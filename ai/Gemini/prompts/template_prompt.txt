@@ -1,0 +1,17 @@
+คุณเป็นผู้เชี่ยวชาญด้านการทดสอบซอฟต์แวร์ ให้วิเคราะห์ Source Code ภาษา Java จากโปรเจกต์ใน Defects4J ที่กำหนด และสร้างกรณีทดสอบระดับ Unit Test ด้วย JUnit
+
+ข้อมูลโปรเจกต์
+• Project: [ชื่อโปรเจกต์ เช่น Lang]
+• Project ID/Version: [หมายเลขที่ทดสอบ เช่น 1b]
+• Class ที่ต้องการทดสอบ: [ชื่อ Class เช่น org.apache.commons.lang3.math.NumberUtils]
+
+ข้อกำหนด
+1. สร้าง Test Case สำหรับ Java Class ที่กำหนด (ใช้ JUnit 4: @Test จาก org.junit.Test และ assertions จาก org.junit.Assert.*)
+2. ครอบคลุม Normal Case, Boundary Case และ Exception Case หากมี
+3. พยายามเพิ่ม Branch Coverage และ Code Coverage ให้มากที่สุด
+4. สร้าง Test Case ที่มีโอกาสตรวจพบข้อบกพร่องของโปรแกรม
+5. Test ที่สร้างต้องสามารถ Compile และ Execute กับโปรเจกต์ที่กำหนดได้
+6. แสดงผลลัพธ์เฉพาะโค้ด JUnit Test เท่านั้น
+
+Java Source Code:
+[ใส่ JAVA SOURCE CODE ที่นี่]
