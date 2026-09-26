@@ -1,0 +1,2 @@
+project,bug_id,algorithm,tests,line_cov,branch_cov,lines,covered_lines,total_branches,covered_branches,buggy_fails,verdict,elapsed_seconds
+Lang,1,Ant Colony Optimization (ACO),82,98.4,89.1,375,369,338,301,1,REVEALING,7.61

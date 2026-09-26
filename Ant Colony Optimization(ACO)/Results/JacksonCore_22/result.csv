@@ -1,0 +1,2 @@
+project,bug_id,checkout,compile,tests_status,failing_tests_count,verdict,elapsed_seconds
+JacksonCore,22,SUCCESS,SUCCESS,COMPLETED,12,REVEALING,50.51

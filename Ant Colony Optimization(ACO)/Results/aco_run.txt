@@ -1,0 +1,197 @@
+ACO Run Results
+Target: org.apache.commons.lang3.math.NumberUtils (Defects4J Lang-1)
+Config: ants=20 iterations=30 alpha=1.0 beta=2.0 evaporation=0.25 seed=999
+ACO Search Time: 27 ms
+
+Search History:
+  iteration=1 covered_so_far=20/82 new_this_iteration=20
+  iteration=2 covered_so_far=40/82 new_this_iteration=20
+  iteration=3 covered_so_far=60/82 new_this_iteration=20
+  iteration=4 covered_so_far=80/82 new_this_iteration=20
+  iteration=5 covered_so_far=82/82 new_this_iteration=2
+
+Covered leaves: 82/82
+Uncovered leaves: []
+
+Covering inputs & Tokens:
+  CN_SUF_D_ZERO -> "0.0D"
+  CN_EXP_NEG -> "5.2e-22"
+  CN_SUF_D_OVERFLOW -> "1e400d"
+  CN_SUF_F_NEG -> "-4.65f"
+  CN_DEC_BIGDEC -> "0.1158994310082925730"
+  CN_DEC_FLOAT -> "3.18786"
+  CN_SUF_D_NEG -> "-7.20d"
+  CN_SUF_ERR_CHAR -> "699q"
+  CN_SUF_L_BIGINT -> "999999999999999999999999999999l"
+  CN_SUF_L_ERR -> "1.2L"
+  MM_LONG_ARR -> "MM_LONG_ARR"
+  CN_LANG747_ZERO_LONG -> "0x000000000006C94bd713B9"
+  CN_SUF_D_POS -> "1.84D"
+  CN_HEX_NEG_0x -> "-0x1D8a"
+  CN_SUF_L_POS -> "11270l"
+  CN_PLAIN_ZERO -> "0"
+  CN_PLAIN_LONG_OVERFLOW -> "3000000000"
+  CN_SUF_F_OVERFLOW -> "1e40F"
+  MM_3ARG_INT -> "MM_3ARG_INT"
+  CN_SUF_D_PRECISION -> "1e-350d"
+  CN_DEC_FLOAT_OVERFLOW -> "1e40"
+  CN_SUF_F_ZERO -> "0.0F"
+  CN_PLAIN_INT -> "40424"
+  MM_3ARG_LONG -> "MM_3ARG_LONG"
+  CN_HEX_NEG_0X -> "-0X1"
+  CN_HEX_BIGINT -> "0xeB7A336680aA8e11AF"
+  CN_SUF_F_POS -> "4.1F"
+  CN_SUF_F_ERR -> "foo.f"
+  CN_DEC_DOUBLE_OVERFLOW -> "1e400"
+  CN_SUF_F_PRECISION -> "1e-45f"
+  CN_SUF_L_NEG -> "-136L"
+  CN_LANG747_LONG_FAULT -> "0x86e4b6Cae862eCbf"
+  CN_SUF_D_ERR -> "foo.d"
+  CN_HEX_0X -> "0X7"
+  CN_PLAIN_BIGINT_OVERFLOW -> "999999999999999999999999999999"
+  CN_HEX_0x -> "0xf"
+  CR_BIGDEC -> "CR_BIGDEC"
+  CN_EXP_ERR_END -> "12e"
+  MM_FLOAT_ARR -> "MM_FLOAT_ARR"
+  CN_DEC_DOUBLE -> "2.9500031434913"
+  CN_HEX_NEG_HASH -> "-#2"
+  MM_3ARG_SHORT -> "MM_3ARG_SHORT"
+  CN_LANG747_ZERO_INT -> "0x00000000000C"
+  CN_EXP_DEC -> "3.2e896"
+  MM_3ARG_BYTE -> "MM_3ARG_BYTE"
+  CN_HEX_LONG -> "0xc7f4b5A80d3"
+  CN_LANG747_INT_FAULT -> "0x84c0CD58"
+  CN_EXP_ERR_DOUBLE -> "1.2e3e4"
+  MM_3ARG_FLOAT -> "MM_3ARG_FLOAT"
+  CN_EXP_INT -> "7E0"
+  MM_3ARG_DOUBLE -> "MM_3ARG_DOUBLE"
+  CN_EXP_ERR_DOT -> "1e.5"
+  CN_DEC_ALL_ZEROS -> "0.0000"
+  IS_DEC_INVALID -> "IS_DEC_INVALID"
+  CN_HEX_HASH -> "#8"
+  MM_SHORT_ARR -> "MM_SHORT_ARR"
+  CN_BLANK_EMPTY -> ""
+  MM_BYTE_ARR -> "MM_BYTE_ARR"
+  IS_QUALIFIERS -> "IS_QUALIFIERS"
+  CV_TO_FLOAT -> "CV_TO_FLOAT"
+  CN_BLANK_SPACE -> " 	 "
+  IS_OCTAL -> "IS_OCTAL"
+  CR_FLOAT_DOUBLE -> "CR_FLOAT_DOUBLE"
+  MM_INT_ARR -> "MM_INT_ARR"
+  CR_CONSTRUCTOR -> "CR_CONSTRUCTOR"
+  IS_EXP_VALID -> "IS_EXP_VALID"
+  IS_DEC_SIGNS -> "IS_DEC_SIGNS"
+  IS_INVALID_CHARS -> "IS_INVALID_CHARS"
+  CV_TO_SHORT -> "CV_TO_SHORT"
+  IS_NULL_EMPTY -> "IS_NULL_EMPTY"
+  CR_INT_LONG -> "CR_INT_LONG"
+  CV_TO_INT -> "CV_TO_INT"
+  CV_TO_DOUBLE -> "CV_TO_DOUBLE"
+  CV_TO_BYTE -> "CV_TO_BYTE"
+  CN_NULL -> null
+  IS_EXP_INVALID -> "IS_EXP_INVALID"
+  IS_HEX_INVALID -> "IS_HEX_INVALID"
+  MM_DOUBLE_ARR -> "MM_DOUBLE_ARR"
+  CR_IS_DIGITS -> "CR_IS_DIGITS"
+  IS_HEX_VALID -> "IS_HEX_VALID"
+  CV_TO_LONG -> "CV_TO_LONG"
+  CR_BIGINT -> "CR_BIGINT"
+
+Final pheromone levels:
+  e_root_cn                 7.5643
+  e_root_is                 8.0420
+  e_root_cv                 4.8896
+  e_root_mm                 6.5669
+  e_root_cr                 5.3203
+  e_cn_null                 0.9404
+  e_cn_notnull              6.8612
+  e_cn_blank_empty          0.7139
+  e_cn_blank_space          0.7061
+  e_cn_notblank             5.9159
+  e_cn_hex_match            2.3953
+  e_cn_hex_nomatch          3.7578
+  e_cn_hex_0x               0.3955
+  e_cn_hex_0X               0.3955
+  e_cn_hex_hash             0.4482
+  e_cn_hex_neg_0x           0.3560
+  e_cn_hex_neg_0X           0.3955
+  e_cn_hex_neg_hash         0.4482
+  e_cn_hex_long             0.4482
+  e_cn_hex_bigint           0.3955
+  e_cn_l747_int_fault       0.5232
+  e_cn_l747_long_fault      0.3955
+  e_cn_l747_zero_int        0.4482
+  e_cn_l747_zero_long       0.3560
+  e_cn_exp_match            1.1711
+  e_cn_exp_nomatch          2.8240
+  e_cn_exp_dec              0.4131
+  e_cn_exp_int              0.4131
+  e_cn_exp_neg              0.3362
+  e_cn_exp_err_double       0.4131
+  e_cn_exp_err_dot          0.4131
+  e_cn_exp_err_end          0.3691
+  e_cn_suf_match            1.9012
+  e_cn_suf_nomatch          1.1602
+  e_cn_suf_l_pos            0.3221
+  e_cn_suf_l_neg            0.3503
+  e_cn_suf_l_bigint         0.3221
+  e_cn_suf_l_err            0.3221
+  e_cn_suf_f_pos            0.4039
+  e_cn_suf_f_neg            0.3221
+  e_cn_suf_f_zero           0.3503
+  e_cn_suf_f_overflow       0.3221
+  e_cn_suf_f_precision      0.3503
+  e_cn_suf_f_err            0.3503
+  e_cn_suf_d_pos            0.3221
+  e_cn_suf_d_neg            0.3221
+  e_cn_suf_d_zero           0.3221
+  e_cn_suf_d_overflow       0.3221
+  e_cn_suf_d_precision      0.3221
+  e_cn_suf_d_err            0.3503
+  e_cn_suf_err_char         0.3221
+  e_cn_plain                0.5834
+  e_cn_dec                  0.8141
+  e_cn_plain_int            0.3362
+  e_cn_plain_zero           0.3115
+  e_cn_plain_long_ovf       0.3115
+  e_cn_plain_bigint_ovf     0.3362
+  e_cn_dec_float            0.3115
+  e_cn_dec_double           0.3362
+  e_cn_dec_bigdec           0.3115
+  e_cn_dec_float_ovf        0.3362
+  e_cn_dec_double_ovf       0.3362
+  e_cn_dec_all_zeros        0.3691
+  e_is_null_empty           1.3154
+  e_is_hex_valid            0.9404
+  e_is_hex_invalid          1.3154
+  e_is_dec_signs            0.9404
+  e_is_dec_invalid          0.9521
+  e_is_octal                1.1279
+  e_is_exp_valid            0.9404
+  e_is_exp_invalid          0.9404
+  e_is_qualifiers           0.7646
+  e_is_invalid_chars        0.9404
+  e_cv_int                  0.9404
+  e_cv_long                 1.1748
+  e_cv_float                0.9521
+  e_cv_double               0.9404
+  e_cv_byte                 1.1279
+  e_cv_short                0.9404
+  e_mm_long_arr             0.5339
+  e_mm_int_arr              0.9404
+  e_mm_short_arr            0.7646
+  e_mm_byte_arr             0.7646
+  e_mm_double_arr           0.9404
+  e_mm_float_arr            0.6328
+  e_mm_3arg_int             0.5339
+  e_mm_3arg_long            0.8203
+  e_mm_3arg_short           0.7646
+  e_mm_3arg_byte            0.7646
+  e_mm_3arg_double          0.7646
+  e_mm_3arg_float           0.9521
+  e_cr_int_long             0.9404
+  e_cr_float_double         1.1279
+  e_cr_bigdec               1.0078
+  e_cr_bigint               1.5498
+  e_cr_is_digits            0.9404
+  e_cr_constructor          0.9404

@@ -1,0 +1,2 @@
+project,bug_id,checkout,compile,tests_status,failing_tests_count,verdict,elapsed_seconds
+Time,14,SUCCESS,SUCCESS,COMPLETED,8,REVEALING,40.4

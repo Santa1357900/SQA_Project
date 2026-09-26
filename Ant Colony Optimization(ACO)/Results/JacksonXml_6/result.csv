@@ -1,0 +1,2 @@
+project,bug_id,checkout,compile,tests_status,failing_tests_count,verdict,elapsed_seconds
+JacksonXml,6,SUCCESS,SUCCESS,COMPLETED,5,REVEALING,128.18

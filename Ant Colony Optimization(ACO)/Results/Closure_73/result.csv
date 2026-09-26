@@ -1,0 +1,2 @@
+project,bug_id,checkout,compile,tests_status,failing_tests_count,verdict,elapsed_seconds
+Closure,73,SUCCESS,SUCCESS,SKIPPED,-1,TIMEOUT,463.27

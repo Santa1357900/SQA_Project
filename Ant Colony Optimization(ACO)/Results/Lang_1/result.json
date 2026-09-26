@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.1",
+  "algorithm": "Ant Colony Optimization (ACO)",
+  "created_at": "2026-09-26T19:17:31.067237+00:00",
+  "project": "Lang",
+  "bug_id": 1,
+  "target_class": "org.apache.commons.lang3.math.NumberUtils",
+  "tests": 82,
+  "test_files": 1,
+  "coverage": 98.4,
+  "line_cov": 98.4,
+  "branch_cov": 89.1,
+  "total_goals": 713,
+  "covered_goals": 670,
+  "lines": 375,
+  "covered_lines": 369,
+  "total_branches": 338,
+  "covered_branches": 301,
+  "buggy_result": "FAIL",
+  "buggy_fails": 1,
+  "fixed_result": "PASS",
+  "fixed_fails": 0,
+  "verdict": "REVEALING",
+  "duration_seconds": 7.61,
+  "runs": 5,
+  "validations": [
+    {
+      "run": 1,
+      "line_cov": 98.4,
+      "branch_cov": 89.1,
+      "fault_detected": true,
+      "time_ms": 9750
+    },
+    {
+      "run": 2,
+      "line_cov": 98.4,
+      "branch_cov": 89.3,
+      "fault_detected": true,
+      "time_ms": 7140
+    },
+    {
+      "run": 3,
+      "line_cov": 98.4,
+      "branch_cov": 89.1,
+      "fault_detected": true,
+      "time_ms": 7080
+    },
+    {
+      "run": 4,
+      "line_cov": 98.4,
+      "branch_cov": 89.1,
+      "fault_detected": true,
+      "time_ms": 7110
+    },
+    {
+      "run": 5,
+      "line_cov": 98.4,
+      "branch_cov": 89.1,
+      "fault_detected": true,
+      "time_ms": 7000
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+project,bug_id,checkout,compile,tests_status,failing_tests_count,verdict,elapsed_seconds
+Mockito,24,SUCCESS,FAILED,SKIPPED,-1,COMPILE_FAILED,304.31
