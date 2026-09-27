@@ -246,7 +246,7 @@ def run_target(name: str, source: Path, d4j: str, coverage: bool,
         old_log.unlink()
     for old_failures in logs.glob("*_failing_tests.txt"):
         old_failures.unlink()
-    report = {"schema_version": "1.0", "generator": "Gemini-2.5-Flash",
+    report = {"schema_version": "1.0", "generator": "Gemini-3.5-Flash-Lite",
               "created_at": datetime.now(timezone.utc).isoformat(),
               "project": project, "bug_id": bug_id,
               "source": str(source), "coverage_scope": "modified classes of buggy revision"}
