@@ -6,13 +6,12 @@
 ```
 dataset/
 ├── <Project>_<BugID>/
-│   ├── metadata.json       # ข้อมูลคลาส, package name, test class name
-│   └── <ClassName>.java    # ซอร์สโค้ด Java ของคลาสที่มีบั๊ก
+│   └── <ClassName>.java    # ซอร์สโค้ด Java ดิบของคลาสที่มีบั๊ก
 ...
 ```
 
 ## วิธีใช้งาน
 สคริปต์ Generator (เช่น `experiments/scripts/pipeline_gemini.py` หรือเครื่องมือ Claude, DE, ACO) สามารถโหลดโค้ดได้โดยตรง:
-1. อ่านไฟล์ `metadata.json` ในโฟลเดอร์ของบั๊กที่ต้องการ
-2. โหลดโค้ดจากไฟล์ `.java` ที่ระบุใน `source_file`
+1. เปิดโฟลเดอร์ของบั๊กที่ต้องการ (เช่น `dataset/Chart_1/`)
+2. โหลดโค้ดจากไฟล์ `.java` ภายในโฟลเดอร์โดยตรง
 3. ไม่จำเป็นต้องรัน `defects4j checkout` ผ่าน WSL ทำให้ทำงานได้ทุกระบบปฏิบัติการ (Windows, Mac, Linux)

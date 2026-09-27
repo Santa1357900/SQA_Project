@@ -10,7 +10,7 @@
 flowchart TD
     subgraph S1 ["1. Data Preparation (แหล่งข้อมูล)"]
         D4J["Defects4J Benchmark<br/>(17 Projects / 854 Active Bugs)"] --> EXT["experiments/scripts/extract_dataset.py"]
-        EXT --> DS["dataset/<br/>(Target Java Code + metadata.json)"]
+        EXT --> DS["dataset/<br/>(Target Java Source Code)"]
     end
 
     subgraph S2 ["2. AI Test Generation (การสร้างชุดทดสอบ)"]
@@ -43,9 +43,8 @@ flowchart TD
 
 ```text
 SQA_Project/
-├── dataset/                         # ชุดข้อมูลคลาสเป้าหมาย 854 บั๊ก (ซอร์สโค้ด Java + metadata.json)
+├── dataset/                         # ชุดข้อมูลคลาสเป้าหมาย 854 บั๊ก (ซอร์สโค้ด Java ดิบ)
 │   ├── Chart_1/
-│   │   ├── metadata.json            # ข้อมูลคลาส, package, test class name
 │   │   └── AbstractCategoryItemRenderer.java
 │   └── ...
 │
@@ -75,8 +74,8 @@ SQA_Project/
 ### 3.1 แหล่งข้อมูลคลาสเป้าหมาย (`dataset/` & `extract_dataset.py`)
 - **ที่มาข้อมูล:** บั๊กจริง 854 ตัวจาก 17 โปรเจกต์ของ Defects4J (เช่น Chart, Cli, Closure, Lang, Math, Mockito, Time ฯลฯ)
 - **หน้าที่:**
-  - จัดเก็บซอร์สโค้ดของคลาสที่มีบั๊ก (Target Class) แยกเป็นรายโฟลเดอร์ เช่น `dataset/Cli_1/`
-  - มีไฟล์ `metadata.json` ระบุข้อมูลจำเป็น เช่น `target_class`, `package_name`, `class_name`, และ `test_class_name`
+  - จัดเก็บซอร์สโค้ดของคลาสที่มีบั๊ก (Target Class) แยกเป็นรายโฟลเดอร์ เช่น `dataset/Cli_1/CommandLine.java`
+  - สคริปต์ Generator สามารถอ่านชื่อ Package และ Class จากตัวโค้ด Java ได้โดยตรง
   - **ข้อดี:** ผู้ใช้และสมาชิกในกลุ่มทุกคนสามารถเข้าถึงโค้ดได้ทันที โดยไม่ต้องติดตั้งหรือรัน `defects4j checkout` ผ่าน WSL ให้เสียเวลา
 
 ### 3.2 ระบบสร้างชุดทดสอบอัตโนมัติ (`pipeline_gemini.py`)

@@ -259,23 +259,32 @@ def extract_target_source_d4j(project: str, bug_id: str):
         run_wsl(f"rm -rf {temp_dir}")
 
 def load_target_source(project: str, bug_id: str):
-    """โหลดซอร์สโค้ดและข้อมูลคลาส: ดึงจากโฟลเดอร์ dataset ก่อน หากไม่มีจึง fallback ไป Defects4J"""
+    """โหลดซอร์สโค้ดและข้อมูลคลาส: ดึงจากไฟล์ .java ในโฟลเดอร์ dataset ก่อน หากไม่มีจึง fallback ไป Defects4J"""
     target_name = f"{project}_{bug_id}"
-    meta_path = DATASET_DIR / target_name / "metadata.json"
-    if meta_path.is_file():
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            src_file = DATASET_DIR / target_name / meta["source_file"]
-            if src_file.is_file():
-                return {
-                    "full_class": meta["target_class"],
-                    "class_name": meta["class_name"],
-                    "package_name": meta["package_name"],
-                    "test_class_name": meta["test_class_name"],
-                    "source_code": src_file.read_text(encoding="utf-8")
-                }
-        except Exception as e:
-            print(f"[*] อ่านจาก dataset/{target_name} ไม่สำเร็จ ({e}) กำลังลอง Defects4J...", file=sys.stderr)
+    target_dir = DATASET_DIR / target_name
+    if target_dir.is_dir():
+        java_files = list(target_dir.glob("*.java"))
+        if java_files:
+            src_file = java_files[0]
+            code_content = src_file.read_text(encoding="utf-8")
+            
+            # ดึงชื่อ package จากโค้ด Java
+            pkg_match = re.search(r"^\s*package\s+([a-zA-Z0-9_.]+);", code_content, re.MULTILINE)
+            pkg_name = pkg_match.group(1) if pkg_match else ""
+            
+            # ชื่อคลาสและชื่อไฟล์เทส
+            raw_class_name = src_file.stem
+            clean_name = raw_class_name.replace("$", "_") if raw_class_name.startswith("$") else raw_class_name.split("$")[-1]
+            test_class_name = f"{clean_name}Test"
+            full_class = f"{pkg_name}.{raw_class_name}" if pkg_name else raw_class_name
+            
+            return {
+                "full_class": full_class,
+                "class_name": clean_name,
+                "package_name": pkg_name,
+                "test_class_name": test_class_name,
+                "source_code": code_content
+            }
 
     return extract_target_source_d4j(project, bug_id)
 
