@@ -285,14 +285,14 @@ def process_bug(key_mgr: KeyManager, project: str, bug_id: str, output_root: Pat
             output_file = target_dir / f"{data['test_class_name']}.java"
             output_file.write_text(clean_code, encoding="utf-8")
             
-            # บันทึกลง ai/Gemini/generated-tests-v2 ตามข้อกำหนด (ไม่กระทบเวอร์ชันแรก)
-            gen_dir_name = f"generated-tests-{version_tag}" if version_tag != "v1" else "generated-tests"
+            # บันทึกลง ai/Gemini/generated-tests ตามข้อกำหนด
+            gen_dir_name = f"generated-tests-{version_tag}" if version_tag else "generated-tests"
             gemini_gen_dir = BASE_DIR / "ai" / "Gemini" / gen_dir_name / f"{project}_{bug_id}_buggy"
             gemini_gen_dir.mkdir(parents=True, exist_ok=True)
             (gemini_gen_dir / f"{data['test_class_name']}.java").write_text(clean_code, encoding="utf-8")
             
             # บันทึก prompt ที่ส่งจริงไว้เป็นหลักฐานใน history
-            history_dir_name = f"history_{version_tag}" if version_tag != "v1" else "history"
+            history_dir_name = f"history_{version_tag}" if version_tag else "history"
             prompt_log_dir = BASE_DIR / "ai" / "Gemini" / "prompts" / history_dir_name
             prompt_log_dir.mkdir(parents=True, exist_ok=True)
             (prompt_log_dir / f"{project}_{bug_id}.txt").write_text(current_prompt, encoding="utf-8")
@@ -332,18 +332,18 @@ def main():
     parser.add_argument("--bugs", nargs="+", help="ระบุหมายเลขบั๊กเฉพาะเจาะจง เช่น 1 3 4")
     parser.add_argument("--limit", type=int, help="จำกัดจำนวนบั๊กที่จะประมวลผล (เช่น --limit 5)")
     parser.add_argument("--model", default="gemini-3.5-flash-lite", help="โมเดล Gemini (default: gemini-3.5-flash-lite)")
-    parser.add_argument("--output-dir", default=str(BASE_DIR / "TestCode_v2"), help="โฟลเดอร์สำหรับเก็บไฟล์เทส (default: TestCode_v2)")
-    parser.add_argument("--version-tag", default="v2", help="Tag เวอร์ชันสำหรับโฟลเดอร์ ai/Gemini (default: v2)")
+    parser.add_argument("--output-dir", default=str(BASE_DIR / "TestCode"), help="โฟลเดอร์สำหรับเก็บไฟล์เทส (default: TestCode)")
+    parser.add_argument("--version-tag", default=None, help="Tag เวอร์ชันสำหรับโฟลเดอร์ ai/Gemini (default: None)")
     parser.add_argument("--overwrite", action="store_true", help="สร้างเทสทับไฟล์เดิมถ้ามีอยู่แล้ว")
     args = parser.parse_args()
 
     output_root = Path(args.output_dir).resolve()
 
     print("=" * 65)
-    print("   🚀 GEMINI AUTOMATED TEST GENERATOR PIPELINE v2.0")
+    print("   🚀 GEMINI AUTOMATED TEST GENERATOR PIPELINE")
     print("   Model:", args.model)
     print("   Output Directory:", output_root)
-    print("   Version Tag:", args.version_tag)
+    print("   Version Tag:", args.version_tag or "Standard")
     print("=" * 65)
 
     key_mgr = KeyManager(args.model)

@@ -375,7 +375,7 @@ def main(argv=None):
         TEST_ROOT = Path(args.test_dir) if args.test_dir else ROOT / "TestCode_v2"
         RESULT_ROOT = Path(args.result_dir) if args.result_dir else ROOT / "Result_v2"
     else:
-        v_tag = args.version_tag or "v1"
+        v_tag = args.version_tag or ""
         TEST_ROOT = Path(args.test_dir) if args.test_dir else ROOT / "TestCode"
         RESULT_ROOT = Path(args.result_dir) if args.result_dir else ROOT / "Result"
 

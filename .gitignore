@@ -12,13 +12,12 @@ Result/
 Result_v2/
 scratch/
 
+# Local backup / versioned folders
+ai/Gemini/*-v2/
+ai/Gemini/prompts/*_v2/
+experiments/raw/*_v2/
+experiments/*_v2.csv
+
 # Python cache
 __pycache__/
 *.pyc
-
-# Exclude v1 folders from v2 branch
-ai/Gemini/generated-tests/
-ai/Gemini/prompts/history/
-ai/Gemini/results/
-experiments/results.csv
-experiments/raw/Gemini/
