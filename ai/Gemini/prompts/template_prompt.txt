@@ -1,4 +1,4 @@
-### TASK: DEFECTS4J AUTOMATED UNIT TEST GENERATION (GEMINI SQA ENGINE v2.0)
+### TASK: DEFECTS4J AUTOMATED UNIT TEST GENERATION
 
 [OBJECTIVE / เป้าหมาย]
 สร้างชุดทดสอบระดับ Unit Test ด้วย JUnit 4 ฉบับสมบูรณ์สำหรับคลาส Java ที่กำหนด เพื่อใช้วัดผลความครอบคลุมของโค้ด (Line/Branch Coverage) และเพิ่มอัตราการตรวจจับข้อบกพร่องจริง (Fault Detection / REVEALING) โดยมีอัตราการคอมไพล์ผ่าน 100% ภายใต้สภาพแวดล้อม Defects4J
