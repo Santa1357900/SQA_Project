@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 86,
+  "target_class": "org.jsoup.nodes.Comment",
+  "package_name": "org.jsoup.nodes",
+  "class_name": "Comment",
+  "raw_class_name": "Comment",
+  "test_class_name": "CommentTest",
+  "source_file": "Comment.java"
+}

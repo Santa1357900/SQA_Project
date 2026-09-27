@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 92,
+  "target_class": "com.google.javascript.jscomp.ProcessClosurePrimitives",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "ProcessClosurePrimitives",
+  "raw_class_name": "ProcessClosurePrimitives",
+  "test_class_name": "ProcessClosurePrimitivesTest",
+  "source_file": "ProcessClosurePrimitives.java"
+}

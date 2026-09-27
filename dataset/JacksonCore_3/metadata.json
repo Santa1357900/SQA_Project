@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 3,
+  "target_class": "com.fasterxml.jackson.core.json.UTF8StreamJsonParser",
+  "package_name": "com.fasterxml.jackson.core.json",
+  "class_name": "UTF8StreamJsonParser",
+  "raw_class_name": "UTF8StreamJsonParser",
+  "test_class_name": "UTF8StreamJsonParserTest",
+  "source_file": "UTF8StreamJsonParser.java"
+}

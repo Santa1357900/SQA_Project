@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 26,
+  "target_class": "com.google.javascript.jscomp.ProcessCommonJSModules",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "ProcessCommonJSModules",
+  "raw_class_name": "ProcessCommonJSModules",
+  "test_class_name": "ProcessCommonJSModulesTest",
+  "source_file": "ProcessCommonJSModules.java"
+}

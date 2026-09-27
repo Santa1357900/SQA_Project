@@ -1,0 +1,10 @@
+{
+  "project": "JxPath",
+  "bug_id": 8,
+  "target_class": "org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpression",
+  "package_name": "org.apache.commons.jxpath.ri.compiler",
+  "class_name": "CoreOperationRelationalExpression",
+  "raw_class_name": "CoreOperationRelationalExpression",
+  "test_class_name": "CoreOperationRelationalExpressionTest",
+  "source_file": "CoreOperationRelationalExpression.java"
+}

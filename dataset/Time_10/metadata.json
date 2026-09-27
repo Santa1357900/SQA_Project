@@ -1,0 +1,10 @@
+{
+  "project": "Time",
+  "bug_id": 10,
+  "target_class": "org.joda.time.base.BaseSingleFieldPeriod",
+  "package_name": "org.joda.time.base",
+  "class_name": "BaseSingleFieldPeriod",
+  "raw_class_name": "BaseSingleFieldPeriod",
+  "test_class_name": "BaseSingleFieldPeriodTest",
+  "source_file": "BaseSingleFieldPeriod.java"
+}

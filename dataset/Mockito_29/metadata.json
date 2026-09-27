@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 29,
+  "target_class": "org.mockito.internal.matchers.Same",
+  "package_name": "org.mockito.internal.matchers",
+  "class_name": "Same",
+  "raw_class_name": "Same",
+  "test_class_name": "SameTest",
+  "source_file": "Same.java"
+}

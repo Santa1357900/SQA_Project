@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 11,
+  "target_class": "org.apache.commons.lang3.RandomStringUtils",
+  "package_name": "org.apache.commons.lang3",
+  "class_name": "RandomStringUtils",
+  "raw_class_name": "RandomStringUtils",
+  "test_class_name": "RandomStringUtilsTest",
+  "source_file": "RandomStringUtils.java"
+}

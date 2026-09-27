@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 102,
+  "target_class": "com.fasterxml.jackson.databind.ser.std.DateTimeSerializerBase",
+  "package_name": "com.fasterxml.jackson.databind.ser.std",
+  "class_name": "DateTimeSerializerBase",
+  "raw_class_name": "DateTimeSerializerBase",
+  "test_class_name": "DateTimeSerializerBaseTest",
+  "source_file": "DateTimeSerializerBase.java"
+}

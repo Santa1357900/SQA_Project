@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 14,
+  "target_class": "org.mockito.internal.MockHandler",
+  "package_name": "org.mockito.internal",
+  "class_name": "MockHandler",
+  "raw_class_name": "MockHandler",
+  "test_class_name": "MockHandlerTest",
+  "source_file": "MockHandler.java"
+}

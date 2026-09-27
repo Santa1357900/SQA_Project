@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 54,
+  "target_class": "com.fasterxml.jackson.databind.ser.PropertyBuilder",
+  "package_name": "com.fasterxml.jackson.databind.ser",
+  "class_name": "PropertyBuilder",
+  "raw_class_name": "PropertyBuilder",
+  "test_class_name": "PropertyBuilderTest",
+  "source_file": "PropertyBuilder.java"
+}

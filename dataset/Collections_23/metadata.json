@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 23,
+  "target_class": "org.apache.commons.collections4.trie.UnmodifiableTrie",
+  "package_name": "org.apache.commons.collections4.trie",
+  "class_name": "UnmodifiableTrie",
+  "raw_class_name": "UnmodifiableTrie",
+  "test_class_name": "UnmodifiableTrieTest",
+  "source_file": "UnmodifiableTrie.java"
+}

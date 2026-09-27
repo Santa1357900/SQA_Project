@@ -1,0 +1,10 @@
+{
+  "project": "Codec",
+  "bug_id": 3,
+  "target_class": "org.apache.commons.codec.language.DoubleMetaphone",
+  "package_name": "org.apache.commons.codec.language",
+  "class_name": "DoubleMetaphone",
+  "raw_class_name": "DoubleMetaphone",
+  "test_class_name": "DoubleMetaphoneTest",
+  "source_file": "DoubleMetaphone.java"
+}

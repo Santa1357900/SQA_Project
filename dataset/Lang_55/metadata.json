@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 55,
+  "target_class": "org.apache.commons.lang.time.StopWatch",
+  "package_name": "org.apache.commons.lang.time",
+  "class_name": "StopWatch",
+  "raw_class_name": "StopWatch",
+  "test_class_name": "StopWatchTest",
+  "source_file": "StopWatch.java"
+}

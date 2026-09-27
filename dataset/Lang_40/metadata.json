@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 40,
+  "target_class": "org.apache.commons.lang.StringUtils",
+  "package_name": "org.apache.commons.lang",
+  "class_name": "StringUtils",
+  "raw_class_name": "StringUtils",
+  "test_class_name": "StringUtilsTest",
+  "source_file": "StringUtils.java"
+}

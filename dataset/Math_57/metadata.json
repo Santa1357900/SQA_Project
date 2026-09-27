@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 57,
+  "target_class": "org.apache.commons.math.stat.clustering.KMeansPlusPlusClusterer",
+  "package_name": "org.apache.commons.math.stat.clustering",
+  "class_name": "KMeansPlusPlusClusterer",
+  "raw_class_name": "KMeansPlusPlusClusterer",
+  "test_class_name": "KMeansPlusPlusClustererTest",
+  "source_file": "KMeansPlusPlusClusterer.java"
+}

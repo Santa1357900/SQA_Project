@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 69,
+  "target_class": "org.apache.commons.math.stat.correlation.PearsonsCorrelation",
+  "package_name": "org.apache.commons.math.stat.correlation",
+  "class_name": "PearsonsCorrelation",
+  "raw_class_name": "PearsonsCorrelation",
+  "test_class_name": "PearsonsCorrelationTest",
+  "source_file": "PearsonsCorrelation.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Time",
+  "bug_id": 9,
+  "target_class": "org.joda.time.DateTimeZone",
+  "package_name": "org.joda.time",
+  "class_name": "DateTimeZone",
+  "raw_class_name": "DateTimeZone",
+  "test_class_name": "DateTimeZoneTest",
+  "source_file": "DateTimeZone.java"
+}

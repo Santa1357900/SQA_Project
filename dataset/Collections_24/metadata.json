@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 24,
+  "target_class": "org.apache.commons.collections4.collection.UnmodifiableBoundedCollection",
+  "package_name": "org.apache.commons.collections4.collection",
+  "class_name": "UnmodifiableBoundedCollection",
+  "raw_class_name": "UnmodifiableBoundedCollection",
+  "test_class_name": "UnmodifiableBoundedCollectionTest",
+  "source_file": "UnmodifiableBoundedCollection.java"
+}

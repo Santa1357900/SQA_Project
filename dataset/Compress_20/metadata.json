@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 20,
+  "target_class": "org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream",
+  "package_name": "org.apache.commons.compress.archivers.cpio",
+  "class_name": "CpioArchiveInputStream",
+  "raw_class_name": "CpioArchiveInputStream",
+  "test_class_name": "CpioArchiveInputStreamTest",
+  "source_file": "CpioArchiveInputStream.java"
+}

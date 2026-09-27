@@ -1,0 +1,10 @@
+{
+  "project": "Chart",
+  "bug_id": 5,
+  "target_class": "org.jfree.data.xy.XYSeries",
+  "package_name": "org.jfree.data.xy",
+  "class_name": "XYSeries",
+  "raw_class_name": "XYSeries",
+  "test_class_name": "XYSeriesTest",
+  "source_file": "XYSeries.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 99,
+  "target_class": "com.fasterxml.jackson.databind.type.ReferenceType",
+  "package_name": "com.fasterxml.jackson.databind.type",
+  "class_name": "ReferenceType",
+  "raw_class_name": "ReferenceType",
+  "test_class_name": "ReferenceTypeTest",
+  "source_file": "ReferenceType.java"
+}

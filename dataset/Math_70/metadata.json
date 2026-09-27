@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 70,
+  "target_class": "org.apache.commons.math.analysis.solvers.BisectionSolver",
+  "package_name": "org.apache.commons.math.analysis.solvers",
+  "class_name": "BisectionSolver",
+  "raw_class_name": "BisectionSolver",
+  "test_class_name": "BisectionSolverTest",
+  "source_file": "BisectionSolver.java"
+}

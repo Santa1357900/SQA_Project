@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 118,
+  "target_class": "com.google.javascript.jscomp.DisambiguateProperties",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "DisambiguateProperties",
+  "raw_class_name": "DisambiguateProperties",
+  "test_class_name": "DisambiguatePropertiesTest",
+  "source_file": "DisambiguateProperties.java"
+}

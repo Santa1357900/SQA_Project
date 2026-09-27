@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 26,
+  "target_class": "org.mockito.internal.util.Primitives",
+  "package_name": "org.mockito.internal.util",
+  "class_name": "Primitives",
+  "raw_class_name": "Primitives",
+  "test_class_name": "PrimitivesTest",
+  "source_file": "Primitives.java"
+}

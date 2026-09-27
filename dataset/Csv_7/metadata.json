@@ -1,0 +1,10 @@
+{
+  "project": "Csv",
+  "bug_id": 7,
+  "target_class": "org.apache.commons.csv.CSVParser",
+  "package_name": "org.apache.commons.csv",
+  "class_name": "CSVParser",
+  "raw_class_name": "CSVParser",
+  "test_class_name": "CSVParserTest",
+  "source_file": "CSVParser.java"
+}

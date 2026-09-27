@@ -1,0 +1,10 @@
+{
+  "project": "Time",
+  "bug_id": 12,
+  "target_class": "org.joda.time.LocalDate",
+  "package_name": "org.joda.time",
+  "class_name": "LocalDate",
+  "raw_class_name": "LocalDate",
+  "test_class_name": "LocalDateTest",
+  "source_file": "LocalDate.java"
+}

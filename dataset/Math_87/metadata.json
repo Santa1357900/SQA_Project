@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 87,
+  "target_class": "org.apache.commons.math.optimization.linear.SimplexTableau",
+  "package_name": "org.apache.commons.math.optimization.linear",
+  "class_name": "SimplexTableau",
+  "raw_class_name": "SimplexTableau",
+  "test_class_name": "SimplexTableauTest",
+  "source_file": "SimplexTableau.java"
+}

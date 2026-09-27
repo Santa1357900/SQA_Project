@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 2,
+  "target_class": "org.apache.commons.compress.archivers.ar.ArArchiveInputStream",
+  "package_name": "org.apache.commons.compress.archivers.ar",
+  "class_name": "ArArchiveInputStream",
+  "raw_class_name": "ArArchiveInputStream",
+  "test_class_name": "ArArchiveInputStreamTest",
+  "source_file": "ArArchiveInputStream.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 13,
+  "target_class": "com.fasterxml.jackson.core.json.JsonGeneratorImpl",
+  "package_name": "com.fasterxml.jackson.core.json",
+  "class_name": "JsonGeneratorImpl",
+  "raw_class_name": "JsonGeneratorImpl",
+  "test_class_name": "JsonGeneratorImplTest",
+  "source_file": "JsonGeneratorImpl.java"
+}

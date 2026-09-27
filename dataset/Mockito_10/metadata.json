@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 10,
+  "target_class": "org.mockito.internal.stubbing.defaultanswers.ReturnsDeepStubs",
+  "package_name": "org.mockito.internal.stubbing.defaultanswers",
+  "class_name": "ReturnsDeepStubs",
+  "raw_class_name": "ReturnsDeepStubs",
+  "test_class_name": "ReturnsDeepStubsTest",
+  "source_file": "ReturnsDeepStubs.java"
+}

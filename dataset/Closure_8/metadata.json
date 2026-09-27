@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 8,
+  "target_class": "com.google.javascript.jscomp.CollapseVariableDeclarations",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "CollapseVariableDeclarations",
+  "raw_class_name": "CollapseVariableDeclarations",
+  "test_class_name": "CollapseVariableDeclarationsTest",
+  "source_file": "CollapseVariableDeclarations.java"
+}

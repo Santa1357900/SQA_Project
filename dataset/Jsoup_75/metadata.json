@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 75,
+  "target_class": "org.jsoup.nodes.Attributes",
+  "package_name": "org.jsoup.nodes",
+  "class_name": "Attributes",
+  "raw_class_name": "Attributes",
+  "test_class_name": "AttributesTest",
+  "source_file": "Attributes.java"
+}

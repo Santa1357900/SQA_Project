@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 45,
+  "target_class": "org.apache.commons.lang.WordUtils",
+  "package_name": "org.apache.commons.lang",
+  "class_name": "WordUtils",
+  "raw_class_name": "WordUtils",
+  "test_class_name": "WordUtilsTest",
+  "source_file": "WordUtils.java"
+}

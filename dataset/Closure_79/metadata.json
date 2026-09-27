@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 79,
+  "target_class": "com.google.javascript.jscomp.Normalize",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "Normalize",
+  "raw_class_name": "Normalize",
+  "test_class_name": "NormalizeTest",
+  "source_file": "Normalize.java"
+}

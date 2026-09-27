@@ -1,0 +1,10 @@
+{
+  "project": "JxPath",
+  "bug_id": 14,
+  "target_class": "org.apache.commons.jxpath.ri.compiler.CoreFunction",
+  "package_name": "org.apache.commons.jxpath.ri.compiler",
+  "class_name": "CoreFunction",
+  "raw_class_name": "CoreFunction",
+  "test_class_name": "CoreFunctionTest",
+  "source_file": "CoreFunction.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 67,
+  "target_class": "com.fasterxml.jackson.databind.deser.BasicDeserializerFactory",
+  "package_name": "com.fasterxml.jackson.databind.deser",
+  "class_name": "BasicDeserializerFactory",
+  "raw_class_name": "BasicDeserializerFactory",
+  "test_class_name": "BasicDeserializerFactoryTest",
+  "source_file": "BasicDeserializerFactory.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 56,
+  "target_class": "org.apache.commons.math.util.MultidimensionalCounter",
+  "package_name": "org.apache.commons.math.util",
+  "class_name": "MultidimensionalCounter",
+  "raw_class_name": "MultidimensionalCounter",
+  "test_class_name": "MultidimensionalCounterTest",
+  "source_file": "MultidimensionalCounter.java"
+}

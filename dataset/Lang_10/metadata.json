@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 10,
+  "target_class": "org.apache.commons.lang3.time.FastDateParser",
+  "package_name": "org.apache.commons.lang3.time",
+  "class_name": "FastDateParser",
+  "raw_class_name": "FastDateParser",
+  "test_class_name": "FastDateParserTest",
+  "source_file": "FastDateParser.java"
+}

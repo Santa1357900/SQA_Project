@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 150,
+  "target_class": "com.google.javascript.jscomp.TypedScopeCreator",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "TypedScopeCreator",
+  "raw_class_name": "TypedScopeCreator",
+  "test_class_name": "TypedScopeCreatorTest",
+  "source_file": "TypedScopeCreator.java"
+}

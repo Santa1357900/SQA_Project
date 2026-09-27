@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 53,
+  "target_class": "org.apache.commons.lang.time.DateUtils",
+  "package_name": "org.apache.commons.lang.time",
+  "class_name": "DateUtils",
+  "raw_class_name": "DateUtils",
+  "test_class_name": "DateUtilsTest",
+  "source_file": "DateUtils.java"
+}

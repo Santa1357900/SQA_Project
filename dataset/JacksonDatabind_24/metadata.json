@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 24,
+  "target_class": "com.fasterxml.jackson.databind.cfg.BaseSettings",
+  "package_name": "com.fasterxml.jackson.databind.cfg",
+  "class_name": "BaseSettings",
+  "raw_class_name": "BaseSettings",
+  "test_class_name": "BaseSettingsTest",
+  "source_file": "BaseSettings.java"
+}

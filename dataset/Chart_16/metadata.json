@@ -1,0 +1,10 @@
+{
+  "project": "Chart",
+  "bug_id": 16,
+  "target_class": "org.jfree.data.category.DefaultIntervalCategoryDataset",
+  "package_name": "org.jfree.data.category",
+  "class_name": "DefaultIntervalCategoryDataset",
+  "raw_class_name": "DefaultIntervalCategoryDataset",
+  "test_class_name": "DefaultIntervalCategoryDatasetTest",
+  "source_file": "DefaultIntervalCategoryDataset.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 109,
+  "target_class": "com.google.javascript.jscomp.parsing.JsDocInfoParser",
+  "package_name": "com.google.javascript.jscomp.parsing",
+  "class_name": "JsDocInfoParser",
+  "raw_class_name": "JsDocInfoParser",
+  "test_class_name": "JsDocInfoParserTest",
+  "source_file": "JsDocInfoParser.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JxPath",
+  "bug_id": 13,
+  "target_class": "org.apache.commons.jxpath.ri.NamespaceResolver",
+  "package_name": "org.apache.commons.jxpath.ri",
+  "class_name": "NamespaceResolver",
+  "raw_class_name": "NamespaceResolver",
+  "test_class_name": "NamespaceResolverTest",
+  "source_file": "NamespaceResolver.java"
+}

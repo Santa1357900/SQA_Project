@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 104,
+  "target_class": "com.fasterxml.jackson.databind.util.StdDateFormat",
+  "package_name": "com.fasterxml.jackson.databind.util",
+  "class_name": "StdDateFormat",
+  "raw_class_name": "StdDateFormat",
+  "test_class_name": "StdDateFormatTest",
+  "source_file": "StdDateFormat.java"
+}

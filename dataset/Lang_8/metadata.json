@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 8,
+  "target_class": "org.apache.commons.lang3.time.FastDatePrinter",
+  "package_name": "org.apache.commons.lang3.time",
+  "class_name": "FastDatePrinter",
+  "raw_class_name": "FastDatePrinter",
+  "test_class_name": "FastDatePrinterTest",
+  "source_file": "FastDatePrinter.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 5,
+  "target_class": "org.apache.commons.collections.list.SetUniqueList",
+  "package_name": "org.apache.commons.collections.list",
+  "class_name": "SetUniqueList",
+  "raw_class_name": "SetUniqueList",
+  "test_class_name": "SetUniqueListTest",
+  "source_file": "SetUniqueList.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 79,
+  "target_class": "org.jsoup.nodes.LeafNode",
+  "package_name": "org.jsoup.nodes",
+  "class_name": "LeafNode",
+  "raw_class_name": "LeafNode",
+  "test_class_name": "LeafNodeTest",
+  "source_file": "LeafNode.java"
+}

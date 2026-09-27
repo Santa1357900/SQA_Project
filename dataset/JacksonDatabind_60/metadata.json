@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 60,
+  "target_class": "com.fasterxml.jackson.databind.ser.std.JsonValueSerializer",
+  "package_name": "com.fasterxml.jackson.databind.ser.std",
+  "class_name": "JsonValueSerializer",
+  "raw_class_name": "JsonValueSerializer",
+  "test_class_name": "JsonValueSerializerTest",
+  "source_file": "JsonValueSerializer.java"
+}

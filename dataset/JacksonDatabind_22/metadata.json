@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 22,
+  "target_class": "com.fasterxml.jackson.databind.ser.BasicSerializerFactory",
+  "package_name": "com.fasterxml.jackson.databind.ser",
+  "class_name": "BasicSerializerFactory",
+  "raw_class_name": "BasicSerializerFactory",
+  "test_class_name": "BasicSerializerFactoryTest",
+  "source_file": "BasicSerializerFactory.java"
+}

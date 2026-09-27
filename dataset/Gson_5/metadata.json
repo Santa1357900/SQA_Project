@@ -1,0 +1,10 @@
+{
+  "project": "Gson",
+  "bug_id": 5,
+  "target_class": "com.google.gson.internal.bind.util.ISO8601Utils",
+  "package_name": "com.google.gson.internal.bind.util",
+  "class_name": "ISO8601Utils",
+  "raw_class_name": "ISO8601Utils",
+  "test_class_name": "ISO8601UtilsTest",
+  "source_file": "ISO8601Utils.java"
+}

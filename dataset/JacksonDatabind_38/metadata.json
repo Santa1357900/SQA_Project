@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 38,
+  "target_class": "com.fasterxml.jackson.databind.type.CollectionType",
+  "package_name": "com.fasterxml.jackson.databind.type",
+  "class_name": "CollectionType",
+  "raw_class_name": "CollectionType",
+  "test_class_name": "CollectionTypeTest",
+  "source_file": "CollectionType.java"
+}

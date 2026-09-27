@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 111,
+  "target_class": "com.fasterxml.jackson.databind.deser.CreatorProperty",
+  "package_name": "com.fasterxml.jackson.databind.deser",
+  "class_name": "CreatorProperty",
+  "raw_class_name": "CreatorProperty",
+  "test_class_name": "CreatorPropertyTest",
+  "source_file": "CreatorProperty.java"
+}

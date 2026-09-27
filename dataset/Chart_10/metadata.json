@@ -1,0 +1,10 @@
+{
+  "project": "Chart",
+  "bug_id": 10,
+  "target_class": "org.jfree.chart.imagemap.StandardToolTipTagFragmentGenerator",
+  "package_name": "org.jfree.chart.imagemap",
+  "class_name": "StandardToolTipTagFragmentGenerator",
+  "raw_class_name": "StandardToolTipTagFragmentGenerator",
+  "test_class_name": "StandardToolTipTagFragmentGeneratorTest",
+  "source_file": "StandardToolTipTagFragmentGenerator.java"
+}

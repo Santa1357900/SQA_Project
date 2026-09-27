@@ -1,0 +1,10 @@
+{
+  "project": "Cli",
+  "bug_id": 36,
+  "target_class": "org.apache.commons.cli.OptionGroup",
+  "package_name": "org.apache.commons.cli",
+  "class_name": "OptionGroup",
+  "raw_class_name": "OptionGroup",
+  "test_class_name": "OptionGroupTest",
+  "source_file": "OptionGroup.java"
+}

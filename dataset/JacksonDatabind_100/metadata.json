@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 100,
+  "target_class": "com.fasterxml.jackson.databind.node.TreeTraversingParser",
+  "package_name": "com.fasterxml.jackson.databind.node",
+  "class_name": "TreeTraversingParser",
+  "raw_class_name": "TreeTraversingParser",
+  "test_class_name": "TreeTraversingParserTest",
+  "source_file": "TreeTraversingParser.java"
+}

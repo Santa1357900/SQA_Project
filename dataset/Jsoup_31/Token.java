@@ -1,0 +1,282 @@
+ว่าคลาสมี Constructor อะไรบ้าง
+   - ❌ ห้ามส่ง `null` ให้ parameter ที่เป็น primitive type (`int`, `double`, `boolean`, `char`, `long`) เด็ดขาด เพราะ javac จะฟ้อง type incompatible
+   - ❌ ห้ามเรียกใช้ `private` method / constructor หรือ private field หรือ private inner class (เช่น `Assign` ใน `RemoveUnusedVars`) โดยตรง
+   - ❌ ห้ามใช้ `assertEquals(null, val)` ให้ใช้ `assertNull(val)` แทนเสมอ
+   - ❌ ห้ามใช้ `assertEquals(Double.NaN, val)` เพราะ ambiguous ใน JUnit 4 ให้ใช้ `assertEquals(Double.valueOf(Double.NaN), val)` หรือ `assertTrue(Double.isNaN(val))`
+5. Full Imports Required:
+   - ต้อง Import ทุกคลาสที่เรียกใช้อย่างครบถ้วน ไม่ละเลย Utility หรือ Annotation package (เช่น `com.fasterxml.jackson.databind.util.ClassUtil`, `com.fasterxml.jackson.annotation.*`, `org.jsoup.parser.*`, `org.jsoup.nodes.*`)
+
+[TEST DESIGN & FAULT DETECTION DIRECTIVES (เพิ่มโอกาส REVEALING และลด INCONCLUSIVE)]
+1. Oracle Precision (ลด Inconclusive จากการ Assert เปราะบาง):
+   - ❌ อย่า Assert ข้อความ Exception หรือ toString() แบบ Exact Match (เพราะข้อความอาจเปลี่ยนตามเวอร์ชัน) ให้เน้น Assert ชนิดของ Exception หรือใช้ `assertTrue(e.getMessage().contains(...))` แทน
+   - สำหรับกรณีทดสอบที่คาดว่าจะเกิด Exception ให้ใช้โครงสร้าง `try { method(); fail("Should throw exception"); } catch (SpecificException e) { /* Expected */ }` หรือ `@Test(expected = SpecificException.class)`
+2. Bug-Hunting Edge Cases (กระตุ้นจุดบกพร่องที่ซ่อนอยู่):
+   - ค่าขอบเขตวิกฤต: ค่าศูนย์ (0), ค่าลบ (-1), Maximum/Minimum values, Integer overflow/underflow
+   - ปัญหา Null Safety: ส่ง `null` เข้าไปยัง Public method ที่รับ Object เพื่อดูว่ามี NullPointerException โดยไม่ได้จัดการหรือไม่
+   - กรณี Collection/Array: ทดสอบ Empty, Single element, Duplicate elements, Null elements, Unmodifiable collection
+   - กรณี String: Empty string `""`, Whitespace only `"   "`, String containing delimiters, Escape sequences, Special Unicode characters
+   - Boundary & Loop conditions: จุดเปลี่ยนเงื่อนไข `<` vs `<=`, Off-by-one errors, Empty input streams
+
+[TARGET SOURCE CODE]
+package org.jsoup.parser;
+
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Attributes;
+
+/**
+ * Parse tokens for the Tokeniser.
+ */
+abstract class Token {
+    TokenType type;
+
+    private Token() {
+    }
+    
+    String tokenType() {
+        return this.getClass().getSimpleName();
+    }
+
+    static class Doctype extends Token {
+        final StringBuilder name = new StringBuilder();
+        final StringBuilder publicIdentifier = new StringBuilder();
+        final StringBuilder systemIdentifier = new StringBuilder();
+        boolean forceQuirks = false;
+
+        Doctype() {
+            type = TokenType.Doctype;
+        }
+
+        String getName() {
+            return name.toString();
+        }
+
+        String getPublicIdentifier() {
+            return publicIdentifier.toString();
+        }
+
+        public String getSystemIdentifier() {
+            return systemIdentifier.toString();
+        }
+
+        public boolean isForceQuirks() {
+            return forceQuirks;
+        }
+    }
+
+    static abstract class Tag extends Token {
+        protected String tagName;
+        private String pendingAttributeName; // attribute names are generally caught in one hop, not accumulated
+        private StringBuilder pendingAttributeValue; // but values are accumulated, from e.g. & in hrefs
+
+        boolean selfClosing = false;
+        Attributes attributes; // start tags get attributes on construction. End tags get attributes on first new attribute (but only for parser convenience, not used).
+
+        void newAttribute() {
+            if (attributes == null)
+                attributes = new Attributes();
+
+            if (pendingAttributeName != null) {
+                Attribute attribute;
+                if (pendingAttributeValue == null)
+                    attribute = new Attribute(pendingAttributeName, "");
+                else
+                    attribute = new Attribute(pendingAttributeName, pendingAttributeValue.toString());
+                attributes.put(attribute);
+            }
+            pendingAttributeName = null;
+            if (pendingAttributeValue != null)
+                pendingAttributeValue.delete(0, pendingAttributeValue.length());
+        }
+
+        void finaliseTag() {
+            // finalises for emit
+            if (pendingAttributeName != null) {
+                // todo: check if attribute name exists; if so, drop and error
+                newAttribute();
+            }
+        }
+
+        String name() {
+            Validate.isFalse(tagName.length() == 0);
+            return tagName;
+        }
+
+        Tag name(String name) {
+            tagName = name;
+            return this;
+        }
+
+        boolean isSelfClosing() {
+            return selfClosing;
+        }
+
+        @SuppressWarnings({"TypeMayBeWeakened"})
+        Attributes getAttributes() {
+            return attributes;
+        }
+
+        // these appenders are rarely hit in not null state-- caused by null chars.
+        void appendTagName(String append) {
+            tagName = tagName == null ? append : tagName.concat(append);
+        }
+
+        void appendTagName(char append) {
+            appendTagName(String.valueOf(append));
+        }
+
+        void appendAttributeName(String append) {
+            pendingAttributeName = pendingAttributeName == null ? append : pendingAttributeName.concat(append);
+        }
+
+        void appendAttributeName(char append) {
+            appendAttributeName(String.valueOf(append));
+        }
+
+        void appendAttributeValue(String append) {
+            pendingAttributeValue = pendingAttributeValue == null ? new StringBuilder(append) : pendingAttributeValue.append(append);
+        }
+
+        void appendAttributeValue(char append) {
+            appendAttributeValue(String.valueOf(append));
+        }
+    }
+
+    static class StartTag extends Tag {
+        StartTag() {
+            super();
+            attributes = new Attributes();
+            type = TokenType.StartTag;
+        }
+
+        StartTag(String name) {
+            this();
+            this.tagName = name;
+        }
+
+        StartTag(String name, Attributes attributes) {
+            this();
+            this.tagName = name;
+            this.attributes = attributes;
+        }
+
+        @Override
+        public String toString() {
+            if (attributes != null && attributes.size() > 0)
+                return "<" + name() + " " + attributes.toString() + ">";
+            else
+                return "<" + name() + ">";
+        }
+    }
+
+    static class EndTag extends Tag{
+        EndTag() {
+            super();
+            type = TokenType.EndTag;
+        }
+
+        EndTag(String name) {
+            this();
+            this.tagName = name;
+        }
+
+        @Override
+        public String toString() {
+            return "</" + name() + ">";
+        }
+    }
+
+    static class Comment extends Token {
+        final StringBuilder data = new StringBuilder();
+
+        Comment() {
+            type = TokenType.Comment;
+        }
+
+        String getData() {
+            return data.toString();
+        }
+
+        @Override
+        public String toString() {
+            return "<!--" + getData() + "-->";
+        }
+    }
+
+    static class Character extends Token {
+        private final String data;
+
+        Character(String data) {
+            type = TokenType.Character;
+            this.data = data;
+        }
+
+        String getData() {
+            return data;
+        }
+
+        @Override
+        public String toString() {
+            return getData();
+        }
+    }
+
+    static class EOF extends Token {
+        EOF() {
+            type = Token.TokenType.EOF;
+        }
+    }
+
+    boolean isDoctype() {
+        return type == TokenType.Doctype;
+    }
+
+    Doctype asDoctype() {
+        return (Doctype) this;
+    }
+
+    boolean isStartTag() {
+        return type == TokenType.StartTag;
+    }
+
+    StartTag asStartTag() {
+        return (StartTag) this;
+    }
+
+    boolean isEndTag() {
+        return type == TokenType.EndTag;
+    }
+
+    EndTag asEndTag() {
+        return (EndTag) this;
+    }
+
+    boolean isComment() {
+        return type == TokenType.Comment;
+    }
+
+    Comment asComment() {
+        return (Comment) this;
+    }
+
+    boolean isCharacter() {
+        return type == TokenType.Character;
+    }
+
+    Character asCharacter() {
+        return (Character) this;
+    }
+
+    boolean isEOF() {
+        return type == TokenType.EOF;
+    }
+
+    enum TokenType {
+        Doctype,
+        StartTag,
+        EndTag,
+        Comment,
+        Character,
+        EOF
+    }
+}

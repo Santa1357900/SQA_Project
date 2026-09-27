@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 53,
+  "target_class": "org.jsoup.parser.TokenQueue",
+  "package_name": "org.jsoup.parser",
+  "class_name": "TokenQueue",
+  "raw_class_name": "TokenQueue",
+  "test_class_name": "TokenQueueTest",
+  "source_file": "TokenQueue.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 55,
+  "target_class": "com.fasterxml.jackson.databind.ser.std.StdKeySerializers",
+  "package_name": "com.fasterxml.jackson.databind.ser.std",
+  "class_name": "StdKeySerializers",
+  "raw_class_name": "StdKeySerializers",
+  "test_class_name": "StdKeySerializersTest",
+  "source_file": "StdKeySerializers.java"
+}

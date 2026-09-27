@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 44,
+  "target_class": "org.apache.commons.math.ode.AbstractIntegrator",
+  "package_name": "org.apache.commons.math.ode",
+  "class_name": "AbstractIntegrator",
+  "raw_class_name": "AbstractIntegrator",
+  "test_class_name": "AbstractIntegratorTest",
+  "source_file": "AbstractIntegrator.java"
+}

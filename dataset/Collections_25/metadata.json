@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 25,
+  "target_class": "org.apache.commons.collections4.IteratorUtils",
+  "package_name": "org.apache.commons.collections4",
+  "class_name": "IteratorUtils",
+  "raw_class_name": "IteratorUtils",
+  "test_class_name": "IteratorUtilsTest",
+  "source_file": "IteratorUtils.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 31,
+  "target_class": "org.jsoup.parser.Token",
+  "package_name": "org.jsoup.parser",
+  "class_name": "Token",
+  "raw_class_name": "Token",
+  "test_class_name": "TokenTest",
+  "source_file": "Token.java"
+}

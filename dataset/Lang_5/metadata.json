@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 5,
+  "target_class": "org.apache.commons.lang3.LocaleUtils",
+  "package_name": "org.apache.commons.lang3",
+  "class_name": "LocaleUtils",
+  "raw_class_name": "LocaleUtils",
+  "test_class_name": "LocaleUtilsTest",
+  "source_file": "LocaleUtils.java"
+}

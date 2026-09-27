@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 5,
+  "target_class": "com.fasterxml.jackson.core.JsonPointer",
+  "package_name": "com.fasterxml.jackson.core",
+  "class_name": "JsonPointer",
+  "raw_class_name": "JsonPointer",
+  "test_class_name": "JsonPointerTest",
+  "source_file": "JsonPointer.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 7,
+  "target_class": "com.fasterxml.jackson.core.json.JsonWriteContext",
+  "package_name": "com.fasterxml.jackson.core.json",
+  "class_name": "JsonWriteContext",
+  "raw_class_name": "JsonWriteContext",
+  "test_class_name": "JsonWriteContextTest",
+  "source_file": "JsonWriteContext.java"
+}

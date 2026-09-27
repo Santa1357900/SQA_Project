@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 34,
+  "target_class": "com.fasterxml.jackson.databind.ser.std.NumberSerializer",
+  "package_name": "com.fasterxml.jackson.databind.ser.std",
+  "class_name": "NumberSerializer",
+  "raw_class_name": "NumberSerializer",
+  "test_class_name": "NumberSerializerTest",
+  "source_file": "NumberSerializer.java"
+}

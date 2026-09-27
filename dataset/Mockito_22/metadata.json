@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 22,
+  "target_class": "org.mockito.internal.matchers.Equality",
+  "package_name": "org.mockito.internal.matchers",
+  "class_name": "Equality",
+  "raw_class_name": "Equality",
+  "test_class_name": "EqualityTest",
+  "source_file": "Equality.java"
+}

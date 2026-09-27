@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 30,
+  "target_class": "org.mockito.exceptions.Reporter",
+  "package_name": "org.mockito.exceptions",
+  "class_name": "Reporter",
+  "raw_class_name": "Reporter",
+  "test_class_name": "ReporterTest",
+  "source_file": "Reporter.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 103,
+  "target_class": "com.fasterxml.jackson.databind.DatabindContext",
+  "package_name": "com.fasterxml.jackson.databind",
+  "class_name": "DatabindContext",
+  "raw_class_name": "DatabindContext",
+  "test_class_name": "DatabindContextTest",
+  "source_file": "DatabindContext.java"
+}

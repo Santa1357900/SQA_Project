@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 13,
+  "target_class": "com.fasterxml.jackson.databind.deser.DefaultDeserializationContext",
+  "package_name": "com.fasterxml.jackson.databind.deser",
+  "class_name": "DefaultDeserializationContext",
+  "raw_class_name": "DefaultDeserializationContext",
+  "test_class_name": "DefaultDeserializationContextTest",
+  "source_file": "DefaultDeserializationContext.java"
+}

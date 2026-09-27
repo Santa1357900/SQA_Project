@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 19,
+  "target_class": "org.apache.commons.compress.archivers.zip.Zip64ExtendedInformationExtraField",
+  "package_name": "org.apache.commons.compress.archivers.zip",
+  "class_name": "Zip64ExtendedInformationExtraField",
+  "raw_class_name": "Zip64ExtendedInformationExtraField",
+  "test_class_name": "Zip64ExtendedInformationExtraFieldTest",
+  "source_file": "Zip64ExtendedInformationExtraField.java"
+}

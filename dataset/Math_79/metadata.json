@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 79,
+  "target_class": "org.apache.commons.math.util.MathUtils",
+  "package_name": "org.apache.commons.math.util",
+  "class_name": "MathUtils",
+  "raw_class_name": "MathUtils",
+  "test_class_name": "MathUtilsTest",
+  "source_file": "MathUtils.java"
+}

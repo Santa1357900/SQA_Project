@@ -1,0 +1,10 @@
+{
+  "project": "Time",
+  "bug_id": 11,
+  "target_class": "org.joda.time.tz.ZoneInfoCompiler",
+  "package_name": "org.joda.time.tz",
+  "class_name": "ZoneInfoCompiler",
+  "raw_class_name": "ZoneInfoCompiler",
+  "test_class_name": "ZoneInfoCompilerTest",
+  "source_file": "ZoneInfoCompiler.java"
+}

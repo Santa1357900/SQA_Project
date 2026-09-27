@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 91,
+  "target_class": "org.jsoup.UncheckedIOException",
+  "package_name": "org.jsoup",
+  "class_name": "UncheckedIOException",
+  "raw_class_name": "UncheckedIOException",
+  "test_class_name": "UncheckedIOExceptionTest",
+  "source_file": "UncheckedIOException.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Csv",
+  "bug_id": 8,
+  "target_class": "org.apache.commons.csv.CSVFormat",
+  "package_name": "org.apache.commons.csv",
+  "class_name": "CSVFormat",
+  "raw_class_name": "CSVFormat",
+  "test_class_name": "CSVFormatTest",
+  "source_file": "CSVFormat.java"
+}

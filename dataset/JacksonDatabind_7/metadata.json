@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 7,
+  "target_class": "com.fasterxml.jackson.databind.util.TokenBuffer",
+  "package_name": "com.fasterxml.jackson.databind.util",
+  "class_name": "TokenBuffer",
+  "raw_class_name": "TokenBuffer",
+  "test_class_name": "TokenBufferTest",
+  "source_file": "TokenBuffer.java"
+}

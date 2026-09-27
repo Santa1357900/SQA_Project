@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 32,
+  "target_class": "org.mockito.internal.configuration.SpyAnnotationEngine",
+  "package_name": "org.mockito.internal.configuration",
+  "class_name": "SpyAnnotationEngine",
+  "raw_class_name": "SpyAnnotationEngine",
+  "test_class_name": "SpyAnnotationEngineTest",
+  "source_file": "SpyAnnotationEngine.java"
+}

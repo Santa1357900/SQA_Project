@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 98,
+  "target_class": "org.apache.commons.math.linear.BigMatrixImpl",
+  "package_name": "org.apache.commons.math.linear",
+  "class_name": "BigMatrixImpl",
+  "raw_class_name": "BigMatrixImpl",
+  "test_class_name": "BigMatrixImplTest",
+  "source_file": "BigMatrixImpl.java"
+}

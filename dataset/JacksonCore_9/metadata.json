@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 9,
+  "target_class": "com.fasterxml.jackson.core.base.ParserMinimalBase",
+  "package_name": "com.fasterxml.jackson.core.base",
+  "class_name": "ParserMinimalBase",
+  "raw_class_name": "ParserMinimalBase",
+  "test_class_name": "ParserMinimalBaseTest",
+  "source_file": "ParserMinimalBase.java"
+}

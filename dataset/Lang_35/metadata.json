@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 35,
+  "target_class": "org.apache.commons.lang3.ArrayUtils",
+  "package_name": "org.apache.commons.lang3",
+  "class_name": "ArrayUtils",
+  "raw_class_name": "ArrayUtils",
+  "test_class_name": "ArrayUtilsTest",
+  "source_file": "ArrayUtils.java"
+}

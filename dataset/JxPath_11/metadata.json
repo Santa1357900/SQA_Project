@@ -1,0 +1,10 @@
+{
+  "project": "JxPath",
+  "bug_id": 11,
+  "target_class": "org.apache.commons.jxpath.ri.model.dom.DOMAttributeIterator",
+  "package_name": "org.apache.commons.jxpath.ri.model.dom",
+  "class_name": "DOMAttributeIterator",
+  "raw_class_name": "DOMAttributeIterator",
+  "test_class_name": "DOMAttributeIteratorTest",
+  "source_file": "DOMAttributeIterator.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 41,
+  "target_class": "org.apache.commons.compress.archivers.zip.ZipArchiveInputStream",
+  "package_name": "org.apache.commons.compress.archivers.zip",
+  "class_name": "ZipArchiveInputStream",
+  "raw_class_name": "ZipArchiveInputStream",
+  "test_class_name": "ZipArchiveInputStreamTest",
+  "source_file": "ZipArchiveInputStream.java"
+}

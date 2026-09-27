@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 106,
+  "target_class": "com.google.javascript.jscomp.GlobalNamespace",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "GlobalNamespace",
+  "raw_class_name": "GlobalNamespace",
+  "test_class_name": "GlobalNamespaceTest",
+  "source_file": "GlobalNamespace.java"
+}

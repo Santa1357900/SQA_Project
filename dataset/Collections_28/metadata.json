@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 28,
+  "target_class": "org.apache.commons.collections4.trie.AbstractPatriciaTrie",
+  "package_name": "org.apache.commons.collections4.trie",
+  "class_name": "AbstractPatriciaTrie",
+  "raw_class_name": "AbstractPatriciaTrie",
+  "test_class_name": "AbstractPatriciaTrieTest",
+  "source_file": "AbstractPatriciaTrie.java"
+}

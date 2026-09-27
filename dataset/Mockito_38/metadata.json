@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 38,
+  "target_class": "org.mockito.internal.verification.argumentmatching.ArgumentMatchingTool",
+  "package_name": "org.mockito.internal.verification.argumentmatching",
+  "class_name": "ArgumentMatchingTool",
+  "raw_class_name": "ArgumentMatchingTool",
+  "test_class_name": "ArgumentMatchingToolTest",
+  "source_file": "ArgumentMatchingTool.java"
+}

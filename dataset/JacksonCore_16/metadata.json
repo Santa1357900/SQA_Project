@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 16,
+  "target_class": "com.fasterxml.jackson.core.util.JsonParserSequence",
+  "package_name": "com.fasterxml.jackson.core.util",
+  "class_name": "JsonParserSequence",
+  "raw_class_name": "JsonParserSequence",
+  "test_class_name": "JsonParserSequenceTest",
+  "source_file": "JsonParserSequence.java"
+}

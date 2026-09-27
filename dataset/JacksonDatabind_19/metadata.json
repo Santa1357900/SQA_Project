@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 19,
+  "target_class": "com.fasterxml.jackson.databind.type.TypeFactory",
+  "package_name": "com.fasterxml.jackson.databind.type",
+  "class_name": "TypeFactory",
+  "raw_class_name": "TypeFactory",
+  "test_class_name": "TypeFactoryTest",
+  "source_file": "TypeFactory.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 22,
+  "target_class": "org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream",
+  "package_name": "org.apache.commons.compress.compressors.bzip2",
+  "class_name": "BZip2CompressorInputStream",
+  "raw_class_name": "BZip2CompressorInputStream",
+  "test_class_name": "BZip2CompressorInputStreamTest",
+  "source_file": "BZip2CompressorInputStream.java"
+}

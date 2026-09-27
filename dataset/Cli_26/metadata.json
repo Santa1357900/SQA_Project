@@ -1,0 +1,10 @@
+{
+  "project": "Cli",
+  "bug_id": 26,
+  "target_class": "org.apache.commons.cli.OptionBuilder",
+  "package_name": "org.apache.commons.cli",
+  "class_name": "OptionBuilder",
+  "raw_class_name": "OptionBuilder",
+  "test_class_name": "OptionBuilderTest",
+  "source_file": "OptionBuilder.java"
+}

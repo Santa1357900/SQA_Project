@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 17,
+  "target_class": "org.apache.commons.math3.dfp.Dfp",
+  "package_name": "org.apache.commons.math3.dfp",
+  "class_name": "Dfp",
+  "raw_class_name": "Dfp",
+  "test_class_name": "DfpTest",
+  "source_file": "Dfp.java"
+}

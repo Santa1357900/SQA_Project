@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 56,
+  "target_class": "com.google.javascript.jscomp.SourceFile",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "SourceFile",
+  "raw_class_name": "SourceFile",
+  "test_class_name": "SourceFileTest",
+  "source_file": "SourceFile.java"
+}

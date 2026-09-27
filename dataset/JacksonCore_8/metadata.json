@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 8,
+  "target_class": "com.fasterxml.jackson.core.util.TextBuffer",
+  "package_name": "com.fasterxml.jackson.core.util",
+  "class_name": "TextBuffer",
+  "raw_class_name": "TextBuffer",
+  "test_class_name": "TextBufferTest",
+  "source_file": "TextBuffer.java"
+}

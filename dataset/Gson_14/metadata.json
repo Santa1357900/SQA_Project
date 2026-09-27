@@ -1,0 +1,10 @@
+{
+  "project": "Gson",
+  "bug_id": 14,
+  "target_class": "com.google.gson.internal.$Gson$Types",
+  "package_name": "com.google.gson.internal",
+  "class_name": "_Gson_Types",
+  "raw_class_name": "$Gson$Types",
+  "test_class_name": "_Gson_TypesTest",
+  "source_file": "_Gson_Types.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 48,
+  "target_class": "org.jsoup.helper.HttpConnection",
+  "package_name": "org.jsoup.helper",
+  "class_name": "HttpConnection",
+  "raw_class_name": "HttpConnection",
+  "test_class_name": "HttpConnectionTest",
+  "source_file": "HttpConnection.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 35,
+  "target_class": "com.fasterxml.jackson.databind.jsontype.impl.AsWrapperTypeDeserializer",
+  "package_name": "com.fasterxml.jackson.databind.jsontype.impl",
+  "class_name": "AsWrapperTypeDeserializer",
+  "raw_class_name": "AsWrapperTypeDeserializer",
+  "test_class_name": "AsWrapperTypeDeserializerTest",
+  "source_file": "AsWrapperTypeDeserializer.java"
+}

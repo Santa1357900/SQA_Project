@@ -1,0 +1,10 @@
+{
+  "project": "Codec",
+  "bug_id": 9,
+  "target_class": "org.apache.commons.codec.binary.Base64",
+  "package_name": "org.apache.commons.codec.binary",
+  "class_name": "Base64",
+  "raw_class_name": "Base64",
+  "test_class_name": "Base64Test",
+  "source_file": "Base64.java"
+}

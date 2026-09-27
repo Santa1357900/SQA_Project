@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 33,
+  "target_class": "org.apache.commons.compress.compressors.CompressorStreamFactory",
+  "package_name": "org.apache.commons.compress.compressors",
+  "class_name": "CompressorStreamFactory",
+  "raw_class_name": "CompressorStreamFactory",
+  "test_class_name": "CompressorStreamFactoryTest",
+  "source_file": "CompressorStreamFactory.java"
+}

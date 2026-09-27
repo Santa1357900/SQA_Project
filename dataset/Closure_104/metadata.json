@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 104,
+  "target_class": "com.google.javascript.rhino.jstype.UnionType",
+  "package_name": "com.google.javascript.rhino.jstype",
+  "class_name": "UnionType",
+  "raw_class_name": "UnionType",
+  "test_class_name": "UnionTypeTest",
+  "source_file": "UnionType.java"
+}

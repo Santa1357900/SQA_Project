@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 44,
+  "target_class": "org.jsoup.parser.TreeBuilder",
+  "package_name": "org.jsoup.parser",
+  "class_name": "TreeBuilder",
+  "raw_class_name": "TreeBuilder",
+  "test_class_name": "TreeBuilderTest",
+  "source_file": "TreeBuilder.java"
+}

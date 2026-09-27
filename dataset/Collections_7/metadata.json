@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 7,
+  "target_class": "org.apache.commons.collections.ExtendedProperties",
+  "package_name": "org.apache.commons.collections",
+  "class_name": "ExtendedProperties",
+  "raw_class_name": "ExtendedProperties",
+  "test_class_name": "ExtendedPropertiesTest",
+  "source_file": "ExtendedProperties.java"
+}

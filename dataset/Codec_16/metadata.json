@@ -1,0 +1,10 @@
+{
+  "project": "Codec",
+  "bug_id": 16,
+  "target_class": "org.apache.commons.codec.binary.Base32",
+  "package_name": "org.apache.commons.codec.binary",
+  "class_name": "Base32",
+  "raw_class_name": "Base32",
+  "test_class_name": "Base32Test",
+  "source_file": "Base32.java"
+}

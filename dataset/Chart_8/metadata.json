@@ -1,0 +1,10 @@
+{
+  "project": "Chart",
+  "bug_id": 8,
+  "target_class": "org.jfree.data.time.Week",
+  "package_name": "org.jfree.data.time",
+  "class_name": "Week",
+  "raw_class_name": "Week",
+  "test_class_name": "WeekTest",
+  "source_file": "Week.java"
+}

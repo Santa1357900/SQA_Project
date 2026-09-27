@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 84,
+  "target_class": "org.jsoup.helper.W3CDom",
+  "package_name": "org.jsoup.helper",
+  "class_name": "W3CDom",
+  "raw_class_name": "W3CDom",
+  "test_class_name": "W3CDomTest",
+  "source_file": "W3CDom.java"
+}

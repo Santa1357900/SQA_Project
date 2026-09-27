@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 40,
+  "target_class": "org.apache.commons.compress.utils.BitInputStream",
+  "package_name": "org.apache.commons.compress.utils",
+  "class_name": "BitInputStream",
+  "raw_class_name": "BitInputStream",
+  "test_class_name": "BitInputStreamTest",
+  "source_file": "BitInputStream.java"
+}

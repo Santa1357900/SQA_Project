@@ -1,0 +1,10 @@
+{
+  "project": "Cli",
+  "bug_id": 12,
+  "target_class": "org.apache.commons.cli.GnuParser",
+  "package_name": "org.apache.commons.cli",
+  "class_name": "GnuParser",
+  "raw_class_name": "GnuParser",
+  "test_class_name": "GnuParserTest",
+  "source_file": "GnuParser.java"
+}

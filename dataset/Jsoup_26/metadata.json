@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 26,
+  "target_class": "org.jsoup.safety.Cleaner",
+  "package_name": "org.jsoup.safety",
+  "class_name": "Cleaner",
+  "raw_class_name": "Cleaner",
+  "test_class_name": "CleanerTest",
+  "source_file": "Cleaner.java"
+}

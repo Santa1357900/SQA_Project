@@ -1,0 +1,10 @@
+{
+  "project": "Codec",
+  "bug_id": 1,
+  "target_class": "org.apache.commons.codec.language.Caverphone",
+  "package_name": "org.apache.commons.codec.language",
+  "class_name": "Caverphone",
+  "raw_class_name": "Caverphone",
+  "test_class_name": "CaverphoneTest",
+  "source_file": "Caverphone.java"
+}

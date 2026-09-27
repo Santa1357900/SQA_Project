@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 157,
+  "target_class": "com.google.javascript.jscomp.CodeGenerator",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "CodeGenerator",
+  "raw_class_name": "CodeGenerator",
+  "test_class_name": "CodeGeneratorTest",
+  "source_file": "CodeGenerator.java"
+}

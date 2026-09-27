@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 38,
+  "target_class": "org.apache.commons.compress.archivers.tar.TarArchiveEntry",
+  "package_name": "org.apache.commons.compress.archivers.tar",
+  "class_name": "TarArchiveEntry",
+  "raw_class_name": "TarArchiveEntry",
+  "test_class_name": "TarArchiveEntryTest",
+  "source_file": "TarArchiveEntry.java"
+}

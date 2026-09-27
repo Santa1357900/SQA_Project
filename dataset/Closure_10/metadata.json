@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 10,
+  "target_class": "com.google.javascript.jscomp.NodeUtil",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "NodeUtil",
+  "raw_class_name": "NodeUtil",
+  "test_class_name": "NodeUtilTest",
+  "source_file": "NodeUtil.java"
+}

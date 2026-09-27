@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 51,
+  "target_class": "org.apache.commons.lang.BooleanUtils",
+  "package_name": "org.apache.commons.lang",
+  "class_name": "BooleanUtils",
+  "raw_class_name": "BooleanUtils",
+  "test_class_name": "BooleanUtilsTest",
+  "source_file": "BooleanUtils.java"
+}

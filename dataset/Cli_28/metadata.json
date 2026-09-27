@@ -1,0 +1,10 @@
+{
+  "project": "Cli",
+  "bug_id": 28,
+  "target_class": "org.apache.commons.cli.Parser",
+  "package_name": "org.apache.commons.cli",
+  "class_name": "Parser",
+  "raw_class_name": "Parser",
+  "test_class_name": "ParserTest",
+  "source_file": "Parser.java"
+}

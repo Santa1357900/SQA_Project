@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 42,
+  "target_class": "com.fasterxml.jackson.databind.deser.std.FromStringDeserializer",
+  "package_name": "com.fasterxml.jackson.databind.deser.std",
+  "class_name": "FromStringDeserializer",
+  "raw_class_name": "FromStringDeserializer",
+  "test_class_name": "FromStringDeserializerTest",
+  "source_file": "FromStringDeserializer.java"
+}

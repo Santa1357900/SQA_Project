@@ -1,0 +1,10 @@
+{
+  "project": "Csv",
+  "bug_id": 5,
+  "target_class": "org.apache.commons.csv.CSVPrinter",
+  "package_name": "org.apache.commons.csv",
+  "class_name": "CSVPrinter",
+  "raw_class_name": "CSVPrinter",
+  "test_class_name": "CSVPrinterTest",
+  "source_file": "CSVPrinter.java"
+}

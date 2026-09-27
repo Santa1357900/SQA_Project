@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 44,
+  "target_class": "com.fasterxml.jackson.databind.type.SimpleType",
+  "package_name": "com.fasterxml.jackson.databind.type",
+  "class_name": "SimpleType",
+  "raw_class_name": "SimpleType",
+  "test_class_name": "SimpleTypeTest",
+  "source_file": "SimpleType.java"
+}

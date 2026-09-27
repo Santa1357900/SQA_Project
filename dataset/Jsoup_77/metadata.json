@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 77,
+  "target_class": "org.jsoup.parser.XmlTreeBuilder",
+  "package_name": "org.jsoup.parser",
+  "class_name": "XmlTreeBuilder",
+  "raw_class_name": "XmlTreeBuilder",
+  "test_class_name": "XmlTreeBuilderTest",
+  "source_file": "XmlTreeBuilder.java"
+}

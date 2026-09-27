@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 11,
+  "target_class": "org.mockito.internal.creation.DelegatingMethod",
+  "package_name": "org.mockito.internal.creation",
+  "class_name": "DelegatingMethod",
+  "raw_class_name": "DelegatingMethod",
+  "test_class_name": "DelegatingMethodTest",
+  "source_file": "DelegatingMethod.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 52,
+  "target_class": "org.apache.commons.lang.StringEscapeUtils",
+  "package_name": "org.apache.commons.lang",
+  "class_name": "StringEscapeUtils",
+  "raw_class_name": "StringEscapeUtils",
+  "test_class_name": "StringEscapeUtilsTest",
+  "source_file": "StringEscapeUtils.java"
+}

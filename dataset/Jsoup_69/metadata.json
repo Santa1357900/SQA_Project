@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 69,
+  "target_class": "org.jsoup.nodes.FormElement",
+  "package_name": "org.jsoup.nodes",
+  "class_name": "FormElement",
+  "raw_class_name": "FormElement",
+  "test_class_name": "FormElementTest",
+  "source_file": "FormElement.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Csv",
+  "bug_id": 1,
+  "target_class": "org.apache.commons.csv.ExtendedBufferedReader",
+  "package_name": "org.apache.commons.csv",
+  "class_name": "ExtendedBufferedReader",
+  "raw_class_name": "ExtendedBufferedReader",
+  "test_class_name": "ExtendedBufferedReaderTest",
+  "source_file": "ExtendedBufferedReader.java"
+}

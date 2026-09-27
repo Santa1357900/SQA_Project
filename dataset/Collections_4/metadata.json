@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 4,
+  "target_class": "org.apache.commons.collections.map.MultiValueMap",
+  "package_name": "org.apache.commons.collections.map",
+  "class_name": "MultiValueMap",
+  "raw_class_name": "MultiValueMap",
+  "test_class_name": "MultiValueMapTest",
+  "source_file": "MultiValueMap.java"
+}

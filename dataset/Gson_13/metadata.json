@@ -1,0 +1,10 @@
+{
+  "project": "Gson",
+  "bug_id": 13,
+  "target_class": "com.google.gson.stream.JsonReader",
+  "package_name": "com.google.gson.stream",
+  "class_name": "JsonReader",
+  "raw_class_name": "JsonReader",
+  "test_class_name": "JsonReaderTest",
+  "source_file": "JsonReader.java"
+}

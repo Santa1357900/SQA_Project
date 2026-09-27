@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 110,
+  "target_class": "com.fasterxml.jackson.databind.deser.impl.JavaUtilCollectionsDeserializers",
+  "package_name": "com.fasterxml.jackson.databind.deser.impl",
+  "class_name": "JavaUtilCollectionsDeserializers",
+  "raw_class_name": "JavaUtilCollectionsDeserializers",
+  "test_class_name": "JavaUtilCollectionsDeserializersTest",
+  "source_file": "JavaUtilCollectionsDeserializers.java"
+}

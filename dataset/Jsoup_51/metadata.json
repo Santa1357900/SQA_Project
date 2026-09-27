@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 51,
+  "target_class": "org.jsoup.parser.CharacterReader",
+  "package_name": "org.jsoup.parser",
+  "class_name": "CharacterReader",
+  "raw_class_name": "CharacterReader",
+  "test_class_name": "CharacterReaderTest",
+  "source_file": "CharacterReader.java"
+}

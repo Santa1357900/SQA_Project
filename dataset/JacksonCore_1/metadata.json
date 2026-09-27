@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 1,
+  "target_class": "com.fasterxml.jackson.core.io.NumberInput",
+  "package_name": "com.fasterxml.jackson.core.io",
+  "class_name": "NumberInput",
+  "raw_class_name": "NumberInput",
+  "test_class_name": "NumberInputTest",
+  "source_file": "NumberInput.java"
+}

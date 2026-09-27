@@ -1,0 +1,10 @@
+{
+  "project": "JacksonXml",
+  "bug_id": 1,
+  "target_class": "com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser",
+  "package_name": "com.fasterxml.jackson.dataformat.xml.deser",
+  "class_name": "FromXmlParser",
+  "raw_class_name": "FromXmlParser",
+  "test_class_name": "FromXmlParserTest",
+  "source_file": "FromXmlParser.java"
+}

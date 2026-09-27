@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 18,
+  "target_class": "org.apache.commons.collections.set.ListOrderedSet",
+  "package_name": "org.apache.commons.collections.set",
+  "class_name": "ListOrderedSet",
+  "raw_class_name": "ListOrderedSet",
+  "test_class_name": "ListOrderedSetTest",
+  "source_file": "ListOrderedSet.java"
+}

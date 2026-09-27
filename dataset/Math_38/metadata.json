@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 38,
+  "target_class": "org.apache.commons.math.optimization.direct.BOBYQAOptimizer",
+  "package_name": "org.apache.commons.math.optimization.direct",
+  "class_name": "BOBYQAOptimizer",
+  "raw_class_name": "BOBYQAOptimizer",
+  "test_class_name": "BOBYQAOptimizerTest",
+  "source_file": "BOBYQAOptimizer.java"
+}

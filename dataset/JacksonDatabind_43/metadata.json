@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 43,
+  "target_class": "com.fasterxml.jackson.databind.deser.impl.ObjectIdValueProperty",
+  "package_name": "com.fasterxml.jackson.databind.deser.impl",
+  "class_name": "ObjectIdValueProperty",
+  "raw_class_name": "ObjectIdValueProperty",
+  "test_class_name": "ObjectIdValuePropertyTest",
+  "source_file": "ObjectIdValueProperty.java"
+}

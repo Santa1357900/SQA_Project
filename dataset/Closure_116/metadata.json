@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 116,
+  "target_class": "com.google.javascript.jscomp.FunctionInjector",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "FunctionInjector",
+  "raw_class_name": "FunctionInjector",
+  "test_class_name": "FunctionInjectorTest",
+  "source_file": "FunctionInjector.java"
+}

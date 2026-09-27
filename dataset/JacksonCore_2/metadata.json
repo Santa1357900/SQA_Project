@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 2,
+  "target_class": "com.fasterxml.jackson.core.json.ReaderBasedJsonParser",
+  "package_name": "com.fasterxml.jackson.core.json",
+  "class_name": "ReaderBasedJsonParser",
+  "raw_class_name": "ReaderBasedJsonParser",
+  "test_class_name": "ReaderBasedJsonParserTest",
+  "source_file": "ReaderBasedJsonParser.java"
+}

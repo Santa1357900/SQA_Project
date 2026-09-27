@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 20,
+  "target_class": "org.mockito.internal.creation.bytebuddy.ByteBuddyMockMaker",
+  "package_name": "org.mockito.internal.creation.bytebuddy",
+  "class_name": "ByteBuddyMockMaker",
+  "raw_class_name": "ByteBuddyMockMaker",
+  "test_class_name": "ByteBuddyMockMakerTest",
+  "source_file": "ByteBuddyMockMaker.java"
+}

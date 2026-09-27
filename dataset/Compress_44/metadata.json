@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 44,
+  "target_class": "org.apache.commons.compress.utils.ChecksumCalculatingInputStream",
+  "package_name": "org.apache.commons.compress.utils",
+  "class_name": "ChecksumCalculatingInputStream",
+  "raw_class_name": "ChecksumCalculatingInputStream",
+  "test_class_name": "ChecksumCalculatingInputStreamTest",
+  "source_file": "ChecksumCalculatingInputStream.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 61,
+  "target_class": "org.apache.commons.math.distribution.PoissonDistributionImpl",
+  "package_name": "org.apache.commons.math.distribution",
+  "class_name": "PoissonDistributionImpl",
+  "raw_class_name": "PoissonDistributionImpl",
+  "test_class_name": "PoissonDistributionImplTest",
+  "source_file": "PoissonDistributionImpl.java"
+}

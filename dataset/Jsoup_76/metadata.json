@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 76,
+  "target_class": "org.jsoup.parser.HtmlTreeBuilderState",
+  "package_name": "org.jsoup.parser",
+  "class_name": "HtmlTreeBuilderState",
+  "raw_class_name": "HtmlTreeBuilderState",
+  "test_class_name": "HtmlTreeBuilderStateTest",
+  "source_file": "HtmlTreeBuilderState.java"
+}

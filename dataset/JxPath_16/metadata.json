@@ -1,0 +1,10 @@
+{
+  "project": "JxPath",
+  "bug_id": 16,
+  "target_class": "org.apache.commons.jxpath.ri.model.dom.DOMNodePointer",
+  "package_name": "org.apache.commons.jxpath.ri.model.dom",
+  "class_name": "DOMNodePointer",
+  "raw_class_name": "DOMNodePointer",
+  "test_class_name": "DOMNodePointerTest",
+  "source_file": "DOMNodePointer.java"
+}

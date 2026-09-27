@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 95,
+  "target_class": "org.apache.commons.math.distribution.FDistributionImpl",
+  "package_name": "org.apache.commons.math.distribution",
+  "class_name": "FDistributionImpl",
+  "raw_class_name": "FDistributionImpl",
+  "test_class_name": "FDistributionImplTest",
+  "source_file": "FDistributionImpl.java"
+}

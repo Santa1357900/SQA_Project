@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 28,
+  "target_class": "org.apache.commons.math3.optimization.linear.SimplexSolver",
+  "package_name": "org.apache.commons.math3.optimization.linear",
+  "class_name": "SimplexSolver",
+  "raw_class_name": "SimplexSolver",
+  "test_class_name": "SimplexSolverTest",
+  "source_file": "SimplexSolver.java"
+}

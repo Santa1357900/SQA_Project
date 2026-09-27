@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 36,
+  "target_class": "org.jsoup.helper.DataUtil",
+  "package_name": "org.jsoup.helper",
+  "class_name": "DataUtil",
+  "raw_class_name": "DataUtil",
+  "test_class_name": "DataUtilTest",
+  "source_file": "DataUtil.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 17,
+  "target_class": "org.apache.commons.collections.functors.EqualPredicate",
+  "package_name": "org.apache.commons.collections.functors",
+  "class_name": "EqualPredicate",
+  "raw_class_name": "EqualPredicate",
+  "test_class_name": "EqualPredicateTest",
+  "source_file": "EqualPredicate.java"
+}

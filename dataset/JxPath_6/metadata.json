@@ -1,0 +1,10 @@
+{
+  "project": "JxPath",
+  "bug_id": 6,
+  "target_class": "org.apache.commons.jxpath.ri.compiler.CoreOperationCompare",
+  "package_name": "org.apache.commons.jxpath.ri.compiler",
+  "class_name": "CoreOperationCompare",
+  "raw_class_name": "CoreOperationCompare",
+  "test_class_name": "CoreOperationCompareTest",
+  "source_file": "CoreOperationCompare.java"
+}

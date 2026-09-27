@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 8,
+  "target_class": "org.apache.commons.math3.distribution.DiscreteDistribution",
+  "package_name": "org.apache.commons.math3.distribution",
+  "class_name": "DiscreteDistribution",
+  "raw_class_name": "DiscreteDistribution",
+  "test_class_name": "DiscreteDistributionTest",
+  "source_file": "DiscreteDistribution.java"
+}

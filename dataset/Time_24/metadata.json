@@ -1,0 +1,10 @@
+{
+  "project": "Time",
+  "bug_id": 24,
+  "target_class": "org.joda.time.format.DateTimeParserBucket",
+  "package_name": "org.joda.time.format",
+  "class_name": "DateTimeParserBucket",
+  "raw_class_name": "DateTimeParserBucket",
+  "test_class_name": "DateTimeParserBucketTest",
+  "source_file": "DateTimeParserBucket.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 70,
+  "target_class": "com.fasterxml.jackson.databind.deser.impl.BeanPropertyMap",
+  "package_name": "com.fasterxml.jackson.databind.deser.impl",
+  "class_name": "BeanPropertyMap",
+  "raw_class_name": "BeanPropertyMap",
+  "test_class_name": "BeanPropertyMapTest",
+  "source_file": "BeanPropertyMap.java"
+}

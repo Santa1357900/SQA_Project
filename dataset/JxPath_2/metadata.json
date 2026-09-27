@@ -1,0 +1,10 @@
+{
+  "project": "JxPath",
+  "bug_id": 2,
+  "target_class": "org.apache.commons.jxpath.ri.compiler.Expression",
+  "package_name": "org.apache.commons.jxpath.ri.compiler",
+  "class_name": "Expression",
+  "raw_class_name": "Expression",
+  "test_class_name": "ExpressionTest",
+  "source_file": "Expression.java"
+}

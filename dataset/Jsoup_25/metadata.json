@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 25,
+  "target_class": "org.jsoup.parser.Tag",
+  "package_name": "org.jsoup.parser",
+  "class_name": "Tag",
+  "raw_class_name": "Tag",
+  "test_class_name": "TagTest",
+  "source_file": "Tag.java"
+}

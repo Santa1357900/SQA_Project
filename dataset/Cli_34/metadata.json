@@ -1,0 +1,10 @@
+{
+  "project": "Cli",
+  "bug_id": 34,
+  "target_class": "org.apache.commons.cli.Option",
+  "package_name": "org.apache.commons.cli",
+  "class_name": "Option",
+  "raw_class_name": "Option",
+  "test_class_name": "OptionTest",
+  "source_file": "Option.java"
+}

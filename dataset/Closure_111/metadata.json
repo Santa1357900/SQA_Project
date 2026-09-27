@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 111,
+  "target_class": "com.google.javascript.jscomp.type.ClosureReverseAbstractInterpreter",
+  "package_name": "com.google.javascript.jscomp.type",
+  "class_name": "ClosureReverseAbstractInterpreter",
+  "raw_class_name": "ClosureReverseAbstractInterpreter",
+  "test_class_name": "ClosureReverseAbstractInterpreterTest",
+  "source_file": "ClosureReverseAbstractInterpreter.java"
+}

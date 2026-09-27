@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 1,
+  "target_class": "org.apache.commons.compress.archivers.cpio.CpioArchiveOutputStream",
+  "package_name": "org.apache.commons.compress.archivers.cpio",
+  "class_name": "CpioArchiveOutputStream",
+  "raw_class_name": "CpioArchiveOutputStream",
+  "test_class_name": "CpioArchiveOutputStreamTest",
+  "source_file": "CpioArchiveOutputStream.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Chart",
+  "bug_id": 15,
+  "target_class": "org.jfree.chart.plot.PiePlot",
+  "package_name": "org.jfree.chart.plot",
+  "class_name": "PiePlot",
+  "raw_class_name": "PiePlot",
+  "test_class_name": "PiePlotTest",
+  "source_file": "PiePlot.java"
+}

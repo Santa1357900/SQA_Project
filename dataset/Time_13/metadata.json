@@ -1,0 +1,10 @@
+{
+  "project": "Time",
+  "bug_id": 13,
+  "target_class": "org.joda.time.format.PeriodFormatterBuilder",
+  "package_name": "org.joda.time.format",
+  "class_name": "PeriodFormatterBuilder",
+  "raw_class_name": "PeriodFormatterBuilder",
+  "test_class_name": "PeriodFormatterBuilderTest",
+  "source_file": "PeriodFormatterBuilder.java"
+}

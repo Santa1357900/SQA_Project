@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 61,
+  "target_class": "com.fasterxml.jackson.databind.ObjectMapper",
+  "package_name": "com.fasterxml.jackson.databind",
+  "class_name": "ObjectMapper",
+  "raw_class_name": "ObjectMapper",
+  "test_class_name": "ObjectMapperTest",
+  "source_file": "ObjectMapper.java"
+}

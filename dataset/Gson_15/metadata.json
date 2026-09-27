@@ -1,0 +1,10 @@
+{
+  "project": "Gson",
+  "bug_id": 15,
+  "target_class": "com.google.gson.stream.JsonWriter",
+  "package_name": "com.google.gson.stream",
+  "class_name": "JsonWriter",
+  "raw_class_name": "JsonWriter",
+  "test_class_name": "JsonWriterTest",
+  "source_file": "JsonWriter.java"
+}

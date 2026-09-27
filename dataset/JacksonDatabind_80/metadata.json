@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 80,
+  "target_class": "com.fasterxml.jackson.databind.jsontype.impl.StdSubtypeResolver",
+  "package_name": "com.fasterxml.jackson.databind.jsontype.impl",
+  "class_name": "StdSubtypeResolver",
+  "raw_class_name": "StdSubtypeResolver",
+  "test_class_name": "StdSubtypeResolverTest",
+  "source_file": "StdSubtypeResolver.java"
+}

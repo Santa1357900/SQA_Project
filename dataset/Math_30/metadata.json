@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 30,
+  "target_class": "org.apache.commons.math3.stat.inference.MannWhitneyUTest",
+  "package_name": "org.apache.commons.math3.stat.inference",
+  "class_name": "MannWhitneyUTest",
+  "raw_class_name": "MannWhitneyUTest",
+  "test_class_name": "MannWhitneyUTestTest",
+  "source_file": "MannWhitneyUTest.java"
+}

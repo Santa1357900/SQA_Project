@@ -1,0 +1,10 @@
+{
+  "project": "Time",
+  "bug_id": 5,
+  "target_class": "org.joda.time.Period",
+  "package_name": "org.joda.time",
+  "class_name": "Period",
+  "raw_class_name": "Period",
+  "test_class_name": "PeriodTest",
+  "source_file": "Period.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Cli",
+  "bug_id": 33,
+  "target_class": "org.apache.commons.cli.HelpFormatter",
+  "package_name": "org.apache.commons.cli",
+  "class_name": "HelpFormatter",
+  "raw_class_name": "HelpFormatter",
+  "test_class_name": "HelpFormatterTest",
+  "source_file": "HelpFormatter.java"
+}

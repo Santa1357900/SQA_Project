@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 14,
+  "target_class": "com.fasterxml.jackson.core.io.IOContext",
+  "package_name": "com.fasterxml.jackson.core.io",
+  "class_name": "IOContext",
+  "raw_class_name": "IOContext",
+  "test_class_name": "IOContextTest",
+  "source_file": "IOContext.java"
+}

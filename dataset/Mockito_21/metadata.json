@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 21,
+  "target_class": "org.mockito.internal.creation.instance.ConstructorInstantiator",
+  "package_name": "org.mockito.internal.creation.instance",
+  "class_name": "ConstructorInstantiator",
+  "raw_class_name": "ConstructorInstantiator",
+  "test_class_name": "ConstructorInstantiatorTest",
+  "source_file": "ConstructorInstantiator.java"
+}

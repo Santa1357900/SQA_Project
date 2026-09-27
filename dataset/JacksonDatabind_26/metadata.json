@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 26,
+  "target_class": "com.fasterxml.jackson.databind.ser.BeanPropertyWriter",
+  "package_name": "com.fasterxml.jackson.databind.ser",
+  "class_name": "BeanPropertyWriter",
+  "raw_class_name": "BeanPropertyWriter",
+  "test_class_name": "BeanPropertyWriterTest",
+  "source_file": "BeanPropertyWriter.java"
+}

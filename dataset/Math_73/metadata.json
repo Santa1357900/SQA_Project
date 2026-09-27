@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 73,
+  "target_class": "org.apache.commons.math.analysis.solvers.BrentSolver",
+  "package_name": "org.apache.commons.math.analysis.solvers",
+  "class_name": "BrentSolver",
+  "raw_class_name": "BrentSolver",
+  "test_class_name": "BrentSolverTest",
+  "source_file": "BrentSolver.java"
+}

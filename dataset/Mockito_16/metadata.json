@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 16,
+  "target_class": "org.mockito.internal.MockitoCore",
+  "package_name": "org.mockito.internal",
+  "class_name": "MockitoCore",
+  "raw_class_name": "MockitoCore",
+  "test_class_name": "MockitoCoreTest",
+  "source_file": "MockitoCore.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 85,
+  "target_class": "org.apache.commons.math.analysis.solvers.UnivariateRealSolverUtils",
+  "package_name": "org.apache.commons.math.analysis.solvers",
+  "class_name": "UnivariateRealSolverUtils",
+  "raw_class_name": "UnivariateRealSolverUtils",
+  "test_class_name": "UnivariateRealSolverUtilsTest",
+  "source_file": "UnivariateRealSolverUtils.java"
+}

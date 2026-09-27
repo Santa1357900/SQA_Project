@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 88,
+  "target_class": "com.fasterxml.jackson.databind.jsontype.impl.ClassNameIdResolver",
+  "package_name": "com.fasterxml.jackson.databind.jsontype.impl",
+  "class_name": "ClassNameIdResolver",
+  "raw_class_name": "ClassNameIdResolver",
+  "test_class_name": "ClassNameIdResolverTest",
+  "source_file": "ClassNameIdResolver.java"
+}

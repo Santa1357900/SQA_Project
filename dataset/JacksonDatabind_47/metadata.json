@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 47,
+  "target_class": "com.fasterxml.jackson.databind.AnnotationIntrospector",
+  "package_name": "com.fasterxml.jackson.databind",
+  "class_name": "AnnotationIntrospector",
+  "raw_class_name": "AnnotationIntrospector",
+  "test_class_name": "AnnotationIntrospectorTest",
+  "source_file": "AnnotationIntrospector.java"
+}

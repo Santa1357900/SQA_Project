@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 40,
+  "target_class": "org.apache.commons.math.analysis.solvers.BracketingNthOrderBrentSolver",
+  "package_name": "org.apache.commons.math.analysis.solvers",
+  "class_name": "BracketingNthOrderBrentSolver",
+  "raw_class_name": "BracketingNthOrderBrentSolver",
+  "test_class_name": "BracketingNthOrderBrentSolverTest",
+  "source_file": "BracketingNthOrderBrentSolver.java"
+}

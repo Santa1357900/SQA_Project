@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 22,
+  "target_class": "org.apache.commons.collections4.map.ListOrderedMap",
+  "package_name": "org.apache.commons.collections4.map",
+  "class_name": "ListOrderedMap",
+  "raw_class_name": "ListOrderedMap",
+  "test_class_name": "ListOrderedMapTest",
+  "source_file": "ListOrderedMap.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 53,
+  "target_class": "com.fasterxml.jackson.databind.type.TypeBindings",
+  "package_name": "com.fasterxml.jackson.databind.type",
+  "class_name": "TypeBindings",
+  "raw_class_name": "TypeBindings",
+  "test_class_name": "TypeBindingsTest",
+  "source_file": "TypeBindings.java"
+}

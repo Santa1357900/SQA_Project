@@ -1,0 +1,10 @@
+{
+  "project": "Chart",
+  "bug_id": 18,
+  "target_class": "org.jfree.data.DefaultKeyedValues",
+  "package_name": "org.jfree.data",
+  "class_name": "DefaultKeyedValues",
+  "raw_class_name": "DefaultKeyedValues",
+  "test_class_name": "DefaultKeyedValuesTest",
+  "source_file": "DefaultKeyedValues.java"
+}

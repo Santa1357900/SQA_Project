@@ -1,0 +1,194 @@
+ว่าคลาสมี Constructor อะไรบ้าง
+   - ❌ ห้ามส่ง `null` ให้ parameter ที่เป็น primitive type (`int`, `double`, `boolean`, `char`, `long`) เด็ดขาด เพราะ javac จะฟ้อง type incompatible
+   - ❌ ห้ามเรียกใช้ `private` method / constructor หรือ private field หรือ private inner class (เช่น `Assign` ใน `RemoveUnusedVars`) โดยตรง
+   - ❌ ห้ามใช้ `assertEquals(null, val)` ให้ใช้ `assertNull(val)` แทนเสมอ
+   - ❌ ห้ามใช้ `assertEquals(Double.NaN, val)` เพราะ ambiguous ใน JUnit 4 ให้ใช้ `assertEquals(Double.valueOf(Double.NaN), val)` หรือ `assertTrue(Double.isNaN(val))`
+5. Full Imports Required:
+   - ต้อง Import ทุกคลาสที่เรียกใช้อย่างครบถ้วน ไม่ละเลย Utility หรือ Annotation package (เช่น `com.fasterxml.jackson.databind.util.ClassUtil`, `com.fasterxml.jackson.annotation.*`, `org.jsoup.parser.*`, `org.jsoup.nodes.*`)
+
+[TEST DESIGN & FAULT DETECTION DIRECTIVES (เพิ่มโอกาส REVEALING และลด INCONCLUSIVE)]
+1. Oracle Precision (ลด Inconclusive จากการ Assert เปราะบาง):
+   - ❌ อย่า Assert ข้อความ Exception หรือ toString() แบบ Exact Match (เพราะข้อความอาจเปลี่ยนตามเวอร์ชัน) ให้เน้น Assert ชนิดของ Exception หรือใช้ `assertTrue(e.getMessage().contains(...))` แทน
+   - สำหรับกรณีทดสอบที่คาดว่าจะเกิด Exception ให้ใช้โครงสร้าง `try { method(); fail("Should throw exception"); } catch (SpecificException e) { /* Expected */ }` หรือ `@Test(expected = SpecificException.class)`
+2. Bug-Hunting Edge Cases (กระตุ้นจุดบกพร่องที่ซ่อนอยู่):
+   - ค่าขอบเขตวิกฤต: ค่าศูนย์ (0), ค่าลบ (-1), Maximum/Minimum values, Integer overflow/underflow
+   - ปัญหา Null Safety: ส่ง `null` เข้าไปยัง Public method ที่รับ Object เพื่อดูว่ามี NullPointerException โดยไม่ได้จัดการหรือไม่
+   - กรณี Collection/Array: ทดสอบ Empty, Single element, Duplicate elements, Null elements, Unmodifiable collection
+   - กรณี String: Empty string `""`, Whitespace only `"   "`, String containing delimiters, Escape sequences, Special Unicode characters
+   - Boundary & Loop conditions: จุดเปลี่ยนเงื่อนไข `<` vs `<=`, Off-by-one errors, Empty input streams
+
+[TARGET SOURCE CODE]
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.math3.linear;
+
+import org.apache.commons.math3.util.FastMath;
+
+/**
+ * Calculates the rectangular Cholesky decomposition of a matrix.
+ * <p>The rectangular Cholesky decomposition of a real symmetric positive
+ * semidefinite matrix A consists of a rectangular matrix B with the same
+ * number of rows such that: A is almost equal to BB<sup>T</sup>, depending
+ * on a user-defined tolerance. In a sense, this is the square root of A.</p>
+ * <p>The difference with respect to the regular {@link CholeskyDecomposition}
+ * is that rows/columns may be permuted (hence the rectangular shape instead
+ * of the traditional triangular shape) and there is a threshold to ignore
+ * small diagonal elements. This is used for example to generate {@link
+ * org.apache.commons.math3.random.CorrelatedRandomVectorGenerator correlated
+ * random n-dimensions vectors} in a p-dimension subspace (p < n).
+ * In other words, it allows generating random vectors from a covariance
+ * matrix that is only positive semidefinite, and not positive definite.</p>
+ * <p>Rectangular Cholesky decomposition is <em>not</em> suited for solving
+ * linear systems, so it does not provide any {@link DecompositionSolver
+ * decomposition solver}.</p>
+ *
+ * @see <a href="http://mathworld.wolfram.com/CholeskyDecomposition.html">MathWorld</a>
+ * @see <a href="http://en.wikipedia.org/wiki/Cholesky_decomposition">Wikipedia</a>
+ * @version $Id$
+ * @since 2.0 (changed to concrete class in 3.0)
+ */
+public class RectangularCholeskyDecomposition {
+
+    /** Permutated Cholesky root of the symmetric positive semidefinite matrix. */
+    private final RealMatrix root;
+
+    /** Rank of the symmetric positive semidefinite matrix. */
+    private int rank;
+
+    /**
+     * Decompose a symmetric positive semidefinite matrix.
+     *
+     * @param matrix Symmetric positive semidefinite matrix.
+     * @param small Diagonal elements threshold under which  column are
+     * considered to be dependent on previous ones and are discarded.
+     * @exception NonPositiveDefiniteMatrixException if the matrix is not
+     * positive semidefinite.
+     */
+    public RectangularCholeskyDecomposition(RealMatrix matrix, double small)
+        throws NonPositiveDefiniteMatrixException {
+
+        final int order = matrix.getRowDimension();
+        final double[][] c = matrix.getData();
+        final double[][] b = new double[order][order];
+
+        int[] swap  = new int[order];
+        int[] index = new int[order];
+        for (int i = 0; i < order; ++i) {
+            index[i] = i;
+        }
+
+        int r = 0;
+        for (boolean loop = true; loop;) {
+
+            // find maximal diagonal element
+            swap[r] = r;
+            for (int i = r + 1; i < order; ++i) {
+                int ii  = index[i];
+                int isi = index[swap[i]];
+                if (c[ii][ii] > c[isi][isi]) {
+                    swap[r] = i;
+                }
+            }
+
+
+            // swap elements
+            if (swap[r] != r) {
+                int tmp = index[r];
+                index[r] = index[swap[r]];
+                index[swap[r]] = tmp;
+            }
+
+            // check diagonal element
+            int ir = index[r];
+            if (c[ir][ir] < small) {
+
+                if (r == 0) {
+                    throw new NonPositiveDefiniteMatrixException(c[ir][ir], ir, small);
+                }
+
+                // check remaining diagonal elements
+                for (int i = r; i < order; ++i) {
+                    if (c[index[i]][index[i]] < -small) {
+                        // there is at least one sufficiently negative diagonal element,
+                        // the symmetric positive semidefinite matrix is wrong
+                        throw new NonPositiveDefiniteMatrixException(c[index[i]][index[i]], i, small);
+                    }
+                }
+
+                // all remaining diagonal elements are close to zero, we consider we have
+                // found the rank of the symmetric positive semidefinite matrix
+                ++r;
+                loop = false;
+
+            } else {
+
+                // transform the matrix
+                final double sqrt = FastMath.sqrt(c[ir][ir]);
+                b[r][r] = sqrt;
+                final double inverse  = 1 / sqrt;
+                for (int i = r + 1; i < order; ++i) {
+                    final int ii = index[i];
+                    final double e = inverse * c[ii][ir];
+                    b[i][r] = e;
+                    c[ii][ii] -= e * e;
+                    for (int j = r + 1; j < i; ++j) {
+                        final int ij = index[j];
+                        final double f = c[ii][ij] - e * b[j][r];
+                        c[ii][ij] = f;
+                        c[ij][ii] = f;
+                    }
+                }
+
+                // prepare next iteration
+                loop = ++r < order;
+            }
+        }
+
+        // build the root matrix
+        rank = r;
+        root = MatrixUtils.createRealMatrix(order, r);
+        for (int i = 0; i < order; ++i) {
+            for (int j = 0; j < r; ++j) {
+                root.setEntry(index[i], j, b[i][j]);
+            }
+        }
+
+    }
+
+    /** Get the root of the covariance matrix.
+     * The root is the rectangular matrix <code>B</code> such that
+     * the covariance matrix is equal to <code>B.B<sup>T</sup></code>
+     * @return root of the square matrix
+     * @see #getRank()
+     */
+    public RealMatrix getRootMatrix() {
+        return root;
+    }
+
+    /** Get the rank of the symmetric positive semidefinite matrix.
+     * The r is the number of independent rows in the symmetric positive semidefinite
+     * matrix, it is also the number of columns of the rectangular
+     * matrix of the decomposition.
+     * @return r of the square matrix.
+     * @see #getRootMatrix()
+     */
+    public int getRank() {
+        return rank;
+    }
+
+}

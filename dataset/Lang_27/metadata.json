@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 27,
+  "target_class": "org.apache.commons.lang3.math.NumberUtils",
+  "package_name": "org.apache.commons.lang3.math",
+  "class_name": "NumberUtils",
+  "raw_class_name": "NumberUtils",
+  "test_class_name": "NumberUtilsTest",
+  "source_file": "NumberUtils.java"
+}

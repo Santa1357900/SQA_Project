@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 63,
+  "target_class": "com.fasterxml.jackson.databind.JsonMappingException",
+  "package_name": "com.fasterxml.jackson.databind",
+  "class_name": "JsonMappingException",
+  "raw_class_name": "JsonMappingException",
+  "test_class_name": "JsonMappingExceptionTest",
+  "source_file": "JsonMappingException.java"
+}

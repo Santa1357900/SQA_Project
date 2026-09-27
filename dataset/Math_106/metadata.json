@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 106,
+  "target_class": "org.apache.commons.math.fraction.ProperFractionFormat",
+  "package_name": "org.apache.commons.math.fraction",
+  "class_name": "ProperFractionFormat",
+  "raw_class_name": "ProperFractionFormat",
+  "test_class_name": "ProperFractionFormatTest",
+  "source_file": "ProperFractionFormat.java"
+}

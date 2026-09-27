@@ -1,0 +1,10 @@
+{
+  "project": "Collections",
+  "bug_id": 26,
+  "target_class": "org.apache.commons.collections4.keyvalue.MultiKey",
+  "package_name": "org.apache.commons.collections4.keyvalue",
+  "class_name": "MultiKey",
+  "raw_class_name": "MultiKey",
+  "test_class_name": "MultiKeyTest",
+  "source_file": "MultiKey.java"
+}

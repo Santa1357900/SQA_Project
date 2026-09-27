@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 23,
+  "target_class": "com.fasterxml.jackson.core.util.DefaultPrettyPrinter",
+  "package_name": "com.fasterxml.jackson.core.util",
+  "class_name": "DefaultPrettyPrinter",
+  "raw_class_name": "DefaultPrettyPrinter",
+  "test_class_name": "DefaultPrettyPrinterTest",
+  "source_file": "DefaultPrettyPrinter.java"
+}

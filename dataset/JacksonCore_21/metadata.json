@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 21,
+  "target_class": "com.fasterxml.jackson.core.filter.FilteringParserDelegate",
+  "package_name": "com.fasterxml.jackson.core.filter",
+  "class_name": "FilteringParserDelegate",
+  "raw_class_name": "FilteringParserDelegate",
+  "test_class_name": "FilteringParserDelegateTest",
+  "source_file": "FilteringParserDelegate.java"
+}

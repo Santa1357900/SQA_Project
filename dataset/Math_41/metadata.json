@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 41,
+  "target_class": "org.apache.commons.math.stat.descriptive.moment.Variance",
+  "package_name": "org.apache.commons.math.stat.descriptive.moment",
+  "class_name": "Variance",
+  "raw_class_name": "Variance",
+  "test_class_name": "VarianceTest",
+  "source_file": "Variance.java"
+}

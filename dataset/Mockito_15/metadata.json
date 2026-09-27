@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 15,
+  "target_class": "org.mockito.internal.configuration.injection.FinalMockCandidateFilter",
+  "package_name": "org.mockito.internal.configuration.injection",
+  "class_name": "FinalMockCandidateFilter",
+  "raw_class_name": "FinalMockCandidateFilter",
+  "test_class_name": "FinalMockCandidateFilterTest",
+  "source_file": "FinalMockCandidateFilter.java"
+}

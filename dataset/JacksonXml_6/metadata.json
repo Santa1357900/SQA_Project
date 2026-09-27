@@ -1,0 +1,10 @@
+{
+  "project": "JacksonXml",
+  "bug_id": 6,
+  "target_class": "com.fasterxml.jackson.dataformat.xml.ser.ToXmlGenerator",
+  "package_name": "com.fasterxml.jackson.dataformat.xml.ser",
+  "class_name": "ToXmlGenerator",
+  "raw_class_name": "ToXmlGenerator",
+  "test_class_name": "ToXmlGeneratorTest",
+  "source_file": "ToXmlGenerator.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 14,
+  "target_class": "org.apache.commons.math3.optim.nonlinear.vector.jacobian.AbstractLeastSquaresOptimizer",
+  "package_name": "org.apache.commons.math3.optim.nonlinear.vector.jacobian",
+  "class_name": "AbstractLeastSquaresOptimizer",
+  "raw_class_name": "AbstractLeastSquaresOptimizer",
+  "test_class_name": "AbstractLeastSquaresOptimizerTest",
+  "source_file": "AbstractLeastSquaresOptimizer.java"
+}

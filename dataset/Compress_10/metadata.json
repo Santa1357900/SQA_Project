@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 10,
+  "target_class": "org.apache.commons.compress.archivers.zip.ZipFile",
+  "package_name": "org.apache.commons.compress.archivers.zip",
+  "class_name": "ZipFile",
+  "raw_class_name": "ZipFile",
+  "test_class_name": "ZipFileTest",
+  "source_file": "ZipFile.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 71,
+  "target_class": "org.jsoup.nodes.PseudoTextElement",
+  "package_name": "org.jsoup.nodes",
+  "class_name": "Evaluator",
+  "raw_class_name": "PseudoTextElement",
+  "test_class_name": "EvaluatorTest",
+  "source_file": "PseudoTextElement.java"
+}

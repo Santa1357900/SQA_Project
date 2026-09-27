@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 35,
+  "target_class": "org.mockito.Matchers",
+  "package_name": "org.mockito",
+  "class_name": "Matchers",
+  "raw_class_name": "Matchers",
+  "test_class_name": "MatchersTest",
+  "source_file": "Matchers.java"
+}

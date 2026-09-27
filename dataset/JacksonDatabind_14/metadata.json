@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 14,
+  "target_class": "com.fasterxml.jackson.databind.ObjectReader",
+  "package_name": "com.fasterxml.jackson.databind",
+  "class_name": "ObjectReader",
+  "raw_class_name": "ObjectReader",
+  "test_class_name": "ObjectReaderTest",
+  "source_file": "ObjectReader.java"
+}

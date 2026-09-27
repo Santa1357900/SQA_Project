@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 142,
+  "target_class": "com.google.javascript.jscomp.CoalesceVariableNames",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "CoalesceVariableNames",
+  "raw_class_name": "CoalesceVariableNames",
+  "test_class_name": "CoalesceVariableNamesTest",
+  "source_file": "CoalesceVariableNames.java"
+}

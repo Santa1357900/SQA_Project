@@ -1,0 +1,10 @@
+{
+  "project": "Chart",
+  "bug_id": 11,
+  "target_class": "org.jfree.chart.util.ShapeUtilities",
+  "package_name": "org.jfree.chart.util",
+  "class_name": "ShapeUtilities",
+  "raw_class_name": "ShapeUtilities",
+  "test_class_name": "ShapeUtilitiesTest",
+  "source_file": "ShapeUtilities.java"
+}

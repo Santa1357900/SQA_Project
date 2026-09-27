@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 55,
+  "target_class": "org.jsoup.parser.TokeniserState",
+  "package_name": "org.jsoup.parser",
+  "class_name": "TokeniserState",
+  "raw_class_name": "TokeniserState",
+  "test_class_name": "TokeniserStateTest",
+  "source_file": "TokeniserState.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 34,
+  "target_class": "org.apache.commons.compress.archivers.zip.X7875_NewUnix",
+  "package_name": "org.apache.commons.compress.archivers.zip",
+  "class_name": "X7875_NewUnix",
+  "raw_class_name": "X7875_NewUnix",
+  "test_class_name": "X7875_NewUnixTest",
+  "source_file": "X7875_NewUnix.java"
+}

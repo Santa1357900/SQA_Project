@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 73,
+  "target_class": "com.fasterxml.jackson.databind.introspect.POJOPropertiesCollector",
+  "package_name": "com.fasterxml.jackson.databind.introspect",
+  "class_name": "POJOPropertiesCollector",
+  "raw_class_name": "POJOPropertiesCollector",
+  "test_class_name": "POJOPropertiesCollectorTest",
+  "source_file": "POJOPropertiesCollector.java"
+}

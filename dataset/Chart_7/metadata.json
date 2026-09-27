@@ -1,0 +1,10 @@
+{
+  "project": "Chart",
+  "bug_id": 7,
+  "target_class": "org.jfree.data.time.TimePeriodValues",
+  "package_name": "org.jfree.data.time",
+  "class_name": "TimePeriodValues",
+  "raw_class_name": "TimePeriodValues",
+  "test_class_name": "TimePeriodValuesTest",
+  "source_file": "TimePeriodValues.java"
+}

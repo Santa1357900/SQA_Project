@@ -1,0 +1,10 @@
+{
+  "project": "Chart",
+  "bug_id": 20,
+  "target_class": "org.jfree.chart.plot.ValueMarker",
+  "package_name": "org.jfree.chart.plot",
+  "class_name": "ValueMarker",
+  "raw_class_name": "ValueMarker",
+  "test_class_name": "ValueMarkerTest",
+  "source_file": "ValueMarker.java"
+}

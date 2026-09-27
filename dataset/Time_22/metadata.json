@@ -1,0 +1,10 @@
+{
+  "project": "Time",
+  "bug_id": 22,
+  "target_class": "org.joda.time.base.BasePeriod",
+  "package_name": "org.joda.time.base",
+  "class_name": "BasePeriod",
+  "raw_class_name": "BasePeriod",
+  "test_class_name": "BasePeriodTest",
+  "source_file": "BasePeriod.java"
+}

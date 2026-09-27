@@ -1,0 +1,10 @@
+{
+  "project": "Closure",
+  "bug_id": 57,
+  "target_class": "com.google.javascript.jscomp.ClosureCodingConvention",
+  "package_name": "com.google.javascript.jscomp",
+  "class_name": "ClosureCodingConvention",
+  "raw_class_name": "ClosureCodingConvention",
+  "test_class_name": "ClosureCodingConventionTest",
+  "source_file": "ClosureCodingConvention.java"
+}

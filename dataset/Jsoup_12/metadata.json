@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 12,
+  "target_class": "org.jsoup.select.Selector",
+  "package_name": "org.jsoup.select",
+  "class_name": "Selector",
+  "raw_class_name": "Selector",
+  "test_class_name": "SelectorTest",
+  "source_file": "Selector.java"
+}

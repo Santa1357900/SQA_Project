@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 74,
+  "target_class": "org.apache.commons.math.ode.nonstiff.EmbeddedRungeKuttaIntegrator",
+  "package_name": "org.apache.commons.math.ode.nonstiff",
+  "class_name": "EmbeddedRungeKuttaIntegrator",
+  "raw_class_name": "EmbeddedRungeKuttaIntegrator",
+  "test_class_name": "EmbeddedRungeKuttaIntegratorTest",
+  "source_file": "EmbeddedRungeKuttaIntegrator.java"
+}

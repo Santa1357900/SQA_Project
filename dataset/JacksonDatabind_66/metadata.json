@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 66,
+  "target_class": "com.fasterxml.jackson.databind.deser.std.StdKeyDeserializer",
+  "package_name": "com.fasterxml.jackson.databind.deser.std",
+  "class_name": "StdKeyDeserializer",
+  "raw_class_name": "StdKeyDeserializer",
+  "test_class_name": "StdKeyDeserializerTest",
+  "source_file": "StdKeyDeserializer.java"
+}

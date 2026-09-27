@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 103,
+  "target_class": "org.apache.commons.math.distribution.NormalDistributionImpl",
+  "package_name": "org.apache.commons.math.distribution",
+  "class_name": "NormalDistributionImpl",
+  "raw_class_name": "NormalDistributionImpl",
+  "test_class_name": "NormalDistributionImplTest",
+  "source_file": "NormalDistributionImpl.java"
+}

@@ -13,6 +13,7 @@ Workflow:
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -35,7 +36,23 @@ if sys.platform == "win32":
 # ที่อยู่หลักของโปรเจกต์
 BASE_DIR = Path(__file__).resolve().parents[2]
 ENV_FILE = BASE_DIR / ".env"
-D4J_WSL_BIN = "/mnt/c/Users/Petchy_STB/Desktop/sqa/FinalProjectSQA/SQA_Project/defects4j/framework/bin/defects4j"
+DATASET_DIR = BASE_DIR / "dataset"
+
+def get_d4j_wsl_bin() -> str:
+    """ค้นหาตำแหน่ง defects4j ใน WSL แบบยืดหยุ่น รองรับเครื่องอื่นอัตโนมัติ"""
+    env_bin = os.environ.get("DEFECTS4J_BIN")
+    if env_bin:
+        return env_bin
+    local_d4j = BASE_DIR / "defects4j" / "framework" / "bin" / "defects4j"
+    if local_d4j.is_file():
+        try:
+            wsl_res = subprocess.run(["wsl", "wslpath", "-a", local_d4j.as_posix()],
+                                     capture_output=True, text=True, encoding="utf-8")
+            if wsl_res.returncode == 0 and wsl_res.stdout.strip():
+                return wsl_res.stdout.strip()
+        except Exception:
+            pass
+    return "defects4j"
 
 # ที่อยู่ของไฟล์แม่แบบ Prompt
 TEMPLATE_FILE = BASE_DIR / "ai" / "Gemini" / "prompts" / "template_prompt.txt"
@@ -163,19 +180,20 @@ def sanitize_java_code(code: str) -> str:
 
     return code
 
-def extract_target_source(project: str, bug_id: str):
+def extract_target_source_d4j(project: str, bug_id: str):
     """สั่ง Defects4J ดึงซอร์สโค้ดของคลาสที่มีบั๊กออกมา พร้อมรองรับ edge cases (inner class, newly added files)"""
+    d4j_bin = get_d4j_wsl_bin()
     temp_dir = f"/tmp/d4j_ext_{project}_{bug_id}"
     try:
         # Checkout bug
-        run_wsl(f"rm -rf {temp_dir} && {D4J_WSL_BIN} checkout -p {project} -v {bug_id}b -w {temp_dir}")
+        run_wsl(f"rm -rf {temp_dir} && {d4j_bin} checkout -p {project} -v {bug_id}b -w {temp_dir}")
         
         # ดึง Modified Class และ Source Directory
-        mod_classes = run_wsl(f"{D4J_WSL_BIN} export -p classes.modified -w {temp_dir}").split()
+        mod_classes = run_wsl(f"{d4j_bin} export -p classes.modified -w {temp_dir}").split()
         if not mod_classes:
             raise ValueError(f"No modified classes found for {project}-{bug_id}")
             
-        src_dir = run_wsl(f"{D4J_WSL_BIN} export -p dir.src.classes -w {temp_dir}")
+        src_dir = run_wsl(f"{d4j_bin} export -p dir.src.classes -w {temp_dir}")
         
         target_class = None
         code_content = None
@@ -200,8 +218,8 @@ def extract_target_source(project: str, bug_id: str):
         if not target_class:
             fixed_temp = f"/tmp/d4j_ext_{project}_{bug_id}_f"
             try:
-                run_wsl(f"rm -rf {fixed_temp} && {D4J_WSL_BIN} checkout -p {project} -v {bug_id}f -w {fixed_temp}")
-                fixed_src_dir = run_wsl(f"{D4J_WSL_BIN} export -p dir.src.classes -w {fixed_temp}")
+                run_wsl(f"rm -rf {fixed_temp} && {d4j_bin} checkout -p {project} -v {bug_id}f -w {fixed_temp}")
+                fixed_src_dir = run_wsl(f"{d4j_bin} export -p dir.src.classes -w {fixed_temp}")
                 for cls in mod_classes:
                     candidates = [cls.replace(".", "/") + ".java"]
                     if "$" in cls:
@@ -240,6 +258,27 @@ def extract_target_source(project: str, bug_id: str):
         # ลบโฟลเดอร์ชั่วคราว
         run_wsl(f"rm -rf {temp_dir}")
 
+def load_target_source(project: str, bug_id: str):
+    """โหลดซอร์สโค้ดและข้อมูลคลาส: ดึงจากโฟลเดอร์ dataset ก่อน หากไม่มีจึง fallback ไป Defects4J"""
+    target_name = f"{project}_{bug_id}"
+    meta_path = DATASET_DIR / target_name / "metadata.json"
+    if meta_path.is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            src_file = DATASET_DIR / target_name / meta["source_file"]
+            if src_file.is_file():
+                return {
+                    "full_class": meta["target_class"],
+                    "class_name": meta["class_name"],
+                    "package_name": meta["package_name"],
+                    "test_class_name": meta["test_class_name"],
+                    "source_code": src_file.read_text(encoding="utf-8")
+                }
+        except Exception as e:
+            print(f"[*] อ่านจาก dataset/{target_name} ไม่สำเร็จ ({e}) กำลังลอง Defects4J...", file=sys.stderr)
+
+    return extract_target_source_d4j(project, bug_id)
+
 def process_bug(key_mgr: KeyManager, project: str, bug_id: str, output_root: Path, overwrite: bool = False, version_tag: str = "v2"):
     """ประมวลผลบั๊ก 1 ตัว: ดึงโค้ด -> ส่ง Gemini -> เซฟไฟล์ Test"""
     target_dir = output_root / f"{project}_{bug_id}_buggy"
@@ -251,9 +290,9 @@ def process_bug(key_mgr: KeyManager, project: str, bug_id: str, output_root: Pat
         print(f"[-] [{project}_{bug_id}] มีไฟล์เทสอยู่แล้ว ({existing_tests[0].name}) ข้าม...")
         return True
 
-    print(f"\n[*] [{project}_{bug_id}] กำลังดึงซอร์สโค้ดจาก Defects4J...")
+    print(f"\n[*] [{project}_{bug_id}] กำลังโหลดซอร์สโค้ด...")
     try:
-        data = extract_target_source(project, bug_id)
+        data = load_target_source(project, bug_id)
     except Exception as e:
         print(f"[!] [{project}_{bug_id}] ดึงซอร์สโค้ดล้มเหลว: {e}", file=sys.stderr)
         return False
@@ -350,7 +389,12 @@ def main():
     
     # ดึงรายชื่อโปรเจกต์
     if args.all or any(p.lower() == "all" for p in args.projects):
-        project_list = run_wsl(f"{D4J_WSL_BIN} pids").split()
+        if DATASET_DIR.is_dir():
+            pids = sorted({d.name.split("_")[0] for d in DATASET_DIR.iterdir() if d.is_dir() and "_" in d.name})
+            project_list = pids
+        else:
+            d4j_bin = get_d4j_wsl_bin()
+            project_list = run_wsl(f"{d4j_bin} pids").split()
         print(f"[*] โหมด All: เลือกทำทั้งหมด {len(project_list)} โปรเจกต์")
     else:
         project_list = args.projects
@@ -365,8 +409,19 @@ def main():
         if args.bugs:
             bug_list = args.bugs
         else:
-            bug_query = run_wsl(f"{D4J_WSL_BIN} query -p {project} -q bug.id")
-            bug_list = bug_query.split()
+            dataset_bugs = []
+            if DATASET_DIR.is_dir():
+                for d in DATASET_DIR.iterdir():
+                    if d.is_dir() and d.name.startswith(f"{project}_"):
+                        parts = d.name.split("_")
+                        if len(parts) == 2 and parts[1].isdigit():
+                            dataset_bugs.append(int(parts[1]))
+            if dataset_bugs:
+                bug_list = [str(b) for b in sorted(dataset_bugs)]
+            else:
+                d4j_bin = get_d4j_wsl_bin()
+                bug_query = run_wsl(f"{d4j_bin} query -p {project} -q bug.id")
+                bug_list = bug_query.split()
 
         if args.limit and len(bug_list) > args.limit:
             bug_list = bug_list[:args.limit]

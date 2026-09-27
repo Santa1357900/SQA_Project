@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 91,
+  "target_class": "org.apache.commons.math.fraction.Fraction",
+  "package_name": "org.apache.commons.math.fraction",
+  "class_name": "Fraction",
+  "raw_class_name": "Fraction",
+  "test_class_name": "FractionTest",
+  "source_file": "Fraction.java"
+}

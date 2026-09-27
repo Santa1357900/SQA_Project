@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 11,
+  "target_class": "com.fasterxml.jackson.core.sym.ByteQuadsCanonicalizer",
+  "package_name": "com.fasterxml.jackson.core.sym",
+  "class_name": "ByteQuadsCanonicalizer",
+  "raw_class_name": "ByteQuadsCanonicalizer",
+  "test_class_name": "ByteQuadsCanonicalizerTest",
+  "source_file": "ByteQuadsCanonicalizer.java"
+}

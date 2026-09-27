@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 90,
+  "target_class": "com.fasterxml.jackson.databind.deser.ValueInstantiator",
+  "package_name": "com.fasterxml.jackson.databind.deser",
+  "class_name": "ValueInstantiator",
+  "raw_class_name": "ValueInstantiator",
+  "test_class_name": "ValueInstantiatorTest",
+  "source_file": "ValueInstantiator.java"
+}

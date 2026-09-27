@@ -1,0 +1,10 @@
+{
+  "project": "Chart",
+  "bug_id": 12,
+  "target_class": "org.jfree.chart.plot.MultiplePiePlot",
+  "package_name": "org.jfree.chart.plot",
+  "class_name": "MultiplePiePlot",
+  "raw_class_name": "MultiplePiePlot",
+  "test_class_name": "MultiplePiePlotTest",
+  "source_file": "MultiplePiePlot.java"
+}

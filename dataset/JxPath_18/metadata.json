@@ -1,0 +1,10 @@
+{
+  "project": "JxPath",
+  "bug_id": 18,
+  "target_class": "org.apache.commons.jxpath.ri.axes.AttributeContext",
+  "package_name": "org.apache.commons.jxpath.ri.axes",
+  "class_name": "AttributeContext",
+  "raw_class_name": "AttributeContext",
+  "test_class_name": "AttributeContextTest",
+  "source_file": "AttributeContext.java"
+}

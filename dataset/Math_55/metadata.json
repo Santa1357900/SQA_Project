@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 55,
+  "target_class": "org.apache.commons.math.geometry.Vector3D",
+  "package_name": "org.apache.commons.math.geometry",
+  "class_name": "Vector3D",
+  "raw_class_name": "Vector3D",
+  "test_class_name": "Vector3DTest",
+  "source_file": "Vector3D.java"
+}

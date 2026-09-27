@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 36,
+  "target_class": "org.apache.commons.compress.archivers.sevenz.SevenZFile",
+  "package_name": "org.apache.commons.compress.archivers.sevenz",
+  "class_name": "SevenZFile",
+  "raw_class_name": "SevenZFile",
+  "test_class_name": "SevenZFileTest",
+  "source_file": "SevenZFile.java"
+}

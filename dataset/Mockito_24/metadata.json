@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 24,
+  "target_class": "org.mockito.internal.stubbing.defaultanswers.ReturnsEmptyValues",
+  "package_name": "org.mockito.internal.stubbing.defaultanswers",
+  "class_name": "ReturnsEmptyValues",
+  "raw_class_name": "ReturnsEmptyValues",
+  "test_class_name": "ReturnsEmptyValuesTest",
+  "source_file": "ReturnsEmptyValues.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 20,
+  "target_class": "com.fasterxml.jackson.databind.node.ObjectNode",
+  "package_name": "com.fasterxml.jackson.databind.node",
+  "class_name": "ObjectNode",
+  "raw_class_name": "ObjectNode",
+  "test_class_name": "ObjectNodeTest",
+  "source_file": "ObjectNode.java"
+}

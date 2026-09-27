@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 52,
+  "target_class": "org.apache.commons.math.geometry.euclidean.threed.Rotation",
+  "package_name": "org.apache.commons.math.geometry.euclidean.threed",
+  "class_name": "Rotation",
+  "raw_class_name": "Rotation",
+  "test_class_name": "RotationTest",
+  "source_file": "Rotation.java"
+}

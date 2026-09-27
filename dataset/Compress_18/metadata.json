@@ -1,0 +1,10 @@
+{
+  "project": "Compress",
+  "bug_id": 18,
+  "target_class": "org.apache.commons.compress.archivers.tar.TarArchiveOutputStream",
+  "package_name": "org.apache.commons.compress.archivers.tar",
+  "class_name": "TarArchiveOutputStream",
+  "raw_class_name": "TarArchiveOutputStream",
+  "test_class_name": "TarArchiveOutputStreamTest",
+  "source_file": "TarArchiveOutputStream.java"
+}

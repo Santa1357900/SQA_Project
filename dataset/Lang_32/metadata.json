@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 32,
+  "target_class": "org.apache.commons.lang3.builder.HashCodeBuilder",
+  "package_name": "org.apache.commons.lang3.builder",
+  "class_name": "HashCodeBuilder",
+  "raw_class_name": "HashCodeBuilder",
+  "test_class_name": "HashCodeBuilderTest",
+  "source_file": "HashCodeBuilder.java"
+}

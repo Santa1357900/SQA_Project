@@ -1,0 +1,10 @@
+{
+  "project": "Mockito",
+  "bug_id": 5,
+  "target_class": "org.mockito.internal.verification.VerificationOverTimeImpl",
+  "package_name": "org.mockito.internal.verification",
+  "class_name": "VerificationOverTimeImpl",
+  "raw_class_name": "VerificationOverTimeImpl",
+  "test_class_name": "VerificationOverTimeImplTest",
+  "source_file": "VerificationOverTimeImpl.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 97,
+  "target_class": "com.fasterxml.jackson.databind.node.POJONode",
+  "package_name": "com.fasterxml.jackson.databind.node",
+  "class_name": "POJONode",
+  "raw_class_name": "POJONode",
+  "test_class_name": "POJONodeTest",
+  "source_file": "POJONode.java"
+}

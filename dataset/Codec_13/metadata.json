@@ -1,0 +1,10 @@
+{
+  "project": "Codec",
+  "bug_id": 13,
+  "target_class": "org.apache.commons.codec.binary.CharSequenceUtils",
+  "package_name": "org.apache.commons.codec.binary",
+  "class_name": "StringUtils",
+  "raw_class_name": "CharSequenceUtils",
+  "test_class_name": "StringUtilsTest",
+  "source_file": "CharSequenceUtils.java"
+}

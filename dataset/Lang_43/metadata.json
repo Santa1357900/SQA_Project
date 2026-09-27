@@ -1,0 +1,10 @@
+{
+  "project": "Lang",
+  "bug_id": 43,
+  "target_class": "org.apache.commons.lang.text.ExtendedMessageFormat",
+  "package_name": "org.apache.commons.lang.text",
+  "class_name": "ExtendedMessageFormat",
+  "raw_class_name": "ExtendedMessageFormat",
+  "test_class_name": "ExtendedMessageFormatTest",
+  "source_file": "ExtendedMessageFormat.java"
+}

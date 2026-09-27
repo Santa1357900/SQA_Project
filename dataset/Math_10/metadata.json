@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 10,
+  "target_class": "org.apache.commons.math3.analysis.differentiation.DSCompiler",
+  "package_name": "org.apache.commons.math3.analysis.differentiation",
+  "class_name": "DSCompiler",
+  "raw_class_name": "DSCompiler",
+  "test_class_name": "DSCompilerTest",
+  "source_file": "DSCompiler.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Math",
+  "bug_id": 29,
+  "target_class": "org.apache.commons.math3.linear.OpenMapRealVector",
+  "package_name": "org.apache.commons.math3.linear",
+  "class_name": "OpenMapRealVector",
+  "raw_class_name": "OpenMapRealVector",
+  "test_class_name": "OpenMapRealVectorTest",
+  "source_file": "OpenMapRealVector.java"
+}

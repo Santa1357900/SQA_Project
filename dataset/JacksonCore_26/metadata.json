@@ -1,0 +1,10 @@
+{
+  "project": "JacksonCore",
+  "bug_id": 26,
+  "target_class": "com.fasterxml.jackson.core.json.async.NonBlockingJsonParser",
+  "package_name": "com.fasterxml.jackson.core.json.async",
+  "class_name": "NonBlockingJsonParser",
+  "raw_class_name": "NonBlockingJsonParser",
+  "test_class_name": "NonBlockingJsonParserTest",
+  "source_file": "NonBlockingJsonParser.java"
+}

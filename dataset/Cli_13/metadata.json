@@ -1,0 +1,10 @@
+{
+  "project": "Cli",
+  "bug_id": 13,
+  "target_class": "org.apache.commons.cli2.WriteableCommandLine",
+  "package_name": "org.apache.commons.cli2",
+  "class_name": "WriteableCommandLine",
+  "raw_class_name": "WriteableCommandLine",
+  "test_class_name": "WriteableCommandLineTest",
+  "source_file": "WriteableCommandLine.java"
+}

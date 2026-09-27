@@ -1,0 +1,10 @@
+{
+  "project": "JacksonDatabind",
+  "bug_id": 28,
+  "target_class": "com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer",
+  "package_name": "com.fasterxml.jackson.databind.deser.std",
+  "class_name": "JsonNodeDeserializer",
+  "raw_class_name": "JsonNodeDeserializer",
+  "test_class_name": "JsonNodeDeserializerTest",
+  "source_file": "JsonNodeDeserializer.java"
+}

@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 2,
+  "target_class": "org.jsoup.parser.Parser",
+  "package_name": "org.jsoup.parser",
+  "class_name": "Parser",
+  "raw_class_name": "Parser",
+  "test_class_name": "ParserTest",
+  "source_file": "Parser.java"
+}

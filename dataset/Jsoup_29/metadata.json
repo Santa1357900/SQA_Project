@@ -1,0 +1,10 @@
+{
+  "project": "Jsoup",
+  "bug_id": 29,
+  "target_class": "org.jsoup.nodes.Document",
+  "package_name": "org.jsoup.nodes",
+  "class_name": "Document",
+  "raw_class_name": "Document",
+  "test_class_name": "DocumentTest",
+  "source_file": "Document.java"
+}
