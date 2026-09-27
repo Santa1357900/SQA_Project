@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "generator": "Gemini-2.5-Flash",
+  "created_at": "2026-09-26T13:38:04.237567+00:00",
+  "project": "Lang",
+  "bug_id": 36,
+  "source": "/mnt/c/Users/Petchy_STB/Desktop/sqa/FinalProjectSQA/SQA_Project/TestCode_v2/Lang_36_buggy",
+  "coverage_scope": "modified classes of buggy revision",
+  "tests": 45,
+  "test_files": 1,
+  "buggy": {
+    "result": "FAIL",
+    "fails": 4,
+    "compile": "PASS",
+    "test_compile": "PASS",
+    "coverage_status": "PASS",
+    "lines": 370,
+    "covered_lines": 341,
+    "line_cov": 92.16,
+    "branches": 344,
+    "covered_branches": 271,
+    "branch_cov": 78.78
+  },
+  "fixed": {
+    "result": "FAIL",
+    "fails": 4,
+    "compile": "PASS",
+    "test_compile": "PASS"
+  },
+  "verdict": "INCONCLUSIVE"
+}

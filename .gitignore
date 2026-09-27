@@ -1,1 +1,24 @@
-experiments/
+# Security: Never commit API keys
+.env
+*.env
+
+# Defects4J framework
+defects4j/
+
+# Temporary and local execution directories
+TestCode/
+TestCode_v2/
+Result/
+Result_v2/
+scratch/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Exclude v1 folders from v2 branch
+ai/Gemini/generated-tests/
+ai/Gemini/prompts/history/
+ai/Gemini/results/
+experiments/results.csv
+experiments/raw/Gemini/

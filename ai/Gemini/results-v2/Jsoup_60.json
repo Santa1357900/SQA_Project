@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "generator": "Gemini-2.5-Flash",
+  "created_at": "2026-09-26T13:17:36.640678+00:00",
+  "project": "Jsoup",
+  "bug_id": 60,
+  "source": "/mnt/c/Users/Petchy_STB/Desktop/sqa/FinalProjectSQA/SQA_Project/TestCode_v2/Jsoup_60_buggy",
+  "coverage_scope": "modified classes of buggy revision",
+  "tests": 33,
+  "test_files": 1,
+  "buggy": {
+    "result": "FAIL",
+    "fails": 1,
+    "compile": "PASS",
+    "test_compile": "PASS",
+    "coverage_status": "PASS",
+    "lines": 365,
+    "covered_lines": 133,
+    "line_cov": 36.44,
+    "branches": 258,
+    "covered_branches": 105,
+    "branch_cov": 40.7
+  },
+  "fixed": {
+    "result": "FAIL",
+    "fails": 1,
+    "compile": "PASS",
+    "test_compile": "PASS"
+  },
+  "verdict": "INCONCLUSIVE"
+}

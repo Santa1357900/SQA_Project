@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "generator": "Gemini-2.5-Flash",
+  "created_at": "2026-09-26T11:56:50.276938+00:00",
+  "project": "Compress",
+  "bug_id": 31,
+  "source": "/mnt/c/Users/Petchy_STB/Desktop/sqa/FinalProjectSQA/SQA_Project/TestCode_v2/Compress_31_buggy",
+  "coverage_scope": "modified classes of buggy revision",
+  "tests": 30,
+  "test_files": 1,
+  "buggy": {
+    "result": "FAIL",
+    "fails": 4,
+    "compile": "PASS",
+    "test_compile": "PASS",
+    "coverage_status": "PASS",
+    "lines": 176,
+    "covered_lines": 159,
+    "line_cov": 90.34,
+    "branches": 116,
+    "covered_branches": 99,
+    "branch_cov": 85.34
+  },
+  "fixed": {
+    "result": "FAIL",
+    "fails": 4,
+    "compile": "PASS",
+    "test_compile": "PASS"
+  },
+  "verdict": "INCONCLUSIVE"
+}

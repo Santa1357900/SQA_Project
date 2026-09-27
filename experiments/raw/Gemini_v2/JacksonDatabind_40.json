@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "generator": "Gemini-2.5-Flash",
+  "created_at": "2026-09-26T12:30:33.516520+00:00",
+  "project": "JacksonDatabind",
+  "bug_id": 40,
+  "source": "/mnt/c/Users/Petchy_STB/Desktop/sqa/FinalProjectSQA/SQA_Project/TestCode_v2/JacksonDatabind_40_buggy",
+  "coverage_scope": "modified classes of buggy revision",
+  "tests": 7,
+  "test_files": 1,
+  "buggy": {
+    "result": "PASS",
+    "fails": 0,
+    "compile": "PASS",
+    "test_compile": "PASS",
+    "coverage_status": "PASS",
+    "lines": 219,
+    "covered_lines": 95,
+    "line_cov": 43.38,
+    "branches": 130,
+    "covered_branches": 42,
+    "branch_cov": 32.31
+  },
+  "fixed": {
+    "result": "PASS",
+    "fails": 0,
+    "compile": "PASS",
+    "test_compile": "PASS"
+  },
+  "verdict": "NOT_REVEALING"
+}

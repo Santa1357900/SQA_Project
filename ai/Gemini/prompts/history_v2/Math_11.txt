@@ -1,0 +1,284 @@
+### TASK: DEFECTS4J AUTOMATED UNIT TEST GENERATION (GEMINI SQA ENGINE v2.0)
+
+[OBJECTIVE / เป้าหมาย]
+สร้างชุดทดสอบระดับ Unit Test ด้วย JUnit 4 ฉบับสมบูรณ์สำหรับคลาส Java ที่กำหนด เพื่อใช้วัดผลความครอบคลุมของโค้ด (Line/Branch Coverage) และเพิ่มอัตราการตรวจจับข้อบกพร่องจริง (Fault Detection / REVEALING) โดยมีอัตราการคอมไพล์ผ่าน 100% ภายใต้สภาพแวดล้อม Defects4J
+
+[DEFECTS4J COMPATIBILITY & COMPILE SAFETY RULES (กฎเหล็กป้องกัน Compile Error 100%)]
+1. Java 6 Language Level (STRICT - Defects4J คอมไพล์ด้วย -source 1.6):
+   - ❌ ห้ามใช้ Diamond Operator: ห้ามเขียน `new ArrayList<>()` ให้ระบุ Type ชัดเจนเสมอ เช่น `new ArrayList<String>()` หรือ `new ArrayList()`
+   - ❌ ห้ามใช้ Lambda Expressions หรือ Method References: ห้ามใช้ `->` หรือ `::` เด็ดขาด ให้เขียนเป็น Anonymous Inner Class แบบ Java 6 ดั้งเดิม (เช่น `new Runnable() { public void run() { ... } }`)
+   - ❌ ห้ามใช้ Try-with-resources (`try (AutoCloseable r = ...)`) หรือ Multi-catch (`catch (X | Y e)`) ให้ใช้บล็อก `try-finally` แบบคลาสสิกเท่านั้น
+2. Exception Propagation:
+   - ทุก `@Test` method ต้องต่อท้ายด้วย `throws Throwable` เสมอ (เช่น `public void testMethod() throws Throwable`) เพื่อป้องกันข้อผิดพลาด unreported checked exception
+3. Zero-Dependency & Mocking Safety:
+   - ❌ ห้ามเรียกใช้ไลบรารีภายนอก เช่น Mockito, PowerMock, EasyMock, AssertJ เด็ดขาด
+   - ❌ ห้ามพยายาม Implement/Extends Interface หรือ Abstract Class ขนาดใหญ่ของ Java SE หรือ Framework (เช่น Compiler, AbstractCompiler, ErrorReporter, JsonParser, JsonGenerator, JsonDeserializer, MapperConfig, DeserializationConfig, SerializationConfig, Graphics2D, UnivariateRealFunction, Evaluator, Node) เพราะ javac จะ error ทันทีว่า "is not abstract and does not override all methods"
+   - ให้สร้างและทดสอบผ่าน Concrete Class ที่มีอยู่จริงในโปรเจกต์ หรือสร้าง Dummy class เฉพาะกรณีที่ Interface มีเมธอดไม่เกิน 1-2 เมธอดเท่านั้น
+4. Type & Constructor Strictness (No Hallucination):
+   - ❌ ห้ามเดาหรือเรียกเมธอดแปลกปลอมบนคลาส `Node` ของ Google Closure Compiler (เช่น `setQualifiedName` ไม่มีอยู่จริง ให้ใช้เฉพาะเมธอดมาตรฐาน เช่น `getType()`, `getString()`, `getDouble()`, `getFirstChild()`, `hasChildren()` หรือสร้างผ่าน `IR.name(String)`, `IR.string(String)`, `IR.number(double)` เท่านั้น)
+   - ❌ ห้ามเดา Constructor หรือ Method หรือชื่อคลาสที่ไม่มีอยู่จริง (เช่น `PropertyMapKind`) ให้ตรวจสอบจาก [TARGET SOURCE CODE] ว่าคลาสมี Constructor อะไรบ้าง
+   - ❌ ห้ามส่ง `null` ให้ parameter ที่เป็น primitive type (`int`, `double`, `boolean`, `char`, `long`) เด็ดขาด เพราะ javac จะฟ้อง type incompatible
+   - ❌ ห้ามเรียกใช้ `private` method / constructor หรือ private field หรือ private inner class (เช่น `Assign` ใน `RemoveUnusedVars`) โดยตรง
+   - ❌ ห้ามใช้ `assertEquals(null, val)` ให้ใช้ `assertNull(val)` แทนเสมอ
+   - ❌ ห้ามใช้ `assertEquals(Double.NaN, val)` เพราะ ambiguous ใน JUnit 4 ให้ใช้ `assertEquals(Double.valueOf(Double.NaN), val)` หรือ `assertTrue(Double.isNaN(val))`
+5. Full Imports Required:
+   - ต้อง Import ทุกคลาสที่เรียกใช้อย่างครบถ้วน ไม่ละเลย Utility หรือ Annotation package (เช่น `com.fasterxml.jackson.databind.util.ClassUtil`, `com.fasterxml.jackson.annotation.*`, `org.jsoup.parser.*`, `org.jsoup.nodes.*`)
+
+[TEST DESIGN & FAULT DETECTION DIRECTIVES (เพิ่มโอกาส REVEALING และลด INCONCLUSIVE)]
+1. Oracle Precision (ลด Inconclusive จากการ Assert เปราะบาง):
+   - ❌ อย่า Assert ข้อความ Exception หรือ toString() แบบ Exact Match (เพราะข้อความอาจเปลี่ยนตามเวอร์ชัน) ให้เน้น Assert ชนิดของ Exception หรือใช้ `assertTrue(e.getMessage().contains(...))` แทน
+   - สำหรับกรณีทดสอบที่คาดว่าจะเกิด Exception ให้ใช้โครงสร้าง `try { method(); fail("Should throw exception"); } catch (SpecificException e) { /* Expected */ }` หรือ `@Test(expected = SpecificException.class)`
+2. Bug-Hunting Edge Cases (กระตุ้นจุดบกพร่องที่ซ่อนอยู่):
+   - ค่าขอบเขตวิกฤต: ค่าศูนย์ (0), ค่าลบ (-1), Maximum/Minimum values, Integer overflow/underflow
+   - ปัญหา Null Safety: ส่ง `null` เข้าไปยัง Public method ที่รับ Object เพื่อดูว่ามี NullPointerException โดยไม่ได้จัดการหรือไม่
+   - กรณี Collection/Array: ทดสอบ Empty, Single element, Duplicate elements, Null elements, Unmodifiable collection
+   - กรณี String: Empty string `""`, Whitespace only `"   "`, String containing delimiters, Escape sequences, Special Unicode characters
+   - Boundary & Loop conditions: จุดเปลี่ยนเงื่อนไข `<` vs `<=`, Off-by-one errors, Empty input streams
+
+[TARGET SOURCE CODE]
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.math3.distribution;
+
+import org.apache.commons.math3.exception.DimensionMismatchException;
+import org.apache.commons.math3.linear.Array2DRowRealMatrix;
+import org.apache.commons.math3.linear.EigenDecomposition;
+import org.apache.commons.math3.linear.NonPositiveDefiniteMatrixException;
+import org.apache.commons.math3.linear.RealMatrix;
+import org.apache.commons.math3.linear.SingularMatrixException;
+import org.apache.commons.math3.random.RandomGenerator;
+import org.apache.commons.math3.random.Well19937c;
+import org.apache.commons.math3.util.FastMath;
+import org.apache.commons.math3.util.MathArrays;
+
+/**
+ * Implementation of the multivariate normal (Gaussian) distribution.
+ *
+ * @see <a href="http://en.wikipedia.org/wiki/Multivariate_normal_distribution">
+ * Multivariate normal distribution (Wikipedia)</a>
+ * @see <a href="http://mathworld.wolfram.com/MultivariateNormalDistribution.html">
+ * Multivariate normal distribution (MathWorld)</a>
+ *
+ * @version $Id$
+ * @since 3.1
+ */
+public class MultivariateNormalDistribution
+    extends AbstractMultivariateRealDistribution {
+    /** Vector of means. */
+    private final double[] means;
+    /** Covariance matrix. */
+    private final RealMatrix covarianceMatrix;
+    /** The matrix inverse of the covariance matrix. */
+    private final RealMatrix covarianceMatrixInverse;
+    /** The determinant of the covariance matrix. */
+    private final double covarianceMatrixDeterminant;
+    /** Matrix used in computation of samples. */
+    private final RealMatrix samplingMatrix;
+
+    /**
+     * Creates a multivariate normal distribution with the given mean vector and
+     * covariance matrix.
+     * <br/>
+     * The number of dimensions is equal to the length of the mean vector
+     * and to the number of rows and columns of the covariance matrix.
+     * It is frequently written as "p" in formulae.
+     *
+     * @param means Vector of means.
+     * @param covariances Covariance matrix.
+     * @throws DimensionMismatchException if the arrays length are
+     * inconsistent.
+     * @throws SingularMatrixException if the eigenvalue decomposition cannot
+     * be performed on the provided covariance matrix.
+     * @throws NonPositiveDefiniteMatrixException if any of the eigenvalues is
+     * negative.
+     */
+    public MultivariateNormalDistribution(final double[] means,
+                                          final double[][] covariances)
+        throws SingularMatrixException,
+               DimensionMismatchException,
+               NonPositiveDefiniteMatrixException {
+        this(new Well19937c(), means, covariances);
+    }
+
+    /**
+     * Creates a multivariate normal distribution with the given mean vector and
+     * covariance matrix.
+     * <br/>
+     * The number of dimensions is equal to the length of the mean vector
+     * and to the number of rows and columns of the covariance matrix.
+     * It is frequently written as "p" in formulae.
+     *
+     * @param rng Random Number Generator.
+     * @param means Vector of means.
+     * @param covariances Covariance matrix.
+     * @throws DimensionMismatchException if the arrays length are
+     * inconsistent.
+     * @throws SingularMatrixException if the eigenvalue decomposition cannot
+     * be performed on the provided covariance matrix.
+     * @throws NonPositiveDefiniteMatrixException if any of the eigenvalues is
+     * negative.
+     */
+    public MultivariateNormalDistribution(RandomGenerator rng,
+                                          final double[] means,
+                                          final double[][] covariances)
+            throws SingularMatrixException,
+                   DimensionMismatchException,
+                   NonPositiveDefiniteMatrixException {
+        super(rng, means.length);
+
+        final int dim = means.length;
+
+        if (covariances.length != dim) {
+            throw new DimensionMismatchException(covariances.length, dim);
+        }
+
+        for (int i = 0; i < dim; i++) {
+            if (dim != covariances[i].length) {
+                throw new DimensionMismatchException(covariances[i].length, dim);
+            }
+        }
+
+        this.means = MathArrays.copyOf(means);
+
+        covarianceMatrix = new Array2DRowRealMatrix(covariances);
+
+        // Covariance matrix eigen decomposition.
+        final EigenDecomposition covMatDec = new EigenDecomposition(covarianceMatrix);
+
+        // Compute and store the inverse.
+        covarianceMatrixInverse = covMatDec.getSolver().getInverse();
+        // Compute and store the determinant.
+        covarianceMatrixDeterminant = covMatDec.getDeterminant();
+
+        // Eigenvalues of the covariance matrix.
+        final double[] covMatEigenvalues = covMatDec.getRealEigenvalues();
+
+        for (int i = 0; i < covMatEigenvalues.length; i++) {
+            if (covMatEigenvalues[i] < 0) {
+                throw new NonPositiveDefiniteMatrixException(covMatEigenvalues[i], i, 0);
+            }
+        }
+
+        // Matrix where each column is an eigenvector of the covariance matrix.
+        final Array2DRowRealMatrix covMatEigenvectors = new Array2DRowRealMatrix(dim, dim);
+        for (int v = 0; v < dim; v++) {
+            final double[] evec = covMatDec.getEigenvector(v).toArray();
+            covMatEigenvectors.setColumn(v, evec);
+        }
+
+        final RealMatrix tmpMatrix = covMatEigenvectors.transpose();
+
+        // Scale each eigenvector by the square root of its eigenvalue.
+        for (int row = 0; row < dim; row++) {
+            final double factor = FastMath.sqrt(covMatEigenvalues[row]);
+            for (int col = 0; col < dim; col++) {
+                tmpMatrix.multiplyEntry(row, col, factor);
+            }
+        }
+
+        samplingMatrix = covMatEigenvectors.multiply(tmpMatrix);
+    }
+
+    /**
+     * Gets the mean vector.
+     *
+     * @return the mean vector.
+     */
+    public double[] getMeans() {
+        return MathArrays.copyOf(means);
+    }
+
+    /**
+     * Gets the covariance matrix.
+     *
+     * @return the covariance matrix.
+     */
+    public RealMatrix getCovariances() {
+        return covarianceMatrix.copy();
+    }
+
+    /** {@inheritDoc} */
+    public double density(final double[] vals) throws DimensionMismatchException {
+        final int dim = getDimension();
+        if (vals.length != dim) {
+            throw new DimensionMismatchException(vals.length, dim);
+        }
+
+        return FastMath.pow(2 * FastMath.PI, -dim / 2) *
+            FastMath.pow(covarianceMatrixDeterminant, -0.5) *
+            getExponentTerm(vals);
+    }
+
+    /**
+     * Gets the square root of each element on the diagonal of the covariance
+     * matrix.
+     *
+     * @return the standard deviations.
+     */
+    public double[] getStandardDeviations() {
+        final int dim = getDimension();
+        final double[] std = new double[dim];
+        final double[][] s = covarianceMatrix.getData();
+        for (int i = 0; i < dim; i++) {
+            std[i] = FastMath.sqrt(s[i][i]);
+        }
+        return std;
+    }
+
+    /** {@inheritDoc} */
+    public double[] sample() {
+        final int dim = getDimension();
+        final double[] normalVals = new double[dim];
+
+        for (int i = 0; i < dim; i++) {
+            normalVals[i] = random.nextGaussian();
+        }
+
+        final double[] vals = samplingMatrix.operate(normalVals);
+
+        for (int i = 0; i < dim; i++) {
+            vals[i] += means[i];
+        }
+
+        return vals;
+    }
+
+    /**
+     * Computes the term used in the exponent (see definition of the distribution).
+     *
+     * @param values Values at which to compute density.
+     * @return the multiplication factor of density calculations.
+     */
+    private double getExponentTerm(final double[] values) {
+        final double[] centered = new double[values.length];
+        for (int i = 0; i < centered.length; i++) {
+            centered[i] = values[i] - getMeans()[i];
+        }
+        final double[] preMultiplied = covarianceMatrixInverse.preMultiply(centered);
+        double sum = 0;
+        for (int i = 0; i < preMultiplied.length; i++) {
+            sum += preMultiplied[i] * centered[i];
+        }
+        return FastMath.exp(-0.5 * sum);
+    }
+}
+
+[OUTPUT PROTOCOL]
+ส่งกลับเฉพาะ "โค้ดภาษา Java ดิบ (Raw Code)" ที่พร้อมนำไปคอมไพล์ทันที:
+- เริ่มต้นบรรทัดแรกด้วย package org.apache.commons.math3.distribution; และสิ้นสุดที่ปีกกาปิด } สุดท้ายของคลาส
+- ห้ามใส่เครื่องหมาย Markdown Code Fence (ห้ามใส่ ``` หรือ ```java)
+- ห้ามมีข้อความเกริ่นนำ คำอธิบายประกอบ หรือข้อความสรุปใด ๆ ทั้งสิ้น

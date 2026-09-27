@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "generator": "Gemini-2.5-Flash",
+  "created_at": "2026-09-26T11:27:33.776451+00:00",
+  "project": "Closure",
+  "bug_id": 149,
+  "source": "/mnt/c/Users/Petchy_STB/Desktop/sqa/FinalProjectSQA/SQA_Project/TestCode_v2/Closure_149_buggy",
+  "coverage_scope": "modified classes of buggy revision",
+  "tests": 17,
+  "test_files": 1,
+  "buggy": {
+    "result": "PASS",
+    "fails": 0,
+    "compile": "PASS",
+    "test_compile": "PASS",
+    "coverage_status": "PASS",
+    "lines": 1661,
+    "covered_lines": 321,
+    "line_cov": 19.33,
+    "branches": 567,
+    "covered_branches": 54,
+    "branch_cov": 9.52
+  },
+  "fixed": {
+    "result": "PASS",
+    "fails": 0,
+    "compile": "PASS",
+    "test_compile": "PASS"
+  },
+  "verdict": "NOT_REVEALING"
+}

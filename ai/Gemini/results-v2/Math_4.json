@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "generator": "Gemini-2.5-Flash",
+  "created_at": "2026-09-26T13:46:35.133493+00:00",
+  "project": "Math",
+  "bug_id": 4,
+  "source": "/mnt/c/Users/Petchy_STB/Desktop/sqa/FinalProjectSQA/SQA_Project/TestCode_v2/Math_4_buggy",
+  "coverage_scope": "modified classes of buggy revision",
+  "tests": 6,
+  "test_files": 1,
+  "buggy": {
+    "result": "FAIL",
+    "fails": 1,
+    "compile": "PASS",
+    "test_compile": "PASS",
+    "coverage_status": "PASS",
+    "lines": 84,
+    "covered_lines": 25,
+    "line_cov": 29.76,
+    "branches": 44,
+    "covered_branches": 8,
+    "branch_cov": 18.18
+  },
+  "fixed": {
+    "result": "PASS",
+    "fails": 0,
+    "compile": "PASS",
+    "test_compile": "PASS"
+  },
+  "verdict": "REVEALING"
+}
