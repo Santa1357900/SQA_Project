@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j",
+  "algorithm": "Gemini",
+  "algorithm_version": "Gemini-3.5-Flash-Lite",
+  "project": "JacksonDatabind",
+  "bug_id": 29,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "not_revealing",
+  "error": null,
+  "tests_generated": 1,
+  "tests_validated": 1,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": null,
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 18,
+    "lines_total": 141,
+    "line_ratio": 0.12766,
+    "branch_measure": "condition",
+    "branches_covered": 0,
+    "branches_total": 62,
+    "branch_ratio": 0.0
+  },
+  "generation_seconds": null,
+  "total_seconds": null,
+  "configuration": {
+    "generator": "Gemini-3.5-Flash-Lite"
+  },
+  "artifacts": {
+    "tests": "Tests/defects4j/Gemini/JacksonDatabind/JacksonDatabind-29/run1/",
+    "logs": "Results/defects4j/Gemini/JacksonDatabind/JacksonDatabind-29/run1/logs/"
+  }
+}

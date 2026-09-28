@@ -3,7 +3,7 @@
 *.env
 
 # Defects4J framework
-defects4j/
+/defects4j/
 
 # Temporary and local execution directories
 TestCode/
