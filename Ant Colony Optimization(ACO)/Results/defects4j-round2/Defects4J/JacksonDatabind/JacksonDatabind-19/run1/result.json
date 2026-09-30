@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Defects4J",
+  "algorithm_version": "2.0.0",
+  "project": "JacksonDatabind",
+  "bug_id": 19,
+  "run": 1,
+  "status": "error",
+  "status_detail": "error",
+  "error": null,
+  "tests_generated": 1200,
+  "tests_validated": 1198,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 2,
+  "fault_detected": true,
+  "test_coverage": null,
+  "code_coverage": null,
+  "generation_seconds": 0.0,
+  "total_seconds": 665.17,
+  "configuration": {
+    "benchmark": "Defects4J",
+    "timeout": 300
+  },
+  "artifacts": {
+    "tests": null,
+    "logs": "Results/defects4j-round2/Defects4J/JacksonDatabind/JacksonDatabind-19/run1/logs/"
+  }
+}

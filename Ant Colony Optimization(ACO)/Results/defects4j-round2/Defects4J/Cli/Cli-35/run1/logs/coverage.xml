@@ -1,0 +1,276 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.9649122807017544" branch-rate="1.0" lines-covered="55" lines-valid="57" branches-covered="20" branches-valid="20" complexity="1.625" version="2.0.3" timestamp="1790683846506">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="org.apache.commons.cli" line-rate="0.9649122807017544" branch-rate="1.0" complexity="1.625">
+			<classes>
+				<class name="org.apache.commons.cli.Options" filename="org/apache/commons/cli/Options.java" line-rate="0.9649122807017544" branch-rate="1.0" complexity="1.625">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="44" hits="552" branch="false"/>
+								<line number="50" hits="552" branch="false"/>
+								<line number="53" hits="552" branch="false"/>
+								<line number="58" hits="552" branch="false"/>
+								<line number="61" hits="552" branch="false"/>
+							</lines>
+						</method>
+						<method name="addOption" signature="(Ljava/lang/String;Ljava/lang/String;)Lorg/apache/commons/cli/Options;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="111" hits="0" branch="false"/>
+								<line number="112" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="addOption" signature="(Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)Lorg/apache/commons/cli/Options;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="142" hits="1095" branch="false"/>
+								<line number="143" hits="1095" branch="false"/>
+							</lines>
+						</method>
+						<method name="addOption" signature="(Ljava/lang/String;ZLjava/lang/String;)Lorg/apache/commons/cli/Options;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="126" hits="81" branch="false"/>
+								<line number="127" hits="81" branch="false"/>
+							</lines>
+						</method>
+						<method name="addOption" signature="(Lorg/apache/commons/cli/Option;)Lorg/apache/commons/cli/Options;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="154" hits="1667" branch="false"/>
+								<line number="157" hits="1667" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="159" hits="1369" branch="false"/>
+								<line number="163" hits="1667" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="165" hits="49" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="167" hits="1" branch="false"/>
+								<line number="169" hits="49" branch="false"/>
+								<line number="172" hits="1667" branch="false"/>
+								<line number="174" hits="1667" branch="false"/>
+							</lines>
+						</method>
+						<method name="addOptionGroup" signature="(Lorg/apache/commons/cli/OptionGroup;)Lorg/apache/commons/cli/Options;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="71" hits="72" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="73" hits="7" branch="false"/>
+								<line number="76" hits="72" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="81" hits="144" branch="false"/>
+								<line number="82" hits="144" branch="false"/>
+								<line number="84" hits="144" branch="false"/>
+								<line number="85" hits="144" branch="false"/>
+								<line number="87" hits="72" branch="false"/>
+							</lines>
+						</method>
+						<method name="getMatchingOptions" signature="(Ljava/lang/String;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="235" hits="201" branch="false"/>
+								<line number="237" hits="201" branch="false"/>
+								<line number="241" hits="201" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="243" hits="849" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="245" hits="134" branch="false"/>
+								<line number="247" hits="849" branch="false"/>
+								<line number="249" hits="201" branch="false"/>
+							</lines>
+						</method>
+						<method name="getOption" signature="(Ljava/lang/String;)Lorg/apache/commons/cli/Option;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="216" hits="948" branch="false"/>
+								<line number="218" hits="948" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="220" hits="871" branch="false"/>
+								<line number="223" hits="77" branch="false"/>
+							</lines>
+						</method>
+						<method name="getOptionGroup" signature="(Lorg/apache/commons/cli/Option;)Lorg/apache/commons/cli/OptionGroup;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="302" hits="740" branch="false"/>
+							</lines>
+						</method>
+						<method name="getOptionGroups" signature="()Ljava/util/Collection;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="97" hits="362" branch="false"/>
+							</lines>
+						</method>
+						<method name="getOptions" signature="()Ljava/util/Collection;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="184" hits="16" branch="false"/>
+							</lines>
+						</method>
+						<method name="getRequiredOptions" signature="()Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="204" hits="360" branch="false"/>
+							</lines>
+						</method>
+						<method name="hasLongOption" signature="(Ljava/lang/String;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="274" hits="52" branch="false"/>
+								<line number="276" hits="52" branch="false"/>
+							</lines>
+						</method>
+						<method name="hasOption" signature="(Ljava/lang/String;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="260" hits="1226" branch="false"/>
+								<line number="262" hits="1226" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="hasShortOption" signature="(Ljava/lang/String;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="288" hits="104" branch="false"/>
+								<line number="290" hits="104" branch="false"/>
+							</lines>
+						</method>
+						<method name="helpOptions" signature="()Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="194" hits="259" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="313" hits="1" branch="false"/>
+								<line number="315" hits="1" branch="false"/>
+								<line number="316" hits="1" branch="false"/>
+								<line number="317" hits="1" branch="false"/>
+								<line number="318" hits="1" branch="false"/>
+								<line number="319" hits="1" branch="false"/>
+								<line number="321" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="44" hits="552" branch="false"/>
+						<line number="50" hits="552" branch="false"/>
+						<line number="53" hits="552" branch="false"/>
+						<line number="58" hits="552" branch="false"/>
+						<line number="61" hits="552" branch="false"/>
+						<line number="71" hits="72" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="73" hits="7" branch="false"/>
+						<line number="76" hits="72" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="81" hits="144" branch="false"/>
+						<line number="82" hits="144" branch="false"/>
+						<line number="84" hits="144" branch="false"/>
+						<line number="85" hits="144" branch="false"/>
+						<line number="87" hits="72" branch="false"/>
+						<line number="97" hits="362" branch="false"/>
+						<line number="111" hits="0" branch="false"/>
+						<line number="112" hits="0" branch="false"/>
+						<line number="126" hits="81" branch="false"/>
+						<line number="127" hits="81" branch="false"/>
+						<line number="142" hits="1095" branch="false"/>
+						<line number="143" hits="1095" branch="false"/>
+						<line number="154" hits="1667" branch="false"/>
+						<line number="157" hits="1667" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="159" hits="1369" branch="false"/>
+						<line number="163" hits="1667" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="165" hits="49" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="167" hits="1" branch="false"/>
+						<line number="169" hits="49" branch="false"/>
+						<line number="172" hits="1667" branch="false"/>
+						<line number="174" hits="1667" branch="false"/>
+						<line number="184" hits="16" branch="false"/>
+						<line number="194" hits="259" branch="false"/>
+						<line number="204" hits="360" branch="false"/>
+						<line number="216" hits="948" branch="false"/>
+						<line number="218" hits="948" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="220" hits="871" branch="false"/>
+						<line number="223" hits="77" branch="false"/>
+						<line number="235" hits="201" branch="false"/>
+						<line number="237" hits="201" branch="false"/>
+						<line number="241" hits="201" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="243" hits="849" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="245" hits="134" branch="false"/>
+						<line number="247" hits="849" branch="false"/>
+						<line number="249" hits="201" branch="false"/>
+						<line number="260" hits="1226" branch="false"/>
+						<line number="262" hits="1226" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="274" hits="52" branch="false"/>
+						<line number="276" hits="52" branch="false"/>
+						<line number="288" hits="104" branch="false"/>
+						<line number="290" hits="104" branch="false"/>
+						<line number="302" hits="740" branch="false"/>
+						<line number="313" hits="1" branch="false"/>
+						<line number="315" hits="1" branch="false"/>
+						<line number="316" hits="1" branch="false"/>
+						<line number="317" hits="1" branch="false"/>
+						<line number="318" hits="1" branch="false"/>
+						<line number="319" hits="1" branch="false"/>
+						<line number="321" hits="1" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

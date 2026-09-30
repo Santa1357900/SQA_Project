@@ -1,0 +1,550 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.9732142857142857" branch-rate="0.8571428571428571" lines-covered="109" lines-valid="112" branches-covered="12" branches-valid="14" complexity="2.074074074074074" version="2.0.3" timestamp="1790723595048">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="org.mockito.exceptions" line-rate="0.9891304347826086" branch-rate="0.875" complexity="2.04">
+			<classes>
+				<class name="org.mockito.exceptions.Reporter" filename="org/mockito/exceptions/Reporter.java" line-rate="0.9891304347826086" branch-rate="0.875" complexity="2.04">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="46" hits="9030" branch="false"/>
+							</lines>
+						</method>
+						<method name="argumentsAreDifferent" signature="(Ljava/lang/String;Ljava/lang/String;Lorg/mockito/internal/debugging/Location;)V" line-rate="0.75" branch-rate="0.5">
+							<lines>
+								<line number="227" hits="38" branch="false"/>
+								<line number="236" hits="38" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="237" hits="38" branch="false"/>
+								<line number="239" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="cannotCallRealMethodOnInterface" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="502" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="cannotInitializeForInjectMocksAnnotation" signature="(Ljava/lang/String;Ljava/lang/Exception;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="543" hits="2" branch="false"/>
+								<line number="545" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="cannotInitializeForSpyAnnotation" signature="(Ljava/lang/String;Ljava/lang/Exception;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="532" hits="12" branch="false"/>
+								<line number="534" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="cannotMockFinalClass" signature="(Ljava/lang/Class;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="375" hits="4" branch="false"/>
+								<line number="376" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="cannotStubVoidMethodWithAReturnValue" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="385" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="cannotStubWithNullThrowable" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="56" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="cannotVerifyToString" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="511" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="checkedExceptionInvalid" signature="(Ljava/lang/Throwable;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="49" hits="9" branch="false"/>
+							</lines>
+						</method>
+						<method name="createTooLittleInvocationsMessage" signature="(Lorg/mockito/exceptions/Discrepancy;Lorg/mockito/exceptions/PrintableInvocation;Lorg/mockito/internal/debugging/Location;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="324" hits="12" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="326" hits="24" branch="false"/>
+								<line number="327" hits="12" branch="false"/>
+								<line number="328" hits="12" branch="false"/>
+								<line number="330" hits="12" branch="false"/>
+								<line number="333" hits="12" branch="false"/>
+							</lines>
+						</method>
+						<method name="createTooManyInvocationsMessage" signature="(IILorg/mockito/exceptions/PrintableInvocation;Lorg/mockito/internal/debugging/Location;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="293" hits="36" branch="false"/>
+								<line number="294" hits="18" branch="false"/>
+								<line number="295" hits="18" branch="false"/>
+								<line number="297" hits="18" branch="false"/>
+							</lines>
+						</method>
+						<method name="createWantedButNotInvokedMessage" signature="(Lorg/mockito/exceptions/PrintableInvocation;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="265" hits="60" branch="false"/>
+								<line number="267" hits="30" branch="false"/>
+							</lines>
+						</method>
+						<method name="extraInterfacesAcceptsOnlyInterfaces" signature="(Ljava/lang/Class;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="470" hits="6" branch="false"/>
+								<line number="472" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="extraInterfacesCannotContainMockedType" signature="(Ljava/lang/Class;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="477" hits="4" branch="false"/>
+								<line number="479" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="extraInterfacesDoesNotAcceptNullParameters" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="464" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="extraInterfacesRequiresAtLeastOneInterface" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="485" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="inOrderRequiresFamiliarMock" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="202" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="invalidUseOfMatchers" signature="(II)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="211" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="misplacedArgumentMatcher" signature="(Lorg/mockito/internal/debugging/Location;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="422" hits="10" branch="false"/>
+							</lines>
+						</method>
+						<method name="missingMethodInvocation" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="80" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="mockedTypeIsInconsistentWithSpiedInstanceType" signature="(Ljava/lang/Class;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="491" hits="4" branch="false"/>
+								<line number="493" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="mocksHaveToBePassedToVerifyNoMoreInteractions" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="148" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="mocksHaveToBePassedWhenCreatingInOrder" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="193" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="moreThanOneAnnotationNotAllowed" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="521" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="neverWantedButInvoked" signature="(Lorg/mockito/exceptions/PrintableInvocation;Lorg/mockito/internal/debugging/Location;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="304" hits="14" branch="false"/>
+								<line number="305" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="noArgumentValueWasCaptured" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="449" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="noMoreInteractionsWanted" signature="(Lorg/mockito/internal/invocation/Invocation;Ljava/util/List;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="351" hits="27" branch="false"/>
+								<line number="352" hits="27" branch="false"/>
+								<line number="354" hits="54" branch="false"/>
+								<line number="358" hits="27" branch="false"/>
+							</lines>
+						</method>
+						<method name="noMoreInteractionsWantedInOrder" signature="(Lorg/mockito/internal/invocation/Invocation;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="365" hits="10" branch="false"/>
+								<line number="369" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="notAMockPassedToVerify" signature="(Ljava/lang/Class;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="109" hits="6" branch="false"/>
+								<line number="110" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="notAMockPassedToVerifyNoMoreInteractions" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="157" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="notAMockPassedToWhenMethod" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="131" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="notAMockPassedWhenCreatingInOrder" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="175" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="nullPassedToVerify" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="120" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="nullPassedToVerifyNoMoreInteractions" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="166" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="nullPassedToWhenMethod" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="139" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="nullPassedWhenCreatingInOrder" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="184" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="onlyVoidMethodsCanBeSetToDoNothing" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="395" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="smartNullPointerException" signature="(Lorg/mockito/internal/debugging/Location;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="439" hits="16" branch="false"/>
+							</lines>
+						</method>
+						<method name="tooLittleActualInvocations" signature="(Lorg/mockito/exceptions/Discrepancy;Lorg/mockito/exceptions/PrintableInvocation;Lorg/mockito/internal/debugging/Location;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="337" hits="5" branch="false"/>
+								<line number="339" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="tooLittleActualInvocationsInOrder" signature="(Lorg/mockito/exceptions/Discrepancy;Lorg/mockito/exceptions/PrintableInvocation;Lorg/mockito/internal/debugging/Location;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="343" hits="7" branch="false"/>
+								<line number="345" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="tooManyActualInvocations" signature="(IILorg/mockito/exceptions/PrintableInvocation;Lorg/mockito/internal/debugging/Location;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="287" hits="3" branch="false"/>
+								<line number="288" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="tooManyActualInvocationsInOrder" signature="(IILorg/mockito/exceptions/PrintableInvocation;Lorg/mockito/internal/debugging/Location;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="315" hits="15" branch="false"/>
+								<line number="316" hits="15" branch="false"/>
+							</lines>
+						</method>
+						<method name="unfinishedStubbing" signature="(Lorg/mockito/internal/debugging/Location;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="63" hits="27" branch="false"/>
+							</lines>
+						</method>
+						<method name="unfinishedVerificationException" signature="(Lorg/mockito/internal/debugging/Location;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="93" hits="16" branch="false"/>
+								<line number="105" hits="16" branch="false"/>
+							</lines>
+						</method>
+						<method name="unsupportedCombinationOfAnnotations" signature="(Ljava/lang/String;Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="527" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="wantedAtMostX" signature="(II)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="418" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="wantedButNotInvoked" signature="(Lorg/mockito/exceptions/PrintableInvocation;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="244" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="wantedButNotInvoked" signature="(Lorg/mockito/exceptions/PrintableInvocation;Ljava/util/List;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="249" hits="23" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="250" hits="12" branch="false"/>
+								<line number="252" hits="11" branch="false"/>
+								<line number="253" hits="11" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="254" hits="15" branch="false"/>
+								<line number="255" hits="15" branch="false"/>
+								<line number="256" hits="15" branch="false"/>
+								<line number="257" hits="11" branch="false"/>
+								<line number="260" hits="23" branch="false"/>
+								<line number="261" hits="23" branch="false"/>
+							</lines>
+						</method>
+						<method name="wantedButNotInvokedInOrder" signature="(Lorg/mockito/exceptions/PrintableInvocation;Lorg/mockito/exceptions/PrintableInvocation;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="274" hits="60" branch="false"/>
+								<line number="277" hits="30" branch="false"/>
+								<line number="280" hits="30" branch="false"/>
+								<line number="281" hits="30" branch="false"/>
+							</lines>
+						</method>
+						<method name="wrongTypeOfReturnValue" signature="(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="407" hits="5" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="46" hits="9030" branch="false"/>
+						<line number="49" hits="9" branch="false"/>
+						<line number="56" hits="6" branch="false"/>
+						<line number="63" hits="27" branch="false"/>
+						<line number="80" hits="7" branch="false"/>
+						<line number="93" hits="16" branch="false"/>
+						<line number="105" hits="16" branch="false"/>
+						<line number="109" hits="6" branch="false"/>
+						<line number="110" hits="3" branch="false"/>
+						<line number="120" hits="1" branch="false"/>
+						<line number="131" hits="1" branch="false"/>
+						<line number="139" hits="1" branch="false"/>
+						<line number="148" hits="4" branch="false"/>
+						<line number="157" hits="3" branch="false"/>
+						<line number="166" hits="1" branch="false"/>
+						<line number="175" hits="2" branch="false"/>
+						<line number="184" hits="1" branch="false"/>
+						<line number="193" hits="3" branch="false"/>
+						<line number="202" hits="3" branch="false"/>
+						<line number="211" hits="2" branch="false"/>
+						<line number="227" hits="38" branch="false"/>
+						<line number="236" hits="38" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="237" hits="38" branch="false"/>
+						<line number="239" hits="0" branch="false"/>
+						<line number="244" hits="7" branch="false"/>
+						<line number="249" hits="23" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="250" hits="12" branch="false"/>
+						<line number="252" hits="11" branch="false"/>
+						<line number="253" hits="11" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="254" hits="15" branch="false"/>
+						<line number="255" hits="15" branch="false"/>
+						<line number="256" hits="15" branch="false"/>
+						<line number="257" hits="11" branch="false"/>
+						<line number="260" hits="23" branch="false"/>
+						<line number="261" hits="23" branch="false"/>
+						<line number="265" hits="60" branch="false"/>
+						<line number="267" hits="30" branch="false"/>
+						<line number="274" hits="60" branch="false"/>
+						<line number="277" hits="30" branch="false"/>
+						<line number="280" hits="30" branch="false"/>
+						<line number="281" hits="30" branch="false"/>
+						<line number="287" hits="3" branch="false"/>
+						<line number="288" hits="3" branch="false"/>
+						<line number="293" hits="36" branch="false"/>
+						<line number="294" hits="18" branch="false"/>
+						<line number="295" hits="18" branch="false"/>
+						<line number="297" hits="18" branch="false"/>
+						<line number="304" hits="14" branch="false"/>
+						<line number="305" hits="7" branch="false"/>
+						<line number="315" hits="15" branch="false"/>
+						<line number="316" hits="15" branch="false"/>
+						<line number="324" hits="12" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="326" hits="24" branch="false"/>
+						<line number="327" hits="12" branch="false"/>
+						<line number="328" hits="12" branch="false"/>
+						<line number="330" hits="12" branch="false"/>
+						<line number="333" hits="12" branch="false"/>
+						<line number="337" hits="5" branch="false"/>
+						<line number="339" hits="5" branch="false"/>
+						<line number="343" hits="7" branch="false"/>
+						<line number="345" hits="7" branch="false"/>
+						<line number="351" hits="27" branch="false"/>
+						<line number="352" hits="27" branch="false"/>
+						<line number="354" hits="54" branch="false"/>
+						<line number="358" hits="27" branch="false"/>
+						<line number="365" hits="10" branch="false"/>
+						<line number="369" hits="5" branch="false"/>
+						<line number="375" hits="4" branch="false"/>
+						<line number="376" hits="2" branch="false"/>
+						<line number="385" hits="5" branch="false"/>
+						<line number="395" hits="2" branch="false"/>
+						<line number="407" hits="5" branch="false"/>
+						<line number="418" hits="3" branch="false"/>
+						<line number="422" hits="10" branch="false"/>
+						<line number="439" hits="16" branch="false"/>
+						<line number="449" hits="2" branch="false"/>
+						<line number="464" hits="2" branch="false"/>
+						<line number="470" hits="6" branch="false"/>
+						<line number="472" hits="3" branch="false"/>
+						<line number="477" hits="4" branch="false"/>
+						<line number="479" hits="2" branch="false"/>
+						<line number="485" hits="4" branch="false"/>
+						<line number="491" hits="4" branch="false"/>
+						<line number="493" hits="2" branch="false"/>
+						<line number="502" hits="4" branch="false"/>
+						<line number="511" hits="2" branch="false"/>
+						<line number="521" hits="2" branch="false"/>
+						<line number="527" hits="4" branch="false"/>
+						<line number="532" hits="12" branch="false"/>
+						<line number="534" hits="6" branch="false"/>
+						<line number="543" hits="2" branch="false"/>
+						<line number="545" hits="1" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+		<package name="org.mockito.internal.stubbing.defaultanswers" line-rate="0.9" branch-rate="0.8333333333333334" complexity="2.5">
+			<classes>
+				<class name="org.mockito.internal.stubbing.defaultanswers.ReturnsSmartNulls" filename="org/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls.java" line-rate="0.8888888888888888" branch-rate="0.75" complexity="2.5">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="39" hits="157" branch="false"/>
+								<line number="66" hits="157" branch="false"/>
+							</lines>
+						</method>
+						<method name="answer" signature="(Lorg/mockito/invocation/InvocationOnMock;)Ljava/lang/Object;" line-rate="0.8571428571428571" branch-rate="0.75">
+							<lines>
+								<line number="69" hits="33" branch="false"/>
+								<line number="70" hits="33" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="71" hits="23" branch="false"/>
+								<line number="73" hits="10" branch="false"/>
+								<line number="74" hits="10" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="75" hits="10" branch="false"/>
+								<line number="77" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="39" hits="157" branch="false"/>
+						<line number="66" hits="157" branch="false"/>
+						<line number="69" hits="33" branch="false"/>
+						<line number="70" hits="33" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="71" hits="23" branch="false"/>
+						<line number="73" hits="10" branch="false"/>
+						<line number="74" hits="10" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="75" hits="10" branch="false"/>
+						<line number="77" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.stubbing.defaultanswers.ReturnsSmartNulls$1" filename="org/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls.java" line-rate="1.0" branch-rate="1.0" complexity="2.5">
+					<methods>
+					</methods>
+					<lines>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.stubbing.defaultanswers.ReturnsSmartNulls$ThrowingInterceptor" filename="org/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls.java" line-rate="0.9090909090909091" branch-rate="1.0" complexity="2.5">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls;Lorg/mockito/invocation/InvocationOnMock;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="45" hits="10" branch="false"/>
+								<line number="47" hits="10" branch="false"/>
+								<line number="48" hits="10" branch="false"/>
+								<line number="49" hits="10" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Lorg/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls;Lorg/mockito/invocation/InvocationOnMock;Lorg/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls$1;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="43" hits="10" branch="false"/>
+							</lines>
+						</method>
+						<method name="formatMethodCall" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="61" hits="5" branch="false"/>
+								<line number="62" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="intercept" signature="(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;Lorg/mockito/cglib/proxy/MethodProxy;)Ljava/lang/Object;" line-rate="0.75" branch-rate="1.0">
+							<lines>
+								<line number="52" hits="21" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="53" hits="5" branch="false"/>
+								<line number="56" hits="16" branch="false"/>
+								<line number="57" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="43" hits="10" branch="false"/>
+						<line number="45" hits="10" branch="false"/>
+						<line number="47" hits="10" branch="false"/>
+						<line number="48" hits="10" branch="false"/>
+						<line number="49" hits="10" branch="false"/>
+						<line number="52" hits="21" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="53" hits="5" branch="false"/>
+						<line number="56" hits="16" branch="false"/>
+						<line number="57" hits="0" branch="false"/>
+						<line number="61" hits="5" branch="false"/>
+						<line number="62" hits="5" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

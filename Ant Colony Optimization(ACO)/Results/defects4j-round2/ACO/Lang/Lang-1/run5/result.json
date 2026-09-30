@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "ACO",
+  "algorithm_version": "1.0.0",
+  "project": "Lang",
+  "bug_id": 1,
+  "run": 5,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 82,
+  "tests_validated": 82,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 1,
+  "fault_detected": true,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 48,
+    "total_methods": 48,
+    "ratio": 1.0
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 369,
+    "lines_total": 375,
+    "line_ratio": 0.984,
+    "branch_measure": "condition",
+    "branches_covered": 301,
+    "branches_total": 338,
+    "branch_ratio": 0.8905
+  },
+  "generation_seconds": 0.027,
+  "total_seconds": 7.0,
+  "configuration": {
+    "num_ants": 20,
+    "iterations": 30,
+    "alpha": 1.0,
+    "beta": 2.0,
+    "evaporation": 0.25,
+    "seed": 5
+  },
+  "artifacts": {
+    "tests": "Tests/defects4j-round2/ACO/Lang/Lang-1/run5/",
+    "logs": "Results/defects4j-round2/ACO/Lang/Lang-1/run5/logs/"
+  }
+}

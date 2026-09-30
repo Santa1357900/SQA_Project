@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Defects4J",
+  "algorithm_version": "2.0.0",
+  "project": "Gson",
+  "bug_id": 10,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 996,
+  "tests_validated": 995,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 1,
+  "fault_detected": true,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 15,
+    "total_methods": 15,
+    "ratio": 1.0
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 112,
+    "lines_total": 117,
+    "line_ratio": 0.9573,
+    "branch_measure": "condition",
+    "branches_covered": 56,
+    "branches_total": 58,
+    "branch_ratio": 0.9655
+  },
+  "generation_seconds": 0.0,
+  "total_seconds": 43.34,
+  "configuration": {
+    "benchmark": "Defects4J",
+    "timeout": 300
+  },
+  "artifacts": {
+    "tests": null,
+    "logs": "Results/defects4j-round2/Defects4J/Gson/Gson-10/run1/logs/"
+  }
+}

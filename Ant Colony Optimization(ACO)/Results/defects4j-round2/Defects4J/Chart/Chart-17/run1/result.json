@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Defects4J",
+  "algorithm_version": "2.0.0",
+  "project": "Chart",
+  "bug_id": 17,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 1742,
+  "tests_validated": 1741,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 1,
+  "fault_detected": true,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 36,
+    "total_methods": 44,
+    "ratio": 0.8182
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 219,
+    "lines_total": 288,
+    "line_ratio": 0.7604,
+    "branch_measure": "condition",
+    "branches_covered": 95,
+    "branches_total": 128,
+    "branch_ratio": 0.7422
+  },
+  "generation_seconds": 0.0,
+  "total_seconds": 81.4,
+  "configuration": {
+    "benchmark": "Defects4J",
+    "timeout": 300
+  },
+  "artifacts": {
+    "tests": null,
+    "logs": "Results/defects4j-round2/Defects4J/Chart/Chart-17/run1/logs/"
+  }
+}

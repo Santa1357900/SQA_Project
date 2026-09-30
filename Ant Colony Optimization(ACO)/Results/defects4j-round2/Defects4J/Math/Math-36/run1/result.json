@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Defects4J",
+  "algorithm_version": "2.0.0",
+  "project": "Math",
+  "bug_id": 36,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 2832,
+  "tests_validated": 2830,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 2,
+  "fault_detected": true,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 52,
+    "total_methods": 55,
+    "ratio": 0.9455
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 217,
+    "lines_total": 230,
+    "line_ratio": 0.9435,
+    "branch_measure": "condition",
+    "branches_covered": 84,
+    "branches_total": 92,
+    "branch_ratio": 0.913
+  },
+  "generation_seconds": 0.0,
+  "total_seconds": 86.86,
+  "configuration": {
+    "benchmark": "Defects4J",
+    "timeout": 300
+  },
+  "artifacts": {
+    "tests": null,
+    "logs": "Results/defects4j-round2/Defects4J/Math/Math-36/run1/logs/"
+  }
+}

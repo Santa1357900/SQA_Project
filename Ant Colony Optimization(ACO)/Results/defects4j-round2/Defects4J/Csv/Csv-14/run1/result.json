@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Defects4J",
+  "algorithm_version": "2.0.0",
+  "project": "Csv",
+  "bug_id": 14,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 257,
+  "tests_validated": 251,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 6,
+  "fault_detected": true,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 75,
+    "total_methods": 75,
+    "ratio": 1.0
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 330,
+    "lines_total": 356,
+    "line_ratio": 0.927,
+    "branch_measure": "condition",
+    "branches_covered": 232,
+    "branches_total": 272,
+    "branch_ratio": 0.8529
+  },
+  "generation_seconds": 0.0,
+  "total_seconds": 33.63,
+  "configuration": {
+    "benchmark": "Defects4J",
+    "timeout": 300
+  },
+  "artifacts": {
+    "tests": null,
+    "logs": "Results/defects4j-round2/Defects4J/Csv/Csv-14/run1/logs/"
+  }
+}

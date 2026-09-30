@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Defects4J",
+  "algorithm_version": "2.0.0",
+  "project": "Cli",
+  "bug_id": 27,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 248,
+  "tests_validated": 245,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 3,
+  "fault_detected": true,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 9,
+    "total_methods": 9,
+    "ratio": 1.0
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 34,
+    "lines_total": 34,
+    "line_ratio": 1.0,
+    "branch_measure": "condition",
+    "branches_covered": 11,
+    "branches_total": 12,
+    "branch_ratio": 0.9167
+  },
+  "generation_seconds": 0.0,
+  "total_seconds": 15.11,
+  "configuration": {
+    "benchmark": "Defects4J",
+    "timeout": 300
+  },
+  "artifacts": {
+    "tests": null,
+    "logs": "Results/defects4j-round2/Defects4J/Cli/Cli-27/run1/logs/"
+  }
+}
