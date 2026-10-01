@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-58-ul7wefdm/Math-58f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.math.optimization.fitting.GaussianFitterClaudeTest::testGuess_exactlyThreeObservations_correctSigma_bugDetection
+  - org.apache.commons.math.optimization.fitting.GaussianFitterClaudeTest::testGuess_interpolatedHalfMax_symmetricData_correctSigma_bugDetection
+  - org.apache.commons.math.optimization.fitting.GaussianFitterClaudeTest::testGuess_exactHalfMaxMatchOnBothSides_correctSigma_bugDetection
+[exit 0]

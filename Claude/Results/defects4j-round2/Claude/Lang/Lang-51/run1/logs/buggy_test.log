@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Lang-51-tg_ekq5n/Lang-51b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.lang.BooleanUtilsClaudeTest::testToBoolean_String_threeCharNoMatch_mustReturnFalseNotThrow
+[exit 0]

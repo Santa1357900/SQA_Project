@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Gson-14-rtv93igs/Gson-14b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - com.google.gson.internal._Gson_TypesClaudeTest::testSubtypeOf_withWildcardBound_unwrapsToOriginalBound
+  - com.google.gson.internal._Gson_TypesClaudeTest::testSupertypeOf_withWildcardBound_unwrapsToOriginalBound
+[exit 0]

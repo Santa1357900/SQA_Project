@@ -1,0 +1,636 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Math (Defects4J bug Math-55)
+package: org.apache.commons.math.geometry
+class_under_test: Vector3D
+test_class_to_write: Vector3DClaudeTest
+</target>
+
+<project_notes>
+Commons Math: ใช้ delta ทุกครั้งที่เทียบ double ห้าม implement UnivariateRealFunction/UnivariateFunction ถ้าไม่ได้ปรากฏใน source ให้ใช้ anonymous inner class เมื่อ interface มีเมธอดเดียว exception เป็น checked หลายตัว (เช่น MathException) จึงต้อง throws Throwable
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.math.geometry;
+
+import java.io.Serializable;
+
+import org.apache.commons.math.exception.MathArithmeticException;
+import org.apache.commons.math.exception.util.LocalizedFormats;
+import org.apache.commons.math.util.MathUtils;
+import org.apache.commons.math.util.FastMath;
+
+/**
+ * This class implements vectors in a three-dimensional space.
+ * <p>Instance of this class are guaranteed to be immutable.</p>
+ * @version $Revision$ $Date$
+ * @since 1.2
+ */
+public class Vector3D implements Serializable {
+  /** Null vector (coordinates: 0, 0, 0). */
+  public static final Vector3D ZERO   = new Vector3D(0, 0, 0);
+
+  /** First canonical vector (coordinates: 1, 0, 0). */
+  public static final Vector3D PLUS_I = new Vector3D(1, 0, 0);
+
+  /** Opposite of the first canonical vector (coordinates: -1, 0, 0). */
+  public static final Vector3D MINUS_I = new Vector3D(-1, 0, 0);
+
+  /** Second canonical vector (coordinates: 0, 1, 0). */
+  public static final Vector3D PLUS_J = new Vector3D(0, 1, 0);
+
+  /** Opposite of the second canonical vector (coordinates: 0, -1, 0). */
+  public static final Vector3D MINUS_J = new Vector3D(0, -1, 0);
+
+  /** Third canonical vector (coordinates: 0, 0, 1). */
+  public static final Vector3D PLUS_K = new Vector3D(0, 0, 1);
+
+  /** Opposite of the third canonical vector (coordinates: 0, 0, -1).  */
+  public static final Vector3D MINUS_K = new Vector3D(0, 0, -1);
+
+  // CHECKSTYLE: stop ConstantName
+  /** A vector with all coordinates set to NaN. */
+  public static final Vector3D NaN = new Vector3D(Double.NaN, Double.NaN, Double.NaN);
+  // CHECKSTYLE: resume ConstantName
+
+  /** A vector with all coordinates set to positive infinity. */
+  public static final Vector3D POSITIVE_INFINITY =
+      new Vector3D(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
+
+  /** A vector with all coordinates set to negative infinity. */
+  public static final Vector3D NEGATIVE_INFINITY =
+      new Vector3D(Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+
+  /** Default format. */
+  private static final Vector3DFormat DEFAULT_FORMAT =
+      Vector3DFormat.getInstance();
+
+  /** Serializable version identifier. */
+  private static final long serialVersionUID = 5133268763396045979L;
+
+  /** Abscissa. */
+  private final double x;
+
+  /** Ordinate. */
+  private final double y;
+
+  /** Height. */
+  private final double z;
+
+  /** Simple constructor.
+   * Build a vector from its coordinates
+   * @param x abscissa
+   * @param y ordinate
+   * @param z height
+   * @see #getX()
+   * @see #getY()
+   * @see #getZ()
+   */
+  public Vector3D(double x, double y, double z) {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+  }
+
+  /** Simple constructor.
+   * Build a vector from its azimuthal coordinates
+   * @param alpha azimuth (&alpha;) around Z
+   *              (0 is +X, &pi;/2 is +Y, &pi; is -X and 3&pi;/2 is -Y)
+   * @param delta elevation (&delta;) above (XY) plane, from -&pi;/2 to +&pi;/2
+   * @see #getAlpha()
+   * @see #getDelta()
+   */
+  public Vector3D(double alpha, double delta) {
+    double cosDelta = FastMath.cos(delta);
+    this.x = FastMath.cos(alpha) * cosDelta;
+    this.y = FastMath.sin(alpha) * cosDelta;
+    this.z = FastMath.sin(delta);
+  }
+
+  /** Multiplicative constructor
+   * Build a vector from another one and a scale factor.
+   * The vector built will be a * u
+   * @param a scale factor
+   * @param u base (unscaled) vector
+   */
+  public Vector3D(double a, Vector3D u) {
+    this.x = a * u.x;
+    this.y = a * u.y;
+    this.z = a * u.z;
+  }
+
+  /** Linear constructor
+   * Build a vector from two other ones and corresponding scale factors.
+   * The vector built will be a1 * u1 + a2 * u2
+   * @param a1 first scale factor
+   * @param u1 first base (unscaled) vector
+   * @param a2 second scale factor
+   * @param u2 second base (unscaled) vector
+   */
+  public Vector3D(double a1, Vector3D u1, double a2, Vector3D u2) {
+    this.x = a1 * u1.x + a2 * u2.x;
+    this.y = a1 * u1.y + a2 * u2.y;
+    this.z = a1 * u1.z + a2 * u2.z;
+  }
+
+  /** Linear constructor
+   * Build a vector from three other ones and corresponding scale factors.
+   * The vector built will be a1 * u1 + a2 * u2 + a3 * u3
+   * @param a1 first scale factor
+   * @param u1 first base (unscaled) vector
+   * @param a2 second scale factor
+   * @param u2 second base (unscaled) vector
+   * @param a3 third scale factor
+   * @param u3 third base (unscaled) vector
+   */
+  public Vector3D(double a1, Vector3D u1, double a2, Vector3D u2,
+                  double a3, Vector3D u3) {
+    this.x = a1 * u1.x + a2 * u2.x + a3 * u3.x;
+    this.y = a1 * u1.y + a2 * u2.y + a3 * u3.y;
+    this.z = a1 * u1.z + a2 * u2.z + a3 * u3.z;
+  }
+
+  /** Linear constructor
+   * Build a vector from four other ones and corresponding scale factors.
+   * The vector built will be a1 * u1 + a2 * u2 + a3 * u3 + a4 * u4
+   * @param a1 first scale factor
+   * @param u1 first base (unscaled) vector
+   * @param a2 second scale factor
+   * @param u2 second base (unscaled) vector
+   * @param a3 third scale factor
+   * @param u3 third base (unscaled) vector
+   * @param a4 fourth scale factor
+   * @param u4 fourth base (unscaled) vector
+   */
+  public Vector3D(double a1, Vector3D u1, double a2, Vector3D u2,
+                  double a3, Vector3D u3, double a4, Vector3D u4) {
+    this.x = a1 * u1.x + a2 * u2.x + a3 * u3.x + a4 * u4.x;
+    this.y = a1 * u1.y + a2 * u2.y + a3 * u3.y + a4 * u4.y;
+    this.z = a1 * u1.z + a2 * u2.z + a3 * u3.z + a4 * u4.z;
+  }
+
+  /** Get the abscissa of the vector.
+   * @return abscissa of the vector
+   * @see #Vector3D(double, double, double)
+   */
+  public double getX() {
+    return x;
+  }
+
+  /** Get the ordinate of the vector.
+   * @return ordinate of the vector
+   * @see #Vector3D(double, double, double)
+   */
+  public double getY() {
+    return y;
+  }
+
+  /** Get the height of the vector.
+   * @return height of the vector
+   * @see #Vector3D(double, double, double)
+   */
+  public double getZ() {
+    return z;
+  }
+
+  /** Get the L<sub>1</sub> norm for the vector.
+   * @return L<sub>1</sub> norm for the vector
+   */
+  public double getNorm1() {
+    return FastMath.abs(x) + FastMath.abs(y) + FastMath.abs(z);
+  }
+
+  /** Get the L<sub>2</sub> norm for the vector.
+   * @return euclidian norm for the vector
+   */
+  public double getNorm() {
+    return FastMath.sqrt (x * x + y * y + z * z);
+  }
+
+  /** Get the square of the norm for the vector.
+   * @return square of the euclidian norm for the vector
+   */
+  public double getNormSq() {
+    return x * x + y * y + z * z;
+  }
+
+  /** Get the L<sub>&infin;</sub> norm for the vector.
+   * @return L<sub>&infin;</sub> norm for the vector
+   */
+  public double getNormInf() {
+    return FastMath.max(FastMath.max(FastMath.abs(x), FastMath.abs(y)), FastMath.abs(z));
+  }
+
+  /** Get the azimuth of the vector.
+   * @return azimuth (&alpha;) of the vector, between -&pi; and +&pi;
+   * @see #Vector3D(double, double)
+   */
+  public double getAlpha() {
+    return FastMath.atan2(y, x);
+  }
+
+  /** Get the elevation of the vector.
+   * @return elevation (&delta;) of the vector, between -&pi;/2 and +&pi;/2
+   * @see #Vector3D(double, double)
+   */
+  public double getDelta() {
+    return FastMath.asin(z / getNorm());
+  }
+
+  /** Add a vector to the instance.
+   * @param v vector to add
+   * @return a new vector
+   */
+  public Vector3D add(Vector3D v) {
+    return new Vector3D(x + v.x, y + v.y, z + v.z);
+  }
+
+  /** Add a scaled vector to the instance.
+   * @param factor scale factor to apply to v before adding it
+   * @param v vector to add
+   * @return a new vector
+   */
+  public Vector3D add(double factor, Vector3D v) {
+    return new Vector3D(x + factor * v.x, y + factor * v.y, z + factor * v.z);
+  }
+
+  /** Subtract a vector from the instance.
+   * @param v vector to subtract
+   * @return a new vector
+   */
+  public Vector3D subtract(Vector3D v) {
+    return new Vector3D(x - v.x, y - v.y, z - v.z);
+  }
+
+  /** Subtract a scaled vector from the instance.
+   * @param factor scale factor to apply to v before subtracting it
+   * @param v vector to subtract
+   * @return a new vector
+   */
+  public Vector3D subtract(double factor, Vector3D v) {
+    return new Vector3D(x - factor * v.x, y - factor * v.y, z - factor * v.z);
+  }
+
+  /** Get a normalized vector aligned with the instance.
+   * @return a new normalized vector
+   * @exception ArithmeticException if the norm is zero
+   */
+  public Vector3D normalize() {
+    double s = getNorm();
+    if (s == 0) {
+      throw new MathArithmeticException(LocalizedFormats.CANNOT_NORMALIZE_A_ZERO_NORM_VECTOR);
+    }
+    return scalarMultiply(1 / s);
+  }
+
+  /** Get a vector orthogonal to the instance.
+   * <p>There are an infinite number of normalized vectors orthogonal
+   * to the instance. This method picks up one of them almost
+   * arbitrarily. It is useful when one needs to compute a reference
+   * frame with one of the axes in a predefined direction. The
+   * following example shows how to build a frame having the k axis
+   * aligned with the known vector u :
+   * <pre><code>
+   *   Vector3D k = u.normalize();
+   *   Vector3D i = k.orthogonal();
+   *   Vector3D j = Vector3D.crossProduct(k, i);
+   * </code></pre></p>
+   * @return a new normalized vector orthogonal to the instance
+   * @exception ArithmeticException if the norm of the instance is null
+   */
+  public Vector3D orthogonal() {
+
+    double threshold = 0.6 * getNorm();
+    if (threshold == 0) {
+      throw new MathArithmeticException(LocalizedFormats.ZERO_NORM);
+    }
+
+    if ((x >= -threshold) && (x <= threshold)) {
+      double inverse  = 1 / FastMath.sqrt(y * y + z * z);
+      return new Vector3D(0, inverse * z, -inverse * y);
+    } else if ((y >= -threshold) && (y <= threshold)) {
+      double inverse  = 1 / FastMath.sqrt(x * x + z * z);
+      return new Vector3D(-inverse * z, 0, inverse * x);
+    }
+    double inverse  = 1 / FastMath.sqrt(x * x + y * y);
+    return new Vector3D(inverse * y, -inverse * x, 0);
+
+  }
+
+  /** Compute the angular separation between two vectors.
+   * <p>This method computes the angular separation between two
+   * vectors using the dot product for well separated vectors and the
+   * cross product for almost aligned vectors. This allows to have a
+   * good accuracy in all cases, even for vectors very close to each
+   * other.</p>
+   * @param v1 first vector
+   * @param v2 second vector
+   * @return angular separation between v1 and v2
+   * @exception ArithmeticException if either vector has a null norm
+   */
+  public static double angle(Vector3D v1, Vector3D v2) {
+
+    double normProduct = v1.getNorm() * v2.getNorm();
+    if (normProduct == 0) {
+      throw new MathArithmeticException(LocalizedFormats.ZERO_NORM);
+    }
+
+    double dot = dotProduct(v1, v2);
+    double threshold = normProduct * 0.9999;
+    if ((dot < -threshold) || (dot > threshold)) {
+      // the vectors are almost aligned, compute using the sine
+      Vector3D v3 = crossProduct(v1, v2);
+      if (dot >= 0) {
+        return FastMath.asin(v3.getNorm() / normProduct);
+      }
+      return FastMath.PI - FastMath.asin(v3.getNorm() / normProduct);
+    }
+
+    // the vectors are sufficiently separated to use the cosine
+    return FastMath.acos(dot / normProduct);
+
+  }
+
+  /** Get the opposite of the instance.
+   * @return a new vector which is opposite to the instance
+   */
+  public Vector3D negate() {
+    return new Vector3D(-x, -y, -z);
+  }
+
+  /** Multiply the instance by a scalar
+   * @param a scalar
+   * @return a new vector
+   */
+  public Vector3D scalarMultiply(double a) {
+    return new Vector3D(a * x, a * y, a * z);
+  }
+
+  /**
+   * Returns true if any coordinate of this vector is NaN; false otherwise
+   * @return  true if any coordinate of this vector is NaN; false otherwise
+   */
+  public boolean isNaN() {
+      return Double.isNaN(x) || Double.isNaN(y) || Double.isNaN(z);
+  }
+
+  /**
+   * Returns true if any coordinate of this vector is infinite and none are NaN;
+   * false otherwise
+   * @return  true if any coordinate of this vector is infinite and none are NaN;
+   * false otherwise
+   */
+  public boolean isInfinite() {
+      return !isNaN() && (Double.isInfinite(x) || Double.isInfinite(y) || Double.isInfinite(z));
+  }
+
+  /**
+   * Test for the equality of two 3D vectors.
+   * <p>
+   * If all coordinates of two 3D vectors are exactly the same, and none are
+   * <code>Double.NaN</code>, the two 3D vectors are considered to be equal.
+   * </p>
+   * <p>
+   * <code>NaN</code> coordinates are considered to affect globally the vector
+   * and be equals to each other - i.e, if either (or all) coordinates of the
+   * 3D vector are equal to <code>Double.NaN</code>, the 3D vector is equal to
+   * {@link #NaN}.
+   * </p>
+   *
+   * @param other Object to test for equality to this
+   * @return true if two 3D vector objects are equal, false if
+   *         object is null, not an instance of Vector3D, or
+   *         not equal to this Vector3D instance
+   *
+   */
+  @Override
+  public boolean equals(Object other) {
+
+    if (this == other) {
+      return true;
+    }
+
+    if (other instanceof Vector3D) {
+      final Vector3D rhs = (Vector3D)other;
+      if (rhs.isNaN()) {
+          return this.isNaN();
+      }
+
+      return (x == rhs.x) && (y == rhs.y) && (z == rhs.z);
+    }
+    return false;
+  }
+
+  /**
+   * Get a hashCode for the 3D vector.
+   * <p>
+   * All NaN values have the same hash code.</p>
+   *
+   * @return a hash code value for this object
+   */
+  @Override
+  public int hashCode() {
+      if (isNaN()) {
+          return 8;
+      }
+      return 31 * (23 * MathUtils.hash(x) +  19 * MathUtils.hash(y) +  MathUtils.hash(z));
+  }
+
+  /** Compute the dot-product of two vectors.
+   * @param v1 first vector
+   * @param v2 second vector
+   * @return the dot product v1.v2
+   */
+  public static double dotProduct(Vector3D v1, Vector3D v2) {
+    return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+  }
+
+  /** Compute the cross-product of two vectors.
+   * @param v1 first vector
+   * @param v2 second vector
+   * @return the cross product v1 ^ v2 as a new Vector
+   */
+  public static Vector3D crossProduct(final Vector3D v1, final Vector3D v2) {
+
+
+      // rescale both vectors without losing precision,
+      // to ensure their norm are the same order of magnitude
+
+      // we reduce cancellation errors by preconditioning,
+      // we replace v1 by v3 = v1 - rho v2 with rho chosen in order to compute
+      // v3 without loss of precision. See Kahan lecture
+      // "Computing Cross-Products and Rotations in 2- and 3-Dimensional Euclidean Spaces"
+      // available at http://www.cs.berkeley.edu/~wkahan/MathH110/Cross.pdf
+
+      // compute rho as an 8 bits approximation of v1.v2 / v2.v2
+
+
+      // compute cross product from v3 and v2 instead of v1 and v2
+      return new Vector3D(v1.y * v2.z - v1.z * v2.y, v1.z * v2.x - v1.x * v2.z, v1.x * v2.y - v1.y * v2.x);
+
+  }
+
+  /** Compute the distance between two vectors according to the L<sub>1</sub> norm.
+   * <p>Calling this method is equivalent to calling:
+   * <code>v1.subtract(v2).getNorm1()</code> except that no intermediate
+   * vector is built</p>
+   * @param v1 first vector
+   * @param v2 second vector
+   * @return the distance between v1 and v2 according to the L<sub>1</sub> norm
+   */
+  public static double distance1(Vector3D v1, Vector3D v2) {
+    final double dx = FastMath.abs(v2.x - v1.x);
+    final double dy = FastMath.abs(v2.y - v1.y);
+    final double dz = FastMath.abs(v2.z - v1.z);
+    return dx + dy + dz;
+  }
+
+  /** Compute the distance between two vectors according to the L<sub>2</sub> norm.
+   * <p>Calling this method is equivalent to calling:
+   * <code>v1.subtract(v2).getNorm()</code> except that no intermediate
+   * vector is built</p>
+   * @param v1 first vector
+   * @param v2 second vector
+   * @return the distance between v1 and v2 according to the L<sub>2</sub> norm
+   */
+  public static double distance(Vector3D v1, Vector3D v2) {
+    final double dx = v2.x - v1.x;
+    final double dy = v2.y - v1.y;
+    final double dz = v2.z - v1.z;
+    return FastMath.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  /** Compute the distance between two vectors according to the L<sub>&infin;</sub> norm.
+   * <p>Calling this method is equivalent to calling:
+   * <code>v1.subtract(v2).getNormInf()</code> except that no intermediate
+   * vector is built</p>
+   * @param v1 first vector
+   * @param v2 second vector
+   * @return the distance between v1 and v2 according to the L<sub>&infin;</sub> norm
+   */
+  public static double distanceInf(Vector3D v1, Vector3D v2) {
+    final double dx = FastMath.abs(v2.x - v1.x);
+    final double dy = FastMath.abs(v2.y - v1.y);
+    final double dz = FastMath.abs(v2.z - v1.z);
+    return FastMath.max(FastMath.max(dx, dy), dz);
+  }
+
+  /** Compute the square of the distance between two vectors.
+   * <p>Calling this method is equivalent to calling:
+   * <code>v1.subtract(v2).getNormSq()</code> except that no intermediate
+   * vector is built</p>
+   * @param v1 first vector
+   * @param v2 second vector
+   * @return the square of the distance between v1 and v2
+   */
+  public static double distanceSq(Vector3D v1, Vector3D v2) {
+    final double dx = v2.x - v1.x;
+    final double dy = v2.y - v1.y;
+    final double dz = v2.z - v1.z;
+    return dx * dx + dy * dy + dz * dz;
+  }
+
+  /** Get a string representation of this vector.
+   * @return a string representation of this vector
+   */
+  @Override
+  public String toString() {
+      return DEFAULT_FORMAT.format(this);
+  }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ Vector3DClaudeTest ใน package org.apache.commons.math.geometry เพื่อทดสอบคลาส Vector3D ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.math.geometry;` เท่านั้น
+</instructions>

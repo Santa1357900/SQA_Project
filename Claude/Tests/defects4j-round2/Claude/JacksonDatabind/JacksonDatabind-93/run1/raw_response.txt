@@ -1,0 +1,304 @@
+package com.fasterxml.jackson.databind.jsontype.impl;
+
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+
+public class SubTypeValidatorClaudeTest
+{
+    public static class CaptureDeserializer extends JsonDeserializer<String>
+    {
+        public static DeserializationContext lastContext;
+
+        @Override
+        public String deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+        {
+            lastContext = ctxt;
+            return p.getValueAsString();
+        }
+    }
+
+    public static class Wrapper
+    {
+        @JsonDeserialize(using = CaptureDeserializer.class)
+        public String value;
+
+        public String getValue() { return value; }
+        public void setValue(String value) { this.value = value; }
+    }
+
+    public static class SamplePojo
+    {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    private ObjectMapper mapper;
+    private DeserializationContext ctxt;
+
+    @Before
+    public void setUp() throws Throwable
+    {
+        mapper = new ObjectMapper();
+        mapper.readValue("{\"value\":\"abc\"}", Wrapper.class);
+        ctxt = CaptureDeserializer.lastContext;
+    }
+
+    // instance() must never return null
+    @Test
+    public void testInstance_returnsNonNullSingleton() throws Throwable
+    {
+        assertNotNull(SubTypeValidator.instance());
+    }
+
+    // instance() is a singleton: repeated calls return the same object
+    @Test
+    public void testInstance_calledTwice_returnsSameInstance() throws Throwable
+    {
+        SubTypeValidator v1 = SubTypeValidator.instance();
+        SubTypeValidator v2 = SubTypeValidator.instance();
+        assertSame(v1, v2);
+    }
+
+    // protected constructor: same-package instantiation initializes default illegal names
+    @Test
+    public void testConstructor_createsInstanceWithDefaultIllegalNames() throws Throwable
+    {
+        SubTypeValidator v = new SubTypeValidator();
+        assertNotNull(v);
+        assertSame(SubTypeValidator.DEFAULT_NO_DESER_CLASS_NAMES, v._cfgIllegalClassNames);
+    }
+
+    // PREFIX_STRING constant value
+    @Test
+    public void testPrefixString_value() throws Throwable
+    {
+        assertEquals("org.springframework.", SubTypeValidator.PREFIX_STRING);
+    }
+
+    // DEFAULT_NO_DESER_CLASS_NAMES contains known JDK-based dangerous class
+    @Test
+    public void testDefaultIllegalClassNames_containsFileHandler() throws Throwable
+    {
+        assertTrue(SubTypeValidator.DEFAULT_NO_DESER_CLASS_NAMES.contains("java.util.logging.FileHandler"));
+    }
+
+    // DEFAULT_NO_DESER_CLASS_NAMES contains known JDK-based dangerous class
+    @Test
+    public void testDefaultIllegalClassNames_containsUnicastRemoteObject() throws Throwable
+    {
+        assertTrue(SubTypeValidator.DEFAULT_NO_DESER_CLASS_NAMES.contains("java.rmi.server.UnicastRemoteObject"));
+    }
+
+    // DEFAULT_NO_DESER_CLASS_NAMES contains the exact-match spring entry
+    @Test
+    public void testDefaultIllegalClassNames_containsSpringObjectFactory() throws Throwable
+    {
+        assertTrue(SubTypeValidator.DEFAULT_NO_DESER_CLASS_NAMES.contains("org.springframework.beans.factory.ObjectFactory"));
+    }
+
+    // DEFAULT_NO_DESER_CLASS_NAMES contains known c3p0 dangerous class
+    @Test
+    public void testDefaultIllegalClassNames_containsC3p0DataSource() throws Throwable
+    {
+        assertTrue(SubTypeValidator.DEFAULT_NO_DESER_CLASS_NAMES.contains("com.mchange.v2.c3p0.JndiRefForwardingDataSource"));
+    }
+
+    // an ordinary, harmless class must not be in the default blacklist
+    @Test
+    public void testDefaultIllegalClassNames_doesNotContainAllowedClass() throws Throwable
+    {
+        assertFalse(SubTypeValidator.DEFAULT_NO_DESER_CLASS_NAMES.contains("java.lang.String"));
+    }
+
+    // set is wrapped with Collections.unmodifiableSet: mutation must fail
+    @Test
+    public void testDefaultIllegalClassNames_isUnmodifiable() throws Throwable
+    {
+        try {
+            SubTypeValidator.DEFAULT_NO_DESER_CLASS_NAMES.add("x.y.Z");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // sanity check that the custom deserializer captured a real context for later tests
+    @Test
+    public void testSetUp_capturesNonNullDeserializationContext() throws Throwable
+    {
+        assertNotNull(ctxt);
+    }
+
+    // validateSubType: exact-match illegal class name branch -> throws
+    @Test
+    public void testValidateSubType_illegalFileHandler_throwsJsonMappingException() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(java.util.logging.FileHandler.class);
+        try {
+            SubTypeValidator.instance().validateSubType(ctxt, type);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("Illegal type"));
+        }
+    }
+
+    // validateSubType: exact-match illegal class name branch -> throws
+    @Test
+    public void testValidateSubType_illegalUnicastRemoteObject_throwsJsonMappingException() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(java.rmi.server.UnicastRemoteObject.class);
+        try {
+            SubTypeValidator.instance().validateSubType(ctxt, type);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("prevented for security reasons"));
+        }
+    }
+
+    // exception message must include the offending full class name per String.format contract
+    @Test
+    public void testValidateSubType_exceptionMessage_containsFullClassName() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(java.util.logging.FileHandler.class);
+        try {
+            SubTypeValidator.instance().validateSubType(ctxt, type);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("java.util.logging.FileHandler"));
+        }
+    }
+
+    // thrown exception's concrete type must be JsonMappingException
+    @Test
+    public void testValidateSubType_exceptionType_isJsonMappingException() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(java.util.logging.FileHandler.class);
+        Exception caught = null;
+        try {
+            SubTypeValidator.instance().validateSubType(ctxt, type);
+        } catch (Exception e) {
+            caught = e;
+        }
+        assertTrue(caught instanceof JsonMappingException);
+    }
+
+    // validateSubType: not in blacklist, not spring-prefixed -> returns normally
+    @Test
+    public void testValidateSubType_allowedString_doesNotThrow() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(String.class);
+        assertFalse(SubTypeValidator.DEFAULT_NO_DESER_CLASS_NAMES.contains(type.getRawClass().getName()));
+        SubTypeValidator.instance().validateSubType(ctxt, type);
+        assertEquals(String.class, type.getRawClass());
+    }
+
+    // validateSubType: custom POJO type is allowed
+    @Test
+    public void testValidateSubType_allowedCustomPojo_doesNotThrow() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(SamplePojo.class);
+        SubTypeValidator.instance().validateSubType(ctxt, type);
+        assertEquals(SamplePojo.class, type.getRawClass());
+    }
+
+    // validateSubType: JDK interface not spring-prefixed is allowed (loop branch skipped)
+    @Test
+    public void testValidateSubType_allowedJdkInterface_doesNotThrow() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(java.io.Serializable.class);
+        SubTypeValidator.instance().validateSubType(ctxt, type);
+        assertTrue(type.getRawClass().isInterface());
+    }
+
+    // validateSubType: java.lang.Object is allowed
+    @Test
+    public void testValidateSubType_objectClass_doesNotThrow() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(Object.class);
+        SubTypeValidator.instance().validateSubType(ctxt, type);
+        assertEquals(Object.class, type.getRawClass());
+    }
+
+    // validateSubType: primitive type is allowed
+    @Test
+    public void testValidateSubType_primitiveInt_doesNotThrow() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(int.class);
+        SubTypeValidator.instance().validateSubType(ctxt, type);
+        assertTrue(type.getRawClass().isPrimitive());
+    }
+
+    // validateSubType: array of illegal class is allowed (blacklist is exact-name match only)
+    @Test
+    public void testValidateSubType_arrayOfIllegalClass_doesNotThrow() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(java.util.logging.FileHandler[].class);
+        SubTypeValidator.instance().validateSubType(ctxt, type);
+        assertTrue(type.getRawClass().isArray());
+    }
+
+    // configurable _cfgIllegalClassNames: a custom set can block a normally-allowed class
+    @Test
+    public void testValidateSubType_customIllegalNamesSet_blocksConfiguredClass() throws Throwable
+    {
+        SubTypeValidator v = new SubTypeValidator();
+        Set<String> custom = new HashSet<String>();
+        custom.add(SamplePojo.class.getName());
+        v._cfgIllegalClassNames = custom;
+        JavaType type = mapper.getTypeFactory().constructType(SamplePojo.class);
+        try {
+            v.validateSubType(ctxt, type);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains(SamplePojo.class.getName()));
+        }
+    }
+
+    // configurable _cfgIllegalClassNames: an empty set allows a normally-illegal class
+    @Test
+    public void testValidateSubType_emptyIllegalNamesSet_allowsNormallyIllegalClass() throws Throwable
+    {
+        SubTypeValidator v = new SubTypeValidator();
+        v._cfgIllegalClassNames = new HashSet<String>();
+        JavaType type = mapper.getTypeFactory().constructType(java.util.logging.FileHandler.class);
+        v.validateSubType(ctxt, type);
+        assertEquals(java.util.logging.FileHandler.class, type.getRawClass());
+    }
+
+    // calling validateSubType twice on the same illegal type consistently throws
+    @Test
+    public void testValidateSubType_illegalClassCalledTwice_consistentThrow() throws Throwable
+    {
+        JavaType type = mapper.getTypeFactory().constructType(java.util.logging.FileHandler.class);
+        int throwCount = 0;
+        for (int i = 0; i < 2; i++) {
+            try {
+                SubTypeValidator.instance().validateSubType(ctxt, type);
+            } catch (JsonMappingException e) {
+                throwCount++;
+            }
+        }
+        assertEquals(2, throwCount);
+    }
+
+    // instance()'s default illegal-name set is the same reference as the static default
+    @Test
+    public void testCfgIllegalClassNames_defaultInstance_sameReferenceAsStaticSet() throws Throwable
+    {
+        SubTypeValidator v = SubTypeValidator.instance();
+        assertSame(SubTypeValidator.DEFAULT_NO_DESER_CLASS_NAMES, v._cfgIllegalClassNames);
+    }
+}

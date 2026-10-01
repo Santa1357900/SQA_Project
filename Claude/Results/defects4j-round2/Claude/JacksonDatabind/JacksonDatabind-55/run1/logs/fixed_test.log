@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-55-tqxy0c6b/JacksonDatabind-55f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - com.fasterxml.jackson.databind.ser.std.StdKeySerializersClaudeTest::testObjectMapper_dateKeyMap_serializesAsTimestampByDefault
+  - com.fasterxml.jackson.databind.ser.std.StdKeySerializersClaudeTest::testObjectMapper_calendarKeyMap_serializesAsTimestampByDefault
+  - com.fasterxml.jackson.databind.ser.std.StdKeySerializersClaudeTest::testGetFallbackKeySerializer_concreteEnum_returnsDefault
+[exit 0]

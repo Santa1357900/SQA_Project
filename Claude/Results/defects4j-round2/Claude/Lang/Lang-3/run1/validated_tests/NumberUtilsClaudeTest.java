@@ -1,0 +1,344 @@
+package org.apache.commons.lang3.math;
+
+import static org.junit.Assert.*;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import org.junit.Test;
+
+public class NumberUtilsClaudeTest {
+
+    // Covers: toInt/toLong/toFloat/toDouble/toByte/toShort single-arg methods, str==null branch
+    @Test
+    public void testToPrimitiveConversions_nullString_returnsZeroDefault() throws Throwable {
+        assertEquals(0, NumberUtils.toInt(null));
+        assertEquals(0L, NumberUtils.toLong(null));
+        assertEquals(0.0f, NumberUtils.toFloat(null), 1e-9f);
+        assertEquals(0.0d, NumberUtils.toDouble(null), 1e-9d);
+        assertEquals((byte) 0, NumberUtils.toByte(null));
+        assertEquals((short) 0, NumberUtils.toShort(null));
+    }
+
+    // Covers: two-arg to* methods, NumberFormatException catch branch returning defaultValue
+    @Test
+    public void testToPrimitiveConversionsWithDefault_invalidString_returnsDefault() throws Throwable {
+        assertEquals(5, NumberUtils.toInt("abc", 5));
+        assertEquals(5L, NumberUtils.toLong("abc", 5L));
+        assertEquals(5.0f, NumberUtils.toFloat("abc", 5.0f), 1e-9f);
+        assertEquals(5.0d, NumberUtils.toDouble("abc", 5.0d), 1e-9d);
+        assertEquals((byte) 5, NumberUtils.toByte("abc", (byte) 5));
+        assertEquals((short) 5, NumberUtils.toShort("abc", (short) 5));
+    }
+
+    // Covers: successful Integer/Long/Float/Double/Byte/Short parse branches
+    @Test
+    public void testToPrimitiveConversions_validString_returnsParsedValue() throws Throwable {
+        assertEquals(42, NumberUtils.toInt("42"));
+        assertEquals(42L, NumberUtils.toLong("42"));
+        assertEquals(4.2f, NumberUtils.toFloat("4.2"), 1e-6f);
+        assertEquals(4.2d, NumberUtils.toDouble("4.2"), 1e-9d);
+        assertEquals((byte) 4, NumberUtils.toByte("4"));
+        assertEquals((short) 4, NumberUtils.toShort("4"));
+    }
+
+    // Covers: createNumber(null) -> null branch
+    @Test
+    public void testCreateNumber_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createNumber(null));
+    }
+
+    // Covers: createNumber empty string -> isBlank throws NumberFormatException
+    @Test
+    public void testCreateNumber_emptyString_throwsNFE() throws Throwable {
+        try {
+            NumberUtils.createNumber("");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+            // ok
+        }
+    }
+
+    // Covers: createNumber blank (whitespace) string -> isBlank throws NumberFormatException
+    @Test
+    public void testCreateNumber_blankString_throwsNFE() throws Throwable {
+        try {
+            NumberUtils.createNumber("   ");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+            // ok
+        }
+    }
+
+    // Covers: hex prefix "0x" with <=8 digits -> createInteger branch
+    @Test
+    public void testCreateNumber_hexLowercase_returnsInteger() throws Throwable {
+        Number result = NumberUtils.createNumber("0x1A");
+        assertTrue(result instanceof Integer);
+        assertEquals(26, result.intValue());
+    }
+
+    // Covers: hex prefix "0X" with <=8 digits -> createInteger branch
+    @Test
+    public void testCreateNumber_hexUppercase_returnsInteger() throws Throwable {
+        Number result = NumberUtils.createNumber("0X1A");
+        assertTrue(result instanceof Integer);
+        assertEquals(26, result.intValue());
+    }
+
+    // Covers: hex digits > 8 and <= 16 -> createLong branch
+    @Test
+    public void testCreateNumber_hexLongDigitCount_returnsLong() throws Throwable {
+        Number result = NumberUtils.createNumber("0x123456789");
+        assertTrue(result instanceof Long);
+        assertEquals(0x123456789L, result.longValue());
+    }
+
+    // Covers: hex digits > 16 -> createBigInteger branch
+    @Test
+    public void testCreateNumber_hexBigIntegerDigitCount_returnsBigInteger() throws Throwable {
+        Number result = NumberUtils.createNumber("0x12345678901234567");
+        assertTrue(result instanceof BigInteger);
+        assertEquals(new BigInteger("12345678901234567", 16), result);
+    }
+
+    // Covers: 'L'/'l' suffix with plain digits -> createLong branch
+    @Test
+    public void testCreateNumber_longSuffix_returnsLong() throws Throwable {
+        Number result = NumberUtils.createNumber("123L");
+        assertTrue(result instanceof Long);
+        assertEquals(123L, result.longValue());
+    }
+
+    // Covers: 'f'/'F' suffix -> createFloat succeeds branch
+    @Test
+    public void testCreateNumber_floatSuffix_returnsFloat() throws Throwable {
+        Number result = NumberUtils.createNumber("123.45f");
+        assertTrue(result instanceof Float);
+        assertEquals(123.45f, result.floatValue(), 1e-4f);
+    }
+
+    // Covers: 'd'/'D' suffix -> createDouble succeeds branch
+    @Test
+    public void testCreateNumber_doubleSuffix_returnsDouble() throws Throwable {
+        Number result = NumberUtils.createNumber("123.45d");
+        assertTrue(result instanceof Double);
+        assertEquals(123.45d, result.doubleValue(), 1e-9d);
+    }
+
+    // Covers: no decimal/exponent -> createInteger success branch
+    @Test
+    public void testCreateNumber_plainInteger_returnsInteger() throws Throwable {
+        Number result = NumberUtils.createNumber("123");
+        assertTrue(result instanceof Integer);
+        assertEquals(123, result.intValue());
+    }
+
+    // Covers: decimal present, no type qualifier -> tries Float first, fits
+    @Test
+    public void testCreateNumber_plainDecimal_returnsFloat() throws Throwable {
+        Number result = NumberUtils.createNumber("1.5");
+        assertTrue(result instanceof Float);
+        assertEquals(1.5f, result.floatValue(), 1e-6f);
+    }
+
+    // Covers: integer too big for Integer and Long -> createBigInteger fallback branch
+    @Test
+    public void testCreateNumber_bigIntegerOverflow_returnsBigInteger() throws Throwable {
+        Number result = NumberUtils.createNumber("12345678901234567890");
+        assertTrue(result instanceof BigInteger);
+        assertEquals(new BigInteger("12345678901234567890"), result);
+    }
+
+    // Covers: default switch case -> throws NumberFormatException for garbage input
+    @Test
+    public void testCreateNumber_invalidString_throwsNFE() throws Throwable {
+        try {
+            NumberUtils.createNumber("abc");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+            // ok
+        }
+    }
+
+    // Covers: createFloat(null) -> null branch
+    @Test
+    public void testCreateFloat_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createFloat(null));
+    }
+
+    // Covers: createDouble(null) -> null branch
+    @Test
+    public void testCreateDouble_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createDouble(null));
+    }
+
+    // Covers: createInteger hex decoding via Integer.decode
+    @Test
+    public void testCreateInteger_hex_returnsIntegerValue() throws Throwable {
+        Integer result = NumberUtils.createInteger("0x1A");
+        assertEquals(26, result.intValue());
+    }
+
+    // Covers: createLong hex decoding via Long.decode
+    @Test
+    public void testCreateLong_hex_returnsLongValue() throws Throwable {
+        Long result = NumberUtils.createLong("0x1A");
+        assertEquals(26L, result.longValue());
+    }
+
+    // Covers: createBigInteger(null) -> null branch
+    @Test
+    public void testCreateBigInteger_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createBigInteger(null));
+    }
+
+    // Covers: createBigInteger lowercase "0x" hex prefix branch
+    @Test
+    public void testCreateBigInteger_lowercaseHexPrefix_returnsCorrectValue() throws Throwable {
+        BigInteger result = NumberUtils.createBigInteger("0x1A");
+        assertEquals(new BigInteger("1A", 16), result);
+    }
+
+
+
+    // Covers: createBigInteger negative sign + hex prefix branch
+    @Test
+    public void testCreateBigInteger_negativeHexPrefix_returnsNegativeValue() throws Throwable {
+        BigInteger result = NumberUtils.createBigInteger("-0x1A");
+        assertEquals(new BigInteger("1A", 16).negate(), result);
+    }
+
+    // Covers: createBigInteger octal ("0" prefix with extra digits) branch
+    @Test
+    public void testCreateBigInteger_octalPrefix_returnsCorrectValue() throws Throwable {
+        BigInteger result = NumberUtils.createBigInteger("010");
+        assertEquals(BigInteger.valueOf(8L), result);
+    }
+
+    // Covers: createBigDecimal(null) -> null branch
+    @Test
+    public void testCreateBigDecimal_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createBigDecimal(null));
+    }
+
+    // Covers: createBigDecimal blank string -> throws NumberFormatException
+    @Test
+    public void testCreateBigDecimal_blankString_throwsNFE() throws Throwable {
+        try {
+            NumberUtils.createBigDecimal("");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+            // ok
+        }
+    }
+
+    // Covers: createBigDecimal "--" prefix protective check branch
+    @Test
+    public void testCreateBigDecimal_doubleMinusPrefix_throwsNFE() throws Throwable {
+        try {
+            NumberUtils.createBigDecimal("--1");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+            // ok
+        }
+    }
+
+    // Covers: createBigDecimal successful construction branch
+    @Test
+    public void testCreateBigDecimal_validString_returnsBigDecimalValue() throws Throwable {
+        BigDecimal result = NumberUtils.createBigDecimal("1.5");
+        assertEquals(new BigDecimal("1.5"), result);
+    }
+
+    // Covers: min(long[]) validateArray null branch -> IllegalArgumentException
+    @Test
+    public void testMinLongArray_nullArray_throwsIAE() throws Throwable {
+        try {
+            NumberUtils.min((long[]) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // Covers: min(long[]) validateArray empty branch -> IllegalArgumentException
+    @Test
+    public void testMinLongArray_emptyArray_throwsIAE() throws Throwable {
+        try {
+            NumberUtils.min(new long[0]);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // Covers: min(long[]) normal loop with multiple elements
+    @Test
+    public void testMinLongArray_basic_returnsMinValue() throws Throwable {
+        long result = NumberUtils.min(new long[] {5L, -3L, 10L});
+        assertEquals(-3L, result);
+    }
+
+    // Covers: max(int[]) normal loop with multiple elements
+    @Test
+    public void testMaxIntArray_basic_returnsMaxValue() throws Throwable {
+        int result = NumberUtils.max(new int[] {5, -3, 10});
+        assertEquals(10, result);
+    }
+
+    // Covers: min(double[]) NaN short-circuit branch
+    @Test
+    public void testMinDoubleArray_withNaN_returnsNaN() throws Throwable {
+        double result = NumberUtils.min(new double[] {1.0d, Double.NaN, 2.0d});
+        assertTrue(Double.isNaN(result));
+    }
+
+    // Covers: max(float[]) NaN short-circuit branch
+    @Test
+    public void testMaxFloatArray_withNaN_returnsNaN() throws Throwable {
+        float result = NumberUtils.max(new float[] {1.0f, Float.NaN, 2.0f});
+        assertTrue(Float.isNaN(result));
+    }
+
+    // Covers: 3-param min(int,int,int) both if-branches
+    @Test
+    public void testMinThreeInts_basic_returnsSmallest() throws Throwable {
+        int result = NumberUtils.min(5, -3, 10);
+        assertEquals(-3, result);
+    }
+
+    // Covers: 3-param max(byte,byte,byte) both if-branches
+    @Test
+    public void testMaxThreeBytes_basic_returnsLargest() throws Throwable {
+        byte result = NumberUtils.max((byte) 5, (byte) -3, (byte) 10);
+        assertEquals((byte) 10, result);
+    }
+
+    // Covers: isDigits null/empty/all-digit/non-digit branches
+    @Test
+    public void testIsDigits_variousInputs_returnsExpected() throws Throwable {
+        assertFalse(NumberUtils.isDigits(null));
+        assertFalse(NumberUtils.isDigits(""));
+        assertTrue(NumberUtils.isDigits("12345"));
+        assertFalse(NumberUtils.isDigits("12a45"));
+    }
+
+    // Covers: isNumber valid formats - plain, hex, exponent, long suffix, trailing decimal
+    @Test
+    public void testIsNumber_validFormats_returnsTrue() throws Throwable {
+        assertTrue(NumberUtils.isNumber("123"));
+        assertTrue(NumberUtils.isNumber("0x1F"));
+        assertTrue(NumberUtils.isNumber("1e10"));
+        assertTrue(NumberUtils.isNumber("123L"));
+        assertTrue(NumberUtils.isNumber("1."));
+    }
+
+    // Covers: isNumber invalid formats - null/empty/"0x"/unsupported '+'/L with decimal
+    @Test
+    public void testIsNumber_invalidFormats_returnsFalse() throws Throwable {
+        assertFalse(NumberUtils.isNumber(null));
+        assertFalse(NumberUtils.isNumber(""));
+        assertFalse(NumberUtils.isNumber("0x"));
+        assertFalse(NumberUtils.isNumber("+1"));
+        assertFalse(NumberUtils.isNumber("1.1L"));
+    }
+}

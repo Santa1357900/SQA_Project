@@ -1,0 +1,334 @@
+That tool call was unnecessary (irrelevant to the task) — ignoring it and providing the requested Java test file directly.package org.apache.commons.codec.binary;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.util.Arrays;
+
+public class Base32ClaudeTest {
+
+    // constructor: default ctor -> lineLength 0, default pad, no chunking
+    @Test
+    public void testConstructorDefault_encode_noChunkingNoSeparator() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] encoded = codec.encode("fooba".getBytes("UTF-8"));
+        assertEquals("MZXW6YTB", new String(encoded, "UTF-8"));
+    }
+
+    // constructor(byte pad): custom pad byte used instead of '='
+    @Test
+    public void testConstructorPad_customPadByte_usedInPadding() throws Throwable {
+        Base32 codec = new Base32((byte) '@');
+        byte[] encoded = codec.encode("f".getBytes("UTF-8"));
+        assertEquals("MY@@@@@@", new String(encoded, "UTF-8"));
+    }
+
+    // constructor(byte pad): pad in alphabet -> IllegalArgumentException
+    @Test
+    public void testConstructorPad_padInAlphabet_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Base32((byte) 'A');
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor(byte pad): pad is whitespace -> IllegalArgumentException
+    @Test
+    public void testConstructorPad_padIsWhitespace_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Base32((byte) ' ');
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor(boolean useHex): encodes with Base32 Hex alphabet per RFC4648
+    @Test
+    public void testConstructorUseHex_encodesWithHexAlphabet() throws Throwable {
+        Base32 codec = new Base32(true);
+        byte[] encoded = codec.encode("f".getBytes("UTF-8"));
+        assertEquals("CO======", new String(encoded, "UTF-8"));
+    }
+
+    // constructor(boolean useHex, byte pad): combines hex alphabet and custom pad
+    @Test
+    public void testConstructorUseHexAndPad_combinesBoth() throws Throwable {
+        Base32 codec = new Base32(true, (byte) '#');
+        byte[] encoded = codec.encode("f".getBytes("UTF-8"));
+        assertEquals("CO######", new String(encoded, "UTF-8"));
+    }
+
+    // constructor(int lineLength): lineLength>0 branch, default CRLF separator inserted
+    @Test
+    public void testConstructorLineLength_positive_insertsDefaultCRLF() throws Throwable {
+        Base32 codec = new Base32(8);
+        byte[] encoded = codec.encode("ABCDEFGHIJ".getBytes("UTF-8"));
+        String s = new String(encoded, "UTF-8");
+        assertTrue(s.indexOf("\r\n") >= 0);
+    }
+
+    // constructor(int lineLength): lineLength==0 branch -> no separator ever inserted
+    @Test
+    public void testConstructorLineLength_zero_noSeparatorInserted() throws Throwable {
+        Base32 codec = new Base32(0);
+        byte[] encoded = codec.encode("ABCDEFGHIJ".getBytes("UTF-8"));
+        String s = new String(encoded, "UTF-8");
+        assertTrue(s.indexOf("\r\n") < 0);
+    }
+
+    // constructor(int lineLength): negative lineLength treated same as <=0, no chunking
+    @Test
+    public void testConstructorLineLength_negative_treatedAsNoChunking() throws Throwable {
+        Base32 codec = new Base32(-5);
+        byte[] encoded = codec.encode("ABCDEFGHIJ".getBytes("UTF-8"));
+        String s = new String(encoded, "UTF-8");
+        assertTrue(s.indexOf("\r\n") < 0);
+    }
+
+    // constructor(int, byte[]): lineLength>0 with null separator -> IllegalArgumentException
+    @Test
+    public void testConstructorLineLengthPositive_nullSeparator_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Base32(8, null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor(int, byte[], boolean): lineLength<=0 bypasses null-separator check
+    @Test
+    public void testConstructorLineLengthZero_nullSeparator_noException() throws Throwable {
+        Base32 codec = new Base32(0, null, true);
+        byte[] encoded = codec.encode("f".getBytes("UTF-8"));
+        assertEquals("CO======", new String(encoded, "UTF-8"));
+    }
+
+    // constructor(int, byte[]): separator containing an alphabet char -> IllegalArgumentException
+    @Test
+    public void testConstructorLineSeparator_containsAlphabetChar_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Base32(8, new byte[] { 'A' });
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor(int, byte[]): custom separator used instead of CRLF
+    @Test
+    public void testConstructorCustomLineSeparator_usedInsteadOfCRLF() throws Throwable {
+        Base32 codec = new Base32(8, "##".getBytes("UTF-8"));
+        byte[] encoded = codec.encode("ABCDEFGHIJ".getBytes("UTF-8"));
+        String s = new String(encoded, "UTF-8");
+        assertTrue(s.indexOf("##") >= 0);
+        assertTrue(s.indexOf("\r\n") < 0);
+    }
+
+    // constructor(int, byte[], boolean, byte): full combination, exact output check
+    @Test
+    public void testConstructorFourArg_hexPadChunkingCombined_exactOutput() throws Throwable {
+        Base32 codec = new Base32(8, "##".getBytes("UTF-8"), true, (byte) '$');
+        byte[] encoded = codec.encode("foob".getBytes("UTF-8"));
+        assertEquals("CPNMUOG$##", new String(encoded, "UTF-8"));
+    }
+
+    // decode: empty input -> empty output
+    @Test
+    public void testDecode_emptyArray_returnsEmptyArray() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] decoded = codec.decode(new byte[0]);
+        assertEquals(0, decoded.length);
+    }
+
+    // decode: 2 leftover chars (modulus 2) -> 1 byte, matches "MY" -> 'f'
+    @Test
+    public void testDecode_twoCharsNoPad_modulus2_oneByte() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] decoded = codec.decode("MY".getBytes("UTF-8"));
+        assertEquals(1, decoded.length);
+        assertEquals((byte) 'f', decoded[0]);
+    }
+
+    // decode: 4 leftover chars (modulus 4) -> 2 bytes, matches "MZXQ" -> "fo"
+    @Test
+    public void testDecode_fourCharsNoPad_modulus4_twoBytes() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] decoded = codec.decode("MZXQ".getBytes("UTF-8"));
+        assertTrue(Arrays.equals("fo".getBytes("UTF-8"), decoded));
+    }
+
+    // decode: 5 leftover chars (modulus 5) -> 3 bytes, matches "MZXW6" -> "foo"
+    @Test
+    public void testDecode_fiveCharsNoPad_modulus5_threeBytes() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] decoded = codec.decode("MZXW6".getBytes("UTF-8"));
+        assertTrue(Arrays.equals("foo".getBytes("UTF-8"), decoded));
+    }
+
+    // decode: 7 leftover chars (modulus 7) -> 4 bytes, matches "MZXW6YQ" -> "foob"
+    @Test
+    public void testDecode_sevenCharsNoPad_modulus7_fourBytes() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] decoded = codec.decode("MZXW6YQ".getBytes("UTF-8"));
+        assertTrue(Arrays.equals("foob".getBytes("UTF-8"), decoded));
+    }
+
+    // decode: 3 leftover chars (modulus 3), arbitrary "ABC" -> 15 bits, drop 7 -> 0x00
+    @Test
+    public void testDecode_threeCharsNoPad_modulus3_oneByteZero() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] decoded = codec.decode("ABC".getBytes("UTF-8"));
+        assertEquals(1, decoded.length);
+        assertEquals((byte) 0, decoded[0]);
+    }
+
+    // decode: 6 leftover chars (modulus 6) -> 3 bytes produced (30 bits, drop 6)
+    @Test
+    public void testDecode_sixCharsNoPad_modulus6_threeBytesLength() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] decoded = codec.decode("ABCDEF".getBytes("UTF-8"));
+        assertEquals(3, decoded.length);
+    }
+
+    // decode: padding char stops processing (eof triggered), still decodes correctly
+    @Test
+    public void testDecode_withPaddingCharacter_stopsAndDecodesCorrectly() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] decoded = codec.decode("MY======".getBytes("UTF-8"));
+        assertEquals(1, decoded.length);
+        assertEquals((byte) 'f', decoded[0]);
+    }
+
+    // decode: non-alphabet characters (CRLF) are silently ignored per javadoc
+    @Test
+    public void testDecode_ignoresEmbeddedCRLF() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] decoded = codec.decode("MZ\r\nXW6YTB".getBytes("UTF-8"));
+        assertTrue(Arrays.equals("fooba".getBytes("UTF-8"), decoded));
+    }
+
+    // BUG oracle: 'W' is not part of the 32-symbol Base32-Hex alphabet (0-9,A-V) and must be
+    // ignored as a non-alphabet character; a single valid char after it is insufficient to emit
+    // any byte, so decoding "WA" must yield zero bytes.
+    @Test
+    public void testDecode_hexCharW_ignoredAsInvalid_noOutput() throws Throwable {
+        Base32 codec = new Base32(true);
+        byte[] decoded = codec.decode("WA".getBytes("UTF-8"));
+        assertEquals(0, decoded.length);
+    }
+
+    // encode: empty input -> empty output
+    @Test
+    public void testEncode_emptyArray_returnsEmptyArray() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] encoded = codec.encode(new byte[0]);
+        assertEquals(0, encoded.length);
+    }
+
+    // encode: 1 byte (modulus 1 at EOF) -> 2 data chars + 6 pad chars
+    @Test
+    public void testEncode_oneByte_twoCharsSixPad() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] encoded = codec.encode("f".getBytes("UTF-8"));
+        assertEquals("MY======", new String(encoded, "UTF-8"));
+    }
+
+    // encode: 5 bytes exactly fill one block in the main loop, no padding
+    @Test
+    public void testEncode_fiveBytes_exactBlockNoPadding() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] encoded = codec.encode("fooba".getBytes("UTF-8"));
+        assertEquals("MZXW6YTB", new String(encoded, "UTF-8"));
+    }
+
+    // encode: 4 bytes (modulus 4 at EOF) -> 7 data chars + 1 pad char
+    @Test
+    public void testEncode_fourBytes_sevenCharsOnePad() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] encoded = codec.encode("foob".getBytes("UTF-8"));
+        assertEquals("MZXW6YQ=", new String(encoded, "UTF-8"));
+    }
+
+    // encode: lineLength>0 inserts CRLF after each completed 8-char block
+    @Test
+    public void testEncode_withLineLength_insertsCRLFSeparator() throws Throwable {
+        Base32 codec = new Base32(8);
+        byte[] encoded = codec.encode("fooba".getBytes("UTF-8"));
+        String s = new String(encoded, "UTF-8");
+        assertTrue(s.indexOf("\r\n") >= 0);
+    }
+
+    // encode: hex variant for 4 bytes matches RFC4648 Base32-Hex test vector
+    @Test
+    public void testEncode_hexVariant_matchesRfcVector() throws Throwable {
+        Base32 codec = new Base32(true);
+        byte[] encoded = codec.encode("foob".getBytes("UTF-8"));
+        assertEquals("CPNMUOG=", new String(encoded, "UTF-8"));
+    }
+
+    // encode: custom pad byte appears in place of '=' in output
+    @Test
+    public void testEncode_customPad_appearsInOutput() throws Throwable {
+        Base32 codec = new Base32((byte) '*');
+        byte[] encoded = codec.encode("foob".getBytes("UTF-8"));
+        assertEquals("MZXW6YQ*", new String(encoded, "UTF-8"));
+    }
+
+    // encode followed by decode must restore the original bytes
+    @Test
+    public void testEncodeDecode_roundTrip_restoresOriginal() throws Throwable {
+        Base32 codec = new Base32();
+        byte[] original = "Hello, World! 123".getBytes("UTF-8");
+        byte[] encoded = codec.encode(original);
+        byte[] decoded = codec.decode(encoded);
+        assertTrue(Arrays.equals(original, decoded));
+    }
+
+    // isInAlphabet: valid uppercase letter and valid digits 2-7 return true
+    @Test
+    public void testIsInAlphabet_validLettersAndDigits_returnsTrue() throws Throwable {
+        Base32 codec = new Base32();
+        assertTrue(codec.isInAlphabet((byte) 'A'));
+        assertTrue(codec.isInAlphabet((byte) 'Z'));
+        assertTrue(codec.isInAlphabet((byte) '2'));
+        assertTrue(codec.isInAlphabet((byte) '7'));
+    }
+
+    // isInAlphabet: digits '0' and '1' are not part of the Base32 alphabet
+    @Test
+    public void testIsInAlphabet_invalidDigits0and1_returnsFalse() throws Throwable {
+        Base32 codec = new Base32();
+        assertFalse(codec.isInAlphabet((byte) '0'));
+        assertFalse(codec.isInAlphabet((byte) '1'));
+    }
+
+    // isInAlphabet: negative byte fails the octet >= 0 guard
+    @Test
+    public void testIsInAlphabet_negativeByte_returnsFalse() throws Throwable {
+        Base32 codec = new Base32();
+        assertFalse(codec.isInAlphabet((byte) -1));
+    }
+
+    // isInAlphabet: lowercase letter is out of decode table bounds -> false
+    @Test
+    public void testIsInAlphabet_lowercaseOutOfBounds_returnsFalse() throws Throwable {
+        Base32 codec = new Base32();
+        assertFalse(codec.isInAlphabet((byte) 'a'));
+    }
+
+    // isInAlphabet (hex): 'V' is the last valid letter of the 32-symbol hex alphabet
+    @Test
+    public void testIsInAlphabet_hexBoundaryV_returnsTrue() throws Throwable {
+        Base32 codec = new Base32(true);
+        assertTrue(codec.isInAlphabet((byte) '0'));
+        assertTrue(codec.isInAlphabet((byte) '9'));
+        assertTrue(codec.isInAlphabet((byte) 'V'));
+    }
+
+    // BUG oracle: Base32-Hex alphabet per RFC4648 is only {0-9,A-V} (32 symbols); 'W' must
+    // NOT be considered part of the alphabet.
+    @Test
+    public void testIsInAlphabet_hexCharW_returnsFalse() throws Throwable {
+        Base32 codec = new Base32(true);
+        assertFalse(codec.isInAlphabet((byte) 'W'));
+    }
+}

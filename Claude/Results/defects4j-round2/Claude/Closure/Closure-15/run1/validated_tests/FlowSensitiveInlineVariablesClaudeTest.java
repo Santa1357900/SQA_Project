@@ -1,0 +1,204 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class FlowSensitiveInlineVariablesClaudeTest {
+
+  private String compileAndGetSource(String js) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.flowSensitiveInlineVariables = true;
+    SourceFile extern = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("input.js", js);
+    compiler.compile(extern, input, options);
+    return compiler.toSource();
+  }
+
+  // Global scope: pass must not touch top-level (non-function) code.
+  @Test
+  public void testGlobalScope_notInlined() throws Throwable {
+    String src = compileAndGetSource("var x=1;var y=x;");
+    assertTrue(src.contains("y=x"));
+  }
+
+  // Simple chained inlining of var-defined literals through two variables.
+  @Test
+  public void testSimpleChainInline_var_inlinesToLiteral() throws Throwable {
+    String src = compileAndGetSource("function f(){var x=1;var y=x;return y;}");
+    assertTrue(src.contains("return 1"));
+  }
+
+  // Variable used twice in same statement: numUseWithinUseCfgNode != 1, no inline.
+  @Test
+  public void testMultipleUsesInStatement_notInlined() throws Throwable {
+    String src = compileAndGetSource("function f(){var x=1;var y=x+x;return y;}");
+    assertTrue(src.contains("x+x"));
+    assertTrue(src.contains("x=1"));
+  }
+
+  // RHS has side effect (unknown function call): mayHaveSideEffects blocks inline.
+  @Test
+  public void testSideEffectRHS_call_notInlined() throws Throwable {
+    String src = compileAndGetSource(
+        "function f(){function foo(){return 1;} var x=foo();var y=x;return y;}");
+    assertTrue(src.contains("foo()"));
+    assertTrue(src.contains("return x"));
+  }
+
+  // Use within a loop: NodeUtil.isWithinLoop blocks inline.
+  @Test
+  public void testWithinLoop_notInlined() throws Throwable {
+    String src = compileAndGetSource(
+        "function f(){function cond(){return false;} function sink(a){}"
+        + "var x=1;while(cond()){sink(x);}}");
+    assertTrue(src.contains("sink(x)"));
+  }
+
+  // Parameter definitions (defCfgNode.isFunction()) must never be inlined.
+  @Test
+  public void testParameter_notInlined() throws Throwable {
+    String src = compileAndGetSource("function f(a){function sink(b){} sink(a);}");
+    assertTrue(src.contains("sink(a)"));
+  }
+
+  // Assign-based definition (not var) gets inlined and the assign stmt removed.
+  @Test
+  public void testAssignBasedInline_removesAssignStatement() throws Throwable {
+    String src = compileAndGetSource("function f(){function sink(a){} var x;x=1;sink(x);}");
+    assertTrue(src.contains("sink(1)"));
+    assertFalse(src.contains("x=1"));
+  }
+
+  // RHS is GETPROP: NodeUtil.has blocks inline (alias safety).
+  @Test
+  public void testGetPropRHS_notInlined() throws Throwable {
+    String src = compileAndGetSource("function f(o){function sink(a){} var x=o.p;sink(x);}");
+    assertTrue(src.contains("sink(x)"));
+  }
+
+  // checkRightOf: side effect to the right of def within same statement blocks inline.
+  @Test
+  public void testCheckRightOf_siblingSideEffect_notInlined() throws Throwable {
+    String src = compileAndGetSource(
+        "function f(){function foo(){return 1;} function sink(a){}"
+        + "var x=1,y=foo();sink(x);}");
+    assertTrue(src.contains("sink(x)"));
+  }
+
+
+
+
+
+  // More than one use in the CFG (reachingUses.getUses().size() != 1): no inline.
+  @Test
+  public void testMultipleUsesAcrossStatements_notInlined() throws Throwable {
+    String src = compileAndGetSource("function f(){function sink(a){} var x=1;sink(x);sink(x);}");
+    int first = src.indexOf("sink(x)");
+    int second = src.indexOf("sink(x)", first + 1);
+    assertTrue(first >= 0);
+    assertTrue(second > first);
+  }
+
+  // RHS is NEW (constructor call): NodeUtil.has blocks inline.
+  @Test
+  public void testNewExpressionRHS_notInlined() throws Throwable {
+    String src = compileAndGetSource(
+        "function f(){function Ctor(){} function sink(a){} var x=new Ctor();sink(x);}");
+    assertTrue(src.contains("sink(x)"));
+  }
+
+  // RHS is ARRAYLIT: NodeUtil.has blocks inline.
+  @Test
+  public void testArrayLitRHS_notInlined() throws Throwable {
+    String src = compileAndGetSource("function f(){function sink(a){} var x=[1,2];sink(x);}");
+    assertTrue(src.contains("sink(x)"));
+  }
+
+  // RHS is OBJECTLIT: NodeUtil.has blocks inline.
+  @Test
+  public void testObjectLitRHS_notInlined() throws Throwable {
+    String src = compileAndGetSource("function f(){function sink(a){} var x={};sink(x);}");
+    assertTrue(src.contains("sink(x)"));
+  }
+
+  // RHS is REGEXP: NodeUtil.has blocks inline.
+  @Test
+  public void testRegexpRHS_notInlined() throws Throwable {
+    String src = compileAndGetSource("function f(){function sink(a){} var x=/a/;sink(x);}");
+    assertTrue(src.contains("sink(x)"));
+  }
+
+  // RHS is GETELEM: NodeUtil.has blocks inline.
+  @Test
+  public void testGetElemRHS_notInlined() throws Throwable {
+    String src = compileAndGetSource("function f(o){function sink(a){} var x=o[0];sink(x);}");
+    assertTrue(src.contains("sink(x)"));
+  }
+
+  // Non-adjacent def/use with no side effect in between: pathCheck passes, inlines.
+  @Test
+  public void testNonAdjacentNoSideEffect_inlined() throws Throwable {
+    String src = compileAndGetSource(
+        "function f(){function sink(a){} var x=1;var unused=2;sink(x);}");
+    assertTrue(src.contains("sink(1)"));
+  }
+
+  // Non-adjacent def/use with a side effect in between: pathCheck blocks inline.
+  @Test
+  public void testNonAdjacentWithSideEffect_notInlined() throws Throwable {
+    String src = compileAndGetSource(
+        "function f(){function foo(){return 1;} function sink(a){}"
+        + "var x=1;foo();sink(x);}");
+    assertTrue(src.contains("sink(x)"));
+    assertTrue(src.contains("foo()"));
+  }
+
+  // Empty function body: zero candidates, zero iterations, no crash.
+  @Test
+  public void testEmptyFunction_noCandidates() throws Throwable {
+    String src = compileAndGetSource("function f(){}");
+    assertTrue(src.contains("function f()"));
+  }
+
+  // Declared but never read variable: no candidate generated, stays unchanged.
+  @Test
+  public void testUnusedVar_unchanged() throws Throwable {
+    String src = compileAndGetSource("function f(){var x=1;}");
+    assertTrue(src.contains("x=1"));
+  }
+
+  // Recursive descent of SIDE_EFFECT_PREDICATE into nested array literal.
+  @Test
+  public void testRecursiveSideEffectInArray_notInlined() throws Throwable {
+    String src = compileAndGetSource(
+        "function f(){function foo(){return 1;} function sink(a){}"
+        + "var x=1,y=[foo()];sink(x);}");
+    assertTrue(src.contains("sink(x)"));
+  }
+
+  // Multiple function scopes are each processed independently by enterScope.
+  @Test
+  public void testMultipleFunctions_independentProcessing() throws Throwable {
+    String src = compileAndGetSource(
+        "function f(){var a=2;var b=a;return b;}"
+        + "function g(){var c=3;var d=c;return d;}");
+    assertTrue(src.contains("return 2"));
+    assertTrue(src.contains("return 3"));
+  }
+
+  // Chain of assign-based then var-based inline through to the final use.
+  @Test
+  public void testAssignThenVarChain_inlinesToLiteral() throws Throwable {
+    String src = compileAndGetSource("function f(){var x;x=5;var y=x;return y;}");
+    assertTrue(src.contains("return 5"));
+  }
+
+  // Arithmetic RHS with no side effects chains through two inlines.
+  @Test
+  public void testArithmeticChain_inlinesExpression() throws Throwable {
+    String src = compileAndGetSource(
+        "function f(){function sink(b){} var a=2;var x=a+1;sink(x);}");
+    assertTrue(src.contains("sink(2+1)"));
+  }
+}

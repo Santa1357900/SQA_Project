@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonCore-14-2dcd9z4z/JacksonCore-14b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - com.fasterxml.jackson.core.io.IOContextClaudeTest::test_verifyRelease_charArraySameLengthDifferentReference_doesNotThrow
+  - com.fasterxml.jackson.core.io.IOContextClaudeTest::test_verifyRelease_byteArraySameLengthDifferentReference_doesNotThrow
+  - com.fasterxml.jackson.core.io.IOContextClaudeTest::testReleaseReadIOBuffer_differentBufferSameLength_doesNotThrow
+[exit 0]

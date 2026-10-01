@@ -1,0 +1,380 @@
+package org.apache.commons.compress.compressors;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
+import org.apache.commons.compress.compressors.deflate.DeflateCompressorInputStream;
+import org.apache.commons.compress.compressors.deflate.DeflateCompressorOutputStream;
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream;
+import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream;
+import org.apache.commons.compress.compressors.pack200.Pack200CompressorOutputStream;
+
+public class CompressorStreamFactoryClaudeTest {
+
+    private CompressorStreamFactory factory;
+    private byte[] original1;
+    private byte[] original2;
+
+    @Before
+    public void setUp() throws Throwable {
+        factory = new CompressorStreamFactory();
+        original1 = "Hello Compress World".getBytes("UTF-8");
+        original2 = "Second concatenated message".getBytes("UTF-8");
+    }
+
+    private byte[] compress(String name, byte[] data) throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CompressorOutputStream cos = factory.createCompressorOutputStream(name, baos);
+        try {
+            cos.write(data);
+        } finally {
+            cos.close();
+        }
+        return baos.toByteArray();
+    }
+
+    private byte[] readAll(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buf = new byte[256];
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            out.write(buf, 0, n);
+        }
+        return out.toByteArray();
+    }
+
+    // Default constructor must leave decompressConcatenated at its default false value
+    @Test
+    public void testDefaultConstructor_decompressConcatenatedIsFalse() throws Throwable {
+        assertFalse(factory.getDecompressConcatenated());
+    }
+
+    // Boolean constructor with true must propagate to decompressConcatenated
+    @Test
+    public void testConstructorWithTrue_decompressConcatenatedIsTrue() throws Throwable {
+        CompressorStreamFactory f = new CompressorStreamFactory(true);
+        assertTrue(f.getDecompressConcatenated());
+    }
+
+    // Boolean constructor with false must propagate to decompressConcatenated
+    @Test
+    public void testConstructorWithFalse_decompressConcatenatedIsFalse() throws Throwable {
+        CompressorStreamFactory f = new CompressorStreamFactory(false);
+        assertFalse(f.getDecompressConcatenated());
+    }
+
+    // setDecompressConcatenated on default-ctor instance updates the flag
+    @Test
+    public void testSetDecompressConcatenated_onDefaultConstructor_updatesFlag() throws Throwable {
+        factory.setDecompressConcatenated(true);
+        assertTrue(factory.getDecompressConcatenated());
+    }
+
+    // setDecompressConcatenated must throw IllegalStateException when boolean ctor was used
+    @Test
+    public void testSetDecompressConcatenated_onBooleanConstructor_throwsIllegalStateException() throws Throwable {
+        CompressorStreamFactory f = new CompressorStreamFactory(true);
+        try {
+            f.setDecompressConcatenated(false);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // autodetect: null stream must throw IllegalArgumentException
+    @Test
+    public void testCreateCompressorInputStreamAutodetect_nullStream_throwsIllegalArgumentException() throws Throwable {
+        try {
+            factory.createCompressorInputStream((InputStream) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // autodetect: stream without mark support must throw IllegalArgumentException
+    @Test
+    public void testCreateCompressorInputStreamAutodetect_markNotSupported_throwsIllegalArgumentException() throws Throwable {
+        InputStream noMark = new InputStream() {
+            public int read() throws IOException {
+                return -1;
+            }
+            public boolean markSupported() {
+                return false;
+            }
+        };
+        try {
+            factory.createCompressorInputStream(noMark);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // autodetect: unrecognized signature must throw CompressorException
+    @Test
+    public void testCreateCompressorInputStreamAutodetect_unknownSignature_throwsCompressorException() throws Throwable {
+        byte[] junk = new byte[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+        ByteArrayInputStream in = new ByteArrayInputStream(junk);
+        try {
+            factory.createCompressorInputStream(in);
+            fail("expected CompressorException");
+        } catch (CompressorException expected) {
+            assertTrue(expected.getMessage().contains("No Compressor"));
+        }
+    }
+
+    // autodetect: valid gzip signature must be detected and decompressed correctly
+    @Test
+    public void testCreateCompressorInputStreamAutodetect_gzipSignature_decompressesOriginalContent() throws Throwable {
+        byte[] data = compress(CompressorStreamFactory.GZIP, original1);
+        CompressorInputStream cin = factory.createCompressorInputStream(new ByteArrayInputStream(data));
+        assertTrue(cin instanceof GzipCompressorInputStream);
+        assertArrayEquals(original1, readAll(cin));
+        cin.close();
+    }
+
+    // autodetect: valid bzip2 signature must be detected and decompressed correctly
+    @Test
+    public void testCreateCompressorInputStreamAutodetect_bzip2Signature_decompressesOriginalContent() throws Throwable {
+        byte[] data = compress(CompressorStreamFactory.BZIP2, original1);
+        CompressorInputStream cin = factory.createCompressorInputStream(new ByteArrayInputStream(data));
+        assertTrue(cin instanceof BZip2CompressorInputStream);
+        assertArrayEquals(original1, readAll(cin));
+        cin.close();
+    }
+
+    // autodetect: valid xz signature must be detected and decompressed correctly
+    @Test
+    public void testCreateCompressorInputStreamAutodetect_xzSignature_decompressesOriginalContent() throws Throwable {
+        byte[] data = compress(CompressorStreamFactory.XZ, original1);
+        CompressorInputStream cin = factory.createCompressorInputStream(new ByteArrayInputStream(data));
+        assertTrue(cin instanceof XZCompressorInputStream);
+        assertArrayEquals(original1, readAll(cin));
+        cin.close();
+    }
+
+    // name-based input: null name must throw IllegalArgumentException
+    @Test
+    public void testCreateCompressorInputStreamByName_nullName_throwsIllegalArgumentException() throws Throwable {
+        try {
+            factory.createCompressorInputStream((String) null, new ByteArrayInputStream(new byte[0]));
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // name-based input: null stream must throw IllegalArgumentException
+    @Test
+    public void testCreateCompressorInputStreamByName_nullStream_throwsIllegalArgumentException() throws Throwable {
+        try {
+            factory.createCompressorInputStream(CompressorStreamFactory.GZIP, (InputStream) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // name-based input: unknown name must throw CompressorException
+    @Test
+    public void testCreateCompressorInputStreamByName_unknownName_throwsCompressorException() throws Throwable {
+        try {
+            factory.createCompressorInputStream("no-such-format", new ByteArrayInputStream(new byte[0]));
+            fail("expected CompressorException");
+        } catch (CompressorException expected) {
+            assertTrue(expected.getMessage().contains("not found"));
+        }
+    }
+
+    // name-based input: gzip must round-trip correctly
+    @Test
+    public void testCreateCompressorInputStreamByName_gzip_decompressesOriginalContent() throws Throwable {
+        byte[] data = compress(CompressorStreamFactory.GZIP, original1);
+        CompressorInputStream cin = factory.createCompressorInputStream(
+                CompressorStreamFactory.GZIP, new ByteArrayInputStream(data));
+        assertTrue(cin instanceof GzipCompressorInputStream);
+        assertArrayEquals(original1, readAll(cin));
+        cin.close();
+    }
+
+    // name-based input: bzip2 must round-trip correctly
+    @Test
+    public void testCreateCompressorInputStreamByName_bzip2_decompressesOriginalContent() throws Throwable {
+        byte[] data = compress(CompressorStreamFactory.BZIP2, original1);
+        CompressorInputStream cin = factory.createCompressorInputStream(
+                CompressorStreamFactory.BZIP2, new ByteArrayInputStream(data));
+        assertTrue(cin instanceof BZip2CompressorInputStream);
+        assertArrayEquals(original1, readAll(cin));
+        cin.close();
+    }
+
+    // name-based input: deflate must round-trip correctly
+    @Test
+    public void testCreateCompressorInputStreamByName_deflate_decompressesOriginalContent() throws Throwable {
+        byte[] data = compress(CompressorStreamFactory.DEFLATE, original1);
+        CompressorInputStream cin = factory.createCompressorInputStream(
+                CompressorStreamFactory.DEFLATE, new ByteArrayInputStream(data));
+        assertTrue(cin instanceof DeflateCompressorInputStream);
+        assertArrayEquals(original1, readAll(cin));
+        cin.close();
+    }
+
+    // name-based input: xz must round-trip correctly
+    @Test
+    public void testCreateCompressorInputStreamByName_xz_decompressesOriginalContent() throws Throwable {
+        byte[] data = compress(CompressorStreamFactory.XZ, original1);
+        CompressorInputStream cin = factory.createCompressorInputStream(
+                CompressorStreamFactory.XZ, new ByteArrayInputStream(data));
+        assertTrue(cin instanceof XZCompressorInputStream);
+        assertArrayEquals(original1, readAll(cin));
+        cin.close();
+    }
+
+    // name-based input: name matching must be case-insensitive
+    @Test
+    public void testCreateCompressorInputStreamByName_caseInsensitiveBzip2UpperCase_decompressesOriginalContent() throws Throwable {
+        byte[] data = compress(CompressorStreamFactory.BZIP2, original1);
+        CompressorInputStream cin = factory.createCompressorInputStream("BZIP2", new ByteArrayInputStream(data));
+        assertTrue(cin instanceof BZip2CompressorInputStream);
+        assertArrayEquals(original1, readAll(cin));
+        cin.close();
+    }
+
+    // output: null name must throw IllegalArgumentException
+    @Test
+    public void testCreateCompressorOutputStream_nullName_throwsIllegalArgumentException() throws Throwable {
+        try {
+            factory.createCompressorOutputStream((String) null, new ByteArrayOutputStream());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // output: null stream must throw IllegalArgumentException
+    @Test
+    public void testCreateCompressorOutputStream_nullStream_throwsIllegalArgumentException() throws Throwable {
+        try {
+            factory.createCompressorOutputStream(CompressorStreamFactory.GZIP, (OutputStream) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // output: unknown name must throw CompressorException
+    @Test
+    public void testCreateCompressorOutputStream_unknownName_throwsCompressorException() throws Throwable {
+        try {
+            factory.createCompressorOutputStream("no-such-format", new ByteArrayOutputStream());
+            fail("expected CompressorException");
+        } catch (CompressorException expected) {
+            assertTrue(expected.getMessage().contains("not found"));
+        }
+    }
+
+    // output: gzip name must return a GzipCompressorOutputStream
+    @Test
+    public void testCreateCompressorOutputStream_gzip_returnsGzipCompressorOutputStream() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CompressorOutputStream cos = factory.createCompressorOutputStream(CompressorStreamFactory.GZIP, baos);
+        assertTrue(cos instanceof GzipCompressorOutputStream);
+        cos.close();
+    }
+
+    // output: bzip2 name must return a BZip2CompressorOutputStream
+    @Test
+    public void testCreateCompressorOutputStream_bzip2_returnsBzip2CompressorOutputStream() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CompressorOutputStream cos = factory.createCompressorOutputStream(CompressorStreamFactory.BZIP2, baos);
+        assertTrue(cos instanceof BZip2CompressorOutputStream);
+        cos.close();
+    }
+
+    // output: xz name must return a XZCompressorOutputStream
+    @Test
+    public void testCreateCompressorOutputStream_xz_returnsXZCompressorOutputStream() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CompressorOutputStream cos = factory.createCompressorOutputStream(CompressorStreamFactory.XZ, baos);
+        assertTrue(cos instanceof XZCompressorOutputStream);
+        cos.close();
+    }
+
+    // output: deflate name must return a DeflateCompressorOutputStream
+    @Test
+    public void testCreateCompressorOutputStream_deflate_returnsDeflateCompressorOutputStream() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CompressorOutputStream cos = factory.createCompressorOutputStream(CompressorStreamFactory.DEFLATE, baos);
+        assertTrue(cos instanceof DeflateCompressorOutputStream);
+        cos.close();
+    }
+
+    // output: pack200 name must return a Pack200CompressorOutputStream
+    @Test
+    public void testCreateCompressorOutputStream_pack200_returnsPack200CompressorOutputStream() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CompressorOutputStream cos = factory.createCompressorOutputStream(CompressorStreamFactory.PACK200, baos);
+        assertTrue(cos instanceof Pack200CompressorOutputStream);
+    }
+
+    // output: lzma is documented as not supported as output -> falls through to CompressorException
+    @Test
+    public void testCreateCompressorOutputStream_lzma_notSupported_throwsCompressorException() throws Throwable {
+        try {
+            factory.createCompressorOutputStream(CompressorStreamFactory.LZMA, new ByteArrayOutputStream());
+            fail("expected CompressorException");
+        } catch (CompressorException expected) {
+            assertTrue(expected.getMessage().contains("not found"));
+        }
+    }
+
+    // output: z is documented as not supported as output -> falls through to CompressorException
+    @Test
+    public void testCreateCompressorOutputStream_z_notSupported_throwsCompressorException() throws Throwable {
+        try {
+            factory.createCompressorOutputStream(CompressorStreamFactory.Z, new ByteArrayOutputStream());
+            fail("expected CompressorException");
+        } catch (CompressorException expected) {
+            assertTrue(expected.getMessage().contains("not found"));
+        }
+    }
+
+    // decompressConcatenated=true must decompress all concatenated gzip members
+    @Test
+    public void testDecompressConcatenated_true_readsAllConcatenatedGzipStreams() throws Throwable {
+        byte[] part1 = compress(CompressorStreamFactory.GZIP, original1);
+        byte[] part2 = compress(CompressorStreamFactory.GZIP, original2);
+        ByteArrayOutputStream merged = new ByteArrayOutputStream();
+        merged.write(part1);
+        merged.write(part2);
+        CompressorStreamFactory concatFactory = new CompressorStreamFactory(true);
+        CompressorInputStream cin = concatFactory.createCompressorInputStream(
+                CompressorStreamFactory.GZIP, new ByteArrayInputStream(merged.toByteArray()));
+        ByteArrayOutputStream expected = new ByteArrayOutputStream();
+        expected.write(original1);
+        expected.write(original2);
+        assertArrayEquals(expected.toByteArray(), readAll(cin));
+        cin.close();
+    }
+
+    // decompressConcatenated=false must stop after the first gzip member only
+    @Test
+    public void testDecompressConcatenated_false_readsOnlyFirstGzipStream() throws Throwable {
+        byte[] part1 = compress(CompressorStreamFactory.GZIP, original1);
+        byte[] part2 = compress(CompressorStreamFactory.GZIP, original2);
+        ByteArrayOutputStream merged = new ByteArrayOutputStream();
+        merged.write(part1);
+        merged.write(part2);
+        CompressorStreamFactory nonConcatFactory = new CompressorStreamFactory(false);
+        CompressorInputStream cin = nonConcatFactory.createCompressorInputStream(
+                CompressorStreamFactory.GZIP, new ByteArrayInputStream(merged.toByteArray()));
+        assertArrayEquals(original1, readAll(cin));
+        cin.close();
+    }
+}

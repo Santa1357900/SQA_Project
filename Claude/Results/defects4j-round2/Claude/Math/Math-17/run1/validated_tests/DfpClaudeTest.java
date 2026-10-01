@@ -1,0 +1,356 @@
+package org.apache.commons.math3.dfp;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class DfpClaudeTest {
+
+    private DfpField field;
+    private Dfp zero;
+    private Dfp one;
+    private Dfp two;
+
+    @Before
+    public void setUp() throws Throwable {
+        field = new DfpField(20);
+        zero = field.getZero();
+        one = field.getOne();
+        two = field.getTwo();
+    }
+
+    // newInstance(int): positive value round trip
+    @Test
+    public void testNewInstanceInt_positiveValue_correctDouble() throws Throwable {
+        Dfp d = zero.newInstance(42);
+        assertEquals(42.0, d.toDouble(), 1e-9);
+    }
+
+    // newInstance(long): negative value round trip
+    @Test
+    public void testNewInstanceLong_negativeValue_correctDouble() throws Throwable {
+        Dfp d = zero.newInstance(-123456789L);
+        assertEquals(-123456789.0, d.toDouble(), 1e-6);
+    }
+
+    // Dfp(double) special case: positive infinity branch
+    @Test
+    public void testNewInstanceDouble_positiveInfinity_isInfinite() throws Throwable {
+        Dfp d = zero.newInstance(Double.POSITIVE_INFINITY);
+        assertTrue(d.isInfinite());
+        assertFalse(d.lessThan(zero));
+    }
+
+    // Dfp(double) special case: negative infinity branch
+    @Test
+    public void testNewInstanceDouble_negativeInfinity_isInfiniteAndNegative() throws Throwable {
+        Dfp d = zero.newInstance(Double.NEGATIVE_INFINITY);
+        assertTrue(d.isInfinite());
+        assertTrue(d.lessThan(zero));
+    }
+
+    // Dfp(double) special case: NaN branch (x != x)
+    @Test
+    public void testNewInstanceDouble_NaN_isNaN() throws Throwable {
+        Dfp d = zero.newInstance(Double.NaN);
+        assertTrue(d.isNaN());
+    }
+
+    // String constructor: scientific notation parsing branch
+    @Test
+    public void testNewInstanceString_scientificNotation_correctValue() throws Throwable {
+        Dfp d = zero.newInstance("1.5e3");
+        assertEquals(1500.0, d.toDouble(), 1e-6);
+    }
+
+    // copy constructor via newInstance(Dfp): equal to source
+    @Test
+    public void testNewInstanceCopy_equalsOriginal() throws Throwable {
+        Dfp copy = zero.newInstance(one);
+        assertTrue(copy.equals(one));
+    }
+
+    // newInstance(byte,byte): non-finite infinite value creation
+    @Test
+    public void testNewInstanceByteCode_infinite_classifiedCorrectly() throws Throwable {
+        Dfp inf = zero.newInstance((byte) 1, Dfp.INFINITE);
+        assertTrue(inf.isInfinite());
+        assertEquals(Dfp.INFINITE, inf.classify());
+    }
+
+    // newInstance(Dfp): mismatched radix digits triggers invalid trap -> QNAN
+    @Test
+    public void testNewInstanceDfp_mismatchedPrecision_returnsNaN() throws Throwable {
+        DfpField field5 = new DfpField(5);
+        Dfp other = field5.getOne();
+        Dfp result = zero.newInstance(other);
+        assertTrue(result.isNaN());
+    }
+
+    // lessThan: normal true case
+    @Test
+    public void testLessThan_trueCase() throws Throwable {
+        Dfp a = zero.newInstance(3);
+        Dfp b = zero.newInstance(5);
+        assertTrue(a.lessThan(b));
+    }
+
+    // lessThan: NaN operand -> contract says false
+    @Test
+    public void testLessThan_NaN_returnsFalse() throws Throwable {
+        Dfp nan = zero.newInstance((byte) 1, Dfp.QNAN);
+        assertFalse(nan.lessThan(zero));
+    }
+
+    // greaterThan: normal true case
+    @Test
+    public void testGreaterThan_trueCase() throws Throwable {
+        Dfp a = zero.newInstance(5);
+        Dfp b = zero.newInstance(3);
+        assertTrue(a.greaterThan(b));
+    }
+
+    // lessThan: mismatched radix digits -> false
+    @Test
+    public void testLessThan_mismatchedPrecision_returnsFalse() throws Throwable {
+        DfpField field5 = new DfpField(5);
+        Dfp other = field5.getOne();
+        assertFalse(zero.lessThan(other));
+    }
+
+    // negativeOrNull: negative true, zero true, positive false
+    @Test
+    public void testNegativeOrNull_negativeAndZeroTrue_positiveFalse() throws Throwable {
+        Dfp neg = zero.newInstance(-5);
+        Dfp pos = zero.newInstance(5);
+        assertTrue(neg.negativeOrNull());
+        assertTrue(zero.negativeOrNull());
+        assertFalse(pos.negativeOrNull());
+    }
+
+    // strictlyNegative: zero must be false, negative must be true
+    @Test
+    public void testStrictlyNegative_zeroIsFalse_negativeIsTrue() throws Throwable {
+        Dfp neg = zero.newInstance(-5);
+        assertFalse(zero.strictlyNegative());
+        assertTrue(neg.strictlyNegative());
+    }
+
+    // positiveOrNull: positive true, zero true, negative false
+    @Test
+    public void testPositiveOrNull_positiveAndZeroTrue_negativeFalse() throws Throwable {
+        Dfp pos = zero.newInstance(5);
+        Dfp neg = zero.newInstance(-5);
+        assertTrue(pos.positiveOrNull());
+        assertTrue(zero.positiveOrNull());
+        assertFalse(neg.positiveOrNull());
+    }
+
+    // strictlyPositive: zero must be false, positive must be true
+    @Test
+    public void testStrictlyPositive_zeroIsFalse_positiveIsTrue() throws Throwable {
+        Dfp pos = zero.newInstance(5);
+        assertFalse(zero.strictlyPositive());
+        assertTrue(pos.strictlyPositive());
+    }
+
+    // abs: negative becomes positive magnitude
+    @Test
+    public void testAbs_negativeValue_returnsPositiveMagnitude() throws Throwable {
+        Dfp neg = zero.newInstance(-7);
+        Dfp r = neg.abs();
+        assertEquals(7.0, r.toDouble(), 1e-9);
+    }
+
+    // isInfinite: both signs of infinity classified as infinite
+    @Test
+    public void testIsInfinite_positiveAndNegative() throws Throwable {
+        Dfp posInf = zero.newInstance((byte) 1, Dfp.INFINITE);
+        Dfp negInf = zero.newInstance((byte) -1, Dfp.INFINITE);
+        assertTrue(posInf.isInfinite());
+        assertTrue(negInf.isInfinite());
+    }
+
+    // isNaN: quiet NaN true, finite value false
+    @Test
+    public void testIsNaN_quietNaNTrue_finiteFalse() throws Throwable {
+        Dfp nan = zero.newInstance((byte) 1, Dfp.QNAN);
+        assertTrue(nan.isNaN());
+        assertFalse(zero.isNaN());
+    }
+
+    // isZero: zero true, NaN false per contract (not equal to zero)
+    @Test
+    public void testIsZero_normalTrue_NaNFalse() throws Throwable {
+        Dfp nan = zero.newInstance((byte) 1, Dfp.QNAN);
+        assertTrue(zero.isZero());
+        assertFalse(nan.isZero());
+    }
+
+    // equals: same numeric value considered equal
+    @Test
+    public void testEquals_equalValues_true() throws Throwable {
+        Dfp a = zero.newInstance(5);
+        Dfp b = zero.newInstance(5);
+        assertTrue(a.equals(b));
+    }
+
+    // equals: NaN is never equal, even to itself
+    @Test
+    public void testEquals_NaNNeverEqual() throws Throwable {
+        Dfp nan = zero.newInstance((byte) 1, Dfp.QNAN);
+        assertFalse(nan.equals(nan));
+    }
+
+    // unequal: differing values true, identical values false
+    @Test
+    public void testUnequal_differentTrue_sameFalse() throws Throwable {
+        Dfp five = zero.newInstance(5);
+        Dfp five2 = zero.newInstance(5);
+        Dfp three = zero.newInstance(3);
+        assertTrue(five.unequal(three));
+        assertFalse(five.unequal(five2));
+    }
+
+    // rint: round-half-even tie-breaking in both directions
+    @Test
+    public void testRint_roundHalfEven_tieToEven() throws Throwable {
+        Dfp half25 = zero.newInstance("2.5");
+        Dfp half35 = zero.newInstance("3.5");
+        assertEquals(2.0, half25.rint().toDouble(), 1e-9);
+        assertEquals(4.0, half35.rint().toDouble(), 1e-9);
+    }
+
+    // floor: rounds toward negative infinity for negative fractional value
+    @Test
+    public void testFloor_negativeValue_roundsTowardNegativeInfinity() throws Throwable {
+        Dfp d = zero.newInstance("-2.5");
+        assertEquals(-3.0, d.floor().toDouble(), 1e-9);
+    }
+
+    // ceil: rounds toward positive infinity for positive fractional value
+    @Test
+    public void testCeil_positiveValue_roundsTowardPositiveInfinity() throws Throwable {
+        Dfp d = zero.newInstance("2.1");
+        assertEquals(3.0, d.ceil().toDouble(), 1e-9);
+    }
+
+    // remainder: IEEE remainder contract, this - n*d with n nearest integer
+    @Test
+    public void testRemainder_basicCase() throws Throwable {
+        Dfp five = zero.newInstance(5);
+        Dfp three = zero.newInstance(3);
+        Dfp r = five.remainder(three);
+        assertEquals(-1.0, r.toDouble(), 1e-9);
+    }
+
+    // intValue: values above Integer.MAX_VALUE clamp per javadoc
+    @Test
+    public void testIntValue_overflowClampsToMax() throws Throwable {
+        Dfp d = zero.newInstance(2147483648L);
+        assertEquals(2147483647, d.intValue());
+    }
+
+    // intValue: values below Integer.MIN_VALUE clamp per javadoc
+    @Test
+    public void testIntValue_underflowClampsToMin() throws Throwable {
+        Dfp d = zero.newInstance(-2147483649L);
+        assertEquals(-2147483648, d.intValue());
+    }
+
+
+
+
+
+
+
+    // power10K: 10000^e value correctness
+    @Test
+    public void testPower10K_value() throws Throwable {
+        Dfp d = zero.power10K(2);
+        assertEquals(1.0e8, d.toDouble(), 1.0);
+    }
+
+    // power10: positive exponent gives correct power of ten
+    @Test
+    public void testPower10_positiveExponent_correctValue() throws Throwable {
+        Dfp d = zero.power10(3);
+        assertEquals(1000.0, d.toDouble(), 1e-6);
+    }
+
+    // negate: sign flips, magnitude preserved
+    @Test
+    public void testNegate_positiveToNegative() throws Throwable {
+        Dfp five = zero.newInstance(5);
+        Dfp n = five.negate();
+        assertEquals(-5.0, n.toDouble(), 1e-9);
+    }
+
+    // subtract: basic difference correctness
+    @Test
+    public void testSubtract_basicCase() throws Throwable {
+        Dfp five = zero.newInstance(5);
+        Dfp three = zero.newInstance(3);
+        Dfp r = five.subtract(three);
+        assertEquals(2.0, r.toDouble(), 1e-9);
+    }
+
+    // add: mismatched radix digits triggers invalid trap -> QNAN
+    @Test
+    public void testAdd_mismatchedPrecision_returnsNaN() throws Throwable {
+        DfpField field5 = new DfpField(5);
+        Dfp other = field5.getOne();
+        Dfp result = one.add(other);
+        assertTrue(result.isNaN());
+    }
+
+    // multiply(Dfp): basic product correctness
+    @Test
+    public void testMultiply_dfpOperands_basicCase() throws Throwable {
+        Dfp three = zero.newInstance(3);
+        Dfp four = zero.newInstance(4);
+        Dfp r = three.multiply(four);
+        assertEquals(12.0, r.toDouble(), 1e-9);
+    }
+
+
+
+    // divide(Dfp): division by zero yields infinite result per IEEE 854
+    @Test
+    public void testDivideDfp_byZero_returnsInfinite() throws Throwable {
+        Dfp ten = zero.newInstance(10);
+        Dfp result = ten.divide(zero);
+        assertTrue(result.isInfinite());
+    }
+
+    // divide(int): division by zero yields infinite result
+    @Test
+    public void testDivideInt_byZero_returnsInfinite() throws Throwable {
+        Dfp ten = zero.newInstance(10);
+        Dfp result = ten.divide(0);
+        assertTrue(result.isInfinite());
+    }
+
+    // reciprocal: 1/x correctness
+    @Test
+    public void testReciprocal_value() throws Throwable {
+        Dfp four = zero.newInstance(4);
+        Dfp r = four.reciprocal();
+        assertEquals(0.25, r.toDouble(), 1e-9);
+    }
+
+    // sqrt: negative input triggers invalid trap -> NaN per contract
+    @Test
+    public void testSqrt_negativeValue_returnsNaN() throws Throwable {
+        Dfp negOne = zero.newInstance(-1);
+        Dfp result = negOne.sqrt();
+        assertTrue(result.isNaN());
+    }
+
+    // sqrt: zero input returns zero
+    @Test
+    public void testSqrt_zero_returnsZero() throws Throwable {
+        Dfp result = zero.sqrt();
+        assertTrue(result.isZero());
+    }
+}

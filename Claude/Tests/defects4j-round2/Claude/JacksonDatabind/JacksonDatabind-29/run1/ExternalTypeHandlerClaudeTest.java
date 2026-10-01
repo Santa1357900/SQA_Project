@@ -1,0 +1,301 @@
+package com.fasterxml.jackson.databind.deser.impl;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonMappingException;
+
+public class ExternalTypeHandlerClaudeTest
+{
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable
+    {
+        mapper = new ObjectMapper();
+    }
+
+    public abstract static class Animal
+    {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class Dog extends Animal
+    {
+        private String breed;
+        public String getBreed() { return breed; }
+        public void setBreed(String breed) { this.breed = breed; }
+    }
+
+    public static class Cat extends Animal
+    {
+        private String color;
+        public String getColor() { return color; }
+        public void setColor(String color) { this.color = color; }
+    }
+
+    public static class Container
+    {
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
+                property = "type", defaultImpl = Dog.class)
+        @JsonSubTypes({ @JsonSubTypes.Type(value = Dog.class, name = "dog"),
+                @JsonSubTypes.Type(value = Cat.class, name = "cat") })
+        private Animal animal;
+        private String other;
+        public Animal getAnimal() { return animal; }
+        public void setAnimal(Animal animal) { this.animal = animal; }
+        public String getOther() { return other; }
+        public void setOther(String other) { this.other = other; }
+    }
+
+    public static class Container2
+    {
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
+                property = "type", defaultImpl = Cat.class)
+        @JsonSubTypes({ @JsonSubTypes.Type(value = Dog.class, name = "dog"),
+                @JsonSubTypes.Type(value = Cat.class, name = "cat") })
+        private Animal animal;
+        public Animal getAnimal() { return animal; }
+        public void setAnimal(Animal animal) { this.animal = animal; }
+    }
+
+    public static class NaturalContainer
+    {
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
+                property = "vtype")
+        private Object value;
+        private String other;
+        public Object getValue() { return value; }
+        public void setValue(Object value) { this.value = value; }
+        public String getOther() { return other; }
+        public void setOther(String other) { this.other = other; }
+    }
+
+    public static class CollisionContainer
+    {
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
+                property = "type", defaultImpl = Dog.class)
+        @JsonSubTypes({ @JsonSubTypes.Type(value = Dog.class, name = "dog"),
+                @JsonSubTypes.Type(value = Cat.class, name = "cat") })
+        private Animal animal;
+        private String type;
+        public Animal getAnimal() { return animal; }
+        public void setAnimal(Animal animal) { this.animal = animal; }
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+    }
+
+    // handlePropertyValue: type property arrives before external value -> canDeserialize becomes true on value
+    @Test
+    public void testHandlePropertyValue_typeBeforeValue_deserializesDog() throws Throwable {
+        String json = "{\"type\":\"dog\",\"animal\":{\"breed\":\"Lab\"},\"other\":\"x\"}";
+        Container c = mapper.readValue(json, Container.class);
+        assertTrue(c.getAnimal() instanceof Dog);
+        assertEquals("Lab", ((Dog) c.getAnimal()).getBreed());
+        assertEquals("x", c.getOther());
+    }
+
+    // handlePropertyValue: external value arrives before type property -> canDeserialize becomes true on type
+    @Test
+    public void testHandlePropertyValue_valueBeforeType_deserializesDog() throws Throwable {
+        String json = "{\"animal\":{\"breed\":\"Rex\"},\"type\":\"dog\",\"other\":\"y\"}";
+        Container c = mapper.readValue(json, Container.class);
+        assertTrue(c.getAnimal() instanceof Dog);
+        assertEquals("Rex", ((Dog) c.getAnimal()).getBreed());
+    }
+
+    // handlePropertyValue: cat subtype with type-before-value ordering
+    @Test
+    public void testHandlePropertyValue_typeBeforeValue_deserializesCat() throws Throwable {
+        String json = "{\"type\":\"cat\",\"animal\":{\"color\":\"black\"}}";
+        Container c = mapper.readValue(json, Container.class);
+        assertTrue(c.getAnimal() instanceof Cat);
+        assertEquals("black", ((Cat) c.getAnimal()).getColor());
+    }
+
+    // handlePropertyValue: cat subtype with value-before-type ordering
+    @Test
+    public void testHandlePropertyValue_valueBeforeType_deserializesCat() throws Throwable {
+        String json = "{\"animal\":{\"color\":\"white\"},\"type\":\"cat\"}";
+        Container c = mapper.readValue(json, Container.class);
+        assertTrue(c.getAnimal() instanceof Cat);
+        assertEquals("white", ((Cat) c.getAnimal()).getColor());
+    }
+
+    // complete(): typeId missing entirely but defaultImpl configured -> falls back to default type id
+    @Test
+    public void testComplete_missingTypeId_usesDefaultImplDog() throws Throwable {
+        String json = "{\"animal\":{\"breed\":\"Buddy\"},\"other\":\"z\"}";
+        Container c = mapper.readValue(json, Container.class);
+        assertTrue(c.getAnimal() instanceof Dog);
+        assertEquals("Buddy", ((Dog) c.getAnimal()).getBreed());
+    }
+
+    // complete(): type id present but external property value never sent -> must throw mapping exception
+    @Test
+    public void testComplete_missingProperty_throwsMappingException() throws Throwable {
+        String json = "{\"type\":\"dog\",\"other\":\"w\"}";
+        try {
+            mapper.readValue(json, Container.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // _deserializeAndSet: buffered value is JSON null with typeId already known -> property must become null
+    @Test
+    public void testDeserializeAndSet_nullValueAfterType_setsPropertyNull() throws Throwable {
+        String json = "{\"type\":\"dog\",\"animal\":null,\"other\":\"n1\"}";
+        Container c = mapper.readValue(json, Container.class);
+        assertNull(c.getAnimal());
+        assertEquals("n1", c.getOther());
+    }
+
+    // _deserializeAndSet: buffered value is JSON null arriving before typeId -> property must become null
+    @Test
+    public void testDeserializeAndSet_nullValueBeforeType_setsPropertyNull() throws Throwable {
+        String json = "{\"animal\":null,\"type\":\"dog\",\"other\":\"n2\"}";
+        Container c = mapper.readValue(json, Container.class);
+        assertNull(c.getAnimal());
+        assertEquals("n2", c.getOther());
+    }
+
+    // complete(): no type id given, buffered token is scalar string -> natural-value shortcut used, no exception
+    @Test
+    public void testComplete_naturalScalarString_noTypeIdNeeded() throws Throwable {
+        String json = "{\"value\":\"hello\",\"other\":\"z\"}";
+        NaturalContainer c = mapper.readValue(json, NaturalContainer.class);
+        assertEquals("hello", c.getValue());
+    }
+
+    // complete(): no type id, buffered token is a JSON object (not scalar) and no defaultImpl -> must throw
+    @Test
+    public void testComplete_nonScalarNoDefaultImpl_throwsMappingException() throws Throwable {
+        String json = "{\"value\":{\"a\":1},\"other\":\"z\"}";
+        try {
+            mapper.readValue(json, NaturalContainer.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // complete(): both type id and external property entirely absent -> silently skipped, no exception
+    @Test
+    public void testComplete_bothTypeAndPropertyMissing_beanUnaffected() throws Throwable {
+        String json = "{}";
+        NaturalContainer c = mapper.readValue(json, NaturalContainer.class);
+        assertNull(c.getValue());
+        assertNull(c.getOther());
+    }
+
+    // handleTypePropertyValue: containing POJO has its own property colliding with the type-id property name
+    @Test
+    public void testHandleTypePropertyValue_collisionProperty_deserializesDog() throws Throwable {
+        String json = "{\"type\":\"dog\",\"animal\":{\"breed\":\"Fido\"}}";
+        CollisionContainer c = mapper.readValue(json, CollisionContainer.class);
+        assertTrue(c.getAnimal() instanceof Dog);
+        assertEquals("Fido", ((Dog) c.getAnimal()).getBreed());
+    }
+
+    // handlePropertyValue: an unrecognized type id string must fail type resolution deep in deserialization
+    @Test
+    public void testHandlePropertyValue_unregisteredTypeId_throwsProcessingException() throws Throwable {
+        String json = "{\"type\":\"fish\",\"animal\":{\"breed\":\"X\"}}";
+        try {
+            mapper.readValue(json, Container.class);
+            fail("expected JsonProcessingException");
+        } catch (JsonProcessingException expected) {
+        }
+    }
+
+    // start(): each top-level object deserialization must get a fresh handler with isolated typeId/token state
+    @Test
+    public void testStart_multipleObjectsInArray_stateIsolated() throws Throwable {
+        String json = "[{\"type\":\"dog\",\"animal\":{\"breed\":\"A\"}},"
+                + "{\"type\":\"cat\",\"animal\":{\"color\":\"B\"}}]";
+        Container[] arr = mapper.readValue(json, Container[].class);
+        assertTrue(arr[0].getAnimal() instanceof Dog);
+        assertEquals("A", ((Dog) arr[0].getAnimal()).getBreed());
+        assertTrue(arr[1].getAnimal() instanceof Cat);
+        assertEquals("B", ((Cat) arr[1].getAnimal()).getColor());
+    }
+
+    // handlePropertyValue: unrelated property interleaved between type and value must not disturb handling
+    @Test
+    public void testHandlePropertyValue_unrelatedPropertyInterleaved_deserializesDog() throws Throwable {
+        String json = "{\"other\":\"first\",\"type\":\"dog\",\"animal\":{\"breed\":\"Z\"}}";
+        Container c = mapper.readValue(json, Container.class);
+        assertEquals("first", c.getOther());
+        assertTrue(c.getAnimal() instanceof Dog);
+        assertEquals("Z", ((Dog) c.getAnimal()).getBreed());
+    }
+
+    // complete(): cat variant of missing-property-with-type-present error path
+    @Test
+    public void testComplete_missingPropertyCatVariant_throwsMappingException() throws Throwable {
+        String json = "{\"type\":\"cat\"}";
+        try {
+            mapper.readValue(json, Container.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // complete(): missing type id with defaultImpl configured as Cat must resolve to Cat, not Dog
+    @Test
+    public void testComplete_missingTypeId_usesDefaultImplCat() throws Throwable {
+        String json = "{\"animal\":{\"color\":\"gray\"}}";
+        Container2 c = mapper.readValue(json, Container2.class);
+        assertTrue(c.getAnimal() instanceof Cat);
+        assertEquals("gray", ((Cat) c.getAnimal()).getColor());
+    }
+
+    // complete(): missing type id, buffered value is scalar JSON null, defaultImpl falls through to null value
+    @Test
+    public void testComplete_nullScalarWithDefaultImpl_setsPropertyNull() throws Throwable {
+        String json = "{\"animal\":null}";
+        Container c = mapper.readValue(json, Container.class);
+        assertNull(c.getAnimal());
+    }
+
+    // complete(): no type id, buffered token is scalar boolean -> natural-value shortcut used
+    @Test
+    public void testComplete_naturalScalarBoolean_noTypeIdNeeded() throws Throwable {
+        String json = "{\"value\":true}";
+        NaturalContainer c = mapper.readValue(json, NaturalContainer.class);
+        assertEquals(Boolean.TRUE, c.getValue());
+    }
+
+    // complete(): no type id, buffered token is scalar integer -> natural-value shortcut used
+    @Test
+    public void testComplete_naturalScalarInteger_noTypeIdNeeded() throws Throwable {
+        String json = "{\"value\":42}";
+        NaturalContainer c = mapper.readValue(json, NaturalContainer.class);
+        assertEquals(42, ((Number) c.getValue()).intValue());
+    }
+
+    // handlePropertyValue: unicode characters in buffered value content must round-trip correctly
+    @Test
+    public void testHandlePropertyValue_unicodeBreedName_deserializesDog() throws Throwable {
+        String json = "{\"type\":\"dog\",\"animal\":{\"breed\":\"Caf\\u00e9\\u4e2d\"}}";
+        Container c = mapper.readValue(json, Container.class);
+        assertTrue(c.getAnimal() instanceof Dog);
+        assertEquals("Caf\u00e9\u4e2d", ((Dog) c.getAnimal()).getBreed());
+    }
+
+    // handlePropertyValue: empty string values for unrelated property must be preserved as-is
+    @Test
+    public void testHandlePropertyValue_emptyStringOtherField_preserved() throws Throwable {
+        String json = "{\"type\":\"dog\",\"animal\":{\"breed\":\"Max\"},\"other\":\"\"}";
+        Container c = mapper.readValue(json, Container.class);
+        assertEquals("", c.getOther());
+        assertTrue(c.getAnimal() instanceof Dog);
+    }
+}

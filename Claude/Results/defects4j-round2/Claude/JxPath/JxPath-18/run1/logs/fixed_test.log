@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-18-byr6c02p/JxPath-18f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.jxpath.ri.axes.AttributeContextClaudeTest::testGetValue_wildcardFirstPositionAfterReorderInsertion_matchesInsertionOrder
+[exit 0]

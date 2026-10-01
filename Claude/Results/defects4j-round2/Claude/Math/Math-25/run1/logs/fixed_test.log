@@ -1,0 +1,14 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-25-sla_nwoa/Math-25f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 8
+  - org.apache.commons.math3.optimization.fitting.HarmonicFitterClaudeTest::testGuess_fallbackBranch_outlierAtFirstPointMax_amplitudeIncludesFirstPoint
+  - org.apache.commons.math3.optimization.fitting.HarmonicFitterClaudeTest::testGuess_unsortedObservations_frontInsertion_sortsBeforeComputing
+  - org.apache.commons.math3.optimization.fitting.HarmonicFitterClaudeTest::testGuess_unsortedObservations_middleInsertion_sortsBeforeComputing
+  - org.apache.commons.math3.optimization.fitting.HarmonicFitterClaudeTest::testGuess_fallbackBranch_outlierAtFirstPointMin_amplitudeIncludesFirstPoint
+  - org.apache.commons.math3.optimization.fitting.HarmonicFitterClaudeTest::testGuess_fallbackBranch_negativeXValues_outlierAtFirstPoint
+  - org.apache.commons.math3.optimization.fitting.HarmonicFitterClaudeTest::testGuess_fallbackBranch_largerDataset_outlierAtFirstPoint
+  - org.apache.commons.math3.optimization.fitting.HarmonicFitterClaudeTest::testGuess_withZeroWeights_amplitudeStillComputedFromYRangeIncludingFirstPoint
+  - org.apache.commons.math3.optimization.fitting.HarmonicFitterClaudeTest::testGuess_fallbackBranch_fivePoints_outlierAtFirstPoint
+[exit 0]

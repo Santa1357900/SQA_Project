@@ -1,0 +1,274 @@
+package com.google.javascript.jscomp.parsing;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import com.google.javascript.rhino.Node;
+
+public class JsDocInfoParserClaudeTest {
+
+  // parseBasicTypeExpression -> parseTypeName: simple identifier type name
+  @Test
+  public void testParseTypeString_simpleTypeName_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("number");
+    assertNotNull(result);
+  }
+
+  // parseTypeName: dotted/namespaced identifier type name
+  @Test
+  public void testParseTypeString_dottedTypeName_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("goog.Foo");
+    assertNotNull(result);
+  }
+
+  // parseBasicTypeExpression: STAR branch ('*' = ALL type)
+  @Test
+  public void testParseTypeString_starType_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("*");
+    assertNotNull(result);
+  }
+
+  // parseTypeExpression: BANG branch ('!Type' = non-nullable)
+  @Test
+  public void testParseTypeString_bangType_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("!Object");
+    assertNotNull(result);
+  }
+
+  // parseTypeExpression: QMARK branch followed by a basic type (nullable)
+  @Test
+  public void testParseTypeString_qmarkPrefixType_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("?Object");
+    assertNotNull(result);
+  }
+
+  // parseBasicTypeExpression: "null" literal special-case branch
+  @Test
+  public void testParseTypeString_nullLiteral_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("null");
+    assertNotNull(result);
+  }
+
+  // parseBasicTypeExpression: "undefined" literal special-case branch
+  @Test
+  public void testParseTypeString_undefinedLiteral_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("undefined");
+    assertNotNull(result);
+  }
+
+  // parseBasicTypeExpression: no token matches (EOF) -> generic syntax warning -> null
+  @Test
+  public void testParseTypeString_emptyString_returnsNull() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("");
+    assertNull(result);
+  }
+
+  // parseRecordType: fieldTypeList null (EOF right after '{') -> null
+  @Test
+  public void testParseTypeString_unterminatedRecordType_returnsNull() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("{");
+    assertNull(result);
+  }
+
+  // wrapNode: BANG with null inner node (EOF after '!') -> null
+  @Test
+  public void testParseTypeString_loneBang_returnsNull() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("!");
+    assertNull(result);
+  }
+
+  // parseFieldType: FieldName ':' TypeExpression branch
+  @Test
+  public void testParseTypeString_recordTypeWithTypedField_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("{a: number}");
+    assertNotNull(result);
+  }
+
+  // parseFieldTypeList: comma-separated multiple fields (loop >1 iteration)
+  @Test
+  public void testParseTypeString_recordTypeWithMultipleFields_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("{a: number, b: string}");
+    assertNotNull(result);
+  }
+
+  // parseFieldType: FieldName without colon branch (untyped field)
+  @Test
+  public void testParseTypeString_recordTypeWithUntypedField_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("{a}");
+    assertNotNull(result);
+  }
+
+  // parseRecordType: missing closing RC -> msg.jsdoc.missing.rc -> null
+  @Test
+  public void testParseTypeString_recordTypeMissingRc_returnsNull() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("{a: number");
+    assertNull(result);
+  }
+
+  // parseArrayType: comma-separated elements (loop >1 iteration)
+  @Test
+  public void testParseTypeString_arrayTypeWithElements_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("[number,string]");
+    assertNotNull(result);
+  }
+
+  // parseTypeName: TypeApplication branch ('.<' ... '>')
+  @Test
+  public void testParseTypeString_typeApplication_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("Array.<string>");
+    assertNotNull(result);
+  }
+
+  // parseTypeName: TypeApplication missing GT -> msg.jsdoc.missing.gt -> null
+  @Test
+  public void testParseTypeString_typeApplicationMissingGt_returnsNull() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("Array.<string");
+    assertNull(result);
+  }
+
+  // parseFunctionType: empty parameter list, empty result type branch
+  @Test
+  public void testParseTypeString_emptyFunctionType_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function()");
+    assertNotNull(result);
+  }
+
+  // parseParametersType: multiple non-rest parameters
+  @Test
+  public void testParseTypeString_functionTypeWithParams_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function(number,string)");
+    assertNotNull(result);
+  }
+
+  // parseResultType: ':' TypeExpression branch
+  @Test
+  public void testParseTypeString_functionTypeWithReturnType_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function():number");
+    assertNotNull(result);
+  }
+
+  // parseResultType: ':' void branch
+  @Test
+  public void testParseTypeString_functionTypeWithVoidReturn_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function():void");
+    assertNotNull(result);
+  }
+
+  // parseFunctionType: token != LP -> msg.jsdoc.missing.lp -> null
+  @Test
+  public void testParseTypeString_functionKeywordWithoutParens_returnsNull() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function");
+    assertNull(result);
+  }
+
+  // parseParametersType: EQUALS wrapping branch for optional parameter
+  @Test
+  public void testParseTypeString_functionTypeWithOptionalParam_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function(number=)");
+    assertNotNull(result);
+  }
+
+  // parseParametersType: bare ELLIPSIS immediately followed by RP (unknown vararg)
+  @Test
+  public void testParseTypeString_functionTypeBareVarArgs_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function(...)");
+    assertNotNull(result);
+  }
+
+  // parseParametersType: legacy bracketed vararg type '...[Type]'
+  @Test
+  public void testParseTypeString_functionTypeBracketedVarArgs_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function(...[number])");
+    assertNotNull(result);
+  }
+
+
+
+  // parseUnionType via parseUnionTypeWithAlternate: parenthesized union (alternate==null)
+  @Test
+  public void testParseTypeString_parenthesizedUnion_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("(number|string)");
+    assertNotNull(result);
+  }
+
+  // parseTopLevelTypeExpression: top-level pipe union without parens (alternate!=null)
+  @Test
+  public void testParseTypeString_topLevelUnion_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("number|string");
+    assertNotNull(result);
+  }
+
+  // parseUnionTypeWithAlternate: double-pipe backward compatibility branch
+  @Test
+  public void testParseTypeString_doublePipeUnion_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("(number||string)");
+    assertNotNull(result);
+  }
+
+  // parseTypeExpressionList / parseTopLevelTypeExpression nested inside TypeApplication
+  @Test
+  public void testParseTypeString_typeApplicationWithUnionMember_returnsNonNullNode()
+      throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("Array.<number|string>");
+    assertNotNull(result);
+  }
+
+  // parseArrayType: ELLIPSIS branch inside '[' ... ']'
+  @Test
+  public void testParseTypeString_arrayTypeWithEllipsis_returnsNonNullNode() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("[...number]");
+    assertNotNull(result);
+  }
+
+  // parseFunctionType: isThis context-type branch ('this:Type')
+  @Test
+  public void testParseTypeString_functionTypeWithThisContext_returnsNonNullNode()
+      throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function(this:Object): void");
+    assertNotNull(result);
+  }
+
+  // parseFunctionType: isNew context-type branch ('new:Type')
+  @Test
+  public void testParseTypeString_functionTypeWithNewContext_returnsNonNullNode()
+      throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function(new:Foo): void");
+    assertNotNull(result);
+  }
+
+  // parseUnionTypeWithAlternate: missing RP -> msg.jsdoc.missing.rp -> null
+  @Test
+  public void testParseTypeString_parenthesizedUnionMissingRp_returnsNull() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("(number|string");
+    assertNull(result);
+  }
+
+  // parseArrayType: missing RB -> msg.jsdoc.missing.rb -> null
+  @Test
+  public void testParseTypeString_arrayTypeMissingRb_returnsNull() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("[number");
+    assertNull(result);
+  }
+
+  // parseTypeExpression QMARK look-ahead: COMMA terminator -> unknown type node
+  @Test
+  public void testParseTypeString_functionParamQmarkBeforeComma_returnsNonNullNode()
+      throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function(?, number): void");
+    assertNotNull(result);
+  }
+
+  // parseTypeExpression QMARK look-ahead: RP terminator -> unknown type node
+  @Test
+  public void testParseTypeString_functionParamQmarkBeforeRp_returnsNonNullNode()
+      throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function(number, ?): void");
+    assertNotNull(result);
+  }
+
+  // parseParametersType: vararg not in last position -> msg.jsdoc.function.varargs -> null
+  @Test
+  public void testParseTypeString_functionTypeVarArgsNotLast_returnsNull() throws Throwable {
+    Node result = JsDocInfoParser.parseTypeString("function(...[number], string)");
+    assertNull(result);
+  }
+}

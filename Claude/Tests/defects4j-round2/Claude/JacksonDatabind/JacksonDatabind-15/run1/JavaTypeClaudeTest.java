@@ -1,0 +1,384 @@
+package com.fasterxml.jackson.databind;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.List;
+import java.util.Map;
+
+public class JavaTypeClaudeTest {
+
+    public static enum SampleEnum { A, B }
+
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    // covers: withTypeHandler sets _typeHandler, getTypeHandler returns it
+    @Test
+    public void testWithTypeHandler_setsHandler_getTypeHandlerReturnsIt() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        Object handler = new Object();
+        JavaType result = type.withTypeHandler(handler);
+        Object got = result.getTypeHandler();
+        assertSame(handler, got);
+    }
+
+    // covers: withContentTypeHandler returns new instance with same raw class
+    @Test
+    public void testWithContentTypeHandler_containerType_sameRawClassReturned() throws Throwable {
+        JavaType listType = mapper.constructType(List.class);
+        Object handler = new Object();
+        JavaType result = listType.withContentTypeHandler(handler);
+        assertNotNull(result);
+        assertEquals(List.class, result.getRawClass());
+    }
+
+    // covers: withValueHandler sets _valueHandler, getValueHandler returns it
+    @Test
+    public void testWithValueHandler_setsHandler_getValueHandlerReturnsIt() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        Object handler = new Object();
+        JavaType result = type.withValueHandler(handler);
+        Object got = result.getValueHandler();
+        assertSame(handler, got);
+    }
+
+    // covers: withContentValueHandler returns new instance with same raw class
+    @Test
+    public void testWithContentValueHandler_containerType_sameRawClassReturned() throws Throwable {
+        JavaType listType = mapper.constructType(List.class);
+        Object handler = new Object();
+        JavaType result = listType.withContentValueHandler(handler);
+        assertNotNull(result);
+        assertEquals(List.class, result.getRawClass());
+    }
+
+    // covers: withStaticTyping sets useStaticType() to true
+    @Test
+    public void testWithStaticTyping_setsStaticFlagTrue() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        assertFalse(type.useStaticType());
+        JavaType staticType = type.withStaticTyping();
+        assertTrue(staticType.useStaticType());
+    }
+
+    // covers: narrowBy - same raw class branch returns same instance
+    @Test
+    public void testNarrowBy_sameClass_returnsSameInstance() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        JavaType result = type.narrowBy(String.class);
+        assertSame(type, result);
+    }
+
+    // covers: narrowBy - compatible subclass succeeds
+    @Test
+    public void testNarrowBy_compatibleSubclass_success() throws Throwable {
+        JavaType base = mapper.constructType(Number.class);
+        JavaType narrowed = base.narrowBy(Integer.class);
+        assertEquals(Integer.class, narrowed.getRawClass());
+    }
+
+    // covers: narrowBy - incompatible subclass throws IllegalArgumentException
+    @Test
+    public void testNarrowBy_incompatibleSubclass_throwsIllegalArgumentException() throws Throwable {
+        JavaType base = mapper.constructType(Number.class);
+        try {
+            base.narrowBy(String.class);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: forcedNarrowBy - same raw class branch returns same instance
+    @Test
+    public void testForcedNarrowBy_sameClass_returnsSameInstance() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        JavaType result = type.forcedNarrowBy(String.class);
+        assertSame(type, result);
+    }
+
+    // covers: forcedNarrowBy - different compatible class narrows without check
+    @Test
+    public void testForcedNarrowBy_compatibleSubclass_success() throws Throwable {
+        JavaType base = mapper.constructType(Number.class);
+        JavaType narrowed = base.forcedNarrowBy(Integer.class);
+        assertEquals(Integer.class, narrowed.getRawClass());
+    }
+
+    // covers: widenBy - same raw class branch returns same instance
+    @Test
+    public void testWidenBy_sameClass_returnsSameInstance() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        JavaType result = type.widenBy(String.class);
+        assertSame(type, result);
+    }
+
+    // covers: widenBy - valid superclass widening succeeds
+    @Test
+    public void testWidenBy_validSuperclass_success() throws Throwable {
+        JavaType base = mapper.constructType(Integer.class);
+        JavaType widened = base.widenBy(Number.class);
+        assertEquals(Number.class, widened.getRawClass());
+    }
+
+    // BUG TEST: widenBy - invalid (non-super) class must throw IllegalArgumentException per contract
+    @Test
+    public void testWidenBy_invalidSuperclass_throwsIllegalArgumentException() throws Throwable {
+        JavaType base = mapper.constructType(Integer.class);
+        try {
+            base.widenBy(String.class);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: narrowContentsBy - compatible content class narrows content type
+    @Test
+    public void testNarrowContentsBy_compatibleContent_success() throws Throwable {
+        JavaType listType = mapper.constructType(List.class);
+        JavaType narrowed = listType.narrowContentsBy(String.class);
+        assertEquals(String.class, narrowed.getContentType().getRawClass());
+    }
+
+    // covers: widenContentsBy - valid content superclass widening succeeds
+    @Test
+    public void testWidenContentsBy_validContent_success() throws Throwable {
+        JavaType listType = mapper.constructType(List.class);
+        JavaType narrowed = listType.narrowContentsBy(String.class);
+        JavaType widened = narrowed.widenContentsBy(Object.class);
+        assertEquals(Object.class, widened.getContentType().getRawClass());
+    }
+
+    // covers: getRawClass and hasRawClass true/false branches
+    @Test
+    public void testGetRawClassAndHasRawClass() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        assertEquals(String.class, type.getRawClass());
+        assertTrue(type.hasRawClass(String.class));
+        assertFalse(type.hasRawClass(Integer.class));
+    }
+
+    // covers: isAbstract true branch for abstract class, false branch for concrete
+    @Test
+    public void testIsAbstract_abstractAndConcreteClasses() throws Throwable {
+        JavaType numberType = mapper.constructType(Number.class);
+        JavaType stringType = mapper.constructType(String.class);
+        assertTrue(numberType.isAbstract());
+        assertFalse(stringType.isAbstract());
+    }
+
+    // covers: isConcrete - primitive quirk branch returns true
+    @Test
+    public void testIsConcrete_primitiveType_true() throws Throwable {
+        JavaType intType = mapper.constructType(int.class);
+        assertTrue(intType.isConcrete());
+    }
+
+    // covers: isConcrete - interface branch returns false
+    @Test
+    public void testIsConcrete_interfaceType_false() throws Throwable {
+        JavaType listType = mapper.constructType(List.class);
+        assertFalse(listType.isConcrete());
+    }
+
+    // covers: isThrowable true/false branches
+    @Test
+    public void testIsThrowable_exceptionAndNonException() throws Throwable {
+        JavaType exceptionType = mapper.constructType(Exception.class);
+        JavaType stringType = mapper.constructType(String.class);
+        assertTrue(exceptionType.isThrowable());
+        assertFalse(stringType.isThrowable());
+    }
+
+    // covers: isArrayType true branch for array, false branch for non-array
+    @Test
+    public void testIsArrayType_arrayAndNonArray() throws Throwable {
+        JavaType arrayType = mapper.constructType(String[].class);
+        JavaType stringType = mapper.constructType(String.class);
+        assertTrue(arrayType.isArrayType());
+        assertFalse(stringType.isArrayType());
+    }
+
+    // covers: isEnumType true/false branches
+    @Test
+    public void testIsEnumType_enumAndNonEnum() throws Throwable {
+        JavaType enumType = mapper.constructType(SampleEnum.class);
+        JavaType stringType = mapper.constructType(String.class);
+        assertTrue(enumType.isEnumType());
+        assertFalse(stringType.isEnumType());
+    }
+
+    // covers: isInterface true/false branches
+    @Test
+    public void testIsInterface_interfaceAndConcrete() throws Throwable {
+        JavaType listType = mapper.constructType(List.class);
+        JavaType stringType = mapper.constructType(String.class);
+        assertTrue(listType.isInterface());
+        assertFalse(stringType.isInterface());
+    }
+
+    // covers: isPrimitive true/false branches
+    @Test
+    public void testIsPrimitive_primitiveAndObject() throws Throwable {
+        JavaType intType = mapper.constructType(int.class);
+        JavaType stringType = mapper.constructType(String.class);
+        assertTrue(intType.isPrimitive());
+        assertFalse(stringType.isPrimitive());
+    }
+
+    // covers: isFinal true/false branches
+    @Test
+    public void testIsFinal_finalAndNonFinalClass() throws Throwable {
+        JavaType stringType = mapper.constructType(String.class);
+        JavaType numberType = mapper.constructType(Number.class);
+        assertTrue(stringType.isFinal());
+        assertFalse(numberType.isFinal());
+    }
+
+    // covers: isContainerType true/false branches (abstract, on concrete subclasses)
+    @Test
+    public void testIsContainerType_containerAndSimple() throws Throwable {
+        JavaType listType = mapper.constructType(List.class);
+        JavaType stringType = mapper.constructType(String.class);
+        assertTrue(listType.isContainerType());
+        assertFalse(stringType.isContainerType());
+    }
+
+    // covers: isCollectionLikeType true for collection, false for simple type
+    @Test
+    public void testIsCollectionLikeType_listAndSimple() throws Throwable {
+        JavaType listType = mapper.constructType(List.class);
+        JavaType stringType = mapper.constructType(String.class);
+        assertTrue(listType.isCollectionLikeType());
+        assertFalse(stringType.isCollectionLikeType());
+    }
+
+    // covers: isMapLikeType true for map, false for collection type
+    @Test
+    public void testIsMapLikeType_mapAndList() throws Throwable {
+        JavaType mapType = mapper.constructType(Map.class);
+        JavaType listType = mapper.constructType(List.class);
+        assertTrue(mapType.isMapLikeType());
+        assertFalse(listType.isMapLikeType());
+    }
+
+    // covers: useStaticType default false
+    @Test
+    public void testUseStaticType_defaultFalse() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        assertFalse(type.useStaticType());
+    }
+
+    // covers: hasGenericTypes false for simple type, true for container type
+    @Test
+    public void testHasGenericTypes_simpleAndContainer() throws Throwable {
+        JavaType stringType = mapper.constructType(String.class);
+        JavaType listType = mapper.constructType(List.class);
+        assertFalse(stringType.hasGenericTypes());
+        assertTrue(listType.hasGenericTypes());
+    }
+
+    // covers: getKeyType/getContentType default null for simple type
+    @Test
+    public void testGetKeyTypeGetContentType_simpleType_null() throws Throwable {
+        JavaType stringType = mapper.constructType(String.class);
+        assertNull(stringType.getKeyType());
+        assertNull(stringType.getContentType());
+    }
+
+    // covers: getKeyType/getContentType not null for map type
+    @Test
+    public void testGetKeyTypeGetContentType_mapType_notNull() throws Throwable {
+        JavaType mapType = mapper.constructType(Map.class);
+        assertNotNull(mapType.getKeyType());
+        assertNotNull(mapType.getContentType());
+        assertEquals(Object.class, mapType.getContentType().getRawClass());
+    }
+
+    // covers: containedTypeCount/containedType/containedTypeName default for simple type
+    @Test
+    public void testContainedTypeCount_simpleType_zeroAndNulls() throws Throwable {
+        JavaType stringType = mapper.constructType(String.class);
+        assertEquals(0, stringType.containedTypeCount());
+        assertNull(stringType.containedType(0));
+        assertNull(stringType.containedTypeName(0));
+    }
+
+    // covers: containedTypeOrUnknown returns unknown (Object) type when containedType is null
+    @Test
+    public void testContainedTypeOrUnknown_simpleType_returnsUnknownObjectType() throws Throwable {
+        JavaType stringType = mapper.constructType(String.class);
+        JavaType unknown = stringType.containedTypeOrUnknown(0);
+        assertNotNull(unknown);
+        assertEquals(Object.class, unknown.getRawClass());
+    }
+
+    // covers: getValueHandler/getTypeHandler default null when not set
+    @Test
+    public void testGetValueHandlerGetTypeHandler_defaultNull() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        Object valueHandler = type.getValueHandler();
+        Object typeHandler = type.getTypeHandler();
+        assertNull(valueHandler);
+        assertNull(typeHandler);
+    }
+
+    // covers: getErasedSignature produces JVM object type descriptor
+    @Test
+    public void testGetErasedSignature_simpleType_objectDescriptor() throws Throwable {
+        JavaType stringType = mapper.constructType(String.class);
+        assertEquals("Ljava/lang/String;", stringType.getErasedSignature());
+    }
+
+    // covers: getErasedSignature produces JVM primitive type descriptor
+    @Test
+    public void testGetErasedSignature_primitiveType_primitiveDescriptor() throws Throwable {
+        JavaType intType = mapper.constructType(int.class);
+        assertEquals("I", intType.getErasedSignature());
+    }
+
+    // covers: getGenericSignature for non-generic simple type equals erased signature
+    @Test
+    public void testGetGenericSignature_simpleType_equalsErased() throws Throwable {
+        JavaType stringType = mapper.constructType(String.class);
+        assertEquals(stringType.getErasedSignature(), stringType.getGenericSignature());
+    }
+
+    // covers: equals - reflexive true, null comparison false
+    @Test
+    public void testEquals_reflexiveTrue_nullFalse() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        assertTrue(type.equals(type));
+        assertFalse(type.equals(null));
+    }
+
+    // covers: equals - two distinct instances of same type are equal
+    @Test
+    public void testEquals_sameTypeDifferentInstances_true() throws Throwable {
+        JavaType type1 = mapper.constructType(String.class);
+        JavaType type2 = mapper.constructType(String.class);
+        assertTrue(type1.equals(type2));
+    }
+
+    // covers: hashCode consistent for equal instances
+    @Test
+    public void testHashCode_consistentWithEquals() throws Throwable {
+        JavaType type1 = mapper.constructType(String.class);
+        JavaType type2 = mapper.constructType(String.class);
+        assertEquals(type1.hashCode(), type2.hashCode());
+    }
+
+    // covers: toString contains raw class simple name
+    @Test
+    public void testToString_containsClassName() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        String str = type.toString();
+        assertNotNull(str);
+        assertTrue(str.contains("String"));
+    }
+}

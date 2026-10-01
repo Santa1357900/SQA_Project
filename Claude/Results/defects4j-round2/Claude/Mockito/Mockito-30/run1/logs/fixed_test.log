@@ -1,0 +1,100 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Mockito-30-xgueysiz/Mockito-30f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /tmp/claude-Mockito-30-xgueysiz/fixed && ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-Mockito-30-xgueysiz/fixed -Dd4j.test.dir=/tmp/claude-Mockito-30-xgueysiz/fixed/.test_suite compile.gen.tests 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+compile:
+
+gradle.compile:
+
+ant.compile:
+
+clean:
+
+prepare:
+    [mkdir] Created dir: /tmp/claude-Mockito-30-xgueysiz/fixed/target/classes
+    [mkdir] Created dir: /tmp/claude-Mockito-30-xgueysiz/fixed/target/test-classes
+    [mkdir] Created dir: /tmp/claude-Mockito-30-xgueysiz/fixed/target/reports/junit
+
+compile:
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/build.xml:78: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 240 source files to /tmp/claude-Mockito-30-xgueysiz/fixed/target/classes
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/configuration/DefaultMockitoConfiguration.java:7: warning: [deprecation] ReturnValues in org.mockito has been deprecated
+    [javac] import org.mockito.ReturnValues;
+    [javac]                   ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/configuration/IMockitoConfiguration.java:7: warning: [deprecation] ReturnValues in org.mockito has been deprecated
+    [javac] import org.mockito.ReturnValues;
+    [javac]                   ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/configuration/GlobalConfiguration.java:7: warning: [deprecation] ReturnValues in org.mockito has been deprecated
+    [javac] import org.mockito.ReturnValues;
+    [javac]                   ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/runners/JUnit44RunnerImpl.java:7: warning: [deprecation] InitializationError in org.junit.internal.runners has been deprecated
+    [javac] import org.junit.internal.runners.InitializationError;
+    [javac]                                  ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/runners/JUnit44RunnerImpl.java:8: warning: [deprecation] JUnit4ClassRunner in org.junit.internal.runners has been deprecated
+    [javac] import org.junit.internal.runners.JUnit4ClassRunner;
+    [javac]                                  ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/stubbing/answers/AnswerReturnValuesAdapter.java:9: warning: [deprecation] ReturnValues in org.mockito has been deprecated
+    [javac] import org.mockito.ReturnValues;
+    [javac]                   ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/util/Primitives.java:35: warning: [deprecation] Character(char) in Character has been deprecated
+    [javac]         wrapperReturnValues.put(Character.class, new Character((char) 0));
+    [javac]                                                  ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/util/Primitives.java:36: warning: [deprecation] Byte(byte) in Byte has been deprecated
+    [javac]         wrapperReturnValues.put(Byte.class, new Byte((byte) 0));
+    [javac]                                             ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/util/Primitives.java:37: warning: [deprecation] Short(short) in Short has been deprecated
+    [javac]         wrapperReturnValues.put(Short.class, new Short((short) 0));
+    [javac]                                              ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/util/Primitives.java:38: warning: [deprecation] Integer(int) in Integer has been deprecated
+    [javac]         wrapperReturnValues.put(Integer.class, new Integer(0));
+    [javac]                                                ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/util/Primitives.java:39: warning: [deprecation] Long(long) in Long has been deprecated
+    [javac]         wrapperReturnValues.put(Long.class, new Long(0));
+    [javac]                                             ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/util/Primitives.java:40: warning: [deprecation] Float(float) in Float has been deprecated
+    [javac]         wrapperReturnValues.put(Float.class, new Float(0));
+    [javac]                                              ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/util/Primitives.java:41: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         wrapperReturnValues.put(Double.class, new Double(0));
+    [javac]                                               ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/configuration/ClassPathLoader.java:27: warning: [deprecation] newInstance() in Class has been deprecated
+    [javac]             return (IMockitoConfiguration) configClass.newInstance();
+    [javac]                                                       ^
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in class Class
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/configuration/SpyAnnotationEngine.java:22: warning: [deprecation] createMockFor(Annotation,Field) in AnnotationEngine has been deprecated
+    [javac]     public Object createMockFor(Annotation annotation, Field field) {
+    [javac]                   ^
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/src/org/mockito/internal/util/reflection/AccessibilityChanger.java:29: warning: [deprecation] isAccessible() in AccessibleObject has been deprecated
+    [javac]         wasAccessible = accessibleObject.isAccessible();
+    [javac]                                         ^
+    [javac] 16 warnings
+
+gradle.compile.mutants:
+
+ant.compile.mutants:
+     [exec] /home/pheerapat/defects4j/framework/projects/Mockito/chooseDepedencyVersion.sh: line 8: ./gradlew: No such file or directory
+
+compile.gen.tests:
+     [echo] classes.dir: /tmp/claude-Mockito-30-xgueysiz/fixed/target/classes
+     [echo] build.home: /tmp/claude-Mockito-30-xgueysiz/fixed/target
+    [mkdir] Created dir: /tmp/claude-Mockito-30-xgueysiz/fixed/.classes_testgen
+    [javac] /home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /tmp/claude-Mockito-30-xgueysiz/fixed/.classes_testgen
+    [javac] /tmp/claude-Mockito-30-xgueysiz/fixed/.test_suite/org/mockito/exceptions/ReporterClaudeTest.java:323: error: method smartNullPointerException in class Reporter cannot be applied to given types;
+    [javac]             reporter.smartNullPointerException(loc);
+    [javac]                     ^
+    [javac]   required: Object,Location
+    [javac]   found: Location
+    [javac]   reason: actual and formal argument lists differ in length
+    [javac] 1 error
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 8 seconds
+Cannot compile extracted test suite! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

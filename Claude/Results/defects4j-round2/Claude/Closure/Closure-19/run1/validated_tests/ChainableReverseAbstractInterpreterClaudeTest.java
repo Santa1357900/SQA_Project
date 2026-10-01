@@ -1,0 +1,385 @@
+package com.google.javascript.jscomp.type;
+
+import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.javascript.jscomp.CodingConvention;
+import com.google.javascript.jscomp.ClosureCodingConvention;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+
+public class ChainableReverseAbstractInterpreterClaudeTest {
+
+  private JSTypeRegistry registry;
+  private CodingConvention convention;
+  private TestInterpreter interpreter;
+
+  private static class TestInterpreter extends ChainableReverseAbstractInterpreter {
+    TestInterpreter(CodingConvention convention, JSTypeRegistry typeRegistry) {
+      super(convention, typeRegistry);
+    }
+
+    public FlowScope getPreciserScopeKnowingConditionOutcome(
+        Node condition, FlowScope blindScope, boolean outcome) {
+      return blindScope;
+    }
+  }
+
+  @Before
+  public void setUp() throws Throwable {
+    ErrorReporter reporter = new ErrorReporter() {
+      public void warning(String message, String sourceName, int line, int lineOffset) {
+      }
+      public void error(String message, String sourceName, int line, int lineOffset) {
+      }
+    };
+    registry = new JSTypeRegistry(reporter);
+    convention = new ClosureCodingConvention();
+    interpreter = new TestInterpreter(convention, registry);
+  }
+
+  // constructor: Preconditions.checkNotNull(convention) must throw when convention is null
+  @Test
+  public void testConstructor_nullConvention_throwsNullPointerException() throws Throwable {
+    try {
+      new TestInterpreter(null, registry);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // constructor: a freshly constructed link is its own first link
+  @Test
+  public void testConstructor_validArguments_getFirstReturnsSelf() throws Throwable {
+    assertSame(interpreter, interpreter.getFirst());
+  }
+
+  // append: returns the appended (last) link
+  @Test
+  public void testAppend_returnsAppendedLink() throws Throwable {
+    TestInterpreter second = new TestInterpreter(convention, registry);
+    ChainableReverseAbstractInterpreter result = interpreter.append(second);
+    assertSame(second, result);
+  }
+
+  // append: the appended link's firstLink is updated to the chain's first link
+  @Test
+  public void testAppend_appendedLinkFirstLinkUpdated() throws Throwable {
+    TestInterpreter second = new TestInterpreter(convention, registry);
+    interpreter.append(second);
+    assertSame(interpreter.getFirst(), second.getFirst());
+  }
+
+  // append: chaining three links keeps getFirst() consistent across the whole chain
+  @Test
+  public void testAppend_chainOfThreeLinks_getFirstConsistent() throws Throwable {
+    TestInterpreter second = new TestInterpreter(convention, registry);
+    TestInterpreter third = new TestInterpreter(convention, registry);
+    interpreter.append(second);
+    second.append(third);
+    assertSame(interpreter, third.getFirst());
+    assertSame(interpreter, second.getFirst());
+  }
+
+  // append: Preconditions.checkArgument(lastLink.nextLink == null) must throw when reused
+  @Test
+  public void testAppend_lastLinkAlreadyHasNext_throwsIllegalArgumentException() throws Throwable {
+    TestInterpreter a = new TestInterpreter(convention, registry);
+    TestInterpreter b = new TestInterpreter(convention, registry);
+    TestInterpreter c = new TestInterpreter(convention, registry);
+    a.append(b);
+    b.append(c);
+    TestInterpreter d = new TestInterpreter(convention, registry);
+    try {
+      d.append(b);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // getRestrictedWithoutUndefined: null input short-circuits to null
+  @Test
+  public void testGetRestrictedWithoutUndefined_nullInput_returnsNull() throws Throwable {
+    assertNull(interpreter.getRestrictedWithoutUndefined(null));
+  }
+
+  // getRestrictedWithoutUndefined: caseVoidType returns null (undefined removed)
+  @Test
+  public void testGetRestrictedWithoutUndefined_voidType_returnsNull() throws Throwable {
+    JSType voidType = registry.getNativeType(JSTypeNative.VOID_TYPE);
+    assertNull(interpreter.getRestrictedWithoutUndefined(voidType));
+  }
+
+  // getRestrictedWithoutUndefined: caseNullType is unaffected by removing undefined
+  @Test
+  public void testGetRestrictedWithoutUndefined_nullType_returnsNullTypeUnchanged() throws Throwable {
+    JSType nullType = registry.getNativeType(JSTypeNative.NULL_TYPE);
+    assertSame(nullType, interpreter.getRestrictedWithoutUndefined(nullType));
+  }
+
+  // getRestrictedWithoutUndefined: caseNumberType returns the number type unchanged
+  @Test
+  public void testGetRestrictedWithoutUndefined_numberType_returnsNumberType() throws Throwable {
+    JSType numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    assertSame(numberType, interpreter.getRestrictedWithoutUndefined(numberType));
+  }
+
+  // getRestrictedWithoutUndefined: caseStringType returns the string type unchanged
+  @Test
+  public void testGetRestrictedWithoutUndefined_stringType_returnsStringType() throws Throwable {
+    JSType stringType = registry.getNativeType(JSTypeNative.STRING_TYPE);
+    assertSame(stringType, interpreter.getRestrictedWithoutUndefined(stringType));
+  }
+
+  // getRestrictedWithoutUndefined: caseBooleanType returns the boolean type unchanged
+  @Test
+  public void testGetRestrictedWithoutUndefined_booleanType_returnsBooleanType() throws Throwable {
+    JSType booleanType = registry.getNativeType(JSTypeNative.BOOLEAN_TYPE);
+    assertSame(booleanType, interpreter.getRestrictedWithoutUndefined(booleanType));
+  }
+
+  // getRestrictedWithoutUndefined: caseUnknownType returns the unknown type unchanged
+  @Test
+  public void testGetRestrictedWithoutUndefined_unknownType_returnsUnknownType() throws Throwable {
+    JSType unknownType = registry.getNativeType(JSTypeNative.UNKNOWN_TYPE);
+    assertSame(unknownType, interpreter.getRestrictedWithoutUndefined(unknownType));
+  }
+
+  // getRestrictedWithoutUndefined: caseNoObjectType returns the no-object type unchanged
+  @Test
+  public void testGetRestrictedWithoutUndefined_noObjectType_returnsNoObjectType() throws Throwable {
+    JSType noObjectType = registry.getNativeType(JSTypeNative.NO_OBJECT_TYPE);
+    assertSame(noObjectType, interpreter.getRestrictedWithoutUndefined(noObjectType));
+  }
+
+  // getRestrictedWithoutUndefined: caseObjectType returns the object type unchanged
+  @Test
+  public void testGetRestrictedWithoutUndefined_objectType_returnsSameObjectType() throws Throwable {
+    JSType objectType = registry.getNativeType(JSTypeNative.OBJECT_TYPE);
+    assertSame(objectType, interpreter.getRestrictedWithoutUndefined(objectType));
+  }
+
+  // getRestrictedWithoutUndefined: caseFunctionType returns the function type unchanged
+  @Test
+  public void testGetRestrictedWithoutUndefined_functionType_returnsSameFunctionType() throws Throwable {
+    JSType functionType = registry.getNativeType(JSTypeNative.U2U_CONSTRUCTOR_TYPE);
+    assertSame(functionType, interpreter.getRestrictedWithoutUndefined(functionType));
+  }
+
+  // getRestrictedWithoutNull: null input short-circuits to null
+  @Test
+  public void testGetRestrictedWithoutNull_nullInput_returnsNull() throws Throwable {
+    assertNull(interpreter.getRestrictedWithoutNull(null));
+  }
+
+  // getRestrictedWithoutNull: caseNullType returns null (null removed)
+  @Test
+  public void testGetRestrictedWithoutNull_nullType_returnsNull() throws Throwable {
+    JSType nullType = registry.getNativeType(JSTypeNative.NULL_TYPE);
+    assertNull(interpreter.getRestrictedWithoutNull(nullType));
+  }
+
+  // getRestrictedWithoutNull: caseVoidType is unaffected by removing null
+  @Test
+  public void testGetRestrictedWithoutNull_voidType_returnsVoidTypeUnchanged() throws Throwable {
+    JSType voidType = registry.getNativeType(JSTypeNative.VOID_TYPE);
+    assertSame(voidType, interpreter.getRestrictedWithoutNull(voidType));
+  }
+
+  // getRestrictedWithoutNull: caseNumberType returns the number type unchanged
+  @Test
+  public void testGetRestrictedWithoutNull_numberType_returnsNumberType() throws Throwable {
+    JSType numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    assertSame(numberType, interpreter.getRestrictedWithoutNull(numberType));
+  }
+
+  // getRestrictedWithoutNull: caseStringType returns the string type unchanged
+  @Test
+  public void testGetRestrictedWithoutNull_stringType_returnsStringType() throws Throwable {
+    JSType stringType = registry.getNativeType(JSTypeNative.STRING_TYPE);
+    assertSame(stringType, interpreter.getRestrictedWithoutNull(stringType));
+  }
+
+  // getRestrictedWithoutNull: caseBooleanType returns the boolean type unchanged
+  @Test
+  public void testGetRestrictedWithoutNull_booleanType_returnsBooleanType() throws Throwable {
+    JSType booleanType = registry.getNativeType(JSTypeNative.BOOLEAN_TYPE);
+    assertSame(booleanType, interpreter.getRestrictedWithoutNull(booleanType));
+  }
+
+  // getRestrictedWithoutNull: caseUnknownType returns the unknown type unchanged
+  @Test
+  public void testGetRestrictedWithoutNull_unknownType_returnsUnknownType() throws Throwable {
+    JSType unknownType = registry.getNativeType(JSTypeNative.UNKNOWN_TYPE);
+    assertSame(unknownType, interpreter.getRestrictedWithoutNull(unknownType));
+  }
+
+  // getRestrictedWithoutNull: caseNoObjectType returns the no-object type unchanged
+  @Test
+  public void testGetRestrictedWithoutNull_noObjectType_returnsNoObjectType() throws Throwable {
+    JSType noObjectType = registry.getNativeType(JSTypeNative.NO_OBJECT_TYPE);
+    assertSame(noObjectType, interpreter.getRestrictedWithoutNull(noObjectType));
+  }
+
+  // getRestrictedWithoutNull: caseObjectType returns the object type unchanged
+  @Test
+  public void testGetRestrictedWithoutNull_objectType_returnsSameObjectType() throws Throwable {
+    JSType objectType = registry.getNativeType(JSTypeNative.OBJECT_TYPE);
+    assertSame(objectType, interpreter.getRestrictedWithoutNull(objectType));
+  }
+
+  // getRestrictedByTypeOfResult: null type, resultEqualsValue true, known typeof value -> native type
+  @Test
+  public void testGetRestrictedByTypeOfResult_nullTypeResultEqualsTrueKnownValue_returnsNativeType() throws Throwable {
+    JSType numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(null, "number", true);
+    assertSame(numberType, result);
+  }
+
+  // getRestrictedByTypeOfResult: null type, resultEqualsValue true, unmapped typeof value -> unknown type
+  @Test
+  public void testGetRestrictedByTypeOfResult_nullTypeResultEqualsTrueUnknownValue_returnsUnknownType() throws Throwable {
+    JSType unknownType = registry.getNativeType(JSTypeNative.UNKNOWN_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(null, "object", true);
+    assertSame(unknownType, result);
+  }
+
+  // getRestrictedByTypeOfResult: null type, resultEqualsValue false -> null
+  @Test
+  public void testGetRestrictedByTypeOfResult_nullTypeResultEqualsFalse_returnsNull() throws Throwable {
+    JSType result = interpreter.getRestrictedByTypeOfResult(null, "number", false);
+    assertNull(result);
+  }
+
+  // getRestrictedByTypeOfResult: number type, matching value & resultEqualsValue true -> number type
+  @Test
+  public void testGetRestrictedByTypeOfResult_numberTypeMatchingValueTrue_returnsNumberType() throws Throwable {
+    JSType numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(numberType, "number", true);
+    assertSame(numberType, result);
+  }
+
+  // getRestrictedByTypeOfResult: number type, non-matching value & resultEqualsValue true -> null
+  @Test
+  public void testGetRestrictedByTypeOfResult_numberTypeNonMatchingValueTrue_returnsNull() throws Throwable {
+    JSType numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(numberType, "string", true);
+    assertNull(result);
+  }
+
+  // getRestrictedByTypeOfResult: number type, non-matching value & resultEqualsValue false -> number type kept
+  @Test
+  public void testGetRestrictedByTypeOfResult_numberTypeNonMatchingValueFalse_returnsNumberType() throws Throwable {
+    JSType numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(numberType, "string", false);
+    assertSame(numberType, result);
+  }
+
+  // getRestrictedByTypeOfResult: string type matching "string" -> string type
+  @Test
+  public void testGetRestrictedByTypeOfResult_stringTypeMatchingValueTrue_returnsStringType() throws Throwable {
+    JSType stringType = registry.getNativeType(JSTypeNative.STRING_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(stringType, "string", true);
+    assertSame(stringType, result);
+  }
+
+  // getRestrictedByTypeOfResult: boolean type matching "boolean" -> boolean type
+  @Test
+  public void testGetRestrictedByTypeOfResult_booleanTypeMatchingValueTrue_returnsBooleanType() throws Throwable {
+    JSType booleanType = registry.getNativeType(JSTypeNative.BOOLEAN_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(booleanType, "boolean", true);
+    assertSame(booleanType, result);
+  }
+
+  // getRestrictedByTypeOfResult: void type matching "undefined" -> void type (typeof spec)
+  @Test
+  public void testGetRestrictedByTypeOfResult_voidTypeMatchingUndefinedTrue_returnsVoidType() throws Throwable {
+    JSType voidType = registry.getNativeType(JSTypeNative.VOID_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(voidType, "undefined", true);
+    assertSame(voidType, result);
+  }
+
+  // getRestrictedByTypeOfResult: JS null type matches "object" per typeof spec
+  @Test
+  public void testGetRestrictedByTypeOfResult_jsNullTypeMatchingObjectTrue_returnsNullType() throws Throwable {
+    JSType nullType = registry.getNativeType(JSTypeNative.NULL_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(nullType, "object", true);
+    assertSame(nullType, result);
+  }
+
+  // getRestrictedByTypeOfResult: unknown type narrows to the known typeof value's native type
+  @Test
+  public void testGetRestrictedByTypeOfResult_unknownTypeKnownValueTrue_returnsKnownType() throws Throwable {
+    JSType unknownType = registry.getNativeType(JSTypeNative.UNKNOWN_TYPE);
+    JSType numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(unknownType, "number", true);
+    assertSame(numberType, result);
+  }
+
+  // getRestrictedByTypeOfResult: unknown type with resultEqualsValue false stays unknown
+  @Test
+  public void testGetRestrictedByTypeOfResult_unknownTypeResultEqualsFalse_returnsUnknownTypeUnchanged() throws Throwable {
+    JSType unknownType = registry.getNativeType(JSTypeNative.UNKNOWN_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(unknownType, "number", false);
+    assertSame(unknownType, result);
+  }
+
+  // getRestrictedByTypeOfResult: function type matching "function" -> same function type
+  @Test
+  public void testGetRestrictedByTypeOfResult_functionTypeMatchingFunctionTrue_returnsSameFunctionType() throws Throwable {
+    JSType functionType = registry.getNativeType(JSTypeNative.U2U_CONSTRUCTOR_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(functionType, "function", true);
+    assertSame(functionType, result);
+  }
+
+  // getRestrictedByTypeOfResult: function type contradicted by resultEqualsValue false -> null (impossible)
+  @Test
+  public void testGetRestrictedByTypeOfResult_functionTypeNonMatchingFunctionFalse_returnsNull() throws Throwable {
+    JSType functionType = registry.getNativeType(JSTypeNative.U2U_CONSTRUCTOR_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(functionType, "function", false);
+    assertNull(result);
+  }
+
+
+
+  // getRestrictedByTypeOfResult: ObjectType known to be "function" narrows to the constructor type
+  @Test
+  public void testGetRestrictedByTypeOfResult_objectTypeFunctionValueTrue_returnsConstructorType() throws Throwable {
+    JSType objectType = registry.getNativeType(JSTypeNative.OBJECT_TYPE);
+    JSType ctorType = registry.getNativeType(JSTypeNative.U2U_CONSTRUCTOR_TYPE);
+    JSType result = interpreter.getRestrictedByTypeOfResult(objectType, "function", true);
+    assertSame(ctorType, result);
+  }
+
+  // getNativeType: delegates directly to the underlying type registry
+  @Test
+  public void testGetNativeType_returnsRegistryNativeType() throws Throwable {
+    JSType expected = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    assertSame(expected, interpreter.getNativeType(JSTypeNative.NUMBER_TYPE));
+  }
+
+  // getTypeIfRefinable: node type outside NAME/GETPROP falls through the switch to null
+  @Test
+  public void testGetTypeIfRefinable_unsupportedNodeType_returnsNull() throws Throwable {
+    Node numberNode = IR.number(1.0);
+    assertNull(interpreter.getTypeIfRefinable(numberNode, null));
+  }
+
+  // declareNameInScope: default branch throws IllegalArgumentException for non-refinable node
+  @Test
+  public void testDeclareNameInScope_unsupportedNodeType_throwsIllegalArgumentException() throws Throwable {
+    JSType stringType = registry.getNativeType(JSTypeNative.STRING_TYPE);
+    Node numberNode = IR.number(1.0);
+    try {
+      interpreter.declareNameInScope(null, numberNode, stringType);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+}

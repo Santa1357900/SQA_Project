@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-46-c_371bof/Math-46f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.math.complex.ComplexClaudeTest::testDivide_complex_divisorZeroThisNonZero_returnsInf
+  - org.apache.commons.math.complex.ComplexClaudeTest::testDivide_double_zeroDivisorNonZero_returnsInf
+[exit 0]

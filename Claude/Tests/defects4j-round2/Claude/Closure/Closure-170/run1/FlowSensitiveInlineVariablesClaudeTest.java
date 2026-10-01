@@ -1,0 +1,218 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
+import com.google.javascript.rhino.Node;
+
+import java.util.List;
+
+public class FlowSensitiveInlineVariablesClaudeTest {
+
+  private Compiler compiler;
+  private CompilerOptions options;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    options = new CompilerOptions();
+  }
+
+  private String inline(String js) throws Throwable {
+    List<SourceFile> externs = Lists.newArrayList();
+    List<SourceFile> inputs = Lists.newArrayList(SourceFile.fromCode("test.js", js));
+    compiler.compile(externs, inputs, options);
+    Node root = compiler.getRoot();
+    Node externsRoot = root.getFirstChild();
+    Node jsRoot = root.getLastChild();
+    FlowSensitiveInlineVariables pass = new FlowSensitiveInlineVariables(compiler);
+    pass.process(externsRoot, jsRoot);
+    return compiler.toSource();
+  }
+
+  // Single def (var decl, pure rhs) + single use, adjacent stmts: must be inlined per contract.
+  @Test
+  public void testProcess_simpleVarDeclSingleUse_inlines() throws Throwable {
+    String out = inline("function f(a) { var x = a; return x; }");
+    assertFalse(out.contains("return x"));
+    assertTrue(out.contains("return a"));
+  }
+
+  // Javadoc: pass does not operate on global scope; declaration must survive untouched.
+  @Test
+  public void testProcess_globalScope_notInlined() throws Throwable {
+    String out = inline("var x = 5; var y = x;");
+    assertTrue(out.contains("var x"));
+    assertFalse(out.contains("y=5"));
+    assertFalse(out.contains("y = 5"));
+  }
+
+  // numUsesWithinCfgNode != 1 branch: two uses of x in the same cfg node blocks inlining.
+  @Test
+  public void testProcess_multipleUses_notInlined() throws Throwable {
+    String out = inline("function f(a) { var x = a; return x + x; }");
+    assertTrue(out.contains("x+x") || out.contains("x + x"));
+  }
+
+  // NodeUtil.isWithinLoop(use) branch (for-loop): use inside loop must not be inlined.
+  @Test
+  public void testProcess_useWithinLoop_notInlined() throws Throwable {
+    String out = inline(
+        "function f(a) { var s = 0; for (var i = 0; i < 3; i++) { var x = a; s = s + x; } return s; }");
+    assertTrue(out.contains("s+x") || out.contains("s + x"));
+  }
+
+  // NodeUtil.isWithinLoop(use) branch (while-loop) variant.
+  @Test
+  public void testProcess_whileLoopUse_notInlined() throws Throwable {
+    String out = inline(
+        "function f(a) { var i = 0; while (i < 3) { var x = a; print(x); i++; } }");
+    assertTrue(out.contains("print(x)"));
+  }
+
+  // Explicit exclusion: rhs is GETPROP, must not be inlined.
+  @Test
+  public void testProcess_getPropRhs_notInlined() throws Throwable {
+    String out = inline("function f(a) { var x = a.b; return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // Explicit exclusion: rhs is ARRAYLIT, must not be inlined.
+  @Test
+  public void testProcess_arrayLitRhs_notInlined() throws Throwable {
+    String out = inline("function f() { var x = [1, 2, 3]; return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // Explicit exclusion: rhs is OBJECTLIT, must not be inlined.
+  @Test
+  public void testProcess_objectLitRhs_notInlined() throws Throwable {
+    String out = inline("function f() { var x = {a: 1}; return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // Explicit exclusion: rhs is NEW expression, must not be inlined.
+  @Test
+  public void testProcess_newExprRhs_notInlined() throws Throwable {
+    String out = inline("function f() { var x = new Date(); return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // Explicit exclusion: rhs is REGEXP, must not be inlined.
+  @Test
+  public void testProcess_regexpRhs_notInlined() throws Throwable {
+    String out = inline("function f() { var x = /abc/; return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // NodeUtil.mayHaveSideEffects on rhs (unknown function call) blocks inlining.
+  @Test
+  public void testProcess_sideEffectCallRhs_notInlined() throws Throwable {
+    String out = inline("function f(a) { var x = foo(a); return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // Explicit exclusion: rhs directly references a catch-bound variable.
+  @Test
+  public void testProcess_catchVarRhs_notInlined() throws Throwable {
+    String out = inline(
+        "function f() { try { bar(); } catch (e) { var x = e; return x; } }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // MustBeReachingVariableDef: two different defs (if/else) merging -> no single reaching def.
+  @Test
+  public void testProcess_ambiguousReachingDef_notInlined() throws Throwable {
+    String out = inline(
+        "function f(a, b, cond) { var x; if (cond) { x = a; } else { x = b; } return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // Assignment-form definition (not var decl) inside an ExprResult: must be inlined.
+  @Test
+  public void testProcess_assignFormSingleUse_inlines() throws Throwable {
+    String out = inline("function f(a) { var x; x = a; return x; }");
+    assertTrue(out.contains("return a"));
+    assertFalse(out.contains("x = a"));
+    assertFalse(out.contains("x=a"));
+  }
+
+  // def.isAssign() && !NodeUtil.isExprAssign(parent): assignment used as r-value, not inlined.
+  @Test
+  public void testProcess_assignUsedAsRValue_notInlined() throws Throwable {
+    String out = inline("function f(a) { var x; var y = (x = a); return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // Non-adjacent def/use with side-effect-free statement in between: path check allows inlining.
+  @Test
+  public void testProcess_nonAdjacentNoSideEffect_inlines() throws Throwable {
+    String out = inline("function f(a) { var x = a; var y = 1; return x; }");
+    assertFalse(out.contains("return x"));
+    assertTrue(out.contains("return a"));
+  }
+
+  // Non-adjacent def/use with a side-effecting call in between: path check blocks inlining.
+  @Test
+  public void testProcess_nonAdjacentWithSideEffect_notInlined() throws Throwable {
+    String out = inline("function f(a) { var x = a; foo(); return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // CheckPathsBetweenNodes across branching if/else, all paths side-effect free: inlines.
+  @Test
+  public void testProcess_branchingPathsNoSideEffect_inlines() throws Throwable {
+    String out = inline(
+        "function f(a, cond) { var x = a; if (cond) { var y = 1; } else { var z = 2; } return x; }");
+    assertFalse(out.contains("return x"));
+    assertTrue(out.contains("return a"));
+  }
+
+  // checkRightOf: sibling declarator to the right of def has a side effect -> blocks inlining.
+  @Test
+  public void testProcess_checkRightOfSideEffect_notInlined() throws Throwable {
+    String out = inline("function f(a) { var x = a, y = foo(); return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // checkLeftOf: expression to the left of the use (comma operator) has a side effect.
+  @Test
+  public void testProcess_checkLeftOfSideEffect_notInlined() throws Throwable {
+    String out = inline("function f(a) { var x = a; foo(), bar(x); }");
+    assertTrue(out.contains("bar(x)"));
+  }
+
+  // Selective inlining: pure single-use var inlined, impure single-use var left untouched.
+  @Test
+  public void testProcess_selectiveInlining_onlyPureVarInlined() throws Throwable {
+    String out = inline("function f(a, b) { var y = foo(b); var x = a; return x + y; }");
+    assertTrue(out.contains("var y"));
+    assertTrue(out.contains("a+y") || out.contains("a + y"));
+  }
+
+  // Positive inline variant with numeric literal rhs.
+  @Test
+  public void testProcess_numericLiteralRhs_inlines() throws Throwable {
+    String out = inline("function f() { var x = 7; return x; }");
+    assertFalse(out.contains("return x"));
+    assertTrue(out.contains("return 7"));
+  }
+
+  // getDefinition(): compound assignment (+=) target is not a recognized NAME-with-children
+  // nor an ASSIGN node, so def stays null -> canInline returns false.
+  @Test
+  public void testProcess_compoundAssignTarget_notInlined() throws Throwable {
+    String out = inline("function f(a) { var x = a; x += 1; return x; }");
+    assertTrue(out.contains("return x"));
+  }
+
+  // getDefCfgNode().isFunction(): a parameter's reaching def node is the function itself,
+  // so direct parameter use can never be "inlined" (nothing to change, must not crash).
+  @Test
+  public void testProcess_parameterDirectUse_notCrashNotInlined() throws Throwable {
+    String out = inline("function f(a) { return a; }");
+    assertTrue(out.contains("return a"));
+  }
+}

@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Csv-15-kgom8e1z/Csv-15f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.csv.CSVFormatClaudeTest::testWithHeader_duplicateEmptyColumnNames_allowed
+  - org.apache.commons.csv.CSVFormatClaudeTest::testFormat_nonAsciiFirstValue_quoted
+[exit 0]

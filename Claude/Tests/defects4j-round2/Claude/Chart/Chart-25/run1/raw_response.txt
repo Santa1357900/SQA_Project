@@ -1,0 +1,355 @@
+package org.jfree.chart.renderer.category;
+
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
+
+import org.jfree.chart.axis.CategoryAxis;
+import org.jfree.chart.axis.NumberAxis;
+import org.jfree.chart.entity.StandardEntityCollection;
+import org.jfree.chart.plot.CategoryPlot;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.data.category.CategoryDataset;
+import org.jfree.data.category.DefaultCategoryDataset;
+import org.jfree.data.statistics.DefaultStatisticalCategoryDataset;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class StatisticalBarRendererClaudeTest {
+
+    // constructor: default errorIndicatorPaint should be Color.gray per javadoc/impl
+    @Test
+    public void testConstructor_defaultErrorIndicatorPaint_isGray() throws Throwable {
+        StatisticalBarRenderer r = new StatisticalBarRenderer();
+        assertEquals(Color.gray, r.getErrorIndicatorPaint());
+    }
+
+    // constructor: default errorIndicatorStroke should be BasicStroke(0.5f)
+    @Test
+    public void testConstructor_defaultErrorIndicatorStroke_isBasicStrokeHalf() throws Throwable {
+        StatisticalBarRenderer r = new StatisticalBarRenderer();
+        assertEquals(new BasicStroke(0.5f), r.getErrorIndicatorStroke());
+    }
+
+    // setErrorIndicatorPaint: getter returns exactly what was set
+    @Test
+    public void testSetErrorIndicatorPaint_setValue_returnsSameValue() throws Throwable {
+        StatisticalBarRenderer r = new StatisticalBarRenderer();
+        r.setErrorIndicatorPaint(Color.red);
+        assertEquals(Color.red, r.getErrorIndicatorPaint());
+    }
+
+    // setErrorIndicatorPaint: null is permitted per javadoc
+    @Test
+    public void testSetErrorIndicatorPaint_null_allowed() throws Throwable {
+        StatisticalBarRenderer r = new StatisticalBarRenderer();
+        r.setErrorIndicatorPaint(null);
+        assertNull(r.getErrorIndicatorPaint());
+    }
+
+    // setErrorIndicatorStroke: getter returns exactly what was set
+    @Test
+    public void testSetErrorIndicatorStroke_setValue_returnsSameValue() throws Throwable {
+        StatisticalBarRenderer r = new StatisticalBarRenderer();
+        BasicStroke s = new BasicStroke(2.5f);
+        r.setErrorIndicatorStroke(s);
+        assertEquals(s, r.getErrorIndicatorStroke());
+    }
+
+    // setErrorIndicatorStroke: null is permitted per javadoc
+    @Test
+    public void testSetErrorIndicatorStroke_null_allowed() throws Throwable {
+        StatisticalBarRenderer r = new StatisticalBarRenderer();
+        r.setErrorIndicatorStroke(null);
+        assertNull(r.getErrorIndicatorStroke());
+    }
+
+    // drawItem: non-statistical dataset must throw IllegalArgumentException
+    @Test
+    public void testDrawItem_nonStatisticalDataset_throwsIllegalArgumentException() throws Throwable {
+        DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+        dataset.addValue(1.0, "R1", "C1");
+        CategoryAxis domainAxis = new CategoryAxis("Cat");
+        NumberAxis rangeAxis = new NumberAxis("Val");
+        StatisticalBarRenderer renderer = new StatisticalBarRenderer();
+        CategoryPlot plot = new CategoryPlot(dataset, domainAxis, rangeAxis, renderer);
+
+        BufferedImage image = new BufferedImage(50, 50, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = image.createGraphics();
+        Rectangle2D dataArea = new Rectangle2D.Double(0, 0, 50, 50);
+        CategoryItemRendererState state = renderer.initialise(g2, dataArea, plot, 0, null);
+
+        try {
+            renderer.drawItem(g2, state, dataArea, plot, domainAxis, rangeAxis,
+                    (CategoryDataset) dataset, 0, 0, 0);
+            fail("expected IllegalArgumentException");
+        }
+        catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // drawItem: HORIZONTAL orientation dispatches to drawHorizontalItem and adds entity
+    @Test
+    public void testDrawItem_horizontalOrientation_dispatchesAndAddsEntity() throws Throwable {
+        DefaultStatisticalCategoryDataset dataset = new DefaultStatisticalCategoryDataset();
+        dataset.add(10.0, 2.0, "S1", "C1");
+        CategoryAxis domainAxis = new CategoryAxis("Cat");
+        NumberAxis rangeAxis = new NumberAxis("Val");
+        StatisticalBarRenderer renderer = new StatisticalBarRenderer();
+        CategoryPlot plot = new CategoryPlot(dataset, domainAxis, rangeAxis, renderer);
+        plot.setOrientation(PlotOrientation.HORIZONTAL);
+
+        BufferedImage image = new BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = image.createGraphics();
+        Rectangle2D dataArea = new Rectangle2D.Double(0, 0, 200, 200);
+        CategoryItemRendererState state = renderer.initialise(g2, dataArea, plot, 0, null);
+        StandardEntityCollection entities = new StandardEntityCollection();
+        state.setEntityCollection(entities);
+
+        renderer.drawItem(g2, state, dataArea, plot, domainAxis, rangeAxis, dataset, 0, 0, 0);
+
+        assertEquals(1, entities.getEntityCount());
+    }
+
+    // drawItem: VERTICAL orientation dispatches to drawVerticalItem and adds entity
+    @Test
+    public void testDrawItem_verticalOrientation_dispatchesAndAddsEntity() throws Throwable {
+        DefaultStatisticalCategoryDataset dataset = new DefaultStatisticalCategoryDataset();
+        dataset.add(10.0, 2.0, "S1", "C1");
+        CategoryAxis domainAxis = new CategoryAxis("Cat");
+        NumberAxis rangeAxis = new NumberAxis("Val");
+        StatisticalBarRenderer renderer = new StatisticalBarRenderer();
+        CategoryPlot plot = new CategoryPlot(dataset, domainAxis, rangeAxis, renderer);
+        plot.setOrientation(PlotOrientation.VERTICAL);
+
+        BufferedImage image = new BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = image.createGraphics();
+        Rectangle2D dataArea = new Rectangle2D.Double(0, 0, 200, 200);
+        CategoryItemRendererState state = renderer.initialise(g2, dataArea, plot, 0, null);
+        StandardEntityCollection entities = new StandardEntityCollection();
+        state.setEntityCollection(entities);
+
+        renderer.drawItem(g2, state, dataArea, plot, domainAxis, rangeAxis, dataset, 0, 0, 0);
+
+        assertEquals(1, entities.getEntityCount());
+    }
+
+    // drawVerticalItem: multiple series (rowCount>1) triggers seriesGap branch, entity per item
+    @Test
+    public void testDrawVerticalItem_multipleSeries_addsEntityForEachRow() throws Throwable {
+        DefaultStatisticalCategoryDataset dataset = new DefaultStatisticalCategoryDataset();
+        dataset.add(10.0, 1.0, "S1", "C1");
+        dataset.add(20.0, 2.0, "S2", "C1");
+        CategoryAxis domainAxis = new CategoryAxis("Cat");
+        NumberAxis rangeAxis = new NumberAxis("Val");
+        StatisticalBarRenderer renderer = new StatisticalBarRenderer();
+        CategoryPlot plot = new CategoryPlot(dataset, domainAxis, rangeAxis, renderer);
+        plot.setOrientation(PlotOrientation.VERTICAL);
+
+        BufferedImage image = new BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = image.createGraphics();
+        Rectangle2D dataArea = new Rectangle2D.Double(0, 0, 200, 200);
+        CategoryItemRendererState state = renderer.initialise(g2, dataArea, plot, 0, null);
+        StandardEntityCollection entities = new StandardEntityCollection();
+        state.setEntityCollection(entities);
+
+        renderer.drawVerticalItem(g2, state, dataArea, plot, domainAxis, rangeAxis, dataset, 0, 0);
+        renderer.drawVerticalItem(g2, state, dataArea, plot, domainAxis, rangeAxis, dataset, 1, 0);
+
+        assertEquals(2, entities.getEntityCount());
+    }
+
+    // drawHorizontalItem: multiple series (rowCount>1) triggers seriesGap branch, entity per item
+    @Test
+    public void testDrawHorizontalItem_multipleSeries_addsEntityForEachRow() throws Throwable {
+        DefaultStatisticalCategoryDataset dataset = new DefaultStatisticalCategoryDataset();
+        dataset.add(10.0, 1.0, "S1", "C1");
+        dataset.add(20.0, 2.0, "S2", "C1");
+        CategoryAxis domainAxis = new CategoryAxis("Cat");
+        NumberAxis rangeAxis = new NumberAxis("Val");
+        StatisticalBarRenderer renderer = new StatisticalBarRenderer();
+        CategoryPlot plot = new CategoryPlot(dataset, domainAxis, rangeAxis, renderer);
+        plot.setOrientation(PlotOrientation.HORIZONTAL);
+
+        BufferedImage image = new BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = image.createGraphics();
+        Rectangle2D dataArea = new Rectangle2D.Double(0, 0, 200, 200);
+        CategoryItemRendererState state = renderer.initialise(g2, dataArea, plot, 0, null);
+        StandardEntityCollection entities = new StandardEntityCollection();
+        state.setEntityCollection(entities);
+
+        renderer.drawHorizontalItem(g2, state, dataArea, plot, domainAxis, rangeAxis, dataset, 0, 0);
+        renderer.drawHorizontalItem(g2, state, dataArea, plot, domainAxis, rangeAxis, dataset, 1, 0);
+
+        assertEquals(2, entities.getEntityCount());
+    }
+
+    // drawVerticalItem: uclip<=0 branch and value>=uclip -> bar not visible, no entity added
+    @Test
+    public void testDrawVerticalItem_upperClipNonPositiveAndValueAboveClip_notVisible() throws Throwable {
+        DefaultStatisticalCategoryDataset dataset = new DefaultStatisticalCategoryDataset();
+        dataset.add(10.0, 1.0, "S1", "C1");
+        CategoryAxis domainAxis = new CategoryAxis("Cat");
+        NumberAxis rangeAxis = new NumberAxis("Val");
+        rangeAxis.setAutoRange(false);
+        rangeAxis.setRange(-100.0, -1.0);
+        StatisticalBarRenderer renderer = new StatisticalBarRenderer();
+        CategoryPlot plot = new CategoryPlot(dataset, domainAxis, rangeAxis, renderer);
+        plot.setOrientation(PlotOrientation.VERTICAL);
+
+        BufferedImage image = new BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = image.createGraphics();
+        Rectangle2D dataArea = new Rectangle2D.Double(0, 0, 200, 200);
+        CategoryItemRendererState state = renderer.initialise(g2, dataArea, plot, 0, null);
+        StandardEntityCollection entities = new StandardEntityCollection();
+        state.setEntityCollection(entities);
+
+        renderer.drawVerticalItem(g2, state, dataArea, plot, domainAxis, rangeAxis, dataset, 0, 0);
+
+        assertEquals(0, entities.getEntityCount());
+    }
+
+    // drawVerticalItem: lclip>0 branch and value<=lclip -> bar not visible, no entity added
+    @Test
+    public void testDrawVerticalItem_lowerClipPositiveAndValueBelowClip_notVisible() throws Throwable {
+        DefaultStatisticalCategoryDataset dataset = new DefaultStatisticalCategoryDataset();
+        dataset.add(-10.0, 1.0, "S1", "C1");
+        CategoryAxis domainAxis = new CategoryAxis("Cat");
+        NumberAxis rangeAxis = new NumberAxis("Val");
+        rangeAxis.setAutoRange(false);
+        rangeAxis.setRange(1.0, 100.0);
+        StatisticalBarRenderer renderer = new StatisticalBarRenderer();
+        CategoryPlot plot = new CategoryPlot(dataset, domainAxis, rangeAxis, renderer);
+        plot.setOrientation(PlotOrientation.VERTICAL);
+
+        BufferedImage image = new BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = image.createGraphics();
+        Rectangle2D dataArea = new Rectangle2D.Double(0, 0, 200, 200);
+        CategoryItemRendererState state = renderer.initialise(g2, dataArea, plot, 0, null);
+        StandardEntityCollection entities = new StandardEntityCollection();
+        state.setEntityCollection(entities);
+
+        renderer.drawVerticalItem(g2, state, dataArea, plot, domainAxis, rangeAxis, dataset, 0, 0);
+
+        assertEquals(0, entities.getEntityCount());
+    }
+
+    // drawHorizontalItem: normal (default auto) range includes zero -> bar visible, entity added
+    @Test
+    public void testDrawHorizontalItem_normalAutoRange_addsEntity() throws Throwable {
+        DefaultStatisticalCategoryDataset dataset = new DefaultStatisticalCategoryDataset();
+        dataset.add(15.0, 3.0, "S1", "C1");
+        CategoryAxis domainAxis = new CategoryAxis("Cat");
+        NumberAxis rangeAxis = new NumberAxis("Val");
+        StatisticalBarRenderer renderer = new StatisticalBarRenderer();
+        CategoryPlot plot = new CategoryPlot(dataset, domainAxis, rangeAxis, renderer);
+        plot.setOrientation(PlotOrientation.HORIZONTAL);
+
+        BufferedImage image = new BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = image.createGraphics();
+        Rectangle2D dataArea = new Rectangle2D.Double(0, 0, 200, 200);
+        CategoryItemRendererState state = renderer.initialise(g2, dataArea, plot, 0, null);
+        StandardEntityCollection entities = new StandardEntityCollection();
+        state.setEntityCollection(entities);
+
+        renderer.drawHorizontalItem(g2, state, dataArea, plot, domainAxis, rangeAxis, dataset, 0, 0);
+
+        assertEquals(1, entities.getEntityCount());
+    }
+
+    // drawVerticalItem: zero standard deviation is a valid edge case, should still draw
+    @Test
+    public void testDrawVerticalItem_zeroStdDeviation_addsEntity() throws Throwable {
+        DefaultStatisticalCategoryDataset dataset = new DefaultStatisticalCategoryDataset();
+        dataset.add(5.0, 0.0, "S1", "C1");
+        CategoryAxis domainAxis = new CategoryAxis("Cat");
+        NumberAxis rangeAxis = new NumberAxis("Val");
+        StatisticalBarRenderer renderer = new StatisticalBarRenderer();
+        CategoryPlot plot = new CategoryPlot(dataset, domainAxis, rangeAxis, renderer);
+        plot.setOrientation(PlotOrientation.VERTICAL);
+
+        BufferedImage image = new BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2 = image.createGraphics();
+        Rectangle2D dataArea = new Rectangle2D.Double(0, 0, 200, 200);
+        CategoryItemRendererState state = renderer.initialise(g2, dataArea, plot, 0, null);
+        StandardEntityCollection entities = new StandardEntityCollection();
+        state.setEntityCollection(entities);
+
+        renderer.drawVerticalItem(g2, state, dataArea, plot, domainAxis, rangeAxis, dataset, 0, 0);
+
+        assertEquals(1, entities.getEntityCount());
+    }
+
+    // equals: same instance reference is always equal
+    @Test
+    public void testEquals_sameInstance_true() throws Throwable {
+        StatisticalBarRenderer r = new StatisticalBarRenderer();
+        assertTrue(r.equals(r));
+    }
+
+    // equals: comparing with null must return false, not throw
+    @Test
+    public void testEquals_null_false() throws Throwable {
+        StatisticalBarRenderer r = new StatisticalBarRenderer();
+        assertFalse(r.equals(null));
+    }
+
+    // equals: comparing with an object of a different class must return false
+    @Test
+    public void testEquals_differentClass_false() throws Throwable {
+        StatisticalBarRenderer r = new StatisticalBarRenderer();
+        assertFalse(r.equals("not a renderer"));
+    }
+
+    // equals: two default-constructed instances should be equal
+    @Test
+    public void testEquals_defaultInstances_equal() throws Throwable {
+        StatisticalBarRenderer r1 = new StatisticalBarRenderer();
+        StatisticalBarRenderer r2 = new StatisticalBarRenderer();
+        assertTrue(r1.equals(r2));
+        assertTrue(r2.equals(r1));
+    }
+
+    // equals: different errorIndicatorPaint must make renderers unequal
+    @Test
+    public void testEquals_differentErrorIndicatorPaint_notEqual() throws Throwable {
+        StatisticalBarRenderer r1 = new StatisticalBarRenderer();
+        StatisticalBarRenderer r2 = new StatisticalBarRenderer();
+        r2.setErrorIndicatorPaint(Color.blue);
+        assertFalse(r1.equals(r2));
+        assertFalse(r2.equals(r1));
+    }
+
+    // equals: different errorIndicatorStroke must make renderers unequal (bug: field not checked)
+    @Test
+    public void testEquals_differentErrorIndicatorStroke_notEqual() throws Throwable {
+        StatisticalBarRenderer r1 = new StatisticalBarRenderer();
+        StatisticalBarRenderer r2 = new StatisticalBarRenderer();
+        r2.setErrorIndicatorStroke(new BasicStroke(3.0f));
+        assertFalse(r1.equals(r2));
+    }
+
+    // equals: one null errorIndicatorPaint vs non-null must be unequal
+    @Test
+    public void testEquals_errorIndicatorPaintNullVsNonNull_notEqual() throws Throwable {
+        StatisticalBarRenderer r1 = new StatisticalBarRenderer();
+        StatisticalBarRenderer r2 = new StatisticalBarRenderer();
+        r1.setErrorIndicatorPaint(null);
+        assertFalse(r1.equals(r2));
+        assertFalse(r2.equals(r1));
+    }
+
+    // equals: both instances with null errorIndicatorPaint should be equal
+    @Test
+    public void testEquals_bothErrorIndicatorPaintNull_equal() throws Throwable {
+        StatisticalBarRenderer r1 = new StatisticalBarRenderer();
+        StatisticalBarRenderer r2 = new StatisticalBarRenderer();
+        r1.setErrorIndicatorPaint(null);
+        r2.setErrorIndicatorPaint(null);
+        assertTrue(r1.equals(r2));
+    }
+}

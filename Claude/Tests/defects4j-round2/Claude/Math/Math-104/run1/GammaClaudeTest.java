@@ -1,0 +1,294 @@
+package org.apache.commons.math.special;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import org.apache.commons.math.MathException;
+import org.apache.commons.math.MaxIterationsExceededException;
+
+public class GammaClaudeTest {
+
+    private static final double DELTA = 1e-6;
+
+    // logGamma: NaN input -> NaN branch
+    @Test
+    public void testLogGamma_NaNInput_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.logGamma(Double.NaN)));
+    }
+
+    // logGamma: x == 0 -> NaN branch (x <= 0.0)
+    @Test
+    public void testLogGamma_zero_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.logGamma(0.0)));
+    }
+
+    // logGamma: negative x -> NaN branch
+    @Test
+    public void testLogGamma_negative_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.logGamma(-5.0)));
+    }
+
+    // logGamma: Gamma(1) = 1 so log = 0
+    @Test
+    public void testLogGamma_one_returnsZero() throws Throwable {
+        assertEquals(0.0, Gamma.logGamma(1.0), DELTA);
+    }
+
+    // logGamma: Gamma(2) = 1 so log = 0
+    @Test
+    public void testLogGamma_two_returnsZero() throws Throwable {
+        assertEquals(0.0, Gamma.logGamma(2.0), DELTA);
+    }
+
+    // logGamma: Gamma(0.5) = sqrt(pi) so log = 0.5*ln(pi)
+    @Test
+    public void testLogGamma_half_returnsHalfLogPi() throws Throwable {
+        double expected = 0.5 * Math.log(Math.PI);
+        assertEquals(expected, Gamma.logGamma(0.5), DELTA);
+    }
+
+    // logGamma: Gamma(5) = 4! = 24, known reference value from commons-math test data
+    @Test
+    public void testLogGamma_five_matchesKnownReferenceValue() throws Throwable {
+        assertEquals(3.178053830347945, Gamma.logGamma(5.0), DELTA);
+    }
+
+    // logGamma: Gamma(10) = 9! = 362880, known reference value from commons-math test data
+    @Test
+    public void testLogGamma_ten_matchesKnownReferenceValue() throws Throwable {
+        assertEquals(12.801827480081469, Gamma.logGamma(10.0), DELTA);
+    }
+
+    // logGamma: recurrence identity Gamma(x+1) = x*Gamma(x) => logGamma(x+1) = log(x) + logGamma(x)
+    @Test
+    public void testLogGamma_recurrenceIdentity_smallX() throws Throwable {
+        double lhs = Gamma.logGamma(6.0);
+        double rhs = Math.log(5.0) + Gamma.logGamma(5.0);
+        assertEquals(rhs, lhs, DELTA);
+    }
+
+    // logGamma: recurrence identity holds for large x too (exercises lanczos loop many terms)
+    @Test
+    public void testLogGamma_recurrenceIdentity_largeX() throws Throwable {
+        double lhs = Gamma.logGamma(101.0);
+        double rhs = Math.log(100.0) + Gamma.logGamma(100.0);
+        assertEquals(rhs, lhs, 1e-3);
+    }
+
+    // regularizedGammaP (2-arg): x == 0 -> returns 0.0 branch
+    @Test
+    public void testRegularizedGammaP_default_zeroX_returnsZero() throws Throwable {
+        assertEquals(0.0, Gamma.regularizedGammaP(2.0, 0.0), DELTA);
+    }
+
+    // regularizedGammaP (2-arg): NaN a -> NaN branch
+    @Test
+    public void testRegularizedGammaP_default_NaNA_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.regularizedGammaP(Double.NaN, 1.0)));
+    }
+
+    // regularizedGammaP (2-arg): NaN x -> NaN branch
+    @Test
+    public void testRegularizedGammaP_default_NaNX_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.regularizedGammaP(1.0, Double.NaN)));
+    }
+
+    // regularizedGammaP (2-arg): a == 0 -> NaN branch (a <= 0.0)
+    @Test
+    public void testRegularizedGammaP_default_zeroA_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.regularizedGammaP(0.0, 1.0)));
+    }
+
+    // regularizedGammaP (2-arg): negative a -> NaN branch
+    @Test
+    public void testRegularizedGammaP_default_negativeA_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.regularizedGammaP(-1.0, 1.0)));
+    }
+
+    // regularizedGammaP (2-arg): negative x -> NaN branch (x < 0.0)
+    @Test
+    public void testRegularizedGammaP_default_negativeX_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.regularizedGammaP(1.0, -1.0)));
+    }
+
+    // regularizedGammaP: a=1,x=1 -> closed form 1 - e^-1 (series branch, a<1 false, a>=1 but x==a not > a)
+    @Test
+    public void testRegularizedGammaP_aOneXOne_matchesClosedForm() throws Throwable {
+        double expected = 1.0 - Math.exp(-1.0);
+        assertEquals(expected, Gamma.regularizedGammaP(1.0, 1.0), DELTA);
+    }
+
+    // regularizedGammaP: a<1 series branch, matches erf identity P(0.5,x) = erf(sqrt(x))
+    @Test
+    public void testRegularizedGammaP_aLessThanOne_matchesErfIdentity() throws Throwable {
+        double expectedErf1 = 0.8427007929497149;
+        assertEquals(expectedErf1, Gamma.regularizedGammaP(0.5, 1.0), DELTA);
+    }
+
+    // regularizedGammaP: a>=1, x<=a (series branch directly), integer a closed form
+    @Test
+    public void testRegularizedGammaP_aGreaterEqualOne_xLessEqualA_matchesClosedForm() throws Throwable {
+        double sum = 1.0 + 2.0 + (2.0 * 2.0) / 2.0;
+        double expected = 1.0 - Math.exp(-2.0) * sum;
+        assertEquals(expected, Gamma.regularizedGammaP(3.0, 2.0), DELTA);
+    }
+
+    // regularizedGammaP: a>=1, x==a boundary (x>a is false at boundary) -> series branch, not Q delegation
+    @Test
+    public void testRegularizedGammaP_boundary_xEqualsA_matchesClosedForm() throws Throwable {
+        double sum = 1.0 + 3.0 + (3.0 * 3.0) / 2.0;
+        double expected = 1.0 - Math.exp(-3.0) * sum;
+        assertEquals(expected, Gamma.regularizedGammaP(3.0, 3.0), DELTA);
+    }
+
+    // regularizedGammaP: a>=1 && x>a -> delegates to 1 - regularizedGammaQ (continued fraction branch)
+    @Test
+    public void testRegularizedGammaP_delegatesToQ_matchesClosedForm() throws Throwable {
+        double sum = 1.0 + 3.0;
+        double expected = 1.0 - Math.exp(-3.0) * sum;
+        assertEquals(expected, Gamma.regularizedGammaP(2.0, 3.0), DELTA);
+    }
+
+    // regularizedGammaP (4-arg): maxIterations == 0 forces series loop to never run then throw
+    @Test
+    public void testRegularizedGammaP_fourArg_maxIterationsZero_throwsMaxIterationsExceeded() throws Throwable {
+        try {
+            Gamma.regularizedGammaP(0.5, 1.0, 1e-9, 0);
+            fail("expected MaxIterationsExceededException");
+        } catch (MaxIterationsExceededException expected) {
+            // expected
+        }
+    }
+
+    // regularizedGammaP (4-arg): normal call with explicit epsilon/maxIterations matches 2-arg result
+    @Test
+    public void testRegularizedGammaP_fourArg_normal_matchesTwoArgOverload() throws Throwable {
+        double expected = Gamma.regularizedGammaP(2.0, 1.5);
+        double actual = Gamma.regularizedGammaP(2.0, 1.5, 1e-9, 10000);
+        assertEquals(expected, actual, DELTA);
+    }
+
+    // regularizedGammaQ (2-arg): x == 0 -> returns 1.0 branch
+    @Test
+    public void testRegularizedGammaQ_default_zeroX_returnsOne() throws Throwable {
+        assertEquals(1.0, Gamma.regularizedGammaQ(2.0, 0.0), DELTA);
+    }
+
+    // regularizedGammaQ (2-arg): NaN a -> NaN branch
+    @Test
+    public void testRegularizedGammaQ_default_NaNA_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.regularizedGammaQ(Double.NaN, 1.0)));
+    }
+
+    // regularizedGammaQ (2-arg): NaN x -> NaN branch
+    @Test
+    public void testRegularizedGammaQ_default_NaNX_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.regularizedGammaQ(1.0, Double.NaN)));
+    }
+
+    // regularizedGammaQ (2-arg): a <= 0 -> NaN branch
+    @Test
+    public void testRegularizedGammaQ_default_nonPositiveA_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.regularizedGammaQ(0.0, 1.0)));
+    }
+
+    // regularizedGammaQ (2-arg): negative x -> NaN branch
+    @Test
+    public void testRegularizedGammaQ_default_negativeX_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Gamma.regularizedGammaQ(1.0, -1.0)));
+    }
+
+    // regularizedGammaQ: a=1,x=1 -> closed form e^-1 (continued fraction branch since x==a, a<1 false)
+    @Test
+    public void testRegularizedGammaQ_aOneXOne_matchesClosedForm() throws Throwable {
+        double expected = Math.exp(-1.0);
+        assertEquals(expected, Gamma.regularizedGammaQ(1.0, 1.0), DELTA);
+    }
+
+    // regularizedGammaQ: x < a -> delegates to 1 - regularizedGammaP, integer closed form
+    @Test
+    public void testRegularizedGammaQ_delegatesToP_xLessThanA_matchesClosedForm() throws Throwable {
+        double sum = 1.0 + 1.0;
+        double expected = Math.exp(-1.0) * sum;
+        assertEquals(expected, Gamma.regularizedGammaQ(2.0, 1.0), DELTA);
+    }
+
+    // regularizedGammaQ: a < 1 -> delegates to 1 - regularizedGammaP, matches erf identity
+    @Test
+    public void testRegularizedGammaQ_delegatesToP_aLessThanOne_matchesErfIdentity() throws Throwable {
+        double expectedErf1 = 0.8427007929497149;
+        double expected = 1.0 - expectedErf1;
+        assertEquals(expected, Gamma.regularizedGammaQ(0.5, 1.0), DELTA);
+    }
+
+    // regularizedGammaQ: x > a, a >= 1 -> continued fraction branch, integer closed form
+    @Test
+    public void testRegularizedGammaQ_continuedFractionBranch_matchesClosedForm() throws Throwable {
+        double sum = 1.0 + 3.0;
+        double expected = Math.exp(-3.0) * sum;
+        assertEquals(expected, Gamma.regularizedGammaQ(2.0, 3.0), DELTA);
+    }
+
+    // regularizedGammaQ: x == a boundary (x<a false) -> continued fraction branch, integer closed form
+    @Test
+    public void testRegularizedGammaQ_boundary_xEqualsA_matchesClosedForm() throws Throwable {
+        double sum = 1.0 + 3.0 + (3.0 * 3.0) / 2.0;
+        double expected = Math.exp(-3.0) * sum;
+        assertEquals(expected, Gamma.regularizedGammaQ(3.0, 3.0), DELTA);
+    }
+
+    // regularizedGammaQ (4-arg): maxIterations == 0 on a<1 delegated series path forces exception
+    @Test
+    public void testRegularizedGammaQ_fourArg_maxIterationsZero_throwsMaxIterationsExceeded() throws Throwable {
+        try {
+            Gamma.regularizedGammaQ(0.5, 1.0, 1e-9, 0);
+            fail("expected MaxIterationsExceededException");
+        } catch (MaxIterationsExceededException expected) {
+            // expected
+        }
+    }
+
+    // regularizedGammaQ (4-arg): normal call with explicit epsilon/maxIterations matches 2-arg result
+    @Test
+    public void testRegularizedGammaQ_fourArg_normal_matchesTwoArgOverload() throws Throwable {
+        double expected = Gamma.regularizedGammaQ(2.0, 1.5);
+        double actual = Gamma.regularizedGammaQ(2.0, 1.5, 1e-9, 10000);
+        assertEquals(expected, actual, DELTA);
+    }
+
+    // Identity P(a,x) + Q(a,x) = 1 must hold for the continued-fraction branch case
+    @Test
+    public void testRegularizedGamma_PplusQequalsOne_continuedFractionCase() throws Throwable {
+        double p = Gamma.regularizedGammaP(2.0, 3.0);
+        double q = Gamma.regularizedGammaQ(2.0, 3.0);
+        assertEquals(1.0, p + q, DELTA);
+    }
+
+    // Identity P(a,x) + Q(a,x) = 1 must hold for the series (a<1) branch case
+    @Test
+    public void testRegularizedGamma_PplusQequalsOne_seriesCase() throws Throwable {
+        double p = Gamma.regularizedGammaP(0.5, 1.0);
+        double q = Gamma.regularizedGammaQ(0.5, 1.0);
+        assertEquals(1.0, p + q, DELTA);
+    }
+
+    // Identity P(a,x) + Q(a,x) = 1 must hold at the x == a boundary
+    @Test
+    public void testRegularizedGamma_PplusQequalsOne_boundaryCase() throws Throwable {
+        double p = Gamma.regularizedGammaP(3.0, 3.0);
+        double q = Gamma.regularizedGammaQ(3.0, 3.0);
+        assertEquals(1.0, p + q, DELTA);
+    }
+
+    // regularizedGammaP throws MathException checked type (verifies declared throws is reachable)
+    @Test
+    public void testRegularizedGammaP_throwsDeclaredMathExceptionType() throws Throwable {
+        try {
+            Gamma.regularizedGammaP(0.5, 1.0, 1e-9, 0);
+            fail("expected MathException");
+        } catch (MathException expected) {
+            assertTrue(expected instanceof MaxIterationsExceededException);
+        }
+    }
+}

@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonCore-12-vtswy45d/JacksonCore-12f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - com.fasterxml.jackson.core.json.ReaderBasedJsonParserClaudeTest::testUnquotedControlChar_inString_throwsException
+  - com.fasterxml.jackson.core.json.ReaderBasedJsonParserClaudeTest::testNextToken_objectWithArrayValue_createsArrayContext
+  - com.fasterxml.jackson.core.json.ReaderBasedJsonParserClaudeTest::testGetInputSource_returnsReaderInstance
+  - com.fasterxml.jackson.core.json.ReaderBasedJsonParserClaudeTest::testReleaseBuffered_beforeAnyRead_returnsZero
+  - com.fasterxml.jackson.core.json.ReaderBasedJsonParserClaudeTest::testInvalidEscapeSequence_throwsException
+[exit 0]

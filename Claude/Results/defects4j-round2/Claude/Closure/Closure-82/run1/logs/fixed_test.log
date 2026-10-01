@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-82-icepasvz/Closure-82f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - com.google.javascript.rhino.jstype.JSTypeClaudeTest::testGetDisplayName_default_returnsNull
+  - com.google.javascript.rhino.jstype.JSTypeClaudeTest::testIsNumber_stringType_false
+  - com.google.javascript.rhino.jstype.JSTypeClaudeTest::testHasDisplayName_nullDisplayName_returnsFalse
+[exit 0]

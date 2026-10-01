@@ -1,0 +1,297 @@
+package com.google.debugging.sourcemap;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import java.util.Collection;
+import com.google.debugging.sourcemap.proto.Mapping.OriginalMapping;
+
+public class SourceMapConsumerV3ClaudeTest {
+
+  private JSONObject buildMapRoot(int lineCount, String mappings, String[] sources,
+      String[] names) throws JSONException {
+    JSONObject root = new JSONObject();
+    root.put("version", 3);
+    root.put("file", "out.js");
+    root.put("lineCount", lineCount);
+    root.put("mappings", mappings);
+    JSONArray srcArr = new JSONArray();
+    for (int i = 0; i < sources.length; i++) {
+      srcArr.put(sources[i]);
+    }
+    root.put("sources", srcArr);
+    JSONArray nameArr = new JSONArray();
+    for (int i = 0; i < names.length; i++) {
+      nameArr.put(names[i]);
+    }
+    root.put("names", nameArr);
+    return root;
+  }
+
+  private SourceMapConsumerV3 parseMap(int lineCount, String mappings, String[] sources,
+      String[] names) throws Throwable {
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    consumer.parse(buildMapRoot(lineCount, mappings, sources, names).toString());
+    return consumer;
+  }
+
+  // Covers JSON parse failure path wrapping JSONException into SourceMapParseException.
+  @Test
+  public void testParse_malformedJson_throwsSourceMapParseException() throws Throwable {
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    try {
+      consumer.parse("{not valid json");
+      fail("expected SourceMapParseException");
+    } catch (SourceMapParseException expected) {
+      assertTrue(expected.getMessage().contains("JSON parse exception"));
+    }
+  }
+
+  // Covers branch: version field present but not equal to 3 throws "Unknown version".
+  @Test
+  public void testParse_versionNot3_throwsException() throws Throwable {
+    JSONObject root = new JSONObject();
+    root.put("version", 2);
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    try {
+      consumer.parse(root.toString());
+      fail("expected SourceMapParseException");
+    } catch (SourceMapParseException expected) {
+      assertTrue(expected.getMessage().contains("Unknown version"));
+    }
+  }
+
+  // Covers branch: empty "file" field throws "File entry is missing or empty".
+  @Test
+  public void testParse_fileEmpty_throwsException() throws Throwable {
+    JSONObject root = new JSONObject();
+    root.put("version", 3);
+    root.put("file", "");
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    try {
+      consumer.parse(root.toString());
+      fail("expected SourceMapParseException");
+    } catch (SourceMapParseException expected) {
+      assertTrue(expected.getMessage().contains("missing or empty"));
+    }
+  }
+
+
+
+
+
+
+
+
+
+  // Covers UnmappedEntry branch: getOriginalMappingForEntry returns null for UNMAPPED sourceFileId.
+  @Test
+  public void testParse_unmappedEntry_mappingIsNull() throws Throwable {
+    SourceMapConsumerV3 consumer = parseMap(1, "K;", new String[0], new String[0]);
+    OriginalMapping mapping = consumer.getMappingForLine(1, 6);
+    assertNull(mapping);
+  }
+
+  // Covers NamedEntry branch (5 values) producing an identifier from the names array.
+  @Test
+  public void testParse_namedEntry_identifierSet() throws Throwable {
+    SourceMapConsumerV3 consumer =
+        parseMap(1, "AAAAA;", new String[] {"a.js"}, new String[] {"myVar"});
+    OriginalMapping mapping = consumer.getMappingForLine(1, 1);
+    assertNotNull(mapping);
+    assertEquals("myVar", mapping.getIdentifier());
+  }
+
+  // Covers public parse(String, SourceMapSupplier) overload with null supplier.
+  @Test
+  public void testParseStringWithSupplierOverload_basic() throws Throwable {
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    String json = buildMapRoot(1, "AAAA;", new String[] {"a.js"}, new String[0]).toString();
+    consumer.parse(json, null);
+    OriginalMapping mapping = consumer.getMappingForLine(1, 1);
+    assertNotNull(mapping);
+    assertEquals("a.js", mapping.getOriginalFile());
+  }
+
+  // Covers parseMetaMap: presence of "sections" together with "lineCount" is an invalid format.
+  @Test
+  public void testParseMetaMap_lineCountWithSections_throwsInvalidFormat() throws Throwable {
+    JSONObject root = new JSONObject();
+    root.put("version", 3);
+    root.put("file", "out.js");
+    root.put("lineCount", 1);
+    root.put("sections", new JSONArray());
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    try {
+      consumer.parse(root.toString());
+      fail("expected SourceMapParseException");
+    } catch (SourceMapParseException expected) {
+      assertTrue(expected.getMessage().contains("Invalid map format"));
+    }
+  }
+
+  // Covers parseMetaMap: a section containing both 'map' and 'url' must be rejected.
+  @Test
+  public void testParseMetaMap_sectionWithBothMapAndUrl_throws() throws Throwable {
+    JSONObject section = new JSONObject();
+    section.put("map", "{}");
+    section.put("url", "http://example.com/x.map");
+    JSONArray sections = new JSONArray();
+    sections.put(section);
+    JSONObject root = new JSONObject();
+    root.put("version", 3);
+    root.put("file", "out.js");
+    root.put("sections", sections);
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    try {
+      consumer.parse(root.toString());
+      fail("expected SourceMapParseException");
+    } catch (SourceMapParseException expected) {
+      assertTrue(expected.getMessage().contains("may not have both"));
+    }
+  }
+
+  // Covers parseMetaMap: a section with neither 'map' nor 'url' must be rejected.
+  @Test
+  public void testParseMetaMap_sectionWithNeitherMapNorUrl_throws() throws Throwable {
+    JSONObject offset = new JSONObject();
+    offset.put("line", 0);
+    offset.put("column", 0);
+    JSONObject section = new JSONObject();
+    section.put("offset", offset);
+    JSONArray sections = new JSONArray();
+    sections.put(section);
+    JSONObject root = new JSONObject();
+    root.put("version", 3);
+    root.put("file", "out.js");
+    root.put("sections", sections);
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    try {
+      consumer.parse(root.toString());
+      fail("expected SourceMapParseException");
+    } catch (SourceMapParseException expected) {
+      assertTrue(expected.getMessage().contains("must have either"));
+    }
+  }
+
+  // Covers parseMetaMap: url section whose supplier cannot retrieve content throws accordingly.
+  @Test
+  public void testParseMetaMap_sectionUrlReturnsNull_throwsUnableToRetrieve() throws Throwable {
+    JSONObject offset = new JSONObject();
+    offset.put("line", 0);
+    offset.put("column", 0);
+    JSONObject section = new JSONObject();
+    section.put("offset", offset);
+    section.put("url", "http://example.com/x.map");
+    JSONArray sections = new JSONArray();
+    sections.put(section);
+    JSONObject root = new JSONObject();
+    root.put("version", 3);
+    root.put("file", "out.js");
+    root.put("sections", sections);
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    try {
+      consumer.parse(root.toString());
+      fail("expected SourceMapParseException");
+    } catch (SourceMapParseException expected) {
+      assertTrue(expected.getMessage().contains("Unable to retrieve"));
+    }
+  }
+
+  // Covers public parse(JSONObject) overload.
+  @Test
+  public void testParseJSONObjectOverload_basic() throws Throwable {
+    JSONObject root = buildMapRoot(1, "AAAA;", new String[] {"a.js"}, new String[0]);
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    consumer.parse(root);
+    OriginalMapping mapping = consumer.getMappingForLine(1, 1);
+    assertNotNull(mapping);
+    assertEquals("a.js", mapping.getOriginalFile());
+  }
+
+  // Covers public parse(JSONObject, SourceMapSupplier) overload with null supplier.
+  @Test
+  public void testParseJSONObjectWithSupplierOverload_basic() throws Throwable {
+    JSONObject root = buildMapRoot(1, "AAAA;", new String[] {"a.js"}, new String[0]);
+    SourceMapConsumerV3 consumer = new SourceMapConsumerV3();
+    consumer.parse(root, null);
+    OriginalMapping mapping = consumer.getMappingForLine(1, 1);
+    assertNotNull(mapping);
+    assertEquals("a.js", mapping.getOriginalFile());
+  }
+
+  // Covers branch: normalized lineNumber < 0 (input line 0) returns null.
+  @Test
+  public void testGetMappingForLine_lineNumberZero_returnsNull() throws Throwable {
+    SourceMapConsumerV3 consumer = parseMap(1, "AAAA;", new String[] {"a.js"}, new String[0]);
+    assertNull(consumer.getMappingForLine(0, 1));
+  }
+
+  // Covers branch: normalized lineNumber beyond available lines returns null.
+  @Test
+  public void testGetMappingForLine_lineNumberBeyondLines_returnsNull() throws Throwable {
+    SourceMapConsumerV3 consumer = parseMap(1, "AAAA;", new String[] {"a.js"}, new String[0]);
+    assertNull(consumer.getMappingForLine(5, 1));
+  }
+
+
+
+  // Covers getOriginalSources returning all parsed source file names.
+  @Test
+  public void testGetOriginalSources_returnsAllSources() throws Throwable {
+    SourceMapConsumerV3 consumer =
+        parseMap(1, "AAAA;", new String[] {"a.js", "b.js"}, new String[0]);
+    Collection<String> result = consumer.getOriginalSources();
+    assertEquals(2, result.size());
+    assertTrue(result.contains("a.js"));
+    assertTrue(result.contains("b.js"));
+  }
+
+  // Covers getReverseMapping lazy build and correct lookup for an existing source/line pair.
+  @Test
+  public void testGetReverseMapping_validSourceAndLine_returnsMapping() throws Throwable {
+    SourceMapConsumerV3 consumer = parseMap(2, "AAAA;KACA;", new String[] {"a.js"}, new String[0]);
+    Collection<OriginalMapping> result = consumer.getReverseMapping("a.js", 1, 0);
+    assertEquals(1, result.size());
+    OriginalMapping mapping = result.iterator().next();
+    assertEquals(1, mapping.getLineNumber());
+    assertEquals(5, mapping.getColumnPosition());
+  }
+
+  // Covers getReverseMapping branch: unknown original file returns empty collection.
+  @Test
+  public void testGetReverseMapping_unknownSource_returnsEmpty() throws Throwable {
+    SourceMapConsumerV3 consumer = parseMap(2, "AAAA;KACA;", new String[] {"a.js"}, new String[0]);
+    Collection<OriginalMapping> result = consumer.getReverseMapping("missing.js", 0, 0);
+    assertEquals(0, result.size());
+  }
+
+  // Covers getReverseMapping branch: known file but unmapped line returns empty collection.
+  @Test
+  public void testGetReverseMapping_unknownLine_returnsEmpty() throws Throwable {
+    SourceMapConsumerV3 consumer = parseMap(2, "AAAA;KACA;", new String[] {"a.js"}, new String[0]);
+    Collection<OriginalMapping> result = consumer.getReverseMapping("a.js", 99, 0);
+    assertEquals(0, result.size());
+  }
+
+  // Covers visitMappings: a pending mapped entry is flushed when the next entry is encountered.
+  @Test
+  public void testVisitMappings_twoMappedEntriesSameLine_visitorInvokedOnce() throws Throwable {
+    SourceMapConsumerV3 consumer =
+        parseMap(1, "AAAA,KACA;", new String[] {"a.js"}, new String[0]);
+    final int[] count = new int[1];
+    final String[] capturedSource = new String[1];
+    consumer.visitMappings(new SourceMapConsumerV3.EntryVisitor() {
+      @Override
+      public void visit(String sourceName, String symbolName, FilePosition sourceStartPosition,
+          FilePosition startPosition, FilePosition endPosition) {
+        count[0]++;
+        capturedSource[0] = sourceName;
+      }
+    });
+    assertEquals(1, count[0]);
+    assertEquals("a.js", capturedSource[0]);
+  }
+}

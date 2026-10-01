@@ -1,0 +1,240 @@
+package org.apache.commons.cli;
+
+import java.io.File;
+import java.net.URL;
+import java.text.DateFormat;
+import java.util.Date;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TypeHandlerClaudeTest {
+
+    // createValue(String,Object): Object overload delegates to Class overload, String-valued branch
+    @Test
+    public void testCreateValue_objectOverload_delegatesToClassOverload() throws Throwable {
+        Object result = TypeHandler.createValue("sample", (Object) PatternOptionBuilder.STRING_VALUE);
+        assertEquals("sample", result);
+    }
+
+    // createValue(String,Object): obj not a Class instance -> ClassCastException on internal cast
+    @Test
+    public void testCreateValue_objectNotClassInstance_throwsClassCastException() throws Throwable {
+        try {
+            TypeHandler.createValue("test", (Object) "notAClassInstance");
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // createValue(String,Class): STRING_VALUE branch returns the string unchanged
+    @Test
+    public void testCreateValueClass_stringValue_returnsStringUnchanged() throws Throwable {
+        Object result = TypeHandler.createValue("hello world", PatternOptionBuilder.STRING_VALUE);
+        assertEquals("hello world", result);
+    }
+
+    // createValue(String,Class): OBJECT_VALUE branch delegates to createObject
+    @Test
+    public void testCreateValueClass_objectValue_createsObjectInstance() throws Throwable {
+        Object result = TypeHandler.createValue("java.lang.Object", PatternOptionBuilder.OBJECT_VALUE);
+        assertNotNull(result);
+        assertEquals(Object.class, result.getClass());
+    }
+
+    // createValue(String,Class): NUMBER_VALUE branch delegates to createNumber
+    @Test
+    public void testCreateValueClass_numberValue_createsNumber() throws Throwable {
+        Object result = TypeHandler.createValue("99", PatternOptionBuilder.NUMBER_VALUE);
+        assertNotNull(result);
+        assertEquals(99.0, ((Number) result).doubleValue(), 1e-9);
+    }
+
+    // BUG: createValue(String,Class) DATE_VALUE should delegate to a working createDate that parses str
+    @Test
+    public void testCreateValueClass_dateValue_returnsNonNullDate() throws Throwable {
+        String str = DateFormat.getDateInstance().format(new Date(0));
+        Object result = TypeHandler.createValue(str, PatternOptionBuilder.DATE_VALUE);
+        assertNotNull(result);
+        assertTrue(result instanceof Date);
+    }
+
+    // createValue(String,Class): CLASS_VALUE branch delegates to createClass
+    @Test
+    public void testCreateValueClass_classValue_createsClass() throws Throwable {
+        Object result = TypeHandler.createValue("java.lang.String", PatternOptionBuilder.CLASS_VALUE);
+        assertEquals(String.class, result);
+    }
+
+    // createValue(String,Class): FILE_VALUE branch delegates to createFile
+    @Test
+    public void testCreateValueClass_fileValue_createsFile() throws Throwable {
+        Object result = TypeHandler.createValue("data.csv", PatternOptionBuilder.FILE_VALUE);
+        assertEquals(new File("data.csv"), result);
+    }
+
+    // createValue(String,Class): EXISTING_FILE_VALUE branch also delegates to createFile
+    @Test
+    public void testCreateValueClass_existingFileValue_createsFile() throws Throwable {
+        Object result = TypeHandler.createValue("test.txt", PatternOptionBuilder.EXISTING_FILE_VALUE);
+        assertTrue(result instanceof File);
+        assertEquals(new File("test.txt"), result);
+    }
+
+    // createValue(String,Class): FILES_VALUE branch delegates to createFiles (unimplemented, returns null)
+    @Test
+    public void testCreateValueClass_filesValue_returnsNull() throws Throwable {
+        Object result = TypeHandler.createValue("file1,file2", PatternOptionBuilder.FILES_VALUE);
+        assertNull(result);
+    }
+
+    // createValue(String,Class): URL_VALUE branch delegates to createURL
+    @Test
+    public void testCreateValueClass_urlValue_createsURL() throws Throwable {
+        Object result = TypeHandler.createValue("http://example.com", PatternOptionBuilder.URL_VALUE);
+        assertTrue(result instanceof URL);
+        URL url = (URL) result;
+        assertEquals("http", url.getProtocol());
+        assertEquals("example.com", url.getHost());
+    }
+
+    // createValue(String,Class): unmatched class falls into else branch returning null
+    @Test
+    public void testCreateValueClass_unknownClass_returnsNull() throws Throwable {
+        Object result = TypeHandler.createValue("test", Boolean.class);
+        assertNull(result);
+    }
+
+    // createObject: valid class name with public no-arg constructor returns instance
+    @Test
+    public void testCreateObject_validClassName_returnsInstance() throws Throwable {
+        Object result = TypeHandler.createObject("java.lang.Object");
+        assertNotNull(result);
+        assertEquals(Object.class, result.getClass());
+    }
+
+    // createObject: ClassNotFoundException path returns null
+    @Test
+    public void testCreateObject_classNotFound_returnsNull() throws Throwable {
+        Object result = TypeHandler.createObject("com.nonexistent.FakeClassXyz");
+        assertNull(result);
+    }
+
+    // createObject: class without no-arg constructor -> InstantiationException caught -> null
+    @Test
+    public void testCreateObject_instantiationException_returnsNull() throws Throwable {
+        Object result = TypeHandler.createObject("java.lang.Integer");
+        assertNull(result);
+    }
+
+    // createObject: class with private constructor -> IllegalAccessException caught -> null
+    @Test
+    public void testCreateObject_illegalAccessException_returnsNull() throws Throwable {
+        Object result = TypeHandler.createObject("java.lang.Math");
+        assertNull(result);
+    }
+
+    // createNumber: whole number string parses to a Number with correct value
+    @Test
+    public void testCreateNumber_integerString_returnsCorrectValue() throws Throwable {
+        Number result = TypeHandler.createNumber("42");
+        assertNotNull(result);
+        assertEquals(42.0, result.doubleValue(), 1e-9);
+    }
+
+    // createNumber: decimal string parses to a Number with correct value (delta tolerant of float precision)
+    @Test
+    public void testCreateNumber_decimalString_returnsCorrectValue() throws Throwable {
+        Number result = TypeHandler.createNumber("3.14");
+        assertNotNull(result);
+        assertEquals(3.14, result.doubleValue(), 1e-4);
+    }
+
+    // createNumber: non-numeric string -> NumberFormatException caught -> null
+    @Test
+    public void testCreateNumber_invalidString_returnsNull() throws Throwable {
+        Number result = TypeHandler.createNumber("abc");
+        assertNull(result);
+    }
+
+    // createNumber: negative integer string parses correctly
+    @Test
+    public void testCreateNumber_negativeInteger_returnsCorrectValue() throws Throwable {
+        Number result = TypeHandler.createNumber("-7");
+        assertNotNull(result);
+        assertEquals(-7.0, result.doubleValue(), 1e-9);
+    }
+
+    // createNumber: empty string is not a valid number -> null
+    @Test
+    public void testCreateNumber_emptyString_returnsNull() throws Throwable {
+        Number result = TypeHandler.createNumber("");
+        assertNull(result);
+    }
+
+    // createClass: valid fully qualified class name resolves
+    @Test
+    public void testCreateClass_validClassName_returnsClass() throws Throwable {
+        Class result = TypeHandler.createClass("java.lang.String");
+        assertEquals(String.class, result);
+    }
+
+    // createClass: ClassNotFoundException path returns null
+    @Test
+    public void testCreateClass_invalidClassName_returnsNull() throws Throwable {
+        Class result = TypeHandler.createClass("com.nonexistent.FakeClassAbc");
+        assertNull(result);
+    }
+
+    // BUG HUNT: per Javadoc createDate must return the parsed date for a valid date string, not always null
+    @Test
+    public void testCreateDate_validDateString_returnsNonNullDate() throws Throwable {
+        String str = DateFormat.getDateInstance().format(new Date(0));
+        Date result = TypeHandler.createDate(str);
+        assertNotNull(result);
+    }
+
+    // createDate: clearly invalid string should not parse and returns null
+    @Test
+    public void testCreateDate_invalidString_returnsNull() throws Throwable {
+        Date result = TypeHandler.createDate("###not-a-date###");
+        assertNull(result);
+    }
+
+    // createURL: well-formed URL string is parsed into a URL with correct protocol/host/path
+    @Test
+    public void testCreateURL_validURL_returnsURL() throws Throwable {
+        URL result = TypeHandler.createURL("http://apache.org/path");
+        assertNotNull(result);
+        assertEquals("apache.org", result.getHost());
+        assertEquals("/path", result.getPath());
+    }
+
+    // createURL: malformed URL string -> MalformedURLException caught -> null
+    @Test
+    public void testCreateURL_invalidURL_returnsNull() throws Throwable {
+        URL result = TypeHandler.createURL("not a valid url with spaces");
+        assertNull(result);
+    }
+
+    // createFile: returns a File object built directly from the given path
+    @Test
+    public void testCreateFile_returnsFileWithGivenPath() throws Throwable {
+        File result = TypeHandler.createFile("test.txt");
+        assertEquals(new File("test.txt"), result);
+    }
+
+    // createFile: empty string path edge case
+    @Test
+    public void testCreateFile_emptyString_returnsFileWithEmptyPath() throws Throwable {
+        File result = TypeHandler.createFile("");
+        assertEquals(new File(""), result);
+    }
+
+    // createFiles: unimplemented stub always returns null regardless of input
+    @Test
+    public void testCreateFiles_anyString_returnsNull() throws Throwable {
+        File[] result = TypeHandler.createFiles("a.txt,b.txt");
+        assertNull(result);
+    }
+}

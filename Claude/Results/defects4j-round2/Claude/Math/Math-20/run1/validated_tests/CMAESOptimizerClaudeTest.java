@@ -1,0 +1,372 @@
+package org.apache.commons.math3.optimization.direct;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.List;
+
+import org.apache.commons.math3.analysis.MultivariateFunction;
+import org.apache.commons.math3.exception.DimensionMismatchException;
+import org.apache.commons.math3.exception.MathUnsupportedOperationException;
+import org.apache.commons.math3.exception.NotPositiveException;
+import org.apache.commons.math3.exception.OutOfRangeException;
+import org.apache.commons.math3.exception.TooManyEvaluationsException;
+import org.apache.commons.math3.linear.RealMatrix;
+import org.apache.commons.math3.optimization.ConvergenceChecker;
+import org.apache.commons.math3.optimization.GoalType;
+import org.apache.commons.math3.optimization.PointValuePair;
+import org.apache.commons.math3.random.MersenneTwister;
+import org.apache.commons.math3.random.RandomGenerator;
+
+public class CMAESOptimizerClaudeTest {
+
+    private MultivariateFunction sphere2D;
+    private MultivariateFunction negSphere2D;
+    private MultivariateFunction identity1D;
+    private MultivariateFunction negIdentity1D;
+
+    @Before
+    public void setUp() throws Throwable {
+        sphere2D = new MultivariateFunction() {
+            public double value(double[] x) {
+                double s = 0;
+                for (int i = 0; i < x.length; i++) {
+                    s += x[i] * x[i];
+                }
+                return s;
+            }
+        };
+        negSphere2D = new MultivariateFunction() {
+            public double value(double[] x) {
+                double s = 0;
+                for (int i = 0; i < x.length; i++) {
+                    s += x[i] * x[i];
+                }
+                return -s;
+            }
+        };
+        identity1D = new MultivariateFunction() {
+            public double value(double[] x) {
+                return x[0];
+            }
+        };
+        negIdentity1D = new MultivariateFunction() {
+            public double value(double[] x) {
+                return -x[0];
+            }
+        };
+    }
+
+    // Default constructor + auto lambda calc branch: must produce a valid, finite result.
+    @Test
+    public void testConstructorDefault_optimizeSphere_returnsFiniteResult() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer();
+        double[] start = {5.0, 5.0};
+        PointValuePair result = optimizer.optimize(3000, sphere2D, GoalType.MINIMIZE, start);
+        assertNotNull(result);
+        assertEquals(2, result.getPoint().length);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // Lambda-only constructor branch.
+    @Test
+    public void testConstructorLambdaOnly_optimizeSphere_returnsFiniteResult() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(8);
+        double[] start = {3.0, -3.0};
+        PointValuePair result = optimizer.optimize(2000, sphere2D, GoalType.MINIMIZE, start);
+        assertNotNull(result);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // Lambda + inputSigma constructor branch.
+    @Test
+    public void testConstructorLambdaAndSigma_optimizeSphere_returnsFiniteResult() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(8, new double[]{0.5, 0.5});
+        double[] start = {2.0, 2.0};
+        PointValuePair result = optimizer.optimize(2000, sphere2D, GoalType.MINIMIZE, start);
+        assertNotNull(result);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // Statistics history lists are empty right after construction (before any optimize call).
+    @Test
+    public void testGetStatisticsHistories_emptyBeforeOptimize() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer();
+        assertTrue(optimizer.getStatisticsSigmaHistory().isEmpty());
+        assertTrue(optimizer.getStatisticsMeanHistory().isEmpty());
+        assertTrue(optimizer.getStatisticsFitnessHistory().isEmpty());
+        assertTrue(optimizer.getStatisticsDHistory().isEmpty());
+    }
+
+    // generateStatistics=false branch: histories stay empty even after running optimize.
+    @Test
+    public void testGetStatisticsHistories_emptyWhenGenerateStatisticsFalse() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 1000, 0, true, 0, 0,
+                new MersenneTwister(42L), false);
+        optimizer.optimize(2000, sphere2D, GoalType.MINIMIZE, new double[]{2.0, 2.0});
+        assertTrue(optimizer.getStatisticsSigmaHistory().isEmpty());
+    }
+
+    // generateStatistics=true branch: histories get populated after at least one generation.
+    @Test
+    public void testGetStatisticsHistories_populatedWhenGenerateStatisticsTrue() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 1000, 0, true, 0, 0,
+                new MersenneTwister(42L), true);
+        optimizer.optimize(2000, sphere2D, GoalType.MINIMIZE, new double[]{2.0, 2.0});
+        assertFalse(optimizer.getStatisticsSigmaHistory().isEmpty());
+        assertFalse(optimizer.getStatisticsFitnessHistory().isEmpty());
+        assertFalse(optimizer.getStatisticsMeanHistory().isEmpty());
+        assertFalse(optimizer.getStatisticsDHistory().isEmpty());
+    }
+
+    // Sigma history values must always be positive (sigma is a standard deviation).
+    @Test
+    public void testGetStatisticsSigmaHistory_valuesArePositive() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 1000, 0, true, 0, 0,
+                new MersenneTwister(7L), true);
+        optimizer.optimize(2000, sphere2D, GoalType.MINIMIZE, new double[]{2.0, 2.0});
+        List<Double> hist = optimizer.getStatisticsSigmaHistory();
+        assertTrue(hist.get(0).doubleValue() > 0.0);
+    }
+
+    // Mean history entries must have as many columns as the problem dimension.
+    @Test
+    public void testGetStatisticsMeanHistory_matchesDimension() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 1000, 0, true, 0, 0,
+                new MersenneTwister(7L), true);
+        optimizer.optimize(2000, sphere2D, GoalType.MINIMIZE, new double[]{2.0, 2.0});
+        List<RealMatrix> hist = optimizer.getStatisticsMeanHistory();
+        assertEquals(2, hist.get(0).getColumnDimension());
+    }
+
+    // checkParameters: inputSigma.length != startPoint.length -> DimensionMismatchException.
+    @Test
+    public void testOptimize_inputSigmaDimensionMismatch_throwsDimensionMismatchException() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, new double[]{0.3, 0.3});
+        try {
+            optimizer.optimize(1000, identity1D, GoalType.MINIMIZE, new double[]{0.0});
+            fail("expected DimensionMismatchException");
+        } catch (DimensionMismatchException expected) {
+            // expected
+        }
+    }
+
+    // checkParameters: inputSigma[i] < 0 -> NotPositiveException.
+    @Test
+    public void testOptimize_negativeInputSigma_throwsNotPositiveException() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, new double[]{-0.5});
+        try {
+            optimizer.optimize(1000, identity1D, GoalType.MINIMIZE, new double[]{0.0});
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+            // expected
+        }
+    }
+
+
+
+    // checkParameters: inputSigma[i] > (upper-lower) -> OutOfRangeException.
+    @Test
+    public void testOptimize_inputSigmaExceedsRange_throwsOutOfRangeException() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, new double[]{1.5});
+        try {
+            optimizer.optimize(1000, identity1D, GoalType.MINIMIZE,
+                    new double[]{0.5}, new double[]{0.0}, new double[]{1.0});
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+            // expected
+        }
+    }
+
+    // checkParameters edge: inputSigma[i] == (upper-lower) is allowed (strict '>' only) -> no exception.
+    @Test
+    public void testOptimize_inputSigmaEqualsRange_noException() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, new double[]{1.0},
+                50, 0, true, 0, 0, new MersenneTwister(1L), false);
+        PointValuePair result = optimizer.optimize(100, identity1D, GoalType.MINIMIZE,
+                new double[]{0.5}, new double[]{0.0}, new double[]{1.0});
+        assertNotNull(result);
+    }
+
+    // checkParameters: mixing finite and infinite bounds -> MathUnsupportedOperationException.
+    @Test
+    public void testOptimize_mixedFiniteInfiniteBounds_throwsMathUnsupportedOperationException() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer();
+        double[] lower = {0.0, Double.NEGATIVE_INFINITY};
+        double[] upper = {1.0, Double.POSITIVE_INFINITY};
+        try {
+            optimizer.optimize(1000, sphere2D, GoalType.MINIMIZE,
+                    new double[]{0.5, 0.5}, lower, upper);
+            fail("expected MathUnsupportedOperationException");
+        } catch (MathUnsupportedOperationException expected) {
+            // expected
+        }
+    }
+
+    // checkParameters: all-infinite bounds are treated as unbounded (boundaries == null) -> no exception.
+    @Test
+    public void testOptimize_allInfiniteBounds_noException() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 500, 0, true, 0, 0,
+                new MersenneTwister(5L), false);
+        double[] lower = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
+        double[] upper = {Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY};
+        PointValuePair result = optimizer.optimize(1000, sphere2D, GoalType.MINIMIZE,
+                new double[]{1.0, 1.0}, lower, upper);
+        assertNotNull(result);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // maxEvaluations == 0: the very first fitness evaluation must exceed the budget.
+    @Test
+    public void testOptimize_zeroMaxEvaluations_throwsTooManyEvaluationsException() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer();
+        try {
+            optimizer.optimize(0, sphere2D, GoalType.MINIMIZE, new double[]{1.0, 1.0});
+            fail("expected TooManyEvaluationsException");
+        } catch (TooManyEvaluationsException expected) {
+            // expected
+        }
+    }
+
+    // Small maxEvaluations budget: exception thrown mid-generation is caught internally (break generationLoop).
+    @Test
+    public void testOptimize_lowMaxEvaluations_returnsGracefullyWithoutException() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 1000, 0, true, 0, 0,
+                new MersenneTwister(3L), false);
+        PointValuePair result = optimizer.optimize(3, sphere2D, GoalType.MINIMIZE,
+                new double[]{2.0, 2.0});
+        assertNotNull(result);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // Unbounded minimization of sphere function must substantially improve over the starting value.
+    @Test
+    public void testOptimize_sphereMinimize_convergesCloseToZero() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 2000, 0, true, 0, 0,
+                new MersenneTwister(42L), false);
+        PointValuePair result = optimizer.optimize(5000, sphere2D, GoalType.MINIMIZE,
+                new double[]{5.0, 5.0});
+        assertTrue("expected value well below initial 50.0 but was " + result.getValue(),
+                result.getValue() < 5.0);
+    }
+
+    // GoalType.MAXIMIZE branch (isMinimize=false): value must stay <=0 and approach 0.
+    @Test
+    public void testOptimize_maximizeGoal_convergesCloseToZeroFromBelow() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 2000, 0, true, 0, 0,
+                new MersenneTwister(42L), false);
+        PointValuePair result = optimizer.optimize(5000, negSphere2D, GoalType.MAXIMIZE,
+                new double[]{5.0, 5.0});
+        assertTrue(result.getValue() <= 1e-6);
+        assertTrue("expected value close to 0 but was " + result.getValue(),
+                result.getValue() > -5.0);
+    }
+
+    // stopFitness != 0 branch: optimization must terminate once bestFitness is below stopFitness.
+    @Test
+    public void testOptimize_stopFitnessTerminatesEarly() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 5000, 20.0, true, 0, 0,
+                new MersenneTwister(11L), false);
+        PointValuePair result = optimizer.optimize(5000, sphere2D, GoalType.MINIMIZE,
+                new double[]{10.0, 10.0});
+        assertTrue("expected value below stopFitness 20.0 but was " + result.getValue(),
+                result.getValue() < 20.0);
+    }
+
+    // diagonalOnly > 0 branch (updateCovarianceDiagonalOnly path).
+    @Test
+    public void testOptimize_diagonalOnlyPositive_returnsFiniteResult() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 500, 0, true, 1, 0,
+                new MersenneTwister(9L), false);
+        PointValuePair result = optimizer.optimize(3000, sphere2D, GoalType.MINIMIZE,
+                new double[]{4.0, 4.0, 4.0});
+        assertNotNull(result);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // diagonalOnly > 1 branch: after enough iterations it switches back to full covariance matrix.
+    @Test
+    public void testOptimize_diagonalOnlyGreaterThanOne_returnsFiniteResult() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 200, 0, true, 2, 0,
+                new MersenneTwister(9L), false);
+        PointValuePair result = optimizer.optimize(3000, sphere2D, GoalType.MINIMIZE,
+                new double[]{4.0, 4.0, 4.0});
+        assertNotNull(result);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // isActiveCMA == false branch (non-active covariance update path).
+    @Test
+    public void testOptimize_activeCMAFalse_returnsFiniteResult() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 1000, 0, false, 0, 0,
+                new MersenneTwister(13L), false);
+        PointValuePair result = optimizer.optimize(3000, sphere2D, GoalType.MINIMIZE,
+                new double[]{3.0, 3.0});
+        assertNotNull(result);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // checkFeasableCount > 0 branch: feasibility re-sampling loop for bounded offspring.
+    @Test
+    public void testOptimize_checkFeasableCountPositive_returnsFiniteResult() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 1000, 0, true, 0, 3,
+                new MersenneTwister(21L), false);
+        PointValuePair result = optimizer.optimize(2000, sphere2D, GoalType.MINIMIZE,
+                new double[]{0.0, 0.0}, new double[]{-2.0, -2.0}, new double[]{2.0, 2.0});
+        assertNotNull(result);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // Custom ConvergenceChecker that always reports convergence forces early termination.
+    @Test
+    public void testOptimize_customConvergenceCheckerAlwaysTrue_terminatesWithFiniteResult() throws Throwable {
+        ConvergenceChecker<PointValuePair> checker = new ConvergenceChecker<PointValuePair>() {
+            public boolean converged(int iteration, PointValuePair previous, PointValuePair current) {
+                return true;
+            }
+        };
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 1000, 0, true, 0, 0,
+                new MersenneTwister(17L), false, checker);
+        PointValuePair result = optimizer.optimize(2000, sphere2D, GoalType.MINIMIZE,
+                new double[]{3.0, 3.0});
+        assertNotNull(result);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // Bug check: with bounds and the true optimum sitting exactly at the lower bound, the
+    // final reported point must stay within [lower, upper] (contract of bounded optimize()).
+    @Test
+    public void testOptimize_boundedResultStaysWithinBounds_optimumAtLowerBoundary() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 3000, 0, true, 0, 0,
+                new MersenneTwister(123456789L), false);
+        double[] lower = {0.0};
+        double[] upper = {10.0};
+        PointValuePair result = optimizer.optimize(3000, identity1D, GoalType.MINIMIZE,
+                new double[]{0.0}, lower, upper);
+        double x = result.getPoint()[0];
+        assertTrue("point " + x + " must be within [0,10]", x >= lower[0] - 1e-9 && x <= upper[0] + 1e-9);
+    }
+
+    // Bug check: same contract near the upper boundary with a function favoring higher x.
+    @Test
+    public void testOptimize_boundedResultStaysWithinBounds_optimumAtUpperBoundary() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(0, null, 3000, 0, true, 0, 0,
+                new MersenneTwister(987654321L), false);
+        double[] lower = {0.0};
+        double[] upper = {10.0};
+        PointValuePair result = optimizer.optimize(3000, negIdentity1D, GoalType.MINIMIZE,
+                new double[]{10.0}, lower, upper);
+        double x = result.getPoint()[0];
+        assertTrue("point " + x + " must be within [0,10]", x >= lower[0] - 1e-9 && x <= upper[0] + 1e-9);
+    }
+
+    // Deprecated 9-arg constructor branch with generateStatistics=true.
+    @Test
+    public void testDeprecatedConstructor_generateStatisticsTrue_populatesHistory() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(6, new double[]{0.4, 0.4}, 500, 0,
+                true, 0, 0, new MersenneTwister(2L), true);
+        optimizer.optimize(1500, sphere2D, GoalType.MINIMIZE, new double[]{2.0, 2.0});
+        assertFalse(optimizer.getStatisticsFitnessHistory().isEmpty());
+    }
+}

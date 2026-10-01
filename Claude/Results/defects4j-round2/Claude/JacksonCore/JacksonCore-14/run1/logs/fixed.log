@@ -1,0 +1,19 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p JacksonCore -v 14f -w /tmp/claude-JacksonCore-14-2dcd9z4z/fixed
+Checking out 3c2c9610 to /tmp/claude-JacksonCore-14-2dcd9z4z/fixed......... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Backing up build file: /tmp/claude-JacksonCore-14-2dcd9z4z/fixed/maven-buil OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 3c2c9610:383f6324..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: JacksonCore-14f................................. OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-JacksonCore-14-2dcd9z4z/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

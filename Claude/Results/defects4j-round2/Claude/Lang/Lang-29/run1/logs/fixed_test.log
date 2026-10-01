@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Lang-29-0hxy8vv8/Lang-29f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.lang3.SystemUtilsClaudeTest::testToJavaVersionIntArray_trimsToMaxSizeThree_bugCheck
+[exit 0]

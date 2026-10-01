@@ -1,0 +1,512 @@
+package org.joda.time.format;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.Locale;
+
+import org.joda.time.Chronology;
+import org.joda.time.DateTimeZone;
+import org.joda.time.DateTimeFieldType;
+import org.joda.time.chrono.ISOChronology;
+
+public class DateTimeFormatterBuilderClaudeTest {
+
+    private final Chronology UTC_CHRONO = ISOChronology.getInstanceUTC();
+    private final DateTimeZone UTC = DateTimeZone.UTC;
+    private final Locale ENGLISH = Locale.ENGLISH;
+
+    // covers: initial empty builder -> getFormatter() yields empty Composite, nothing printable/parsable
+    @Test
+    public void testConstructor_defaultState_cannotBuildFormatter() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        assertFalse(builder.canBuildFormatter());
+        assertFalse(builder.canBuildPrinter());
+        assertFalse(builder.canBuildParser());
+    }
+
+    // covers: toFormatter() throw branch when neither printer nor parser available
+    @Test
+    public void testToFormatter_emptyBuilder_throwsUnsupportedOperationException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.toFormatter();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // covers: toPrinter() throw branch when printer not available
+    @Test
+    public void testToPrinter_emptyBuilder_throwsUnsupportedOperationException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.toPrinter();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // covers: toParser() throw branch when parser not available
+    @Test
+    public void testToParser_emptyBuilder_throwsUnsupportedOperationException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.toParser();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // covers: clear() resets iFormatter cache and iElementPairs list
+    @Test
+    public void testClear_afterAppend_resetsBuilder() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendLiteral('X');
+        assertTrue(builder.canBuildFormatter());
+        builder.clear();
+        assertFalse(builder.canBuildFormatter());
+    }
+
+    // covers: append(DateTimeFormatter) null check branch
+    @Test
+    public void testAppendDateTimeFormatter_null_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.append((DateTimeFormatter) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: append(DateTimeFormatter) success path via formatter.getPrinter()/getParser()
+    @Test
+    public void testAppendDateTimeFormatter_valid_combinesPrinterAndParser() throws Throwable {
+        DateTimeFormatterBuilder inner = new DateTimeFormatterBuilder();
+        inner.appendLiteral('A');
+        DateTimeFormatter innerFormatter = inner.toFormatter();
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.append(innerFormatter);
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        printer.printTo(buf, 0L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("A", buf.toString());
+    }
+
+    // covers: append(DateTimePrinter) -> checkPrinter() null branch
+    @Test
+    public void testAppendDateTimePrinter_null_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.append((DateTimePrinter) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: append(DateTimeParser) -> checkParser() null branch
+    @Test
+    public void testAppendDateTimeParser_null_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.append((DateTimeParser) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: append(DateTimePrinter,DateTimeParser) normal path, single-pair getFormatter shortcut
+    @Test
+    public void testAppendPrinterParser_bothProvided_canBuildFormatter() throws Throwable {
+        DateTimeFormatterBuilder src = new DateTimeFormatterBuilder();
+        src.appendLiteral('A');
+        DateTimePrinter printer = src.toPrinter();
+        DateTimeParser parser = src.toParser();
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.append(printer, parser);
+        assertTrue(builder.canBuildFormatter());
+    }
+
+    // covers: append(DateTimePrinter) stores null parser slot; Composite.isParser() false when parser list empty
+    @Test
+    public void testAppendDateTimePrinterOnly_compositeCanBuildPrinterNotParser() throws Throwable {
+        DateTimeFormatterBuilder src = new DateTimeFormatterBuilder();
+        src.appendLiteral('A');
+        DateTimePrinter printer = src.toPrinter();
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.append(printer);
+        builder.append(printer);
+        assertTrue(builder.canBuildPrinter());
+        assertFalse(builder.canBuildParser());
+    }
+
+    // covers: append(DateTimeParser) stores null printer slot; Composite.isPrinter() false when printer list empty
+    @Test
+    public void testAppendDateTimeParserOnly_compositeCanBuildParserNotPrinter() throws Throwable {
+        DateTimeFormatterBuilder src = new DateTimeFormatterBuilder();
+        src.appendLiteral('A');
+        DateTimeParser parser = src.toParser();
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.append(parser);
+        builder.append(parser);
+        assertTrue(builder.canBuildParser());
+        assertFalse(builder.canBuildPrinter());
+    }
+
+    // covers: append(printer, parsers[]) null array branch
+    @Test
+    public void testAppendPrinterAndParserArray_nullArray_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.append((DateTimePrinter) null, (DateTimeParser[]) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: append(printer, parsers[]) loop detecting non-last null element (incomplete array)
+    @Test
+    public void testAppendPrinterAndParserArray_incompleteArray_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder src = new DateTimeFormatterBuilder();
+        src.appendLiteral('A');
+        DateTimeParser p1 = src.toParser();
+        DateTimeParser[] parsers = new DateTimeParser[] {null, p1};
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.append((DateTimePrinter) null, parsers);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: append(printer, parsers[]) length==1 with null element branch
+    @Test
+    public void testAppendPrinterAndParserArray_singleNullElement_throwsIllegalArgumentException() throws Throwable {
+        DateTimeParser[] parsers = new DateTimeParser[] {null};
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.append((DateTimePrinter) null, parsers);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: append(printer, parsers[]) length==1 valid element -> append0(printer, parsers[0])
+    @Test
+    public void testAppendPrinterAndParserArray_singleValidElement_buildsParserOnly() throws Throwable {
+        DateTimeFormatterBuilder src = new DateTimeFormatterBuilder();
+        src.appendLiteral('A');
+        DateTimeParser p1 = src.toParser();
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        DateTimeParser[] parsers = new DateTimeParser[] {p1};
+        builder.append((DateTimePrinter) null, parsers);
+        builder.append(p1);
+        assertTrue(builder.canBuildParser());
+        assertFalse(builder.canBuildPrinter());
+    }
+
+    // covers: appendOptional(parser) -> checkParser() null branch
+    @Test
+    public void testAppendOptional_null_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendOptional(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendOptional(parser) success path wraps into parser-only MatchingParser
+    @Test
+    public void testAppendOptional_validParser_parserOnlyNotPrinter() throws Throwable {
+        DateTimeFormatterBuilder src = new DateTimeFormatterBuilder();
+        src.appendLiteral('A');
+        DateTimeParser p1 = src.toParser();
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendOptional(p1);
+        assertTrue(builder.canBuildParser());
+        assertFalse(builder.canBuildPrinter());
+    }
+
+    // covers: appendLiteral(char) -> CharacterLiteral.printTo
+    @Test
+    public void testAppendLiteralChar_printsCharacter() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendLiteral('Q');
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        printer.printTo(buf, 0L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("Q", buf.toString());
+    }
+
+    // covers: appendLiteral(String) null check branch
+    @Test
+    public void testAppendLiteralString_null_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendLiteral((String) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendLiteral(String) length==0 branch returns builder unchanged (no element added)
+    @Test
+    public void testAppendLiteralString_empty_noElementAdded() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendLiteral("");
+        assertFalse(builder.canBuildFormatter());
+    }
+
+    // covers: appendLiteral(String) length==1 branch -> CharacterLiteral
+    @Test
+    public void testAppendLiteralString_singleChar_printsCharacter() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendLiteral("Z");
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        printer.printTo(buf, 0L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("Z", buf.toString());
+    }
+
+    // covers: appendLiteral(String) default branch -> StringLiteral
+    @Test
+    public void testAppendLiteralString_multiChar_printsString() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendLiteral("Hello");
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        printer.printTo(buf, 0L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("Hello", buf.toString());
+    }
+
+    // covers: appendDecimal null fieldType check
+    @Test
+    public void testAppendDecimal_nullFieldType_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendDecimal(null, 1, 2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendDecimal maxDigits<=0 branch after min/max adjustment
+    @Test
+    public void testAppendDecimal_zeroMinAndMaxDigits_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendDecimal(DateTimeFieldType.dayOfMonth(), 0, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendDecimal maxDigits<minDigits adjustment, PaddedNumber branch (minDigits>1)
+    @Test
+    public void testAppendDecimal_maxLessThanMin_adjustsAndPads() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendDecimal(DateTimeFieldType.dayOfMonth(), 3, 1);
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        // 345600000L = 1970-01-05T00:00:00Z, dayOfMonth = 5
+        printer.printTo(buf, 345600000L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("005", buf.toString());
+    }
+
+    // covers: appendFixedDecimal numDigits<=0 branch
+    @Test
+    public void testAppendFixedDecimal_zeroDigits_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendFixedDecimal(DateTimeFieldType.dayOfMonth(), 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendSignedDecimal null fieldType check
+    @Test
+    public void testAppendSignedDecimal_nullFieldType_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendSignedDecimal(null, 1, 2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendFixedSignedDecimal numDigits<=0 branch (negative value)
+    @Test
+    public void testAppendFixedSignedDecimal_negativeDigits_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendFixedSignedDecimal(DateTimeFieldType.year(), -3);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendText null fieldType check
+    @Test
+    public void testAppendText_nullFieldType_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendText(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendShortText null fieldType check
+    @Test
+    public void testAppendShortText_nullFieldType_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendShortText(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendText -> TextField(isShort=false) printTo full-text branch
+    @Test
+    public void testAppendText_monthOfYear_printsFullName() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendText(DateTimeFieldType.monthOfYear());
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        // 0L = 1970-01-01T00:00:00Z, January
+        printer.printTo(buf, 0L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("January", buf.toString());
+    }
+
+    // covers: appendShortText -> TextField(isShort=true) printTo short-text branch
+    @Test
+    public void testAppendShortText_monthOfYear_printsShortName() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendShortText(DateTimeFieldType.monthOfYear());
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        printer.printTo(buf, 0L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("Jan", buf.toString());
+    }
+
+    // covers: appendFraction null fieldType check
+    @Test
+    public void testAppendFraction_nullFieldType_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendFraction(null, 1, 2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendFraction minDigits<0 branch
+    @Test
+    public void testAppendFraction_negativeMinDigits_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendFraction(DateTimeFieldType.secondOfDay(), -1, 3);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: appendFractionOfSecond -> Fraction.printTo non-zero fraction branch
+    @Test
+    public void testAppendFractionOfSecond_printsFractionDigits() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendFractionOfSecond(3, 3);
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        // 500L millis into the first second -> fraction 500/1000
+        printer.printTo(buf, 500L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("500", buf.toString());
+    }
+
+    // covers: appendMillisOfSecond -> appendDecimal with minDigits=3 (PaddedNumber)
+    @Test
+    public void testAppendMillisOfSecond_padsToMinDigits() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendMillisOfSecond(3);
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        printer.printTo(buf, 5L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("005", buf.toString());
+    }
+
+    // covers: appendPattern delegates to DateTimeFormat.appendPatternTo
+    @Test
+    public void testAppendPattern_year_printsFourDigitYear() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendPattern("yyyy");
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        printer.printTo(buf, 0L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("1970", buf.toString());
+    }
+
+    // covers: TimeZoneOffset.printTo displayOffset==0 && zeroOffsetPrintText!=null branch
+    @Test
+    public void testAppendTimeZoneOffset_zeroOffsetText_printsZeroText() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendTimeZoneOffset("Z", true, 1, 4);
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        printer.printTo(buf, 0L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("Z", buf.toString());
+    }
+
+    // covers: TimeZoneOffset.printTo negative branch, hours/minutes/seconds with separators, maxFields stop
+    @Test
+    public void testAppendTimeZoneOffset_negativeOffsetWithSeparators_printsAllFields() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendTimeZoneOffset(null, true, 3, 3);
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        int offsetMillis = -((1 * 3600 + 1 * 60 + 1) * 1000);
+        printer.printTo(buf, 0L, UTC_CHRONO, offsetMillis, UTC, ENGLISH);
+        assertEquals("-01:01:01", buf.toString());
+    }
+
+    // covers: TimeZoneOffset constructor minFields<=0 branch via appendTimeZoneOffset
+    @Test
+    public void testAppendTimeZoneOffset_invalidFields_throwsIllegalArgumentException() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        try {
+            builder.appendTimeZoneOffset(null, false, 0, 1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+
+
+
+
+    // covers: appendTimeZoneId -> TimeZoneId.printTo using displayZone.getID()
+    @Test
+    public void testAppendTimeZoneId_printsZoneId() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendTimeZoneId();
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        printer.printTo(buf, 0L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("UTC", buf.toString());
+    }
+
+    // covers: Composite constructor decompose(), printTo loop over multiple elements, estimatePrintedLength sum
+    @Test
+    public void testComposite_twoLiterals_printsConcatenatedAndSumsEstimates() throws Throwable {
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
+        builder.appendLiteral('A');
+        builder.appendLiteral('B');
+        DateTimePrinter printer = builder.toPrinter();
+        StringBuffer buf = new StringBuffer();
+        printer.printTo(buf, 0L, UTC_CHRONO, 0, UTC, ENGLISH);
+        assertEquals("AB", buf.toString());
+        assertEquals(2, printer.estimatePrintedLength());
+    }
+}

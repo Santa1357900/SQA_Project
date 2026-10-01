@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Mockito-28-ccszl08v/Mockito-28b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.mockito.internal.configuration.DefaultInjectionEngineClaudeTest::testInjectMocksOnFields_subtypeFieldProcessedBeforeSupertypeField_onlySubFieldInjected
+  - org.mockito.internal.configuration.DefaultInjectionEngineClaudeTest::testInjectMocksOnFields_bothSuperAndSubMocksAvailable_eachFieldGetsOwnMatch
+  - org.mockito.internal.configuration.DefaultInjectionEngineClaudeTest::testInjectMocksOnFields_twoFieldsSameType_exactlyOneReceivesMock
+[exit 0]

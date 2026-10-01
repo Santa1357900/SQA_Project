@@ -1,0 +1,19 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonCore-4-j2r7iv14/JacksonCore-4f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 13
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testAppendString_simpleInBoundsCopy
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testGetTextBuffer_multiSegment_returnsExactSizedArray
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testGetTextOffset_nonShared_returnsZero
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testContentsAsString_singleSegment_matchesAppendedContent
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testEmptyAndGetCurrentSegment_resetsStateAndReturnsNonNullArray
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testAppendCharArray_spanningMultipleSegments_contentCorrect
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testHasTextAsCharacters_segmentedContent_true
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testAppendString_spanningMultipleSegments_contentCorrect
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testExpandCurrentSegment_atMaxSegmentLen_growsByOne
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testSize_afterAppendChar_returnsOne
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testReleaseBuffers_withNullAllocator_resetsToEmpty
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testContentsAsString_multiSegment_matchesFullContent
+  - com.fasterxml.jackson.core.util.TextBufferClaudeTest::testGetTextBuffer_singleSegment_returnsRawArrayWithOffsetZero
+[exit 0]

@@ -1,0 +1,17 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Codec -v 10f -w /tmp/claude-Codec-10-pcmodf7f/fixed
+Checking out 41c68e9e to /tmp/claude-Codec-10-pcmodf7f/fixed............... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Run post-checkout hook..................................................... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 41c68e9e:2a8fd84f..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Codec-10f....................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Codec-10-pcmodf7f/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

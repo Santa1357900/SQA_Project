@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Claude",
+  "algorithm_version": "1.0.0",
+  "project": "Math",
+  "bug_id": 10,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 45,
+  "tests_validated": 44,
+  "fixed_failing_tests": 1,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 47,
+    "total_methods": 47,
+    "ratio": 1.0
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 473,
+    "lines_total": 553,
+    "line_ratio": 0.8553,
+    "branch_measure": "condition",
+    "branches_covered": 206,
+    "branches_total": 286,
+    "branch_ratio": 0.7203
+  },
+  "generation_seconds": 313.385,
+  "validation_seconds": 117.649,
+  "total_seconds": 431.034,
+  "configuration": {
+    "model": "claude-sonnet-5",
+    "effort": "high",
+    "thinking": "adaptive",
+    "max_tokens": 64000,
+    "prompt_system": "Claude/Prompt/system_prompt.txt",
+    "prompt_template": "Claude/Prompt/template_prompt.txt",
+    "usage": {
+      "input_tokens": 6,
+      "output_tokens": 37882,
+      "cache_creation_input_tokens": 59080,
+      "cache_read_input_tokens": 103935,
+      "total_cost_usd": 0.6600180000000001,
+      "duration_api_ms": 313385,
+      "num_turns": 3
+    }
+  },
+  "artifacts": {
+    "tests": "Tests/defects4j-round2/Claude/Math/Math-10/run1/",
+    "logs": "Results/defects4j-round2/Claude/Math/Math-10/run1/logs/",
+    "prompt": "Claude/Prompt/history/Math_10.txt"
+  },
+  "created_at": "2026-10-01T10:13:28.148803+00:00",
+  "generation_wall_seconds": 315.938
+}

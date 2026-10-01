@@ -1,0 +1,19 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Gson -v 7f -w /tmp/claude-Gson-7-z2nt_8xq/fixed
+Checking out 2b08c88c to /tmp/claude-Gson-7-z2nt_8xq/fixed................. OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 2b08c88c:a02f5757..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Gson-7f......................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Gson-7-z2nt_8xq/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

@@ -1,0 +1,298 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+
+public class TypedScopeCreatorClaudeTest {
+
+  private Result compileJs(String js) throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    return compiler.compile(externs, input, options);
+  }
+
+  private Compiler initializedCompiler() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.compile(SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode("test.js", ""), options);
+    return compiler;
+  }
+
+  // createInitialScope() must return a global scope (per its Javadoc)
+  @Test
+  public void testCreateInitialScope_returnsGlobalScope() throws Throwable {
+    Compiler compiler = initializedCompiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope s = creator.createInitialScope(IR.block());
+    assertTrue(s.isGlobal());
+  }
+
+  // createInitialScope() must declare Object and Object.prototype as function-typed vars
+  @Test
+  public void testCreateInitialScope_objectAndPrototypeDeclared() throws Throwable {
+    Compiler compiler = initializedCompiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope s = creator.createInitialScope(IR.block());
+    Var objectVar = s.getVar("Object");
+    assertNotNull(objectVar);
+    assertTrue(objectVar.getType().isFunctionType());
+    assertNotNull(s.getVar("Object.prototype"));
+  }
+
+  // createInitialScope() must declare Array and Array.prototype
+  @Test
+  public void testCreateInitialScope_arrayAndPrototypeDeclared() throws Throwable {
+    Compiler compiler = initializedCompiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope s = creator.createInitialScope(IR.block());
+    assertNotNull(s.getVar("Array"));
+    assertNotNull(s.getVar("Array.prototype"));
+  }
+
+  // createInitialScope() must declare Date as a function type
+  @Test
+  public void testCreateInitialScope_dateDeclared() throws Throwable {
+    Compiler compiler = initializedCompiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope s = creator.createInitialScope(IR.block());
+    Var dateVar = s.getVar("Date");
+    assertNotNull(dateVar);
+    assertTrue(dateVar.getType().isFunctionType());
+  }
+
+  // createInitialScope() must bind "undefined" to the native VOID_TYPE
+  @Test
+  public void testCreateInitialScope_undefinedHasVoidType() throws Throwable {
+    Compiler compiler = initializedCompiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope s = creator.createInitialScope(IR.block());
+    JSTypeRegistry registry = compiler.getTypeRegistry();
+    JSType voidType = registry.getNativeType(JSTypeNative.VOID_TYPE);
+    Var undefinedVar = s.getVar("undefined");
+    assertNotNull(undefinedVar);
+    assertEquals(voidType, undefinedVar.getType());
+  }
+
+  // createInitialScope() must bind "ActiveXObject" to the native NO_OBJECT_TYPE
+  @Test
+  public void testCreateInitialScope_activeXObjectHasNoObjectType() throws Throwable {
+    Compiler compiler = initializedCompiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope s = creator.createInitialScope(IR.block());
+    JSTypeRegistry registry = compiler.getTypeRegistry();
+    JSType noObjectType = registry.getNativeType(JSTypeNative.NO_OBJECT_TYPE);
+    Var axVar = s.getVar("ActiveXObject");
+    assertNotNull(axVar);
+    assertEquals(noObjectType, axVar.getType());
+  }
+
+  // createInitialScope() must not declare arbitrary unrelated names
+  @Test
+  public void testCreateInitialScope_unknownNameNotDeclared() throws Throwable {
+    Compiler compiler = initializedCompiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope s = creator.createInitialScope(IR.block());
+    assertNull(s.getVar("ThisNameDoesNotExist"));
+  }
+
+  // patchGlobalScope() requires a SCRIPT-typed root; a BLOCK root must throw
+  @Test
+  public void testPatchGlobalScope_nonScriptRoot_throwsIllegalStateException() throws Throwable {
+    Compiler compiler = initializedCompiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope globalScope = creator.createInitialScope(IR.block());
+    try {
+      creator.patchGlobalScope(globalScope, IR.block());
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // @enum initialized with an object literal is valid: no ENUM_INITIALIZER warning
+  @Test
+  public void testEnum_objectLiteralInitializer_noWarnings() throws Throwable {
+    Result result = compileJs("/** @enum {number} */ var Color = {RED: 1, GREEN: 2};");
+    assertTrue(result.success);
+    assertEquals(0, result.warnings.length);
+  }
+
+  // @enum initialized with a non-object, non-qualified-name value must warn (ENUM_INITIALIZER)
+  @Test
+  public void testEnum_nonObjectInitializer_warns() throws Throwable {
+    Result result = compileJs("/** @enum {number} */ var Color = 5;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Duplicate enum keys must trigger a warning (ENUM_DUP)
+  @Test
+  public void testEnum_duplicateKey_warns() throws Throwable {
+    Result result = compileJs("/** @enum {number} */ var Color = {A: 1, A: 2};");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Multiple var names in a single statement with JSDoc triggers MULTIPLE_VAR_DEF
+  @Test
+  public void testVar_multipleNamesWithJSDoc_warns() throws Throwable {
+    Result result = compileJs("/** @type {number} */ var a = 1, b = 2;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Multiple var names without JSDoc must not trigger MULTIPLE_VAR_DEF
+  @Test
+  public void testVar_multipleNamesWithoutJSDoc_noWarnings() throws Throwable {
+    Result result = compileJs("var a = 1, b = 2;");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // @constructor var without an initializer must warn (CTOR_INITIALIZER)
+  @Test
+  public void testConstructor_missingInitializer_warns() throws Throwable {
+    Result result = compileJs("/** @constructor */ var Foo;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // @constructor var with a function literal initializer must not warn
+  @Test
+  public void testConstructor_withInitializer_noWarnings() throws Throwable {
+    Result result = compileJs("/** @constructor */ var Foo = function() {};");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // @interface var without an initializer must warn (IFACE_INITIALIZER)
+  @Test
+  public void testInterface_missingInitializer_warns() throws Throwable {
+    Result result = compileJs("/** @interface */ var Foo;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // @interface var with a function literal initializer must not warn
+  @Test
+  public void testInterface_withInitializer_noWarnings() throws Throwable {
+    Result result = compileJs("/** @interface */ var Foo = function() {};");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // @lends referencing an undeclared variable must warn (UNKNOWN_LENDS)
+  @Test
+  public void testLends_undeclaredVariable_warns() throws Throwable {
+    Result result = compileJs("/** @lends {NotDeclared} */ ({x: 1});");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // @lends referencing a non-object typed variable must warn (LENDS_ON_NON_OBJECT)
+  @Test
+  public void testLends_onNonObjectType_warns() throws Throwable {
+    Result result = compileJs(
+        "/** @type {number} */ var num = 5;\n"
+        + "/** @lends {num} */ ({x: 1});");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // @lends referencing a declared object-typed variable must not warn
+  @Test
+  public void testLends_onObjectType_noWarnings() throws Throwable {
+    Result result = compileJs(
+        "var ns = {};\n"
+        + "/** @lends {ns} */ ({x: 1});");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // Plain function declaration must compile without warnings
+  @Test
+  public void testFunctionDeclaration_simple_noWarnings() throws Throwable {
+    Result result = compileJs("function foo() { return 1; }");
+    assertTrue(result.success);
+    assertEquals(0, result.warnings.length);
+  }
+
+  // Plain var declaration must compile without warnings
+  @Test
+  public void testVarDeclaration_simple_noWarnings() throws Throwable {
+    Result result = compileJs("var x = 1;");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // Fully-typed function with matching JSDoc params exercises the param loop (multiple iterations)
+  @Test
+  public void testFunction_withMultipleTypedParams_noWarnings() throws Throwable {
+    Result result = compileJs(
+        "/**\n"
+        + " * @param {number} a\n"
+        + " * @param {number} b\n"
+        + " * @return {number}\n"
+        + " */\n"
+        + "function add(a, b) { return a + b; }");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // Fully-typed function with zero parameters exercises the param loop (zero iterations)
+  @Test
+  public void testFunction_withNoParams_noWarnings() throws Throwable {
+    Result result = compileJs(
+        "/** @return {number} */\n"
+        + "function get() { return 1; }");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // catch parameter declaration (defineCatch) must not produce warnings
+  @Test
+  public void testCatchParameter_declaration_noWarnings() throws Throwable {
+    Result result = compileJs(
+        "function foo() {\n"
+        + "  try {\n"
+        + "    throw new Error('x');\n"
+        + "  } catch (e) {\n"
+        + "  }\n"
+        + "}");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // Reassigning prototype to an object literal with no declared supertype is allowed
+  @Test
+  public void testPrototypeReassignment_objectLiteral_noWarnings() throws Throwable {
+    Result result = compileJs(
+        "/** @constructor */\n"
+        + "function Foo() {}\n"
+        + "Foo.prototype = { bar: function() { return 1; } };");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // Declaring a stub property with an explicit type must not warn
+  @Test
+  public void testStubProperty_withType_noWarnings() throws Throwable {
+    Result result = compileJs(
+        "/** @constructor */\n"
+        + "function Foo() {}\n"
+        + "/** @type {number} */\n"
+        + "Foo.prototype.bar;");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // Declaring a stub property without any type resolves to unknown, no warnings
+  @Test
+  public void testStubProperty_withoutType_noWarnings() throws Throwable {
+    Result result = compileJs(
+        "/** @constructor */\n"
+        + "function Foo() {}\n"
+        + "Foo.prototype.bar;");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // Function calls exercise class-defining-call detection without affecting result
+  @Test
+  public void testFunctionCall_simple_noWarnings() throws Throwable {
+    Result result = compileJs("function foo() {} foo();");
+    assertEquals(0, result.warnings.length);
+  }
+}

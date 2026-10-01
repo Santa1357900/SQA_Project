@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-61-4ey7e5ku/Jsoup-61f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.jsoup.nodes.ElementClaudeTest::testFirstElementSibling_noParent_returnsSelf
+  - org.jsoup.nodes.ElementClaudeTest::testLastElementSibling_noParent_returnsSelf
+  - org.jsoup.nodes.ElementClaudeTest::testLastElementSibling_onlyChild_returnsSelf
+  - org.jsoup.nodes.ElementClaudeTest::testFirstElementSibling_onlyChild_returnsSelf
+[exit 0]

@@ -1,0 +1,242 @@
+package org.apache.commons.jxpath.ri.compiler;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class CoreOperationCompareClaudeTest {
+
+    private JXPathContext context;
+
+    private boolean evalBool(String xpath) {
+        Object result = context.getValue(xpath);
+        return ((Boolean) result).booleanValue();
+    }
+
+    @Before
+    public void setUp() throws Throwable {
+        Map<String, Object> root = new HashMap<String, Object>();
+        root.put("intVal", new Integer(5));
+        root.put("doubleVal", new Double(5.0));
+        root.put("negVal", new Integer(-5));
+        root.put("strVal", "5");
+        root.put("strAbc", "abc");
+        root.put("boolTrue", Boolean.TRUE);
+        root.put("boolFalse", Boolean.FALSE);
+
+        List<Integer> numbers = new ArrayList<Integer>();
+        numbers.add(new Integer(1));
+        numbers.add(new Integer(2));
+        numbers.add(new Integer(3));
+        root.put("numbers", numbers);
+
+        List<Integer> others = new ArrayList<Integer>();
+        others.add(new Integer(4));
+        others.add(new Integer(2));
+        root.put("others", others);
+
+        List<Integer> farNumbers = new ArrayList<Integer>();
+        farNumbers.add(new Integer(7));
+        farNumbers.add(new Integer(8));
+        farNumbers.add(new Integer(9));
+        root.put("farNumbers", farNumbers);
+
+        List<Integer> empty = new ArrayList<Integer>();
+        root.put("empty", empty);
+
+        context = JXPathContext.newContext(root);
+    }
+
+    // equal(Object,Object): l==r identity shortcut, same property compared to itself
+    @Test
+    public void testEqual_sameIntegerProperty_identityShortcut_true() throws Throwable {
+        assertTrue(evalBool("intVal = intVal"));
+    }
+
+    // Number branch: equal integer literal
+    @Test
+    public void testEqual_equalIntegerLiteral_true() throws Throwable {
+        assertTrue(evalBool("intVal = 5"));
+    }
+
+    // Number branch: unequal integer literal
+    @Test
+    public void testEqual_unequalIntegerLiteral_false() throws Throwable {
+        assertFalse(evalBool("intVal = 6"));
+    }
+
+    // Number branch: cross numeric type (Integer vs Double) equal via doubleValue
+    @Test
+    public void testEqual_crossNumericTypeEqual_true() throws Throwable {
+        assertTrue(evalBool("intVal = doubleVal"));
+    }
+
+    // Number branch: cross numeric type unequal
+    @Test
+    public void testEqual_crossNumericTypeUnequal_false() throws Throwable {
+        assertFalse(evalBool("intVal = 9.9"));
+    }
+
+    // Number branch: negative number literal equality
+    @Test
+    public void testEqual_negativeNumberEqual_true() throws Throwable {
+        assertTrue(evalBool("negVal = -5"));
+    }
+
+    // String branch: equal string literal
+    @Test
+    public void testEqual_stringEqualLiteral_true() throws Throwable {
+        assertTrue(evalBool("strAbc = 'abc'"));
+    }
+
+    // String branch: unequal string literal
+    @Test
+    public void testEqual_stringUnequalLiteral_false() throws Throwable {
+        assertFalse(evalBool("strAbc = 'xyz'"));
+    }
+
+    // Number branch precedence over String: numeric string coerced to number, equal
+    @Test
+    public void testEqual_numericStringCoercion_true() throws Throwable {
+        assertTrue(evalBool("strVal = 5"));
+    }
+
+    // Number branch precedence over String: non-numeric string -> NaN, never equal
+    @Test
+    public void testEqual_nonNumericStringVsNumber_false() throws Throwable {
+        assertFalse(evalBool("strAbc = 5"));
+    }
+
+    // Boolean branch precedence over Number: true compared to non-zero number
+    @Test
+    public void testEqual_booleanPrecedenceOverNumber_true() throws Throwable {
+        assertTrue(evalBool("boolTrue = 1"));
+    }
+
+    // Boolean branch precedence over Number: false compared to non-zero number
+    @Test
+    public void testEqual_booleanPrecedenceOverNumber_false() throws Throwable {
+        assertFalse(evalBool("boolFalse = 1"));
+    }
+
+    // Boolean branch: false equals zero after numeric-to-boolean coercion
+    @Test
+    public void testEqual_booleanVsZero_true() throws Throwable {
+        assertTrue(evalBool("boolFalse = 0"));
+    }
+
+    // Boolean branch precedence over String: non-empty string coerces to true
+    @Test
+    public void testEqual_booleanVsNonEmptyString_true() throws Throwable {
+        assertTrue(evalBool("boolTrue = 'abc'"));
+    }
+
+    // Boolean branch precedence over String: empty string coerces to false
+    @Test
+    public void testEqual_booleanVsEmptyString_true() throws Throwable {
+        assertTrue(evalBool("boolFalse = ''"));
+    }
+
+    // Boolean branch: true does not equal empty string (false)
+    @Test
+    public void testEqual_booleanVsEmptyString_false() throws Throwable {
+        assertFalse(evalBool("boolTrue = ''"));
+    }
+
+    // Boolean branch: two different boolean values are not equal
+    @Test
+    public void testEqual_booleanVsBoolean_false() throws Throwable {
+        assertFalse(evalBool("boolTrue = boolFalse"));
+    }
+
+    // equal(EvalContext,...): l is Iterator (collection), r is scalar, contains() finds match after multiple rounds
+    @Test
+    public void testEqual_collectionContainsValue_true() throws Throwable {
+        assertTrue(evalBool("numbers = 2"));
+    }
+
+    // contains(): collection does not contain value, full loop then false
+    @Test
+    public void testEqual_collectionContainsValue_notFound_false() throws Throwable {
+        assertFalse(evalBool("numbers = 99"));
+    }
+
+    // equal(EvalContext,...): r is Iterator, l is scalar, symmetric contains() branch
+    @Test
+    public void testEqual_valueInCollection_reverseOrder_true() throws Throwable {
+        assertTrue(evalBool("2 = numbers"));
+    }
+
+    // symmetric contains() branch, value not found
+    @Test
+    public void testEqual_valueInCollection_reverseOrder_false() throws Throwable {
+        assertFalse(evalBool("99 = numbers"));
+    }
+
+    // contains(): empty collection on left, loop runs 0 times, result false
+    @Test
+    public void testEqual_emptyCollectionVsScalar_false() throws Throwable {
+        assertFalse(evalBool("empty = 1"));
+    }
+
+    // contains(): empty collection on right, loop runs 0 times, result false
+    @Test
+    public void testEqual_scalarVsEmptyCollection_false() throws Throwable {
+        assertFalse(evalBool("1 = empty"));
+    }
+
+    // findMatch(): both sides Iterators with a common element across multiple rounds
+    @Test
+    public void testEqual_bothCollectionsIntersect_true() throws Throwable {
+        assertTrue(evalBool("numbers = others"));
+    }
+
+    // findMatch(): both sides Iterators, no common element
+    @Test
+    public void testEqual_bothCollectionsNoIntersect_false() throws Throwable {
+        assertFalse(evalBool("numbers = farNumbers"));
+    }
+
+    // findMatch(): both sides empty, outer loop runs 0 times
+    @Test
+    public void testEqual_bothCollectionsEmpty_false() throws Throwable {
+        assertFalse(evalBool("empty = empty"));
+    }
+
+    // findMatch(): left set empty, right iterator runs multiple rounds, always false
+    @Test
+    public void testEqual_emptyLeftNonEmptyRightCollections_false() throws Throwable {
+        assertFalse(evalBool("empty = numbers"));
+    }
+
+    // "!=" operator exercises equal() negated: unequal numbers -> true
+    @Test
+    public void testNotEqual_differentNumbers_true() throws Throwable {
+        assertTrue(evalBool("intVal != 6"));
+    }
+
+    // "!=" operator: equal numbers -> false
+    @Test
+    public void testNotEqual_sameNumbers_false() throws Throwable {
+        assertFalse(evalBool("intVal != 5"));
+    }
+
+    // "!=" operator on strings: different strings -> true
+    @Test
+    public void testNotEqual_differentStrings_true() throws Throwable {
+        assertTrue(evalBool("strAbc != 'xyz'"));
+    }
+
+    // "!=" operator: identical property compared to itself -> false
+    @Test
+    public void testNotEqual_sameIntegerProperty_false() throws Throwable {
+        assertFalse(evalBool("intVal != intVal"));
+    }
+}

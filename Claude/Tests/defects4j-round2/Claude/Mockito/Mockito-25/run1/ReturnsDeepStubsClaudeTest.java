@@ -1,0 +1,333 @@
+package org.mockito.internal.stubbing.defaultanswers;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.mockito.Mockito;
+import org.mockito.stubbing.Answer;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.internal.InternalMockHandler;
+import org.mockito.internal.stubbing.InvocationContainerImpl;
+import org.mockito.internal.stubbing.StubbedInvocationMatcher;
+import org.mockito.internal.util.MockUtil;
+import org.mockito.internal.util.reflection.GenericMetadataSupport;
+
+import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+public class ReturnsDeepStubsClaudeTest {
+
+    interface SimpleInterface {
+        SimpleInterface getSelf();
+        OtherInterface getOther();
+        OtherInterface getOtherById(int id);
+        String getString();
+        int getInt();
+        long getLong();
+        boolean getBoolean();
+        Integer getInteger();
+        Number getNumber();
+        FinalHolder getFinalHolder();
+        List<String> getList();
+        Map<String, String> getMap();
+        void doSomething();
+    }
+
+    interface OtherInterface {
+        String getName();
+    }
+
+    static final class FinalHolder {
+    }
+
+    interface GenericsNest<K extends Comparable<K>> extends Map<K, Set<Number>> {
+    }
+
+    // mockable interface return type: must yield a non-null mock
+    @Test
+    public void testAnswer_mockableInterfaceReturnType_returnsNonNullMock() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        assertNotNull(mock.getSelf());
+    }
+
+    // "will return previously created mock if the invocation matches" (no-arg method)
+    @Test
+    public void testAnswer_sameMethodCalledTwice_returnsSameMockInstance() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        SimpleInterface s1 = mock.getSelf();
+        SimpleInterface s2 = mock.getSelf();
+        assertSame(s1, s2);
+    }
+
+    // distinct methods must not share the cached deep stub mock
+    @Test
+    public void testAnswer_differentMethodsSameMock_returnDifferentMockInstances() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        SimpleInterface self = mock.getSelf();
+        OtherInterface other = mock.getOther();
+        assertNotSame(self, other);
+    }
+
+    // loop matches invocation with equal argument -> cached mock returned
+    @Test
+    public void testAnswer_methodWithArgs_sameArguments_returnsSameMockInstance() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        OtherInterface a = mock.getOtherById(5);
+        OtherInterface b = mock.getOtherById(5);
+        assertSame(a, b);
+    }
+
+    // loop does not match invocation with different argument -> new mock recorded
+    @Test
+    public void testAnswer_methodWithArgs_differentArguments_returnDifferentMockInstances() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        OtherInterface a = mock.getOtherById(1);
+        OtherInterface b = mock.getOtherById(2);
+        assertNotSame(a, b);
+    }
+
+    // loop over multiple stubbed invocations finds correct matching entry
+    @Test
+    public void testAnswer_methodWithArgs_threeCalls_cacheMatchesCorrectEntry() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        OtherInterface a1 = mock.getOtherById(1);
+        OtherInterface a2 = mock.getOtherById(2);
+        OtherInterface a1Again = mock.getOtherById(1);
+        assertSame(a1, a1Again);
+        assertNotSame(a1, a2);
+    }
+
+    // primitive int is not mockable -> delegate returns default primitive value 0
+    @Test
+    public void testAnswer_primitiveIntReturnType_returnsZero() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        assertEquals(0, mock.getInt());
+    }
+
+    // primitive long is not mockable -> delegate returns default primitive value 0L
+    @Test
+    public void testAnswer_primitiveLongReturnType_returnsZero() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        assertEquals(0L, mock.getLong());
+    }
+
+    // primitive boolean is not mockable -> delegate returns default value false
+    @Test
+    public void testAnswer_primitiveBooleanReturnType_returnsFalse() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        assertFalse(mock.getBoolean());
+    }
+
+    // Integer wrapper is final (not mockable) -> delegate returns boxed zero
+    @Test
+    public void testAnswer_wrapperIntegerReturnType_returnsZero() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        assertEquals(Integer.valueOf(0), mock.getInteger());
+    }
+
+    // String is final (not mockable) -> delegate returns empty string
+    @Test
+    public void testAnswer_stringReturnType_returnsEmptyString() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        assertEquals("", mock.getString());
+    }
+
+    // arbitrary final class is not mockable -> delegate returns null
+    @Test
+    public void testAnswer_finalUserClassReturnType_returnsNull() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        assertNull(mock.getFinalHolder());
+    }
+
+    // abstract (non-final) class is mockable -> deep stub mock instance returned
+    @Test
+    public void testAnswer_abstractClassReturnType_returnsMockInstance() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        Number number = mock.getNumber();
+        assertNotNull(number);
+    }
+
+    // abstract class deep stub is cached like any other mockable return type
+    @Test
+    public void testAnswer_abstractClassReturnType_sameInstanceOnRepeatedCall() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        Number n1 = mock.getNumber();
+        Number n2 = mock.getNumber();
+        assertSame(n1, n2);
+    }
+
+    // List interface is mockable -> deep stub mock (not plain empty list) is returned
+    @Test
+    public void testAnswer_listReturnType_returnsMockListInstance() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        List list = mock.getList();
+        assertNotNull(list);
+    }
+
+    // Map interface is mockable -> same deep stub mock cached across calls
+    @Test
+    public void testAnswer_mapReturnType_returnsSameMockInstanceOnRepeatedCall() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        Map m1 = mock.getMap();
+        Map m2 = mock.getMap();
+        assertSame(m1, m2);
+    }
+
+    // intermediate deep stub mock in a chained call is not null
+    @Test
+    public void testAnswer_chainedDeepStub_intermediateMockNotNull() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        OtherInterface other = mock.getOther();
+        assertNotNull(other);
+    }
+
+    // terminal non-mockable String value of a chained deep stub equals ""
+    @Test
+    public void testAnswer_chainedDeepStub_terminalStringValueIsEmpty() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        String name = mock.getOther().getName();
+        assertEquals("", name);
+    }
+
+    // javadoc example: nested generics resolved down to a mock Number instance
+    @Test
+    public void testAnswer_javadocNestedGenericsExample_resolvesToNonNullNumberMock() throws Throwable {
+        GenericsNest mock = Mockito.mock(GenericsNest.class, new ReturnsDeepStubs());
+        Map.Entry entry = (Map.Entry) mock.entrySet().iterator().next();
+        Set valueSet = (Set) entry.getValue();
+        Object number = valueSet.iterator().next();
+        assertNotNull(number);
+        assertTrue(number instanceof Number);
+    }
+
+    // void method return type is not mockable, invocation must not throw
+    @Test
+    public void testAnswer_voidMethodInvocation_doesNotThrow() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        mock.doSomething();
+        assertNotNull(mock);
+    }
+
+    // direct call of the public answer(InvocationOnMock) method using a captured invocation
+    @Test
+    public void testAnswer_calledDirectlyWithCapturedInvocation_returnsNonNullMock() throws Throwable {
+        final InvocationOnMock[] captured = new InvocationOnMock[1];
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new Answer<Object>() {
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                captured[0] = invocation;
+                return null;
+            }
+        });
+        mock.getOther();
+        Object result = new ReturnsDeepStubs().answer(captured[0]);
+        assertNotNull(result);
+    }
+
+    // no deep stub recorded yet on a fresh mock
+    @Test
+    public void testContainer_noStubbedInvocationsBeforeAnyCall() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        InternalMockHandler handler = new MockUtil().getMockHandler(mock);
+        InvocationContainerImpl container = (InvocationContainerImpl) handler.getInvocationContainer();
+        int count = 0;
+        for (StubbedInvocationMatcher s : container.getStubbedInvocations()) {
+            count++;
+        }
+        assertEquals(0, count);
+    }
+
+    // a single deep stub call registers exactly one stubbed invocation
+    @Test
+    public void testContainer_oneStubbedInvocationAfterSingleDeepStubCall() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        mock.getOther();
+        InternalMockHandler handler = new MockUtil().getMockHandler(mock);
+        InvocationContainerImpl container = (InvocationContainerImpl) handler.getInvocationContainer();
+        int count = 0;
+        for (StubbedInvocationMatcher s : container.getStubbedInvocations()) {
+            count++;
+        }
+        assertEquals(1, count);
+    }
+
+    // repeating the same call must reuse cached mock, not add a duplicate stub
+    @Test
+    public void testContainer_doesNotDuplicateStubbedInvocationOnRepeatedSameCall() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        mock.getOther();
+        mock.getOther();
+        mock.getOther();
+        InternalMockHandler handler = new MockUtil().getMockHandler(mock);
+        InvocationContainerImpl container = (InvocationContainerImpl) handler.getInvocationContainer();
+        int count = 0;
+        for (StubbedInvocationMatcher s : container.getStubbedInvocations()) {
+            count++;
+        }
+        assertEquals(1, count);
+    }
+
+    // two distinct deep stub calls register two separate stubbed invocations
+    @Test
+    public void testContainer_twoStubbedInvocationsAfterTwoDistinctCalls() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        mock.getOther();
+        mock.getSelf();
+        InternalMockHandler handler = new MockUtil().getMockHandler(mock);
+        InvocationContainerImpl container = (InvocationContainerImpl) handler.getInvocationContainer();
+        int count = 0;
+        for (StubbedInvocationMatcher s : container.getStubbedInvocations()) {
+            count++;
+        }
+        assertEquals(2, count);
+    }
+
+    // protected actualParameterizedType returns non-null metadata for a real mock
+    @Test
+    public void testActualParameterizedType_returnsNonNullMetadataForMock() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        ReturnsDeepStubs answer = new ReturnsDeepStubs();
+        GenericMetadataSupport metadata = answer.actualParameterizedType(mock);
+        assertNotNull(metadata);
+    }
+
+    // resolveGenericReturnType().rawType() matches declared interface return type
+    @Test
+    public void testActualParameterizedType_resolveGenericReturnType_rawTypeMatchesInterfaceReturnType() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        ReturnsDeepStubs answer = new ReturnsDeepStubs();
+        Method m = SimpleInterface.class.getMethod("getOther");
+        Class rawType = answer.actualParameterizedType(mock).resolveGenericReturnType(m).rawType();
+        assertEquals(OtherInterface.class, rawType);
+    }
+
+    // resolveGenericReturnType().rawType() matches declared primitive int return type
+    @Test
+    public void testActualParameterizedType_resolveGenericReturnType_rawTypeMatchesPrimitiveIntReturnType() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        ReturnsDeepStubs answer = new ReturnsDeepStubs();
+        Method m = SimpleInterface.class.getMethod("getInt");
+        Class rawType = answer.actualParameterizedType(mock).resolveGenericReturnType(m).rawType();
+        assertEquals(int.class, rawType);
+    }
+
+    // resolveGenericReturnType().rawType() matches declared String return type
+    @Test
+    public void testActualParameterizedType_resolveGenericReturnType_rawTypeMatchesStringReturnType() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        ReturnsDeepStubs answer = new ReturnsDeepStubs();
+        Method m = SimpleInterface.class.getMethod("getString");
+        Class rawType = answer.actualParameterizedType(mock).resolveGenericReturnType(m).rawType();
+        assertEquals(String.class, rawType);
+    }
+
+    // resolveGenericReturnType().rawType() matches declared List return type
+    @Test
+    public void testActualParameterizedType_resolveGenericReturnType_rawTypeMatchesListReturnType() throws Throwable {
+        SimpleInterface mock = Mockito.mock(SimpleInterface.class, new ReturnsDeepStubs());
+        ReturnsDeepStubs answer = new ReturnsDeepStubs();
+        Method m = SimpleInterface.class.getMethod("getList");
+        Class rawType = answer.actualParameterizedType(mock).resolveGenericReturnType(m).rawType();
+        assertEquals(List.class, rawType);
+    }
+}

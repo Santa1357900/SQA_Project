@@ -1,0 +1,351 @@
+package com.google.javascript.rhino.jstype;
+
+import java.util.HashSet;
+import java.util.Set;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class UnionTypeClaudeTest {
+
+  private UnionType newEmptyUnion() {
+    return new UnionType(null, new HashSet<JSType>());
+  }
+
+  private UnionType newUnionWith(JSType alt) {
+    Set<JSType> s = new HashSet<JSType>();
+    s.add(alt);
+    return new UnionType(null, s);
+  }
+
+  private UnionType newUnionWith(JSType a, JSType b) {
+    Set<JSType> s = new HashSet<JSType>();
+    s.add(a);
+    s.add(b);
+    return new UnionType(null, s);
+  }
+
+  // covers getAlternates(): returned iterable yields the exact alternate provided
+  @Test
+  public void testGetAlternates_singleAlternate_returnsIterableWithThatAlternate() throws Throwable {
+    JSType leaf = newEmptyUnion();
+    UnionType union = newUnionWith(leaf);
+    int count = 0;
+    for (JSType t : union.getAlternates()) {
+      assertSame(leaf, t);
+      count++;
+    }
+    assertEquals(1, count);
+  }
+
+  // covers forgiveUnknownNames(): loop over alternates, state unaffected
+  @Test
+  public void testForgiveUnknownNames_doesNotAlterAlternatesSize() throws Throwable {
+    UnionType union = newUnionWith(newEmptyUnion());
+    union.forgiveUnknownNames();
+    int count = 0;
+    for (JSType t : union.getAlternates()) {
+      count++;
+    }
+    assertEquals(1, count);
+  }
+
+  // covers matchesNumberContext(): zero-iteration loop returns false
+  @Test
+  public void testMatchesNumberContext_emptyAlternates_returnsFalse() throws Throwable {
+    assertFalse(newEmptyUnion().matchesNumberContext());
+  }
+
+  // covers matchesNumberContext(): multi-iteration loop, all false, returns false
+  @Test
+  public void testMatchesNumberContext_nonEmptyAlternates_returnsFalse() throws Throwable {
+    UnionType union = newUnionWith(newEmptyUnion(), newEmptyUnion());
+    assertFalse(union.matchesNumberContext());
+  }
+
+  // covers matchesStringContext(): zero-iteration loop returns false
+  @Test
+  public void testMatchesStringContext_emptyAlternates_returnsFalse() throws Throwable {
+    assertFalse(newEmptyUnion().matchesStringContext());
+  }
+
+  // covers matchesStringContext(): multi-iteration loop, all false, returns false
+  @Test
+  public void testMatchesStringContext_nonEmptyAlternates_returnsFalse() throws Throwable {
+    UnionType union = newUnionWith(newEmptyUnion(), newEmptyUnion());
+    assertFalse(union.matchesStringContext());
+  }
+
+  // covers matchesObjectContext(): zero-iteration loop returns false
+  @Test
+  public void testMatchesObjectContext_emptyAlternates_returnsFalse() throws Throwable {
+    assertFalse(newEmptyUnion().matchesObjectContext());
+  }
+
+  // covers matchesObjectContext(): multi-iteration loop, all false, returns false
+  @Test
+  public void testMatchesObjectContext_nonEmptyAlternates_returnsFalse() throws Throwable {
+    UnionType union = newUnionWith(newEmptyUnion(), newEmptyUnion());
+    assertFalse(union.matchesObjectContext());
+  }
+
+  // covers findPropertyType(): empty alternates leaves propertyType null
+  @Test
+  public void testFindPropertyType_emptyAlternates_returnsNull() throws Throwable {
+    assertNull(newEmptyUnion().findPropertyType("foo"));
+  }
+
+  // covers findPropertyType(): altPropertyType null for each alternate -> continue branch -> null result
+  @Test
+  public void testFindPropertyType_nonEmptyAlternates_returnsNull() throws Throwable {
+    UnionType union = newUnionWith(newEmptyUnion());
+    assertNull(union.findPropertyType("foo"));
+  }
+
+  // covers canAssignTo(): zero-iteration loop, vacuous true
+  @Test
+  public void testCanAssignTo_emptyAlternates_returnsTrue() throws Throwable {
+    assertTrue(newEmptyUnion().canAssignTo(newEmptyUnion()));
+  }
+
+  // covers canAssignTo(): non empty loop, isUnknownType false branch, canAssign accumulation true
+  @Test
+  public void testCanAssignTo_nonEmptyAlternates_returnsTrue() throws Throwable {
+    UnionType union = newUnionWith(newEmptyUnion());
+    assertTrue(union.canAssignTo(newEmptyUnion()));
+  }
+
+  // covers canBeCalled(): zero-iteration loop, vacuous true
+  @Test
+  public void testCanBeCalled_emptyAlternates_returnsTrue() throws Throwable {
+    assertTrue(newEmptyUnion().canBeCalled());
+  }
+
+  // covers canBeCalled(): non empty loop, no early false return, result true
+  @Test
+  public void testCanBeCalled_nonEmptyAlternates_returnsTrue() throws Throwable {
+    assertTrue(newUnionWith(newEmptyUnion()).canBeCalled());
+  }
+
+  // covers testForEquality(): zero-iteration loop returns null result
+  @Test
+  public void testTestForEquality_emptyAlternates_returnsNull() throws Throwable {
+    TernaryValue result = newEmptyUnion().testForEquality(newEmptyUnion());
+    assertNull(result);
+  }
+
+  // covers testForEquality(): multiple alternates, result stays null each iteration
+  @Test
+  public void testTestForEquality_multipleAlternates_returnsNull() throws Throwable {
+    UnionType union = newUnionWith(newEmptyUnion(), newUnionWith(newEmptyUnion()));
+    TernaryValue result = union.testForEquality(newEmptyUnion());
+    assertNull(result);
+  }
+
+  // covers isNullable(): zero-iteration loop returns false
+  @Test
+  public void testIsNullable_emptyAlternates_returnsFalse() throws Throwable {
+    assertFalse(newEmptyUnion().isNullable());
+  }
+
+  // covers isNullable(): non empty loop, no alternate nullable, returns false
+  @Test
+  public void testIsNullable_nonEmptyAlternates_returnsFalse() throws Throwable {
+    assertFalse(newUnionWith(newEmptyUnion()).isNullable());
+  }
+
+  // covers isUnknownType(): zero-iteration loop returns false
+  @Test
+  public void testIsUnknownType_emptyAlternates_returnsFalse() throws Throwable {
+    assertFalse(newEmptyUnion().isUnknownType());
+  }
+
+  // covers isUnknownType(): non empty loop, no alternate unknown, returns false
+  @Test
+  public void testIsUnknownType_nonEmptyAlternates_returnsFalse() throws Throwable {
+    assertFalse(newUnionWith(newEmptyUnion()).isUnknownType());
+  }
+
+  // covers getLeastSupertype(): that is subtype of an alternate -> early return this
+  @Test
+  public void testGetLeastSupertype_thatSubtypeOfAlternate_returnsThis() throws Throwable {
+    UnionType union = newUnionWith(newEmptyUnion());
+    JSType that = newEmptyUnion();
+    assertSame(union, union.getLeastSupertype(that));
+  }
+
+  // covers resolveInternal(): when an alternate resolves to a different instance,
+  // the union must store the resolved alternate, not the original one (regression for the known fix)
+  @Test
+  public void testResolveInternal_alternateResolvesToDifferentType_usesResolvedAlternate() throws Throwable {
+    JSType leaf = newEmptyUnion();
+    UnionType a = newUnionWith(leaf);
+    JSType b = newEmptyUnion();
+    a.setResolvedTypeInternal(b);
+    UnionType outer = newUnionWith(a);
+    outer.resolveInternal(null, null);
+    assertTrue(outer.contains(b));
+    assertFalse(outer.contains(a));
+  }
+
+  // covers equals(): same alternates content -> equal
+  @Test
+  public void testEquals_sameContent_returnsTrue() throws Throwable {
+    JSType leaf = newEmptyUnion();
+    UnionType u1 = newUnionWith(leaf);
+    UnionType u2 = newUnionWith(leaf);
+    assertTrue(u1.equals(u2));
+  }
+
+  // covers equals(): different alternates content -> not equal
+  @Test
+  public void testEquals_differentContent_returnsFalse() throws Throwable {
+    UnionType u1 = newUnionWith(newEmptyUnion());
+    UnionType u2 = newEmptyUnion();
+    assertFalse(u1.equals(u2));
+  }
+
+  // covers equals(): non UnionType object -> instanceof check fails -> false
+  @Test
+  public void testEquals_nonUnionType_returnsFalse() throws Throwable {
+    UnionType u1 = newEmptyUnion();
+    assertFalse(u1.equals("not a union"));
+  }
+
+  // covers hashCode(): equal unions produce equal hash codes
+  @Test
+  public void testHashCode_equalUnions_haveSameHashCode() throws Throwable {
+    JSType leaf = newEmptyUnion();
+    UnionType u1 = newUnionWith(leaf);
+    UnionType u2 = newUnionWith(leaf);
+    assertEquals(u1.hashCode(), u2.hashCode());
+  }
+
+  // covers isUnionType(): always true
+  @Test
+  public void testIsUnionType_alwaysTrue() throws Throwable {
+    assertTrue(newEmptyUnion().isUnionType());
+  }
+
+  // covers isObject(): zero-iteration loop, vacuous true
+  @Test
+  public void testIsObject_emptyAlternates_returnsTrue() throws Throwable {
+    assertTrue(newEmptyUnion().isObject());
+  }
+
+  // covers isObject(): non empty loop, no alternate fails isObject, returns true
+  @Test
+  public void testIsObject_nonEmptyAlternates_returnsTrue() throws Throwable {
+    assertTrue(newUnionWith(newEmptyUnion()).isObject());
+  }
+
+  // covers contains(): alternate present in the backing set
+  @Test
+  public void testContains_alternatePresent_returnsTrue() throws Throwable {
+    JSType leaf = newEmptyUnion();
+    UnionType union = newUnionWith(leaf);
+    assertTrue(union.contains(leaf));
+  }
+
+  // covers contains(): alternate not present and not equal to the member
+  @Test
+  public void testContains_alternateAbsent_returnsFalse() throws Throwable {
+    JSType leafA = newEmptyUnion();
+    JSType leafB = newUnionWith(newEmptyUnion());
+    UnionType union = newUnionWith(leafA);
+    assertFalse(union.contains(leafB));
+  }
+
+  // covers getRestrictedUnion(): zero-iteration loop, builder empty -> null
+  @Test
+  public void testGetRestrictedUnion_emptyAlternates_returnsNull() throws Throwable {
+    assertNull(newEmptyUnion().getRestrictedUnion(newEmptyUnion()));
+  }
+
+  // covers getRestrictedUnion(): all alternates are subtype of type -> never added -> null
+  @Test
+  public void testGetRestrictedUnion_allAlternatesSubtypeOfType_returnsNull() throws Throwable {
+    UnionType union = newUnionWith(newEmptyUnion(), newUnionWith(newEmptyUnion()));
+    assertNull(union.getRestrictedUnion(newEmptyUnion()));
+  }
+
+  // covers toString(): zero alternates -> "()"
+  @Test
+  public void testToString_emptyAlternates_returnsEmptyParens() throws Throwable {
+    assertEquals("()", newEmptyUnion().toString());
+  }
+
+  // covers toString(): single alternate -> no separator, nested toString wrapped
+  @Test
+  public void testToString_singleAlternate_wrapsNestedToString() throws Throwable {
+    UnionType union = newUnionWith(newEmptyUnion());
+    assertEquals("(())", union.toString());
+  }
+
+  // covers toString(): multiple alternates -> separator inserted between both parts
+  @Test
+  public void testToString_multipleAlternates_containsSeparatorAndBothParts() throws Throwable {
+    JSType e1 = newEmptyUnion();
+    JSType e2 = newUnionWith(newEmptyUnion());
+    UnionType union = newUnionWith(e1, e2);
+    String result = union.toString();
+    assertTrue(result.equals("(()|(()))") || result.equals("((())|())"));
+  }
+
+  // covers isSubtype(): zero-iteration loop, vacuously true
+  @Test
+  public void testIsSubtype_emptyAlternates_returnsTrue() throws Throwable {
+    assertTrue(newEmptyUnion().isSubtype(newEmptyUnion()));
+  }
+
+  // covers isSubtype(): non empty loop, every element is subtype, returns true
+  @Test
+  public void testIsSubtype_nonEmptyAlternates_returnsTrue() throws Throwable {
+    assertTrue(newUnionWith(newEmptyUnion()).isSubtype(newEmptyUnion()));
+  }
+
+  // covers getPossibleToBooleanOutcomes(): zero-iteration loop keeps literals EMPTY
+  @Test
+  public void testGetPossibleToBooleanOutcomes_emptyAlternates_returnsEmpty() throws Throwable {
+    assertEquals(BooleanLiteralSet.EMPTY, newEmptyUnion().getPossibleToBooleanOutcomes());
+  }
+
+  // covers getTypesUnderEquality(): zero-iteration loop, both builders empty -> null pair
+  @Test
+  public void testGetTypesUnderEquality_emptyAlternates_returnsNullPair() throws Throwable {
+    TypePair pair = newEmptyUnion().getTypesUnderEquality(newEmptyUnion());
+    assertNull(pair.typeA);
+    assertNull(pair.typeB);
+  }
+
+  // covers getTypesUnderInequality(): zero-iteration loop, both builders empty -> null pair
+  @Test
+  public void testGetTypesUnderInequality_emptyAlternates_returnsNullPair() throws Throwable {
+    TypePair pair = newEmptyUnion().getTypesUnderInequality(newEmptyUnion());
+    assertNull(pair.typeA);
+    assertNull(pair.typeB);
+  }
+
+  // covers getTypesUnderShallowInequality(): zero-iteration loop, both builders empty -> null pair
+  @Test
+  public void testGetTypesUnderShallowInequality_emptyAlternates_returnsNullPair() throws Throwable {
+    TypePair pair = newEmptyUnion().getTypesUnderShallowInequality(newEmptyUnion());
+    assertNull(pair.typeA);
+    assertNull(pair.typeB);
+  }
+
+  // covers getRestrictedTypeGivenToBooleanOutcome(): zero-iteration loop, builder empty -> null
+  @Test
+  public void testGetRestrictedTypeGivenToBooleanOutcome_emptyAlternates_returnsNull() throws Throwable {
+    assertNull(newEmptyUnion().getRestrictedTypeGivenToBooleanOutcome(true));
+  }
+
+  // covers meet(): single common alternate added once -> builder.build() returns that alternate (no nested unions)
+  @Test
+  public void testMeet_singleCommonAlternate_returnsThatAlternate() throws Throwable {
+    JSType leaf = newEmptyUnion();
+    UnionType union = newUnionWith(leaf);
+    JSType result = union.meet(leaf);
+    assertEquals(leaf, result);
+  }
+}

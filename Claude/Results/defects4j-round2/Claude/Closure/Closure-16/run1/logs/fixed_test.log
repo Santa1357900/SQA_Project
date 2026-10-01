@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-16-viceh28g/Closure-16f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - com.google.javascript.jscomp.ScopedAliasesClaudeTest::testProcess_namespaceShadowInNestedFunction_compilesSuccessfully
+  - com.google.javascript.jscomp.ScopedAliasesClaudeTest::testGetSourceRegion_followingStatementExists_endLineIsNextStatementLine
+  - com.google.javascript.jscomp.ScopedAliasesClaudeTest::testProcess_aliasUsedInNestedFunction_isInlined
+[exit 0]

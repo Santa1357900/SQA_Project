@@ -1,0 +1,25 @@
+{
+  "experiment": "defects4j-round2",
+  "algorithm": "Claude",
+  "algorithm_version": "1.0.0",
+  "backend": "cli",
+  "cli_command": "claude",
+  "cli_timeout_seconds": 3600,
+  "cli_config_dir": "C:\\claude-pipeline",
+  "_cli_config_dir_note": "โฟลเดอร์ CLAUDE_CONFIG_DIR ที่ล็อกอินบัญชีสำหรับรัน pipeline โดยเฉพาะ (ว่าง = ใช้ล็อกอินปกติของเครื่อง)",
+  "_backend_note": "cli = เรียกผ่าน Claude Code CLI (`claude -p`) ด้วยบัญชีที่ล็อกอินไว้ในเครื่อง, api = Anthropic SDK ด้วย ANTHROPIC_API_KEY ใน .env",
+  "model": "claude-sonnet-5",
+  "max_tokens": 64000,
+  "thinking": "adaptive",
+  "effort": "high",
+  "max_attempts": 5,
+  "generation_workers": 8,
+  "validation_workers": 12,
+  "_workers_note": "ตั้งตามเครื่องที่รัน: Ryzen 9 5950X 16C/32T, RAM 64GB (WSL 32 CPU / 31GB). generation_workers จำกัดด้วย API rate limit, validation_workers ~ 1 งานต่อ 1-1.5 core เพราะ Defects4J compile+coverage กิน CPU และ RAM (Closure ~2GB/งาน)",
+  "test_class_suffix": "ClaudeTest",
+  "prompt_files": {
+    "system": "Claude/Prompt/system_prompt.txt",
+    "user_template": "Claude/Prompt/template_prompt.txt",
+    "project_notes": "Claude/Configuration/project_notes.json"
+  }
+}

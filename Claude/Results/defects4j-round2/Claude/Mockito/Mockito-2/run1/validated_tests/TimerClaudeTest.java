@@ -1,0 +1,173 @@
+package org.mockito.internal.util;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TimerClaudeTest {
+
+    // duration=0: just-started timer must still count at least once (elapsed 0 <= 0)
+    @Test
+    public void testIsCounting_zeroDurationImmediatelyAfterStart_returnsTrue() throws Throwable {
+        Timer timer = new Timer(0);
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // duration=0: once any time passes, elapsed > 0 so it must stop counting
+    @Test
+    public void testIsCounting_zeroDurationAfterSleep_returnsFalse() throws Throwable {
+        Timer timer = new Timer(0);
+        timer.start();
+        Thread.sleep(30);
+        assertFalse(timer.isCounting());
+    }
+
+    // positive duration right after start: elapsed ~0 <= duration -> true
+    @Test
+    public void testIsCounting_positiveDurationImmediatelyAfterStart_returnsTrue() throws Throwable {
+        Timer timer = new Timer(1000);
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // positive duration, sleep less than duration: still within window -> true
+    @Test
+    public void testIsCounting_positiveDurationBeforeExpiry_returnsTrue() throws Throwable {
+        Timer timer = new Timer(1000);
+        timer.start();
+        Thread.sleep(50);
+        assertTrue(timer.isCounting());
+    }
+
+    // positive duration, sleep well past duration: elapsed > duration -> false
+    @Test
+    public void testIsCounting_positiveDurationAfterExpiry_returnsFalse() throws Throwable {
+        Timer timer = new Timer(5);
+        timer.start();
+        Thread.sleep(100);
+        assertFalse(timer.isCounting());
+    }
+
+
+
+
+
+    // boundary positive value 1: true immediately after start
+    @Test
+    public void testIsCounting_durationOneImmediatelyAfterStart_returnsTrue() throws Throwable {
+        Timer timer = new Timer(1);
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // extreme upper bound duration: elapsed is always far smaller -> true
+    @Test
+    public void testIsCounting_withLongMaxValueDuration_returnsTrue() throws Throwable {
+        Timer timer = new Timer(Long.MAX_VALUE);
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+
+
+    // very large but not extreme duration: still true right after start
+    @Test
+    public void testIsCounting_withLargeHalfMaxDuration_returnsTrue() throws Throwable {
+        Timer timer = new Timer(Long.MAX_VALUE / 2);
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // large duration, short sleep well within window: still true
+    @Test
+    public void testIsCounting_largeDurationAfterShortSleep_returnsTrue() throws Throwable {
+        Timer timer = new Timer(1000);
+        timer.start();
+        Thread.sleep(20);
+        assertTrue(timer.isCounting());
+    }
+
+    // after expiry, repeated calls to isCounting() are idempotent (no state mutated)
+    @Test
+    public void testIsCounting_afterExpiryCalledTwice_bothReturnFalse() throws Throwable {
+        Timer timer = new Timer(5);
+        timer.start();
+        Thread.sleep(100);
+        assertFalse(timer.isCounting());
+        assertFalse(timer.isCounting());
+    }
+
+    // within duration, repeated calls to isCounting() are idempotent and consistent
+    @Test
+    public void testIsCounting_withinDurationCalledTwice_bothReturnTrue() throws Throwable {
+        Timer timer = new Timer(1000);
+        timer.start();
+        Thread.sleep(10);
+        assertTrue(timer.isCounting());
+        assertTrue(timer.isCounting());
+    }
+
+    // two independent Timer instances must not affect each other's state
+    @Test
+    public void testIsCounting_twoIndependentTimers_doNotInterfere() throws Throwable {
+        Timer shortTimer = new Timer(5);
+        Timer longTimer = new Timer(1000);
+        shortTimer.start();
+        longTimer.start();
+        Thread.sleep(100);
+        assertFalse(shortTimer.isCounting());
+        assertTrue(longTimer.isCounting());
+    }
+
+    // start() called again after expiry must reset the countdown window
+    @Test
+    public void testStart_restartsExpiredTimer_returnsTrueAgain() throws Throwable {
+        Timer timer = new Timer(5);
+        timer.start();
+        Thread.sleep(100);
+        assertFalse(timer.isCounting());
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // calling start() twice in succession must not throw and timer keeps working
+    @Test
+    public void testStart_calledTwiceInSuccession_doesNotThrowAndStillCounts() throws Throwable {
+        Timer timer = new Timer(1000);
+        timer.start();
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // reset timer with a zero duration still counts once immediately after restart
+    @Test
+    public void testStart_restartExpiredTimerWithZeroDuration_returnsTrueImmediately() throws Throwable {
+        Timer timer = new Timer(0);
+        timer.start();
+        Thread.sleep(30);
+        assertFalse(timer.isCounting());
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // restart with positive duration after sleeping within the window keeps counting true
+    @Test
+    public void testStart_restartBeforeExpiryThenSleep_stillCountsTrue() throws Throwable {
+        Timer timer = new Timer(1000);
+        timer.start();
+        timer.start();
+        Thread.sleep(50);
+        assertTrue(timer.isCounting());
+    }
+
+    // zero duration, two immediate consecutive calls should both be true (no mutation from reads)
+    @Test
+    public void testIsCounting_zeroDurationCalledTwiceImmediately_bothReturnTrue() throws Throwable {
+        Timer timer = new Timer(0);
+        timer.start();
+        boolean first = timer.isCounting();
+        boolean second = timer.isCounting();
+        assertTrue(first);
+        assertTrue(second);
+    }
+}

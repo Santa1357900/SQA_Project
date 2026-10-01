@@ -1,0 +1,430 @@
+package org.apache.commons.jxpath.ri.model.dom;
+
+import static org.junit.Assert.*;
+
+import java.util.Locale;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.apache.commons.jxpath.JXPathException;
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.model.NodeIterator;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+import org.apache.commons.jxpath.ri.model.beans.NullPointer;
+import org.junit.Before;
+import org.junit.Test;
+import org.w3c.dom.Comment;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.ProcessingInstruction;
+import org.w3c.dom.Text;
+
+public class DOMNodePointerClaudeTest {
+
+    private Document document;
+
+    @Before
+    public void setUp() throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        document = builder.newDocument();
+    }
+
+    // constructor (Node, Locale): getImmediateNode/getBaseValue ต้องคืนโหนดเดิม
+    @Test
+    public void testConstructorNodeLocale_setsImmediateNodeAndBaseValue() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US);
+        assertSame(el, pointer.getImmediateNode());
+        assertSame(el, pointer.getBaseValue());
+    }
+
+    // constructor พร้อม id: asPath ต้องคืน id('...') และ escape single quote เป็น &apos;
+    @Test
+    public void testConstructorWithId_asPathEscapesQuotesAndReturnsIdExpression() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US, "a'b");
+        assertEquals("id('a&apos;b')", pointer.asPath());
+    }
+
+    // constructor (parent, node): getImmediateNode ต้องคืนโหนดลูกที่ส่งเข้าไปจริง
+    @Test
+    public void testConstructorWithParent_setsImmediateNode() throws Throwable {
+        Element parentEl = document.createElement("parent");
+        Element childEl = document.createElement("child");
+        parentEl.appendChild(childEl);
+        DOMNodePointer parentPtr = new DOMNodePointer(parentEl, Locale.US);
+        DOMNodePointer childPtr = new DOMNodePointer(parentPtr, childEl);
+        assertSame(childEl, childPtr.getImmediateNode());
+    }
+
+    // testNode(null) ต้องคืน true เสมอ ทั้ง instance method และ static method
+    @Test
+    public void testTestNode_nullTest_instanceAndStaticReturnTrue() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US);
+        assertTrue(pointer.testNode(null));
+        assertTrue(DOMNodePointer.testNode(el, null));
+    }
+
+    // getName สำหรับ element ที่ไม่มี prefix ต้องได้ localName ตรงตัวและ prefix เป็น null
+    @Test
+    public void testGetName_elementNoPrefix_returnsLocalNameOnly() throws Throwable {
+        Element el = document.createElement("foo");
+        QName qn = new DOMNodePointer(el, Locale.US).getName();
+        assertNull(qn.getPrefix());
+        assertEquals("foo", qn.getName());
+    }
+
+    // getName สำหรับ element ที่มี prefix (namespace-aware) ต้องได้ prefix และ localName ที่ถูกต้อง
+    @Test
+    public void testGetName_elementWithPrefix_returnsPrefixAndLocalName() throws Throwable {
+        Element el = document.createElementNS("urn:test", "ns:foo");
+        QName qn = new DOMNodePointer(el, Locale.US).getName();
+        assertEquals("ns", qn.getPrefix());
+        assertEquals("foo", qn.getName());
+    }
+
+    // getName สำหรับ processing instruction ต้องใช้ target เป็นชื่อ และไม่มี prefix
+    @Test
+    public void testGetName_processingInstruction_targetAsLocalName() throws Throwable {
+        ProcessingInstruction pi = document.createProcessingInstruction("target", "data");
+        QName qn = new DOMNodePointer(pi, Locale.US).getName();
+        assertNull(qn.getPrefix());
+        assertEquals("target", qn.getName());
+    }
+
+    // getName สำหรับ text node (ไม่ใช่ ELEMENT หรือ PI) ต้องได้ name และ prefix เป็น null ทั้งคู่
+    @Test
+    public void testGetName_textNode_returnsNullNameAndPrefix() throws Throwable {
+        Text t = document.createTextNode("hello");
+        QName qn = new DOMNodePointer(t, Locale.US).getName();
+        assertNull(qn.getPrefix());
+        assertNull(qn.getName());
+    }
+
+    // getNamespaceURI(): element ที่มี namespace ต้องคืน URI จริง ส่วนที่ไม่มี namespace ต้องคืน null
+    @Test
+    public void testGetNamespaceURI_elementWithAndWithoutNamespace() throws Throwable {
+        Element withNs = document.createElementNS("urn:test", "p:foo");
+        Element withoutNs = document.createElement("foo");
+        assertEquals("urn:test", new DOMNodePointer(withNs, Locale.US).getNamespaceURI());
+        assertNull(new DOMNodePointer(withoutNs, Locale.US).getNamespaceURI());
+    }
+
+    // childIterator ต้องคืน iterator ที่เดินไปยังลูกตัวแรกได้เมื่อไม่มี NodeTest กรอง
+    @Test
+    public void testChildIterator_iteratesSingleChild() throws Throwable {
+        Element el = document.createElement("root");
+        Text t = document.createTextNode("x");
+        el.appendChild(t);
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US);
+        NodeIterator it = pointer.childIterator(null, false, null);
+        assertTrue(it.setPosition(1));
+        NodePointer child = it.getNodePointer();
+        assertTrue(child instanceof DOMNodePointer);
+        assertSame(t, ((DOMNodePointer) child).getImmediateNode());
+    }
+
+    // attributeIterator ต้องหา attribute ตามชื่อที่ระบุและคืนค่า value ที่ถูกต้อง
+    @Test
+    public void testAttributeIterator_locatesAttributeByName() throws Throwable {
+        Element el = document.createElement("root");
+        el.setAttribute("attr1", "v1");
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US);
+        NodeIterator it = pointer.attributeIterator(new QName(null, "attr1"));
+        assertTrue(it.setPosition(1));
+        assertEquals("v1", it.getNodePointer().getValue());
+    }
+
+    // namespaceIterator และ namespacePointer ต้องคืนค่าที่ไม่เป็น null สำหรับ element node
+    @Test
+    public void testNamespaceIteratorAndNamespacePointer_returnNonNull() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US);
+        assertNotNull(pointer.namespaceIterator());
+        assertNotNull(pointer.namespacePointer("foo"));
+    }
+
+    // getNamespaceURI(prefix) สำหรับ prefix สงวน "xml" และ "xmlns" ต้องคืนค่าคงที่ตามสเปก
+    @Test
+    public void testGetNamespaceURI_reservedPrefixesXmlAndXmlns_returnConstants() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US);
+        assertEquals(DOMNodePointer.XML_NAMESPACE_URI, pointer.getNamespaceURI("xml"));
+        assertEquals(DOMNodePointer.XMLNS_NAMESPACE_URI, pointer.getNamespaceURI("xmlns"));
+    }
+
+    // getNamespaceURI(prefix) เมื่อไม่มีการประกาศ xmlns:prefix ที่ใดเลยต้องคืน null
+    @Test
+    public void testGetNamespaceURI_unknownPrefix_returnsNull() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US);
+        assertNull(pointer.getNamespaceURI("foo"));
+    }
+
+    // getNamespaceURI(prefix) ต้องไล่หา xmlns:prefix จากบรรพบุรุษได้ แม้ node ปัจจุบันไม่มี attribute นี้
+    @Test
+    public void testGetNamespaceURI_declaredOnAncestor_returnsURI() throws Throwable {
+        Element root = document.createElement("root");
+        root.setAttribute("xmlns:foo", "urn:abc");
+        Element child = document.createElement("child");
+        root.appendChild(child);
+        DOMNodePointer pointer = new DOMNodePointer(child, Locale.US);
+        assertEquals("urn:abc", pointer.getNamespaceURI("foo"));
+    }
+
+    // getDefaultNamespaceURI เมื่อไม่มี attribute xmlns เลยต้องคืน null
+    @Test
+    public void testGetDefaultNamespaceURI_noAttr_returnsNull() throws Throwable {
+        Element el = document.createElement("root");
+        assertNull(new DOMNodePointer(el, Locale.US).getDefaultNamespaceURI());
+    }
+
+    // getDefaultNamespaceURI เมื่อมี attribute xmlns ต้องคืนค่า URI ที่ประกาศไว้
+    @Test
+    public void testGetDefaultNamespaceURI_withXmlnsAttr_returnsURI() throws Throwable {
+        Element root = document.createElement("root");
+        root.setAttribute("xmlns", "urn:def");
+        assertEquals("urn:def", new DOMNodePointer(root, Locale.US).getDefaultNamespaceURI());
+    }
+
+    // getNamespaceURI("") ต้องมีพฤติกรรมเดียวกับ getDefaultNamespaceURI()
+    @Test
+    public void testGetNamespaceURI_emptyPrefix_delegatesToDefault() throws Throwable {
+        Element root = document.createElement("root");
+        root.setAttribute("xmlns", "urn:def");
+        DOMNodePointer pointer = new DOMNodePointer(root, Locale.US);
+        assertEquals("urn:def", pointer.getNamespaceURI(""));
+    }
+
+    // isActual, isCollection, getLength ต้องคืนค่าคงที่ตามสัญญาของ DOM node pointer เดี่ยว
+    @Test
+    public void testIsActualIsCollectionGetLength_fixedContractValues() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US);
+        assertTrue(pointer.isActual());
+        assertFalse(pointer.isCollection());
+        assertEquals(1, pointer.getLength());
+    }
+
+    // isLeaf ต้องเป็น true เมื่อไม่มีลูก และ false เมื่อมีลูกอย่างน้อยหนึ่งตัว
+    @Test
+    public void testIsLeaf_noChildrenTrue_withChildrenFalse() throws Throwable {
+        Element leaf = document.createElement("leaf");
+        Element parent = document.createElement("parent");
+        parent.appendChild(document.createTextNode("x"));
+        assertTrue(new DOMNodePointer(leaf, Locale.US).isLeaf());
+        assertFalse(new DOMNodePointer(parent, Locale.US).isLeaf());
+    }
+
+    // isLanguage ต้องเทียบ xml:lang แบบไม่สนตัวพิมพ์เล็กใหญ่ ว่าเริ่มต้นด้วย lang ที่ร้องขอ
+    @Test
+    public void testIsLanguage_matchingAndNonMatchingAttr() throws Throwable {
+        Element el = document.createElement("div");
+        el.setAttribute("xml:lang", "en-US");
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US);
+        assertTrue(pointer.isLanguage("en"));
+        assertFalse(pointer.isLanguage("fr"));
+    }
+
+    // isLanguage ต้องไล่หา xml:lang จากบรรพบุรุษเมื่อ node ปัจจุบันไม่มี attribute
+    @Test
+    public void testIsLanguage_inheritedFromAncestor() throws Throwable {
+        Element root = document.createElement("root");
+        root.setAttribute("xml:lang", "de");
+        Element child = document.createElement("child");
+        root.appendChild(child);
+        assertTrue(new DOMNodePointer(child, Locale.US).isLanguage("de"));
+    }
+
+    // setValue บน text node ด้วยค่าที่ไม่ว่างต้องตั้งค่า node value ใหม่
+    @Test
+    public void testSetValue_textNodeNonEmpty_setsNodeValue() throws Throwable {
+        Text t = document.createTextNode("old");
+        new DOMNodePointer(t, Locale.US).setValue("new");
+        assertEquals("new", t.getNodeValue());
+    }
+
+    // setValue บน text node ด้วยค่าว่างต้องลบ node ออกจาก parent ตามสัญญาของ setValue
+    @Test
+    public void testSetValue_textNodeEmpty_removesFromParent() throws Throwable {
+        Element parent = document.createElement("p");
+        Text t = document.createTextNode("old");
+        parent.appendChild(t);
+        new DOMNodePointer(t, Locale.US).setValue("");
+        assertEquals(0, parent.getChildNodes().getLength());
+    }
+
+    // setValue บน element ด้วย String ต้องแทนที่ลูกทั้งหมดด้วย text node ใหม่
+    @Test
+    public void testSetValue_elementWithStringValue_replacesChildrenWithTextNode() throws Throwable {
+        Element el = document.createElement("p");
+        el.appendChild(document.createTextNode("old"));
+        new DOMNodePointer(el, Locale.US).setValue("newtext");
+        assertEquals(1, el.getChildNodes().getLength());
+        assertEquals("newtext", el.getFirstChild().getNodeValue());
+    }
+
+    // setValue บน element ด้วย Element อื่นต้อง copy ลูกของ value node มาแทนที่ลูกเดิม
+    @Test
+    public void testSetValue_elementWithElementValue_copiesChildrenOfValueNode() throws Throwable {
+        Element el = document.createElement("p");
+        Element valueEl = document.createElement("wrapper");
+        valueEl.appendChild(document.createTextNode("inner"));
+        new DOMNodePointer(el, Locale.US).setValue(valueEl);
+        assertEquals(1, el.getChildNodes().getLength());
+        assertEquals("inner", el.getFirstChild().getNodeValue());
+    }
+
+    // createAttribute โดยไม่มี prefix ต้องสร้าง attribute ใหม่ด้วยค่าว่างและคืน pointer ที่ใช้งานได้
+    @Test
+    public void testCreateAttribute_noPrefix_createsEmptyAttributeAndReturnsPointer() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer pointer = new DOMNodePointer(el, Locale.US);
+        NodePointer attrPtr = pointer.createAttribute(null, new QName(null, "newattr"));
+        assertTrue(el.hasAttribute("newattr"));
+        assertEquals("", el.getAttribute("newattr"));
+        assertNotNull(attrPtr);
+    }
+
+    // remove() เมื่อมี parent ต้องลบ node ออกจาก parent จริง
+    @Test
+    public void testRemove_withParent_removesChild() throws Throwable {
+        Element parent = document.createElement("p");
+        Element child = document.createElement("c");
+        parent.appendChild(child);
+        new DOMNodePointer(child, Locale.US).remove();
+        assertEquals(0, parent.getChildNodes().getLength());
+    }
+
+    // remove() เมื่อไม่มี parent (document node) ต้อง throw JXPathException
+    @Test
+    public void testRemove_noParent_throwsJXPathException() throws Throwable {
+        try {
+            new DOMNodePointer(document, Locale.US).remove();
+            fail("expected JXPathException");
+        }
+        catch (JXPathException expected) {
+        }
+    }
+
+    // asPath สำหรับ document node (ไม่มี parent pointer) ต้องเป็นสตริงว่าง
+    @Test
+    public void testAsPath_documentNode_returnsEmptyString() throws Throwable {
+        assertEquals("", new DOMNodePointer(document, Locale.US).asPath());
+    }
+
+    // asPath สำหรับ text node ที่เป็นลูกของ DOMNodePointer ต้องมีส่วน /text()[ตำแหน่ง] ตาม sibling ที่เป็น text
+    @Test
+    public void testAsPath_textNodeUnderDomParent_returnsPositionIndex() throws Throwable {
+        Element root = document.createElement("root");
+        Text t1 = document.createTextNode("a");
+        Text t2 = document.createTextNode("b");
+        root.appendChild(t1);
+        root.appendChild(t2);
+        DOMNodePointer rootPtr = new DOMNodePointer(root, Locale.US);
+        DOMNodePointer t2Ptr = new DOMNodePointer(rootPtr, t2);
+        assertEquals("/text()[2]", t2Ptr.asPath());
+    }
+
+    // equals ต้อง true เมื่อเทียบกับตัวเอง และเมื่อเทียบกับ pointer อื่นที่ห่อ node เดียวกัน
+    @Test
+    public void testEquals_reflexiveAndSameNode_true() throws Throwable {
+        Element el = document.createElement("x");
+        DOMNodePointer p1 = new DOMNodePointer(el, Locale.US);
+        DOMNodePointer p2 = new DOMNodePointer(el, Locale.US);
+        assertTrue(p1.equals(p1));
+        assertTrue(p1.equals(p2));
+    }
+
+    // equals ต้อง false เมื่อ node ต่างกัน หรือเทียบกับ object คนละชนิด
+    @Test
+    public void testEquals_differentNodeOrType_false() throws Throwable {
+        Element el1 = document.createElement("x");
+        Element el2 = document.createElement("y");
+        DOMNodePointer p1 = new DOMNodePointer(el1, Locale.US);
+        assertFalse(p1.equals(new DOMNodePointer(el2, Locale.US)));
+        assertFalse(p1.equals("not a pointer"));
+    }
+
+    // hashCode ต้องเท่ากันสำหรับ pointer คนละ instance ที่ห่อ node เดียวกัน (identityHashCode ของ node)
+    @Test
+    public void testHashCode_consistentForSameNode() throws Throwable {
+        Element el = document.createElement("x");
+        DOMNodePointer p1 = new DOMNodePointer(el, Locale.US);
+        DOMNodePointer p2 = new DOMNodePointer(el, Locale.US);
+        assertEquals(p1.hashCode(), p2.hashCode());
+    }
+
+    // static getPrefix/getLocalName ต้อง fallback มาแยกจาก nodeName เมื่อไม่มี prefix/localName แบบ namespace-aware
+    @Test
+    public void testStaticGetPrefixAndGetLocalName_fallbackFromColonInName() throws Throwable {
+        Element el = document.createElement("ns:foo");
+        assertEquals("ns", DOMNodePointer.getPrefix(el));
+        assertEquals("foo", DOMNodePointer.getLocalName(el));
+    }
+
+    // static getLocalName เมื่อไม่มี ':' ในชื่อ ต้องคืนชื่อเต็มตรงตัว
+    @Test
+    public void testStaticGetLocalName_noColon_returnsFullName() throws Throwable {
+        Element el = document.createElement("plain");
+        assertEquals("plain", DOMNodePointer.getLocalName(el));
+    }
+
+    // getValue ของ comment/text/processing-instruction ต้อง trim ช่องว่างหัวท้ายเสมอ
+    @Test
+    public void testGetValue_commentTextAndProcessingInstruction_trimWhitespace() throws Throwable {
+        Comment c = document.createComment("  hello  ");
+        Text t = document.createTextNode(" world ");
+        ProcessingInstruction pi = document.createProcessingInstruction("tgt", "  data value  ");
+        assertEquals("hello", new DOMNodePointer(c, Locale.US).getValue());
+        assertEquals("world", new DOMNodePointer(t, Locale.US).getValue());
+        assertEquals("data value", new DOMNodePointer(pi, Locale.US).getValue());
+    }
+
+    // getValue ของ element ต้อง concat ข้อความของลูกทุกระดับแบบ recursive แล้ว trim ผลลัพธ์สุดท้าย
+    @Test
+    public void testGetValue_elementWithMixedChildren_concatenatesText() throws Throwable {
+        Element el = document.createElement("p");
+        el.appendChild(document.createTextNode("a"));
+        Element span = document.createElement("span");
+        span.appendChild(document.createTextNode("b"));
+        el.appendChild(span);
+        assertEquals("ab", new DOMNodePointer(el, Locale.US).getValue());
+    }
+
+    // getPointerByID ต้องคืน DOMNodePointer ชี้ไปที่ element ที่มี id ตรงกัน และคืน NullPointer เมื่อไม่พบ
+    @Test
+    public void testGetPointerByID_foundAndNotFound() throws Throwable {
+        Element root = document.createElement("root");
+        document.appendChild(root);
+        root.setAttribute("id", "e1");
+        root.setIdAttribute("id", true);
+        DOMNodePointer docPointer = new DOMNodePointer(document, Locale.US);
+        Pointer found = docPointer.getPointerByID(null, "e1");
+        assertTrue(found instanceof DOMNodePointer);
+        assertSame(root, ((DOMNodePointer) found).getImmediateNode());
+        Pointer notFound = docPointer.getPointerByID(null, "missing");
+        assertTrue(notFound instanceof NullPointer);
+    }
+
+    // compareChildNodePointers ต้องจัดลำดับตามตำแหน่งจริงในเอกสาร และคืน 0 เมื่อเทียบ node เดียวกัน
+    @Test
+    public void testCompareChildNodePointers_orderingAndEquality() throws Throwable {
+        Element root = document.createElement("root");
+        Text t1 = document.createTextNode("1");
+        Text t2 = document.createTextNode("2");
+        root.appendChild(t1);
+        root.appendChild(t2);
+        DOMNodePointer rootPtr = new DOMNodePointer(root, Locale.US);
+        DOMNodePointer p1 = new DOMNodePointer(rootPtr, t1);
+        DOMNodePointer p2 = new DOMNodePointer(rootPtr, t2);
+        assertEquals(-1, rootPtr.compareChildNodePointers(p1, p2));
+        assertEquals(1, rootPtr.compareChildNodePointers(p2, p1));
+        assertEquals(0, rootPtr.compareChildNodePointers(p1, p1));
+    }
+}

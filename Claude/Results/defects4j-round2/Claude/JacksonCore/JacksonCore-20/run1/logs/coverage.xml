@@ -1,0 +1,1146 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.7876447876447876" branch-rate="0.8556701030927835" lines-covered="204" lines-valid="259" branches-covered="83" branches-valid="97" complexity="1.761467889908257" version="2.0.3" timestamp="1790804088767">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="com.fasterxml.jackson.core" line-rate="0.7876447876447876" branch-rate="0.8556701030927835" complexity="1.761467889908257">
+			<classes>
+				<class name="com.fasterxml.jackson.core.JsonGenerator" filename="com/fasterxml/jackson/core/JsonGenerator.java" line-rate="0.7669491525423728" branch-rate="0.8461538461538461" complexity="1.761467889908257">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="267" hits="53" branch="false"/>
+							</lines>
+						</method>
+						<method name="_reportError" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1888" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="_reportUnsupportedOperation" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="1894" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="_throwInternal" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="1891" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="_verifyOffsets" signature="(III)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1902" hits="9" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1903" hits="8" branch="false"/>
+								<line number="1905" hits="4" branch="false"/>
+								<line number="1907" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="_writeSimpleObject" signature="(Ljava/lang/Object;)V" line-rate="0.9795918367346939" branch-rate="0.96875">
+							<lines>
+								<line number="1922" hits="16" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1923" hits="1" branch="false"/>
+								<line number="1924" hits="1" branch="false"/>
+								<line number="1926" hits="15" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1927" hits="1" branch="false"/>
+								<line number="1928" hits="1" branch="false"/>
+								<line number="1930" hits="14" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1931" hits="10" branch="false"/>
+								<line number="1932" hits="10" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1933" hits="1" branch="false"/>
+								<line number="1934" hits="1" branch="false"/>
+								<line number="1935" hits="9" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1936" hits="1" branch="false"/>
+								<line number="1937" hits="1" branch="false"/>
+								<line number="1938" hits="8" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1939" hits="1" branch="false"/>
+								<line number="1940" hits="1" branch="false"/>
+								<line number="1941" hits="7" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1942" hits="1" branch="false"/>
+								<line number="1943" hits="1" branch="false"/>
+								<line number="1944" hits="6" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1945" hits="1" branch="false"/>
+								<line number="1946" hits="1" branch="false"/>
+								<line number="1947" hits="5" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1948" hits="1" branch="false"/>
+								<line number="1949" hits="1" branch="false"/>
+								<line number="1950" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1951" hits="1" branch="false"/>
+								<line number="1952" hits="1" branch="false"/>
+								<line number="1953" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1954" hits="1" branch="false"/>
+								<line number="1955" hits="1" branch="false"/>
+								<line number="1958" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1959" hits="1" branch="false"/>
+								<line number="1960" hits="1" branch="false"/>
+								<line number="1961" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="1962" hits="1" branch="false"/>
+								<line number="1963" hits="1" branch="false"/>
+								<line number="1965" hits="0" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1966" hits="1" branch="false"/>
+								<line number="1967" hits="1" branch="false"/>
+								<line number="1968" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1969" hits="1" branch="false"/>
+								<line number="1970" hits="1" branch="false"/>
+								<line number="1971" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1972" hits="1" branch="false"/>
+								<line number="1973" hits="1" branch="false"/>
+								<line number="1975" hits="1" branch="false"/>
+								<line number="1976" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="canOmitFields" signature="()Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="699" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="canUseSchema" signature="(Lcom/fasterxml/jackson/core/FormatSchema;)Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="645" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="canWriteBinaryNatively" signature="()Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="689" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="canWriteFormattedNumbers" signature="()Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="713" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="canWriteObjectId" signature="()Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="661" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="canWriteTypeId" signature="()Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="677" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="configure" signature="(Lcom/fasterxml/jackson/core/JsonGenerator$Feature;Z)Lcom/fasterxml/jackson/core/JsonGenerator;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="320" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="321" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="copyCurrentEvent" signature="(Lcom/fasterxml/jackson/core/JsonParser;)V" line-rate="0.7954545454545454" branch-rate="0.7692307692307693">
+							<lines>
+								<line number="1685" hits="27" branch="false"/>
+								<line number="1687" hits="27" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1688" hits="1" branch="false"/>
+								<line number="1690" hits="26" branch="true" condition-coverage="78% (11/14)">
+									<conditions>
+										<condition number="0" type="switch" coverage="78%"/>
+									</conditions>
+								</line>
+								<line number="1692" hits="0" branch="false"/>
+								<line number="1693" hits="0" branch="false"/>
+								<line number="1695" hits="2" branch="false"/>
+								<line number="1696" hits="2" branch="false"/>
+								<line number="1698" hits="2" branch="false"/>
+								<line number="1699" hits="2" branch="false"/>
+								<line number="1701" hits="1" branch="false"/>
+								<line number="1702" hits="1" branch="false"/>
+								<line number="1704" hits="1" branch="false"/>
+								<line number="1705" hits="1" branch="false"/>
+								<line number="1707" hits="7" branch="false"/>
+								<line number="1708" hits="7" branch="false"/>
+								<line number="1710" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="1711" hits="1" branch="false"/>
+								<line number="1713" hits="0" branch="false"/>
+								<line number="1715" hits="0" branch="false"/>
+								<line number="1718" hits="7" branch="false"/>
+								<line number="1719" hits="7" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1720" hits="5" branch="false"/>
+								<line number="1721" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1722" hits="1" branch="false"/>
+								<line number="1724" hits="1" branch="false"/>
+								<line number="1726" hits="1" branch="false"/>
+								<line number="1730" hits="2" branch="false"/>
+								<line number="1731" hits="2" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="1732" hits="0" branch="false"/>
+								<line number="1733" hits="2" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="1734" hits="0" branch="false"/>
+								<line number="1736" hits="2" branch="false"/>
+								<line number="1738" hits="2" branch="false"/>
+								<line number="1741" hits="1" branch="false"/>
+								<line number="1742" hits="1" branch="false"/>
+								<line number="1744" hits="1" branch="false"/>
+								<line number="1745" hits="1" branch="false"/>
+								<line number="1747" hits="1" branch="false"/>
+								<line number="1748" hits="1" branch="false"/>
+								<line number="1750" hits="0" branch="false"/>
+								<line number="1751" hits="0" branch="false"/>
+								<line number="1753" hits="0" branch="false"/>
+								<line number="1755" hits="26" branch="false"/>
+							</lines>
+						</method>
+						<method name="copyCurrentStructure" signature="(Lcom/fasterxml/jackson/core/JsonParser;)V" line-rate="0.9523809523809523" branch-rate="0.9090909090909091">
+							<lines>
+								<line number="1789" hits="7" branch="false"/>
+								<line number="1790" hits="7" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="1791" hits="0" branch="false"/>
+								<line number="1794" hits="7" branch="false"/>
+								<line number="1795" hits="7" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1796" hits="2" branch="false"/>
+								<line number="1797" hits="2" branch="false"/>
+								<line number="1798" hits="2" branch="false"/>
+								<line number="1801" hits="7" branch="true" condition-coverage="100% (3/3)">
+									<conditions>
+										<condition number="0" type="switch" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1803" hits="2" branch="false"/>
+								<line number="1804" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1805" hits="2" branch="false"/>
+								<line number="1807" hits="2" branch="false"/>
+								<line number="1808" hits="2" branch="false"/>
+								<line number="1810" hits="1" branch="false"/>
+								<line number="1811" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="1812" hits="3" branch="false"/>
+								<line number="1814" hits="1" branch="false"/>
+								<line number="1815" hits="1" branch="false"/>
+								<line number="1817" hits="4" branch="false"/>
+								<line number="1819" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="getCharacterEscapes" signature="()Lcom/fasterxml/jackson/core/io/CharacterEscapes;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="526" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getCurrentValue" signature="()Ljava/lang/Object;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="612" hits="0" branch="false"/>
+								<line number="613" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="getFormatFeatures" signature="()I" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="385" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getHighestEscapedChar" signature="()I" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="520" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getOutputBuffered" signature="()I" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="595" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getOutputTarget" signature="()Ljava/lang/Object;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="573" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getPrettyPrinter" signature="()Lcom/fasterxml/jackson/core/PrettyPrinter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="473" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="getSchema" signature="()Lcom/fasterxml/jackson/core/FormatSchema;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="442" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="overrideFormatFeatures" signature="(II)Lcom/fasterxml/jackson/core/JsonGenerator;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="402" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="overrideStdFeatures" signature="(II)Lcom/fasterxml/jackson/core/JsonGenerator;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="371" hits="0" branch="false"/>
+								<line number="372" hits="0" branch="false"/>
+								<line number="373" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="setCharacterEscapes" signature="(Lcom/fasterxml/jackson/core/io/CharacterEscapes;)Lcom/fasterxml/jackson/core/JsonGenerator;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="534" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="setCurrentValue" signature="(Ljava/lang/Object;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="625" hits="0" branch="false"/>
+								<line number="626" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="627" hits="0" branch="false"/>
+								<line number="629" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="setHighestNonEscapedChar" signature="(I)Lcom/fasterxml/jackson/core/JsonGenerator;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="506" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="setPrettyPrinter" signature="(Lcom/fasterxml/jackson/core/PrettyPrinter;)Lcom/fasterxml/jackson/core/JsonGenerator;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="462" hits="2" branch="false"/>
+								<line number="463" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="setRootValueSeparator" signature="(Lcom/fasterxml/jackson/core/SerializableString;)Lcom/fasterxml/jackson/core/JsonGenerator;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="548" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="setSchema" signature="(Lcom/fasterxml/jackson/core/FormatSchema;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="432" hits="0" branch="false"/>
+								<line number="433" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeArray" signature="([DII)V" line-rate="0.875" branch-rate="0.75">
+							<lines>
+								<line number="909" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="910" hits="0" branch="false"/>
+								<line number="912" hits="1" branch="false"/>
+								<line number="913" hits="1" branch="false"/>
+								<line number="914" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="915" hits="2" branch="false"/>
+								<line number="917" hits="1" branch="false"/>
+								<line number="918" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeArray" signature="([III)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="861" hits="5" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="862" hits="1" branch="false"/>
+								<line number="864" hits="4" branch="false"/>
+								<line number="865" hits="2" branch="false"/>
+								<line number="866" hits="8" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="867" hits="6" branch="false"/>
+								<line number="869" hits="2" branch="false"/>
+								<line number="870" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeArray" signature="([JII)V" line-rate="0.875" branch-rate="0.75">
+							<lines>
+								<line number="885" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="886" hits="0" branch="false"/>
+								<line number="888" hits="1" branch="false"/>
+								<line number="889" hits="1" branch="false"/>
+								<line number="890" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="891" hits="3" branch="false"/>
+								<line number="893" hits="1" branch="false"/>
+								<line number="894" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeArrayFieldStart" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1620" hits="1" branch="false"/>
+								<line number="1621" hits="1" branch="false"/>
+								<line number="1622" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeBinary" signature="(Ljava/io/InputStream;I)I" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="1162" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeBinary" signature="([B)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1144" hits="3" branch="false"/>
+								<line number="1145" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeBinary" signature="([BII)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1134" hits="1" branch="false"/>
+								<line number="1135" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeBinaryField" signature="(Ljava/lang/String;[B)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1602" hits="1" branch="false"/>
+								<line number="1603" hits="1" branch="false"/>
+								<line number="1604" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeBooleanField" signature="(Ljava/lang/String;Z)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1509" hits="1" branch="false"/>
+								<line number="1510" hits="1" branch="false"/>
+								<line number="1511" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeEmbeddedObject" signature="(Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1330" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeFieldId" signature="(J)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="839" hits="1" branch="false"/>
+								<line number="840" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeNullField" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1522" hits="1" branch="false"/>
+								<line number="1523" hits="1" branch="false"/>
+								<line number="1524" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeNumber" signature="(S)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="1206" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeNumberField" signature="(Ljava/lang/String;D)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1561" hits="1" branch="false"/>
+								<line number="1562" hits="1" branch="false"/>
+								<line number="1563" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeNumberField" signature="(Ljava/lang/String;F)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1574" hits="1" branch="false"/>
+								<line number="1575" hits="1" branch="false"/>
+								<line number="1576" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeNumberField" signature="(Ljava/lang/String;I)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1535" hits="3" branch="false"/>
+								<line number="1536" hits="3" branch="false"/>
+								<line number="1537" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeNumberField" signature="(Ljava/lang/String;J)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1548" hits="1" branch="false"/>
+								<line number="1549" hits="1" branch="false"/>
+								<line number="1550" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeNumberField" signature="(Ljava/lang/String;Ljava/math/BigDecimal;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1588" hits="1" branch="false"/>
+								<line number="1589" hits="1" branch="false"/>
+								<line number="1590" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeObjectField" signature="(Ljava/lang/String;Ljava/lang/Object;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="1652" hits="0" branch="false"/>
+								<line number="1653" hits="0" branch="false"/>
+								<line number="1654" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeObjectFieldStart" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1638" hits="1" branch="false"/>
+								<line number="1639" hits="1" branch="false"/>
+								<line number="1640" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeObjectId" signature="(Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1352" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeObjectRef" signature="(Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1365" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeOmittedField" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1665" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeRaw" signature="(Lcom/fasterxml/jackson/core/SerializableString;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="1076" hits="0" branch="false"/>
+								<line number="1077" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeRawValue" signature="(Lcom/fasterxml/jackson/core/SerializableString;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="1101" hits="0" branch="false"/>
+								<line number="1102" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeStartArray" signature="(I)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="748" hits="1" branch="false"/>
+								<line number="749" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeStartObject" signature="(Ljava/lang/Object;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="788" hits="0" branch="false"/>
+								<line number="789" hits="0" branch="false"/>
+								<line number="790" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeStringField" signature="(Ljava/lang/String;Ljava/lang/String;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="1496" hits="0" branch="false"/>
+								<line number="1497" hits="0" branch="false"/>
+								<line number="1498" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeTypeId" signature="(Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1380" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="267" hits="53" branch="false"/>
+						<line number="320" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="321" hits="2" branch="false"/>
+						<line number="371" hits="0" branch="false"/>
+						<line number="372" hits="0" branch="false"/>
+						<line number="373" hits="0" branch="false"/>
+						<line number="385" hits="0" branch="false"/>
+						<line number="402" hits="1" branch="false"/>
+						<line number="432" hits="0" branch="false"/>
+						<line number="433" hits="0" branch="false"/>
+						<line number="442" hits="1" branch="false"/>
+						<line number="462" hits="2" branch="false"/>
+						<line number="463" hits="2" branch="false"/>
+						<line number="473" hits="4" branch="false"/>
+						<line number="506" hits="0" branch="false"/>
+						<line number="520" hits="0" branch="false"/>
+						<line number="526" hits="0" branch="false"/>
+						<line number="534" hits="0" branch="false"/>
+						<line number="548" hits="0" branch="false"/>
+						<line number="573" hits="0" branch="false"/>
+						<line number="595" hits="0" branch="false"/>
+						<line number="612" hits="0" branch="false"/>
+						<line number="613" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="625" hits="0" branch="false"/>
+						<line number="626" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="627" hits="0" branch="false"/>
+						<line number="629" hits="0" branch="false"/>
+						<line number="645" hits="0" branch="false"/>
+						<line number="661" hits="0" branch="false"/>
+						<line number="677" hits="0" branch="false"/>
+						<line number="689" hits="0" branch="false"/>
+						<line number="699" hits="0" branch="false"/>
+						<line number="713" hits="0" branch="false"/>
+						<line number="748" hits="1" branch="false"/>
+						<line number="749" hits="1" branch="false"/>
+						<line number="788" hits="0" branch="false"/>
+						<line number="789" hits="0" branch="false"/>
+						<line number="790" hits="0" branch="false"/>
+						<line number="839" hits="1" branch="false"/>
+						<line number="840" hits="1" branch="false"/>
+						<line number="861" hits="5" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="862" hits="1" branch="false"/>
+						<line number="864" hits="4" branch="false"/>
+						<line number="865" hits="2" branch="false"/>
+						<line number="866" hits="8" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="867" hits="6" branch="false"/>
+						<line number="869" hits="2" branch="false"/>
+						<line number="870" hits="2" branch="false"/>
+						<line number="885" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="886" hits="0" branch="false"/>
+						<line number="888" hits="1" branch="false"/>
+						<line number="889" hits="1" branch="false"/>
+						<line number="890" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="891" hits="3" branch="false"/>
+						<line number="893" hits="1" branch="false"/>
+						<line number="894" hits="1" branch="false"/>
+						<line number="909" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="910" hits="0" branch="false"/>
+						<line number="912" hits="1" branch="false"/>
+						<line number="913" hits="1" branch="false"/>
+						<line number="914" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="915" hits="2" branch="false"/>
+						<line number="917" hits="1" branch="false"/>
+						<line number="918" hits="1" branch="false"/>
+						<line number="1076" hits="0" branch="false"/>
+						<line number="1077" hits="0" branch="false"/>
+						<line number="1101" hits="0" branch="false"/>
+						<line number="1102" hits="0" branch="false"/>
+						<line number="1134" hits="1" branch="false"/>
+						<line number="1135" hits="1" branch="false"/>
+						<line number="1144" hits="3" branch="false"/>
+						<line number="1145" hits="3" branch="false"/>
+						<line number="1162" hits="0" branch="false"/>
+						<line number="1206" hits="0" branch="false"/>
+						<line number="1330" hits="2" branch="false"/>
+						<line number="1352" hits="1" branch="false"/>
+						<line number="1365" hits="1" branch="false"/>
+						<line number="1380" hits="1" branch="false"/>
+						<line number="1496" hits="0" branch="false"/>
+						<line number="1497" hits="0" branch="false"/>
+						<line number="1498" hits="0" branch="false"/>
+						<line number="1509" hits="1" branch="false"/>
+						<line number="1510" hits="1" branch="false"/>
+						<line number="1511" hits="1" branch="false"/>
+						<line number="1522" hits="1" branch="false"/>
+						<line number="1523" hits="1" branch="false"/>
+						<line number="1524" hits="1" branch="false"/>
+						<line number="1535" hits="3" branch="false"/>
+						<line number="1536" hits="3" branch="false"/>
+						<line number="1537" hits="3" branch="false"/>
+						<line number="1548" hits="1" branch="false"/>
+						<line number="1549" hits="1" branch="false"/>
+						<line number="1550" hits="1" branch="false"/>
+						<line number="1561" hits="1" branch="false"/>
+						<line number="1562" hits="1" branch="false"/>
+						<line number="1563" hits="1" branch="false"/>
+						<line number="1574" hits="1" branch="false"/>
+						<line number="1575" hits="1" branch="false"/>
+						<line number="1576" hits="1" branch="false"/>
+						<line number="1588" hits="1" branch="false"/>
+						<line number="1589" hits="1" branch="false"/>
+						<line number="1590" hits="1" branch="false"/>
+						<line number="1602" hits="1" branch="false"/>
+						<line number="1603" hits="1" branch="false"/>
+						<line number="1604" hits="1" branch="false"/>
+						<line number="1620" hits="1" branch="false"/>
+						<line number="1621" hits="1" branch="false"/>
+						<line number="1622" hits="1" branch="false"/>
+						<line number="1638" hits="1" branch="false"/>
+						<line number="1639" hits="1" branch="false"/>
+						<line number="1640" hits="1" branch="false"/>
+						<line number="1652" hits="0" branch="false"/>
+						<line number="1653" hits="0" branch="false"/>
+						<line number="1654" hits="0" branch="false"/>
+						<line number="1665" hits="1" branch="false"/>
+						<line number="1685" hits="27" branch="false"/>
+						<line number="1687" hits="27" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1688" hits="1" branch="false"/>
+						<line number="1690" hits="26" branch="true" condition-coverage="78% (11/14)">
+							<conditions>
+								<condition number="0" type="switch" coverage="78%"/>
+							</conditions>
+						</line>
+						<line number="1692" hits="0" branch="false"/>
+						<line number="1693" hits="0" branch="false"/>
+						<line number="1695" hits="2" branch="false"/>
+						<line number="1696" hits="2" branch="false"/>
+						<line number="1698" hits="2" branch="false"/>
+						<line number="1699" hits="2" branch="false"/>
+						<line number="1701" hits="1" branch="false"/>
+						<line number="1702" hits="1" branch="false"/>
+						<line number="1704" hits="1" branch="false"/>
+						<line number="1705" hits="1" branch="false"/>
+						<line number="1707" hits="7" branch="false"/>
+						<line number="1708" hits="7" branch="false"/>
+						<line number="1710" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="1711" hits="1" branch="false"/>
+						<line number="1713" hits="0" branch="false"/>
+						<line number="1715" hits="0" branch="false"/>
+						<line number="1718" hits="7" branch="false"/>
+						<line number="1719" hits="7" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1720" hits="5" branch="false"/>
+						<line number="1721" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1722" hits="1" branch="false"/>
+						<line number="1724" hits="1" branch="false"/>
+						<line number="1726" hits="1" branch="false"/>
+						<line number="1730" hits="2" branch="false"/>
+						<line number="1731" hits="2" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="1732" hits="0" branch="false"/>
+						<line number="1733" hits="2" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="1734" hits="0" branch="false"/>
+						<line number="1736" hits="2" branch="false"/>
+						<line number="1738" hits="2" branch="false"/>
+						<line number="1741" hits="1" branch="false"/>
+						<line number="1742" hits="1" branch="false"/>
+						<line number="1744" hits="1" branch="false"/>
+						<line number="1745" hits="1" branch="false"/>
+						<line number="1747" hits="1" branch="false"/>
+						<line number="1748" hits="1" branch="false"/>
+						<line number="1750" hits="0" branch="false"/>
+						<line number="1751" hits="0" branch="false"/>
+						<line number="1753" hits="0" branch="false"/>
+						<line number="1755" hits="26" branch="false"/>
+						<line number="1789" hits="7" branch="false"/>
+						<line number="1790" hits="7" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="1791" hits="0" branch="false"/>
+						<line number="1794" hits="7" branch="false"/>
+						<line number="1795" hits="7" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1796" hits="2" branch="false"/>
+						<line number="1797" hits="2" branch="false"/>
+						<line number="1798" hits="2" branch="false"/>
+						<line number="1801" hits="7" branch="true" condition-coverage="100% (3/3)">
+							<conditions>
+								<condition number="0" type="switch" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1803" hits="2" branch="false"/>
+						<line number="1804" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1805" hits="2" branch="false"/>
+						<line number="1807" hits="2" branch="false"/>
+						<line number="1808" hits="2" branch="false"/>
+						<line number="1810" hits="1" branch="false"/>
+						<line number="1811" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1812" hits="3" branch="false"/>
+						<line number="1814" hits="1" branch="false"/>
+						<line number="1815" hits="1" branch="false"/>
+						<line number="1817" hits="4" branch="false"/>
+						<line number="1819" hits="7" branch="false"/>
+						<line number="1888" hits="1" branch="false"/>
+						<line number="1891" hits="0" branch="false"/>
+						<line number="1894" hits="0" branch="false"/>
+						<line number="1902" hits="9" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1903" hits="8" branch="false"/>
+						<line number="1905" hits="4" branch="false"/>
+						<line number="1907" hits="5" branch="false"/>
+						<line number="1922" hits="16" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1923" hits="1" branch="false"/>
+						<line number="1924" hits="1" branch="false"/>
+						<line number="1926" hits="15" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1927" hits="1" branch="false"/>
+						<line number="1928" hits="1" branch="false"/>
+						<line number="1930" hits="14" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1931" hits="10" branch="false"/>
+						<line number="1932" hits="10" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1933" hits="1" branch="false"/>
+						<line number="1934" hits="1" branch="false"/>
+						<line number="1935" hits="9" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1936" hits="1" branch="false"/>
+						<line number="1937" hits="1" branch="false"/>
+						<line number="1938" hits="8" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1939" hits="1" branch="false"/>
+						<line number="1940" hits="1" branch="false"/>
+						<line number="1941" hits="7" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1942" hits="1" branch="false"/>
+						<line number="1943" hits="1" branch="false"/>
+						<line number="1944" hits="6" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1945" hits="1" branch="false"/>
+						<line number="1946" hits="1" branch="false"/>
+						<line number="1947" hits="5" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1948" hits="1" branch="false"/>
+						<line number="1949" hits="1" branch="false"/>
+						<line number="1950" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1951" hits="1" branch="false"/>
+						<line number="1952" hits="1" branch="false"/>
+						<line number="1953" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1954" hits="1" branch="false"/>
+						<line number="1955" hits="1" branch="false"/>
+						<line number="1958" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1959" hits="1" branch="false"/>
+						<line number="1960" hits="1" branch="false"/>
+						<line number="1961" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="1962" hits="1" branch="false"/>
+						<line number="1963" hits="1" branch="false"/>
+						<line number="1965" hits="0" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1966" hits="1" branch="false"/>
+						<line number="1967" hits="1" branch="false"/>
+						<line number="1968" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1969" hits="1" branch="false"/>
+						<line number="1970" hits="1" branch="false"/>
+						<line number="1971" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="1972" hits="1" branch="false"/>
+						<line number="1973" hits="1" branch="false"/>
+						<line number="1975" hits="1" branch="false"/>
+						<line number="1976" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.fasterxml.jackson.core.JsonGenerator$Feature" filename="com/fasterxml/jackson/core/JsonGenerator.java" line-rate="1.0" branch-rate="1.0" complexity="1.761467889908257">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="33" hits="4" branch="false"/>
+								<line number="49" hits="1" branch="false"/>
+								<line number="61" hits="1" branch="false"/>
+								<line number="74" hits="1" branch="false"/>
+								<line number="87" hits="1" branch="false"/>
+								<line number="101" hits="1" branch="false"/>
+								<line number="118" hits="1" branch="false"/>
+								<line number="130" hits="1" branch="false"/>
+								<line number="147" hits="1" branch="false"/>
+								<line number="190" hits="1" branch="false"/>
+								<line number="212" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/String;IZ)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="233" hits="10" branch="false"/>
+								<line number="234" hits="10" branch="false"/>
+								<line number="235" hits="10" branch="false"/>
+								<line number="236" hits="10" branch="false"/>
+							</lines>
+						</method>
+						<method name="collectDefaults" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="224" hits="2" branch="false"/>
+								<line number="225" hits="22" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="226" hits="20" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="227" hits="10" branch="false"/>
+								<line number="230" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="enabledByDefault" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="238" hits="20" branch="false"/>
+							</lines>
+						</method>
+						<method name="enabledIn" signature="(I)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="243" hits="223" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="getMask" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="245" hits="143" branch="false"/>
+							</lines>
+						</method>
+						<method name="valueOf" signature="(Ljava/lang/String;)Lcom/fasterxml/jackson/core/JsonGenerator$Feature;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="values" signature="()[Lcom/fasterxml/jackson/core/JsonGenerator$Feature;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="33" hits="4" branch="false"/>
+						<line number="49" hits="1" branch="false"/>
+						<line number="61" hits="1" branch="false"/>
+						<line number="74" hits="1" branch="false"/>
+						<line number="87" hits="1" branch="false"/>
+						<line number="101" hits="1" branch="false"/>
+						<line number="118" hits="1" branch="false"/>
+						<line number="130" hits="1" branch="false"/>
+						<line number="147" hits="1" branch="false"/>
+						<line number="190" hits="1" branch="false"/>
+						<line number="212" hits="1" branch="false"/>
+						<line number="224" hits="2" branch="false"/>
+						<line number="225" hits="22" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="226" hits="20" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="227" hits="10" branch="false"/>
+						<line number="230" hits="2" branch="false"/>
+						<line number="233" hits="10" branch="false"/>
+						<line number="234" hits="10" branch="false"/>
+						<line number="235" hits="10" branch="false"/>
+						<line number="236" hits="10" branch="false"/>
+						<line number="238" hits="20" branch="false"/>
+						<line number="243" hits="223" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="245" hits="143" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Chart-12-0rmek0o3/Chart-12b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.jfree.chart.plot.MultiplePiePlotClaudeTest::testConstructorWithDataset_registersAsChangeListener
+[exit 0]

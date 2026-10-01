@@ -1,0 +1,433 @@
+package org.apache.commons.cli;
+
+import java.util.Properties;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class DefaultParserClaudeTest
+{
+    private DefaultParser parser;
+
+    @Before
+    public void setUp() throws Throwable
+    {
+        parser = new DefaultParser();
+    }
+
+    // covers: handleShortAndLongOption -> t.length()==1 branch, option found
+    @Test
+    public void testParse_shortBooleanOption_hasOptionTrue() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "flag a"));
+        CommandLine cmd = parser.parse(options, new String[] { "-a" });
+        assertTrue(cmd.hasOption("a"));
+    }
+
+    // covers: currentOption accepts arg, separate token consumed as value
+    @Test
+    public void testParse_shortOptionSeparateArgToken_valueCaptured() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("a", true, "arg a"));
+        CommandLine cmd = parser.parse(options, new String[] { "-a", "value" });
+        assertEquals("value", cmd.getOptionValue("a"));
+    }
+
+    // covers: handleConcatenatedOptions trailing value attached (-avalue)
+    @Test
+    public void testParse_shortOptionAttachedValue_valueCaptured() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("a", true, "arg a"));
+        CommandLine cmd = parser.parse(options, new String[] { "-avalue" });
+        assertEquals("value", cmd.getOptionValue("a"));
+    }
+
+    // covers: handleShortAndLongOption equal-sign branch, opt.length()==1
+    @Test
+    public void testParse_shortOptionEqualsValue_valueCaptured() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("a", true, "arg a"));
+        CommandLine cmd = parser.parse(options, new String[] { "-a=value" });
+        assertEquals("value", cmd.getOptionValue("a"));
+    }
+
+    // covers: handleLongOptionWithoutEqual, next token consumed as value
+    @Test
+    public void testParse_longOptionSeparateArgToken_valueCaptured() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option(null, "alpha", true, "long arg"));
+        CommandLine cmd = parser.parse(options, new String[] { "--alpha", "value" });
+        assertEquals("value", cmd.getOptionValue("alpha"));
+    }
+
+    // covers: handleLongOptionWithEqual, option accepts arg
+    @Test
+    public void testParse_longOptionEqualsValue_valueCaptured() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option(null, "alpha", true, "long arg"));
+        CommandLine cmd = parser.parse(options, new String[] { "--alpha=value" });
+        assertEquals("value", cmd.getOptionValue("alpha"));
+    }
+
+    // covers: handleLongOptionWithoutEqual, unambiguous prefix match
+    @Test
+    public void testParse_longOptionUnambiguousPrefix_optionSet() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option(null, "alpha", false, "long flag"));
+        CommandLine cmd = parser.parse(options, new String[] { "--al" });
+        assertTrue(cmd.hasOption("alpha"));
+    }
+
+    // covers: handleLongOptionWithoutEqual, matchingOpts.size() > 1
+    @Test
+    public void testParse_longOptionAmbiguousPrefix_throwsAmbiguousOptionException() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option(null, "alphaOne", false, "d1"));
+        options.addOption(new Option(null, "alphaTwo", false, "d2"));
+        try
+        {
+            parser.parse(options, new String[] { "--alpha" });
+            fail("expected AmbiguousOptionException");
+        }
+        catch (AmbiguousOptionException expected)
+        {
+        }
+    }
+
+    // covers: handleLongOptionWithoutEqual, matchingOpts empty -> unknown token
+    @Test
+    public void testParse_unrecognizedLongOption_throwsUnrecognizedOptionException() throws Throwable {
+        Options options = new Options();
+        try
+        {
+            parser.parse(options, new String[] { "--zzz" });
+            fail("expected UnrecognizedOptionException");
+        }
+        catch (UnrecognizedOptionException expected)
+        {
+        }
+    }
+
+    // covers: handleShortAndLongOption t.length()==1, hasShortOption false -> unknown token
+    @Test
+    public void testParse_unrecognizedShortOption_throwsUnrecognizedOptionException() throws Throwable {
+        Options options = new Options();
+        try
+        {
+            parser.parse(options, new String[] { "-z" });
+            fail("expected UnrecognizedOptionException");
+        }
+        catch (UnrecognizedOptionException expected)
+        {
+        }
+    }
+
+    // covers: handleUnknownToken with stopAtNonOption true; skipParsing stays true afterwards
+    @Test
+    public void testParse_stopAtNonOptionTrue_unknownTokenAndRestAddedAsArgs() throws Throwable {
+        Options options = new Options();
+        CommandLine cmd = parser.parse(options, new String[] { "-z", "rest1", "rest2" }, true);
+        String[] args = cmd.getArgs();
+        assertEquals(3, args.length);
+        assertEquals("-z", args[0]);
+        assertEquals("rest2", args[2]);
+    }
+
+    // covers: "--".equals(token) branch stops option parsing
+    @Test
+    public void testParse_doubleHyphenToken_stopsOptionParsing() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "flag a"));
+        CommandLine cmd = parser.parse(options, new String[] { "-a", "--", "-b", "plain" });
+        assertTrue(cmd.hasOption("a"));
+        String[] args = cmd.getArgs();
+        assertEquals(2, args.length);
+        assertEquals("-b", args[0]);
+        assertEquals("plain", args[1]);
+    }
+
+    // covers: checkRequiredOptions throws when expectedOpts not empty
+    @Test
+    public void testParse_missingRequiredOption_throwsMissingOptionException() throws Throwable {
+        Options options = new Options();
+        Option r = new Option("r", false, "required flag");
+        r.setRequired(true);
+        options.addOption(r);
+        try
+        {
+            parser.parse(options, new String[0]);
+            fail("expected MissingOptionException");
+        }
+        catch (MissingOptionException expected)
+        {
+        }
+    }
+
+    // covers: updateRequiredOptions removes required option from expectedOpts
+    @Test
+    public void testParse_requiredOptionPresent_noExceptionThrown() throws Throwable {
+        Options options = new Options();
+        Option r = new Option("r", false, "required flag");
+        r.setRequired(true);
+        options.addOption(r);
+        CommandLine cmd = parser.parse(options, new String[] { "-r" });
+        assertTrue(cmd.hasOption("r"));
+    }
+
+    // covers: checkRequiredArgs throws MissingArgumentException when last option lacks value
+    @Test
+    public void testParse_missingArgumentAtEnd_throwsMissingArgumentException() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("f", true, "needs arg"));
+        try
+        {
+            parser.parse(options, new String[] { "-f" });
+            fail("expected MissingArgumentException");
+        }
+        catch (MissingArgumentException expected)
+        {
+        }
+    }
+
+    // covers: updateRequiredOptions -> group.setSelected throws AlreadySelectedException
+    @Test
+    public void testParse_optionGroupConflict_throwsAlreadySelectedException() throws Throwable {
+        Options options = new Options();
+        OptionGroup group = new OptionGroup();
+        group.addOption(new Option("x", false, "x flag"));
+        group.addOption(new Option("y", false, "y flag"));
+        options.addOptionGroup(group);
+        try
+        {
+            parser.parse(options, new String[] { "-x", "-y" });
+            fail("expected AlreadySelectedException");
+        }
+        catch (AlreadySelectedException expected)
+        {
+        }
+    }
+
+    // covers: isArgument -> isOption false for negative-number-like token, becomes value
+    @Test
+    public void testParse_negativeNumberArgument_valueCaptured() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("n", true, "num arg"));
+        CommandLine cmd = parser.parse(options, new String[] { "-n", "-1" });
+        assertEquals("-1", cmd.getOptionValue("n"));
+    }
+
+    // covers: handleConcatenatedOptions loop, all boolean chars matched
+    @Test
+    public void testParse_concatenatedShortBooleanOptions_allSet() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "a"));
+        options.addOption(new Option("b", false, "b"));
+        options.addOption(new Option("c", false, "c"));
+        CommandLine cmd = parser.parse(options, new String[] { "-abc" });
+        assertTrue(cmd.hasOption("a"));
+        assertTrue(cmd.hasOption("b"));
+        assertTrue(cmd.hasOption("c"));
+    }
+
+    // covers: handleConcatenatedOptions, trailing chars used as value of arg-accepting option
+    @Test
+    public void testParse_concatenatedShortOptionsWithTrailingArgValue_valueCaptured() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "a"));
+        options.addOption(new Option("b", true, "b"));
+        CommandLine cmd = parser.parse(options, new String[] { "-abvalue" });
+        assertTrue(cmd.hasOption("a"));
+        assertEquals("value", cmd.getOptionValue("b"));
+    }
+
+    // covers: handleConcatenatedOptions unknown char, stopAtNonOption false -> throws
+    @Test
+    public void testParse_concatenatedUnknownOptionCharacter_throwsUnrecognizedOptionException() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "a"));
+        try
+        {
+            parser.parse(options, new String[] { "-abx" });
+            fail("expected UnrecognizedOptionException");
+        }
+        catch (UnrecognizedOptionException expected)
+        {
+        }
+    }
+
+    // covers: handleConcatenatedOptions unknown char with stopAtNonOption true, trailing added as arg
+    @Test
+    public void testParse_concatenatedUnknownWithStopAtNonOption_addsTrailingAsArg() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("a", false, "a"));
+        CommandLine cmd = parser.parse(options, new String[] { "-abx", "extra" }, true);
+        assertTrue(cmd.hasOption("a"));
+        String[] args = cmd.getArgs();
+        assertEquals(2, args.length);
+        assertEquals("bx", args[0]);
+        assertEquals("extra", args[1]);
+    }
+
+    // covers: isJavaProperty branch in equal-sign path (-Dkey=value)
+    @Test
+    public void testParse_javaPropertyStyleOption_valuesCaptured() throws Throwable {
+        Options options = new Options();
+        Option d = new Option("D", true, "define");
+        d.setArgs(2);
+        options.addOption(d);
+        CommandLine cmd = parser.parse(options, new String[] { "-Dkey=value" });
+        String[] values = cmd.getOptionValues("D");
+        assertEquals(2, values.length);
+        assertEquals("key", values[0]);
+        assertEquals("value", values[1]);
+    }
+
+    // covers: getLongPrefix match, trailing chars used as value (-Xmx512m)
+    @Test
+    public void testParse_longPrefixAttachedValue_valueCaptured() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("X", "Xmx", true, "memory"));
+        CommandLine cmd = parser.parse(options, new String[] { "-Xmx512m" });
+        assertEquals("512m", cmd.getOptionValue("X"));
+    }
+
+    // covers: handleProperties, arg option value applied from properties
+    @Test
+    public void testParse_propertiesDefaultValueForArgOption_valueApplied() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("p", true, "prop arg"));
+        Properties props = new Properties();
+        props.setProperty("p", "hello");
+        CommandLine cmd = parser.parse(options, new String[0], props);
+        assertEquals("hello", cmd.getOptionValue("p"));
+    }
+
+    // covers: handleProperties boolean option, "true" value adds option
+    @Test
+    public void testParse_propertiesBooleanTrueValue_optionAdded() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("b", false, "flag"));
+        Properties props = new Properties();
+        props.setProperty("b", "true");
+        CommandLine cmd = parser.parse(options, new String[0], props);
+        assertTrue(cmd.hasOption("b"));
+    }
+
+    // covers: handleProperties boolean option, non yes/true/1 value skips (continue)
+    @Test
+    public void testParse_propertiesBooleanNonTrueValue_optionNotAdded() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("b2", false, "flag"));
+        Properties props = new Properties();
+        props.setProperty("b2", "no");
+        CommandLine cmd = parser.parse(options, new String[0], props);
+        assertFalse(cmd.hasOption("b2"));
+    }
+
+    // covers: handleProperties, option not defined -> UnrecognizedOptionException
+    @Test
+    public void testParse_propertiesUnrecognizedOption_throwsUnrecognizedOptionException() throws Throwable {
+        Options options = new Options();
+        Properties props = new Properties();
+        props.setProperty("zzz", "1");
+        try
+        {
+            parser.parse(options, new String[0], props);
+            fail("expected UnrecognizedOptionException");
+        }
+        catch (UnrecognizedOptionException expected)
+        {
+        }
+    }
+
+    // covers: handleProperties, option already on command line -> property value ignored
+    @Test
+    public void testParse_propertiesIgnoredWhenAlreadyOnCommandLine_originalValueKept() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("p", true, "prop arg"));
+        Properties props = new Properties();
+        props.setProperty("p", "propvalue");
+        CommandLine cmd = parser.parse(options, new String[] { "-p", "cmdvalue" }, props);
+        assertEquals("cmdvalue", cmd.getOptionValue("p"));
+    }
+
+    // covers: parse with empty arguments array, no options/args produced
+    @Test
+    public void testParse_emptyArguments_returnsEmptyCommandLine() throws Throwable {
+        Options options = new Options();
+        CommandLine cmd = parser.parse(options, new String[0]);
+        assertEquals(0, cmd.getArgs().length);
+    }
+
+    // covers: parse with null arguments array (arguments != null guard)
+    @Test
+    public void testParse_nullArguments_returnsEmptyCommandLine() throws Throwable {
+        Options options = new Options();
+        CommandLine cmd = parser.parse(options, null);
+        assertEquals(0, cmd.getArgs().length);
+    }
+
+    // covers: acceptsArg stays true for UNLIMITED_VALUES, multiple tokens consumed
+    @Test
+    public void testParse_unlimitedValuesOption_allValuesCaptured() throws Throwable {
+        Options options = new Options();
+        Option v = new Option("v", true, "multi");
+        v.setArgs(Option.UNLIMITED_VALUES);
+        options.addOption(v);
+        CommandLine cmd = parser.parse(options, new String[] { "-v", "a", "b", "c" });
+        String[] values = cmd.getOptionValues("v");
+        assertEquals(3, values.length);
+        assertEquals("a", values[0]);
+        assertEquals("c", values[2]);
+    }
+
+    // covers: handleUnknownToken, token without leading dash added directly as arg
+    @Test
+    public void testParse_plainArgument_addedToArgs() throws Throwable {
+        Options options = new Options();
+        CommandLine cmd = parser.parse(options, new String[] { "value1" });
+        String[] args = cmd.getArgs();
+        assertEquals(1, args.length);
+        assertEquals("value1", args[0]);
+    }
+
+    // covers: handleToken else-branch bypass for lone "-" token (length==1, added as arg)
+    @Test
+    public void testParse_singleHyphenToken_addedAsArgRegardless() throws Throwable {
+        Options options = new Options();
+        CommandLine cmd = parser.parse(options, new String[] { "-" });
+        String[] args = cmd.getArgs();
+        assertEquals(1, args.length);
+        assertEquals("-", args[0]);
+    }
+
+    // covers: handleLongOptionWithEqual, option does not accept arg -> unknown token
+    @Test
+    public void testParse_longOptionWithEqualNotAcceptingArg_throwsUnrecognizedOptionException() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option(null, "verbose", false, "flag"));
+        try
+        {
+            parser.parse(options, new String[] { "--verbose=true" });
+            fail("expected UnrecognizedOptionException");
+        }
+        catch (UnrecognizedOptionException expected)
+        {
+        }
+    }
+
+    // covers: handleShortAndLongOption equal-sign branch, option not accepting arg -> unknown token
+    @Test
+    public void testParse_shortOptionEqualsNotAcceptingArg_throwsUnrecognizedOptionException() throws Throwable {
+        Options options = new Options();
+        options.addOption(new Option("s", false, "flag"));
+        try
+        {
+            parser.parse(options, new String[] { "-s=val" });
+            fail("expected UnrecognizedOptionException");
+        }
+        catch (UnrecognizedOptionException expected)
+        {
+        }
+    }
+}

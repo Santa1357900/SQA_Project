@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-123-hl3i07ou/Closure-123f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - com.google.javascript.jscomp.CodeGeneratorClaudeTest::testGetSimpleNumber_valueEqualsBoundary_returnsExactValue
+  - com.google.javascript.jscomp.CodeGeneratorClaudeTest::testAdd_doWhileStatement_printsDoAndWhile
+[exit 0]

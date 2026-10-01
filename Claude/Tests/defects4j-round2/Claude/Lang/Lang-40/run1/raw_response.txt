@@ -1,0 +1,528 @@
+package org.apache.commons.lang;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Iterator;
+import java.util.Collection;
+
+public class StringUtilsClaudeTest {
+
+    // isEmpty/isNotEmpty: null, empty, whitespace-only are not empty
+    @Test
+    public void testIsEmpty_nullEmptyAndNonEmpty() throws Throwable {
+        assertTrue(StringUtils.isEmpty(null));
+        assertTrue(StringUtils.isEmpty(""));
+        assertFalse(StringUtils.isEmpty(" "));
+        assertFalse(StringUtils.isNotEmpty(null));
+        assertTrue(StringUtils.isNotEmpty("bob"));
+    }
+
+    // isBlank/isNotBlank: null, empty, whitespace, non-blank branches
+    @Test
+    public void testIsBlank_variousInputs() throws Throwable {
+        assertTrue(StringUtils.isBlank(null));
+        assertTrue(StringUtils.isBlank(""));
+        assertTrue(StringUtils.isBlank("   "));
+        assertFalse(StringUtils.isBlank("bob"));
+        assertTrue(StringUtils.isNotBlank("bob"));
+        assertFalse(StringUtils.isNotBlank("  "));
+    }
+
+    // trim/trimToNull/trimToEmpty: null-safety and whitespace-only collapse
+    @Test
+    public void testTrimFamily_nullAndWhitespaceHandling() throws Throwable {
+        assertNull(StringUtils.trim(null));
+        assertEquals("abc", StringUtils.trim("  abc  "));
+        assertNull(StringUtils.trimToNull("     "));
+        assertEquals("abc", StringUtils.trimToNull("  abc  "));
+        assertEquals("", StringUtils.trimToEmpty(null));
+    }
+
+    // strip default whitespace and custom stripChars branches
+    @Test
+    public void testStrip_defaultAndCustomChars() throws Throwable {
+        assertNull(StringUtils.strip(null));
+        assertEquals("ab c", StringUtils.strip(" ab c "));
+        assertEquals("  abc", StringUtils.strip("  abcyx", "xyz"));
+        assertNull(StringUtils.stripToNull(null));
+        assertNull(StringUtils.stripToNull("   "));
+    }
+
+    // stripStart/stripEnd boundary: empty stripChars returns unchanged
+    @Test
+    public void testStripStartEnd_emptyStripCharsReturnsUnchanged() throws Throwable {
+        assertEquals("abc", StringUtils.stripStart("abc", ""));
+        assertEquals("abc  ", StringUtils.stripStart("abc  ", null));
+        assertEquals("abc", StringUtils.stripEnd("abc", ""));
+        assertEquals("  abc", StringUtils.stripEnd("  abc", null));
+    }
+
+    // stripAll: null entries ignored, new array returned
+    @Test
+    public void testStripAll_nullEntryIgnored() throws Throwable {
+        String[] result = StringUtils.stripAll(new String[] {"abc  ", null});
+        assertArrayEquals(new String[] {"abc", null}, result);
+        assertNull(StringUtils.stripAll(null));
+    }
+
+    // equals/equalsIgnoreCase: both-null, one-null, case sensitivity
+    @Test
+    public void testEquals_nullSafeAndCaseSensitivity() throws Throwable {
+        assertTrue(StringUtils.equals(null, null));
+        assertFalse(StringUtils.equals(null, "abc"));
+        assertFalse(StringUtils.equals("abc", "ABC"));
+        assertTrue(StringUtils.equalsIgnoreCase("abc", "ABC"));
+        assertTrue(StringUtils.equalsIgnoreCase(null, null));
+    }
+
+    // indexOf(char) and indexOf(char,startPos): empty string and negative startPos
+    @Test
+    public void testIndexOfChar_emptyAndNegativeStart() throws Throwable {
+        assertEquals(-1, StringUtils.indexOf("", 'a'));
+        assertEquals(2, StringUtils.indexOf("aabaabaa", 'b'));
+        assertEquals(2, StringUtils.indexOf("aabaabaa", 'b', -1));
+        assertEquals(5, StringUtils.indexOf("aabaabaa", 'b', 3));
+    }
+
+    // indexOf(String,String) null-safety and ordinalIndexOf second occurrence
+    @Test
+    public void testIndexOfString_nullAndOrdinal() throws Throwable {
+        assertEquals(-1, StringUtils.indexOf(null, "a"));
+        assertEquals(1, StringUtils.indexOf("aabaabaa", "ab"));
+        assertEquals(1, StringUtils.ordinalIndexOf("aabaabaa", "a", 2));
+        assertEquals(-1, StringUtils.ordinalIndexOf("aabaabaa", "z", 1));
+    }
+
+    // indexOf(String,String,startPos): empty search string at/after end of string
+    @Test
+    public void testIndexOfStringStartPos_emptySearchAtEnd() throws Throwable {
+        assertEquals(3, StringUtils.indexOf("abc", "", 9));
+        assertEquals(2, StringUtils.indexOf("aabaabaa", "", 2));
+        assertEquals(-1, StringUtils.indexOf(null, "a", 0));
+    }
+
+    // lastIndexOf(char,startPos): startPos 0 miss, and negative startPos
+    @Test
+    public void testLastIndexOfChar_startPosBoundaries() throws Throwable {
+        assertEquals(-1, StringUtils.lastIndexOf("aabaabaa", 'b', 0));
+        assertEquals(2, StringUtils.lastIndexOf("aabaabaa", 'b', 4));
+        assertEquals(-1, StringUtils.lastIndexOf("aabaabaa", 'b', -1));
+    }
+
+    // lastIndexOf(String,String) and with startPos
+    @Test
+    public void testLastIndexOfString_nullSafeAndStartPos() throws Throwable {
+        assertEquals(-1, StringUtils.lastIndexOf(null, "a"));
+        assertEquals(8, StringUtils.lastIndexOf("aabaabaa", ""));
+        assertEquals(4, StringUtils.lastIndexOf("aabaabaa", "ab", 8));
+        assertEquals(-1, StringUtils.lastIndexOf("aabaabaa", "b", -1));
+    }
+
+    // contains(char/String): empty string false, empty search true
+    @Test
+    public void testContains_emptyStringAndSearch() throws Throwable {
+        assertFalse(StringUtils.contains("", 'a'));
+        assertTrue(StringUtils.contains("abc", 'a'));
+        assertTrue(StringUtils.contains("abc", ""));
+        assertFalse(StringUtils.contains(null, "a"));
+        assertTrue(StringUtils.containsIgnoreCase("abc", "A"));
+    }
+
+    // indexOfAny(char[])/indexOfAny(String) found and not found branches
+    @Test
+    public void testIndexOfAnyChars_foundAndNotFound() throws Throwable {
+        assertEquals(0, StringUtils.indexOfAny("zzabyycdxx", new char[] {'z', 'a'}));
+        assertEquals(-1, StringUtils.indexOfAny("aba", new char[] {'z'}));
+        assertEquals(3, StringUtils.indexOfAny("zzabyycdxx", "by"));
+        assertEquals(-1, StringUtils.indexOfAny((String) null, (String) null));
+    }
+
+    // containsAny(char[]/String): empty array/string returns false
+    @Test
+    public void testContainsAny_emptyAndFound() throws Throwable {
+        assertFalse(StringUtils.containsAny("", new char[] {'a'}));
+        assertFalse(StringUtils.containsAny("abc", new char[0]));
+        assertTrue(StringUtils.containsAny("zzabyycdxx", new char[] {'b', 'y'}));
+        assertTrue(StringUtils.containsAny("zzabyycdxx", "za"));
+    }
+
+    // indexOfAnyBut(char[]/String): all-match returns -1
+    @Test
+    public void testIndexOfAnyBut_allMatchAndSomeMatch() throws Throwable {
+        assertEquals(-1, StringUtils.indexOfAnyBut("aba", new char[] {'a', 'b'}));
+        assertEquals(3, StringUtils.indexOfAnyBut("zzabyycdxx", new char[] {'z', 'a'}));
+        assertEquals(3, StringUtils.indexOfAnyBut("zzabyycdxx", "za"));
+    }
+
+    // containsOnly(char[]/String): empty string true, empty valid-set false
+    @Test
+    public void testContainsOnly_emptyStringAndEmptyValidSet() throws Throwable {
+        assertTrue(StringUtils.containsOnly("", new char[] {'a'}));
+        assertFalse(StringUtils.containsOnly("ab", new char[0]));
+        assertFalse(StringUtils.containsOnly((String) null, new char[] {'a'}));
+        assertTrue(StringUtils.containsOnly("abab", "abc"));
+    }
+
+    // containsNone(char[]/String): null returns true, actual match returns false
+    @Test
+    public void testContainsNone_nullTrueAndMatchFalse() throws Throwable {
+        assertTrue(StringUtils.containsNone(null, new char[] {'a'}));
+        assertTrue(StringUtils.containsNone("abab", new char[] {'x', 'y', 'z'}));
+        assertFalse(StringUtils.containsNone("abz", "xyz"));
+    }
+
+    // indexOfAny(String[]) / lastIndexOfAny(String[]): null entry ignored
+    @Test
+    public void testIndexOfAnyAndLastIndexOfAny_stringArrayWithNullEntry() throws Throwable {
+        assertEquals(2, StringUtils.indexOfAny("zzabyycdxx", new String[] {"ab", "cd"}));
+        assertEquals(-1, StringUtils.indexOfAny("zzabyycdxx", new String[] {"mn", "op"}));
+        assertEquals(6, StringUtils.lastIndexOfAny("zzabyycdxx", new String[] {"ab", "cd"}));
+        assertEquals(-1, StringUtils.lastIndexOfAny("abc", new String[] {null}));
+    }
+
+    // substring(start): negative start counts from end, out-of-range returns ""
+    @Test
+    public void testSubstringStart_negativeAndOutOfRange() throws Throwable {
+        assertEquals("bc", StringUtils.substring("abc", -2));
+        assertEquals("abc", StringUtils.substring("abc", -4));
+        assertEquals("", StringUtils.substring("abc", 4));
+        assertNull(StringUtils.substring(null, 1));
+    }
+
+    // substring(start,end): start>end returns "", negative offsets
+    @Test
+    public void testSubstringRange_startGreaterThanEndAndNegatives() throws Throwable {
+        assertEquals("", StringUtils.substring("abc", 2, 0));
+        assertEquals("ab", StringUtils.substring("abc", -4, 2));
+        assertEquals("b", StringUtils.substring("abc", -2, -1));
+    }
+
+    // left/right/mid boundary lengths including zero and negative
+    @Test
+    public void testLeftRightMid_boundaryLengths() throws Throwable {
+        assertEquals("", StringUtils.left("abc", 0));
+        assertEquals("", StringUtils.right(null, -1) == null ? "" : StringUtils.right("abc", -1));
+        assertEquals("abc", StringUtils.left("abc", 4));
+        assertEquals("", StringUtils.mid("abc", 4, 2));
+        assertEquals("ab", StringUtils.mid("abc", -2, 2));
+    }
+
+    // substringBefore/substringAfter: empty separator and not-found branches
+    @Test
+    public void testSubstringBeforeAfter_emptyAndNotFoundSeparator() throws Throwable {
+        assertEquals("", StringUtils.substringBefore("abc", ""));
+        assertEquals("abc", StringUtils.substringBefore("abc", "d"));
+        assertEquals("abc", StringUtils.substringAfter("abc", ""));
+        assertEquals("", StringUtils.substringAfter("abc", "d"));
+        assertNull(StringUtils.substringAfter(null, "x"));
+    }
+
+    // substringBeforeLast/substringAfterLast edge cases
+    @Test
+    public void testSubstringBeforeAfterLast_edgeCases() throws Throwable {
+        assertEquals("a", StringUtils.substringBeforeLast("a", "z"));
+        assertEquals("", StringUtils.substringBeforeLast("a", "a"));
+        assertEquals("", StringUtils.substringAfterLast("a", "a"));
+        assertEquals("a", StringUtils.substringAfterLast("abcba", "b"));
+    }
+
+    // substringBetween(tag) and (open,close) match/no-match branches
+    @Test
+    public void testSubstringBetween_tagAndOpenClose() throws Throwable {
+        assertEquals("abc", StringUtils.substringBetween("tagabctag", "tag"));
+        assertNull(StringUtils.substringBetween("", "tag"));
+        assertEquals("b", StringUtils.substringBetween("wx[b]yz", "[", "]"));
+        assertNull(StringUtils.substringBetween("abc", null, "]"));
+    }
+
+    // substringsBetween: multiple matches array, no-match returns null
+    @Test
+    public void testSubstringsBetween_multipleMatchesAndNoMatch() throws Throwable {
+        String[] result = StringUtils.substringsBetween("[a][b][c]", "[", "]");
+        assertArrayEquals(new String[] {"a", "b", "c"}, result);
+        assertNull(StringUtils.substringsBetween("abc", "[", "]"));
+    }
+
+    // split default whitespace, adjacent separators treated as one
+    @Test
+    public void testSplit_defaultWhitespaceAdjacentSeparators() throws Throwable {
+        assertArrayEquals(new String[] {"abc", "def"}, StringUtils.split("abc  def"));
+        assertNull(StringUtils.split((String) null));
+        assertArrayEquals(new String[] {"a", "b", "c"}, StringUtils.split("a..b.c", '.'));
+    }
+
+    // split with max limit: remainder lumped into last token
+    @Test
+    public void testSplit_withMaxLimit() throws Throwable {
+        assertArrayEquals(new String[] {"ab", "cd:ef"}, StringUtils.split("ab:cd:ef", ":", 2));
+    }
+
+    // splitPreserveAllTokens: adjacent separators create empty tokens
+    @Test
+    public void testSplitPreserveAllTokens_emptyTokensPreserved() throws Throwable {
+        assertArrayEquals(new String[] {"a", "", "b", "c"}, StringUtils.splitPreserveAllTokens("a..b.c", '.'));
+        assertArrayEquals(new String[] {"ab", "cd", "ef", ""}, StringUtils.splitPreserveAllTokens("ab:cd:ef:", ":"));
+    }
+
+    // splitByWholeSeparator: multi-character delimiter
+    @Test
+    public void testSplitByWholeSeparator_multiCharDelimiter() throws Throwable {
+        String[] result = StringUtils.splitByWholeSeparator("ab-!-cd-!-ef", "-!-");
+        assertArrayEquals(new String[] {"ab", "cd", "ef"}, result);
+    }
+
+    // splitByCharacterTypeCamelCase: uppercase run followed by lowercase
+    @Test
+    public void testSplitByCharacterTypeCamelCase_upperFollowedByLower() throws Throwable {
+        assertArrayEquals(new String[] {"ASF", "Rules"}, StringUtils.splitByCharacterTypeCamelCase("ASFRules"));
+        assertArrayEquals(new String[] {"ASFR", "ules"}, StringUtils.splitByCharacterType("ASFRules"));
+    }
+
+    // join(Object[]) default null separator, and null array returns null
+    @Test
+    public void testJoinObjectArray_defaultSeparatorAndNullElements() throws Throwable {
+        assertNull(StringUtils.join((Object[]) null));
+        assertEquals("a", StringUtils.join(new Object[] {null, "", "a"}));
+        assertEquals(";;a", StringUtils.join(new Object[] {null, "", "a"}, ';'));
+    }
+
+    // join(Iterator/Collection): single element and multi element paths
+    @Test
+    public void testJoinIteratorAndCollection_singleAndMultiElement() throws Throwable {
+        List<String> list = new ArrayList<String>();
+        list.add("x");
+        assertEquals("x", StringUtils.join((Iterator<?>) list.iterator(), ','));
+        list.add("y");
+        assertEquals("x,y", StringUtils.join((Collection<?>) list, ','));
+    }
+
+    // deleteWhitespace removes all whitespace characters
+    @Test
+    public void testDeleteWhitespace_mixedContent() throws Throwable {
+        assertEquals("abc", StringUtils.deleteWhitespace("   ab  c  "));
+        assertNull(StringUtils.deleteWhitespace(null));
+    }
+
+    // removeStart/removeEnd (case variants) prefix/suffix removal
+    @Test
+    public void testRemoveStartEnd_prefixSuffixIgnoreCase() throws Throwable {
+        assertEquals("domain.com", StringUtils.removeStart("www.domain.com", "www."));
+        assertEquals("domain.com", StringUtils.removeStartIgnoreCase("www.domain.com", "WWW."));
+        assertEquals("www.domain", StringUtils.removeEnd("www.domain.com", ".com"));
+        assertEquals("www.domain", StringUtils.removeEndIgnoreCase("www.domain.COM", ".com"));
+    }
+
+    // remove(String,String) and remove(String,char)
+    @Test
+    public void testRemove_substringAndChar() throws Throwable {
+        assertEquals("qd", StringUtils.remove("queued", "ue"));
+        assertEquals("queued", StringUtils.remove("queued", "zz"));
+        assertEquals("qeed", StringUtils.remove("queued", 'u'));
+    }
+
+    // replace with max occurrences and replaceOnce
+    @Test
+    public void testReplace_maxOccurrencesAndOnce() throws Throwable {
+        assertEquals("zba", StringUtils.replaceOnce("aba", "a", "z"));
+        assertEquals("zbza", StringUtils.replace("abaa", "a", "z", 2));
+        assertEquals("abaa", StringUtils.replace("abaa", "a", null, -1));
+    }
+
+    // replaceEach (no repeat) and replaceEachRepeatedly (with repeat)
+    @Test
+    public void testReplaceEach_noRepeatAndRepeated() throws Throwable {
+        String[] search = new String[] {"ab", "d"};
+        assertEquals("wcte", StringUtils.replaceEach("abcde", search, new String[] {"w", "t"}));
+        assertEquals("tcte", StringUtils.replaceEachRepeatedly("abcde", search, new String[] {"d", "t"}));
+    }
+
+    // replaceChars(char,char) and replaceChars(String,String) mapping
+    @Test
+    public void testReplaceChars_charAndStringMapping() throws Throwable {
+        assertEquals("aycya", StringUtils.replaceChars("abcba", 'b', 'y'));
+        assertEquals("ayzya", StringUtils.replaceChars("abcba", "bc", "yzx"));
+        assertEquals("ac", StringUtils.replaceChars("abc", "b", (String) null));
+    }
+
+    // overlay: index swap when start>end and null overlay treated as empty
+    @Test
+    public void testOverlay_indexSwapAndNullOverlay() throws Throwable {
+        assertEquals("abzzzzef", StringUtils.overlay("abcdef", "zzzz", 4, 2));
+        assertEquals("abef", StringUtils.overlay("abcdef", null, 2, 4));
+    }
+
+    // chomp newline variants, and chop last-character removal
+    @Test
+    public void testChompAndChop_newlineHandling() throws Throwable {
+        assertEquals("abc", StringUtils.chomp("abc\n"));
+        assertEquals("abc\r\n", StringUtils.chomp("abc\r\n\r\n"));
+        assertEquals("foo", StringUtils.chomp("foobar", "bar") == null ? null : StringUtils.chomp("foobar", "bar").substring(0, 3));
+        assertEquals("abc", StringUtils.chop("abc\r\n"));
+        assertEquals("", StringUtils.chop("a"));
+    }
+
+    // repeat(str,n) and repeat(str,separator,n)
+    @Test
+    public void testRepeat_withAndWithoutSeparator() throws Throwable {
+        assertEquals("aaa", StringUtils.repeat("a", 3));
+        assertEquals("", StringUtils.repeat("a", -2));
+        assertEquals("?, ?, ?", StringUtils.repeat("?", ", ", 3));
+    }
+
+    // rightPad/leftPad with char and String pad, exceeding single-char length
+    @Test
+    public void testPadding_rightAndLeftWithStringPad() throws Throwable {
+        assertEquals("bat  ", StringUtils.rightPad("bat", 5));
+        assertEquals("batyzyzy", StringUtils.rightPad("bat", 8, "yz"));
+        assertEquals("yzyzybat", StringUtils.leftPad("bat", 8, "yz"));
+        assertEquals(0, StringUtils.length(null));
+    }
+
+    // center with char and String pad, odd padding distribution
+    @Test
+    public void testCenter_oddPaddingDistribution() throws Throwable {
+        assertEquals(" a  ", StringUtils.center("a", 4));
+        assertEquals("yayy", StringUtils.center("a", 4, 'y'));
+        assertEquals("  abc  ", StringUtils.center("abc", 7, (String) null));
+    }
+
+    // case conversion: upper/lower with and without Locale, capitalize/uncapitalize
+    @Test
+    public void testCaseConversion_upperLowerCapitalize() throws Throwable {
+        assertEquals("ABC", StringUtils.upperCase("aBc"));
+        assertEquals("abc", StringUtils.lowerCase("aBc", Locale.ENGLISH));
+        assertEquals("Cat", StringUtils.capitalize("cat"));
+        assertEquals("cAT", StringUtils.uncapitalize("CAT"));
+        assertNull(StringUtils.upperCase(null));
+    }
+
+    // swapCase and countMatches (including overlapping substrings)
+    @Test
+    public void testSwapCaseAndCountMatches() throws Throwable {
+        assertEquals("tHE DOG HAS A bone", StringUtils.swapCase("The dog has a BONE"));
+        assertEquals(2, StringUtils.countMatches("abba", "a"));
+        assertEquals(0, StringUtils.countMatches("abba", ""));
+    }
+
+    // character-type checks: alpha, alphanumeric, numeric, whitespace boundaries
+    @Test
+    public void testCharacterTypeChecks_booleanBranches() throws Throwable {
+        assertFalse(StringUtils.isAlpha(null));
+        assertTrue(StringUtils.isAlpha(""));
+        assertFalse(StringUtils.isAlpha("ab2c"));
+        assertTrue(StringUtils.isAlphanumericSpace("ab c"));
+        assertFalse(StringUtils.isNumeric("12.3"));
+        assertTrue(StringUtils.isNumericSpace("12 3"));
+        assertTrue(StringUtils.isWhitespace("  "));
+    }
+
+    // isAllLowerCase/isAllUpperCase: empty and null both return false
+    @Test
+    public void testIsAllLowerUpperCase_emptyAndNullFalse() throws Throwable {
+        assertFalse(StringUtils.isAllLowerCase(""));
+        assertFalse(StringUtils.isAllLowerCase(null));
+        assertTrue(StringUtils.isAllLowerCase("abc"));
+        assertFalse(StringUtils.isAllUpperCase("aBC"));
+    }
+
+    // defaultString/defaultIfEmpty default-value branches
+    @Test
+    public void testDefaultStringAndDefaultIfEmpty() throws Throwable {
+        assertEquals("", StringUtils.defaultString(null));
+        assertEquals("NULL", StringUtils.defaultString(null, "NULL"));
+        assertEquals("NULL", StringUtils.defaultIfEmpty("", "NULL"));
+        assertNull(StringUtils.defaultIfEmpty("", null));
+    }
+
+    // reverse and reverseDelimited
+    @Test
+    public void testReverseAndReverseDelimited() throws Throwable {
+        assertEquals("tab", StringUtils.reverse("bat"));
+        assertNull(StringUtils.reverse(null));
+        assertEquals("c.b.a", StringUtils.reverseDelimited("a.b.c", '.'));
+    }
+
+    // abbreviate: exact width unchanged, too-small width throws
+    @Test
+    public void testAbbreviate_exactWidthAndTooSmallThrows() throws Throwable {
+        assertEquals("abcdefg", StringUtils.abbreviate("abcdefg", 7));
+        assertEquals("abc...", StringUtils.abbreviate("abcdefg", 6));
+        try {
+            StringUtils.abbreviate("abcdefg", 3);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // abbreviate with offset: minimum width with offset throws
+    @Test
+    public void testAbbreviateWithOffset_minimumWidthThrows() throws Throwable {
+        try {
+            StringUtils.abbreviate("abcdefghij", 5, 6);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+        assertEquals("...fghi...", StringUtils.abbreviate("abcdefghijklmno", 5, 10));
+    }
+
+    // difference and indexOfDifference (two-String overload)
+    @Test
+    public void testDifferenceAndIndexOfDifference_twoStrings() throws Throwable {
+        assertEquals("", StringUtils.difference("abc", "abc"));
+        assertEquals("xyz", StringUtils.difference("ab", "abxyz"));
+        assertEquals(2, StringUtils.indexOfDifference("ab", "abxyz"));
+        assertEquals(-1, StringUtils.indexOfDifference("abc", "abc"));
+    }
+
+    // indexOfDifference(String[]) and getCommonPrefix array overloads
+    @Test
+    public void testIndexOfDifferenceArrayAndGetCommonPrefix() throws Throwable {
+        assertEquals(-1, StringUtils.indexOfDifference((String[]) null));
+        assertEquals(1, StringUtils.indexOfDifference(new String[] {"abc", "a"}));
+        assertEquals("ab", StringUtils.getCommonPrefix(new String[] {"abcde", "abxyz"}));
+        assertEquals("", StringUtils.getCommonPrefix(new String[] {"abcde", "xyz"}));
+    }
+
+    // getLevenshteinDistance: normal distance and null-input exception
+    @Test
+    public void testGetLevenshteinDistance_normalAndNullThrows() throws Throwable {
+        assertEquals(1, StringUtils.getLevenshteinDistance("frog", "fog"));
+        assertEquals(0, StringUtils.getLevenshteinDistance("", ""));
+        try {
+            StringUtils.getLevenshteinDistance(null, "x");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // startsWith/endsWith family: null-safety and case sensitivity
+    @Test
+    public void testStartsWithEndsWith_nullSafeAndCaseSensitivity() throws Throwable {
+        assertTrue(StringUtils.startsWith(null, null));
+        assertFalse(StringUtils.startsWith("ABCDEF", "abc"));
+        assertTrue(StringUtils.startsWithIgnoreCase("ABCDEF", "abc"));
+        assertFalse(StringUtils.endsWith("ABCDEF", "def"));
+        assertTrue(StringUtils.endsWithIgnoreCase("ABCDEF", "def"));
+    }
+
+    // startsWithAny: normal match and null-array/null-string branches
+    @Test
+    public void testStartsWithAny_normalMatchAndNullBranches() throws Throwable {
+        assertTrue(StringUtils.startsWithAny("abcxyz", new String[] {"abc"}));
+        assertFalse(StringUtils.startsWithAny(null, new String[] {"abc"}));
+        assertFalse(StringUtils.startsWithAny("abcxyz", (String[]) null));
+    }
+
+    // BUG TEST: per Javadoc, an empty search string in the array must NOT count
+    // as a match ("StringUtils.startsWithAny(\"abcxyz\", new String[] {\"\"}) = false"),
+    // but the buggy implementation delegates to startsWith() which treats an
+    // empty prefix as always matching, incorrectly returning true.
+    @Test
+    public void testStartsWithAny_emptySearchStringShouldNotMatch() throws Throwable {
+        boolean result = StringUtils.startsWithAny("abcxyz", new String[] {""});
+        assertFalse("empty search string must not be considered a starting match", result);
+    }
+}

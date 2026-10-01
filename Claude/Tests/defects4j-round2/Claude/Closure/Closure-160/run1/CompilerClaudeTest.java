@@ -1,0 +1,464 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.jscomp.parsing.Config;
+import com.google.common.base.Supplier;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.util.Collections;
+
+public class CompilerClaudeTest {
+
+  // Compiler(): errorManager must be lazily non-null via getErrorManager()
+  @Test
+  public void testConstructor_default_getErrorManagerNotNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    assertNotNull(compiler.getErrorManager());
+  }
+
+  // Compiler(PrintStream): outStream path, errorManager still lazily available
+  @Test
+  public void testConstructor_withPrintStream_errorManagerNotNull() throws Throwable {
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    PrintStream ps = new PrintStream(baos);
+    Compiler compiler = new Compiler(ps);
+    assertNotNull(compiler.getErrorManager());
+  }
+
+  // setErrorManager(null) must throw NullPointerException (Preconditions.checkNotNull)
+  @Test
+  public void testSetErrorManager_null_throwsNullPointerException() throws Throwable {
+    Compiler compiler = new Compiler();
+    try {
+      compiler.setErrorManager(null);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) { }
+  }
+
+  // isTypeCheckingEnabled() reflects options.checkTypes field
+  @Test
+  public void testIsTypeCheckingEnabled_checkTypesTrue_returnsTrue() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.checkTypes = true;
+    compiler.initOptions(options);
+    assertTrue(compiler.isTypeCheckingEnabled());
+  }
+
+  // acceptConstKeyword() reflects options.acceptConstKeyword field
+  @Test
+  public void testAcceptConstKeyword_fieldTrue_returnsTrue() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.acceptConstKeyword = true;
+    compiler.initOptions(options);
+    assertTrue(compiler.acceptConstKeyword());
+  }
+
+  // acceptEcmaScript5(): default language mode is not ES5/ES5_STRICT -> false branch
+  @Test
+  public void testAcceptEcmaScript5_defaultLanguage_returnsFalse() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    assertFalse(compiler.acceptEcmaScript5());
+  }
+
+  // getParserConfig(): default options map to a known language mode, never throws
+  @Test
+  public void testGetParserConfig_defaultOptions_returnsNonNullConfig() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    Config config = compiler.getParserConfig();
+    assertNotNull(config);
+  }
+
+  // isIdeMode() reflects options.ideMode field
+  @Test
+  public void testIsIdeMode_fieldTrue_returnsTrue() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.ideMode = true;
+    compiler.initOptions(options);
+    assertTrue(compiler.isIdeMode());
+  }
+
+  // getCodingConvention() must never return null (falls back to defaultCodingConvention)
+  @Test
+  public void testGetCodingConvention_default_returnsNonNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    assertNotNull(compiler.getCodingConvention());
+  }
+
+  // hasErrors(): javadoc says ideMode=true always returns false even with reported errors
+  @Test
+  public void testHasErrors_ideModeTrue_alwaysFalse() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.ideMode = true;
+    compiler.initOptions(options);
+    compiler.report(JSError.make(Compiler.MODULE_DEPENDENCY_ERROR, "a", "b"));
+    assertTrue(compiler.getErrorCount() > 0);
+    assertFalse(compiler.hasErrors());
+  }
+
+  // hasErrors(): ideMode=false, with a reported error, must return true
+  @Test
+  public void testHasErrors_ideModeFalse_withError_returnsTrue() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.ideMode = false;
+    compiler.initOptions(options);
+    compiler.report(JSError.make(Compiler.MODULE_DEPENDENCY_ERROR, "a", "b"));
+    assertTrue(compiler.hasErrors());
+  }
+
+  // getErrorLevel(): Preconditions.checkNotNull(options) must throw when options not initialized
+  @Test
+  public void testGetErrorLevel_optionsNull_throwsNullPointerException() throws Throwable {
+    Compiler compiler = new Compiler();
+    JSError error = JSError.make(Compiler.MODULE_DEPENDENCY_ERROR, "a", "b");
+    try {
+      compiler.getErrorLevel(error);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) { }
+  }
+
+  // getMessages() is documented to be the same as getErrors()
+  @Test
+  public void testGetMessages_sameAsGetErrors() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    compiler.report(JSError.make(Compiler.MODULE_DEPENDENCY_ERROR, "a", "b"));
+    assertArrayEquals(compiler.getErrors(), compiler.getMessages());
+  }
+
+  // getWarnings() never null, empty when nothing reported
+  @Test
+  public void testGetWarnings_initiallyEmpty() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    assertNotNull(compiler.getWarnings());
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // precheck(): contract says it always returns true to continue compilation
+  @Test
+  public void testPrecheck_alwaysReturnsTrue() throws Throwable {
+    Compiler compiler = new Compiler();
+    assertTrue(compiler.precheck());
+  }
+
+  // getUniqueNameIdSupplier(): increments each call; resetUniqueNameId() resets to 0
+  @Test
+  public void testGetUniqueNameIdSupplier_incrementsAndReset() throws Throwable {
+    Compiler compiler = new Compiler();
+    Supplier<String> supplier = compiler.getUniqueNameIdSupplier();
+    assertEquals("0", supplier.get());
+    assertEquals("1", supplier.get());
+    compiler.resetUniqueNameId();
+    assertEquals("0", supplier.get());
+  }
+
+  // getRoot(): before any parse() call, externAndJsRoot is null
+  @Test
+  public void testGetRoot_beforeParse_returnsNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    assertNull(compiler.getRoot());
+  }
+
+  // areNodesEqualForInlining(): non-ambiguate/disambiguate path, equal names -> true
+  @Test
+  public void testAreNodesEqualForInlining_sameNameNodes_returnsTrue() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    Node n1 = IR.name("a");
+    Node n2 = IR.name("a");
+    assertTrue(compiler.areNodesEqualForInlining(n1, n2));
+  }
+
+  // areNodesEqualForInlining(): different names -> false
+  @Test
+  public void testAreNodesEqualForInlining_differentNameNodes_returnsFalse() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    Node n1 = IR.name("a");
+    Node n2 = IR.name("b");
+    assertFalse(compiler.areNodesEqualForInlining(n1, n2));
+  }
+
+  // hasRegExpGlobalReferences(): default true, setter toggles value
+  @Test
+  public void testHasRegExpGlobalReferences_defaultTrueAndSetterToggles() throws Throwable {
+    Compiler compiler = new Compiler();
+    assertTrue(compiler.hasRegExpGlobalReferences());
+    compiler.setHasRegExpGlobalReferences(false);
+    assertFalse(compiler.hasRegExpGlobalReferences());
+  }
+
+  // reportCodeChange(): registered recentChange handler is notified
+  @Test
+  public void testReportCodeChange_notifiesRegisteredHandler() throws Throwable {
+    Compiler compiler = new Compiler();
+    assertFalse(compiler.recentChange.hasCodeChanged());
+    compiler.reportCodeChange();
+    assertTrue(compiler.recentChange.hasCodeChanged());
+  }
+
+  // removeChangeHandler(): once removed, the handler is no longer notified
+  @Test
+  public void testRemoveChangeHandler_handlerNotNotified() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.removeChangeHandler(compiler.recentChange);
+    compiler.reportCodeChange();
+    assertFalse(compiler.recentChange.hasCodeChanged());
+  }
+
+  // setPassConfig(): success path, getPassConfig() returns the same instance set
+  @Test
+  public void testSetPassConfig_success_getPassConfigReturnsSameInstance() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.initOptions(options);
+    PassConfig pc = new DefaultPassConfig(options);
+    compiler.setPassConfig(pc);
+    assertSame(pc, compiler.getPassConfig());
+  }
+
+  // setPassConfig(): calling twice must throw IllegalStateException
+  @Test
+  public void testSetPassConfig_calledTwice_throwsIllegalStateException() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.initOptions(options);
+    compiler.setPassConfig(new DefaultPassConfig(options));
+    try {
+      compiler.setPassConfig(new DefaultPassConfig(options));
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) { }
+  }
+
+  // setPassConfig(null) must throw NullPointerException
+  @Test
+  public void testSetPassConfig_null_throwsNullPointerException() throws Throwable {
+    Compiler compiler = new Compiler();
+    try {
+      compiler.setPassConfig(null);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) { }
+  }
+
+  // getPassConfig(): lazily creates a DefaultPassConfig when none was set
+  @Test
+  public void testGetPassConfig_default_createsDefaultPassConfigInstance() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    PassConfig pc = compiler.getPassConfig();
+    assertNotNull(pc);
+    assertTrue(pc instanceof DefaultPassConfig);
+  }
+
+  // checkFirstModule(): empty module list reports EMPTY_MODULE_LIST_ERROR
+  @Test
+  public void testCheckFirstModule_emptyModuleList_reportsErrorViaInitModules() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.initModules(Collections.<JSSourceFile>emptyList(),
+        Collections.<JSModule>emptyList(), options);
+    assertTrue(compiler.hasErrors());
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // checkFirstModule(): first module empty AND more than one module -> EMPTY_ROOT_MODULE_ERROR
+  @Test
+  public void testCheckFirstModule_emptyRootModuleWithMultipleModules_reportsError() throws Throwable {
+    JSModule module1 = new JSModule("module1");
+    JSModule module2 = new JSModule("module2");
+    module2.add(JSSourceFile.fromCode("m2.js", "var q;"));
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.init(new JSSourceFile[0], new JSModule[] { module1, module2 }, options);
+    assertTrue(compiler.hasErrors());
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // initInputsByNameMap(): same name in both externs and inputs reports DUPLICATE_INPUT
+  @Test
+  public void testInitInputsByNameMap_duplicateInputName_reportsDuplicateError() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile[] externsArr = { JSSourceFile.fromCode("dup.js", "") };
+    JSSourceFile[] inputsArr = { JSSourceFile.fromCode("dup.js", "var y;") };
+    compiler.init(externsArr, inputsArr, options);
+    assertTrue(compiler.hasErrors());
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // newExternInput(): conflicting name must throw IllegalArgumentException
+  @Test
+  public void testNewExternInput_conflictingName_throwsIllegalArgumentException() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile[] externs = { JSSourceFile.fromCode("e1.js", "") };
+    JSSourceFile[] inputs = { JSSourceFile.fromCode("i1.js", "var a;") };
+    compiler.init(externs, inputs, options);
+    compiler.parse();
+    try {
+      compiler.newExternInput("e1.js");
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) { }
+  }
+
+  // newExternInput(): new unique name succeeds and becomes retrievable via getInput()
+  @Test
+  public void testNewExternInput_newName_addsInputSuccessfully() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile[] externs = { JSSourceFile.fromCode("e2.js", "") };
+    JSSourceFile[] inputs = { JSSourceFile.fromCode("i2.js", "var a;") };
+    compiler.init(externs, inputs, options);
+    compiler.parse();
+    CompilerInput created = compiler.newExternInput("brandNew.js");
+    assertNotNull(created);
+    assertNotNull(compiler.getInput("brandNew.js"));
+  }
+
+  // getSourceLine(): lineNumber < 1 must return null without touching inputsByName
+  @Test
+  public void testGetSourceLine_lineNumberLessThanOne_returnsNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    assertNull(compiler.getSourceLine("foo.js", 0));
+    assertNull(compiler.getSourceLine("foo.js", -5));
+  }
+
+  // getSourceRegion(): lineNumber < 1 must return null without touching inputsByName
+  @Test
+  public void testGetSourceRegion_lineNumberLessThanOne_returnsNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    assertNull(compiler.getSourceRegion("foo.js", 0));
+  }
+
+  // compile(): valid externs/input compiles with zero errors
+  @Test
+  public void testCompile_validInput_noErrors() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.disableThreads();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile extern = JSSourceFile.fromCode("externs.js", "");
+    JSSourceFile input = JSSourceFile.fromCode("input.js", "var x = 1;");
+    Result result = compiler.compile(extern, input, options);
+    assertNotNull(result);
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // compile(): Preconditions.checkState(jsRoot == null) -> second call must throw
+  @Test
+  public void testCompile_calledTwice_throwsIllegalStateException() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.disableThreads();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile extern = JSSourceFile.fromCode("externs2.js", "");
+    JSSourceFile input = JSSourceFile.fromCode("input2.js", "var y = 2;");
+    compiler.compile(extern, input, options);
+    try {
+      compiler.compile(extern, input, options);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) { }
+  }
+
+  // compile(): syntax error in input source reports at least one error
+  @Test
+  public void testCompile_syntaxErrorInInput_reportsErrors() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.disableThreads();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile extern = JSSourceFile.fromCode("externs3.js", "");
+    JSSourceFile input = JSSourceFile.fromCode("bad.js", "var x = ;");
+    Result result = compiler.compile(extern, input, options);
+    assertNotNull(result);
+    assertTrue(compiler.getErrorCount() > 0);
+  }
+
+  // toSource() no-arg: before any parse, jsRoot is null -> empty string result
+  @Test
+  public void testToSource_noArgs_beforeParse_returnsEmptyString() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    compiler.disableThreads();
+    assertEquals("", compiler.toSource());
+  }
+
+  // toSource(Node): generates source text containing the node's own content
+  @Test
+  public void testToSource_withNode_containsExpectedText() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node nameNode = IR.name("foo");
+    String src = compiler.toSource(nameNode);
+    assertTrue(src.contains("foo"));
+  }
+
+  // CodeBuilder.append(): text buffer and length tracked correctly
+  @Test
+  public void testCodeBuilder_append_updatesLengthAndToString() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("hello");
+    assertEquals(5, cb.getLength());
+    assertEquals("hello", cb.toString());
+  }
+
+  // CodeBuilder.reset(): clears text but, per javadoc, leaves line count unchanged
+  @Test
+  public void testCodeBuilder_reset_clearsTextKeepsLineCount() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("a\nb\n");
+    int lineIndexBefore = cb.getLineIndex();
+    cb.reset();
+    assertEquals(0, cb.getLength());
+    assertEquals(lineIndexBefore, cb.getLineIndex());
+  }
+
+  // CodeBuilder.getLineIndex(): counts newline characters appended
+  @Test
+  public void testCodeBuilder_getLineIndex_countsNewlines() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("one\ntwo\nthree");
+    assertEquals(2, cb.getLineIndex());
+  }
+
+  // CodeBuilder.endsWith(): buffer shorter than suffix must be false
+  @Test
+  public void testCodeBuilder_endsWith_bufferShorterThanSuffix_returnsFalse() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("ab");
+    assertFalse(cb.endsWith("abcd"));
+  }
+
+  // CodeBuilder.endsWith(): buffer content exactly equals suffix must be true (boundary bug)
+  @Test
+  public void testCodeBuilder_endsWith_bufferEqualsSuffix_returnsTrue() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("\n");
+    assertTrue(cb.endsWith("\n"));
+  }
+
+  // CodeBuilder.endsWith(): buffer longer than suffix and does contain it at the end -> true
+  @Test
+  public void testCodeBuilder_endsWith_bufferLongerContainingSuffix_returnsTrue() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("hello\n");
+    assertTrue(cb.endsWith("\n"));
+  }
+
+  // CodeBuilder.endsWith(): buffer longer than suffix but does not end with it -> false
+  @Test
+  public void testCodeBuilder_endsWith_bufferLongerNotContainingSuffix_returnsFalse() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("hello;");
+    assertFalse(cb.endsWith("\n"));
+  }
+}

@@ -1,0 +1,279 @@
+package org.apache.commons.math3.geometry.euclidean.threed;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.apache.commons.math3.exception.MathIllegalArgumentException;
+import org.apache.commons.math3.geometry.euclidean.oned.Vector1D;
+
+public class LineClaudeTest {
+
+    private void assertVec(double ex, double ey, double ez, Vector3D v, double delta) {
+        assertEquals(ex, v.getX(), delta);
+        assertEquals(ey, v.getY(), delta);
+        assertEquals(ez, v.getZ(), delta);
+    }
+
+    // constructor: normal branch, direction normalized correctly from two points
+    @Test
+    public void testConstructor_validPoints_computesNormalizedDirection() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(3, 4, 0));
+        assertVec(0.6, 0.8, 0.0, line.getDirection(), 1e-9);
+        assertEquals(1.0, line.getDirection().getNorm(), 1e-9);
+    }
+
+    // constructor: equal points -> norm2==0 branch throws exception
+    @Test
+    public void testConstructor_equalPoints_throwsException() throws Throwable {
+        Vector3D p = new Vector3D(1, 2, 3);
+        try {
+            new Line(p, p);
+            fail("expected MathIllegalArgumentException");
+        } catch (MathIllegalArgumentException expected) {
+        }
+    }
+
+    // copy constructor: produces line with same direction and origin values
+    @Test
+    public void testCopyConstructor_sameValuesAsOriginal() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(3, 4, 0));
+        Line copy = new Line(line1);
+        assertVec(line1.getDirection().getX(), line1.getDirection().getY(),
+                line1.getDirection().getZ(), copy.getDirection(), 1e-9);
+        assertVec(line1.getOrigin().getX(), line1.getOrigin().getY(),
+                line1.getOrigin().getZ(), copy.getOrigin(), 1e-9);
+    }
+
+    // reset: valid points branch, re-initializes direction and zero
+    @Test
+    public void testReset_newPoints_updatesDirectionAndOrigin() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        line.reset(new Vector3D(0, 0, 0), new Vector3D(0, 5, 0));
+        assertVec(0.0, 1.0, 0.0, line.getDirection(), 1e-9);
+        assertVec(0.0, 0.0, 0.0, line.getOrigin(), 1e-9);
+    }
+
+    // reset: equal points branch throws exception
+    @Test
+    public void testReset_equalPoints_throwsException() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Vector3D p = new Vector3D(2, 2, 2);
+        try {
+            line.reset(p, p);
+            fail("expected MathIllegalArgumentException");
+        } catch (MathIllegalArgumentException expected) {
+        }
+    }
+
+    // revert: direction reversed, closest-to-origin point unchanged
+    @Test
+    public void testRevert_reversesDirectionKeepsOrigin() throws Throwable {
+        Line line = new Line(new Vector3D(1, 1, 0), new Vector3D(1, 2, 0));
+        Line reverted = line.revert();
+        assertVec(0.0, -1.0, 0.0, reverted.getDirection(), 1e-9);
+        assertVec(1.0, 0.0, 0.0, reverted.getOrigin(), 1e-9);
+    }
+
+    // getDirection: result is always a unit vector
+    @Test
+    public void testGetDirection_isUnitVector() throws Throwable {
+        Line line = new Line(new Vector3D(1, 2, 3), new Vector3D(4, 6, 3));
+        assertEquals(1.0, line.getDirection().getNorm(), 1e-9);
+    }
+
+    // getOrigin: abscissa of the closest point must be zero by contract
+    @Test
+    public void testGetOrigin_hasZeroAbscissa() throws Throwable {
+        Line line = new Line(new Vector3D(2, 3, 4), new Vector3D(5, 3, 4));
+        assertEquals(0.0, line.getAbscissa(line.getOrigin()), 1e-9);
+    }
+
+    // getAbscissa: dot product formula, independent of off-axis components
+    @Test
+    public void testGetAbscissa_pointOnLine_returnsParameterValue() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        assertEquals(7.0, line.getAbscissa(new Vector3D(7, 100, 100)), 1e-9);
+    }
+
+    // pointAt: positive abscissa reconstructs expected point
+    @Test
+    public void testPointAt_positiveAbscissa_returnsCorrectPoint() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        assertVec(7.0, 0.0, 0.0, line.pointAt(7.0), 1e-9);
+    }
+
+    // pointAt: zero abscissa must equal getOrigin()
+    @Test
+    public void testPointAt_zeroAbscissa_equalsOrigin() throws Throwable {
+        Line line = new Line(new Vector3D(2, 3, 4), new Vector3D(5, 3, 4));
+        Vector3D p0 = line.pointAt(0.0);
+        Vector3D origin = line.getOrigin();
+        assertVec(origin.getX(), origin.getY(), origin.getZ(), p0, 1e-9);
+    }
+
+    // pointAt: negative abscissa reconstructs expected point
+    @Test
+    public void testPointAt_negativeAbscissa_returnsCorrectPoint() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        assertVec(-7.0, 0.0, 0.0, line.pointAt(-7.0), 1e-9);
+    }
+
+    // toSubSpace: must match getAbscissa for the same point
+    @Test
+    public void testToSubSpace_matchesGetAbscissa() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Vector1D v = line.toSubSpace(new Vector3D(7, 50, 50));
+        assertEquals(7.0, v.getX(), 1e-9);
+    }
+
+    // toSpace: must match pointAt for the same abscissa
+    @Test
+    public void testToSpace_matchesPointAt() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Vector3D v = line.toSpace(new Vector1D(7.0));
+        assertVec(7.0, 0.0, 0.0, v, 1e-9);
+    }
+
+    // isSimilarTo: angle<1e-10 branch (same direction) AND contains true -> true
+    @Test
+    public void testIsSimilarTo_sameDirection_true() throws Throwable {
+        Vector3D p1 = new Vector3D(0, 0, 0);
+        Vector3D p2 = new Vector3D(1, 0, 0);
+        Line line1 = new Line(p1, p2);
+        Line line2 = new Line(p1, p2);
+        assertTrue(line1.isSimilarTo(line2));
+    }
+
+    // isSimilarTo: angle>PI-1e-10 branch (opposite direction) AND contains true -> true
+    @Test
+    public void testIsSimilarTo_oppositeDirection_true() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        assertTrue(line.isSimilarTo(line.revert()));
+    }
+
+    // isSimilarTo: angle condition true but contains(line.zero) false -> overall false
+    @Test
+    public void testIsSimilarTo_parallelDifferentLine_false() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(0, 5, 0), new Vector3D(1, 5, 0));
+        assertFalse(line1.isSimilarTo(line2));
+    }
+
+    // isSimilarTo: angle condition false (perpendicular lines) -> overall false
+    @Test
+    public void testIsSimilarTo_nonParallelLine_false() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(0, 0, 0), new Vector3D(0, 1, 0));
+        assertFalse(line1.isSimilarTo(line2));
+    }
+
+    // contains: point exactly on the line satisfies distance < 1e-10 -> true
+    @Test
+    public void testContains_pointOnLine_true() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        assertTrue(line.contains(new Vector3D(50, 0, 0)));
+    }
+
+    // contains: point off the line fails the distance threshold -> false
+    @Test
+    public void testContains_pointOffLine_false() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        assertFalse(line.contains(new Vector3D(0, 1, 0)));
+    }
+
+    // distance(point): known perpendicular distance via Pythagoras
+    @Test
+    public void testDistancePoint_perpendicularDistance_knownValue() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        assertEquals(13.0, line.distance(new Vector3D(0, 5, 12)), 1e-9);
+    }
+
+    // distance(point): point on the line yields zero distance
+    @Test
+    public void testDistancePoint_pointOnLine_zero() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        assertEquals(0.0, line.distance(new Vector3D(100, 0, 0)), 1e-9);
+    }
+
+    // distance(line): parallel lines (same direction) -> cross product ~0 branch
+    @Test
+    public void testDistanceLine_parallelSameDirection_knownValue() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(0, 5, 0), new Vector3D(1, 5, 0));
+        assertEquals(5.0, line1.distance(line2), 1e-9);
+    }
+
+    // distance(line): parallel lines with opposite direction vectors -> still parallel branch
+    @Test
+    public void testDistanceLine_parallelOppositeDirection_knownValue() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(0, 5, 0), new Vector3D(-1, 5, 0));
+        assertEquals(5.0, line1.distance(line2), 1e-9);
+    }
+
+    // distance(line): intersecting non-parallel lines -> zero separation
+    @Test
+    public void testDistanceLine_intersectingLines_zero() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(0, 0, 0), new Vector3D(0, 1, 0));
+        assertEquals(0.0, line1.distance(line2), 1e-9);
+    }
+
+    // distance(line): skew non-parallel lines -> known separation via offset formula
+    @Test
+    public void testDistanceLine_skewLines_knownValue() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(0, 0, 1), new Vector3D(0, 1, 1));
+        assertEquals(1.0, line1.distance(line2), 1e-9);
+    }
+
+    // closestPoint: parallel lines branch (n < EPSILON) returns this instance's own zero
+    @Test
+    public void testClosestPoint_parallelLines_returnsOwnOrigin() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(0, 5, 0), new Vector3D(1, 5, 0));
+        assertVec(0.0, 0.0, 0.0, line1.closestPoint(line2), 1e-9);
+    }
+
+    // closestPoint: intersecting lines -> closest point equals the true intersection
+    @Test
+    public void testClosestPoint_intersectingLines_returnsIntersection() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(0, 0, 0), new Vector3D(0, 1, 0));
+        assertVec(0.0, 0.0, 0.0, line1.closestPoint(line2), 1e-9);
+    }
+
+    // closestPoint: skew lines -> minimization formula gives a known non-trivial point
+    @Test
+    public void testClosestPoint_skewLines_knownPoint() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(2, 0, 1), new Vector3D(2, 1, 1));
+        assertVec(2.0, 0.0, 0.0, line1.closestPoint(line2), 1e-9);
+    }
+
+    // intersection: intersecting lines -> non-null point at true intersection
+    @Test
+    public void testIntersection_intersectingLines_returnsPoint() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(0, 0, 0), new Vector3D(0, 1, 0));
+        Vector3D inter = line1.intersection(line2);
+        assertNotNull(inter);
+        assertVec(0.0, 0.0, 0.0, inter, 1e-9);
+    }
+
+    // intersection: skew lines that never actually meet -> must return null
+    @Test
+    public void testIntersection_skewLines_returnsNull() throws Throwable {
+        Line line1 = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        Line line2 = new Line(new Vector3D(0, 0, 1), new Vector3D(0, 1, 1));
+        assertNull(line1.intersection(line2));
+    }
+
+    // wholeLine: must build a non-null SubLine covering the whole line
+    @Test
+    public void testWholeLine_returnsNonNullSubLine() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        SubLine sub = line.wholeLine();
+        assertNotNull(sub);
+        assertTrue(sub instanceof SubLine);
+    }
+}

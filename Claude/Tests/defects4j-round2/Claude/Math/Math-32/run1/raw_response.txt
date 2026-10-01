@@ -1,0 +1,262 @@
+package org.apache.commons.math3.geometry.euclidean.twod;
+
+import java.util.ArrayList;
+import java.util.Collection;
+
+import org.apache.commons.math3.geometry.partitioning.BSPTree;
+import org.apache.commons.math3.geometry.partitioning.Region;
+import org.apache.commons.math3.geometry.partitioning.SubHyperplane;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class PolygonsSetClaudeTest {
+
+    private boolean containsCorner(Vector2D[] loop, double x, double y) {
+        Vector2D target = new Vector2D(x, y);
+        for (int i = 0; i < loop.length; i++) {
+            if (loop[i] != null && loop[i].distance(target) < 1e-9) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // covers computeGeometricalProperties() v.length==0 branch with inside attribute TRUE
+    @Test
+    public void testNoArgConstructor_sizeIsPositiveInfinity() throws Throwable {
+        PolygonsSet whole = new PolygonsSet();
+        assertEquals(Double.POSITIVE_INFINITY, whole.getSize(), 0.0);
+    }
+
+    // covers Vector2D.NaN barycenter for the whole-space region
+    @Test
+    public void testNoArgConstructor_barycenterIsNaN() throws Throwable {
+        PolygonsSet whole = new PolygonsSet();
+        Vector2D bc = (Vector2D) whole.getBarycenter();
+        assertTrue(Double.isNaN(bc.getX()));
+        assertTrue(Double.isNaN(bc.getY()));
+    }
+
+    // covers checkPoint contract: whole space region contains every point
+    @Test
+    public void testNoArgConstructor_checkPointAlwaysInside() throws Throwable {
+        PolygonsSet whole = new PolygonsSet();
+        assertEquals(Region.Location.INSIDE, whole.checkPoint(new Vector2D(1000.0, -1000.0)));
+    }
+
+    // covers getVertices() branch getTree(false).getCut()==null -> zero length loop array
+    @Test
+    public void testNoArgConstructor_getVerticesIsEmpty() throws Throwable {
+        PolygonsSet whole = new PolygonsSet();
+        assertEquals(0, whole.getVertices().length);
+    }
+
+    // covers PolygonsSet(BSPTree) constructor delegating to super(tree)
+    @Test
+    public void testBSPTreeConstructor_rebuildsEquivalentRegion() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        BSPTree<Euclidean2D> tree = box.getTree(false);
+        PolygonsSet rebuilt = new PolygonsSet(tree);
+        assertEquals(box.getSize(), rebuilt.getSize(), 1e-9);
+    }
+
+    // covers "If the boundary is empty, the region will represent the whole space."
+    @Test
+    public void testCollectionConstructor_emptyBoundary_wholeSpace() throws Throwable {
+        Collection<SubHyperplane<Euclidean2D>> empty = new ArrayList<SubHyperplane<Euclidean2D>>();
+        PolygonsSet region = new PolygonsSet(empty);
+        assertEquals(Double.POSITIVE_INFINITY, region.getSize(), 0.0);
+    }
+
+    // covers checkPoint on whole-space region built from empty boundary collection
+    @Test
+    public void testCollectionConstructor_emptyBoundary_checkPointInside() throws Throwable {
+        Collection<SubHyperplane<Euclidean2D>> empty = new ArrayList<SubHyperplane<Euclidean2D>>();
+        PolygonsSet region = new PolygonsSet(empty);
+        assertEquals(Region.Location.INSIDE, region.checkPoint(new Vector2D(0.0, 0.0)));
+    }
+
+    // covers box constructor + shoelace sum>0 branch producing finite size
+    @Test
+    public void testBoxConstructor_unitSquare_size() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        assertEquals(1.0, box.getSize(), 1e-9);
+    }
+
+    // covers barycenter formula sumX/(3*sum), sumY/(3*sum)
+    @Test
+    public void testBoxConstructor_unitSquare_barycenter() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        Vector2D bc = (Vector2D) box.getBarycenter();
+        assertEquals(0.5, bc.getX(), 1e-9);
+        assertEquals(0.5, bc.getY(), 1e-9);
+    }
+
+    // covers area formula for a non-square rectangle: width * height
+    @Test
+    public void testBoxConstructor_rectangle_sizeGeneralFormula() throws Throwable {
+        PolygonsSet rect = new PolygonsSet(-1.0, 2.0, -3.0, 1.0);
+        assertEquals(12.0, rect.getSize(), 1e-9);
+    }
+
+    // covers barycenter for a non-square rectangle: midpoint of bounds
+    @Test
+    public void testBoxConstructor_rectangle_barycenterGeneralFormula() throws Throwable {
+        PolygonsSet rect = new PolygonsSet(-1.0, 2.0, -3.0, 1.0);
+        Vector2D bc = (Vector2D) rect.getBarycenter();
+        assertEquals(0.5, bc.getX(), 1e-9);
+        assertEquals(-1.0, bc.getY(), 1e-9);
+    }
+
+    // covers checkPoint INSIDE branch
+    @Test
+    public void testBoxConstructor_checkPointStrictlyInside() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        assertEquals(Region.Location.INSIDE, box.checkPoint(new Vector2D(0.5, 0.5)));
+    }
+
+    // covers checkPoint OUTSIDE branch
+    @Test
+    public void testBoxConstructor_checkPointStrictlyOutside() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        assertEquals(Region.Location.OUTSIDE, box.checkPoint(new Vector2D(5.0, 5.0)));
+    }
+
+    // covers checkPoint BOUNDARY branch on an edge midpoint
+    @Test
+    public void testBoxConstructor_checkPointOnEdgeIsBoundary() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        assertEquals(Region.Location.BOUNDARY, box.checkPoint(new Vector2D(0.5, 0.0)));
+    }
+
+    // covers checkPoint BOUNDARY branch exactly on a corner vertex
+    @Test
+    public void testBoxConstructor_checkPointOnVertexIsBoundary() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        assertEquals(Region.Location.BOUNDARY, box.checkPoint(new Vector2D(0.0, 0.0)));
+    }
+
+    // covers buildNew(BSPTree) returning a new PolygonsSet wrapping the given tree
+    @Test
+    public void testBuildNew_sameTree_sameSize() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 2.0, 0.0, 3.0);
+        BSPTree<Euclidean2D> tree = box.getTree(false);
+        PolygonsSet rebuilt = box.buildNew(tree);
+        assertEquals(6.0, rebuilt.getSize(), 1e-9);
+    }
+
+    // covers buildNew returning a region with identical boundary vertex count
+    @Test
+    public void testBuildNew_sameTree_sameVertexCount() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 2.0, 0.0, 3.0);
+        BSPTree<Euclidean2D> tree = box.getTree(false);
+        PolygonsSet rebuilt = box.buildNew(tree);
+        assertEquals(box.getVertices().length, rebuilt.getVertices().length);
+    }
+
+    // covers computeGeometricalProperties() closed-loop branch (all loops closed, sum>=0)
+    @Test
+    public void testComputeGeometricalProperties_box_setsFiniteSizeMatchingArea() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 4.0, 0.0, 5.0);
+        box.computeGeometricalProperties();
+        assertEquals(20.0, box.getSize(), 1e-9);
+    }
+
+    // covers computeGeometricalProperties() v.length==0 branch for whole-space region
+    @Test
+    public void testComputeGeometricalProperties_wholeSpace_setsInfiniteSize() throws Throwable {
+        PolygonsSet whole = new PolygonsSet();
+        whole.computeGeometricalProperties();
+        assertEquals(Double.POSITIVE_INFINITY, whole.getSize(), 0.0);
+    }
+
+    // covers getVertices() with a single closed boundary loop
+    @Test
+    public void testGetVertices_box_oneLoop() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        Vector2D[][] v = box.getVertices();
+        assertEquals(1, v.length);
+    }
+
+    // covers closed-loop branch building array sized to loop.size()
+    @Test
+    public void testGetVertices_box_loopHasFourVertices() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        Vector2D[][] v = box.getVertices();
+        assertEquals(4, v[0].length);
+    }
+
+    // covers branch where loop.get(0).getStart()!=null (closed loop, no null marker)
+    @Test
+    public void testGetVertices_box_noNullMarkersInClosedLoop() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        Vector2D[] loop = box.getVertices()[0];
+        for (int i = 0; i < loop.length; i++) {
+            assertNotNull(loop[i]);
+        }
+    }
+
+    // covers correct vertex extraction for all four box corners
+    @Test
+    public void testGetVertices_box_containsAllFourCorners() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        Vector2D[] loop = box.getVertices()[0];
+        assertTrue(containsCorner(loop, 0.0, 0.0));
+        assertTrue(containsCorner(loop, 1.0, 0.0));
+        assertTrue(containsCorner(loop, 1.0, 1.0));
+        assertTrue(containsCorner(loop, 0.0, 1.0));
+    }
+
+    // covers Javadoc contract: closed loops with finite area obey direct (CCW) orientation
+    @Test
+    public void testGetVertices_box_ccwOrientationPositiveShoelace() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        Vector2D[] loop = box.getVertices()[0];
+        double sum = 0;
+        for (int i = 0; i < loop.length; i++) {
+            Vector2D p0 = loop[i];
+            Vector2D p1 = loop[(i + 1) % loop.length];
+            sum += p0.getX() * p1.getY() - p0.getY() * p1.getX();
+        }
+        assertTrue(sum > 0);
+    }
+
+    // covers "return vertices.clone()" producing a new outer array on each call
+    @Test
+    public void testGetVertices_calledTwice_defensiveCopyOfOuterArray() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        Vector2D[][] v1 = box.getVertices();
+        Vector2D[][] v2 = box.getVertices();
+        assertNotSame(v1, v2);
+    }
+
+    // covers lazy caching of computed vertices (inner loop arrays reused across calls)
+    @Test
+    public void testGetVertices_calledTwice_cachedInnerArraysSameReference() throws Throwable {
+        PolygonsSet box = new PolygonsSet(0.0, 1.0, 0.0, 1.0);
+        Vector2D[][] v1 = box.getVertices();
+        Vector2D[][] v2 = box.getVertices();
+        assertSame(v1[0], v2[0]);
+    }
+
+    // covers getVertices() for a non-square rectangle
+    @Test
+    public void testGetVertices_rectangle_cornersMatchBounds() throws Throwable {
+        PolygonsSet rect = new PolygonsSet(-1.0, 2.0, -3.0, 1.0);
+        Vector2D[] loop = rect.getVertices()[0];
+        assertEquals(4, loop.length);
+        assertTrue(containsCorner(loop, -1.0, -3.0));
+        assertTrue(containsCorner(loop, 2.0, 1.0));
+    }
+
+    // covers box constructor and area/barycenter formulas with negative coordinate bounds
+    @Test
+    public void testBoxConstructor_negativeCoordinates_sizeAndBarycenter() throws Throwable {
+        PolygonsSet box = new PolygonsSet(-4.0, -1.0, -2.0, 2.0);
+        assertEquals(12.0, box.getSize(), 1e-9);
+        Vector2D bc = (Vector2D) box.getBarycenter();
+        assertEquals(-2.5, bc.getX(), 1e-9);
+        assertEquals(0.0, bc.getY(), 1e-9);
+    }
+}

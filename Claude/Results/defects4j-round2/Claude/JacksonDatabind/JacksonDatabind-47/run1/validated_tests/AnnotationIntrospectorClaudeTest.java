@@ -1,0 +1,344 @@
+package com.fasterxml.jackson.databind;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+
+import com.fasterxml.jackson.core.Version;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.introspect.Annotated;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+
+public class AnnotationIntrospectorClaudeTest
+{
+    public static class PlainIntrospector extends AnnotationIntrospector {
+        public Version version() { return Version.unknownVersion(); }
+    }
+
+    public static class ConfigurableIntrospector extends AnnotationIntrospector {
+        Class<?> serType;
+        Class<?> serKeyType;
+        Class<?> serContentType;
+        Class<?> deserType;
+        Class<?> deserKeyType;
+        Class<?> deserContentType;
+
+        public Version version() { return Version.unknownVersion(); }
+        public Class<?> findSerializationType(Annotated a) { return serType; }
+        public Class<?> findSerializationKeyType(Annotated am, JavaType baseType) { return serKeyType; }
+        public Class<?> findSerializationContentType(Annotated am, JavaType baseType) { return serContentType; }
+        public Class<?> findDeserializationType(Annotated am, JavaType baseType) { return deserType; }
+        public Class<?> findDeserializationKeyType(Annotated am, JavaType baseKeyType) { return deserKeyType; }
+        public Class<?> findDeserializationContentType(Annotated am, JavaType baseContentType) { return deserContentType; }
+    }
+
+    public static enum SampleEnum { FOO, BAR, BAZ }
+
+    public static class SamplePojo {
+        private String name;
+        @JsonProperty("customName")
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    private ObjectMapper mapper;
+    private TypeFactory tf;
+    private PlainIntrospector plain;
+    private ConfigurableIntrospector configurable;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+        tf = mapper.getTypeFactory();
+        plain = new PlainIntrospector();
+        configurable = new ConfigurableIntrospector();
+    }
+
+    // AnnotationIntrospector.nopInstance() returns a non-null instance
+    @Test
+    public void testNopInstance_returnsNonNullIntrospector() throws Throwable {
+        AnnotationIntrospector nop = AnnotationIntrospector.nopInstance();
+        assertNotNull(nop);
+    }
+
+    // AnnotationIntrospector.pair(a1, a2) returns a non-null combined introspector
+    @Test
+    public void testPair_returnsNonNullIntrospector() throws Throwable {
+        AnnotationIntrospector a1 = AnnotationIntrospector.nopInstance();
+        AnnotationIntrospector a2 = AnnotationIntrospector.nopInstance();
+        AnnotationIntrospector paired = AnnotationIntrospector.pair(a1, a2);
+        assertNotNull(paired);
+    }
+
+    // default allIntrospectors() returns singleton list containing self
+    @Test
+    public void testAllIntrospectors_noArg_returnsSingletonContainingSelf() throws Throwable {
+        Collection<AnnotationIntrospector> result = plain.allIntrospectors();
+        assertEquals(1, result.size());
+        assertTrue(result.contains(plain));
+    }
+
+    // default allIntrospectors(Collection) adds self to given collection and returns it
+    @Test
+    public void testAllIntrospectors_withCollection_addsSelfToResult() throws Throwable {
+        List<AnnotationIntrospector> list = new ArrayList<AnnotationIntrospector>();
+        Collection<AnnotationIntrospector> result = plain.allIntrospectors(list);
+        assertSame(list, result);
+        assertTrue(result.contains(plain));
+    }
+
+    // default isAnnotationBundle() always returns false
+    @Test
+    public void testIsAnnotationBundle_defaultReturnsFalse() throws Throwable {
+        JsonProperty ann = SamplePojo.class.getMethod("getName").getAnnotation(JsonProperty.class);
+        assertFalse(plain.isAnnotationBundle(ann));
+    }
+
+    // default findObjectIdInfo() returns null
+    @Test
+    public void testFindObjectIdInfo_defaultReturnsNull() throws Throwable {
+        assertNull(plain.findObjectIdInfo(null));
+    }
+
+    // default findObjectReferenceInfo() passes through the given objectIdInfo (null in, null out)
+    @Test
+    public void testFindObjectReferenceInfo_passthroughNull() throws Throwable {
+        assertNull(plain.findObjectReferenceInfo(null, null));
+    }
+
+    // default findRootName/findClassDescription return null
+    @Test
+    public void testFindRootName_findClassDescription_defaultNull() throws Throwable {
+        assertNull(plain.findRootName(null));
+        assertNull(plain.findClassDescription(null));
+    }
+
+    // default findPropertiesToIgnore (both 2-arg branches and deprecated 1-arg) return null
+    @Test
+    public void testFindPropertiesToIgnore_allVariants_defaultReturnNull() throws Throwable {
+        assertNull(plain.findPropertiesToIgnore(null, true));
+        assertNull(plain.findPropertiesToIgnore(null, false));
+        assertNull(plain.findPropertiesToIgnore(null));
+    }
+
+    // default findIgnoreUnknownProperties/isIgnorableType return null
+    @Test
+    public void testFindIgnoreUnknownProperties_isIgnorableType_defaultNull() throws Throwable {
+        assertNull(plain.findIgnoreUnknownProperties(null));
+        assertNull(plain.isIgnorableType(null));
+    }
+
+    // default findFilterId/findNamingStrategy return null
+    @Test
+    public void testFindFilterId_findNamingStrategy_defaultNull() throws Throwable {
+        assertNull(plain.findFilterId(null));
+        assertNull(plain.findNamingStrategy(null));
+    }
+
+    // findEnumValue default returns Enum.name()
+    @Test
+    public void testFindEnumValue_returnsEnumName() throws Throwable {
+        assertEquals("FOO", plain.findEnumValue(SampleEnum.FOO));
+    }
+
+    // findEnumValues only overwrites null entries in names array, leaving others unchanged
+    @Test
+    public void testFindEnumValues_fillsOnlyNullEntries() throws Throwable {
+        Enum<?>[] values = new Enum<?>[] { SampleEnum.FOO, SampleEnum.BAR, SampleEnum.BAZ };
+        String[] names = new String[] { "custom", null, null };
+        String[] result = plain.findEnumValues(SampleEnum.class, values, names);
+        assertEquals("custom", result[0]);
+        assertEquals("BAR", result[1]);
+        assertEquals("BAZ", result[2]);
+        assertSame(names, result);
+    }
+
+    // findEnumValues with empty arrays performs zero loop iterations and returns empty array
+    @Test
+    public void testFindEnumValues_emptyArrays_returnsEmptyArray() throws Throwable {
+        Enum<?>[] values = new Enum<?>[0];
+        String[] names = new String[0];
+        String[] result = plain.findEnumValues(SampleEnum.class, values, names);
+        assertEquals(0, result.length);
+    }
+
+    // default findPropertyInclusion returns a non-null value
+    @Test
+    public void testFindPropertyInclusion_defaultReturnsNonNull() throws Throwable {
+        JsonInclude.Value result = plain.findPropertyInclusion(null);
+        assertNotNull(result);
+    }
+
+    // refineSerializationType: main type widening to declared supertype (generalization branch)
+    @Test
+    public void testRefineSerializationType_mainTypeWidening_generalizesToSuperType() throws Throwable {
+        JavaType base = tf.constructCollectionType(ArrayList.class, String.class);
+        configurable.serType = List.class;
+        JavaType result = configurable.refineSerializationType(mapper.getSerializationConfig(), null, base);
+        assertEquals(List.class, result.getRawClass());
+    }
+
+    // refineSerializationType: same raw class keeps raw class (static typing branch)
+    @Test
+    public void testRefineSerializationType_mainTypeSameRawClass_keepsRawClass() throws Throwable {
+        JavaType base = tf.constructType(String.class);
+        configurable.serType = String.class;
+        JavaType result = configurable.refineSerializationType(mapper.getSerializationConfig(), null, base);
+        assertEquals(String.class, result.getRawClass());
+    }
+
+
+
+    // refineSerializationType: key type specialization branch
+    @Test
+    public void testRefineSerializationType_keyTypeSpecialization() throws Throwable {
+        JavaType base = tf.constructMapType(HashMap.class, Number.class, String.class);
+        configurable.serKeyType = Integer.class;
+        JavaType result = configurable.refineSerializationType(mapper.getSerializationConfig(), null, base);
+        assertEquals(Integer.class, result.getKeyType().getRawClass());
+    }
+
+    // refineSerializationType: unrelated key type throws JsonMappingException
+    @Test
+    public void testRefineSerializationType_keyTypeUnrelated_throwsJsonMappingException() throws Throwable {
+        JavaType base = tf.constructMapType(HashMap.class, String.class, Integer.class);
+        configurable.serKeyType = Thread.class;
+        try {
+            configurable.refineSerializationType(mapper.getSerializationConfig(), null, base);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("not related"));
+        }
+    }
+
+
+
+    // refineSerializationType: content type specialization branch
+    @Test
+    public void testRefineSerializationType_contentTypeSpecialization() throws Throwable {
+        JavaType base = tf.constructCollectionType(ArrayList.class, Number.class);
+        configurable.serContentType = Integer.class;
+        JavaType result = configurable.refineSerializationType(mapper.getSerializationConfig(), null, base);
+        assertEquals(Integer.class, result.getContentType().getRawClass());
+    }
+
+    // refineSerializationType: unrelated content type throws JsonMappingException
+    @Test
+    public void testRefineSerializationType_contentTypeUnrelated_throwsJsonMappingException() throws Throwable {
+        JavaType base = tf.constructCollectionType(ArrayList.class, String.class);
+        configurable.serContentType = Thread.class;
+        try {
+            configurable.refineSerializationType(mapper.getSerializationConfig(), null, base);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("not related"));
+        }
+    }
+
+    // refineSerializationType: with no overrides base type is returned unchanged
+    @Test
+    public void testRefineSerializationType_noOverrides_returnsBaseTypeUnchanged() throws Throwable {
+        JavaType base = tf.constructType(String.class);
+        JavaType result = plain.refineSerializationType(mapper.getSerializationConfig(), null, base);
+        assertEquals(String.class, result.getRawClass());
+    }
+
+    // refineDeserializationType: main type narrowing to declared subtype
+    @Test
+    public void testRefineDeserializationType_mainTypeNarrowing() throws Throwable {
+        JavaType base = tf.constructType(List.class);
+        configurable.deserType = ArrayList.class;
+        JavaType result = configurable.refineDeserializationType(mapper.getDeserializationConfig(), null, base);
+        assertEquals(ArrayList.class, result.getRawClass());
+    }
+
+    // refineDeserializationType: same raw class means no change applied
+    @Test
+    public void testRefineDeserializationType_mainTypeSameRawClass_noChange() throws Throwable {
+        JavaType base = tf.constructType(String.class);
+        configurable.deserType = String.class;
+        JavaType result = configurable.refineDeserializationType(mapper.getDeserializationConfig(), null, base);
+        assertEquals(String.class, result.getRawClass());
+    }
+
+    // refineDeserializationType: key type narrowing
+    @Test
+    public void testRefineDeserializationType_keyTypeNarrowing() throws Throwable {
+        JavaType base = tf.constructMapType(HashMap.class, Number.class, String.class);
+        configurable.deserKeyType = Integer.class;
+        JavaType result = configurable.refineDeserializationType(mapper.getDeserializationConfig(), null, base);
+        assertEquals(Integer.class, result.getKeyType().getRawClass());
+    }
+
+    // refineDeserializationType: content type narrowing
+    @Test
+    public void testRefineDeserializationType_contentTypeNarrowing() throws Throwable {
+        JavaType base = tf.constructCollectionType(ArrayList.class, Number.class);
+        configurable.deserContentType = Integer.class;
+        JavaType result = configurable.refineDeserializationType(mapper.getDeserializationConfig(), null, base);
+        assertEquals(Integer.class, result.getContentType().getRawClass());
+    }
+
+
+
+    // refineDeserializationType: with no overrides base type is returned unchanged
+    @Test
+    public void testRefineDeserializationType_noOverrides_returnsBaseTypeUnchanged() throws Throwable {
+        JavaType base = tf.constructType(String.class);
+        JavaType result = plain.refineDeserializationType(mapper.getDeserializationConfig(), null, base);
+        assertEquals(String.class, result.getRawClass());
+    }
+
+    // deprecated findSerializationType default returns null
+    @Test
+    public void testFindSerializationType_deprecated_defaultNull() throws Throwable {
+        assertNull(plain.findSerializationType(null));
+    }
+
+    // deprecated findDeserializationType default returns null
+    @Test
+    public void testFindDeserializationType_deprecated_defaultNull() throws Throwable {
+        JavaType base = tf.constructType(String.class);
+        assertNull(plain.findDeserializationType(null, base));
+    }
+
+    // default hasAsValueAnnotation returns false
+    @Test
+    public void testHasAsValueAnnotation_defaultFalse() throws Throwable {
+        assertFalse(plain.hasAsValueAnnotation(null));
+    }
+
+    // default hasAnySetterAnnotation/hasAnyGetterAnnotation return false
+    @Test
+    public void testHasAnySetterAndGetterAnnotation_defaultFalse() throws Throwable {
+        assertFalse(plain.hasAnySetterAnnotation(null));
+        assertFalse(plain.hasAnyGetterAnnotation(null));
+    }
+
+    // default hasCreatorAnnotation false and findCreatorBinding null
+    @Test
+    public void testHasCreatorAnnotation_findCreatorBinding_defaultValues() throws Throwable {
+        assertFalse(plain.hasCreatorAnnotation(null));
+        assertNull(plain.findCreatorBinding(null));
+    }
+
+    // default findViews/findFormat return null
+    @Test
+    public void testFindViews_findFormat_defaultNull() throws Throwable {
+        assertNull(plain.findViews(null));
+        assertNull(plain.findFormat(null));
+    }
+
+    // default findWrapperName/findPropertyDefaultValue return null
+    @Test
+    public void testFindWrapperName_findPropertyDefaultValue_defaultNull() throws Throwable {
+        assertNull(plain.findWrapperName(null));
+        assertNull(plain.findPropertyDefaultValue(null));
+    }
+}

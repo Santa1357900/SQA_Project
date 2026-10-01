@@ -1,0 +1,254 @@
+package org.apache.commons.math.distribution;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.MathException;
+import org.apache.commons.math.util.FastMath;
+
+public class PoissonDistributionImplClaudeTest {
+
+    // Constructor(double): valid positive mean sets the mean field
+    @Test
+    public void testConstructorSingleArg_validMean_setsMean() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(4.0);
+        assertEquals(4.0, dist.getMean(), 1e-9);
+    }
+
+    // Constructor(double): p == 0 branch must throw IllegalArgumentException
+    @Test
+    public void testConstructorSingleArg_zeroMean_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new PoissonDistributionImpl(0.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Constructor(double): p < 0 branch must throw IllegalArgumentException
+    @Test
+    public void testConstructorSingleArg_negativeMean_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new PoissonDistributionImpl(-3.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Constructor(double,double,int): valid params set mean correctly
+    @Test
+    public void testConstructorThreeArg_validParams_setsMean() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(10.0, 1e-9, 500);
+        assertEquals(10.0, dist.getMean(), 1e-9);
+    }
+
+    // Constructor(double,double,int): p == 0 still throws via shared validation
+    @Test
+    public void testConstructorThreeArg_zeroMean_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new PoissonDistributionImpl(0.0, 1e-9, 100);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Constructor(double,double): delegates with DEFAULT_MAX_ITERATIONS, matches explicit 3-arg call
+    @Test
+    public void testConstructorEpsilonArg_matchesThreeArgWithDefaultMaxIterations() throws Throwable {
+        PoissonDistributionImpl d1 = new PoissonDistributionImpl(6.0, 1e-9);
+        PoissonDistributionImpl d2 = new PoissonDistributionImpl(6.0, 1e-9, PoissonDistributionImpl.DEFAULT_MAX_ITERATIONS);
+        assertEquals(d2.cumulativeProbability(6), d1.cumulativeProbability(6), 1e-9);
+    }
+
+    // Constructor(double,int): delegates with DEFAULT_EPSILON, matches explicit 3-arg call
+    @Test
+    public void testConstructorMaxIterationsArg_matchesThreeArgWithDefaultEpsilon() throws Throwable {
+        PoissonDistributionImpl d1 = new PoissonDistributionImpl(6.0, 200);
+        PoissonDistributionImpl d2 = new PoissonDistributionImpl(6.0, PoissonDistributionImpl.DEFAULT_EPSILON, 200);
+        assertEquals(d2.cumulativeProbability(6), d1.cumulativeProbability(6), 1e-9);
+    }
+
+    // Constructor(double) delegates to full constructor with both defaults
+    @Test
+    public void testConstructorDefaultVsExplicitDefaults_matchCumulativeProbability() throws Throwable {
+        PoissonDistributionImpl d1 = new PoissonDistributionImpl(7.0);
+        PoissonDistributionImpl d2 = new PoissonDistributionImpl(7.0, PoissonDistributionImpl.DEFAULT_EPSILON,
+                PoissonDistributionImpl.DEFAULT_MAX_ITERATIONS);
+        assertEquals(d2.cumulativeProbability(7), d1.cumulativeProbability(7), 1e-9);
+    }
+
+    // getMean returns the exact fractional mean passed to the constructor
+    @Test
+    public void testGetMean_returnsFractionalValue() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(2.75);
+        assertEquals(2.75, dist.getMean(), 1e-9);
+    }
+
+    // probability(x): x < 0 branch returns 0.0
+    @Test
+    public void testProbability_negativeX_returnsZero() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(3.0);
+        assertEquals(0.0, dist.probability(-1), 1e-12);
+    }
+
+    // probability(x): x == Integer.MAX_VALUE branch returns 0.0
+    @Test
+    public void testProbability_maxIntX_returnsZero() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(3.0);
+        assertEquals(0.0, dist.probability(Integer.MAX_VALUE), 1e-12);
+    }
+
+    // probability(x): x == 0 branch equals exp(-mean) per PMF definition
+    @Test
+    public void testProbability_zeroX_equalsExpNegMean() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(2.0);
+        double expected = FastMath.exp(-2.0);
+        assertEquals(expected, dist.probability(0), 1e-9);
+    }
+
+    // probability(x): positive x matches closed-form PMF e^-mean*mean^x/x! for small mean
+    @Test
+    public void testProbability_positiveX_matchesClosedFormSmallMean() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(0.5);
+        double expected = FastMath.exp(-0.5) * 0.5;
+        assertEquals(expected, dist.probability(1), 1e-6);
+    }
+
+    // probability(x): else branch value is consistent with cumulativeProbability(x) - cumulativeProbability(x-1)
+    @Test
+    public void testProbability_positiveX_matchesCumulativeDifference() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(4.0);
+        double diff = dist.cumulativeProbability(5) - dist.cumulativeProbability(4);
+        assertEquals(diff, dist.probability(5), 1e-9);
+    }
+
+    // probability(x): summing the PMF over a sufficient range must approach 1 (total probability axiom)
+    @Test
+    public void testProbability_sumOverRange_approximatelyOne() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(3.0);
+        double sum = 0.0;
+        for (int x = 0; x <= 50; x++) {
+            sum += dist.probability(x);
+        }
+        assertEquals(1.0, sum, 1e-6);
+    }
+
+    // cumulativeProbability(x): x < 0 branch returns 0
+    @Test
+    public void testCumulativeProbability_negativeX_returnsZero() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(5.0);
+        assertEquals(0.0, dist.cumulativeProbability(-1), 1e-12);
+    }
+
+    // cumulativeProbability(x): x == Integer.MAX_VALUE branch returns 1
+    @Test
+    public void testCumulativeProbability_maxIntX_returnsOne() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(5.0);
+        assertEquals(1.0, dist.cumulativeProbability(Integer.MAX_VALUE), 1e-12);
+    }
+
+    // cumulativeProbability(x): x == 0 case equals probability(0) since P(X<=0)=P(X=0)
+    @Test
+    public void testCumulativeProbability_zeroX_equalsProbabilityZero() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(6.0);
+        assertEquals(dist.probability(0), dist.cumulativeProbability(0), 1e-9);
+    }
+
+    // cumulativeProbability(x): closed-form check for x=1, P(X<=1)=e^-mean*(1+mean)
+    @Test
+    public void testCumulativeProbability_oneX_matchesClosedFormValue() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(2.0);
+        double expected = FastMath.exp(-2.0) * 3.0;
+        assertEquals(expected, dist.cumulativeProbability(1), 1e-6);
+    }
+
+    // cumulativeProbability(x): must be non-decreasing as x increases (general branch)
+    @Test
+    public void testCumulativeProbability_monotonicNonDecreasing() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(5.0);
+        double c1 = dist.cumulativeProbability(2);
+        double c2 = dist.cumulativeProbability(5);
+        double c3 = dist.cumulativeProbability(10);
+        assertTrue(c2 >= c1);
+        assertTrue(c3 >= c2);
+        assertTrue(c3 <= 1.0 + 1e-9);
+    }
+
+    // cumulativeProbability(x): for large x it must approach 1 (CDF upper limit)
+    @Test
+    public void testCumulativeProbability_largeX_approachesOne() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(2.0);
+        assertEquals(1.0, dist.cumulativeProbability(100), 1e-9);
+    }
+
+    // cumulativeProbability(x): with maxIterations exhausted it must throw MathException per javadoc contract
+    @Test
+    public void testCumulativeProbability_insufficientMaxIterations_throwsMathException() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(50.0, 1e-300, 1);
+        try {
+            dist.cumulativeProbability(50);
+            fail("expected MathException due to non-convergence");
+        } catch (MathException expected) {
+        }
+    }
+
+    // normalApproximateProbability: must equal normal.cumulativeProbability(x+0.5) per documented half-correction
+    @Test
+    public void testNormalApproximateProbability_matchesDirectNormalComputation() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(4.0);
+        NormalDistributionImpl normal = new NormalDistributionImpl(4.0, FastMath.sqrt(4.0));
+        double expected = normal.cumulativeProbability(2 + 0.5);
+        assertEquals(expected, dist.normalApproximateProbability(2), 1e-9);
+    }
+
+    // normalApproximateProbability: boundary x=0 still applies the +0.5 half-correction
+    @Test
+    public void testNormalApproximateProbability_zeroX() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(9.0);
+        NormalDistributionImpl normal = new NormalDistributionImpl(9.0, FastMath.sqrt(9.0));
+        double expected = normal.cumulativeProbability(0 + 0.5);
+        assertEquals(expected, dist.normalApproximateProbability(0), 1e-9);
+    }
+
+    // sample(): must return a non-negative integer value (Poisson domain lower bound is 0)
+    @Test
+    public void testSample_returnsNonNegativeValue() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(3.0);
+        int s = dist.sample();
+        assertTrue(s >= 0);
+    }
+
+    // getDomainLowerBound: always returns 0 regardless of the p argument
+    @Test
+    public void testGetDomainLowerBound_returnsZero() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(3.0);
+        assertEquals(0, dist.getDomainLowerBound(0.5));
+    }
+
+    // getDomainLowerBound: boundary p values (0.0 and 1.0) still return 0
+    @Test
+    public void testGetDomainLowerBound_boundaryPValues_returnsZero() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(3.0);
+        assertEquals(0, dist.getDomainLowerBound(0.0));
+        assertEquals(0, dist.getDomainLowerBound(1.0));
+    }
+
+    // getDomainUpperBound: always returns Integer.MAX_VALUE regardless of the p argument
+    @Test
+    public void testGetDomainUpperBound_returnsIntegerMaxValue() throws Throwable {
+        PoissonDistributionImpl dist = new PoissonDistributionImpl(3.0);
+        assertEquals(Integer.MAX_VALUE, dist.getDomainUpperBound(0.5));
+    }
+
+    // DEFAULT_MAX_ITERATIONS constant must equal the documented default value
+    @Test
+    public void testDefaultMaxIterationsConstant_value() throws Throwable {
+        assertEquals(10000000, PoissonDistributionImpl.DEFAULT_MAX_ITERATIONS);
+    }
+
+    // DEFAULT_EPSILON constant must equal the documented default value
+    @Test
+    public void testDefaultEpsilonConstant_value() throws Throwable {
+        assertEquals(1E-12, PoissonDistributionImpl.DEFAULT_EPSILON, 0.0);
+    }
+}

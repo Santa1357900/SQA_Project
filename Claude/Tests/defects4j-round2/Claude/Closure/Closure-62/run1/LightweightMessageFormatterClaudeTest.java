@@ -1,0 +1,265 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class LightweightMessageFormatterClaudeTest {
+
+  private static final DiagnosticType TEST_ERROR_TYPE =
+      DiagnosticType.error("TEST_ERROR_TYPE", "fixed description");
+
+  private Compiler compiler;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.compile(
+        SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode("test.js", "var x = 1;\nvar y = 2;\n"),
+        options);
+  }
+
+  // Constructor(SourceExcerptProvider): null source must trigger Preconditions.checkNotNull
+  @Test
+  public void testConstructorOneArg_nullSource_throwsNullPointerException() throws Throwable {
+    try {
+      new LightweightMessageFormatter((SourceExcerptProvider) null);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // Constructor(SourceExcerptProvider, SourceExcerpt): null source must trigger checkNotNull
+  @Test
+  public void testConstructorTwoArgs_nullSource_throwsNullPointerException() throws Throwable {
+    try {
+      new LightweightMessageFormatter(
+          (SourceExcerptProvider) null, SourceExcerptProvider.SourceExcerpt.LINE);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // Two-arg constructor with explicit LINE excerpt should format identical to one-arg (default)
+  @Test
+  public void testConstructorOneArg_defaultsToLineExcerpt_sameAsExplicit() throws Throwable {
+    LightweightMessageFormatter formatter1 = new LightweightMessageFormatter(compiler);
+    LightweightMessageFormatter formatter2 =
+        new LightweightMessageFormatter(compiler, SourceExcerptProvider.SourceExcerpt.LINE);
+    JSError error = JSError.make("test.js", 1, -1, TEST_ERROR_TYPE);
+    assertEquals(formatter1.formatError(error), formatter2.formatError(error));
+  }
+
+  // Two-arg constructor with explicit LINE excerpt correctly fetches requested source line
+  @Test
+  public void testConstructorTwoArgs_explicitLineExcerpt_formatsWithSourceExcerpt() throws Throwable {
+    LightweightMessageFormatter formatter =
+        new LightweightMessageFormatter(compiler, SourceExcerptProvider.SourceExcerpt.LINE);
+    JSError error = JSError.make("test.js", 2, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertTrue(result.contains("var y = 2;"));
+  }
+
+  // withoutSource(): source == null branch, excerpt and caret must never be appended
+  @Test
+  public void testWithoutSource_formatErrorDoesNotThrow_andOmitsCaret() throws Throwable {
+    LightweightMessageFormatter formatter = LightweightMessageFormatter.withoutSource();
+    JSError error = JSError.make("x.js", 1, 5, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertFalse(result.contains("^"));
+  }
+
+  // error.sourceName == null branch: prefix (sourceName + optional line) must be omitted
+  @Test
+  public void testFormatError_nullSourceName_omitsEntirePrefix() throws Throwable {
+    LightweightMessageFormatter formatter = LightweightMessageFormatter.withoutSource();
+    JSError error = JSError.make((String) null, -1, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertFalse(result.contains(":"));
+    assertTrue(result.contains("fixed description"));
+  }
+
+  // sourceName present, lineNumber == 0: "lineNumber > 0" branch false, no ":0" appended
+  @Test
+  public void testFormatError_sourceNameAndZeroLineNumber_omitsLineNumberSuffix() throws Throwable {
+    LightweightMessageFormatter formatter = LightweightMessageFormatter.withoutSource();
+    JSError error = JSError.make("foo.js", 0, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertTrue(result.contains("foo.js: "));
+    assertFalse(result.contains("foo.js:0"));
+  }
+
+  // sourceName present, lineNumber negative: same branch as above but with negative value
+  @Test
+  public void testFormatError_sourceNameAndNegativeLineNumber_omitsLineNumberSuffix() throws Throwable {
+    LightweightMessageFormatter formatter = LightweightMessageFormatter.withoutSource();
+    JSError error = JSError.make("foo.js", -3, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertTrue(result.contains("foo.js: "));
+    assertFalse(result.contains("foo.js:-3"));
+  }
+
+  // sourceName present, lineNumber positive: "lineNumber > 0" branch true
+  @Test
+  public void testFormatError_sourceNameAndPositiveLineNumber_includesLineNumberPrefix() throws Throwable {
+    LightweightMessageFormatter formatter = LightweightMessageFormatter.withoutSource();
+    JSError error = JSError.make("foo.js", 7, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertTrue(result.contains("foo.js:7:"));
+  }
+
+  // description must always be appended regardless of other branches
+  @Test
+  public void testFormatError_descriptionAppearsInOutput() throws Throwable {
+    LightweightMessageFormatter formatter = LightweightMessageFormatter.withoutSource();
+    JSError error = JSError.make("a.js", 1, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertTrue(result.contains("fixed description"));
+  }
+
+  // without a source excerpt, result must end with the newline appended after description
+  @Test
+  public void testFormatError_withoutSource_endsWithNewline() throws Throwable {
+    LightweightMessageFormatter formatter = LightweightMessageFormatter.withoutSource();
+    JSError error = JSError.make("a.js", 1, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertTrue(result.endsWith("\n"));
+  }
+
+  // getLevelName(CheckLevel.ERROR) branch via formatError
+  @Test
+  public void testFormatError_includesErrorLabel() throws Throwable {
+    LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+    JSError error = JSError.make("test.js", 1, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertTrue(result.contains("ERROR"));
+  }
+
+  // getLevelName(CheckLevel.WARNING) branch via formatWarning, plus excerpt retrieval
+  @Test
+  public void testFormatWarning_includesSourceExcerptAndWarningLabel() throws Throwable {
+    LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+    JSError warning = JSError.make("test.js", 1, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatWarning(warning);
+    assertTrue(result.contains("WARNING"));
+    assertTrue(result.contains("var x = 1;"));
+  }
+
+  // formatError and formatWarning on the same error must differ (only the label changes)
+  @Test
+  public void testFormatErrorAndFormatWarning_differInLabelOnly() throws Throwable {
+    LightweightMessageFormatter formatter = LightweightMessageFormatter.withoutSource();
+    JSError error = JSError.make("a.js", 1, -1, TEST_ERROR_TYPE);
+    String errResult = formatter.formatError(error);
+    String warnResult = formatter.formatWarning(error);
+    assertFalse(errResult.equals(warnResult));
+  }
+
+  // sourceExcerpt != null branch: excerpt line fetched from provider must be included
+  @Test
+  public void testFormatError_withSource_includesSourceExcerptLine() throws Throwable {
+    LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+    JSError error = JSError.make("test.js", 1, 0, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertTrue(result.contains("var x = 1;"));
+  }
+
+  // error.lineNumber must drive which physical source line is fetched
+  @Test
+  public void testFormatError_lineNumberTwo_fetchesCorrectSourceLine() throws Throwable {
+    LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+    JSError error = JSError.make("test.js", 2, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertTrue(result.contains("var y = 2;"));
+    assertFalse(result.contains("var x = 1;"));
+  }
+
+  // charno < 0: "0 <= charno" branch false, no caret line appended
+  @Test
+  public void testFormatError_charnoNegative_noCaretLine() throws Throwable {
+    LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+    JSError error = JSError.make("test.js", 1, -1, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertFalse(result.contains("^"));
+  }
+
+  // extreme negative charno must also skip the caret branch
+  @Test
+  public void testFormatError_charnoMinValue_noCaretLine() throws Throwable {
+    LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+    JSError error = JSError.make("test.js", 1, Integer.MIN_VALUE, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertFalse(result.contains("^"));
+  }
+
+  // charno == 0: loop runs zero times, caret placed immediately after the excerpt line
+  @Test
+  public void testFormatError_charnoZero_caretImmediatelyAfterExcerpt() throws Throwable {
+    LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+    String line = "var x = 1;";
+    JSError error = JSError.make("test.js", 1, 0, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    int excerptIndex = result.indexOf(line);
+    assertTrue(excerptIndex >= 0);
+    int caretLineStart = excerptIndex + line.length() + 1;
+    int caretIndex = result.indexOf('^', caretLineStart);
+    assertEquals(caretLineStart, caretIndex);
+  }
+
+  // charno in the middle of the line: padding length before '^' must equal charno
+  @Test
+  public void testFormatError_charnoMidLine_paddingLengthMatchesCharno() throws Throwable {
+    LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+    String line = "var x = 1;";
+    JSError error = JSError.make("test.js", 1, 4, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    int excerptIndex = result.indexOf(line);
+    assertTrue(excerptIndex >= 0);
+    int caretLineStart = excerptIndex + line.length() + 1;
+    int caretIndex = result.indexOf('^', caretLineStart);
+    assertEquals(caretLineStart + 4, caretIndex);
+  }
+
+  // BUG-SENSITIVE: per the code comment, charno == sourceExcerpt.length() means something is
+  // missing at the end of the line, so the caret must still be rendered at that position.
+  @Test
+  public void testFormatError_charnoEqualsLineLength_caretShownAtEndOfLine() throws Throwable {
+    LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+    String line = "var x = 1;";
+    int lineLength = line.length();
+    JSError error = JSError.make("test.js", 1, lineLength, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    int excerptIndex = result.indexOf(line);
+    assertTrue(excerptIndex >= 0);
+    int caretLineStart = excerptIndex + line.length() + 1;
+    int caretIndex = result.indexOf('^', caretLineStart);
+    assertEquals(caretLineStart + lineLength, caretIndex);
+  }
+
+  // charno strictly greater than line length: must be excluded regardless of boundary used
+  @Test
+  public void testFormatError_charnoGreaterThanLineLength_noCaretLine() throws Throwable {
+    LightweightMessageFormatter formatter = new LightweightMessageFormatter(compiler);
+    JSError error = JSError.make("test.js", 1, 11, TEST_ERROR_TYPE);
+    String result = formatter.formatError(error);
+    assertFalse(result.contains("^"));
+  }
+
+  // LineNumberingFormatter.formatLine must return the given line unchanged, per implementation
+  @Test
+  public void testLineNumberingFormatterFormatLine_returnsLineUnchanged() throws Throwable {
+    LightweightMessageFormatter.LineNumberingFormatter f =
+        new LightweightMessageFormatter.LineNumberingFormatter();
+    assertEquals("abc", f.formatLine("abc", 5));
+  }
+
+  // LineNumberingFormatter.formatRegion(null): "region == null" branch must return null
+  @Test
+  public void testLineNumberingFormatterFormatRegion_null_returnsNull() throws Throwable {
+    LightweightMessageFormatter.LineNumberingFormatter f =
+        new LightweightMessageFormatter.LineNumberingFormatter();
+    assertNull(f.formatRegion(null));
+  }
+}

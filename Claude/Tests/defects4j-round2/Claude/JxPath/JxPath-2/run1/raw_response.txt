@@ -1,0 +1,262 @@
+package org.apache.commons.jxpath.ri.compiler;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+
+import org.apache.commons.jxpath.ri.EvalContext;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+
+public class ExpressionClaudeTest {
+
+    private static class ExpressionForTest extends Expression {
+        boolean dependent;
+        int computeCount = 0;
+        Object computeResult;
+
+        public boolean computeContextDependent() {
+            computeCount++;
+            return dependent;
+        }
+
+        public Object computeValue(EvalContext context) {
+            return null;
+        }
+
+        public Object compute(EvalContext context) {
+            return computeResult;
+        }
+    }
+
+    // Constant ZERO must represent numeric 0
+    @Test
+    public void testConstant_ZERO_equalsZeroValue() throws Throwable {
+        assertEquals(0.0, Expression.ZERO.doubleValue(), 1e-9);
+    }
+
+    // Constant ONE must represent numeric 1
+    @Test
+    public void testConstant_ONE_equalsOneValue() throws Throwable {
+        assertEquals(1.0, Expression.ONE.doubleValue(), 1e-9);
+    }
+
+    // Constant NOT_A_NUMBER must be NaN
+    @Test
+    public void testConstant_NOT_A_NUMBER_isNaN() throws Throwable {
+        assertTrue(Double.isNaN(Expression.NOT_A_NUMBER.doubleValue()));
+    }
+
+    // isContextDependent(): computeContextDependent must be lazy, not invoked before first access
+    @Test
+    public void testIsContextDependent_beforeAnyCall_computeNotYetCalled() throws Throwable {
+        ExpressionForTest expr = new ExpressionForTest();
+        assertEquals(0, expr.computeCount);
+    }
+
+    // isContextDependent(): branch !contextDependencyKnown true, value true, must cache (called once)
+    @Test
+    public void testIsContextDependent_computeReturnsTrue_returnsTrueAndCachesOnce() throws Throwable {
+        ExpressionForTest expr = new ExpressionForTest();
+        expr.dependent = true;
+        boolean first = expr.isContextDependent();
+        boolean second = expr.isContextDependent();
+        assertTrue(first);
+        assertTrue(second);
+        assertEquals(1, expr.computeCount);
+    }
+
+    // isContextDependent(): branch !contextDependencyKnown true, value false, must cache (called once)
+    @Test
+    public void testIsContextDependent_computeReturnsFalse_returnsFalseAndCachesOnce() throws Throwable {
+        ExpressionForTest expr = new ExpressionForTest();
+        expr.dependent = false;
+        boolean first = expr.isContextDependent();
+        boolean second = expr.isContextDependent();
+        assertFalse(first);
+        assertFalse(second);
+        assertEquals(1, expr.computeCount);
+    }
+
+    // isContextDependent(): two separate instances must cache independently
+    @Test
+    public void testIsContextDependent_separateInstances_independentCaching() throws Throwable {
+        ExpressionForTest exprA = new ExpressionForTest();
+        exprA.dependent = true;
+        ExpressionForTest exprB = new ExpressionForTest();
+        exprB.dependent = false;
+        assertTrue(exprA.isContextDependent());
+        assertFalse(exprB.isContextDependent());
+        assertEquals(1, exprA.computeCount);
+        assertEquals(1, exprB.computeCount);
+    }
+
+    // isContextDependent(): once cached, later changes to underlying flag must not affect cached result
+    @Test
+    public void testIsContextDependent_cacheNotAffectedByLaterFlagChange_returnsCachedValue() throws Throwable {
+        ExpressionForTest expr = new ExpressionForTest();
+        expr.dependent = true;
+        assertTrue(expr.isContextDependent());
+        expr.dependent = false;
+        assertTrue(expr.isContextDependent());
+        assertEquals(1, expr.computeCount);
+    }
+
+    // iterate(): result not instanceof EvalContext, single-element list, must return a usable iterator
+    @Test
+    public void testIterate_resultNotEvalContext_singleElementList_returnsNonNullIterator() throws Throwable {
+        ExpressionForTest expr = new ExpressionForTest();
+        List list = new ArrayList();
+        list.add("value1");
+        expr.computeResult = list;
+        Iterator result = expr.iterate(null);
+        assertNotNull(result);
+    }
+
+    // iterate(): result not instanceof EvalContext, empty list, must return a usable iterator
+    @Test
+    public void testIterate_resultNotEvalContext_emptyList_returnsNonNullIterator() throws Throwable {
+        ExpressionForTest expr = new ExpressionForTest();
+        expr.computeResult = new ArrayList();
+        Iterator result = expr.iterate(null);
+        assertNotNull(result);
+    }
+
+    // iteratePointers(): result == null branch must return an empty iterator
+    @Test
+    public void testIteratePointers_resultNull_returnsEmptyIterator() throws Throwable {
+        ExpressionForTest expr = new ExpressionForTest();
+        expr.computeResult = null;
+        Iterator result = expr.iteratePointers(null);
+        assertNotNull(result);
+        assertFalse(result.hasNext());
+    }
+
+    // iteratePointers(): result non-null and not EvalContext relies on context param; null context -> NullPointerException
+    @Test
+    public void testIteratePointers_nonNullResultWithNullContext_throwsNullPointerException() throws Throwable {
+        ExpressionForTest expr = new ExpressionForTest();
+        expr.computeResult = "someValue";
+        try {
+            expr.iteratePointers(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+            // expected
+        }
+    }
+
+    // PointerIterator.hasNext(): empty underlying iterator must return false
+    @Test
+    public void testPointerIterator_hasNext_emptyIterator_returnsFalse() throws Throwable {
+        List list = new ArrayList();
+        Expression.PointerIterator it = new Expression.PointerIterator(list.iterator(), new QName(null, "value"), Locale.US);
+        assertFalse(it.hasNext());
+    }
+
+    // PointerIterator.hasNext(): non-empty underlying iterator must return true
+    @Test
+    public void testPointerIterator_hasNext_nonEmptyIterator_returnsTrue() throws Throwable {
+        List list = new ArrayList();
+        list.add("x");
+        Expression.PointerIterator it = new Expression.PointerIterator(list.iterator(), new QName(null, "value"), Locale.US);
+        assertTrue(it.hasNext());
+    }
+
+    // PointerIterator.next(): non-Pointer object must be wrapped into a NodePointer
+    @Test
+    public void testPointerIterator_next_nonPointerObject_wrapsAsNodePointer() throws Throwable {
+        List list = new ArrayList();
+        list.add("hello");
+        Expression.PointerIterator it = new Expression.PointerIterator(list.iterator(), new QName(null, "value"), Locale.US);
+        Object result = it.next();
+        assertNotNull(result);
+        assertTrue(result instanceof NodePointer);
+    }
+
+    // PointerIterator.next(): multiple elements must all be consumed and wrapped
+    @Test
+    public void testPointerIterator_next_multipleElements_allWrapped() throws Throwable {
+        List list = new ArrayList();
+        list.add("a");
+        list.add("b");
+        Expression.PointerIterator it = new Expression.PointerIterator(list.iterator(), new QName(null, "value"), Locale.US);
+        int count = 0;
+        while (it.hasNext()) {
+            Object o = it.next();
+            assertTrue(o instanceof NodePointer);
+            count++;
+        }
+        assertEquals(2, count);
+    }
+
+    // PointerIterator.remove(): must always throw UnsupportedOperationException
+    @Test
+    public void testPointerIterator_remove_throwsUnsupportedOperationException() throws Throwable {
+        List list = new ArrayList();
+        list.add("x");
+        Expression.PointerIterator it = new Expression.PointerIterator(list.iterator(), new QName(null, "value"), Locale.US);
+        try {
+            it.remove();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+            // expected
+        }
+    }
+
+    // ValueIterator.hasNext(): empty underlying iterator must return false
+    @Test
+    public void testValueIterator_hasNext_emptyIterator_returnsFalse() throws Throwable {
+        List list = new ArrayList();
+        Expression.ValueIterator it = new Expression.ValueIterator(list.iterator());
+        assertFalse(it.hasNext());
+    }
+
+    // ValueIterator.hasNext(): non-empty underlying iterator must return true
+    @Test
+    public void testValueIterator_hasNext_nonEmptyIterator_returnsTrue() throws Throwable {
+        List list = new ArrayList();
+        list.add("x");
+        Expression.ValueIterator it = new Expression.ValueIterator(list.iterator());
+        assertTrue(it.hasNext());
+    }
+
+    // ValueIterator.next(): non-Pointer object must be returned unchanged
+    @Test
+    public void testValueIterator_next_nonPointerObject_returnsSameObject() throws Throwable {
+        List list = new ArrayList();
+        list.add("hello");
+        Expression.ValueIterator it = new Expression.ValueIterator(list.iterator());
+        Object result = it.next();
+        assertEquals("hello", result);
+    }
+
+    // ValueIterator.next(): multiple elements must be returned in order and exhaust correctly
+    @Test
+    public void testValueIterator_next_multipleElements_returnsEachInOrder() throws Throwable {
+        List list = new ArrayList();
+        list.add("a");
+        list.add("b");
+        Expression.ValueIterator it = new Expression.ValueIterator(list.iterator());
+        assertEquals("a", it.next());
+        assertEquals("b", it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // ValueIterator.remove(): must always throw UnsupportedOperationException
+    @Test
+    public void testValueIterator_remove_throwsUnsupportedOperationException() throws Throwable {
+        List list = new ArrayList();
+        list.add("x");
+        Expression.ValueIterator it = new Expression.ValueIterator(list.iterator());
+        try {
+            it.remove();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+            // expected
+        }
+    }
+}

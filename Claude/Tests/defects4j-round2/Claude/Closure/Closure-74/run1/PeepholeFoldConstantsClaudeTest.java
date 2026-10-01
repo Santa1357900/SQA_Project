@@ -1,0 +1,343 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import java.util.Collections;
+import java.util.List;
+
+public class PeepholeFoldConstantsClaudeTest {
+
+  private String fold(String js) throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    List<SourceFile> externs = Collections.<SourceFile>emptyList();
+    List<SourceFile> inputs =
+        Collections.singletonList(SourceFile.fromCode("input.js", js));
+    compiler.compile(externs, inputs, options);
+    return compiler.toSource();
+  }
+
+  private void assertFoldedTrue(String s) {
+    assertTrue(s.contains("true") || s.contains("!0"));
+  }
+
+  private void assertFoldedFalse(String s) {
+    assertTrue(s.contains("false") || s.contains("!1"));
+  }
+
+  // Covers Token.ADD branch -> tryFoldArithmeticOp on two NUMBER literals
+  @Test
+  public void testTryFoldAdd_twoNumberLiterals_foldsToSum() throws Throwable {
+    String out = fold("var f;f(1+1);");
+    assertTrue(out.contains("2"));
+  }
+
+  // Covers tryFoldAddConstantString when both operands are STRING literals
+  @Test
+  public void testTryFoldAdd_twoStringLiterals_foldsToConcatenation() throws Throwable {
+    String out = fold("var f;f('a'+'b');");
+    assertTrue(out.contains("ab"));
+  }
+
+  // Covers mayBeString branch forcing string concatenation in tryFoldAdd
+  @Test
+  public void testTryFoldAdd_numberPlusString_foldsToConcatenation() throws Throwable {
+    String out = fold("var f;f(1+'a');");
+    assertTrue(out.contains("1a"));
+  }
+
+  // Covers Token.SUB branch in tryFoldBinaryOperator
+  @Test
+  public void testTryFoldArithmeticOp_subtraction_foldsToDifference() throws Throwable {
+    String out = fold("var f;f(10-4);");
+    assertTrue(out.contains("6"));
+  }
+
+  // Covers Token.MUL branch (arithmetic fold then possible left-child fold)
+  @Test
+  public void testTryFoldArithmeticOp_multiplication_foldsToProduct() throws Throwable {
+    String out = fold("var f;f(3*4);");
+    assertTrue(out.contains("12"));
+  }
+
+  // Covers Token.DIV branch in performArithmeticOp
+  @Test
+  public void testTryFoldArithmeticOp_division_foldsToQuotient() throws Throwable {
+    String out = fold("var f;f(10/2);");
+    assertTrue(out.contains("5"));
+  }
+
+  // Covers Token.MOD branch in performArithmeticOp
+  @Test
+  public void testTryFoldArithmeticOp_modulo_foldsToRemainder() throws Throwable {
+    String out = fold("var f;f(10%3);");
+    assertTrue(out.contains("1"));
+  }
+
+  // Covers Token.BITAND branch using ScriptRuntime.toInt32
+  @Test
+  public void testTryFoldArithmeticOp_bitwiseAnd_foldsToResult() throws Throwable {
+    String out = fold("var f;f(5&3);");
+    assertTrue(out.contains("1"));
+  }
+
+  // Covers Token.BITOR branch
+  @Test
+  public void testTryFoldArithmeticOp_bitwiseOr_foldsToResult() throws Throwable {
+    String out = fold("var f;f(5|2);");
+    assertTrue(out.contains("7"));
+  }
+
+  // Covers Token.BITXOR branch
+  @Test
+  public void testTryFoldArithmeticOp_bitwiseXor_foldsToResult() throws Throwable {
+    String out = fold("var f;f(5^1);");
+    assertTrue(out.contains("4"));
+  }
+
+  // Covers Token.LSH branch in tryFoldShift
+  @Test
+  public void testTryFoldShift_leftShift_foldsToResult() throws Throwable {
+    String out = fold("var f;f(1<<3);");
+    assertTrue(out.contains("8"));
+  }
+
+  // Covers Token.RSH branch in tryFoldShift
+  @Test
+  public void testTryFoldShift_rightShift_foldsToResult() throws Throwable {
+    String out = fold("var f;f(8>>2);");
+    assertTrue(out.contains("2"));
+  }
+
+  // Covers Token.URSH branch using unsigned math
+  @Test
+  public void testTryFoldShift_unsignedRightShift_foldsToResult() throws Throwable {
+    String out = fold("var f;f(16>>>2);");
+    assertTrue(out.contains("4"));
+  }
+
+  // Covers Token.NOT branch when left is TRUE
+  @Test
+  public void testTryFoldUnaryOperator_notOfTrue_foldsToFalse() throws Throwable {
+    String out = fold("var f;f(!true);");
+    assertFoldedFalse(out);
+  }
+
+  // Covers Token.NOT branch when left is FALSE
+  @Test
+  public void testTryFoldUnaryOperator_notOfFalse_foldsToTrue() throws Throwable {
+    String out = fold("var f;f(!false);");
+    assertFoldedTrue(out);
+  }
+
+  // Covers the special-case guard that keeps !0 unfolded for code size
+  @Test
+  public void testTryFoldUnaryOperator_notOfZero_notFoldedForCodeSize() throws Throwable {
+    String out = fold("var f;f(!0);");
+    assertTrue(out.contains("!0"));
+  }
+
+  // Covers Token.NEG branch for the special "NaN" name: -NaN === NaN
+  @Test
+  public void testTryFoldUnaryOperator_negateNaN_foldsToNaN() throws Throwable {
+    String out = fold("var f;f(-NaN);");
+    assertTrue(out.contains("NaN"));
+  }
+
+  // Covers Token.BITNOT branch computing ~intVal
+  @Test
+  public void testTryFoldUnaryOperator_bitnotOfInteger_foldsToComplement() throws Throwable {
+    String out = fold("var f;f(~5);");
+    assertTrue(out.contains("-6"));
+  }
+
+  // Covers tryReduceVoid replacing a side-effect-free non-zero child with 0
+  @Test
+  public void testTryReduceVoid_nonZeroOperand_replacedWithVoidZero() throws Throwable {
+    String out = fold("var f;f(void 1);");
+    assertTrue(out.contains("void 0"));
+  }
+
+  // Covers Token.STRING branch in tryFoldTypeof
+  @Test
+  public void testTryFoldTypeof_stringLiteral_foldsToStringType() throws Throwable {
+    String out = fold("var f;f(typeof 'abc');");
+    assertTrue(out.contains("string"));
+  }
+
+  // Covers Token.NUMBER branch in tryFoldTypeof
+  @Test
+  public void testTryFoldTypeof_numberLiteral_foldsToNumberType() throws Throwable {
+    String out = fold("var f;f(typeof 123);");
+    assertTrue(out.contains("number"));
+  }
+
+  // Covers Token.NULL branch: per spec typeof null === "object"
+  @Test
+  public void testTryFoldTypeof_null_foldsToObjectType() throws Throwable {
+    String out = fold("var f;f(typeof null);");
+    assertTrue(out.contains("object"));
+  }
+
+  // Covers early return when typeof argument is not a literal value
+  @Test
+  public void testTryFoldTypeof_nonLiteralOperand_notFolded() throws Throwable {
+    String out = fold("var f,x;f(typeof x);");
+    assertTrue(out.contains("typeof"));
+  }
+
+  // Covers immutable-left branch in tryFoldInstanceof: primitives are never instances
+  @Test
+  public void testTryFoldInstanceof_immutableValue_foldsToFalse() throws Throwable {
+    String out = fold("var f,Foo;f(5 instanceof Foo);");
+    assertFoldedFalse(out);
+  }
+
+  // Covers the Object-constructor branch in tryFoldInstanceof
+  @Test
+  public void testTryFoldInstanceof_objectLiteralWithObjectCtor_foldsToTrue() throws Throwable {
+    String out = fold("var f;f(({}) instanceof Object);");
+    assertFoldedTrue(out);
+  }
+
+  // Covers (TRUE && x) => x branch in tryFoldAndOr
+  @Test
+  public void testTryFoldAndOr_trueAndX_foldsToX() throws Throwable {
+    String out = fold("var f,x;f(true&&x);");
+    assertTrue(out.contains("f(x)"));
+  }
+
+  // Covers (FALSE || x) => x branch in tryFoldAndOr
+  @Test
+  public void testTryFoldAndOr_falseOrX_foldsToX() throws Throwable {
+    String out = fold("var f,x;f(false||x);");
+    assertTrue(out.contains("f(x)"));
+  }
+
+  // Covers (FALSE && x) => FALSE branch in tryFoldAndOr
+  @Test
+  public void testTryFoldAndOr_falseAndX_foldsToFalse() throws Throwable {
+    String out = fold("var f,x;f(false&&x);");
+    assertFoldedFalse(out);
+  }
+
+  // Covers (TRUE || x) => TRUE branch in tryFoldAndOr
+  @Test
+  public void testTryFoldAndOr_trueOrX_foldsToTrue() throws Throwable {
+    String out = fold("var f,x;f(true||x);");
+    assertFoldedTrue(out);
+  }
+
+  // Covers Token.LT branch via compareAsNumbers
+  @Test
+  public void testTryFoldComparison_lessThan_foldsToTrue() throws Throwable {
+    String out = fold("var f;f(1<2);");
+    assertFoldedTrue(out);
+  }
+
+  // Covers Token.SHEQ branch for NUMBER operands
+  @Test
+  public void testTryFoldComparison_strictEqualNumbers_foldsToFalse() throws Throwable {
+    String out = fold("var f;f(1===2);");
+    assertFoldedFalse(out);
+  }
+
+  // Covers Token.STRING branch comparing equal strings
+  @Test
+  public void testTryFoldComparison_equalStrings_foldsToTrue() throws Throwable {
+    String out = fold("var f;f('a'=='a');");
+    assertFoldedTrue(out);
+  }
+
+  // Covers Token.NULL branch, same-typeequality comparison
+  @Test
+  public void testTryFoldComparison_nullEqualsNull_foldsToTrue() throws Throwable {
+    String out = fold("var f;f(null==null);");
+    assertFoldedTrue(out);
+  }
+
+  // Covers compareToUndefined with EQ: undefined == null is true per spec
+  @Test
+  public void testTryFoldComparison_undefinedLooseEqualsNull_foldsToTrue() throws Throwable {
+    String out = fold("var f;f((void 0)==null);");
+    assertFoldedTrue(out);
+  }
+
+  // Covers compareToUndefined with SHEQ: undefined === null is false
+  @Test
+  public void testTryFoldComparison_undefinedStrictEqualsNull_foldsToFalse() throws Throwable {
+    String out = fold("var f;f((void 0)===null);");
+    assertFoldedFalse(out);
+  }
+
+  // Covers Token.ARRAYLIT branch in tryFoldGetProp length folding
+  @Test
+  public void testTryFoldGetProp_arrayLength_foldsToElementCount() throws Throwable {
+    String out = fold("var f;f([1,2,3].length);");
+    assertTrue(out.contains("3"));
+  }
+
+  // Covers Token.STRING branch in tryFoldGetProp length folding
+  @Test
+  public void testTryFoldGetProp_stringLength_foldsToCharacterCount() throws Throwable {
+    String out = fold("var f;f('abc'.length);");
+    assertTrue(out.contains("3"));
+  }
+
+  // Covers ARRAYLIT branch in tryFoldGetElem
+  @Test
+  public void testTryFoldGetElem_arrayLiteralIndex_foldsToElement() throws Throwable {
+    String out = fold("var f;f([10,20,30][1]);");
+    assertTrue(out.contains("20"));
+  }
+
+  // Covers tryFoldStringIndexOf for String.indexOf
+  @Test
+  public void testTryFoldStringIndexOf_knownSubstring_foldsToIndex() throws Throwable {
+    String out = fold("var f;f('abcdef'.indexOf('cd'));");
+    assertTrue(out.contains("2"));
+  }
+
+  // Covers tryFoldStringSubstr computing a bounded substring
+  @Test
+  public void testTryFoldStringSubstr_withLength_foldsToSubstring() throws Throwable {
+    String out = fold("var f;f('abcdef'.substr(1,3));");
+    assertTrue(out.contains("bcd"));
+  }
+
+  // Covers tryFoldStringSubstring computing start/end substring
+  @Test
+  public void testTryFoldStringSubstring_withEnd_foldsToSubstring() throws Throwable {
+    String out = fold("var f;f('abcdef'.substring(2,4));");
+    assertTrue(out.contains("cd"));
+  }
+
+  // Covers tryFoldStringToLowerCase
+  @Test
+  public void testTryFoldStringToLowerCase_mixedCase_foldsToLowercase() throws Throwable {
+    String out = fold("var f;f('ABC'.toLowerCase());");
+    assertTrue(out.contains("abc"));
+  }
+
+  // Covers tryFoldArrayJoin merging literal array elements with a separator
+  @Test
+  public void testTryFoldArrayJoin_literalElements_foldsToJoinedString() throws Throwable {
+    String out = fold("var f;f(['a','b','c'].join('-'));");
+    assertTrue(out.contains("a-b-c"));
+  }
+
+  // Covers tryFoldAssign: x = x + y -> x += y
+  @Test
+  public void testTryFoldAssign_sameOrderOperands_foldsToCompoundAssign() throws Throwable {
+    String out = fold("var a=0,b=0;a=a+b;");
+    assertTrue(out.contains("a+=b"));
+  }
+
+  // Covers tryFoldAssign commutative branch: x = y + x -> x += y
+  @Test
+  public void testTryFoldAssign_commutativeOperands_foldsToCompoundAssign() throws Throwable {
+    String out = fold("var a=0,b=0;a=b+a;");
+    assertTrue(out.contains("a+=b"));
+  }
+}

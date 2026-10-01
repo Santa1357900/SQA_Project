@@ -1,0 +1,288 @@
+package org.apache.commons.math3.distribution;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math3.exception.NotPositiveException;
+import org.apache.commons.math3.exception.NotStrictlyPositiveException;
+import org.apache.commons.math3.exception.NumberIsTooLargeException;
+import org.apache.commons.math3.random.RandomGenerator;
+import org.apache.commons.math3.random.Well19937c;
+
+public class HypergeometricDistributionClaudeTest {
+
+    // Constructor: valid parameters -> getters return exact stored values
+    @Test
+    public void testConstructor_validParameters_returnsCorrectGetters() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(20, 8, 10);
+        assertEquals(20, dist.getPopulationSize());
+        assertEquals(8, dist.getNumberOfSuccesses());
+        assertEquals(10, dist.getSampleSize());
+    }
+
+    // Constructor branch: populationSize == 0 -> NotStrictlyPositiveException
+    @Test
+    public void testConstructor_populationSizeZero_throwsNotStrictlyPositiveException() throws Throwable {
+        try {
+            new HypergeometricDistribution(0, 0, 0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // Constructor branch: populationSize < 0 -> NotStrictlyPositiveException
+    @Test
+    public void testConstructor_populationSizeNegative_throwsNotStrictlyPositiveException() throws Throwable {
+        try {
+            new HypergeometricDistribution(-1, 0, 0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // Constructor branch: numberOfSuccesses < 0 -> NotPositiveException
+    @Test
+    public void testConstructor_numberOfSuccessesNegative_throwsNotPositiveException() throws Throwable {
+        try {
+            new HypergeometricDistribution(5, -1, 2);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // Constructor branch: sampleSize < 0 -> NotPositiveException
+    @Test
+    public void testConstructor_sampleSizeNegative_throwsNotPositiveException() throws Throwable {
+        try {
+            new HypergeometricDistribution(5, 2, -1);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // Constructor branch: numberOfSuccesses > populationSize -> NumberIsTooLargeException
+    @Test
+    public void testConstructor_numberOfSuccessesGreaterThanPopulationSize_throwsNumberIsTooLargeException() throws Throwable {
+        try {
+            new HypergeometricDistribution(5, 6, 3);
+            fail("expected NumberIsTooLargeException");
+        } catch (NumberIsTooLargeException expected) {
+        }
+    }
+
+    // Constructor branch: sampleSize > populationSize -> NumberIsTooLargeException
+    @Test
+    public void testConstructor_sampleSizeGreaterThanPopulationSize_throwsNumberIsTooLargeException() throws Throwable {
+        try {
+            new HypergeometricDistribution(5, 3, 6);
+            fail("expected NumberIsTooLargeException");
+        } catch (NumberIsTooLargeException expected) {
+        }
+    }
+
+    // RNG constructor: valid parameters -> getters return exact stored values
+    @Test
+    public void testConstructorWithRandomGenerator_validParameters_returnsCorrectGetters() throws Throwable {
+        RandomGenerator rng = new Well19937c();
+        HypergeometricDistribution dist = new HypergeometricDistribution(rng, 15, 6, 7);
+        assertEquals(15, dist.getPopulationSize());
+        assertEquals(6, dist.getNumberOfSuccesses());
+        assertEquals(7, dist.getSampleSize());
+    }
+
+    // RNG constructor branch: populationSize == 0 -> NotStrictlyPositiveException
+    @Test
+    public void testConstructorWithRandomGenerator_populationSizeZero_throwsNotStrictlyPositiveException() throws Throwable {
+        RandomGenerator rng = new Well19937c();
+        try {
+            new HypergeometricDistribution(rng, 0, 0, 0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // RNG constructor branch: numberOfSuccesses > populationSize -> NumberIsTooLargeException
+    @Test
+    public void testConstructorWithRandomGenerator_numberOfSuccessesGreaterThanPopulationSize_throwsNumberIsTooLargeException() throws Throwable {
+        RandomGenerator rng = new Well19937c();
+        try {
+            new HypergeometricDistribution(rng, 5, 6, 3);
+            fail("expected NumberIsTooLargeException");
+        } catch (NumberIsTooLargeException expected) {
+        }
+    }
+
+    // cumulativeProbability branch: x < domain lower bound -> 0.0
+    @Test
+    public void testCumulativeProbability_belowLowerDomain_returnsZero() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        assertEquals(0.0, dist.cumulativeProbability(-1), 1e-9);
+    }
+
+    // cumulativeProbability branch: x >= domain upper bound -> 1.0
+    @Test
+    public void testCumulativeProbability_atOrAboveUpperDomain_returnsOne() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        assertEquals(1.0, dist.cumulativeProbability(5), 1e-9);
+        assertEquals(1.0, dist.cumulativeProbability(6), 1e-9);
+    }
+
+    // cumulativeProbability at lower domain bound equals single point probability C(5,0)*C(5,5)/C(10,5)
+    @Test
+    public void testCumulativeProbability_atLowerDomain_matchesPointProbability() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        double expected = 1.0 / 252.0;
+        assertEquals(expected, dist.cumulativeProbability(0), 1e-6);
+    }
+
+    // cumulativeProbability within domain sums point probabilities P(0)+P(1)+P(2)=126/252
+    @Test
+    public void testCumulativeProbability_withinDomain_sumsPointProbabilities() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        double expected = (1.0 + 25.0 + 100.0) / 252.0;
+        assertEquals(expected, dist.cumulativeProbability(2), 1e-6);
+    }
+
+    // probability branch: x below domain lower bound -> 0.0
+    @Test
+    public void testProbability_belowLowerDomain_returnsZero() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        assertEquals(0.0, dist.probability(-1), 1e-9);
+    }
+
+    // probability branch: x above domain upper bound -> 0.0
+    @Test
+    public void testProbability_aboveUpperDomain_returnsZero() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        assertEquals(0.0, dist.probability(6), 1e-9);
+    }
+
+    // probability within domain matches hypergeometric formula C(5,2)*C(5,3)/C(10,5)=100/252
+    @Test
+    public void testProbability_withinDomain_matchesHypergeometricFormula() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        double expected = 100.0 / 252.0;
+        assertEquals(expected, dist.probability(2), 1e-6);
+    }
+
+    // probability over the whole support sums to 1.0 (law of total probability)
+    @Test
+    public void testProbability_sumOverSupport_equalsOne() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        double sum = 0.0;
+        for (int x = 0; x <= 5; x++) {
+            sum += dist.probability(x);
+        }
+        assertEquals(1.0, sum, 1e-6);
+    }
+
+    // upperCumulativeProbability branch: x <= domain lower bound -> 1.0 (includes below-lower too)
+    @Test
+    public void testUpperCumulativeProbability_atOrBelowLowerDomain_returnsOne() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        assertEquals(1.0, dist.upperCumulativeProbability(0), 1e-9);
+        assertEquals(1.0, dist.upperCumulativeProbability(-5), 1e-9);
+    }
+
+    // upperCumulativeProbability branch: x > domain upper bound -> 0.0
+    @Test
+    public void testUpperCumulativeProbability_aboveUpperDomain_returnsZero() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        assertEquals(0.0, dist.upperCumulativeProbability(6), 1e-9);
+    }
+
+    // upperCumulativeProbability within domain: P(X>=3)=P(3)+P(4)+P(5)=126/252=0.5
+    @Test
+    public void testUpperCumulativeProbability_withinDomain_matchesKnownValue() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        double expected = (100.0 + 25.0 + 1.0) / 252.0;
+        assertEquals(expected, dist.upperCumulativeProbability(3), 1e-6);
+    }
+
+    // identity: P(X<=2) + P(X>=3) must equal 1.0 for a proper probability distribution
+    @Test
+    public void testUpperCumulativeProbability_complementsCumulativeProbability() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        double sum = dist.cumulativeProbability(2) + dist.upperCumulativeProbability(3);
+        assertEquals(1.0, sum, 1e-6);
+    }
+
+    // getNumericalMean: contract says mean = n * m / N
+    @Test
+    public void testGetNumericalMean_matchesFormula() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        assertEquals(2.5, dist.getNumericalMean(), 1e-9);
+    }
+
+    // getNumericalMean with zero successes -> mean must be 0
+    @Test
+    public void testGetNumericalMean_zeroSuccesses_returnsZero() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 0, 5);
+        assertEquals(0.0, dist.getNumericalMean(), 1e-9);
+    }
+
+    // getNumericalVariance normal case: contract formula n*m*(N-n)*(N-m)/(N^2*(N-1))
+    @Test
+    public void testGetNumericalVariance_normalCase_matchesFormula() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        double expected = (5.0 * 5.0 * 5.0 * 5.0) / (100.0 * 9.0);
+        assertEquals(expected, dist.getNumericalVariance(), 1e-9);
+    }
+
+    // Bug-catching test: for populationSize=1 the distribution is degenerate (single
+    // possible outcome, no randomness), so by definition its variance must be 0.0,
+    // not NaN produced by a 0/0 division in the variance formula.
+    @Test
+    public void testGetNumericalVariance_populationSizeOne_isZeroForDegenerateDistribution() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(1, 1, 1);
+        double variance = dist.getNumericalVariance();
+        assertEquals(0.0, variance, 1e-9);
+    }
+
+    // calculateNumericalVariance (protected, package-accessible) matches same formula directly
+    @Test
+    public void testCalculateNumericalVariance_directCall_matchesFormula() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        double expected = (5.0 * 5.0 * 5.0 * 5.0) / (100.0 * 9.0);
+        assertEquals(expected, dist.calculateNumericalVariance(), 1e-9);
+    }
+
+    // getNumericalVariance caches the computed value: repeated calls return same result
+    @Test
+    public void testGetNumericalVariance_calledTwice_returnsSameCachedValue() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        double first = dist.getNumericalVariance();
+        double second = dist.getNumericalVariance();
+        assertEquals(first, second, 1e-9);
+    }
+
+    // getSupportLowerBound: positive branch max(0, n+m-N) when n+m-N > 0
+    @Test
+    public void testGetSupportLowerBound_positiveCase_computesMax() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 7, 8);
+        assertEquals(5, dist.getSupportLowerBound());
+    }
+
+    // getSupportLowerBound: zero branch max(0, n+m-N) when n+m-N <= 0
+    @Test
+    public void testGetSupportLowerBound_zeroCase_computesMax() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 3, 3);
+        assertEquals(0, dist.getSupportLowerBound());
+    }
+
+    // getSupportUpperBound: min(m,n) covers both branches (m smaller, then n smaller)
+    @Test
+    public void testGetSupportUpperBound_computesMin_bothBranches() throws Throwable {
+        HypergeometricDistribution distMSmaller = new HypergeometricDistribution(10, 7, 8);
+        assertEquals(7, distMSmaller.getSupportUpperBound());
+        HypergeometricDistribution distNSmaller = new HypergeometricDistribution(10, 9, 3);
+        assertEquals(3, distNSmaller.getSupportUpperBound());
+    }
+
+    // isSupportConnected: contract says the support is always connected -> true
+    @Test
+    public void testIsSupportConnected_returnsTrue() throws Throwable {
+        HypergeometricDistribution dist = new HypergeometricDistribution(10, 5, 5);
+        assertTrue(dist.isSupportConnected());
+    }
+}

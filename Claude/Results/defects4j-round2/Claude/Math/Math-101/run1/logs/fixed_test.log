@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-101-7dqtl7mm/Math-101f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.math.complex.ComplexFormatClaudeTest::testParse_PositiveInfinityAtEndOfString_parsesSpecialValue
+  - org.apache.commons.math.complex.ComplexFormatClaudeTest::testParse_NaNAtEndOfString_parsesSpecialValue
+  - org.apache.commons.math.complex.ComplexFormatClaudeTest::testParse_NegativeInfinityAtEndOfString_parsesSpecialValue
+[exit 0]

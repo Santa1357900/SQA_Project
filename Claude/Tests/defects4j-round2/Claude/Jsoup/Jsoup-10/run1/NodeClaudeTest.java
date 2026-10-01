@@ -1,0 +1,428 @@
+package org.jsoup.nodes;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.jsoup.Jsoup;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class NodeClaudeTest {
+
+    // helper: BFS search for a node by nodeName using only Node's own public API
+    private Node findByName(Node root, String name) {
+        List<Node> queue = new ArrayList<Node>();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            Node n = queue.remove(0);
+            if (n.nodeName().equals(name))
+                return n;
+            queue.addAll(n.childNodes());
+        }
+        return null;
+    }
+
+    // constructor: baseUri.trim() removes leading/trailing whitespace
+    @Test
+    public void testConstructor_trimsBaseUri() throws Throwable {
+        Document doc = new Document("   http://x.com/   ");
+        assertEquals("http://x.com/", doc.baseUri());
+    }
+
+    // setBaseUri: javadoc does not promise trimming, so value is stored as-is
+    @Test
+    public void testSetBaseUri_doesNotTrim() throws Throwable {
+        Document doc = new Document("base");
+        doc.setBaseUri("  http://y.com/  ");
+        assertEquals("  http://y.com/  ", doc.baseUri());
+    }
+
+    // attr(): key not present -> empty string branch
+    @Test
+    public void testAttrGet_missingKey_returnsEmptyString() throws Throwable {
+        Document doc = new Document("base");
+        assertEquals("", doc.attr("missing"));
+    }
+
+    // attr(): key not present but starts with "abs:" -> delegates to absUrl, still missing -> ""
+    @Test
+    public void testAttrGet_absPrefixMissingKey_returnsEmptyString() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertEquals("", doc.attr("abs:href"));
+    }
+
+    // attr(key,value) sets and returns this; hasAttr becomes true; attr(key) returns value
+    @Test
+    public void testAttrSetAndGet_chainingAndRetrieval() throws Throwable {
+        Document doc = new Document("base");
+        Node ret = doc.attr("k", "v");
+        assertSame(doc, ret);
+        assertTrue(doc.hasAttr("k"));
+        assertEquals("v", doc.attr("k"));
+    }
+
+    // hasAttr(): false branch when key never set
+    @Test
+    public void testHasAttr_falseInitially() throws Throwable {
+        Document doc = new Document("base");
+        assertFalse(doc.hasAttr("nope"));
+    }
+
+    // attributes(): must not be null
+    @Test
+    public void testAttributes_notNull() throws Throwable {
+        Document doc = new Document("base");
+        assertNotNull(doc.attributes());
+    }
+
+    // removeAttr(): attribute removed, subsequent hasAttr/attr reflect removal
+    @Test
+    public void testRemoveAttr_removesAttribute() throws Throwable {
+        Document doc = new Document("base");
+        doc.attr("k", "v");
+        doc.removeAttr("k");
+        assertFalse(doc.hasAttr("k"));
+        assertEquals("", doc.attr("k"));
+    }
+
+    // absUrl(): attribute missing -> "" regardless of baseUri validity
+    @Test
+    public void testAbsUrl_missingAttribute_returnsEmptyString() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertEquals("", doc.absUrl("href"));
+    }
+
+    // absUrl(): valid base + relative attribute -> standard URL resolution
+    @Test
+    public void testAbsUrl_relativeResolution() throws Throwable {
+        Document doc = new Document("http://example.com/dir/page.html");
+        doc.attr("href", "sub/page2.html");
+        assertEquals("http://example.com/dir/sub/page2.html", doc.absUrl("href"));
+    }
+
+    // absUrl(): attribute is already an absolute URL -> returned as-is
+    @Test
+    public void testAbsUrl_alreadyAbsoluteAttribute() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        doc.attr("href", "http://other.com/z");
+        assertEquals("http://other.com/z", doc.absUrl("href"));
+    }
+
+    // absUrl(): invalid base AND non-absolute relative attribute -> "" (outer catch)
+    @Test
+    public void testAbsUrl_invalidBaseAndRelative_returnsEmptyString() throws Throwable {
+        Document doc = new Document("not a url");
+        doc.attr("href", "relative/path");
+        assertEquals("", doc.absUrl("href"));
+    }
+
+    // childNode(index): valid index returns correct child
+    @Test
+    public void testChildNode_validIndex() throws Throwable {
+        Document parent = new Document("p");
+        Document c1 = new Document("c1");
+        Document c2 = new Document("c2");
+        parent.addChildren(c1, c2);
+        assertSame(c1, parent.childNode(0));
+        assertSame(c2, parent.childNode(1));
+    }
+
+    // childNode(index): out of range -> IndexOutOfBoundsException (JDK List contract)
+    @Test
+    public void testChildNode_invalidIndex_throwsIndexOutOfBounds() throws Throwable {
+        Document parent = new Document("p");
+        try {
+            parent.childNode(0);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // childNodes(): returned list is unmodifiable
+    @Test
+    public void testChildNodes_unmodifiable_throwsOnAdd() throws Throwable {
+        Document parent = new Document("p");
+        List<Node> kids = parent.childNodes();
+        try {
+            kids.add(new Document("x"));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // childNodesAsArray(): array content/size matches childNodes()
+    @Test
+    public void testChildNodesAsArray_matchesChildren() throws Throwable {
+        Document parent = new Document("p");
+        Document c1 = new Document("c1");
+        parent.addChildren(c1);
+        Node[] arr = parent.childNodesAsArray();
+        assertEquals(1, arr.length);
+        assertSame(c1, arr[0]);
+    }
+
+    // parent(): null before attach, non-null after addChildren
+    @Test
+    public void testParent_nullInitially_andSetAfterAddChildren() throws Throwable {
+        Document orphan = new Document("o");
+        assertNull(orphan.parent());
+        Document parent = new Document("p");
+        parent.addChildren(orphan);
+        assertSame(parent, orphan.parent());
+    }
+
+    // ownerDocument(): self for Document; delegation to parent for non-Document descendants
+    @Test
+    public void testOwnerDocument_delegatesToParentAndSelf() throws Throwable {
+        Document doc = Jsoup.parse("<p>Hi</p>");
+        assertSame(doc, doc.ownerDocument());
+        Node body = findByName(doc, "body");
+        assertNotNull(body);
+        assertSame(doc, body.ownerDocument());
+    }
+
+    // ownerDocument(): null when node has no parent and is not itself a Document
+    @Test
+    public void testOwnerDocument_nullWhenOrphanNonDocument() throws Throwable {
+        Document doc = Jsoup.parse("<p>Hi</p>");
+        Node body = findByName(doc, "body");
+        body.remove();
+        assertNull(body.ownerDocument());
+    }
+
+    // addChildren(Node...): appends in order and sets sibling indices
+    @Test
+    public void testAddChildren_variadic_appendsInOrder() throws Throwable {
+        Document parent = new Document("p");
+        Document a = new Document("a");
+        Document b = new Document("b");
+        parent.addChildren(a, b);
+        assertEquals(0, (int) a.siblingIndex());
+        assertEquals(1, (int) b.siblingIndex());
+    }
+
+    // addChildren(int, Node...): inserts at given index and reindexes existing children
+    @Test
+    public void testAddChildren_atIndex_insertsAndReindexes() throws Throwable {
+        Document parent = new Document("p");
+        Document a = new Document("a");
+        Document b = new Document("b");
+        parent.addChildren(a, b);
+        Document c = new Document("c");
+        parent.addChildren(0, c);
+        assertSame(c, parent.childNode(0));
+        assertSame(a, parent.childNode(1));
+        assertEquals(0, (int) c.siblingIndex());
+        assertEquals(1, (int) a.siblingIndex());
+    }
+
+    // addChildren(): reparents a node that already had a different parent
+    @Test
+    public void testAddChildren_reparentsFromOldParent() throws Throwable {
+        Document p1 = new Document("p1");
+        Document p2 = new Document("p2");
+        Document child = new Document("child");
+        p1.addChildren(child);
+        p2.addChildren(child);
+        assertSame(p2, child.parent());
+        assertEquals(0, p1.childNodes().size());
+        assertEquals(1, p2.childNodes().size());
+    }
+
+    // replaceChild(): swaps node at same sibling index, detaches old, attaches new
+    @Test
+    public void testReplaceChild_swapsAtSameIndex() throws Throwable {
+        Document parent = new Document("p");
+        Document oldNode = new Document("old");
+        Document newNode = new Document("neu");
+        parent.addChildren(oldNode);
+        parent.replaceChild(oldNode, newNode);
+        assertSame(newNode, parent.childNode(0));
+        assertNull(oldNode.parent());
+        assertSame(parent, newNode.parent());
+    }
+
+    // removeChild(): removes node and reindexes remaining siblings
+    @Test
+    public void testRemoveChild_reindexesRemaining() throws Throwable {
+        Document parent = new Document("p");
+        Document a = new Document("a");
+        Document b = new Document("b");
+        Document c = new Document("c");
+        parent.addChildren(a, b, c);
+        parent.removeChild(a);
+        assertEquals(0, (int) b.siblingIndex());
+        assertEquals(1, (int) c.siblingIndex());
+        assertEquals(2, parent.childNodes().size());
+    }
+
+    // setParentNode(): assigning a new parent removes node from its previous parent's children
+    @Test
+    public void testSetParentNode_removesFromOldParentChildNodes() throws Throwable {
+        Document p1 = new Document("p1");
+        Document p2 = new Document("p2");
+        Document child = new Document("child");
+        p1.addChildren(child);
+        child.setParentNode(p2);
+        assertEquals(0, p1.childNodes().size());
+        assertSame(p2, child.parent());
+    }
+
+    // siblingNodes(): equals parent's childNodes() content
+    @Test
+    public void testSiblingNodes_matchesParentChildNodes() throws Throwable {
+        Document parent = new Document("p");
+        Document a = new Document("a");
+        Document b = new Document("b");
+        parent.addChildren(a, b);
+        assertEquals(parent.childNodes(), a.siblingNodes());
+    }
+
+    // nextSibling(): returns following sibling, or null when this is the last child
+    @Test
+    public void testNextSibling_hasNext_and_lastReturnsNull() throws Throwable {
+        Document parent = new Document("p");
+        Document a = new Document("a");
+        Document b = new Document("b");
+        parent.addChildren(a, b);
+        assertSame(b, a.nextSibling());
+        assertNull(b.nextSibling());
+    }
+
+    // nextSibling(): node without a parent (root) returns null
+    @Test
+    public void testNextSibling_noParent_returnsNull() throws Throwable {
+        Document orphan = new Document("o");
+        assertNull(orphan.nextSibling());
+    }
+
+    // previousSibling(): returns preceding sibling, or null for first child
+    @Test
+    public void testPreviousSibling_hasPrevious_and_firstReturnsNull() throws Throwable {
+        Document parent = new Document("p");
+        Document a = new Document("a");
+        Document b = new Document("b");
+        parent.addChildren(a, b);
+        assertSame(a, b.previousSibling());
+        assertNull(a.previousSibling());
+    }
+
+    // BUG TARGET: previousSibling() on a node with no parent has no siblings,
+    // so by contract (symmetric with nextSibling) it must return null, not throw.
+    @Test
+    public void testPreviousSibling_noParent_returnsNull() throws Throwable {
+        Document orphan = new Document("o");
+        assertNull(orphan.previousSibling());
+    }
+
+    // siblingIndex(): reflects position assigned by addChildren
+    @Test
+    public void testSiblingIndex_reflectsPosition() throws Throwable {
+        Document parent = new Document("p");
+        Document a = new Document("a");
+        Document b = new Document("b");
+        parent.addChildren(a, b);
+        assertEquals(1, (int) b.siblingIndex());
+    }
+
+    // setSiblingIndex(): getter reflects value set directly
+    @Test
+    public void testSetSiblingIndex_directSetterGetter() throws Throwable {
+        Document node = new Document("n");
+        node.setSiblingIndex(9);
+        assertEquals(9, (int) node.siblingIndex());
+    }
+
+    // remove(): detaches node from parent's child list
+    @Test
+    public void testRemove_removesFromParent() throws Throwable {
+        Document parent = new Document("p");
+        Document child = new Document("c");
+        parent.addChildren(child);
+        child.remove();
+        assertEquals(0, parent.childNodes().size());
+        assertNull(child.parent());
+    }
+
+    // replaceWith(): replaces this node in the DOM with the supplied node
+    @Test
+    public void testReplaceWith_replacesInParent() throws Throwable {
+        Document parent = new Document("p");
+        Document oldNode = new Document("old");
+        Document newNode = new Document("neu");
+        parent.addChildren(oldNode);
+        oldNode.replaceWith(newNode);
+        assertSame(newNode, parent.childNode(0));
+        assertNull(oldNode.parent());
+        assertSame(parent, newNode.parent());
+    }
+
+    // outerHtml()/toString(): toString delegates directly to outerHtml()
+    @Test
+    public void testOuterHtml_equalsToString() throws Throwable {
+        Document doc = new Document("http://n/");
+        assertEquals(doc.outerHtml(), doc.toString());
+    }
+
+    // indent(): appends a leading newline before padding
+    @Test
+    public void testIndent_appendsLeadingNewline() throws Throwable {
+        Document doc = new Document("http://n/");
+        Document.OutputSettings settings = doc.outputSettings();
+        StringBuilder sb = new StringBuilder();
+        doc.indent(sb, 1, settings);
+        assertTrue(sb.toString().startsWith("\n"));
+    }
+
+    // equals(): identity-based equality - same instance true, different instances false
+    @Test
+    public void testEquals_identityOnly() throws Throwable {
+        Document n1 = new Document("n1");
+        Document n2 = new Document("n1");
+        assertTrue(n1.equals(n1));
+        assertFalse(n1.equals(n2));
+    }
+
+    // hashCode(): consistent across repeated calls on same object
+    @Test
+    public void testHashCode_consistentAcrossCalls() throws Throwable {
+        Document n1 = new Document("n1");
+        int h1 = n1.hashCode();
+        int h2 = n1.hashCode();
+        assertEquals(h1, h2);
+    }
+
+    // clone(): produces an independent orphan deep copy
+    @Test
+    public void testClone_orphanIndependentDeepCopy() throws Throwable {
+        Document orig = new Document("http://orig/");
+        orig.attr("a", "1");
+        Document child = new Document("http://child/");
+        orig.addChildren(child);
+
+        Node clone = orig.clone();
+        assertNotSame(orig, clone);
+        assertNull(clone.parent());
+        assertEquals(0, (int) clone.siblingIndex());
+        assertEquals("http://orig/", clone.baseUri());
+        assertEquals(1, clone.childNodes().size());
+        assertNotSame(child, clone.childNodes().get(0));
+
+        clone.attr("a", "2");
+        assertEquals("1", orig.attr("a"));
+    }
+
+    // doClone(parent): sets given parent and preserves original's sibling index
+    @Test
+    public void testDoClone_withParent_setsParentAndPreservesSiblingIndex() throws Throwable {
+        Document parent = new Document("p");
+        Document nodeX = new Document("nx");
+        parent.addChildren(nodeX);
+
+        Document otherParent = new Document("op");
+        Node cloned = nodeX.doClone(otherParent);
+        assertSame(otherParent, cloned.parent());
+        assertEquals((int) nodeX.siblingIndex(), (int) cloned.siblingIndex());
+    }
+}

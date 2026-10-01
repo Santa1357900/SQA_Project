@@ -1,0 +1,465 @@
+package org.apache.commons.math.optimization.linear;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.optimization.GoalType;
+import org.apache.commons.math.optimization.RealPointValuePair;
+
+public class SimplexTableauClaudeTest {
+
+    // Constructor: single LEQ constraint, restrictToNonNegative=true -> no slack/artificial extras beyond LEQ slack
+    @Test
+    public void testConstructor_leqOnly_dimensionsCorrect() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(2, t.getNumDecisionVariables());
+        assertEquals(1, t.getNumSlackVariables());
+        assertEquals(0, t.getNumArtificialVariables());
+        assertEquals(5, t.getWidth());
+        assertEquals(2, t.getHeight());
+    }
+
+    // Constructor: restrictToNonNegative=false adds one extra decision variable (x-)
+    @Test
+    public void testConstructor_restrictToNonNegativeFalse_addsExtraDecisionVariable() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, false, 1e-6);
+        assertEquals(3, t.getNumDecisionVariables());
+    }
+
+    // Constructor: EQ constraint adds an artificial variable but no slack variable
+    @Test
+    public void testConstructor_eqConstraint_addsArtificialNoSlack() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.EQ, 5.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(0, t.getNumSlackVariables());
+        assertEquals(1, t.getNumArtificialVariables());
+    }
+
+    // Constructor: GEQ constraint adds both a slack(excess) variable and an artificial variable
+    @Test
+    public void testConstructor_geqConstraint_addsSlackAndArtificial() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.GEQ, 3.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(1, t.getNumSlackVariables());
+        assertEquals(1, t.getNumArtificialVariables());
+    }
+
+    // getNumVariables returns the dimension of the objective function coefficients
+    @Test
+    public void testGetNumVariables_returnsCoefficientDimension() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {3, 4, 5}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(3, t.getNumVariables());
+    }
+
+    // getNormalizedConstraints: negative RHS flips coefficient signs and relationship
+    @Test
+    public void testGetNormalizedConstraints_negativeValue_flipsSignAndRelationship() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, -5.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        LinearConstraint norm = t.getNormalizedConstraints().get(0);
+        assertEquals(5.0, norm.getValue(), 1e-9);
+        assertEquals(Relationship.GEQ, norm.getRelationship());
+        double[] c = norm.getCoefficients().getData();
+        assertEquals(-1.0, c[0], 1e-9);
+    }
+
+    // getNormalizedConstraints: non-negative RHS stays unchanged
+    @Test
+    public void testGetNormalizedConstraints_positiveValue_unchanged() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {2, 3}, Relationship.LEQ, 7.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        LinearConstraint norm = t.getNormalizedConstraints().get(0);
+        assertEquals(7.0, norm.getValue(), 1e-9);
+        assertEquals(Relationship.LEQ, norm.getRelationship());
+        double[] c = norm.getCoefficients().getData();
+        assertEquals(2.0, c[0], 1e-9);
+        assertEquals(3.0, c[1], 1e-9);
+    }
+
+    // getNumObjectiveFunctions: no artificial variables -> phase 2 only (1)
+    @Test
+    public void testGetNumObjectiveFunctions_noArtificial_returnsOne() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 4.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(1, t.getNumObjectiveFunctions());
+    }
+
+    // getNumObjectiveFunctions: artificial variables present -> phase 1 + phase 2 (2)
+    @Test
+    public void testGetNumObjectiveFunctions_withArtificial_returnsTwo() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.EQ, 5.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(2, t.getNumObjectiveFunctions());
+    }
+
+    // createTableau (maximize, LEQ): objective row coefficients are negated, Z coeff is +1
+    @Test
+    public void testCreateTableau_maximizeLeq_objectiveRowNegatedCoefficients() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 4.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(1.0, t.getEntry(0, 0), 1e-9);
+        assertEquals(-1.0, t.getEntry(0, 1), 1e-9);
+        assertEquals(1.0, t.getEntry(1, 1), 1e-9);
+        assertEquals(4.0, t.getEntry(1, t.getRhsOffset()), 1e-9);
+    }
+
+    // createTableau (minimize, LEQ): objective row keeps original (unnegated) coefficients, Z coeff is -1
+    @Test
+    public void testCreateTableau_minimizeLeq_objectiveRowOriginalCoefficients() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 4.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MINIMIZE, true, 1e-6);
+        assertEquals(-1.0, t.getEntry(0, 0), 1e-9);
+        assertEquals(1.0, t.getEntry(0, 1), 1e-9);
+    }
+
+    // createTableau (GEQ): excess variable coefficient -1, artificial variable coefficient 1
+    @Test
+    public void testCreateTableau_geqConstraint_excessAndArtificialEntries() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.GEQ, 3.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(1.0, t.getEntry(2, 2), 1e-9);
+        assertEquals(-1.0, t.getEntry(2, t.getSlackVariableOffset()), 1e-9);
+        assertEquals(1.0, t.getEntry(2, t.getArtificialVariableOffset()), 1e-9);
+        assertEquals(3.0, t.getEntry(2, t.getRhsOffset()), 1e-9);
+    }
+
+    // createTableau (EQ): artificial variable coefficient 1, no slack column present
+    @Test
+    public void testCreateTableau_eqConstraint_artificialEntryNoSlack() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.EQ, 5.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(1.0, t.getEntry(2, 2), 1e-9);
+        assertEquals(5.0, t.getEntry(2, t.getRhsOffset()), 1e-9);
+        assertEquals(1.0, t.getEntry(2, t.getArtificialVariableOffset()), 1e-9);
+        assertEquals(0, t.getNumSlackVariables());
+    }
+
+    // initialize(): phase-1 objective row must have artificial-variable column zeroed via row elimination
+    @Test
+    public void testInitialize_zeroesArtificialColumnInPhase1Row() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.GEQ, 3.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(0.0, t.getEntry(0, t.getArtificialVariableOffset()), 1e-9);
+    }
+
+    // getInvertedCoeffiecientSum: returns -1 times the sum of all coefficients
+    @Test
+    public void testGetInvertedCoeffiecientSum_negatesSumOfCoefficients() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {2, 3, -1}, 0.0);
+        double sum = SimplexTableau.getInvertedCoeffiecientSum(f.getCoefficients());
+        assertEquals(-4.0, sum, 1e-9);
+    }
+
+    // discardArtificialVariables: no-op when there are no artificial variables
+    @Test
+    public void testDiscardArtificialVariables_noArtificial_dimensionsUnchanged() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        int w = t.getWidth();
+        int h = t.getHeight();
+        t.discardArtificialVariables();
+        assertEquals(w, t.getWidth());
+        assertEquals(h, t.getHeight());
+        assertEquals(0, t.getNumArtificialVariables());
+    }
+
+    // discardArtificialVariables: removes phase-1 row and all artificial columns/RHS shift
+    @Test
+    public void testDiscardArtificialVariables_withArtificial_removesRowAndColumns() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.EQ, 5.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        t.discardArtificialVariables();
+        assertEquals(3, t.getWidth());
+        assertEquals(2, t.getHeight());
+        assertEquals(0, t.getNumArtificialVariables());
+        assertEquals(1.0, t.getEntry(0, 0), 1e-9);
+        assertEquals(-1.0, t.getEntry(0, 1), 1e-9);
+        assertEquals(1.0, t.getEntry(1, 1), 1e-9);
+        assertEquals(5.0, t.getEntry(1, 2), 1e-9);
+    }
+
+    // getSolution on an un-pivoted, already-optimal tableau (origin) must report the current basic
+    // feasible solution x=y=0, not any value merely coincidental in a constraint row.
+    @Test
+    public void testGetSolution_unpivotedOriginOptimal_returnsZeroVector() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {2, 3}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 0}, Relationship.LEQ, 5.0));
+        cs.add(new LinearConstraint(new double[] {0, 1}, Relationship.LEQ, 5.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MINIMIZE, true, 1e-6);
+        RealPointValuePair sol = t.getSolution();
+        double[] point = sol.getPoint();
+        assertEquals(0.0, point[0], 1e-9);
+        assertEquals(0.0, point[1], 1e-9);
+        assertEquals(0.0, sol.getValue(), 1e-9);
+    }
+
+    // getSolution after a correct manual pivot reads the new basic feasible solution from the tableau
+    @Test
+    public void testGetSolution_afterManualPivot_returnsCorrectVertex() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 4.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        double pivot = t.getEntry(1, 1);
+        t.divideRow(1, pivot);
+        double factor = t.getEntry(0, 1);
+        t.subtractRow(0, 1, factor);
+        RealPointValuePair sol = t.getSolution();
+        assertEquals(4.0, sol.getPoint()[0], 1e-9);
+        assertEquals(4.0, sol.getValue(), 1e-9);
+    }
+
+    // divideRow scales every entry of the row by the divisor
+    @Test
+    public void testDivideRow_scalesEntriesCorrectly() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        t.divideRow(1, 2.0);
+        assertEquals(0.5, t.getEntry(1, 1), 1e-9);
+        assertEquals(5.0, t.getEntry(1, t.getRhsOffset()), 1e-9);
+    }
+
+    // subtractRow computes minuendRow = minuendRow - multiple * subtrahendRow
+    @Test
+    public void testSubtractRow_subtractsMultipleCorrectly() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        t.subtractRow(0, 1, 1.0);
+        assertEquals(-2.0, t.getEntry(0, 1), 1e-9);
+        assertEquals(-10.0, t.getEntry(0, t.getRhsOffset()), 1e-9);
+    }
+
+    // getWidth/getHeight match the constructed matrix dimensions
+    @Test
+    public void testGetWidthAndHeight_matchTableauDimensions() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(5, t.getWidth());
+        assertEquals(2, t.getHeight());
+    }
+
+    // setEntry followed by getEntry round-trips the written value
+    @Test
+    public void testGetEntrySetEntry_roundTrip() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        t.setEntry(1, 2, 42.5);
+        assertEquals(42.5, t.getEntry(1, 2), 1e-9);
+    }
+
+    // getSlackVariableOffset == numObjectiveFunctions + numDecisionVariables
+    @Test
+    public void testGetSlackVariableOffset_computedCorrectly() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(3, t.getSlackVariableOffset());
+    }
+
+    // getArtificialVariableOffset == numObjectiveFunctions + numDecisionVariables + numSlackVariables
+    @Test
+    public void testGetArtificialVariableOffset_computedCorrectly() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.GEQ, 3.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(4, t.getArtificialVariableOffset());
+    }
+
+    // getRhsOffset is always the last column index (width - 1)
+    @Test
+    public void testGetRhsOffset_isLastColumn() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(t.getWidth() - 1, t.getRhsOffset());
+    }
+
+    // getNumDecisionVariables, restricted to non-negative, has no extra variable
+    @Test
+    public void testGetNumDecisionVariables_restricted_noExtraVariable() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(2, t.getNumDecisionVariables());
+    }
+
+    // getNumDecisionVariables, unrestricted, includes the extra x- variable
+    @Test
+    public void testGetNumDecisionVariables_unrestricted_includesExtraVariable() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, false, 1e-6);
+        assertEquals(3, t.getNumDecisionVariables());
+    }
+
+    // getOriginalNumDecisionVariables equals numDecisionVariables when restricted to non-negative
+    @Test
+    public void testGetOriginalNumDecisionVariables_restricted_sameAsNumDecisionVariables() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(t.getNumDecisionVariables(), t.getOriginalNumDecisionVariables());
+    }
+
+    // getOriginalNumDecisionVariables excludes the extra x- variable when unrestricted
+    @Test
+    public void testGetOriginalNumDecisionVariables_unrestricted_excludesExtraVariable() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, false, 1e-6);
+        assertEquals(2, t.getOriginalNumDecisionVariables());
+    }
+
+    // getNumSlackVariables counts both LEQ and GEQ constraints
+    @Test
+    public void testGetNumSlackVariables_countsLeqAndGeq() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 0}, Relationship.LEQ, 5.0));
+        cs.add(new LinearConstraint(new double[] {0, 1}, Relationship.GEQ, 2.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(2, t.getNumSlackVariables());
+    }
+
+    // getNumArtificialVariables counts both EQ and GEQ constraints
+    @Test
+    public void testGetNumArtificialVariables_countsEqAndGeq() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 0}, Relationship.EQ, 5.0));
+        cs.add(new LinearConstraint(new double[] {0, 1}, Relationship.GEQ, 2.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(2, t.getNumArtificialVariables());
+    }
+
+    // getData returns the same values as getEntry for every cell
+    @Test
+    public void testGetData_matchesGetEntryValues() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 10.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        double[][] data = t.getData();
+        for (int i = 0; i < t.getHeight(); i++) {
+            for (int j = 0; j < t.getWidth(); j++) {
+                assertEquals(t.getEntry(i, j), data[i][j], 1e-9);
+            }
+        }
+    }
+
+    // equals: same instance reference is always equal (this == other branch)
+    @Test
+    public void testEquals_sameInstance_true() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 4.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertTrue(t.equals(t));
+    }
+
+    // equals: comparing against null returns false
+    @Test
+    public void testEquals_null_false() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 4.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertFalse(t.equals(null));
+    }
+
+    // equals: comparing against an incompatible type returns false via ClassCastException catch
+    @Test
+    public void testEquals_differentType_false() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 4.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertFalse(t.equals("not a tableau"));
+    }
+
+    // equals: differing restrictToNonNegative flag makes tableaus unequal
+    @Test
+    public void testEquals_differentRestrictToNonNegative_false() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 4.0));
+        SimplexTableau t1 = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        SimplexTableau t2 = new SimplexTableau(f, cs, GoalType.MAXIMIZE, false, 1e-6);
+        assertFalse(t1.equals(t2));
+    }
+
+    // equals: differing epsilon makes tableaus unequal
+    @Test
+    public void testEquals_differentEpsilon_false() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 4.0));
+        SimplexTableau t1 = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        SimplexTableau t2 = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-3);
+        assertFalse(t1.equals(t2));
+    }
+
+    // hashCode is consistent across repeated invocations on the same unmodified object
+    @Test
+    public void testHashCode_consistentAcrossCalls() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        List<LinearConstraint> cs = new ArrayList<LinearConstraint>();
+        cs.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 4.0));
+        SimplexTableau t = new SimplexTableau(f, cs, GoalType.MAXIMIZE, true, 1e-6);
+        assertEquals(t.hashCode(), t.hashCode());
+    }
+}

@@ -1,0 +1,301 @@
+package com.google.javascript.rhino;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TokenStreamClaudeTest {
+
+    // length 0: falls through switch, id stays false
+    @Test
+    public void testIsKeyword_emptyString_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword(""));
+    }
+
+    // length 1: no case matches, default path
+    @Test
+    public void testIsKeyword_singleChar_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("a"));
+    }
+
+    // case 2: if/in/do all valid two-letter reserved words
+    @Test
+    public void testIsKeyword_length2_ifInDo_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("if"));
+        assertTrue(TokenStream.isKeyword("in"));
+        assertTrue(TokenStream.isKeyword("do"));
+    }
+
+    // case 2: non keyword of same length falls to break partial
+    @Test
+    public void testIsKeyword_length2_nonKeyword_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("it"));
+    }
+
+    // case 3: for/int/new/try/var branches
+    @Test
+    public void testIsKeyword_length3_forIntNewTryVar_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("for"));
+        assertTrue(TokenStream.isKeyword("int"));
+        assertTrue(TokenStream.isKeyword("new"));
+        assertTrue(TokenStream.isKeyword("try"));
+        assertTrue(TokenStream.isKeyword("var"));
+    }
+
+    // case 3: non keyword falls through to break partial
+    @Test
+    public void testIsKeyword_length3_nonKeyword_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("foo"));
+    }
+
+    // case 4: 'c' branch case/char direct validation
+    @Test
+    public void testIsKeyword_length4_caseAndChar_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("case"));
+        assertTrue(TokenStream.isKeyword("char"));
+    }
+
+    // case 4: 'e' branch else/enum direct validation
+    @Test
+    public void testIsKeyword_length4_elseAndEnum_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("else"));
+        assertTrue(TokenStream.isKeyword("enum"));
+    }
+
+    // case 4: 't' branch true/this direct validation
+    @Test
+    public void testIsKeyword_length4_trueAndThis_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("true"));
+        assertTrue(TokenStream.isKeyword("this"));
+    }
+
+    // case 4: single candidate (X) branches byte/goto/long/null/void/with
+    @Test
+    public void testIsKeyword_length4_singleCandidateWords_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("byte"));
+        assertTrue(TokenStream.isKeyword("goto"));
+        assertTrue(TokenStream.isKeyword("long"));
+        assertTrue(TokenStream.isKeyword("null"));
+        assertTrue(TokenStream.isKeyword("void"));
+        assertTrue(TokenStream.isKeyword("with"));
+    }
+
+    // case 4: X assigned but final equals validation fails -> false
+    @Test
+    public void testIsKeyword_length4_partialMatchFailsValidation_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("goat"));
+    }
+
+    // case 4: no case matches first char -> default -> false
+    @Test
+    public void testIsKeyword_length4_nonKeyword_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("abcd"));
+    }
+
+    // case 5: 'a'/'e'/'i'/'l' branches class/break/while/false
+    @Test
+    public void testIsKeyword_length5_classBreakWhileFalse_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("class"));
+        assertTrue(TokenStream.isKeyword("break"));
+        assertTrue(TokenStream.isKeyword("while"));
+        assertTrue(TokenStream.isKeyword("false"));
+    }
+
+    // case 5: 'n' branch const/final sub-condition on first char
+    @Test
+    public void testIsKeyword_length5_constFinal_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("const"));
+        assertTrue(TokenStream.isKeyword("final"));
+    }
+
+    // case 5: 'o' branch float/short sub-condition on first char
+    @Test
+    public void testIsKeyword_length5_floatShort_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("float"));
+        assertTrue(TokenStream.isKeyword("short"));
+    }
+
+    // case 5: 'p'/'r'/'t' branches super/throw/catch
+    @Test
+    public void testIsKeyword_length5_superThrowCatch_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("super"));
+        assertTrue(TokenStream.isKeyword("throw"));
+        assertTrue(TokenStream.isKeyword("catch"));
+    }
+
+    // case 5: non keyword falls to default -> false
+    @Test
+    public void testIsKeyword_length5_nonKeyword_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("hello"));
+    }
+
+    // case 6: 'a'/'h'/'m'/'o'/'t'/'u'/'w'/'x'/'y' single candidate branches
+    @Test
+    public void testIsKeyword_length6_singleCandidateWords_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("native"));
+        assertTrue(TokenStream.isKeyword("throws"));
+        assertTrue(TokenStream.isKeyword("import"));
+        assertTrue(TokenStream.isKeyword("double"));
+        assertTrue(TokenStream.isKeyword("static"));
+        assertTrue(TokenStream.isKeyword("public"));
+        assertTrue(TokenStream.isKeyword("switch"));
+        assertTrue(TokenStream.isKeyword("export"));
+        assertTrue(TokenStream.isKeyword("typeof"));
+    }
+
+    // case 6: 'e' branch delete/return sub-condition on first char
+    @Test
+    public void testIsKeyword_length6_deleteReturn_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("delete"));
+        assertTrue(TokenStream.isKeyword("return"));
+    }
+
+    // case 6: non keyword falls to default -> false
+    @Test
+    public void testIsKeyword_length6_nonKeyword_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("abcdef"));
+    }
+
+    // case 7: all single candidate branches
+    @Test
+    public void testIsKeyword_length7_allWords_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("package"));
+        assertTrue(TokenStream.isKeyword("default"));
+        assertTrue(TokenStream.isKeyword("finally"));
+        assertTrue(TokenStream.isKeyword("boolean"));
+        assertTrue(TokenStream.isKeyword("private"));
+        assertTrue(TokenStream.isKeyword("extends"));
+    }
+
+    // case 7: non keyword falls through validation -> false
+    @Test
+    public void testIsKeyword_length7_nonKeyword_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("aaaaaaa"));
+    }
+
+    // case 8: all single candidate branches
+    @Test
+    public void testIsKeyword_length8_allWords_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("abstract"));
+        assertTrue(TokenStream.isKeyword("continue"));
+        assertTrue(TokenStream.isKeyword("debugger"));
+        assertTrue(TokenStream.isKeyword("function"));
+        assertTrue(TokenStream.isKeyword("volatile"));
+    }
+
+    // case 8: non keyword -> default -> false
+    @Test
+    public void testIsKeyword_length8_nonKeyword_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("zzzzzzzz"));
+    }
+
+    // case 9: interface/protected/transient branches
+    @Test
+    public void testIsKeyword_length9_allWords_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("interface"));
+        assertTrue(TokenStream.isKeyword("protected"));
+        assertTrue(TokenStream.isKeyword("transient"));
+    }
+
+    // case 9: non keyword -> default -> false
+    @Test
+    public void testIsKeyword_length9_nonKeyword_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("zzzzzzzzz"));
+    }
+
+    // case 10: implements/instanceof branches
+    @Test
+    public void testIsKeyword_length10_allWords_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("implements"));
+        assertTrue(TokenStream.isKeyword("instanceof"));
+    }
+
+    // case 10: non keyword -> default -> false
+    @Test
+    public void testIsKeyword_length10_nonKeyword_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("zzzzzzzzzz"));
+    }
+
+    // no case defined for length 11, falls through to default entirely
+    @Test
+    public void testIsKeyword_length11_noMatchingCase_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("abcdefghijk"));
+    }
+
+    // case 12: synchronized single candidate
+    @Test
+    public void testIsKeyword_length12_synchronized_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isKeyword("synchronized"));
+    }
+
+    // case 12: non keyword -> final equals validation fails -> false
+    @Test
+    public void testIsKeyword_length12_nonKeyword_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("zzzzzzzzzzzz"));
+    }
+
+    // keyword matching must be case sensitive (JS reserved words are lowercase)
+    @Test
+    public void testIsKeyword_caseSensitive_uppercase_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isKeyword("IF"));
+    }
+
+    // length == 0 branch: returns false per Javadoc contract of identifier
+    @Test
+    public void testIsJSIdentifier_emptyString_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isJSIdentifier(""));
+    }
+
+    // first char fails Character.isJavaIdentifierStart (digit cannot start identifier)
+    @Test
+    public void testIsJSIdentifier_startsWithDigit_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isJSIdentifier("1abc"));
+    }
+
+    // valid identifier: letters followed by digits
+    @Test
+    public void testIsJSIdentifier_validSimpleName_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isJSIdentifier("abc123"));
+    }
+
+    // underscore is valid identifier start
+    @Test
+    public void testIsJSIdentifier_underscorePrefix_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isJSIdentifier("_foo"));
+    }
+
+    // dollar sign is valid identifier start
+    @Test
+    public void testIsJSIdentifier_dollarSignPrefix_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isJSIdentifier("$bar"));
+    }
+
+    // single letter, loop body executes zero times
+    @Test
+    public void testIsJSIdentifier_singleLetter_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isJSIdentifier("a"));
+    }
+
+    // loop finds an invalid identifier part character (hyphen) and returns false
+    @Test
+    public void testIsJSIdentifier_containsHyphen_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isJSIdentifier("foo-bar"));
+    }
+
+    // loop finds invalid identifier part character (space) and returns false
+    @Test
+    public void testIsJSIdentifier_containsSpace_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isJSIdentifier("foo bar"));
+    }
+
+    // single digit fails identifier start check
+    @Test
+    public void testIsJSIdentifier_singleDigit_returnsFalse() throws Throwable {
+        assertFalse(TokenStream.isJSIdentifier("5"));
+    }
+
+    // mixed case letters, underscore, and digits all valid identifier parts, loop runs multiple times
+    @Test
+    public void testIsJSIdentifier_mixedCaseAndUnderscoreAndDigits_returnsTrue() throws Throwable {
+        assertTrue(TokenStream.isJSIdentifier("Foo_Bar1"));
+    }
+}

@@ -1,0 +1,596 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Time (Defects4J bug Time-24)
+package: org.joda.time.format
+class_under_test: DateTimeParserBucket
+test_class_to_write: DateTimeParserBucketClaudeTest
+</target>
+
+<project_notes>
+Joda-Time: ใช้ DateTimeZone.UTC หรือ DateTimeZone.forID("...") ระบุ zone ชัดเจนทุกครั้ง ห้ามพึ่ง default zone ใช้ ISOChronology.getInstanceUTC()
+</project_notes>
+
+<source_code>
+/*
+ *  Copyright 2001-2011 Stephen Colebourne
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
+package org.joda.time.format;
+
+import java.util.Arrays;
+import java.util.Locale;
+
+import org.joda.time.Chronology;
+import org.joda.time.DateTimeField;
+import org.joda.time.DateTimeFieldType;
+import org.joda.time.DateTimeUtils;
+import org.joda.time.DateTimeZone;
+import org.joda.time.DurationField;
+import org.joda.time.DurationFieldType;
+import org.joda.time.IllegalFieldValueException;
+
+/**
+ * DateTimeParserBucket is an advanced class, intended mainly for parser
+ * implementations. It can also be used during normal parsing operations to
+ * capture more information about the parse.
+ * <p>
+ * This class allows fields to be saved in any order, but be physically set in
+ * a consistent order. This is useful for parsing against formats that allow
+ * field values to contradict each other.
+ * <p>
+ * Field values are applied in an order where the "larger" fields are set
+ * first, making their value less likely to stick.  A field is larger than
+ * another when it's range duration is longer. If both ranges are the same,
+ * then the larger field has the longer duration. If it cannot be determined
+ * which field is larger, then the fields are set in the order they were saved.
+ * <p>
+ * For example, these fields were saved in this order: dayOfWeek, monthOfYear,
+ * dayOfMonth, dayOfYear. When computeMillis is called, the fields are set in
+ * this order: monthOfYear, dayOfYear, dayOfMonth, dayOfWeek.
+ * <p>
+ * DateTimeParserBucket is mutable and not thread-safe.
+ *
+ * @author Brian S O'Neill
+ * @author Fredrik Borgh
+ * @since 1.0
+ */
+public class DateTimeParserBucket {
+
+    /** The chronology to use for parsing. */
+    private final Chronology iChrono;
+    private final long iMillis;
+    
+    // TimeZone to switch to in computeMillis. If null, use offset.
+    private DateTimeZone iZone;
+    private int iOffset;
+    /** The locale to use for parsing. */
+    private Locale iLocale;
+    /** Used for parsing two-digit years. */
+    private Integer iPivotYear;
+    /** Used for parsing month/day without year. */
+    private int iDefaultYear;
+
+    private SavedField[] iSavedFields = new SavedField[8];
+    private int iSavedFieldsCount;
+    private boolean iSavedFieldsShared;
+    
+    private Object iSavedState;
+
+    /**
+     * Constructs a bucket.
+     * 
+     * @param instantLocal  the initial millis from 1970-01-01T00:00:00, local time
+     * @param chrono  the chronology to use
+     * @param locale  the locale to use
+     * @deprecated Use longer constructor
+     */
+    @Deprecated
+    public DateTimeParserBucket(long instantLocal, Chronology chrono, Locale locale) {
+        this(instantLocal, chrono, locale, null, 2000);
+    }
+
+    /**
+     * Constructs a bucket, with the option of specifying the pivot year for
+     * two-digit year parsing.
+     *
+     * @param instantLocal  the initial millis from 1970-01-01T00:00:00, local time
+     * @param chrono  the chronology to use
+     * @param locale  the locale to use
+     * @param pivotYear  the pivot year to use when parsing two-digit years
+     * @since 1.1
+     * @deprecated Use longer constructor
+     */
+    @Deprecated
+    public DateTimeParserBucket(long instantLocal, Chronology chrono, Locale locale, Integer pivotYear) {
+        this(instantLocal, chrono, locale, pivotYear, 2000);
+    }
+
+    /**
+     * Constructs a bucket, with the option of specifying the pivot year for
+     * two-digit year parsing.
+     *
+     * @param instantLocal  the initial millis from 1970-01-01T00:00:00, local time
+     * @param chrono  the chronology to use
+     * @param locale  the locale to use
+     * @param pivotYear  the pivot year to use when parsing two-digit years
+     * @since 2.0
+     */
+    public DateTimeParserBucket(long instantLocal, Chronology chrono,
+            Locale locale, Integer pivotYear, int defaultYear) {
+        super();
+        chrono = DateTimeUtils.getChronology(chrono);
+        iMillis = instantLocal;
+        iChrono = chrono.withUTC();
+        iLocale = (locale == null ? Locale.getDefault() : locale);
+        setZone(chrono.getZone());
+        iPivotYear = pivotYear;
+        iDefaultYear = defaultYear;
+    }
+
+    //-----------------------------------------------------------------------
+    /**
+     * Gets the chronology of the bucket, which will be a local (UTC) chronology.
+     */
+    public Chronology getChronology() {
+        return iChrono;
+    }
+
+    //-----------------------------------------------------------------------
+    /**
+     * Returns the locale to be used during parsing.
+     * 
+     * @return the locale to use
+     */
+    public Locale getLocale() {
+        return iLocale;
+    }
+
+    //-----------------------------------------------------------------------
+    /**
+     * Returns the time zone used by computeMillis, or null if an offset is
+     * used instead.
+     */
+    public DateTimeZone getZone() {
+        return iZone;
+    }
+    
+    /**
+     * Set a time zone to be used when computeMillis is called, which
+     * overrides any set time zone offset.
+     *
+     * @param zone the date time zone to operate in, or null if UTC
+     */
+    public void setZone(DateTimeZone zone) {
+        iSavedState = null;
+        iZone = zone == DateTimeZone.UTC ? null : zone;
+        iOffset = 0;
+    }
+    
+    //-----------------------------------------------------------------------
+    /**
+     * Returns the time zone offset in milliseconds used by computeMillis,
+     * unless getZone doesn't return null.
+     */
+    public int getOffset() {
+        return iOffset;
+    }
+    
+    /**
+     * Set a time zone offset to be used when computeMillis is called, which
+     * overrides the time zone.
+     */
+    public void setOffset(int offset) {
+        iSavedState = null;
+        iOffset = offset;
+        iZone = null;
+    }
+
+    //-----------------------------------------------------------------------
+    /**
+     * Returns the default year used when information is incomplete.
+     * <p>
+     * This is used for two-digit years and when the largest parsed field is
+     * months or days.
+     * <p>
+     * A null value for two-digit years means to use the value from DateTimeFormatterBuilder.
+     * A null value for month/day only parsing will cause the default of 2000 to be used.
+     *
+     * @return Integer value of the pivot year, null if not set
+     * @since 1.1
+     */
+    public Integer getPivotYear() {
+        return iPivotYear;
+    }
+
+    /**
+     * Sets the pivot year to use when parsing two digit years.
+     * <p>
+     * If the value is set to null, this will indicate that default
+     * behaviour should be used.
+     *
+     * @param pivotYear  the pivot year to use
+     * @since 1.1
+     */
+    public void setPivotYear(Integer pivotYear) {
+        iPivotYear = pivotYear;
+    }
+
+    //-----------------------------------------------------------------------
+    /**
+     * Saves a datetime field value.
+     * 
+     * @param field  the field, whose chronology must match that of this bucket
+     * @param value  the value
+     */
+    public void saveField(DateTimeField field, int value) {
+        saveField(new SavedField(field, value));
+    }
+    
+    /**
+     * Saves a datetime field value.
+     * 
+     * @param fieldType  the field type
+     * @param value  the value
+     */
+    public void saveField(DateTimeFieldType fieldType, int value) {
+        saveField(new SavedField(fieldType.getField(iChrono), value));
+    }
+    
+    /**
+     * Saves a datetime field text value.
+     * 
+     * @param fieldType  the field type
+     * @param text  the text value
+     * @param locale  the locale to use
+     */
+    public void saveField(DateTimeFieldType fieldType, String text, Locale locale) {
+        saveField(new SavedField(fieldType.getField(iChrono), text, locale));
+    }
+    
+    private void saveField(SavedField field) {
+        SavedField[] savedFields = iSavedFields;
+        int savedFieldsCount = iSavedFieldsCount;
+        
+        if (savedFieldsCount == savedFields.length || iSavedFieldsShared) {
+            // Expand capacity or merely copy if saved fields are shared.
+            SavedField[] newArray = new SavedField
+                [savedFieldsCount == savedFields.length ? savedFieldsCount * 2 : savedFields.length];
+            System.arraycopy(savedFields, 0, newArray, 0, savedFieldsCount);
+            iSavedFields = savedFields = newArray;
+            iSavedFieldsShared = false;
+        }
+        
+        iSavedState = null;
+        savedFields[savedFieldsCount] = field;
+        iSavedFieldsCount = savedFieldsCount + 1;
+    }
+    
+    /**
+     * Saves the state of this bucket, returning it in an opaque object. Call
+     * restoreState to undo any changes that were made since the state was
+     * saved. Calls to saveState may be nested.
+     *
+     * @return opaque saved state, which may be passed to restoreState
+     */
+    public Object saveState() {
+        if (iSavedState == null) {
+            iSavedState = new SavedState();
+        }
+        return iSavedState;
+    }
+    
+    /**
+     * Restores the state of this bucket from a previously saved state. The
+     * state object passed into this method is not consumed, and it can be used
+     * later to restore to that state again.
+     *
+     * @param savedState opaque saved state, returned from saveState
+     * @return true state object is valid and state restored
+     */
+    public boolean restoreState(Object savedState) {
+        if (savedState instanceof SavedState) {
+            if (((SavedState) savedState).restoreState(this)) {
+                iSavedState = savedState;
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Computes the parsed datetime by setting the saved fields.
+     * This method is idempotent, but it is not thread-safe.
+     *
+     * @return milliseconds since 1970-01-01T00:00:00Z
+     * @throws IllegalArgumentException if any field is out of range
+     */
+    public long computeMillis() {
+        return computeMillis(false, null);
+    }
+    
+    /**
+     * Computes the parsed datetime by setting the saved fields.
+     * This method is idempotent, but it is not thread-safe.
+     *
+     * @param resetFields false by default, but when true, unsaved field values are cleared
+     * @return milliseconds since 1970-01-01T00:00:00Z
+     * @throws IllegalArgumentException if any field is out of range
+     */
+    public long computeMillis(boolean resetFields) {
+        return computeMillis(resetFields, null);
+    }
+
+    /**
+     * Computes the parsed datetime by setting the saved fields.
+     * This method is idempotent, but it is not thread-safe.
+     *
+     * @param resetFields false by default, but when true, unsaved field values are cleared
+     * @param text optional text being parsed, to be included in any error message
+     * @return milliseconds since 1970-01-01T00:00:00Z
+     * @throws IllegalArgumentException if any field is out of range
+     * @since 1.3
+     */
+    public long computeMillis(boolean resetFields, String text) {
+        SavedField[] savedFields = iSavedFields;
+        int count = iSavedFieldsCount;
+        if (iSavedFieldsShared) {
+            iSavedFields = savedFields = (SavedField[])iSavedFields.clone();
+            iSavedFieldsShared = false;
+        }
+        sort(savedFields, count);
+        if (count > 0) {
+            // alter base year for parsing if first field is month or day
+            DurationField months = DurationFieldType.months().getField(iChrono);
+            DurationField days = DurationFieldType.days().getField(iChrono);
+            DurationField first = savedFields[0].iField.getDurationField();
+            if (compareReverse(first, months) >= 0 && compareReverse(first, days) <= 0) {
+                saveField(DateTimeFieldType.year(), iDefaultYear);
+                return computeMillis(resetFields, text);
+            }
+        }
+
+        long millis = iMillis;
+        try {
+            for (int i = 0; i < count; i++) {
+                millis = savedFields[i].set(millis, resetFields);
+            }
+        } catch (IllegalFieldValueException e) {
+            if (text != null) {
+                e.prependMessage("Cannot parse \"" + text + '"');
+            }
+            throw e;
+        }
+        
+        if (iZone == null) {
+            millis -= iOffset;
+        } else {
+            int offset = iZone.getOffsetFromLocal(millis);
+            millis -= offset;
+            if (offset != iZone.getOffset(millis)) {
+                String message =
+                    "Illegal instant due to time zone offset transition (" + iZone + ')';
+                if (text != null) {
+                    message = "Cannot parse \"" + text + "\": " + message;
+                }
+                throw new IllegalArgumentException(message);
+            }
+        }
+        
+        return millis;
+    }
+    
+    /**
+     * Sorts elements [0,high). Calling java.util.Arrays isn't always the right
+     * choice since it always creates an internal copy of the array, even if it
+     * doesn't need to. If the array slice is small enough, an insertion sort
+     * is chosen instead, but it doesn't need a copy!
+     * <p>
+     * This method has a modified version of that insertion sort, except it
+     * doesn't create an unnecessary array copy. If high is over 10, then
+     * java.util.Arrays is called, which will perform a merge sort, which is
+     * faster than insertion sort on large lists.
+     * <p>
+     * The end result is much greater performance when computeMillis is called.
+     * Since the amount of saved fields is small, the insertion sort is a
+     * better choice. Additional performance is gained since there is no extra
+     * array allocation and copying. Also, the insertion sort here does not
+     * perform any casting operations. The version in java.util.Arrays performs
+     * casts within the insertion sort loop.
+     */
+    private static void sort(SavedField[] array, int high) {
+        if (high > 10) {
+            Arrays.sort(array, 0, high);
+        } else {
+            for (int i=0; i<high; i++) {
+                for (int j=i; j>0 && (array[j-1]).compareTo(array[j])>0; j--) {
+                    SavedField t = array[j];
+                    array[j] = array[j-1];
+                    array[j-1] = t;
+                }
+            }
+        }
+    }
+
+    class SavedState {
+        final DateTimeZone iZone;
+        final int iOffset;
+        final SavedField[] iSavedFields;
+        final int iSavedFieldsCount;
+        
+        SavedState() {
+            this.iZone = DateTimeParserBucket.this.iZone;
+            this.iOffset = DateTimeParserBucket.this.iOffset;
+            this.iSavedFields = DateTimeParserBucket.this.iSavedFields;
+            this.iSavedFieldsCount = DateTimeParserBucket.this.iSavedFieldsCount;
+        }
+        
+        boolean restoreState(DateTimeParserBucket enclosing) {
+            if (enclosing != DateTimeParserBucket.this) {
+                return false;
+            }
+            enclosing.iZone = this.iZone;
+            enclosing.iOffset = this.iOffset;
+            enclosing.iSavedFields = this.iSavedFields;
+            if (this.iSavedFieldsCount < enclosing.iSavedFieldsCount) {
+                // Since count is being restored to a lower count, the
+                // potential exists for new saved fields to destroy data being
+                // shared by another state. Set this flag such that the array
+                // of saved fields is cloned prior to modification.
+                enclosing.iSavedFieldsShared = true;
+            }
+            enclosing.iSavedFieldsCount = this.iSavedFieldsCount;
+            return true;
+        }
+    }
+    
+    static class SavedField implements Comparable<SavedField> {
+        final DateTimeField iField;
+        final int iValue;
+        final String iText;
+        final Locale iLocale;
+        
+        SavedField(DateTimeField field, int value) {
+            iField = field;
+            iValue = value;
+            iText = null;
+            iLocale = null;
+        }
+        
+        SavedField(DateTimeField field, String text, Locale locale) {
+            iField = field;
+            iValue = 0;
+            iText = text;
+            iLocale = locale;
+        }
+        
+        long set(long millis, boolean reset) {
+            if (iText == null) {
+                millis = iField.set(millis, iValue);
+            } else {
+                millis = iField.set(millis, iText, iLocale);
+            }
+            if (reset) {
+                millis = iField.roundFloor(millis);
+            }
+            return millis;
+        }
+        
+        /**
+         * The field with the longer range duration is ordered first, where
+         * null is considered infinite. If the ranges match, then the field
+         * with the longer duration is ordered first.
+         */
+        public int compareTo(SavedField obj) {
+            DateTimeField other = obj.iField;
+            int result = compareReverse
+                (iField.getRangeDurationField(), other.getRangeDurationField());
+            if (result != 0) {
+                return result;
+            }
+            return compareReverse
+                (iField.getDurationField(), other.getDurationField());
+        }
+    }
+
+    static int compareReverse(DurationField a, DurationField b) {
+        if (a == null || !a.isSupported()) {
+            if (b == null || !b.isSupported()) {
+                return 0;
+            }
+            return -1;
+        }
+        if (b == null || !b.isSupported()) {
+            return 1;
+        }
+        return -a.compareTo(b);
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ DateTimeParserBucketClaudeTest ใน package org.joda.time.format เพื่อทดสอบคลาส DateTimeParserBucket ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.joda.time.format;` เท่านั้น
+</instructions>

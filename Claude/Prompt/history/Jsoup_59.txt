@@ -1,0 +1,465 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Jsoup (Defects4J bug Jsoup-59)
+package: org.jsoup.parser
+class_under_test: Token
+test_class_to_write: TokenClaudeTest
+</target>
+
+<project_notes>
+Jsoup: ใช้ Jsoup.parse(String) และ Jsoup.parseBodyFragment(String) เป็นทางเข้า import org.jsoup.nodes.* และ org.jsoup.parser.* ให้ครบ
+</project_notes>
+
+<source_code>
+package org.jsoup.parser;
+
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Attributes;
+import org.jsoup.nodes.BooleanAttribute;
+
+/**
+ * Parse tokens for the Tokeniser.
+ */
+abstract class Token {
+    TokenType type;
+
+    private Token() {
+    }
+    
+    String tokenType() {
+        return this.getClass().getSimpleName();
+    }
+
+    /**
+     * Reset the data represent by this token, for reuse. Prevents the need to create transfer objects for every
+     * piece of data, which immediately get GCed.
+     */
+    abstract Token reset();
+
+    static void reset(StringBuilder sb) {
+        if (sb != null) {
+            sb.delete(0, sb.length());
+        }
+    }
+
+    static final class Doctype extends Token {
+        final StringBuilder name = new StringBuilder();
+        String pubSysKey = null;
+        final StringBuilder publicIdentifier = new StringBuilder();
+        final StringBuilder systemIdentifier = new StringBuilder();
+        boolean forceQuirks = false;
+
+        Doctype() {
+            type = TokenType.Doctype;
+        }
+
+        @Override
+        Token reset() {
+            reset(name);
+            pubSysKey = null;
+            reset(publicIdentifier);
+            reset(systemIdentifier);
+            forceQuirks = false;
+            return this;
+        }
+
+        String getName() {
+            return name.toString();
+        }
+
+        String getPubSysKey() {
+            return pubSysKey;
+        }
+
+        String getPublicIdentifier() {
+            return publicIdentifier.toString();
+        }
+
+        public String getSystemIdentifier() {
+            return systemIdentifier.toString();
+        }
+
+        public boolean isForceQuirks() {
+            return forceQuirks;
+        }
+    }
+
+    static abstract class Tag extends Token {
+        protected String tagName;
+        protected String normalName; // lc version of tag name, for case insensitive tree build
+        private String pendingAttributeName; // attribute names are generally caught in one hop, not accumulated
+        private StringBuilder pendingAttributeValue = new StringBuilder(); // but values are accumulated, from e.g. & in hrefs
+        private String pendingAttributeValueS; // try to get attr vals in one shot, vs Builder
+        private boolean hasEmptyAttributeValue = false; // distinguish boolean attribute from empty string value
+        private boolean hasPendingAttributeValue = false;
+        boolean selfClosing = false;
+        Attributes attributes; // start tags get attributes on construction. End tags get attributes on first new attribute (but only for parser convenience, not used).
+
+        @Override
+        Tag reset() {
+            tagName = null;
+            normalName = null;
+            pendingAttributeName = null;
+            reset(pendingAttributeValue);
+            pendingAttributeValueS = null;
+            hasEmptyAttributeValue = false;
+            hasPendingAttributeValue = false;
+            selfClosing = false;
+            attributes = null;
+            return this;
+        }
+
+        final void newAttribute() {
+            if (attributes == null)
+                attributes = new Attributes();
+
+            if (pendingAttributeName != null) {
+                // the tokeniser has skipped whitespace control chars, but trimming could collapse to empty for other control codes, so verify here
+                pendingAttributeName = pendingAttributeName.trim();
+                    Attribute attribute;
+                    if (hasPendingAttributeValue)
+                        attribute = new Attribute(pendingAttributeName,
+                            pendingAttributeValue.length() > 0 ? pendingAttributeValue.toString() : pendingAttributeValueS);
+                    else if (hasEmptyAttributeValue)
+                        attribute = new Attribute(pendingAttributeName, "");
+                    else
+                        attribute = new BooleanAttribute(pendingAttributeName);
+                    attributes.put(attribute);
+            }
+            pendingAttributeName = null;
+            hasEmptyAttributeValue = false;
+            hasPendingAttributeValue = false;
+            reset(pendingAttributeValue);
+            pendingAttributeValueS = null;
+        }
+
+        final void finaliseTag() {
+            // finalises for emit
+            if (pendingAttributeName != null) {
+                // todo: check if attribute name exists; if so, drop and error
+                newAttribute();
+            }
+        }
+
+        final String name() { // preserves case, for input into Tag.valueOf (which may drop case)
+            Validate.isFalse(tagName == null || tagName.length() == 0);
+            return tagName;
+        }
+
+        final String normalName() { // loses case, used in tree building for working out where in tree it should go
+            return normalName;
+        }
+
+        final Tag name(String name) {
+            tagName = name;
+            normalName = name.toLowerCase();
+            return this;
+        }
+
+        final boolean isSelfClosing() {
+            return selfClosing;
+        }
+
+        @SuppressWarnings({"TypeMayBeWeakened"})
+        final Attributes getAttributes() {
+            return attributes;
+        }
+
+        // these appenders are rarely hit in not null state-- caused by null chars.
+        final void appendTagName(String append) {
+            tagName = tagName == null ? append : tagName.concat(append);
+            normalName = tagName.toLowerCase();
+        }
+
+        final void appendTagName(char append) {
+            appendTagName(String.valueOf(append));
+        }
+
+        final void appendAttributeName(String append) {
+            pendingAttributeName = pendingAttributeName == null ? append : pendingAttributeName.concat(append);
+        }
+
+        final void appendAttributeName(char append) {
+            appendAttributeName(String.valueOf(append));
+        }
+
+        final void appendAttributeValue(String append) {
+            ensureAttributeValue();
+            if (pendingAttributeValue.length() == 0) {
+                pendingAttributeValueS = append;
+            } else {
+                pendingAttributeValue.append(append);
+            }
+        }
+
+        final void appendAttributeValue(char append) {
+            ensureAttributeValue();
+            pendingAttributeValue.append(append);
+        }
+
+        final void appendAttributeValue(char[] append) {
+            ensureAttributeValue();
+            pendingAttributeValue.append(append);
+        }
+
+        final void appendAttributeValue(int[] appendCodepoints) {
+            ensureAttributeValue();
+            for (int codepoint : appendCodepoints) {
+                pendingAttributeValue.appendCodePoint(codepoint);
+            }
+        }
+        
+        final void setEmptyAttributeValue() {
+            hasEmptyAttributeValue = true;
+        }
+
+        private void ensureAttributeValue() {
+            hasPendingAttributeValue = true;
+            // if on second hit, we'll need to move to the builder
+            if (pendingAttributeValueS != null) {
+                pendingAttributeValue.append(pendingAttributeValueS);
+                pendingAttributeValueS = null;
+            }
+        }
+    }
+
+    final static class StartTag extends Tag {
+        StartTag() {
+            super();
+            attributes = new Attributes();
+            type = TokenType.StartTag;
+        }
+
+        @Override
+        Tag reset() {
+            super.reset();
+            attributes = new Attributes();
+            // todo - would prefer these to be null, but need to check Element assertions
+            return this;
+        }
+
+        StartTag nameAttr(String name, Attributes attributes) {
+            this.tagName = name;
+            this.attributes = attributes;
+            normalName = tagName.toLowerCase();
+            return this;
+        }
+
+        @Override
+        public String toString() {
+            if (attributes != null && attributes.size() > 0)
+                return "<" + name() + " " + attributes.toString() + ">";
+            else
+                return "<" + name() + ">";
+        }
+    }
+
+    final static class EndTag extends Tag{
+        EndTag() {
+            super();
+            type = TokenType.EndTag;
+        }
+
+        @Override
+        public String toString() {
+            return "</" + name() + ">";
+        }
+    }
+
+    final static class Comment extends Token {
+        final StringBuilder data = new StringBuilder();
+        boolean bogus = false;
+
+        @Override
+        Token reset() {
+            reset(data);
+            bogus = false;
+            return this;
+        }
+
+        Comment() {
+            type = TokenType.Comment;
+        }
+
+        String getData() {
+            return data.toString();
+        }
+
+        @Override
+        public String toString() {
+            return "<!--" + getData() + "-->";
+        }
+    }
+
+    final static class Character extends Token {
+        private String data;
+
+        Character() {
+            super();
+            type = TokenType.Character;
+        }
+
+        @Override
+        Token reset() {
+            data = null;
+            return this;
+        }
+
+        Character data(String data) {
+            this.data = data;
+            return this;
+        }
+
+        String getData() {
+            return data;
+        }
+
+        @Override
+        public String toString() {
+            return getData();
+        }
+    }
+
+    final static class EOF extends Token {
+        EOF() {
+            type = Token.TokenType.EOF;
+        }
+
+        @Override
+        Token reset() {
+            return this;
+        }
+    }
+
+    final boolean isDoctype() {
+        return type == TokenType.Doctype;
+    }
+
+    final Doctype asDoctype() {
+        return (Doctype) this;
+    }
+
+    final boolean isStartTag() {
+        return type == TokenType.StartTag;
+    }
+
+    final StartTag asStartTag() {
+        return (StartTag) this;
+    }
+
+    final boolean isEndTag() {
+        return type == TokenType.EndTag;
+    }
+
+    final EndTag asEndTag() {
+        return (EndTag) this;
+    }
+
+    final boolean isComment() {
+        return type == TokenType.Comment;
+    }
+
+    final Comment asComment() {
+        return (Comment) this;
+    }
+
+    final boolean isCharacter() {
+        return type == TokenType.Character;
+    }
+
+    final Character asCharacter() {
+        return (Character) this;
+    }
+
+    final boolean isEOF() {
+        return type == TokenType.EOF;
+    }
+
+    enum TokenType {
+        Doctype,
+        StartTag,
+        EndTag,
+        Comment,
+        Character,
+        EOF
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ TokenClaudeTest ใน package org.jsoup.parser เพื่อทดสอบคลาส Token ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.jsoup.parser;` เท่านั้น
+</instructions>

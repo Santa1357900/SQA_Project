@@ -1,0 +1,414 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.JSDocInfo;
+import com.google.javascript.rhino.JSDocInfoBuilder;
+import com.google.javascript.rhino.JSTypeExpression;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+
+public class FunctionTypeBuilderClaudeTest {
+
+  private Compiler compiler;
+  private JSTypeRegistry registry;
+  private Scope scope;
+  private Node errorRoot;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.initOptions(options);
+    registry = compiler.getTypeRegistry();
+    errorRoot = IR.block();
+    scope = new Scope(IR.block(), compiler);
+  }
+
+  private FunctionTypeBuilder newBuilder(String fnName) {
+    return new FunctionTypeBuilder(fnName, compiler, errorRoot, "test.js", scope);
+  }
+
+  // Constructor: Preconditions.checkNotNull(errorRoot) must throw when errorRoot is null.
+  @Test
+  public void testConstructor_nullErrorRoot_throwsNPE() throws Throwable {
+    try {
+      new FunctionTypeBuilder("foo", compiler, null, "test.js", scope);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // setSourceNode: returns this and the node is later used as the FunctionType source.
+  @Test
+  public void testSetSourceNode_returnsSameBuilderAndSetsSource() throws Throwable {
+    FunctionTypeBuilder b = newBuilder("Foo");
+    Node src = IR.name("Foo");
+    FunctionTypeBuilder result = b.setSourceNode(src);
+    assertSame(b, result);
+    b.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType fnType = b.buildAndRegister();
+    assertSame(src, fnType.getSource());
+  }
+
+  // inferFromOverriddenFunction: paramsParent null -> copies return type and params node from oldType.
+  @Test
+  public void testInferFromOverriddenFunction_nullParamsParent_copiesReturnAndParams() throws Throwable {
+    FunctionTypeBuilder old = newBuilder("Old1");
+    old.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType oldType = old.buildAndRegister();
+    FunctionTypeBuilder b = newBuilder("Foo16");
+    b.inferFromOverriddenFunction(oldType, null);
+    FunctionType fnType = b.buildAndRegister();
+    assertSame(oldType.getReturnType(), fnType.getReturnType());
+  }
+
+  // inferFromOverriddenFunction: literal with more params than oldType -> extra params get UNKNOWN_TYPE.
+  @Test
+  public void testInferFromOverriddenFunction_literalWithExtraParams_addsUnknownTypeParams() throws Throwable {
+    FunctionTypeBuilder old = newBuilder("Old2");
+    old.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType oldType = old.buildAndRegister();
+    Node paramsParent = new Node(Token.LP);
+    paramsParent.addChildToBack(Node.newString(Token.NAME, "a"));
+    FunctionTypeBuilder b = newBuilder("Foo17");
+    b.inferFromOverriddenFunction(oldType, paramsParent);
+    FunctionType fnType = b.buildAndRegister();
+    assertTrue(fnType.getParameters().iterator().hasNext());
+  }
+
+  // inferReturnType: info == null -> returnType defaults to UNKNOWN_TYPE.
+  @Test
+  public void testInferReturnType_nullInfo_defaultsToUnknown() throws Throwable {
+    FunctionTypeBuilder b = newBuilder("Foo");
+    b.inferReturnType(null);
+    b.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType fnType = b.buildAndRegister();
+    assertSame(registry.getNativeType(JSTypeNative.UNKNOWN_TYPE), fnType.getReturnType());
+  }
+
+  // inferReturnType: info.hasReturnType() true -> evaluates the declared type ("number").
+  @Test
+  public void testInferReturnType_withReturnType_evaluatesType() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordReturnType(new JSTypeExpression(Node.newString(Token.STRING, "number"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo2b");
+    b.inferReturnType(info);
+    b.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType fnType = b.buildAndRegister();
+    assertEquals("number", fnType.getReturnType().toString());
+  }
+
+  // inferInheritance: info == null -> no-op, returns same builder.
+  @Test
+  public void testInferInheritance_nullInfo_returnsSameBuilder() throws Throwable {
+    FunctionTypeBuilder b = newBuilder("Foo3b");
+    FunctionTypeBuilder result = b.inferInheritance(null);
+    assertSame(b, result);
+  }
+
+  // inferInheritance: hasBaseType but not constructor/interface -> EXTENDS_WITHOUT_TYPEDEF warning.
+  @Test
+  public void testInferInheritance_extendsWithoutTypedef_reportsWarning() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordBaseType(new JSTypeExpression(Node.newString(Token.STRING, "Object"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo3c");
+    b.inferInheritance(info);
+    assertEquals(1, compiler.getWarningCount());
+  }
+
+  // inferInheritance: constructor + valid object base type -> baseType set, no warning.
+  @Test
+  public void testInferInheritance_constructorWithValidObjectBaseType_noWarning() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordConstructor();
+    docBuilder.recordBaseType(new JSTypeExpression(Node.newString(Token.STRING, "Object"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo4b");
+    b.inferInheritance(info);
+    assertEquals(0, compiler.getWarningCount());
+  }
+
+  // BUG: constructor + non-object base type ("number") must only warn (EXTENDS_NON_OBJECT), not throw NPE.
+  @Test
+  public void testInferInheritance_constructorWithNonObjectBaseType_reportsWarningWithoutThrowing() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordConstructor();
+    docBuilder.recordBaseType(new JSTypeExpression(Node.newString(Token.STRING, "number"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo5b");
+    b.inferInheritance(info);
+    assertEquals(1, compiler.getWarningCount());
+  }
+
+  // inferInheritance: implements present but not constructor/interface -> IMPLEMENTS_WITHOUT_CONSTRUCTOR warning.
+  @Test
+  public void testInferInheritance_implementsWithoutConstructor_reportsWarning() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordImplementedInterface(new JSTypeExpression(Node.newString(Token.STRING, "Iface"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo6b");
+    b.inferInheritance(info);
+    assertEquals(1, compiler.getWarningCount());
+  }
+
+  // inferInheritance: constructor + implemented interface that evaluates to non-object -> BAD_IMPLEMENTED_TYPE error.
+  @Test
+  public void testInferInheritance_constructorWithBadImplementedType_reportsError() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordConstructor();
+    docBuilder.recordImplementedInterface(new JSTypeExpression(Node.newString(Token.STRING, "number"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo7b");
+    b.inferInheritance(info);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // inferInheritance: constructor + valid implemented interface -> added without error.
+  @Test
+  public void testInferInheritance_constructorWithValidImplementedInterface_noError() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordConstructor();
+    docBuilder.recordImplementedInterface(new JSTypeExpression(Node.newString(Token.STRING, "SomeIface"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo8b");
+    b.inferInheritance(info);
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // inferThisType(info,type): objType != null and info == null -> thisType is set to objType.
+  @Test
+  public void testInferThisType_objectTypeNoInfo_setsThisType() throws Throwable {
+    JSType objType = new JSTypeExpression(Node.newString(Token.STRING, "Object"), "test.js").evaluate(scope, registry);
+    FunctionTypeBuilder b = newBuilder("Foo9b");
+    b.inferThisType(null, objType);
+    b.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType fnType = b.buildAndRegister();
+    assertSame(objType, fnType.getTypeOfThis());
+  }
+
+  // inferThisType(info,type): info.hasType() true -> thisType must NOT be overwritten with objType.
+  @Test
+  public void testInferThisType_infoHasType_doesNotSetThisType() throws Throwable {
+    JSType objType = new JSTypeExpression(Node.newString(Token.STRING, "Object"), "test.js").evaluate(scope, registry);
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordType(new JSTypeExpression(Node.newString(Token.STRING, "Object"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo10b");
+    b.inferThisType(info, objType);
+    b.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType fnType = b.buildAndRegister();
+    assertNotSame(objType, fnType.getTypeOfThis());
+  }
+
+  // inferThisType(info,owner): owner == null -> no-op, returns same builder.
+  @Test
+  public void testInferThisTypeOwner_nullOwner_returnsSameBuilder() throws Throwable {
+    FunctionTypeBuilder b = newBuilder("Foo11b");
+    FunctionTypeBuilder result = b.inferThisType(null, (Node) null);
+    assertSame(b, result);
+  }
+
+  // inferThisType(info,owner): owner present but unresolvable name -> ownerType null, no crash.
+  @Test
+  public void testInferThisTypeOwner_unresolvableOwnerName_doesNotSetThisTypeButNoThrow() throws Throwable {
+    Node owner = IR.name("UndeclaredOwnerXyz");
+    FunctionTypeBuilder b = newBuilder("Foo12b");
+    b.inferThisType(null, owner);
+    b.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType fnType = b.buildAndRegister();
+    assertNotNull(fnType);
+  }
+
+  // inferParameterTypes(argsParent,info): both null -> early return, parametersNode stays null -> build throws.
+  @Test
+  public void testInferParameterTypes_nullArgsParentNullInfo_parametersNodeStaysNullThrowsOnBuild() throws Throwable {
+    FunctionTypeBuilder b = newBuilder("Foo13b");
+    b.inferParameterTypes(null, null);
+    try {
+      b.buildAndRegister();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // inferParameterTypes: argsParent null but info present -> delegates to one-arg overload, builds params from info.
+  @Test
+  public void testInferParameterTypes_nullArgsParentWithInfo_deducesFromInfo() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordParameter("a", new JSTypeExpression(Node.newString(Token.STRING, "number"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo14b");
+    b.inferParameterTypes(null, info);
+    FunctionType fnType = b.buildAndRegister();
+    assertTrue(fnType.getParameters().iterator().hasNext());
+  }
+
+  // inferParameterTypes: jsdoc names a param not present in argsParent -> INEXISTANT_PARAM warning.
+  @Test
+  public void testInferParameterTypes_argsWithExtraJsDocParam_reportsInexistentParamWarning() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordParameter("x", new JSTypeExpression(Node.newString(Token.STRING, "number"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo15b");
+    b.inferParameterTypes(new Node(Token.LP), info);
+    assertEquals(1, compiler.getWarningCount());
+  }
+
+  // inferParameterTypes: param in argsParent matches jsdoc param name -> no INEXISTANT_PARAM warning.
+  @Test
+  public void testInferParameterTypes_matchingParam_noWarning() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordParameter("a", new JSTypeExpression(Node.newString(Token.STRING, "number"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    Node argsParent = new Node(Token.LP);
+    argsParent.addChildToBack(Node.newString(Token.NAME, "a"));
+    FunctionTypeBuilder b = newBuilder("Foo18b");
+    b.inferParameterTypes(argsParent, info);
+    assertEquals(0, compiler.getWarningCount());
+  }
+
+  // inferTemplateTypeName: info == null -> no-op, returns same builder.
+  @Test
+  public void testInferTemplateTypeName_nullInfo_noCrash() throws Throwable {
+    FunctionTypeBuilder b = newBuilder("Foo19b");
+    FunctionTypeBuilder result = b.inferTemplateTypeName(null);
+    assertSame(b, result);
+  }
+
+  // inferTemplateTypeName: info != null branch exercised (even with no template recorded).
+  @Test
+  public void testInferTemplateTypeName_withInfo_noCrash() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Foo20b");
+    FunctionTypeBuilder result = b.inferTemplateTypeName(info);
+    assertSame(b, result);
+  }
+
+  // buildAndRegister: parametersNode never set -> IllegalStateException per contract.
+  @Test
+  public void testBuildAndRegister_nullParametersNode_throwsIllegalStateException() throws Throwable {
+    FunctionTypeBuilder b = newBuilder("Foo21b");
+    try {
+      b.buildAndRegister();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // buildAndRegister: new constructor type with a fresh global name gets declared in the registry.
+  @Test
+  public void testBuildAndRegister_constructorNewType_declaresAndGlobal() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordConstructor();
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("MyNewCtor1");
+    b.inferInheritance(info);
+    b.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType fnType = b.buildAndRegister();
+    assertSame(fnType.getInstanceType(), registry.getType("MyNewCtor1"));
+  }
+
+  // buildAndRegister: constructor named "Function" hits the built-in existing-type branch, returns a type.
+  @Test
+  public void testBuildAndRegister_constructorBuiltinFunctionName_returnsExistingFunctionConstructor() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordConstructor();
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("Function");
+    b.inferInheritance(info);
+    b.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType fnType = b.buildAndRegister();
+    assertNotNull(fnType);
+  }
+
+  // buildAndRegister: interface branch creates interface type and declares it when global and named.
+  @Test
+  public void testBuildAndRegister_interfaceType_createsInterfaceAndDeclares() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordInterface();
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder("MyIface1");
+    b.inferInheritance(info);
+    b.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType fnType = b.buildAndRegister();
+    assertSame(fnType.getInstanceType(), registry.getType("MyIface1"));
+  }
+
+  // buildAndRegister: fnName empty -> interface still created, but declareType is skipped.
+  @Test
+  public void testBuildAndRegister_emptyFnName_doesNotDeclareButCreatesInterface() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordInterface();
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    FunctionTypeBuilder b = newBuilder(null);
+    b.inferInheritance(info);
+    b.inferParameterTypes(new Node(Token.LP), null);
+    FunctionType fnType = b.buildAndRegister();
+    assertNotNull(fnType.getInstanceType());
+  }
+
+  // isFunctionTypeDeclaration: no param/return/this/ctor/iface -> false.
+  @Test
+  public void testIsFunctionTypeDeclaration_emptyInfo_false() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    assertFalse(FunctionTypeBuilder.isFunctionTypeDeclaration(info));
+  }
+
+  // isFunctionTypeDeclaration: hasReturnType() true -> true.
+  @Test
+  public void testIsFunctionTypeDeclaration_withReturnType_true() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordReturnType(new JSTypeExpression(Node.newString(Token.STRING, "number"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    assertTrue(FunctionTypeBuilder.isFunctionTypeDeclaration(info));
+  }
+
+  // isFunctionTypeDeclaration: getParameterCount() > 0 -> true.
+  @Test
+  public void testIsFunctionTypeDeclaration_withParameter_true() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordParameter("a", new JSTypeExpression(Node.newString(Token.STRING, "number"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    assertTrue(FunctionTypeBuilder.isFunctionTypeDeclaration(info));
+  }
+
+  // isFunctionTypeDeclaration: isConstructor() true -> true.
+  @Test
+  public void testIsFunctionTypeDeclaration_constructor_true() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordConstructor();
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    assertTrue(FunctionTypeBuilder.isFunctionTypeDeclaration(info));
+  }
+
+  // isFunctionTypeDeclaration: isInterface() true -> true.
+  @Test
+  public void testIsFunctionTypeDeclaration_interface_true() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordInterface();
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    assertTrue(FunctionTypeBuilder.isFunctionTypeDeclaration(info));
+  }
+
+  // isFunctionTypeDeclaration: hasThisType() true -> true.
+  @Test
+  public void testIsFunctionTypeDeclaration_withThisType_true() throws Throwable {
+    JSDocInfoBuilder docBuilder = new JSDocInfoBuilder(false);
+    docBuilder.recordThisType(new JSTypeExpression(Node.newString(Token.STRING, "Object"), "test.js"));
+    JSDocInfo info = docBuilder.build(IR.name("f"));
+    assertTrue(FunctionTypeBuilder.isFunctionTypeDeclaration(info));
+  }
+}

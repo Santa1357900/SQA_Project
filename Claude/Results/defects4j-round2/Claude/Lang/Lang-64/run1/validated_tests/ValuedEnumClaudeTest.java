@@ -1,0 +1,239 @@
+package org.apache.commons.lang.enums;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ValuedEnumClaudeTest {
+
+    static final class ColorEnum extends ValuedEnum {
+        static final int RED_VALUE = 0;
+        static final int GREEN_VALUE = 1;
+        static final int BLUE_VALUE = 2;
+        static final ColorEnum RED = new ColorEnum("Red", RED_VALUE);
+        static final ColorEnum GREEN = new ColorEnum("Green", GREEN_VALUE);
+        static final ColorEnum BLUE = new ColorEnum("Blue", BLUE_VALUE);
+        private ColorEnum(String name, int value) {
+            super(name, value);
+        }
+    }
+
+    static final class ShapeEnum extends ValuedEnum {
+        static final int CIRCLE_VALUE = 10;
+        static final int SQUARE_VALUE = 20;
+        static final ShapeEnum CIRCLE = new ShapeEnum("Circle", CIRCLE_VALUE);
+        static final ShapeEnum SQUARE = new ShapeEnum("Square", SQUARE_VALUE);
+        private ShapeEnum(String name, int value) {
+            super(name, value);
+        }
+    }
+
+    @Before
+    public void setUp() throws Throwable {
+        // force static init/registration of fixture enum constants before each test
+        assertNotNull(ColorEnum.RED);
+        assertNotNull(ColorEnum.GREEN);
+        assertNotNull(ColorEnum.BLUE);
+        assertNotNull(ShapeEnum.CIRCLE);
+        assertNotNull(ShapeEnum.SQUARE);
+    }
+
+    // getValue(): ตรวจค่า constructor ของ RED
+    @Test
+    public void testGetValue_red_returnsZero() throws Throwable {
+        assertEquals(ColorEnum.RED_VALUE, ColorEnum.RED.getValue());
+    }
+
+    // getValue(): ตรวจค่า constructor ของ GREEN
+    @Test
+    public void testGetValue_green_returnsOne() throws Throwable {
+        assertEquals(ColorEnum.GREEN_VALUE, ColorEnum.GREEN.getValue());
+    }
+
+    // getValue(): ตรวจค่า constructor ของ BLUE
+    @Test
+    public void testGetValue_blue_returnsTwo() throws Throwable {
+        assertEquals(ColorEnum.BLUE_VALUE, ColorEnum.BLUE.getValue());
+    }
+
+    // getEnum(Class,int): enumClass == null -> IllegalArgumentException
+    @Test
+    public void testGetEnum_nullClass_throwsIllegalArgumentException() throws Throwable {
+        try {
+            ValuedEnum.getEnum(null, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Enum Class"));
+        }
+    }
+
+    // getEnum: ลูปพบ match ตัวแรก (0 iteration ของ loop ก่อนเจอ)
+    @Test
+    public void testGetEnum_firstMatch_returnsRed() throws Throwable {
+        Enum result = ValuedEnum.getEnum(ColorEnum.class, ColorEnum.RED_VALUE);
+        assertSame(ColorEnum.RED, result);
+    }
+
+    // getEnum: ลูปหลายรอบก่อนพบ match (ข้าม RED, GREEN ไปเจอ BLUE)
+    @Test
+    public void testGetEnum_laterMatch_returnsBlue() throws Throwable {
+        Enum result = ValuedEnum.getEnum(ColorEnum.class, ColorEnum.BLUE_VALUE);
+        assertSame(ColorEnum.BLUE, result);
+    }
+
+    // getEnum: ลูปครบทุกตัวไม่พบ match -> คืน null
+    @Test
+    public void testGetEnum_noMatch_returnsNull() throws Throwable {
+        Enum result = ValuedEnum.getEnum(ColorEnum.class, 999);
+        assertNull(result);
+    }
+
+    // getEnum: value ติดลบไม่พบใน list -> null
+    @Test
+    public void testGetEnum_negativeValue_returnsNull() throws Throwable {
+        Enum result = ValuedEnum.getEnum(ColorEnum.class, -1);
+        assertNull(result);
+    }
+
+    // getEnum: value ขอบเขตสูงสุด int ไม่พบ -> null
+    @Test
+    public void testGetEnum_maxIntValue_returnsNull() throws Throwable {
+        Enum result = ValuedEnum.getEnum(ColorEnum.class, Integer.MAX_VALUE);
+        assertNull(result);
+    }
+
+    // getEnum: ค้นด้วยคลาสอื่นที่ไม่มี value นี้ -> null (ไม่ข้ามไปหาใน class อื่น)
+    @Test
+    public void testGetEnum_differentClassSameValue_returnsNull() throws Throwable {
+        Enum result = ValuedEnum.getEnum(ShapeEnum.class, ColorEnum.RED_VALUE);
+        assertNull(result);
+    }
+
+    // getEnum: ค้นด้วยคลาส ShapeEnum หา CIRCLE
+    @Test
+    public void testGetEnum_shapeClass_returnsCircle() throws Throwable {
+        Enum result = ValuedEnum.getEnum(ShapeEnum.class, ShapeEnum.CIRCLE_VALUE);
+        assertSame(ShapeEnum.CIRCLE, result);
+    }
+
+    // getEnum: ค้นด้วยคลาส ShapeEnum หา SQUARE (รายการที่สอง)
+    @Test
+    public void testGetEnum_shapeClass_returnsSquare() throws Throwable {
+        Enum result = ValuedEnum.getEnum(ShapeEnum.class, ShapeEnum.SQUARE_VALUE);
+        assertSame(ShapeEnum.SQUARE, result);
+    }
+
+    // compareTo: เทียบตัวเองค่าเท่ากัน -> 0
+    @Test
+    public void testCompareTo_sameValue_returnsZero() throws Throwable {
+        assertEquals(0, ColorEnum.RED.compareTo(ColorEnum.RED));
+    }
+
+    // compareTo: ค่าน้อยกว่าต้อง < 0 ตาม "numeric by value"
+    @Test
+    public void testCompareTo_lowerThanOther_returnsNegative() throws Throwable {
+        assertTrue(ColorEnum.RED.compareTo(ColorEnum.GREEN) < 0);
+    }
+
+    // compareTo: ค่ามากกว่าต้อง > 0
+    @Test
+    public void testCompareTo_higherThanOther_returnsPositive() throws Throwable {
+        assertTrue(ColorEnum.GREEN.compareTo(ColorEnum.RED) > 0);
+    }
+
+    // compareTo: BLUE เทียบ RED ต้องมากกว่า
+    @Test
+    public void testCompareTo_blueVsRed_returnsPositive() throws Throwable {
+        assertTrue(ColorEnum.BLUE.compareTo(ColorEnum.RED) > 0);
+    }
+
+    // compareTo: RED เทียบ BLUE ต้องน้อยกว่า
+    @Test
+    public void testCompareTo_redVsBlue_returnsNegative() throws Throwable {
+        assertTrue(ColorEnum.RED.compareTo(ColorEnum.BLUE) < 0);
+    }
+
+    // compareTo: other == null -> NullPointerException ตาม Javadoc
+    @Test
+    public void testCompareTo_null_throwsNullPointerException() throws Throwable {
+        try {
+            ColorEnum.RED.compareTo(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // compareTo: other ไม่ใช่ ValuedEnum เลย -> ClassCastException ตาม Javadoc
+    @Test
+    public void testCompareTo_nonEnumObject_throwsClassCastException() throws Throwable {
+        try {
+            ColorEnum.RED.compareTo("not an enum");
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // compareTo: Javadoc ระบุ "the enums must be of the same type" ดังนั้นเทียบคนละ subclass
+    // (ColorEnum กับ ShapeEnum) ต้องไม่ยอมให้คำนวณเป็นตัวเลขเฉย ๆ แต่ต้องโยน ClassCastException
+    @Test
+    public void testCompareTo_differentEnumType_throwsClassCastException() throws Throwable {
+        try {
+            ColorEnum.RED.compareTo(ShapeEnum.CIRCLE);
+            fail("expected ClassCastException for comparing enums of different types");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // compareTo: กลับทิศทางก็ต้องโยน ClassCastException เช่นกัน
+    @Test
+    public void testCompareTo_differentEnumTypeReversed_throwsClassCastException() throws Throwable {
+        try {
+            ShapeEnum.CIRCLE.compareTo(ColorEnum.RED);
+            fail("expected ClassCastException for comparing enums of different types");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // toString: รูปแบบ type[name=value] ต้องมี "Red=0"
+    @Test
+    public void testToString_firstCall_containsNameAndValue() throws Throwable {
+        String s = ColorEnum.RED.toString();
+        assertTrue(s.contains("Red=0"));
+    }
+
+    // toString: ต้องไม่มี package name ปรากฏ (ถูกตัดออกตาม Javadoc)
+    @Test
+    public void testToString_doesNotContainPackagePrefix() throws Throwable {
+        String s = ColorEnum.GREEN.toString();
+        assertFalse(s.contains("org.apache.commons.lang.enums"));
+    }
+
+    // toString: เรียกซ้ำสองครั้งเพื่อคุม branch cache (iToString == null / != null) ต้องได้ค่าเดิม
+    @Test
+    public void testToString_repeatedCall_returnsSameValue() throws Throwable {
+        String first = ColorEnum.BLUE.toString();
+        String second = ColorEnum.BLUE.toString();
+        assertEquals(first, second);
+    }
+
+    // toString: คนละ instance ต้องได้ string ต่างกัน
+    @Test
+    public void testToString_differentInstances_differentStrings() throws Throwable {
+        assertFalse(ColorEnum.RED.toString().equals(ColorEnum.GREEN.toString()));
+    }
+
+    // toString: ค่าของ ShapeEnum ก็ต้องมี name=value ตามสัญญาเช่นกัน
+    @Test
+    public void testToString_shapeEnum_containsNameAndValue() throws Throwable {
+        String s = ShapeEnum.SQUARE.toString();
+        assertTrue(s.contains("Square=20"));
+    }
+
+    // getValue: เรียกซ้ำต้องได้ค่าคงที่เดิมเสมอ (final field)
+    @Test
+    public void testGetValue_calledTwice_consistent() throws Throwable {
+        int first = ShapeEnum.CIRCLE.getValue();
+        int second = ShapeEnum.CIRCLE.getValue();
+        assertEquals(first, second);
+    }
+}

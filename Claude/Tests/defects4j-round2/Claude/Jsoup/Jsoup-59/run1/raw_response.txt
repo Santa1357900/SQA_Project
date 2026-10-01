@@ -1,0 +1,453 @@
+package org.jsoup.parser;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.jsoup.nodes.Attributes;
+
+public class TokenClaudeTest {
+
+    // covers Doctype() constructor setting type via isDoctype()
+    @Test
+    public void testDoctypeConstructor_setsTypeDoctype() throws Throwable {
+        Token.Doctype d = new Token.Doctype();
+        assertTrue(d.isDoctype());
+    }
+
+    // covers getName() reading from name StringBuilder, default and after mutation
+    @Test
+    public void testDoctypeGetName_defaultEmptyAndAfterAppend() throws Throwable {
+        Token.Doctype d = new Token.Doctype();
+        assertEquals("", d.getName());
+        d.name.append("html");
+        assertEquals("html", d.getName());
+    }
+
+    // covers getPubSysKey() default null and after assignment
+    @Test
+    public void testDoctypeGetPubSysKey_defaultNullAndSet() throws Throwable {
+        Token.Doctype d = new Token.Doctype();
+        assertNull(d.getPubSysKey());
+        d.pubSysKey = "PUBLIC";
+        assertEquals("PUBLIC", d.getPubSysKey());
+    }
+
+    // covers getPublicIdentifier() and getSystemIdentifier() default and after mutation
+    @Test
+    public void testDoctypeIdentifiers_defaultEmptyAndAfterAppend() throws Throwable {
+        Token.Doctype d = new Token.Doctype();
+        assertEquals("", d.getPublicIdentifier());
+        assertEquals("", d.getSystemIdentifier());
+        d.publicIdentifier.append("pub");
+        d.systemIdentifier.append("sys");
+        assertEquals("pub", d.getPublicIdentifier());
+        assertEquals("sys", d.getSystemIdentifier());
+    }
+
+    // covers isForceQuirks() default false and after set true
+    @Test
+    public void testDoctypeIsForceQuirks_defaultFalseAndSetTrue() throws Throwable {
+        Token.Doctype d = new Token.Doctype();
+        assertFalse(d.isForceQuirks());
+        d.forceQuirks = true;
+        assertTrue(d.isForceQuirks());
+    }
+
+    // covers reset() clearing all Doctype fields and returning same instance
+    @Test
+    public void testDoctypeReset_clearsAllFieldsAndReturnsSelf() throws Throwable {
+        Token.Doctype d = new Token.Doctype();
+        d.name.append("html");
+        d.pubSysKey = "PUBLIC";
+        d.publicIdentifier.append("pub");
+        d.systemIdentifier.append("sys");
+        d.forceQuirks = true;
+        Token result = d.reset();
+        assertSame(d, result);
+        assertEquals("", d.getName());
+        assertNull(d.getPubSysKey());
+        assertFalse(d.isForceQuirks());
+    }
+
+    // covers StartTag() constructor initializing attributes and setting type via isStartTag()
+    @Test
+    public void testStartTagConstructor_initializesAttributesAndType() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        assertTrue(st.isStartTag());
+        assertNotNull(st.getAttributes());
+        assertEquals(0, st.getAttributes().size());
+    }
+
+    // covers EndTag() constructor leaving attributes null and setting type via isEndTag()
+    @Test
+    public void testEndTagConstructor_attributesNullAndTypeEndTag() throws Throwable {
+        Token.EndTag et = new Token.EndTag();
+        assertTrue(et.isEndTag());
+        assertNull(et.getAttributes());
+    }
+
+    // covers Tag.name(String) setting tagName and lowercase normalName, and fluent return
+    @Test
+    public void testTagNameSetter_setsTagNameAndNormalNameLowercase() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        Token.Tag result = st.name("DIV");
+        assertSame(st, result);
+        assertEquals("DIV", st.name());
+        assertEquals("div", st.normalName());
+    }
+
+    // covers name() validation throwing when tagName is null or empty
+    @Test
+    public void testName_throwsWhenTagNameNullOrEmpty() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        try {
+            st.name();
+            fail("expected IllegalArgumentException for null tagName");
+        } catch (IllegalArgumentException expected) { }
+        st.name("");
+        try {
+            st.name();
+            fail("expected IllegalArgumentException for empty tagName");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // covers appendTagName(String) concatenation branch and null-initial branch
+    @Test
+    public void testAppendTagNameString_concatenatesAndLowercasesNormalName() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.appendTagName("div");
+        assertEquals("div", st.name());
+        st.appendTagName("SPAN");
+        assertEquals("divSPAN", st.name());
+        assertEquals("divspan", st.normalName());
+    }
+
+    // covers appendTagName(char) delegating to appendTagName(String)
+    @Test
+    public void testAppendTagNameChar_appendsSingleChar() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.appendTagName("di");
+        st.appendTagName('v');
+        assertEquals("div", st.name());
+    }
+
+    // covers newAttribute() when pendingAttributeName is null, no attribute should be added
+    @Test
+    public void testNewAttribute_noPendingName_doesNotAddAttribute() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.newAttribute();
+        assertEquals(0, st.getAttributes().size());
+    }
+
+    // covers newAttribute() hasPendingAttributeValue branch adding one Attribute
+    @Test
+    public void testNewAttribute_withValue_addsOneAttribute() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.appendAttributeName("id");
+        st.appendAttributeValue("x");
+        st.newAttribute();
+        assertEquals(1, st.getAttributes().size());
+    }
+
+    // covers newAttribute() hasEmptyAttributeValue branch adding one Attribute with empty value
+    @Test
+    public void testNewAttribute_withEmptyValue_addsOneAttribute() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.appendAttributeName("empty");
+        st.setEmptyAttributeValue();
+        st.newAttribute();
+        assertEquals(1, st.getAttributes().size());
+    }
+
+    // covers newAttribute() else branch creating BooleanAttribute
+    @Test
+    public void testNewAttribute_booleanAttribute_addsOneAttribute() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.appendAttributeName("checked");
+        st.newAttribute();
+        assertEquals(1, st.getAttributes().size());
+    }
+
+    // covers repeated newAttribute() calls accumulating attributes in the map
+    @Test
+    public void testNewAttribute_multipleAttributes_sizeIncrements() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.appendAttributeName("a");
+        st.appendAttributeValue("1");
+        st.newAttribute();
+        st.appendAttributeName("b");
+        st.appendAttributeValue("2");
+        st.newAttribute();
+        assertEquals(2, st.getAttributes().size());
+    }
+
+    // covers appendAttributeValue(String) called twice: pendingAttributeValueS optimization then builder append
+    @Test
+    public void testAppendAttributeValueString_accumulatesAcrossMultipleCalls() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.appendAttributeName("title");
+        st.appendAttributeValue("Hello");
+        st.appendAttributeValue("World");
+        st.newAttribute();
+        String rendered = st.getAttributes().toString();
+        assertTrue(rendered.contains("HelloWorld"));
+    }
+
+    // covers appendAttributeValue(char[]) forcing move from pendingAttributeValueS into StringBuilder
+    @Test
+    public void testAppendAttributeValueCharArray_afterStringOptimization() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.appendAttributeName("data");
+        st.appendAttributeValue("Hi");
+        st.appendAttributeValue(new char[] {'!', '!'});
+        st.newAttribute();
+        String rendered = st.getAttributes().toString();
+        assertTrue(rendered.contains("Hi!!"));
+    }
+
+    // covers appendAttributeValue(int[]) appending each codepoint to the builder
+    @Test
+    public void testAppendAttributeValueIntArray_codepoints() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.appendAttributeName("code");
+        st.appendAttributeValue(new int[] {72, 73});
+        st.newAttribute();
+        String rendered = st.getAttributes().toString();
+        assertTrue(rendered.contains("HI"));
+    }
+
+    // covers finaliseTag() calling newAttribute() when pendingAttributeName is set
+    @Test
+    public void testFinaliseTag_withPendingName_addsAttribute() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.appendAttributeName("attr");
+        st.finaliseTag();
+        assertEquals(1, st.getAttributes().size());
+    }
+
+    // covers finaliseTag() skipping newAttribute() when no pending attribute name
+    @Test
+    public void testFinaliseTag_withoutPendingName_noAttributeAdded() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.finaliseTag();
+        assertEquals(0, st.getAttributes().size());
+    }
+
+    // covers isSelfClosing() default false and true after field set
+    @Test
+    public void testIsSelfClosing_defaultFalseAndSetTrue() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        assertFalse(st.isSelfClosing());
+        st.selfClosing = true;
+        assertTrue(st.isSelfClosing());
+    }
+
+    // covers StartTag.nameAttr(String, Attributes) setting tagName, attributes reference and normalName
+    @Test
+    public void testStartTagNameAttr_setsNameAttributesAndNormalName() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        Attributes attrs = new Attributes();
+        Token.StartTag result = st.nameAttr("DIV", attrs);
+        assertSame(st, result);
+        assertEquals("DIV", st.name());
+        assertEquals("div", st.normalName());
+        assertSame(attrs, st.getAttributes());
+    }
+
+    // covers StartTag.toString() else branch when attributes size is 0
+    @Test
+    public void testStartTagToString_noAttributes() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.name("div");
+        assertEquals("<div>", st.toString());
+    }
+
+    // covers StartTag.toString() true branch when attributes size greater than 0
+    @Test
+    public void testStartTagToString_withAttributes() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.name("div");
+        st.appendAttributeName("id");
+        st.appendAttributeValue("x");
+        st.newAttribute();
+        String expected = "<div " + st.getAttributes().toString() + ">";
+        assertEquals(expected, st.toString());
+    }
+
+    // covers EndTag.toString() formatting
+    @Test
+    public void testEndTagToString_formatsCorrectly() throws Throwable {
+        Token.EndTag et = new Token.EndTag();
+        et.name("span");
+        assertEquals("</span>", et.toString());
+    }
+
+    // covers StartTag.reset() clearing tagName/selfClosing and reinitializing attributes
+    @Test
+    public void testStartTagReset_clearsFieldsAndReinitializesAttributes() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        st.name("div");
+        st.appendAttributeName("id");
+        st.appendAttributeValue("1");
+        st.newAttribute();
+        st.selfClosing = true;
+        Token.Tag result = st.reset();
+        assertSame(st, result);
+        assertNull(st.tagName);
+        assertNotNull(st.attributes);
+        assertEquals(0, st.attributes.size());
+        assertFalse(st.isSelfClosing());
+    }
+
+    // covers Tag.reset() (inherited by EndTag) leaving attributes null, unlike StartTag
+    @Test
+    public void testEndTagReset_clearsFieldsAndAttributesNull() throws Throwable {
+        Token.EndTag et = new Token.EndTag();
+        et.name("div");
+        et.selfClosing = true;
+        Token.Tag result = et.reset();
+        assertSame(et, result);
+        assertNull(et.tagName);
+        assertNull(et.attributes);
+        assertFalse(et.isSelfClosing());
+    }
+
+    // covers Comment() constructor setting type via isComment()
+    @Test
+    public void testCommentConstructor_typeComment() throws Throwable {
+        Token.Comment c = new Token.Comment();
+        assertTrue(c.isComment());
+    }
+
+    // covers getData() reading from data StringBuilder, default and after mutation
+    @Test
+    public void testCommentGetData_defaultEmptyAndAfterAppend() throws Throwable {
+        Token.Comment c = new Token.Comment();
+        assertEquals("", c.getData());
+        c.data.append("hello");
+        assertEquals("hello", c.getData());
+    }
+
+    // covers bogus field default false and set true
+    @Test
+    public void testCommentBogus_defaultFalseAndSetTrue() throws Throwable {
+        Token.Comment c = new Token.Comment();
+        assertFalse(c.bogus);
+        c.bogus = true;
+        assertTrue(c.bogus);
+    }
+
+    // covers Comment.reset() clearing data and bogus, returning same instance
+    @Test
+    public void testCommentReset_clearsDataAndBogusReturnsSelf() throws Throwable {
+        Token.Comment c = new Token.Comment();
+        c.data.append("text");
+        c.bogus = true;
+        Token result = c.reset();
+        assertSame(c, result);
+        assertEquals("", c.getData());
+        assertFalse(c.bogus);
+    }
+
+    // covers Comment.toString() formatting
+    @Test
+    public void testCommentToString_formatsCorrectly() throws Throwable {
+        Token.Comment c = new Token.Comment();
+        c.data.append("comment text");
+        assertEquals("<!--comment text-->", c.toString());
+    }
+
+    // covers Character() constructor setting type via isCharacter() and default null data
+    @Test
+    public void testCharacterConstructor_typeCharacterAndDefaultDataNull() throws Throwable {
+        Token.Character ch = new Token.Character();
+        assertTrue(ch.isCharacter());
+        assertNull(ch.getData());
+    }
+
+    // covers data(String) setting data field and returning same instance for chaining
+    @Test
+    public void testCharacterData_setsAndReturnsSelf() throws Throwable {
+        Token.Character ch = new Token.Character();
+        Token.Character result = ch.data("hello");
+        assertSame(ch, result);
+        assertEquals("hello", ch.getData());
+    }
+
+    // covers Character.reset() setting data back to null
+    @Test
+    public void testCharacterReset_clearsDataReturnsSelf() throws Throwable {
+        Token.Character ch = new Token.Character();
+        ch.data("hello");
+        Token result = ch.reset();
+        assertSame(ch, result);
+        assertNull(ch.getData());
+    }
+
+    // covers Character.toString() returning getData()
+    @Test
+    public void testCharacterToString_returnsData() throws Throwable {
+        Token.Character ch = new Token.Character();
+        ch.data("hello world");
+        assertEquals("hello world", ch.toString());
+    }
+
+    // covers EOF() constructor setting type via isEOF()
+    @Test
+    public void testEOFConstructor_typeEOF() throws Throwable {
+        Token.EOF eof = new Token.EOF();
+        assertTrue(eof.isEOF());
+    }
+
+    // covers EOF.reset() returning same instance unchanged
+    @Test
+    public void testEOFReset_returnsSelf() throws Throwable {
+        Token.EOF eof = new Token.EOF();
+        Token result = eof.reset();
+        assertSame(eof, result);
+    }
+
+    // covers isStartTag/asStartTag and isDoctype/asDoctype branches, plus false-branch checks
+    @Test
+    public void testTokenTypeChecks_forStartTagAndDoctype() throws Throwable {
+        Token.StartTag st = new Token.StartTag();
+        assertTrue(st.isStartTag());
+        assertSame(st, st.asStartTag());
+        assertFalse(st.isDoctype());
+        Token.Doctype d = new Token.Doctype();
+        assertTrue(d.isDoctype());
+        assertSame(d, d.asDoctype());
+        assertFalse(d.isEndTag());
+    }
+
+    // covers isComment/asComment, isCharacter/asCharacter, isEOF branches for respective token types
+    @Test
+    public void testTokenTypeChecks_forCommentCharacterEOF() throws Throwable {
+        Token.Comment c = new Token.Comment();
+        assertTrue(c.isComment());
+        assertSame(c, c.asComment());
+        Token.Character ch = new Token.Character();
+        assertTrue(ch.isCharacter());
+        assertSame(ch, ch.asCharacter());
+        Token.EOF eof = new Token.EOF();
+        assertTrue(eof.isEOF());
+        assertFalse(eof.isComment());
+    }
+
+    // covers tokenType() returning getClass().getSimpleName() for different token subclasses
+    @Test
+    public void testTokenType_returnsSimpleClassName() throws Throwable {
+        Token.Doctype d = new Token.Doctype();
+        assertEquals("Doctype", d.tokenType());
+        Token.StartTag st = new Token.StartTag();
+        assertEquals("StartTag", st.tokenType());
+    }
+
+    // covers static Token.reset(StringBuilder) handling null (no-op) and clearing existing content
+    @Test
+    public void testTokenResetStringBuilder_handlesNullAndClearsContent() throws Throwable {
+        Token.reset(null);
+        StringBuilder sb = new StringBuilder("data");
+        Token.reset(sb);
+        assertEquals(0, sb.length());
+    }
+}

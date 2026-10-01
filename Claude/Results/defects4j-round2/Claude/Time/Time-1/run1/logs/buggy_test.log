@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Time-1-ack31_1c/Time-1b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.joda.time.field.UnsupportedDurationFieldClaudeTest::testCompareTo_withSupportedField_returnsZeroPerJavadoc
+[exit 0]

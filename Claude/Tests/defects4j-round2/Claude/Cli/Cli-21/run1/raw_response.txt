@@ -1,0 +1,267 @@
+package org.apache.commons.cli2;
+
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.List;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class WriteableCommandLineClaudeTest {
+
+    // Contract: WriteableCommandLine must be declared as an interface
+    @Test
+    public void testWriteableCommandLine_isInterface_true() throws Throwable {
+        assertTrue(WriteableCommandLine.class.isInterface());
+    }
+
+    // Contract: WriteableCommandLine must directly extend CommandLine
+    @Test
+    public void testWriteableCommandLine_extendsCommandLine_true() throws Throwable {
+        Class[] interfaces = WriteableCommandLine.class.getInterfaces();
+        boolean found = false;
+        for (int i = 0; i < interfaces.length; i++) {
+            if (interfaces[i].equals(CommandLine.class)) {
+                found = true;
+            }
+        }
+        assertTrue(found);
+    }
+
+    // Contract: exactly 9 methods are declared directly on this interface
+    @Test
+    public void testWriteableCommandLine_declaredMethodCount_isNine() throws Throwable {
+        Method[] methods = WriteableCommandLine.class.getDeclaredMethods();
+        assertEquals(9, methods.length);
+    }
+
+    // addOption(Option) must exist
+    @Test
+    public void testAddOption_exists_withOptionParameter() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addOption", new Class[] { Option.class });
+        assertNotNull(m);
+    }
+
+    // addOption return type must be void
+    @Test
+    public void testAddOption_returnType_isVoid() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addOption", new Class[] { Option.class });
+        assertEquals(Void.TYPE, m.getReturnType());
+    }
+
+    // addOption must be public abstract (interface method)
+    @Test
+    public void testAddOption_isPublicAndAbstract() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addOption", new Class[] { Option.class });
+        assertTrue(Modifier.isPublic(m.getModifiers()));
+        assertTrue(Modifier.isAbstract(m.getModifiers()));
+    }
+
+    // addValue(Option, Object) must exist
+    @Test
+    public void testAddValue_exists_withOptionAndObjectParameters() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addValue", new Class[] { Option.class, Object.class });
+        assertNotNull(m);
+    }
+
+    // addValue return type must be void
+    @Test
+    public void testAddValue_returnType_isVoid() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addValue", new Class[] { Option.class, Object.class });
+        assertEquals(Void.TYPE, m.getReturnType());
+    }
+
+    // addValue parameter order must be (Option, Object)
+    @Test
+    public void testAddValue_parameterTypes_matchOptionAndObject() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addValue", new Class[] { Option.class, Object.class });
+        Class[] params = m.getParameterTypes();
+        assertEquals(2, params.length);
+        assertEquals(Option.class, params[0]);
+        assertEquals(Object.class, params[1]);
+    }
+
+    // getUndefaultedValues(Option) must exist
+    @Test
+    public void testGetUndefaultedValues_exists_withOptionParameter() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("getUndefaultedValues", new Class[] { Option.class });
+        assertNotNull(m);
+    }
+
+    // getUndefaultedValues must return a List per Javadoc
+    @Test
+    public void testGetUndefaultedValues_returnType_isList() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("getUndefaultedValues", new Class[] { Option.class });
+        assertEquals(List.class, m.getReturnType());
+    }
+
+    // setDefaultValues(Option, List) must exist
+    @Test
+    public void testSetDefaultValues_exists_withOptionAndListParameters() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("setDefaultValues", new Class[] { Option.class, List.class });
+        assertNotNull(m);
+    }
+
+    // setDefaultValues return type must be void
+    @Test
+    public void testSetDefaultValues_returnType_isVoid() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("setDefaultValues", new Class[] { Option.class, List.class });
+        assertEquals(Void.TYPE, m.getReturnType());
+    }
+
+    // addSwitch(Option, boolean) must exist
+    @Test
+    public void testAddSwitch_exists_withOptionAndBooleanParameters() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addSwitch", new Class[] { Option.class, Boolean.TYPE });
+        assertNotNull(m);
+    }
+
+    // addSwitch return type must be void
+    @Test
+    public void testAddSwitch_returnType_isVoid() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addSwitch", new Class[] { Option.class, Boolean.TYPE });
+        assertEquals(Void.TYPE, m.getReturnType());
+    }
+
+    // addSwitch must declare IllegalStateException per Javadoc @throws
+    @Test
+    public void testAddSwitch_declaresIllegalStateException() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addSwitch", new Class[] { Option.class, Boolean.TYPE });
+        Class[] exceptions = m.getExceptionTypes();
+        boolean found = false;
+        for (int i = 0; i < exceptions.length; i++) {
+            if (exceptions[i].equals(IllegalStateException.class)) {
+                found = true;
+            }
+        }
+        assertTrue(found);
+    }
+
+    // addSwitch's value parameter must be primitive boolean, not wrapper
+    @Test
+    public void testAddSwitch_secondParameter_isPrimitiveBoolean() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addSwitch", new Class[] { Option.class, Boolean.TYPE });
+        Class[] params = m.getParameterTypes();
+        assertTrue(params[1].isPrimitive());
+    }
+
+    // setDefaultSwitch(Option, Boolean) must exist
+    @Test
+    public void testSetDefaultSwitch_exists_withOptionAndBooleanWrapperParameters() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("setDefaultSwitch", new Class[] { Option.class, Boolean.class });
+        assertNotNull(m);
+    }
+
+    // setDefaultSwitch return type must be void
+    @Test
+    public void testSetDefaultSwitch_returnType_isVoid() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("setDefaultSwitch", new Class[] { Option.class, Boolean.class });
+        assertEquals(Void.TYPE, m.getReturnType());
+    }
+
+    // setDefaultSwitch's defaultSwitch parameter must be the Boolean wrapper (nullable), not primitive
+    @Test
+    public void testSetDefaultSwitch_secondParameter_isBooleanWrapperNotPrimitive() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("setDefaultSwitch", new Class[] { Option.class, Boolean.class });
+        Class[] params = m.getParameterTypes();
+        assertFalse(params[1].isPrimitive());
+    }
+
+    // addProperty(Option, String, String) must exist
+    @Test
+    public void testAddPropertyWithOption_exists_withThreeParameters() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addProperty", new Class[] { Option.class, String.class, String.class });
+        assertNotNull(m);
+    }
+
+    // addProperty(Option, String, String) return type must be void
+    @Test
+    public void testAddPropertyWithOption_returnType_isVoid() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addProperty", new Class[] { Option.class, String.class, String.class });
+        assertEquals(Void.TYPE, m.getReturnType());
+    }
+
+    // addProperty(Option, String, String) parameter order must match (option, property, value)
+    @Test
+    public void testAddPropertyWithOption_parameterTypes_matchOrder() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addProperty", new Class[] { Option.class, String.class, String.class });
+        Class[] params = m.getParameterTypes();
+        assertEquals(3, params.length);
+        assertEquals(Option.class, params[0]);
+        assertEquals(String.class, params[1]);
+        assertEquals(String.class, params[2]);
+    }
+
+    // addProperty(String, String) overload must exist for default property set
+    @Test
+    public void testAddPropertyDefault_exists_withTwoStringParameters() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addProperty", new Class[] { String.class, String.class });
+        assertNotNull(m);
+    }
+
+    // addProperty(String, String) return type must be void
+    @Test
+    public void testAddPropertyDefault_returnType_isVoid() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addProperty", new Class[] { String.class, String.class });
+        assertEquals(Void.TYPE, m.getReturnType());
+    }
+
+    // addProperty(String, String) parameter order must match (property, value)
+    @Test
+    public void testAddPropertyDefault_parameterTypes_matchTwoStrings() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("addProperty", new Class[] { String.class, String.class });
+        Class[] params = m.getParameterTypes();
+        assertEquals(2, params.length);
+        assertEquals(String.class, params[0]);
+        assertEquals(String.class, params[1]);
+    }
+
+    // looksLikeOption(String) must exist
+    @Test
+    public void testLooksLikeOption_exists_withStringParameter() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("looksLikeOption", new Class[] { String.class });
+        assertNotNull(m);
+    }
+
+    // looksLikeOption must return primitive boolean per Javadoc
+    @Test
+    public void testLooksLikeOption_returnType_isBoolean() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("looksLikeOption", new Class[] { String.class });
+        assertEquals(Boolean.TYPE, m.getReturnType());
+    }
+
+    // looksLikeOption must be public abstract (interface method)
+    @Test
+    public void testLooksLikeOption_isPublicAndAbstract() throws Throwable {
+        Method m = WriteableCommandLine.class.getMethod("looksLikeOption", new Class[] { String.class });
+        assertTrue(Modifier.isPublic(m.getModifiers()));
+        assertTrue(Modifier.isAbstract(m.getModifiers()));
+    }
+
+    // Every declared method on the interface must be public
+    @Test
+    public void testAllDeclaredMethods_arePublic() throws Throwable {
+        Method[] methods = WriteableCommandLine.class.getDeclaredMethods();
+        for (int i = 0; i < methods.length; i++) {
+            assertTrue(Modifier.isPublic(methods[i].getModifiers()));
+        }
+    }
+
+    // Every declared method on the interface must be abstract (no bodies)
+    @Test
+    public void testAllDeclaredMethods_areAbstract() throws Throwable {
+        Method[] methods = WriteableCommandLine.class.getDeclaredMethods();
+        for (int i = 0; i < methods.length; i++) {
+            assertTrue(Modifier.isAbstract(methods[i].getModifiers()));
+        }
+    }
+
+    // No declared method on the interface should be static
+    @Test
+    public void testAllDeclaredMethods_areNotStatic() throws Throwable {
+        Method[] methods = WriteableCommandLine.class.getDeclaredMethods();
+        for (int i = 0; i < methods.length; i++) {
+            assertFalse(Modifier.isStatic(methods[i].getModifiers()));
+        }
+    }
+}

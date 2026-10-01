@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-JacksonCore-10-eqnoqsao/JacksonCore-10b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 465
+     Lines covered: 319
+  Conditions total: 266
+Conditions covered: 95
+     Line coverage: 68.6%
+Condition coverage: 35.7%
+[exit 0]

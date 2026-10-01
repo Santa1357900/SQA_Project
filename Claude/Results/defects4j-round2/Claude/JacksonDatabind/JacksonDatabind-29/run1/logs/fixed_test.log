@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-29-whvslmte/JacksonDatabind-29f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandlerClaudeTest::testComplete_missingTypeId_usesDefaultImplCat
+  - com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandlerClaudeTest::testComplete_missingTypeId_usesDefaultImplDog
+  - com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandlerClaudeTest::testHandlePropertyValue_unregisteredTypeId_throwsProcessingException
+  - com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandlerClaudeTest::testComplete_nullScalarWithDefaultImpl_setsPropertyNull
+[exit 0]

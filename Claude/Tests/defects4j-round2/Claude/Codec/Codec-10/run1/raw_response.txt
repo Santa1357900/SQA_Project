@@ -1,0 +1,224 @@
+package org.apache.commons.codec.language;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.apache.commons.codec.EncoderException;
+
+public class CaverphoneClaudeTest {
+
+    private Caverphone caverphone;
+
+    @Before
+    public void setUp() throws Throwable {
+        caverphone = new Caverphone();
+    }
+
+    // Constructor is public and must produce a usable instance
+    @Test
+    public void testConstructor_createsNonNullInstance() throws Throwable {
+        assertNotNull(new Caverphone());
+    }
+
+    // null input short-circuits to the documented default code of ten '1's
+    @Test
+    public void testCaverphone_nullInput_returnsAllOnesDefaultCode() throws Throwable {
+        assertEquals("1111111111", caverphone.caverphone(null));
+    }
+
+    // empty string short-circuits to the documented default code of ten '1's
+    @Test
+    public void testCaverphone_emptyString_returnsAllOnesDefaultCode() throws Throwable {
+        assertEquals("1111111111", caverphone.caverphone(""));
+    }
+
+    // length > 0 so the early-return branch is skipped, but stripping non a-z
+    // leaves an empty core which must yield the same default code via the full pipeline
+    @Test
+    public void testCaverphone_whitespaceOnlyStrippedToEmpty_returnsAllOnesDefaultCode() throws Throwable {
+        assertEquals("1111111111", caverphone.caverphone("   "));
+    }
+
+    // digits/symbols are stripped by [^a-z], leaving an empty core -> default code
+    @Test
+    public void testCaverphone_digitsAndSymbolsOnly_returnsAllOnesDefaultCode() throws Throwable {
+        assertEquals("1111111111", caverphone.caverphone("12345!@#"));
+    }
+
+    // non letter characters are removed before processing, so mixing digits/symbols
+    // into a word must not change the resulting code versus the letters alone
+    @Test
+    public void testCaverphone_nonLetterCharsIgnored_sameAsLettersOnly() throws Throwable {
+        String withNoise = caverphone.caverphone("123abc456");
+        String plain = caverphone.caverphone("abc");
+        assertEquals(plain, withNoise);
+    }
+
+    // step 1 lower-cases the text first, so case must not affect the result
+    @Test
+    public void testCaverphone_caseInsensitive_upperEqualsLower() throws Throwable {
+        assertEquals(caverphone.caverphone("henry"), caverphone.caverphone("HENRY"));
+    }
+
+    // whitespace mixed with letters is stripped, equal to the trimmed letters alone
+    @Test
+    public void testCaverphone_leadingTrailingWhitespaceWithLetters_equalsTrimmedLetters() throws Throwable {
+        assertEquals(caverphone.caverphone("henry"), caverphone.caverphone(" Henry "));
+    }
+
+    // simple two letter word: b->p, leading vowel a->A, consonant doubling p->P
+    @Test
+    public void testCaverphone_simpleTwoLetterWord_exactCode() throws Throwable {
+        assertEquals("AP11111111", caverphone.caverphone("ab"));
+    }
+
+    // "remove final e" step must run before the remaining rules change the outcome
+    @Test
+    public void testCaverphone_finalEStripped_beforeFurtherRules() throws Throwable {
+        assertEquals("P111111111", caverphone.caverphone("be"));
+    }
+
+    // trailing vowel (->3) must be converted to 'A' by the "3$"->"A" rule
+    @Test
+    public void testCaverphone_vowelEndingBecomesA_exactCode() throws Throwable {
+        assertEquals("SA11111111", caverphone.caverphone("sea"));
+    }
+
+    // covers the ^cough/^rough/^tough/^enough/^trough/^gn/^mb start-option branches
+    @Test
+    public void testCaverphone_startPatternWords_produceValidTenCharCode() throws Throwable {
+        String[] words = {"cough", "rough", "tough", "enough", "trough", "gnome", "mbox"};
+        for (int i = 0; i < words.length; i++) {
+            assertTrue(words[i], caverphone.caverphone(words[i]).matches("[A-Z1]{10}"));
+        }
+    }
+
+    // covers cq/ci/ce/cy/tch/c/q/x/v/dg replacement branches
+    @Test
+    public void testCaverphone_midRuleConsonantWordsGroup1_produceValidTenCharCode() throws Throwable {
+        String[] words = {"acquire", "cinema", "cent", "cyborg", "watch", "squad", "box", "five", "badge"};
+        for (int i = 0; i < words.length; i++) {
+            assertTrue(words[i], caverphone.caverphone(words[i]).matches("[A-Z1]{10}"));
+        }
+    }
+
+    // covers tio/tia/d/ph/b/sh/z/j/y/gh replacement branches
+    @Test
+    public void testCaverphone_midRuleConsonantWordsGroup2_produceValidTenCharCode() throws Throwable {
+        String[] words = {"action", "militia", "road", "phone", "cab", "ash", "zebra", "jolly", "young", "light"};
+        for (int i = 0; i < words.length; i++) {
+            assertTrue(words[i], caverphone.caverphone(words[i]).matches("[A-Z1]{10}"));
+        }
+    }
+
+    // covers w3/wh3/w$/r3/r$/l3/l$ branches
+    @Test
+    public void testCaverphone_wAndRAndLRuleWords_produceValidTenCharCode() throws Throwable {
+        String[] words = {"wall", "who", "low", "ring", "car", "lion", "seal"};
+        for (int i = 0; i < words.length; i++) {
+            assertTrue(words[i], caverphone.caverphone(words[i]).matches("[A-Z1]{10}"));
+        }
+    }
+
+    // caverphone() must be a pure function: same input always yields same output
+    @Test
+    public void testCaverphone_sameWordCalledTwice_isConsistent() throws Throwable {
+        String first = caverphone.caverphone("Thompson");
+        String second = caverphone.caverphone("Thompson");
+        assertEquals(first, second);
+    }
+
+    // encode(Object) must delegate to caverphone(String) for actual String input
+    @Test
+    public void testEncode_objectWithString_delegatesToCaverphone() throws Throwable {
+        Object result = caverphone.encode((Object) "test");
+        assertEquals(caverphone.caverphone("test"), result);
+    }
+
+    // Javadoc states the returned object is of type java.lang.String
+    @Test
+    public void testEncode_objectWithString_returnsStringInstance() throws Throwable {
+        Object result = caverphone.encode((Object) "abc");
+        assertTrue(result instanceof String);
+    }
+
+    // encode(Object) must throw EncoderException for a non-String parameter
+    @Test
+    public void testEncode_objectWithNonStringInteger_throwsEncoderException() throws Throwable {
+        try {
+            caverphone.encode((Object) Integer.valueOf(42));
+            fail("expected EncoderException");
+        } catch (EncoderException expected) {
+            assertTrue(expected.getMessage().contains("String"));
+        }
+    }
+
+    // instanceof with null is always false, so encode(Object) must throw too
+    @Test
+    public void testEncode_objectWithNull_throwsEncoderException() throws Throwable {
+        try {
+            caverphone.encode((Object) null);
+            fail("expected EncoderException");
+        } catch (EncoderException expected) {
+            assertTrue(expected.getMessage().contains("String"));
+        }
+    }
+
+    // encode(String) overload must delegate to caverphone(String)
+    @Test
+    public void testEncode_stringOverload_delegatesToCaverphone() throws Throwable {
+        assertEquals(caverphone.caverphone("hello"), caverphone.encode("hello"));
+    }
+
+    // encode(String) overload with null must behave like caverphone(null)
+    @Test
+    public void testEncode_stringOverloadWithNull_returnsDefaultCode() throws Throwable {
+        String s = null;
+        assertEquals("1111111111", caverphone.encode(s));
+    }
+
+    // isCaverphoneEqual must be reflexive for an identical string
+    @Test
+    public void testIsCaverphoneEqual_identicalString_true() throws Throwable {
+        assertTrue(caverphone.isCaverphoneEqual("hello", "hello"));
+    }
+
+    // isCaverphoneEqual must ignore case since caverphone() lower-cases first
+    @Test
+    public void testIsCaverphoneEqual_caseInsensitiveSameWord_true() throws Throwable {
+        assertTrue(caverphone.isCaverphoneEqual("HELLO", "hello"));
+    }
+
+    // null and "" both reduce to the same default code
+    @Test
+    public void testIsCaverphoneEqual_nullAndEmpty_true() throws Throwable {
+        assertTrue(caverphone.isCaverphoneEqual(null, ""));
+    }
+
+    // both null operands must be considered equal (same default code)
+    @Test
+    public void testIsCaverphoneEqual_bothNull_true() throws Throwable {
+        assertTrue(caverphone.isCaverphoneEqual(null, null));
+    }
+
+    // a word with real consonant content cannot collapse to the all-ones default code
+    @Test
+    public void testIsCaverphoneEqual_clearlyDifferentWords_false() throws Throwable {
+        assertFalse(caverphone.isCaverphoneEqual("hello", ""));
+    }
+
+    // Bug hunt: Caverphone matches phonetically similar surname spellings. The silent
+    // "mb" cluster (as in lamb/thumb/comb) occurs at the END of English words, so
+    // "lamb" and "lam" must be phonetically equivalent per the algorithm's own m->"2"
+    // silent-filler convention (the same pattern used for w/h/r/l elisions).
+    @Test
+    public void testIsCaverphoneEqual_mbSilentAtWordEnd_lambEqualsLam() throws Throwable {
+        assertTrue(caverphone.isCaverphoneEqual("lamb", "lam"));
+    }
+
+    // Same silent "mb" reasoning with a different word pair for extra confidence
+    @Test
+    public void testIsCaverphoneEqual_mbSilentAtWordEnd_combEqualsCom() throws Throwable {
+        assertTrue(caverphone.isCaverphoneEqual("comb", "com"));
+    }
+}

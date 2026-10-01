@@ -1,0 +1,417 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.common.base.Supplier;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+
+public class CompilerClaudeTest {
+
+  // setErrorManager(null) must throw NullPointerException (Preconditions.checkNotNull contract).
+  @Test
+  public void testSetErrorManager_null_throwsNullPointerException() throws Throwable {
+    Compiler compiler = new Compiler();
+    try {
+      compiler.setErrorManager(null);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // initOptions without a prior setErrorManager call must lazily create a default error manager.
+  @Test
+  public void testInitOptions_withoutCustomErrorManager_createsDefaultErrorManager() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    assertNotNull(compiler.getErrorManager());
+  }
+
+  // init() with a single source file should register it and make it retrievable by name.
+  @Test
+  public void testInit_withSourceFiles_populatesInputsByNameMap() throws Throwable {
+    Compiler compiler = new Compiler();
+    JSSourceFile[] externs = new JSSourceFile[0];
+    JSSourceFile[] inputs = new JSSourceFile[] { JSSourceFile.fromCode("test.js", "var x = 1;") };
+    compiler.init(externs, inputs, new CompilerOptions());
+    assertNotNull(compiler.getInput("test.js"));
+  }
+
+  // Two inputs sharing the same name must trigger DUPLICATE_INPUT error branch.
+  @Test
+  public void testInit_duplicateInputNames_reportsError() throws Throwable {
+    Compiler compiler = new Compiler();
+    JSSourceFile[] externs = new JSSourceFile[0];
+    JSSourceFile[] inputs = new JSSourceFile[] {
+        JSSourceFile.fromCode("dup.js", "var x=1;"),
+        JSSourceFile.fromCode("dup.js", "var y=2;")
+    };
+    compiler.init(externs, inputs, new CompilerOptions());
+    assertTrue(compiler.hasErrors());
+  }
+
+  // Full compile of valid code must produce zero errors.
+  @Test
+  public void testCompile_validSingleFile_noErrors() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile extern = JSSourceFile.fromCode("externs.js", "");
+    JSSourceFile input = JSSourceFile.fromCode("input.js", "var x=1;");
+    compiler.compile(extern, input, options);
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Preconditions.checkState(jsRoot == null) must fail a second compile() invocation.
+  @Test
+  public void testCompile_calledTwice_throwsIllegalStateException() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile extern = JSSourceFile.fromCode("externs.js", "");
+    JSSourceFile input = JSSourceFile.fromCode("input.js", "var x=1;");
+    compiler.compile(extern, input, options);
+    try {
+      compiler.compile(extern, input, options);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Invalid JS syntax must be reported as a parse error, incrementing error count.
+  @Test
+  public void testCompile_invalidSyntax_reportsErrors() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile extern = JSSourceFile.fromCode("externs.js", "");
+    JSSourceFile input = JSSourceFile.fromCode("bad.js", "var x = ;");
+    compiler.compile(extern, input, options);
+    assertTrue(compiler.getErrorCount() > 0);
+  }
+
+  // disableThreads() branch of runInCompilerThread (useThreads=false) must still compile correctly.
+  @Test
+  public void testDisableThreads_compileStillSucceeds() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.disableThreads();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile extern = JSSourceFile.fromCode("externs.js", "");
+    JSSourceFile input = JSSourceFile.fromCode("input.js", "var x=1;");
+    compiler.compile(extern, input, options);
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // parse() after init() must populate the root AST node.
+  @Test
+  public void testParse_afterInit_setsRootNode() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile[] externs = new JSSourceFile[0];
+    JSSourceFile[] inputs = new JSSourceFile[] { JSSourceFile.fromCode("a.js", "var a=1;") };
+    compiler.init(externs, inputs, options);
+    compiler.parse();
+    assertNotNull(compiler.getRoot());
+  }
+
+  // setPassConfig(null) must throw NullPointerException.
+  @Test
+  public void testSetPassConfig_null_throwsNullPointerException() throws Throwable {
+    Compiler compiler = new Compiler();
+    try {
+      compiler.setPassConfig(null);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // Calling setPassConfig twice must throw IllegalStateException per Javadoc contract.
+  @Test
+  public void testSetPassConfig_calledTwice_throwsIllegalStateException() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.initOptions(options);
+    PassConfig config1 = new DefaultPassConfig(options);
+    PassConfig config2 = new DefaultPassConfig(options);
+    compiler.setPassConfig(config1);
+    try {
+      compiler.setPassConfig(config2);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // check() on valid code should run without introducing new errors.
+  @Test
+  public void testCheck_validCode_noErrorsAfterCheck() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile[] externs = new JSSourceFile[0];
+    JSSourceFile[] inputs = new JSSourceFile[] { JSSourceFile.fromCode("a.js", "var a=1;") };
+    compiler.init(externs, inputs, options);
+    compiler.parse();
+    compiler.check();
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // getErrors() must never return null, and must be empty before any error is reported.
+  @Test
+  public void testGetErrors_noErrorsYet_returnsEmptyArray() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // getRoot() before any parsing must return null.
+  @Test
+  public void testGetRoot_beforeCompilation_returnsNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    assertNull(compiler.getRoot());
+  }
+
+  // getRoot() after a successful compile must return a non-null node.
+  @Test
+  public void testGetRoot_afterCompile_returnsNonNullNode() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile extern = JSSourceFile.fromCode("externs.js", "");
+    JSSourceFile input = JSSourceFile.fromCode("input.js", "var x=1;");
+    compiler.compile(extern, input, options);
+    assertNotNull(compiler.getRoot());
+  }
+
+  // resetUniqueNameId() must reset the internal counter back to 0.
+  @Test
+  public void testResetUniqueNameId_afterIncrementing_resetsToZero() throws Throwable {
+    Compiler compiler = new Compiler();
+    Supplier<String> supplier = compiler.getUniqueNameIdSupplier();
+    supplier.get();
+    supplier.get();
+    compiler.resetUniqueNameId();
+    assertEquals("0", supplier.get());
+  }
+
+  // normalize() must set the normalized flag to true.
+  @Test
+  public void testNormalize_afterCall_setsNormalizedTrue() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile[] externs = new JSSourceFile[0];
+    JSSourceFile[] inputs = new JSSourceFile[] { JSSourceFile.fromCode("a.js", "var a=1;") };
+    compiler.init(externs, inputs, options);
+    compiler.parse();
+    compiler.normalize();
+    assertTrue(compiler.isNormalized());
+  }
+
+  // reportCodeChange() must notify the registered recentChange handler.
+  @Test
+  public void testReportCodeChange_marksRecentChangeAsChanged() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.reportCodeChange();
+    assertTrue(compiler.recentChange.hasCodeChanged());
+  }
+
+  // isIdeMode() must reflect the underlying options.ideMode field.
+  @Test
+  public void testIsIdeMode_reflectsOptionsField() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.ideMode = true;
+    compiler.initOptions(options);
+    assertTrue(compiler.isIdeMode());
+  }
+
+  // isTypeCheckingEnabled() must reflect the underlying options.checkTypes field.
+  @Test
+  public void testIsTypeCheckingEnabled_reflectsOptionsField() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.checkTypes = true;
+    compiler.initOptions(options);
+    assertTrue(compiler.isTypeCheckingEnabled());
+  }
+
+  // report() with an "on" error-level diagnostic must increase the error count.
+  @Test
+  public void testReport_errorDiagnostic_increasesErrorCount() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    compiler.report(JSError.make(Compiler.OPTIMIZE_LOOP_ERROR, "5"));
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // getErrorCount() must be zero before any error is reported.
+  @Test
+  public void testGetErrorCount_beforeAnyErrors_returnsZero() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // hasErrors() must become true once an error has been reported (default, non-ideMode).
+  @Test
+  public void testHasErrors_afterReportingError_returnsTrue() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.ideMode = false;
+    compiler.initOptions(options);
+    assertFalse(compiler.hasErrors());
+    compiler.report(JSError.make(Compiler.OPTIMIZE_LOOP_ERROR, "1"));
+    assertTrue(compiler.hasErrors());
+  }
+
+  // hasHaltingErrors() short-circuits via "!isIdeMode() &&", so ideMode=true must keep hasErrors() false.
+  @Test
+  public void testHasErrors_ideModeTrue_returnsFalseEvenWithErrors() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.ideMode = true;
+    compiler.initOptions(options);
+    compiler.report(JSError.make(Compiler.OPTIMIZE_LOOP_ERROR, "1"));
+    assertFalse(compiler.hasErrors());
+  }
+
+  // getSourceLine() with lineNumber < 1 must return null before touching any source lookup.
+  @Test
+  public void testGetSourceLine_lineNumberZero_returnsNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    assertNull(compiler.getSourceLine("any.js", 0));
+  }
+
+  // When options.sourceMapOutputPath is null, initBasedOnOptions() must not create a SourceMap.
+  @Test
+  public void testGetSourceMap_sourceMapOutputPathNull_returnsNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.sourceMapOutputPath = null;
+    compiler.init(new JSSourceFile[0], new JSSourceFile[0], options);
+    assertNull(compiler.getSourceMap());
+  }
+
+  // getAstDotGraph() with jsRoot == null (no parsing done) must return an empty string.
+  @Test
+  public void testGetAstDotGraph_beforeCompilation_returnsEmptyString() throws Throwable {
+    Compiler compiler = new Compiler();
+    String dot = compiler.getAstDotGraph();
+    assertEquals("", dot);
+  }
+
+  // getErrorManager() with options == null must lazily initialize default options first.
+  @Test
+  public void testGetErrorManager_lazyInitialization_returnsNonNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    assertNotNull(compiler.getErrorManager());
+  }
+
+  // getState()/setState() round trip must correctly restore the "normalized" flag.
+  @Test
+  public void testSetState_restoresNormalizedFlag() throws Throwable {
+    CompilerOptions options = new CompilerOptions();
+    Compiler compiler1 = new Compiler();
+    compiler1.init(new JSSourceFile[0], new JSSourceFile[0], options);
+    compiler1.setNormalized();
+    Compiler.IntermediateState state = compiler1.getState();
+
+    Compiler compiler2 = new Compiler();
+    compiler2.initOptions(options);
+    compiler2.setState(state);
+    assertTrue(compiler2.isNormalized());
+  }
+
+  // toSource() with jsRoot == null (never parsed) must return an empty string.
+  @Test
+  public void testToSource_beforeParsing_returnsEmptyString() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.initOptions(new CompilerOptions());
+    assertEquals("", compiler.toSource());
+  }
+
+  // toSource() after a successful compile must contain generated code.
+  @Test
+  public void testToSource_afterCompile_containsCode() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile extern = JSSourceFile.fromCode("externs.js", "");
+    JSSourceFile input = JSSourceFile.fromCode("input.js", "var x=1;");
+    compiler.compile(extern, input, options);
+    assertTrue(compiler.toSource().length() > 0);
+  }
+
+  // CodeBuilder.append() must update both the length and the string content.
+  @Test
+  public void testCodeBuilder_append_updatesLengthAndContent() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("hello");
+    assertEquals(5, cb.getLength());
+    assertEquals("hello", cb.toString());
+  }
+
+  // endsWith() must return false when the buffer is shorter than the suffix.
+  @Test
+  public void testCodeBuilder_endsWith_shorterThanSuffix_returnsFalse() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("ab");
+    assertFalse(cb.endsWith("abcdef"));
+  }
+
+  // Boundary contract test: when buffer content exactly equals the suffix, endsWith() must be true.
+  @Test
+  public void testCodeBuilder_endsWith_exactLengthMatch_returnsTrue() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("xyz");
+    assertTrue(cb.endsWith("xyz"));
+  }
+
+  // endsWith() must return true for a proper (longer-buffer) suffix match.
+  @Test
+  public void testCodeBuilder_endsWith_properSuffix_returnsTrue() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("hello world");
+    assertTrue(cb.endsWith("world"));
+  }
+
+  // getLineIndex() must count the number of newline characters appended.
+  @Test
+  public void testCodeBuilder_getLineIndex_countsNewlines() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("line1\nline2\nline3");
+    assertEquals(2, cb.getLineIndex());
+  }
+
+  // getColumnIndex() must return the offset from the last newline character.
+  @Test
+  public void testCodeBuilder_getColumnIndex_afterNewline_returnsOffsetFromNewline() throws Throwable {
+    Compiler.CodeBuilder cb = new Compiler.CodeBuilder();
+    cb.append("ab\ncd");
+    assertEquals(2, cb.getColumnIndex());
+  }
+
+  // getTypeRegistry() must lazily create the registry once and reuse the same instance.
+  @Test
+  public void testGetTypeRegistry_calledTwice_returnsSameInstance() throws Throwable {
+    Compiler compiler = new Compiler();
+    JSTypeRegistry r1 = compiler.getTypeRegistry();
+    JSTypeRegistry r2 = compiler.getTypeRegistry();
+    assertSame(r1, r2);
+  }
+
+  // getInput() with an unknown name must return null.
+  @Test
+  public void testGetInput_unknownName_returnsNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    compiler.init(new JSSourceFile[0], new JSSourceFile[0], new CompilerOptions());
+    assertNull(compiler.getInput("nonexistent.js"));
+  }
+
+  // newExternInput() with a name that already exists must throw IllegalArgumentException.
+  @Test
+  public void testNewExternInput_duplicateName_throwsIllegalArgumentException() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    JSSourceFile[] externs = new JSSourceFile[] { JSSourceFile.fromCode("e.js", "") };
+    compiler.init(externs, new JSSourceFile[0], options);
+    try {
+      compiler.newExternInput("e.js");
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+}

@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-63-qwnnt5ee/Jsoup-63f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.jsoup.parser.HtmlTreeBuilderClaudeTest::testFormElement_setGetViaParsingAndManualOverride
+  - org.jsoup.parser.HtmlTreeBuilderClaudeTest::testGenerateImpliedEndTags_popsEndTagElementsUntilNonMatching
+  - org.jsoup.parser.HtmlTreeBuilderClaudeTest::testResetInsertionMode_fragmentRootTdContext_mustResetToInBody_notInCell
+[exit 0]

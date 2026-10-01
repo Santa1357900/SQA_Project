@@ -1,0 +1,260 @@
+package org.jsoup.nodes;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.util.Map;
+
+import org.jsoup.Jsoup;
+
+public class EntitiesClaudeTest {
+
+    // isNamedEntity: "amp" is present in full entity map
+    @Test
+    public void testIsNamedEntity_amp_returnsTrue() throws Throwable {
+        assertTrue(Entities.isNamedEntity("amp"));
+    }
+
+    // isNamedEntity: "lt" is present in full entity map
+    @Test
+    public void testIsNamedEntity_lt_returnsTrue() throws Throwable {
+        assertTrue(Entities.isNamedEntity("lt"));
+    }
+
+    // isNamedEntity: "nbsp" is present in full entity map
+    @Test
+    public void testIsNamedEntity_nbsp_returnsTrue() throws Throwable {
+        assertTrue(Entities.isNamedEntity("nbsp"));
+    }
+
+    // isNamedEntity: unknown name -> false branch (map miss)
+    @Test
+    public void testIsNamedEntity_unknownName_returnsFalse() throws Throwable {
+        assertFalse(Entities.isNamedEntity("notARealEntityXyz"));
+    }
+
+    // isNamedEntity: empty string -> false branch (map miss)
+    @Test
+    public void testIsNamedEntity_emptyString_returnsFalse() throws Throwable {
+        assertFalse(Entities.isNamedEntity(""));
+    }
+
+    // isNamedEntity: null input -> HashMap.containsKey(null) does not throw, returns false
+    @Test
+    public void testIsNamedEntity_nullName_returnsFalse() throws Throwable {
+        assertFalse(Entities.isNamedEntity(null));
+    }
+
+    // isBaseNamedEntity: "amp" is a common/base entity
+    @Test
+    public void testIsBaseNamedEntity_amp_returnsTrue() throws Throwable {
+        assertTrue(Entities.isBaseNamedEntity("amp"));
+    }
+
+    // isBaseNamedEntity: "quot" is a common/base entity
+    @Test
+    public void testIsBaseNamedEntity_quot_returnsTrue() throws Throwable {
+        assertTrue(Entities.isBaseNamedEntity("quot"));
+    }
+
+    // isBaseNamedEntity: unknown name -> false branch
+    @Test
+    public void testIsBaseNamedEntity_unknownName_returnsFalse() throws Throwable {
+        assertFalse(Entities.isBaseNamedEntity("notARealEntityXyz"));
+    }
+
+    // isBaseNamedEntity: null input -> false, no exception
+    @Test
+    public void testIsBaseNamedEntity_nullName_returnsFalse() throws Throwable {
+        assertFalse(Entities.isBaseNamedEntity(null));
+    }
+
+    // relationship: base entity set must be a subset of the full entity set
+    @Test
+    public void testIsBaseNamedEntity_impliesIsNamedEntity() throws Throwable {
+        assertTrue(Entities.isBaseNamedEntity("amp"));
+        assertTrue(Entities.isNamedEntity("amp"));
+    }
+
+    // getCharacterByName: "amp" maps to '&'
+    @Test
+    public void testGetCharacterByName_amp_returnsAmpersand() throws Throwable {
+        assertEquals(Character.valueOf('&'), Entities.getCharacterByName("amp"));
+    }
+
+    // getCharacterByName: "lt" maps to '<'
+    @Test
+    public void testGetCharacterByName_lt_returnsLessThan() throws Throwable {
+        assertEquals(Character.valueOf('<'), Entities.getCharacterByName("lt"));
+    }
+
+    // getCharacterByName: "gt" maps to '>'
+    @Test
+    public void testGetCharacterByName_gt_returnsGreaterThan() throws Throwable {
+        assertEquals(Character.valueOf('>'), Entities.getCharacterByName("gt"));
+    }
+
+    // getCharacterByName: "quot" maps to '"'
+    @Test
+    public void testGetCharacterByName_quot_returnsDoubleQuote() throws Throwable {
+        assertEquals(Character.valueOf('"'), Entities.getCharacterByName("quot"));
+    }
+
+    // getCharacterByName: "nbsp" maps to non-breaking space U+00A0
+    @Test
+    public void testGetCharacterByName_nbsp_returnsNonBreakingSpace() throws Throwable {
+        assertEquals(Character.valueOf('\u00A0'), Entities.getCharacterByName("nbsp"));
+    }
+
+    // getCharacterByName: unknown name -> null (map miss), not an exception
+    @Test
+    public void testGetCharacterByName_unknownName_returnsNull() throws Throwable {
+        assertNull(Entities.getCharacterByName("notARealEntityXyz"));
+    }
+
+    // EscapeMode.xhtml.getMap() is restricted to exactly the 4 xhtml entities
+    @Test
+    public void testEscapeModeXhtml_getMap_hasExactlyFourEntities() throws Throwable {
+        Map<Character, String> map = Entities.EscapeMode.xhtml.getMap();
+        assertEquals(4, map.size());
+    }
+
+    // EscapeMode.xhtml.getMap() values match the standard xhtml entity names
+    @Test
+    public void testEscapeModeXhtml_getMap_valuesMatchStandardXhtmlEntities() throws Throwable {
+        Map<Character, String> map = Entities.EscapeMode.xhtml.getMap();
+        assertEquals("amp", map.get(Character.valueOf('&')));
+        assertEquals("lt", map.get(Character.valueOf('<')));
+        assertEquals("gt", map.get(Character.valueOf('>')));
+        assertEquals("quot", map.get(Character.valueOf('"')));
+    }
+
+    // EscapeMode.base.getMap() contains the ampersand entity used for default escaping
+    @Test
+    public void testEscapeModeBase_getMap_containsAmpersandEntity() throws Throwable {
+        Map<Character, String> map = Entities.EscapeMode.base.getMap();
+        assertEquals("amp", map.get(Character.valueOf('&')));
+    }
+
+    // EscapeMode.extended.getMap() also contains the ampersand entity
+    @Test
+    public void testEscapeModeExtended_getMap_containsAmpersandEntity() throws Throwable {
+        Map<Character, String> map = Entities.EscapeMode.extended.getMap();
+        assertEquals("amp", map.get(Character.valueOf('&')));
+    }
+
+    // EscapeMode enum declared order: xhtml, base, extended
+    @Test
+    public void testEscapeModeValues_hasThreeModesInDeclaredOrder() throws Throwable {
+        Entities.EscapeMode[] modes = Entities.EscapeMode.values();
+        assertEquals(3, modes.length);
+        assertEquals("xhtml", modes[0].name());
+        assertEquals("base", modes[1].name());
+        assertEquals("extended", modes[2].name());
+    }
+
+    // escape(): '&' is always escaped to the named entity "&amp;"
+    @Test
+    public void testEscape_ampersandInText_isEscapedToNamedEntity() throws Throwable {
+        Document doc = Jsoup.parse("<p>A & B</p>");
+        Element p = doc.select("p").first();
+        assertEquals("A & B", p.text());
+        assertTrue(p.html().indexOf("&amp;") >= 0);
+    }
+
+    // escape(): '<' outside an attribute is escaped to "&lt;"; also covers unescape decoding
+    @Test
+    public void testEscape_lessThanInText_isEscapedToNamedEntity() throws Throwable {
+        Document doc = Jsoup.parse("<p>1 &lt; 2</p>");
+        Element p = doc.select("p").first();
+        assertEquals("1 < 2", p.text());
+        assertTrue(p.html().indexOf("&lt;") >= 0);
+    }
+
+    // escape(): '>' outside an attribute is escaped to "&gt;"; also covers unescape decoding
+    @Test
+    public void testEscape_greaterThanInText_isEscapedToNamedEntity() throws Throwable {
+        Document doc = Jsoup.parse("<p>1 &gt; 2</p>");
+        Element p = doc.select("p").first();
+        assertEquals("1 > 2", p.text());
+        assertTrue(p.html().indexOf("&gt;") >= 0);
+    }
+
+    // escape(): '"' inside an attribute value is escaped to "&quot;"; also covers unescape decoding
+    @Test
+    public void testEscape_quoteInAttribute_isEscapedToNamedEntity() throws Throwable {
+        Document doc = Jsoup.parse("<a title=\"a &quot; b\">x</a>");
+        Element a = doc.select("a").first();
+        assertEquals("a \" b", a.attr("title"));
+        assertTrue(a.outerHtml().indexOf("&quot;") >= 0);
+    }
+
+    // escape(): '<' inside an attribute value is left literal (not escaped) per inAttribute branch
+    @Test
+    public void testEscape_lessThanInAttribute_isNotEscaped() throws Throwable {
+        Document doc = Jsoup.parse("<a title=\"a<b\">x</a>");
+        Element a = doc.select("a").first();
+        assertEquals("a<b", a.attr("title"));
+        assertTrue(a.outerHtml().indexOf("a<b") >= 0);
+    }
+
+    // escape(): 0xA0 (nbsp) in base mode is escaped to the named entity "&nbsp;"
+    @Test
+    public void testEscape_nbspCharInText_isEscapedToNamedEntity() throws Throwable {
+        Document doc = Jsoup.parse("<p>A&nbsp;B</p>");
+        Element p = doc.select("p").first();
+        assertTrue(p.text().indexOf('\u00A0') >= 0);
+        assertTrue(p.html().indexOf("&nbsp;") >= 0);
+    }
+
+    // escape(): supplementary (astral) code point that the encoder can represent is kept literal
+    @Test
+    public void testEscape_supplementaryCharInText_isKeptLiteralWhenEncodable() throws Throwable {
+        String html = "<p>A\uD83D\uDE00B</p>";
+        Document doc = Jsoup.parse(html);
+        Element p = doc.select("p").first();
+        assertEquals("A\uD83D\uDE00B", p.text());
+        assertTrue(p.html().indexOf("\uD83D\uDE00") >= 0);
+    }
+
+    // unescape(): decimal numeric character reference decodes per HTML spec
+    @Test
+    public void testUnescape_numericDecimalEntity_decodesToCharacter() throws Throwable {
+        Document doc = Jsoup.parse("<p>&#65;</p>");
+        Element p = doc.select("p").first();
+        assertEquals("A", p.text());
+    }
+
+    // unescape(): hexadecimal numeric character reference decodes per HTML spec
+    @Test
+    public void testUnescape_numericHexEntity_decodesToCharacter() throws Throwable {
+        Document doc = Jsoup.parse("<p>&#x41;</p>");
+        Element p = doc.select("p").first();
+        assertEquals("A", p.text());
+    }
+
+    // unescape(): unknown/invalid entity text is kept as-is (no crash, literal passthrough)
+    @Test
+    public void testUnescape_unknownEntity_keptLiteral() throws Throwable {
+        Document doc = Jsoup.parse("<p>A &notARealEntity; B</p>");
+        Element p = doc.select("p").first();
+        assertTrue(p.text().indexOf("notARealEntity") >= 0);
+    }
+
+    // Jsoup.parseBodyFragment entry point also routes through Entities for escaping/unescaping
+    @Test
+    public void testParseBodyFragment_ampersandInText_isEscapedOnOutput() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<p>A & B</p>");
+        Element p = doc.select("p").first();
+        assertEquals("A & B", p.text());
+        assertTrue(doc.body().html().indexOf("&amp;") >= 0);
+    }
+
+    // Jsoup.parseBodyFragment: named entity in body fragment unescapes correctly
+    @Test
+    public void testParseBodyFragment_ltEntity_unescapesToLessThan() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<p>1 &lt; 2</p>");
+        Element p = doc.select("p").first();
+        assertEquals("1 < 2", p.text());
+    }
+}

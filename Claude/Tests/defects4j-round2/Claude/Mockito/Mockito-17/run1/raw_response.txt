@@ -1,0 +1,261 @@
+package org.mockito.internal.creation;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.mockito.MockSettings;
+import org.mockito.internal.util.MockName;
+import org.mockito.stubbing.Answer;
+
+import java.io.Serializable;
+import java.util.Arrays;
+import java.util.List;
+
+public class MockSettingsImplClaudeTest {
+
+    private MockSettingsImpl settings;
+
+    @Before
+    public void setUp() throws Throwable {
+        settings = new MockSettingsImpl();
+    }
+
+    // serializable(): fluent return value must be the same settings instance
+    @Test
+    public void testSerializable_calledOnce_returnsSameInstance() throws Throwable {
+        MockSettings result = settings.serializable();
+        assertSame(settings, result);
+    }
+
+    // serializable(): after calling, isSerializable() must report true
+    @Test
+    public void testSerializable_calledOnce_setsIsSerializableTrue() throws Throwable {
+        settings.serializable();
+        assertTrue(settings.isSerializable());
+    }
+
+    // serializable(): internally delegates to extraInterfaces(Serializable.class)
+    @Test
+    public void testSerializable_calledOnce_extraInterfacesContainsSerializable() throws Throwable {
+        settings.serializable();
+        Class<?>[] extra = settings.getExtraInterfaces();
+        assertNotNull(extra);
+        assertTrue(Arrays.asList(extra).contains(Serializable.class));
+    }
+
+    // extraInterfaces(): null varargs array branch requires at least one interface
+    @Test
+    public void testExtraInterfaces_nullArray_throwsException() throws Throwable {
+        try {
+            settings.extraInterfaces((Class<?>[]) null);
+            fail("expected exception for null extra interfaces array");
+        } catch (RuntimeException expected) {
+        }
+    }
+
+    // extraInterfaces(): zero-length array branch requires at least one interface
+    @Test
+    public void testExtraInterfaces_emptyArray_throwsException() throws Throwable {
+        try {
+            settings.extraInterfaces(new Class<?>[0]);
+            fail("expected exception for empty extra interfaces array");
+        } catch (RuntimeException expected) {
+        }
+    }
+
+    // extraInterfaces(): for-loop branch where an element is null
+    @Test
+    public void testExtraInterfaces_containsNullElement_throwsException() throws Throwable {
+        try {
+            settings.extraInterfaces(List.class, null);
+            fail("expected exception for null element in extra interfaces");
+        } catch (RuntimeException expected) {
+        }
+    }
+
+    // extraInterfaces(): for-loop branch where element is not an interface
+    @Test
+    public void testExtraInterfaces_nonInterfaceClass_throwsException() throws Throwable {
+        try {
+            settings.extraInterfaces(String.class);
+            fail("expected exception for non-interface class");
+        } catch (RuntimeException expected) {
+        }
+    }
+
+    // extraInterfaces(): happy path with a single valid interface, fluent return + field set
+    @Test
+    public void testExtraInterfaces_singleValidInterface_setsFieldAndReturnsSameInstance() throws Throwable {
+        MockSettings result = settings.extraInterfaces(List.class);
+        assertSame(settings, result);
+        assertArrayEquals(new Class<?>[] { List.class }, settings.getExtraInterfaces());
+    }
+
+    // extraInterfaces(): happy path with several valid interfaces, order preserved
+    @Test
+    public void testExtraInterfaces_multipleValidInterfaces_preservesOrder() throws Throwable {
+        settings.extraInterfaces(List.class, Runnable.class);
+        Class<?>[] extra = settings.getExtraInterfaces();
+        assertEquals(2, extra.length);
+        assertEquals(List.class, extra[0]);
+        assertEquals(Runnable.class, extra[1]);
+    }
+
+    // interaction: serializable() then extraInterfaces() must keep the mock serializable
+    @Test
+    public void testExtraInterfaces_afterSerializable_keepsSerializableTrue() throws Throwable {
+        settings.serializable();
+        settings.extraInterfaces(Runnable.class);
+        assertTrue(settings.isSerializable());
+    }
+
+    // interaction: extraInterfaces() then serializable() must keep both interfaces available
+    @Test
+    public void testExtraInterfaces_beforeSerializable_combinesBothInterfaces() throws Throwable {
+        settings.extraInterfaces(Runnable.class);
+        settings.serializable();
+        Class<?>[] extra = settings.getExtraInterfaces();
+        List<Class<?>> list = Arrays.asList(extra);
+        assertTrue(list.contains(Runnable.class));
+        assertTrue(list.contains(Serializable.class));
+    }
+
+    // extraInterfaces(): duplicate valid interfaces are not rejected, only null/non-interface are
+    @Test
+    public void testExtraInterfaces_duplicateValidInterfaces_doesNotThrow() throws Throwable {
+        settings.extraInterfaces(List.class, List.class);
+        Class<?>[] extra = settings.getExtraInterfaces();
+        assertEquals(2, extra.length);
+    }
+
+    // extraInterfaces(): loop keeps checking elements, failing on the first invalid one encountered
+    @Test
+    public void testExtraInterfaces_firstValidSecondInvalid_throwsException() throws Throwable {
+        try {
+            settings.extraInterfaces(List.class, String.class);
+            fail("expected exception for non-interface class");
+        } catch (RuntimeException expected) {
+        }
+    }
+
+    // getMockName(): default field value before initiateMockName() is called
+    @Test
+    public void testGetMockName_beforeInitiateMockName_returnsNull() throws Throwable {
+        assertNull(settings.getMockName());
+    }
+
+    // getExtraInterfaces(): default field value before extraInterfaces() is ever called
+    @Test
+    public void testGetExtraInterfaces_beforeAnySet_returnsNull() throws Throwable {
+        assertNull(settings.getExtraInterfaces());
+    }
+
+    // getExtraInterfaces(): returns the stored array reference, not a defensive copy, each call
+    @Test
+    public void testGetExtraInterfaces_afterSet_returnsSameReferenceOnRepeatedCalls() throws Throwable {
+        settings.extraInterfaces(List.class);
+        Class<?>[] first = settings.getExtraInterfaces();
+        Class<?>[] second = settings.getExtraInterfaces();
+        assertSame(first, second);
+    }
+
+    // getSpiedInstance(): default field value before spiedInstance() is ever called
+    @Test
+    public void testGetSpiedInstance_beforeAnySet_returnsNull() throws Throwable {
+        assertNull(settings.getSpiedInstance());
+    }
+
+    // spiedInstance(): setter stores the object, getter returns the same reference, fluent return
+    @Test
+    public void testSpiedInstance_withObject_setsAndReturnsSameInstance() throws Throwable {
+        Object spied = new Object();
+        MockSettings result = settings.spiedInstance(spied);
+        assertSame(settings, result);
+        assertSame(spied, settings.getSpiedInstance());
+    }
+
+    // spiedInstance(): null is accepted without throwing
+    @Test
+    public void testSpiedInstance_withNull_allowedAndReturnsNull() throws Throwable {
+        settings.spiedInstance(null);
+        assertNull(settings.getSpiedInstance());
+    }
+
+    // name(): fluent return value must be the same settings instance
+    @Test
+    public void testName_calledOnce_returnsSameInstance() throws Throwable {
+        MockSettings result = settings.name("myMock");
+        assertSame(settings, result);
+    }
+
+    // name(): null name is accepted and does not break initiateMockName()
+    @Test
+    public void testName_withNullName_initiateMockNameStillWorks() throws Throwable {
+        settings.name(null);
+        settings.initiateMockName(List.class);
+        assertNotNull(settings.getMockName());
+    }
+
+    // defaultAnswer(): null is accepted, fluent return value, getter reflects null
+    @Test
+    public void testDefaultAnswer_withNull_returnsSameInstanceAndGetReturnsNull() throws Throwable {
+        MockSettings result = settings.defaultAnswer((Answer) null);
+        assertSame(settings, result);
+        assertNull(settings.getDefaultAnswer());
+    }
+
+    // getDefaultAnswer(): default field value before defaultAnswer() is ever called
+    @Test
+    public void testGetDefaultAnswer_beforeAnySet_returnsNull() throws Throwable {
+        assertNull(settings.getDefaultAnswer());
+    }
+
+    // isSerializable(): default state (no extra interfaces at all) must be false
+    @Test
+    public void testIsSerializable_defaultState_returnsFalse() throws Throwable {
+        assertFalse(settings.isSerializable());
+    }
+
+    // isSerializable(): extra interfaces set but without Serializable must be false
+    @Test
+    public void testIsSerializable_extraInterfacesWithoutSerializable_returnsFalse() throws Throwable {
+        settings.extraInterfaces(Runnable.class);
+        assertFalse(settings.isSerializable());
+    }
+
+    // isSerializable(): Serializable added directly via extraInterfaces() (not via serializable()) must be true
+    @Test
+    public void testIsSerializable_extraInterfacesWithSerializableDirectly_returnsTrue() throws Throwable {
+        settings.extraInterfaces(Serializable.class);
+        assertTrue(settings.isSerializable());
+    }
+
+    // initiateMockName(): sets a non-null MockName using the current (default null) name and given class
+    @Test
+    public void testInitiateMockName_withValidClass_setsNonNullMockName() throws Throwable {
+        settings.initiateMockName(List.class);
+        MockName result = settings.getMockName();
+        assertNotNull(result);
+    }
+
+    // initiateMockName(): sets a non-null MockName using a previously configured custom name
+    @Test
+    public void testInitiateMockName_withCustomName_setsNonNullMockName() throws Throwable {
+        settings.name("customName");
+        settings.initiateMockName(Runnable.class);
+        assertNotNull(settings.getMockName());
+    }
+
+    // extraInterfaces(): a failing second call must not corrupt the previously stored valid state
+    @Test
+    public void testExtraInterfaces_exceptionOnSecondCall_doesNotOverwritePreviousValidState() throws Throwable {
+        settings.extraInterfaces(List.class);
+        try {
+            settings.extraInterfaces((Class<?>[]) null);
+            fail("expected exception for null extra interfaces array");
+        } catch (RuntimeException expected) {
+        }
+        assertArrayEquals(new Class<?>[] { List.class }, settings.getExtraInterfaces());
+    }
+}

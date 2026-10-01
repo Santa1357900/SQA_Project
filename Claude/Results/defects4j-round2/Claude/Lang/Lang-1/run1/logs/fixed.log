@@ -1,0 +1,25 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Lang -v 1f -w /tmp/claude-Lang-1-djah5ilc/fixed
+Checking out d1a45e97 to /tmp/claude-Lang-1-djah5ilc/fixed................. OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Lang-1-djah5ilc/fixed/default.properties OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff d1a45e97:396afc3e..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Lang-1f......................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Lang-1-djah5ilc/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

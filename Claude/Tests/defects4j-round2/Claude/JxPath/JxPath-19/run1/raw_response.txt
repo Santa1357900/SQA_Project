@@ -1,0 +1,513 @@
+package org.apache.commons.jxpath.ri.model.dom;
+
+import java.util.Locale;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.apache.commons.jxpath.JXPathException;
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.NamespaceResolver;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.model.NodeIterator;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+import org.apache.commons.jxpath.ri.model.beans.NullPointer;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.w3c.dom.Attr;
+import org.w3c.dom.Comment;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.ProcessingInstruction;
+import org.w3c.dom.Text;
+
+public class DOMNodePointerClaudeTest {
+
+    private Document document;
+    private Locale locale;
+
+    @Before
+    public void setUp() throws Throwable {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        document = builder.newDocument();
+        locale = Locale.US;
+    }
+
+    // Covers DOMNodePointer(Node, Locale) ctor and getImmediateNode/getBaseValue returning same wrapped node
+    @Test
+    public void testConstructorNodeLocale_GetImmediateNodeAndBaseValue() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        assertSame(el, ptr.getImmediateNode());
+        assertSame(el, ptr.getBaseValue());
+    }
+
+    // Covers DOMNodePointer(Node, Locale, String) ctor and asPath() id branch
+    @Test
+    public void testConstructorNodeLocaleId_AsPathReturnsIdExpression() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale, "abc");
+        assertEquals("id('abc')", ptr.asPath());
+    }
+
+    // Covers DOMNodePointer(NodePointer, Node) ctor
+    @Test
+    public void testConstructorParentNode_GetBaseValue() throws Throwable {
+        Element parentEl = document.createElement("parent");
+        DOMNodePointer parentPtr = new DOMNodePointer(parentEl, locale);
+        Element childEl = document.createElement("child");
+        DOMNodePointer childPtr = new DOMNodePointer(parentPtr, childEl);
+        assertSame(childEl, childPtr.getBaseValue());
+    }
+
+    // Covers testNode(NodeTest) instance delegation and testNode(Node,NodeTest) static null-test branch
+    @Test
+    public void testTestNode_NullTest_ReturnsTrueForInstanceAndStatic() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        assertTrue(ptr.testNode(null));
+        assertTrue(DOMNodePointer.testNode(el, null));
+    }
+
+    // Covers getName() for ELEMENT_NODE without namespace prefix
+    @Test
+    public void testGetName_ElementNoPrefix() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        QName name = ptr.getName();
+        assertNull(name.getPrefix());
+        assertEquals("root", name.getName());
+    }
+
+    // Covers getName() for ELEMENT_NODE with namespace prefix
+    @Test
+    public void testGetName_ElementWithPrefix() throws Throwable {
+        Element el = document.createElementNS("urn:test", "p:root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        QName name = ptr.getName();
+        assertEquals("p", name.getPrefix());
+        assertEquals("root", name.getName());
+    }
+
+    // Covers getName() for PROCESSING_INSTRUCTION_NODE branch
+    @Test
+    public void testGetName_ProcessingInstruction() throws Throwable {
+        ProcessingInstruction pi = document.createProcessingInstruction("target", "data");
+        DOMNodePointer ptr = new DOMNodePointer(pi, locale);
+        QName name = ptr.getName();
+        assertNull(name.getPrefix());
+        assertEquals("target", name.getName());
+    }
+
+    // Covers instance getNamespaceURI() delegating to static version, both explicit-NS and no-NS branches
+    @Test
+    public void testGetNamespaceURIInstance_ExplicitAndAbsentNamespace() throws Throwable {
+        Element withNs = document.createElementNS("urn:test", "p:root");
+        Element withoutNs = document.createElement("root");
+        DOMNodePointer ptrWith = new DOMNodePointer(withNs, locale);
+        DOMNodePointer ptrWithout = new DOMNodePointer(withoutNs, locale);
+        assertEquals("urn:test", ptrWith.getNamespaceURI());
+        assertNull(ptrWithout.getNamespaceURI());
+    }
+
+    // Covers getNamespaceURI(prefix) null/empty prefix branch delegating to default namespace
+    @Test
+    public void testGetNamespaceURIByPrefix_NullOrEmptyPrefix_ReturnsDefaultNamespace() throws Throwable {
+        Element el = document.createElement("root");
+        el.setAttribute("xmlns", "urn:default");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        assertEquals("urn:default", ptr.getNamespaceURI((String) null));
+        assertEquals("urn:default", ptr.getNamespaceURI(""));
+    }
+
+    // Covers getNamespaceURI(prefix) "xml" and "xmlns" literal constant branches
+    @Test
+    public void testGetNamespaceURIByPrefix_XmlAndXmlnsPrefixes_ReturnConstants() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        assertEquals(DOMNodePointer.XML_NAMESPACE_URI, ptr.getNamespaceURI("xml"));
+        assertEquals(DOMNodePointer.XMLNS_NAMESPACE_URI, ptr.getNamespaceURI("xmlns"));
+    }
+
+    // Covers getNamespaceURI(prefix) searching ancestor xmlns:prefix attribute, and caching on repeat call
+    @Test
+    public void testGetNamespaceURIByPrefix_DeclaredOnAncestor_ReturnsURI_AndCaches() throws Throwable {
+        Element parentEl = document.createElement("parent");
+        parentEl.setAttribute("xmlns:p", "urn:p");
+        Element childEl = document.createElement("child");
+        parentEl.appendChild(childEl);
+        DOMNodePointer ptr = new DOMNodePointer(childEl, locale);
+        assertEquals("urn:p", ptr.getNamespaceURI("p"));
+        assertEquals("urn:p", ptr.getNamespaceURI("p"));
+    }
+
+    // Covers getNamespaceURI(prefix) unknown-namespace branch returning null
+    @Test
+    public void testGetNamespaceURIByPrefix_Undeclared_ReturnsNull() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        assertNull(ptr.getNamespaceURI("undeclared"));
+    }
+
+    // Covers getDefaultNamespaceURI() finding xmlns attribute on current element
+    @Test
+    public void testGetDefaultNamespaceURI_DeclaredOnElement_ReturnsURI() throws Throwable {
+        Element el = document.createElement("root");
+        el.setAttribute("xmlns", "urn:default");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        assertEquals("urn:default", ptr.getDefaultNamespaceURI());
+    }
+
+    // Covers childIterator() returning a non-null DOMNodeIterator instance
+    @Test
+    public void testChildIterator_ReturnsDOMNodeIterator() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        NodeIterator it = ptr.childIterator(null, false, null);
+        assertNotNull(it);
+        assertTrue(it instanceof DOMNodeIterator);
+    }
+
+    // Covers getNamespaceResolver() lazy-init then cache-hit branches
+    @Test
+    public void testGetNamespaceResolver_CachesSameInstance() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        NamespaceResolver first = ptr.getNamespaceResolver();
+        NamespaceResolver second = ptr.getNamespaceResolver();
+        assertSame(first, second);
+    }
+
+    // Covers isActual()==true, isCollection()==false, getLength()==1 constant contract
+    @Test
+    public void testIsActualIsCollectionGetLength_Constants() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        assertTrue(ptr.isActual());
+        assertFalse(ptr.isCollection());
+        assertEquals(1, ptr.getLength());
+    }
+
+    // Covers isLeaf() true branch with no children and false branch with children
+    @Test
+    public void testIsLeaf_NoChildrenTrue_WithChildrenFalse() throws Throwable {
+        Element leafEl = document.createElement("leaf");
+        Element parentEl = document.createElement("parent");
+        parentEl.appendChild(document.createTextNode("x"));
+        DOMNodePointer leafPtr = new DOMNodePointer(leafEl, locale);
+        DOMNodePointer parentPtr = new DOMNodePointer(parentEl, locale);
+        assertTrue(leafPtr.isLeaf());
+        assertFalse(parentPtr.isLeaf());
+    }
+
+    // Covers isLanguage() matching current node's xml:lang case-insensitively, and non-match
+    @Test
+    public void testIsLanguage_AttributeOnSelf_MatchAndMismatch() throws Throwable {
+        Element el = document.createElement("root");
+        el.setAttribute("xml:lang", "en-US");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        assertTrue(ptr.isLanguage("en"));
+        assertFalse(ptr.isLanguage("fr"));
+    }
+
+    // Covers isLanguage() resolving xml:lang from an ancestor element via findEnclosingAttribute
+    @Test
+    public void testIsLanguage_InheritedFromParent() throws Throwable {
+        Element parentEl = document.createElement("parent");
+        parentEl.setAttribute("xml:lang", "de");
+        Element childEl = document.createElement("child");
+        parentEl.appendChild(childEl);
+        DOMNodePointer ptr = new DOMNodePointer(childEl, locale);
+        assertTrue(ptr.isLanguage("de"));
+    }
+
+    // Covers setValue() on TEXT_NODE with non-empty string replacing node value
+    @Test
+    public void testSetValue_TextNode_NonEmptyString_UpdatesValue() throws Throwable {
+        Text text = document.createTextNode("old");
+        DOMNodePointer ptr = new DOMNodePointer(text, locale);
+        ptr.setValue("new");
+        assertEquals("new", text.getNodeValue());
+    }
+
+    // Covers setValue() on TEXT_NODE with empty string removing node from parent
+    @Test
+    public void testSetValue_TextNode_EmptyString_RemovesNode() throws Throwable {
+        Element parentEl = document.createElement("parent");
+        Text text = document.createTextNode("old");
+        parentEl.appendChild(text);
+        DOMNodePointer ptr = new DOMNodePointer(text, locale);
+        ptr.setValue("");
+        assertEquals(0, parentEl.getChildNodes().getLength());
+    }
+
+    // Covers setValue() on element branch replacing children with a new text node for String value
+    @Test
+    public void testSetValue_Element_StringValue_AppendsTextChild() throws Throwable {
+        Element el = document.createElement("root");
+        el.appendChild(document.createTextNode("old"));
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        ptr.setValue("newtext");
+        assertEquals("newtext", el.getFirstChild().getNodeValue());
+    }
+
+    // Covers setValue() on element branch leaving no children when String value is empty
+    @Test
+    public void testSetValue_Element_EmptyString_NoChildren() throws Throwable {
+        Element el = document.createElement("root");
+        el.appendChild(document.createTextNode("old"));
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        ptr.setValue("");
+        assertEquals(0, el.getChildNodes().getLength());
+    }
+
+    // Covers setValue() on element branch with Element value cloning its children
+    @Test
+    public void testSetValue_Element_ElementValue_ClonesChildrenOfValue() throws Throwable {
+        Element source = document.createElement("src");
+        source.appendChild(document.createTextNode("abc"));
+        Element target = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(target, locale);
+        ptr.setValue(source);
+        assertEquals("abc", target.getFirstChild().getNodeValue());
+    }
+
+    // Covers setValue() on element branch with a non-Element Node value appended as a direct clone
+    @Test
+    public void testSetValue_Element_NonElementNodeValue_AppendsCloneDirectly() throws Throwable {
+        Text valueText = document.createTextNode("xyz");
+        Element target = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(target, locale);
+        ptr.setValue(valueText);
+        assertEquals("xyz", target.getFirstChild().getNodeValue());
+    }
+
+    // Covers createAttribute() creating a new empty attribute when prefix is null and attribute absent
+    @Test
+    public void testCreateAttribute_NoPrefix_CreatesEmptyAttribute() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        ptr.createAttribute(null, new QName(null, "foo"));
+        assertTrue(el.hasAttribute("foo"));
+        assertEquals("", el.getAttribute("foo"));
+    }
+
+    // Covers createAttribute() skip-set branch when attribute already exists
+    @Test
+    public void testCreateAttribute_AlreadyExists_DoesNotOverwriteValue() throws Throwable {
+        Element el = document.createElement("root");
+        el.setAttribute("foo", "bar");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        ptr.createAttribute(null, new QName(null, "foo"));
+        assertEquals("bar", el.getAttribute("foo"));
+    }
+
+    // Covers createAttribute() throwing JXPathException when namespace prefix cannot be resolved
+    @Test
+    public void testCreateAttribute_UnknownPrefix_ThrowsJXPathException() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        try {
+            ptr.createAttribute(null, new QName("unknownNs", "foo"));
+            fail("expected JXPathException");
+        } catch (JXPathException expected) {
+        }
+    }
+
+    // Covers remove() detaching a node with a parent, and throwing when node has no parent
+    @Test
+    public void testRemove_WithAndWithoutParent() throws Throwable {
+        Element parentEl = document.createElement("parent");
+        Element childEl = document.createElement("child");
+        parentEl.appendChild(childEl);
+        DOMNodePointer childPtr = new DOMNodePointer(childEl, locale);
+        childPtr.remove();
+        assertEquals(0, parentEl.getChildNodes().getLength());
+        Element rootEl = document.createElement("root");
+        DOMNodePointer rootPtr = new DOMNodePointer(rootEl, locale);
+        try {
+            rootPtr.remove();
+            fail("expected JXPathException");
+        } catch (JXPathException expected) {
+        }
+    }
+
+    // Covers asPath() element-with-no-namespace branch and like-named sibling position counting
+    @Test
+    public void testAsPath_ElementNoNamespace_FirstAndSecondSiblingPosition() throws Throwable {
+        DOMNodePointer docPtr = new DOMNodePointer(document, locale);
+        Element root = document.createElement("root");
+        document.appendChild(root);
+        DOMNodePointer rootPtr = new DOMNodePointer(docPtr, root);
+        Element item1 = document.createElement("item");
+        Element item2 = document.createElement("item");
+        root.appendChild(item1);
+        root.appendChild(item2);
+        DOMNodePointer item1Ptr = new DOMNodePointer(rootPtr, item1);
+        DOMNodePointer item2Ptr = new DOMNodePointer(rootPtr, item2);
+        assertEquals("/root[1]/item[1]", item1Ptr.asPath());
+        assertEquals("/root[1]/item[2]", item2Ptr.asPath());
+    }
+
+    // Covers asPath() TEXT_NODE branch with relative position among text siblings
+    @Test
+    public void testAsPath_TextNode() throws Throwable {
+        DOMNodePointer docPtr = new DOMNodePointer(document, locale);
+        Element root = document.createElement("root");
+        document.appendChild(root);
+        DOMNodePointer rootPtr = new DOMNodePointer(docPtr, root);
+        Text text = document.createTextNode("hi");
+        root.appendChild(text);
+        DOMNodePointer textPtr = new DOMNodePointer(rootPtr, text);
+        assertEquals("/root[1]/text()[1]", textPtr.asPath());
+    }
+
+    // Covers asPath() PROCESSING_INSTRUCTION_NODE branch
+    @Test
+    public void testAsPath_ProcessingInstruction() throws Throwable {
+        DOMNodePointer docPtr = new DOMNodePointer(document, locale);
+        Element root = document.createElement("root");
+        document.appendChild(root);
+        DOMNodePointer rootPtr = new DOMNodePointer(docPtr, root);
+        ProcessingInstruction pi = document.createProcessingInstruction("tgt", "d");
+        root.appendChild(pi);
+        DOMNodePointer piPtr = new DOMNodePointer(rootPtr, pi);
+        assertEquals("/root[1]/processing-instruction('tgt')[1]", piPtr.asPath());
+    }
+
+    // Covers hashCode() delegating to wrapped node's hashCode()
+    @Test
+    public void testHashCode_EqualsNodeHashCode() throws Throwable {
+        Element el = document.createElement("root");
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        assertEquals(el.hashCode(), ptr.hashCode());
+    }
+
+    // Covers equals(): same-node true, different-node false, non-DOMNodePointer false
+    @Test
+    public void testEquals_VariousCases() throws Throwable {
+        Element el = document.createElement("root");
+        Element other = document.createElement("other");
+        DOMNodePointer ptr1 = new DOMNodePointer(el, locale);
+        DOMNodePointer ptr2 = new DOMNodePointer(el, locale);
+        DOMNodePointer ptr3 = new DOMNodePointer(other, locale);
+        assertTrue(ptr1.equals(ptr2));
+        assertFalse(ptr1.equals(ptr3));
+        assertFalse(ptr1.equals("not a pointer"));
+    }
+
+    // Covers static getPrefix() fallback colon-split, both with and without a colon
+    @Test
+    public void testGetPrefixStatic_WithColonAndWithoutColon() throws Throwable {
+        Element withColon = document.createElement("p:local");
+        Element withoutColon = document.createElement("local");
+        assertEquals("p", DOMNodePointer.getPrefix(withColon));
+        assertNull(DOMNodePointer.getPrefix(withoutColon));
+    }
+
+    // Covers static getLocalName() fallback to colon split when DOM localName is null
+    @Test
+    public void testGetLocalNameStatic_FallbackSplit() throws Throwable {
+        Element el = document.createElement("p:local");
+        assertEquals("local", DOMNodePointer.getLocalName(el));
+    }
+
+    // Covers static getNamespaceURI() falling back to default "xmlns" attribute lookup
+    @Test
+    public void testGetNamespaceURIStatic_XmlnsAttributeFallback() throws Throwable {
+        Element el = document.createElement("root");
+        el.setAttribute("xmlns", "urn:default");
+        assertEquals("urn:default", DOMNodePointer.getNamespaceURI(el));
+    }
+
+    // Covers static getNamespaceURI() searching ancestor for xmlns:prefix attribute
+    @Test
+    public void testGetNamespaceURIStatic_PrefixedXmlnsOnAncestor() throws Throwable {
+        Element parentEl = document.createElement("parent");
+        parentEl.setAttribute("xmlns:p", "urn:p");
+        Element childEl = document.createElement("p:child");
+        parentEl.appendChild(childEl);
+        assertEquals("urn:p", DOMNodePointer.getNamespaceURI(childEl));
+    }
+
+    // Covers static getNamespaceURI() returning null when no namespace info is found anywhere
+    @Test
+    public void testGetNamespaceURIStatic_NoNamespace_ReturnsNull() throws Throwable {
+        Element el = document.createElement("root");
+        assertNull(DOMNodePointer.getNamespaceURI(el));
+    }
+
+    // Covers getValue() COMMENT_NODE branch and TEXT_NODE branch, both trimming whitespace
+    @Test
+    public void testGetValue_CommentAndTextNode_Trimmed() throws Throwable {
+        Comment comment = document.createComment("  hello  ");
+        Text text = document.createTextNode("  hi  ");
+        DOMNodePointer commentPtr = new DOMNodePointer(comment, locale);
+        DOMNodePointer textPtr = new DOMNodePointer(text, locale);
+        assertEquals("hello", commentPtr.getValue());
+        assertEquals("hi", textPtr.getValue());
+    }
+
+    // Covers stringValue() recursive concatenation over element's children, skipping comments
+    @Test
+    public void testGetValue_ElementNode_ConcatenatesChildTextRecursively() throws Throwable {
+        Element el = document.createElement("root");
+        el.appendChild(document.createTextNode("a"));
+        el.appendChild(document.createComment("skip"));
+        el.appendChild(document.createTextNode("b"));
+        DOMNodePointer ptr = new DOMNodePointer(el, locale);
+        assertEquals("ab", ptr.getValue());
+    }
+
+    // Covers getPointerByID() found branch returning a DOMNodePointer wrapping the matched element
+    @Test
+    public void testGetPointerByID_Found_ReturnsDOMNodePointerWithId() throws Throwable {
+        Element el = document.createElement("root");
+        el.setAttribute("id", "x1");
+        el.setIdAttribute("id", true);
+        document.appendChild(el);
+        DOMNodePointer ptr = new DOMNodePointer(document, locale);
+        Pointer found = ptr.getPointerByID(null, "x1");
+        assertTrue(found instanceof DOMNodePointer);
+        assertSame(el, ((DOMNodePointer) found).getImmediateNode());
+    }
+
+    // Covers getPointerByID() not-found branch returning a NullPointer
+    @Test
+    public void testGetPointerByID_NotFound_ReturnsNullPointer() throws Throwable {
+        document.appendChild(document.createElement("root"));
+        DOMNodePointer ptr = new DOMNodePointer(document, locale);
+        Pointer found = ptr.getPointerByID(null, "missing");
+        assertTrue(found instanceof NullPointer);
+    }
+
+    // Covers compareChildNodePointers() same-node identity short-circuit returning zero
+    @Test
+    public void testCompareChildNodePointers_SameNode_ReturnsZero() throws Throwable {
+        Element root = document.createElement("root");
+        Element child = document.createElement("child");
+        root.appendChild(child);
+        DOMNodePointer rootPtr = new DOMNodePointer(root, locale);
+        DOMNodePointer p1 = new DOMNodePointer(child, locale);
+        DOMNodePointer p2 = new DOMNodePointer(child, locale);
+        assertEquals(0, rootPtr.compareChildNodePointers(p1, p2));
+    }
+
+    // Covers compareChildNodePointers() attribute-vs-non-attribute ordering in both directions
+    @Test
+    public void testCompareChildNodePointers_AttributeBeforeNonAttribute() throws Throwable {
+        Element root = document.createElement("root");
+        root.setAttribute("a", "1");
+        Attr attr = root.getAttributeNode("a");
+        Element child = document.createElement("child");
+        root.appendChild(child);
+        DOMNodePointer rootPtr = new DOMNodePointer(root, locale);
+        DOMNodePointer attrPtr = new DOMNodePointer(attr, locale);
+        DOMNodePointer childPtr = new DOMNodePointer(child, locale);
+        assertEquals(-1, rootPtr.compareChildNodePointers(attrPtr, childPtr));
+        assertEquals(1, rootPtr.compareChildNodePointers(childPtr, attrPtr));
+    }
+}

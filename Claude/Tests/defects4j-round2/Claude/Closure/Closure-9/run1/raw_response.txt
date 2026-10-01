@@ -1,0 +1,256 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+
+public class ProcessCommonJSModulesClaudeTest {
+
+  private Compiler compiler;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+  }
+
+  // ---- toModuleName(String) branch coverage ----
+
+  // covers: basic .js suffix strip + module$ prefix
+  @Test
+  public void testToModuleName_simpleJsFile_addsModulePrefix() throws Throwable {
+    assertEquals("module$foo", ProcessCommonJSModules.toModuleName("foo.js"));
+  }
+
+  // covers: leading "./" removal branch
+  @Test
+  public void testToModuleName_leadingDotSlash_removesPrefix() throws Throwable {
+    assertEquals("module$foo", ProcessCommonJSModules.toModuleName("./foo.js"));
+  }
+
+  // covers: "/" -> "$" replacement
+  @Test
+  public void testToModuleName_pathWithSlash_replacesWithDollar() throws Throwable {
+    assertEquals("module$foo$bar", ProcessCommonJSModules.toModuleName("foo/bar.js"));
+  }
+
+  // covers: "-" -> "_" replacement
+  @Test
+  public void testToModuleName_hyphen_replacesWithUnderscore() throws Throwable {
+    assertEquals("module$foo_bar", ProcessCommonJSModules.toModuleName("foo-bar.js"));
+  }
+
+  // covers: combination of slash and hyphen replacement
+  @Test
+  public void testToModuleName_pathAndHyphenCombined() throws Throwable {
+    assertEquals("module$foo$bar_baz", ProcessCommonJSModules.toModuleName("foo/bar-baz.js"));
+  }
+
+  // covers: multiple slashes replaced globally
+  @Test
+  public void testToModuleName_multipleSlashes_allReplaced() throws Throwable {
+    assertEquals("module$a$b$c", ProcessCommonJSModules.toModuleName("a/b/c.js"));
+  }
+
+  // covers: multiple hyphens replaced globally
+  @Test
+  public void testToModuleName_multipleHyphens_allReplaced() throws Throwable {
+    assertEquals("module$a_b_c", ProcessCommonJSModules.toModuleName("a-b-c.js"));
+  }
+
+  // covers: no .js extension present -> suffix regex does not match
+  @Test
+  public void testToModuleName_noJsExtension_keptAsIs() throws Throwable {
+    assertEquals("module$foo.txt", ProcessCommonJSModules.toModuleName("foo.txt"));
+  }
+
+  // covers: only trailing .js stripped, embedded .min kept intact
+  @Test
+  public void testToModuleName_onlyFinalJsStripped() throws Throwable {
+    assertEquals("module$foo.min", ProcessCommonJSModules.toModuleName("foo.min.js"));
+  }
+
+  // covers: empty string boundary input
+  @Test
+  public void testToModuleName_emptyString_returnsPrefixOnly() throws Throwable {
+    assertEquals("module$", ProcessCommonJSModules.toModuleName(""));
+  }
+
+  // covers: leading "../" NOT matched by the single "./" strip regex
+  @Test
+  public void testToModuleName_doubleDotPrefix_notStripped() throws Throwable {
+    assertEquals("module$..$foo", ProcessCommonJSModules.toModuleName("../foo.js"));
+  }
+
+  // covers: filename without slash or extension
+  @Test
+  public void testToModuleName_noExtensionNoSlash_unchanged() throws Throwable {
+    assertEquals("module$foo", ProcessCommonJSModules.toModuleName("foo"));
+  }
+
+  // covers: trailing slash produces trailing $ separator
+  @Test
+  public void testToModuleName_trailingSlash_producesTrailingDollar() throws Throwable {
+    assertEquals("module$foo$", ProcessCommonJSModules.toModuleName("foo/"));
+  }
+
+  // ---- toModuleName(String, String) branch coverage ----
+
+  // covers: relative "./" resolves against directory of current file
+  @Test
+  public void testToModuleNameTwoArg_relativeSameDir_resolvesAgainstCurrentDir() throws Throwable {
+    assertEquals("module$foo$baz",
+        ProcessCommonJSModules.toModuleName("./baz.js", "foo/bar.js"));
+  }
+
+  // covers: "../" resolves up one directory level
+  @Test
+  public void testToModuleNameTwoArg_parentDir_resolvesUpOneLevel() throws Throwable {
+    assertEquals("module$c",
+        ProcessCommonJSModules.toModuleName("../c.js", "a/b.js"));
+  }
+
+  // covers: required path not starting with ./ or ../ is NOT resolved (else branch)
+  @Test
+  public void testToModuleNameTwoArg_nonRelative_notResolved() throws Throwable {
+    assertEquals("module$c",
+        ProcessCommonJSModules.toModuleName("c.js", "a/b.js"));
+  }
+
+  // covers: nested directories with single parent traversal
+  @Test
+  public void testToModuleNameTwoArg_nestedParentDir() throws Throwable {
+    assertEquals("module$a$d",
+        ProcessCommonJSModules.toModuleName("../d.js", "a/b/c.js"));
+  }
+
+  // covers: current file at top level (no directory) with "./"
+  @Test
+  public void testToModuleNameTwoArg_rootLevelCurrent_relative() throws Throwable {
+    assertEquals("module$bar",
+        ProcessCommonJSModules.toModuleName("./bar.js", "foo.js"));
+  }
+
+  // covers: multiple ".." segments cancel multiple ancestor directories
+  @Test
+  public void testToModuleNameTwoArg_multipleParentDir() throws Throwable {
+    assertEquals("module$a$e",
+        ProcessCommonJSModules.toModuleName("../../e.js", "a/b/c/d.js"));
+  }
+
+  // covers: current filename without a .js extension is still handled correctly
+  @Test
+  public void testToModuleNameTwoArg_currentWithoutJsExtension() throws Throwable {
+    assertEquals("module$a$c",
+        ProcessCommonJSModules.toModuleName("./c.js", "a/b"));
+  }
+
+  // covers: self-reference relative resolution at root level
+  @Test
+  public void testToModuleNameTwoArg_selfReferenceRootLevel() throws Throwable {
+    assertEquals("module$a",
+        ProcessCommonJSModules.toModuleName("./a.js", "a.js"));
+  }
+
+  // ---- guessCJSModuleName(String) branch coverage ----
+
+  // covers: filename starts with default prefix "./" -> prefix stripped before conversion
+  @Test
+  public void testGuessCJSModuleName_withDefaultPrefix_stripsPrefix() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler,
+        ProcessCommonJSModules.DEFAULT_FILENAME_PREFIX);
+    assertEquals("module$foo", pm.guessCJSModuleName("./foo.js"));
+  }
+
+  // covers: filename does not start with prefix -> full path used unchanged
+  @Test
+  public void testGuessCJSModuleName_withoutMatchingPrefix_usesFullFilename() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler,
+        ProcessCommonJSModules.DEFAULT_FILENAME_PREFIX);
+    assertEquals("module$bar$foo", pm.guessCJSModuleName("bar/foo.js"));
+  }
+
+  // covers: constructor appends trailing slash when prefix lacks it
+  @Test
+  public void testGuessCJSModuleName_withCustomPrefixNoTrailingSlash_addsSlashAndStrips() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler, "src");
+    assertEquals("module$foo", pm.guessCJSModuleName("src/foo.js"));
+  }
+
+  // covers: constructor keeps prefix unchanged when it already ends with slash
+  @Test
+  public void testGuessCJSModuleName_withCustomPrefixTrailingSlash() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler, "src/");
+    assertEquals("module$bar$foo", pm.guessCJSModuleName("src/bar/foo.js"));
+  }
+
+  // ---- getModule() ----
+
+  // covers: module field is null before process() has ever been invoked
+  @Test
+  public void testGetModule_beforeProcess_returnsNull() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler, "./");
+    assertNull(pm.getModule());
+  }
+
+  // ---- constructors ----
+
+  // covers: two-arg constructor initializes correctly and does not throw
+  @Test
+  public void testConstructorTwoArg_doesNotThrowAndInitializesModuleNull() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler, "./");
+    assertNull(pm.getModule());
+  }
+
+  // covers: three-arg constructor with reportDependencies=false does not throw
+  @Test
+  public void testConstructorThreeArg_reportDependenciesFalse_doesNotThrow() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler, "./", false);
+    assertNull(pm.getModule());
+  }
+
+  // covers: three-arg constructor with reportDependencies=true behaves like two-arg
+  @Test
+  public void testConstructorThreeArg_reportDependenciesTrue_matchesTwoArgBehavior() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler, "./", true);
+    assertEquals("module$foo", pm.guessCJSModuleName("./foo.js"));
+  }
+
+  // ---- process(Node, Node) ----
+
+  // covers: empty block root -> traversal visits no call/script/getprop nodes, no exception
+  @Test
+  public void testProcess_emptyBlockRoot_doesNotThrowAndModuleRemainsNull() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler, "./");
+    pm.process(IR.block(), IR.block());
+    assertNull(pm.getModule());
+  }
+
+  // covers: externs parameter is unused by process(), null is tolerated
+  @Test
+  public void testProcess_nullExterns_ignoredWithoutException() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler, "./");
+    pm.process(null, IR.block());
+    assertNull(pm.getModule());
+  }
+
+  // covers: root that is a plain NAME node (not call/script/getprop) results in no-op
+  @Test
+  public void testProcess_nameNodeRoot_noOpSinceNotCallScriptOrGetProp() throws Throwable {
+    ProcessCommonJSModules pm = new ProcessCommonJSModules(compiler, "./");
+    Node nameRoot = IR.name("x");
+    pm.process(IR.block(), nameRoot);
+    assertNull(pm.getModule());
+  }
+
+  // ---- constant ----
+
+  // covers: DEFAULT_FILENAME_PREFIX matches the documented "./" value
+  @Test
+  public void testDefaultFilenamePrefixConstant_value() throws Throwable {
+    assertEquals("./", ProcessCommonJSModules.DEFAULT_FILENAME_PREFIX);
+  }
+}

@@ -1,0 +1,664 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Chart (Defects4J bug Chart-7)
+package: org.jfree.data.time
+class_under_test: TimePeriodValues
+test_class_to_write: TimePeriodValuesClaudeTest
+</target>
+
+<project_notes>
+JFreeChart: สร้าง dataset ด้วย DefaultCategoryDataset / DefaultXYDataset / TimeSeries ที่มีอยู่จริง หลีกเลี่ยงการวาดจริงด้วย Graphics2D ถ้าจำเป็นให้ใช้ new BufferedImage(10,10,BufferedImage.TYPE_INT_RGB).createGraphics()
+</project_notes>
+
+<source_code>
+/* ===========================================================
+ * JFreeChart : a free chart library for the Java(tm) platform
+ * ===========================================================
+ *
+ * (C) Copyright 2000-2008, by Object Refinery Limited and Contributors.
+ *
+ * Project Info:  http://www.jfree.org/jfreechart/index.html
+ *
+ * This library is free software; you can redistribute it and/or modify it 
+ * under the terms of the GNU Lesser General Public License as published by 
+ * the Free Software Foundation; either version 2.1 of the License, or 
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful, but 
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY 
+ * or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public 
+ * License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, 
+ * USA.  
+ *
+ * [Java is a trademark or registered trademark of Sun Microsystems, Inc. 
+ * in the United States and other countries.]
+ *
+ * ---------------------
+ * TimePeriodValues.java
+ * ---------------------
+ * (C) Copyright 2003-2008, by Object Refinery Limited.
+ *
+ * Original Author:  David Gilbert (for Object Refinery Limited);
+ * Contributor(s):   -;
+ *
+ * Changes
+ * -------
+ * 22-Apr-2003 : Version 1 (DG);
+ * 30-Jul-2003 : Added clone and equals methods while testing (DG);
+ * 11-Mar-2005 : Fixed bug in bounds recalculation - see bug report 
+ *               1161329 (DG);
+ * ------------- JFREECHART 1.0.x ---------------------------------------------
+ * 03-Oct-2006 : Fixed NullPointerException in equals(), fire change event in 
+ *               add() method, updated API docs (DG);
+ * 21-Jun-2007 : Removed JCommon dependencies (DG);
+ * 29-Jun-2007 : Changed first parameter in constructors from String to 
+ *               Comparable (DG);
+ * 07-Apr-2008 : Fixed bug with maxMiddleIndex in updateBounds() (DG);
+ *
+ */
+
+package org.jfree.data.time;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.jfree.chart.util.ObjectUtilities;
+import org.jfree.data.general.Series;
+import org.jfree.data.general.SeriesChangeEvent;
+import org.jfree.data.general.SeriesException;
+
+/**
+ * A structure containing zero, one or many {@link TimePeriodValue} instances.  
+ * The time periods can overlap, and are maintained in the order that they are 
+ * added to the collection.
+ * <p>
+ * This is similar to the {@link TimeSeries} class, except that the time 
+ * periods can have irregular lengths.
+ */
+public class TimePeriodValues extends Series implements Serializable {
+
+    /** For serialization. */
+    static final long serialVersionUID = -2210593619794989709L;
+    
+    /** Default value for the domain description. */
+    protected static final String DEFAULT_DOMAIN_DESCRIPTION = "Time";
+
+    /** Default value for the range description. */
+    protected static final String DEFAULT_RANGE_DESCRIPTION = "Value";
+
+    /** A description of the domain. */
+    private String domain;
+
+    /** A description of the range. */
+    private String range;
+
+    /** The list of data pairs in the series. */
+    private List data;
+
+    /** Index of the time period with the minimum start milliseconds. */
+    private int minStartIndex = -1;
+    
+    /** Index of the time period with the maximum start milliseconds. */
+    private int maxStartIndex = -1;
+    
+    /** Index of the time period with the minimum middle milliseconds. */
+    private int minMiddleIndex = -1;
+    
+    /** Index of the time period with the maximum middle milliseconds. */
+    private int maxMiddleIndex = -1;
+    
+    /** Index of the time period with the minimum end milliseconds. */
+    private int minEndIndex = -1;
+    
+    /** Index of the time period with the maximum end milliseconds. */
+    private int maxEndIndex = -1;
+
+    /**
+     * Creates a new (empty) collection of time period values.
+     *
+     * @param name  the name of the series (<code>null</code> not permitted).
+     */
+    public TimePeriodValues(Comparable name) {
+        this(name, DEFAULT_DOMAIN_DESCRIPTION, DEFAULT_RANGE_DESCRIPTION);
+    }
+
+    /**
+     * Creates a new time series that contains no data.
+     * <P>
+     * Descriptions can be specified for the domain and range.  One situation
+     * where this is helpful is when generating a chart for the time series -
+     * axis labels can be taken from the domain and range description.
+     *
+     * @param name  the name of the series (<code>null</code> not permitted).
+     * @param domain  the domain description.
+     * @param range  the range description.
+     */
+    public TimePeriodValues(Comparable name, String domain, String range) {
+        super(name);
+        this.domain = domain;
+        this.range = range;
+        this.data = new ArrayList();
+    }
+
+    /**
+     * Returns the domain description.
+     *
+     * @return The domain description (possibly <code>null</code>).
+     * 
+     * @see #getRangeDescription()
+     * @see #setDomainDescription(String)
+     */
+    public String getDomainDescription() {
+        return this.domain;
+    }
+
+    /**
+     * Sets the domain description and fires a property change event (with the
+     * property name <code>Domain</code> if the description changes).
+     *
+     * @param description  the new description (<code>null</code> permitted).
+     * 
+     * @see #getDomainDescription()
+     */
+    public void setDomainDescription(String description) {
+        String old = this.domain;
+        this.domain = description;
+        firePropertyChange("Domain", old, description);
+    }
+
+    /**
+     * Returns the range description.
+     *
+     * @return The range description (possibly <code>null</code>).
+     * 
+     * @see #getDomainDescription()
+     * @see #setRangeDescription(String)
+     */
+    public String getRangeDescription() {
+        return this.range;
+    }
+
+    /**
+     * Sets the range description and fires a property change event with the
+     * name <code>Range</code>.
+     *
+     * @param description  the new description (<code>null</code> permitted).
+     * 
+     * @see #getRangeDescription()
+     */
+    public void setRangeDescription(String description) {
+        String old = this.range;
+        this.range = description;
+        firePropertyChange("Range", old, description);
+    }
+
+    /**
+     * Returns the number of items in the series.
+     *
+     * @return The item count.
+     */
+    public int getItemCount() {
+        return this.data.size();
+    }
+
+    /**
+     * Returns one data item for the series.
+     *
+     * @param index  the item index (in the range <code>0</code> to 
+     *     <code>getItemCount() - 1</code>).
+     *
+     * @return One data item for the series.
+     */
+    public TimePeriodValue getDataItem(int index) {
+        return (TimePeriodValue) this.data.get(index);
+    }
+
+    /**
+     * Returns the time period at the specified index.
+     *
+     * @param index  the item index (in the range <code>0</code> to 
+     *     <code>getItemCount() - 1</code>).
+     *
+     * @return The time period at the specified index.
+     * 
+     * @see #getDataItem(int)
+     */
+    public TimePeriod getTimePeriod(int index) {
+        return getDataItem(index).getPeriod();
+    }
+
+    /**
+     * Returns the value at the specified index.
+     *
+     * @param index  the item index (in the range <code>0</code> to 
+     *     <code>getItemCount() - 1</code>).
+     *
+     * @return The value at the specified index (possibly <code>null</code>).
+     * 
+     * @see #getDataItem(int)
+     */
+    public Number getValue(int index) {
+        return getDataItem(index).getValue();
+    }
+
+    /**
+     * Adds a data item to the series and sends a {@link SeriesChangeEvent} to
+     * all registered listeners.
+     *
+     * @param item  the item (<code>null</code> not permitted).
+     */
+    public void add(TimePeriodValue item) {
+        if (item == null) {
+            throw new IllegalArgumentException("Null item not allowed.");
+        }
+        this.data.add(item);
+        updateBounds(item.getPeriod(), this.data.size() - 1);
+        fireSeriesChanged();
+    }
+    
+    /**
+     * Update the index values for the maximum and minimum bounds.
+     * 
+     * @param period  the time period.
+     * @param index  the index of the time period.
+     */
+    private void updateBounds(TimePeriod period, int index) {
+        
+        long start = period.getStart().getTime();
+        long end = period.getEnd().getTime();
+        long middle = start + ((end - start) / 2);
+
+        if (this.minStartIndex >= 0) {
+            long minStart = getDataItem(this.minStartIndex).getPeriod()
+                .getStart().getTime();
+            if (start < minStart) {
+                this.minStartIndex = index;           
+            }
+        }
+        else {
+            this.minStartIndex = index;
+        }
+        
+        if (this.maxStartIndex >= 0) {
+            long maxStart = getDataItem(this.maxStartIndex).getPeriod()
+                .getStart().getTime();
+            if (start > maxStart) {
+                this.maxStartIndex = index;           
+            }
+        }
+        else {
+            this.maxStartIndex = index;
+        }
+        
+        if (this.minMiddleIndex >= 0) {
+            long s = getDataItem(this.minMiddleIndex).getPeriod().getStart()
+                .getTime();
+            long e = getDataItem(this.minMiddleIndex).getPeriod().getEnd()
+                .getTime();
+            long minMiddle = s + (e - s) / 2;
+            if (middle < minMiddle) {
+                this.minMiddleIndex = index;           
+            }
+        }
+        else {
+            this.minMiddleIndex = index;
+        }
+        
+        if (this.maxMiddleIndex >= 0) {
+            long s = getDataItem(this.minMiddleIndex).getPeriod().getStart()
+                .getTime();
+            long e = getDataItem(this.minMiddleIndex).getPeriod().getEnd()
+                .getTime();
+            long maxMiddle = s + (e - s) / 2;
+            if (middle > maxMiddle) {
+                this.maxMiddleIndex = index;           
+            }
+        }
+        else {
+            this.maxMiddleIndex = index;
+        }
+        
+        if (this.minEndIndex >= 0) {
+            long minEnd = getDataItem(this.minEndIndex).getPeriod().getEnd()
+                .getTime();
+            if (end < minEnd) {
+                this.minEndIndex = index;           
+            }
+        }
+        else {
+            this.minEndIndex = index;
+        }
+       
+        if (this.maxEndIndex >= 0) {
+            long maxEnd = getDataItem(this.maxEndIndex).getPeriod().getEnd()
+                .getTime();
+            if (end > maxEnd) {
+                this.maxEndIndex = index;           
+            }
+        }
+        else {
+            this.maxEndIndex = index;
+        }
+        
+    }
+    
+    /**
+     * Recalculates the bounds for the collection of items.
+     */
+    private void recalculateBounds() {
+        this.minStartIndex = -1;
+        this.minMiddleIndex = -1;
+        this.minEndIndex = -1;
+        this.maxStartIndex = -1;
+        this.maxMiddleIndex = -1;
+        this.maxEndIndex = -1;
+        for (int i = 0; i < this.data.size(); i++) {
+            TimePeriodValue tpv = (TimePeriodValue) this.data.get(i);
+            updateBounds(tpv.getPeriod(), i);
+        }
+    }
+
+    /**
+     * Adds a new data item to the series and sends a {@link SeriesChangeEvent}
+     * to all registered listeners.
+     *
+     * @param period  the time period (<code>null</code> not permitted).
+     * @param value  the value.
+     * 
+     * @see #add(TimePeriod, Number)
+     */
+    public void add(TimePeriod period, double value) {
+        TimePeriodValue item = new TimePeriodValue(period, value);
+        add(item);
+    }
+
+    /**
+     * Adds a new data item to the series and sends a {@link SeriesChangeEvent}
+     * to all registered listeners.
+     *
+     * @param period  the time period (<code>null</code> not permitted).
+     * @param value  the value (<code>null</code> permitted).
+     */
+    public void add(TimePeriod period, Number value) {
+        TimePeriodValue item = new TimePeriodValue(period, value);
+        add(item);
+    }
+
+    /**
+     * Updates (changes) the value of a data item and sends a 
+     * {@link SeriesChangeEvent} to all registered listeners.
+     *
+     * @param index  the index of the data item to update.
+     * @param value  the new value (<code>null</code> not permitted).
+     */
+    public void update(int index, Number value) {
+        TimePeriodValue item = getDataItem(index);
+        item.setValue(value);
+        fireSeriesChanged();
+    }
+
+    /**
+     * Deletes data from start until end index (end inclusive) and sends a
+     * {@link SeriesChangeEvent} to all registered listeners.
+     *
+     * @param start  the index of the first period to delete.
+     * @param end  the index of the last period to delete.
+     */
+    public void delete(int start, int end) {
+        for (int i = 0; i <= (end - start); i++) {
+            this.data.remove(start);
+        }
+        recalculateBounds();
+        fireSeriesChanged();
+    }
+    
+    /**
+     * Tests the series for equality with another object.
+     *
+     * @param obj  the object (<code>null</code> permitted).
+     *
+     * @return <code>true</code> or <code>false</code>.
+     */
+    public boolean equals(Object obj) {
+        if (obj == this) {
+            return true;
+        }
+        if (!(obj instanceof TimePeriodValues)) {
+            return false;
+        }
+        if (!super.equals(obj)) {
+            return false;
+        }
+        TimePeriodValues that = (TimePeriodValues) obj;
+        if (!ObjectUtilities.equal(this.getDomainDescription(), 
+                that.getDomainDescription())) {
+            return false;
+        }
+        if (!ObjectUtilities.equal(this.getRangeDescription(), 
+                that.getRangeDescription())) {
+            return false;
+        }
+        int count = getItemCount();
+        if (count != that.getItemCount()) {
+            return false;
+        }
+        for (int i = 0; i < count; i++) {
+            if (!getDataItem(i).equals(that.getDataItem(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns a hash code value for the object.
+     *
+     * @return The hashcode
+     */
+    public int hashCode() {
+        int result;
+        result = (this.domain != null ? this.domain.hashCode() : 0);
+        result = 29 * result + (this.range != null ? this.range.hashCode() : 0);
+        result = 29 * result + this.data.hashCode();
+        result = 29 * result + this.minStartIndex;
+        result = 29 * result + this.maxStartIndex;
+        result = 29 * result + this.minMiddleIndex;
+        result = 29 * result + this.maxMiddleIndex;
+        result = 29 * result + this.minEndIndex;
+        result = 29 * result + this.maxEndIndex;
+        return result;
+    }
+
+    /**
+     * Returns a clone of the collection.
+     * <P>
+     * Notes:
+     * <ul>
+     *   <li>no need to clone the domain and range descriptions, since String 
+     *       object is immutable;</li>
+     *   <li>we pass over to the more general method createCopy(start, end).
+     *   </li>
+     * </ul>
+     *
+     * @return A clone of the time series.
+     * 
+     * @throws CloneNotSupportedException if there is a cloning problem.
+     */
+    public Object clone() throws CloneNotSupportedException {
+        Object clone = createCopy(0, getItemCount() - 1);
+        return clone;
+    }
+
+    /**
+     * Creates a new instance by copying a subset of the data in this 
+     * collection.
+     *
+     * @param start  the index of the first item to copy.
+     * @param end  the index of the last item to copy.
+     *
+     * @return A copy of a subset of the items.
+     * 
+     * @throws CloneNotSupportedException if there is a cloning problem.
+     */
+    public TimePeriodValues createCopy(int start, int end) 
+        throws CloneNotSupportedException {
+
+        TimePeriodValues copy = (TimePeriodValues) super.clone();
+
+        copy.data = new ArrayList();
+        if (this.data.size() > 0) {
+            for (int index = start; index <= end; index++) {
+                TimePeriodValue item = (TimePeriodValue) this.data.get(index);
+                TimePeriodValue clone = (TimePeriodValue) item.clone();
+                try {
+                    copy.add(clone);
+                }
+                catch (SeriesException e) {
+                    System.err.println("Failed to add cloned item.");
+                }
+            }
+        }
+        return copy;
+
+    }
+    
+    /**
+     * Returns the index of the time period with the minimum start milliseconds.
+     * 
+     * @return The index.
+     */
+    public int getMinStartIndex() {
+        return this.minStartIndex;
+    }
+    
+    /**
+     * Returns the index of the time period with the maximum start milliseconds.
+     * 
+     * @return The index.
+     */
+    public int getMaxStartIndex() {
+        return this.maxStartIndex;
+    }
+
+    /**
+     * Returns the index of the time period with the minimum middle 
+     * milliseconds.
+     * 
+     * @return The index.
+     */
+    public int getMinMiddleIndex() {
+        return this.minMiddleIndex;
+    }
+    
+    /**
+     * Returns the index of the time period with the maximum middle 
+     * milliseconds.
+     * 
+     * @return The index.
+     */
+    public int getMaxMiddleIndex() {
+        return this.maxMiddleIndex;
+    }
+
+    /**
+     * Returns the index of the time period with the minimum end milliseconds.
+     * 
+     * @return The index.
+     */
+    public int getMinEndIndex() {
+        return this.minEndIndex;
+    }
+    
+    /**
+     * Returns the index of the time period with the maximum end milliseconds.
+     * 
+     * @return The index.
+     */
+    public int getMaxEndIndex() {
+        return this.maxEndIndex;
+    }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ TimePeriodValuesClaudeTest ใน package org.jfree.data.time เพื่อทดสอบคลาส TimePeriodValues ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.jfree.data.time;` เท่านั้น
+</instructions>

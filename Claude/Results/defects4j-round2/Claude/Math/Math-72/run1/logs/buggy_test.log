@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-72-aypy2hqf/Math-72b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.math.analysis.solvers.BrentSolverClaudeTest::testSolveWithInitial_maxIsExactRootNotZero_returnsMax
+  - org.apache.commons.math.analysis.solvers.BrentSolverClaudeTest::testSolveWithInitial_minIsExactRootNotZero_returnsMin
+[exit 0]

@@ -1,0 +1,352 @@
+package org.apache.commons.math3.complex;
+
+import java.util.List;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math3.exception.NullArgumentException;
+import org.apache.commons.math3.exception.NotPositiveException;
+
+public class ComplexClaudeTest {
+
+    // Covers Complex(double) delegating to Complex(double,double) with imaginary=0.0
+    @Test
+    public void testConstructor_singleArgReal_imaginaryDefaultsToZero() throws Throwable {
+        Complex c = new Complex(5.0);
+        assertEquals(5.0, c.getReal(), 1e-9);
+        assertEquals(0.0, c.getImaginary(), 1e-9);
+    }
+
+    // Covers isNaN = Double.isNaN(real)||Double.isNaN(imaginary) true branch
+    @Test
+    public void testConstructor_NaNReal_isNaNTrueIsInfiniteFalse() throws Throwable {
+        Complex c = new Complex(Double.NaN, 1.0);
+        assertTrue(c.isNaN());
+        assertFalse(c.isInfinite());
+    }
+
+    // Covers isInfinite = !isNaN && (isInfinite(real)||isInfinite(imaginary)) true branch
+    @Test
+    public void testConstructor_infiniteReal_isInfiniteTrue() throws Throwable {
+        Complex c = new Complex(Double.POSITIVE_INFINITY, 2.0);
+        assertTrue(c.isInfinite());
+        assertFalse(c.isNaN());
+    }
+
+    // Covers the !isNaN guard: NaN takes precedence, isInfinite stays false
+    @Test
+    public void testConstructor_NaNWithInfiniteImaginary_isNaNWinsOverIsInfinite() throws Throwable {
+        Complex c = new Complex(Double.NaN, Double.POSITIVE_INFINITY);
+        assertTrue(c.isNaN());
+        assertFalse(c.isInfinite());
+    }
+
+    // Covers abs() isNaN branch
+    @Test
+    public void testAbs_NaN_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(Complex.NaN.abs()));
+    }
+
+    // Covers abs() isInfinite() branch
+    @Test
+    public void testAbs_infinite_returnsPositiveInfinity() throws Throwable {
+        double a = Complex.INF.abs();
+        assertTrue(Double.isInfinite(a) && a > 0);
+    }
+
+    // Covers branch FastMath.abs(real) < FastMath.abs(imaginary)
+    @Test
+    public void testAbs_realLessThanImaginary_returnsHypotenuse() throws Throwable {
+        Complex c = new Complex(3.0, 4.0);
+        assertEquals(5.0, c.abs(), 1e-9);
+    }
+
+    // Covers else branch FastMath.abs(real) >= FastMath.abs(imaginary)
+    @Test
+    public void testAbs_realGreaterEqualImaginary_returnsHypotenuse() throws Throwable {
+        Complex c = new Complex(4.0, 3.0);
+        assertEquals(5.0, c.abs(), 1e-9);
+    }
+
+    // Covers MathUtils.checkNotNull(addend) throw path in add(Complex)
+    @Test
+    public void testAdd_nullAddend_throwsNullArgumentException() throws Throwable {
+        try {
+            Complex.ONE.add((Complex) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // Covers isNaN || addend.isNaN branch in add(Complex)
+    @Test
+    public void testAdd_NaNOperand_returnsNaN() throws Throwable {
+        Complex result = new Complex(1.0, 1.0).add(Complex.NaN);
+        assertTrue(result.isNaN());
+    }
+
+    // Covers normal createComplex(real+addend.real, imaginary+addend.imaginary) path
+    @Test
+    public void testAdd_normalValues_returnsComponentwiseSum() throws Throwable {
+        Complex result = new Complex(1.0, 2.0).add(new Complex(3.0, 4.0));
+        assertEquals(4.0, result.getReal(), 1e-9);
+        assertEquals(6.0, result.getImaginary(), 1e-9);
+    }
+
+    // Covers add(double) NaN branch and normal real-only addition branch
+    @Test
+    public void testAddDouble_NaNAndNormal_branches() throws Throwable {
+        assertTrue(new Complex(1.0, 1.0).add(Double.NaN).isNaN());
+        Complex result = new Complex(1.0, 2.0).add(3.0);
+        assertEquals(4.0, result.getReal(), 1e-9);
+        assertEquals(2.0, result.getImaginary(), 1e-9);
+    }
+
+    // Covers conjugate() isNaN branch
+    @Test
+    public void testConjugate_NaN_returnsNaN() throws Throwable {
+        assertTrue(Complex.NaN.conjugate().isNaN());
+    }
+
+    // Covers conjugate() normal createComplex(real, -imaginary) path
+    @Test
+    public void testConjugate_normal_negatesImaginaryPart() throws Throwable {
+        Complex result = new Complex(3.0, 4.0).conjugate();
+        assertEquals(3.0, result.getReal(), 1e-9);
+        assertEquals(-4.0, result.getImaginary(), 1e-9);
+    }
+
+    // Covers MathUtils.checkNotNull(divisor) throw path in divide(Complex)
+    @Test
+    public void testDivide_nullDivisor_throwsNullArgumentException() throws Throwable {
+        try {
+            Complex.ONE.divide((Complex) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // Covers c==0.0 && d==0.0 branch, documented to return NaN
+    @Test
+    public void testDivide_zeroDivisor_returnsNaN() throws Throwable {
+        Complex result = new Complex(1.0, 1.0).divide(Complex.ZERO);
+        assertTrue(result.isNaN());
+    }
+
+    // Covers "both infinite -> NaN" and "finite / infinite -> ZERO" documented branches
+    @Test
+    public void testDivide_bothInfiniteAndFiniteDividedByInfinite_branches() throws Throwable {
+        assertTrue(Complex.INF.divide(Complex.INF).isNaN());
+        assertEquals(Complex.ZERO, new Complex(1.0, 1.0).divide(Complex.INF));
+    }
+
+    // Covers FastMath.abs(c) < FastMath.abs(d) branch of divide(Complex)
+    @Test
+    public void testDivide_absCLessThanAbsD_computesCorrectQuotient() throws Throwable {
+        Complex result = new Complex(1.0, 0.0).divide(new Complex(1.0, 2.0));
+        assertEquals(0.2, result.getReal(), 1e-9);
+        assertEquals(-0.4, result.getImaginary(), 1e-9);
+    }
+
+    // Covers else branch FastMath.abs(c) >= FastMath.abs(d) of divide(Complex)
+    @Test
+    public void testDivide_absCGreaterEqualAbsD_computesCorrectQuotient() throws Throwable {
+        Complex result = new Complex(1.0, 0.0).divide(new Complex(2.0, 1.0));
+        assertEquals(0.4, result.getReal(), 1e-9);
+        assertEquals(-0.2, result.getImaginary(), 1e-9);
+    }
+
+    // Covers divide(double) divisor==0 branch and infinite-divisor-with-finite-this branch
+    @Test
+    public void testDivideDouble_zeroAndInfiniteDivisor_branches() throws Throwable {
+        assertTrue(new Complex(1.0, 1.0).divide(0.0).isNaN());
+        assertEquals(Complex.ZERO, new Complex(1.0, 1.0).divide(Double.POSITIVE_INFINITY));
+    }
+
+    // Covers reciprocal() isNaN branch
+    @Test
+    public void testReciprocal_NaN_returnsNaN() throws Throwable {
+        assertTrue(Complex.NaN.reciprocal().isNaN());
+    }
+
+    // BUG-CATCHING TEST: class contract follows "rules for java.lang.Double" where
+    // 1.0/0.0 == Infinity (not NaN); therefore reciprocal of ZERO must be INF.
+    @Test
+    public void testReciprocal_zeroComplex_matchesDoubleDivisionByZeroContract() throws Throwable {
+        Complex result = Complex.ZERO.reciprocal();
+        assertEquals(Complex.INF, result);
+    }
+
+    // Covers reciprocal() isInfinite branch
+    @Test
+    public void testReciprocal_infinite_returnsZero() throws Throwable {
+        assertEquals(Complex.ZERO, Complex.INF.reciprocal());
+    }
+
+    // Covers abs(real)<abs(imaginary) branch and else branch of reciprocal()
+    @Test
+    public void testReciprocal_normal_bothMagnitudeBranches() throws Throwable {
+        Complex r1 = new Complex(1.0, 2.0).reciprocal();
+        assertEquals(0.2, r1.getReal(), 1e-9);
+        assertEquals(-0.4, r1.getImaginary(), 1e-9);
+        Complex r2 = new Complex(2.0, 1.0).reciprocal();
+        assertEquals(0.4, r2.getReal(), 1e-9);
+        assertEquals(-0.2, r2.getImaginary(), 1e-9);
+    }
+
+    // Covers this==other short-circuit branch of equals()
+    @Test
+    public void testEquals_sameInstance_returnsTrue() throws Throwable {
+        Complex c = new Complex(1.0, 2.0);
+        assertTrue(c.equals(c));
+    }
+
+    // Covers "other instanceof Complex" false branch of equals() for null and wrong type
+    @Test
+    public void testEquals_nullAndWrongType_returnFalse() throws Throwable {
+        Complex c = new Complex(1.0, 2.0);
+        assertFalse(c.equals(null));
+        assertFalse(c.equals("not a complex"));
+    }
+
+    // Covers c.isNaN true branch (all NaN equal) and value comparison branch of equals()
+    @Test
+    public void testEquals_NaNEquivalenceAndValueComparison_branches() throws Throwable {
+        assertTrue(new Complex(Double.NaN, 1.0).equals(new Complex(2.0, Double.NaN)));
+        assertFalse(new Complex(1.0, 2.0).equals(new Complex(1.0, 3.0)));
+    }
+
+    // Covers hashCode() isNaN branch returning constant 7
+    @Test
+    public void testHashCode_NaN_returnsConstantSeven() throws Throwable {
+        assertEquals(7, Complex.NaN.hashCode());
+    }
+
+    // Covers MathUtils.checkNotNull(factor) throw path in multiply(Complex)
+    @Test
+    public void testMultiply_nullFactor_throwsNullArgumentException() throws Throwable {
+        try {
+            Complex.ONE.multiply((Complex) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // Covers infinite-operand -> INF branch and normal definitional-formula branch
+    @Test
+    public void testMultiply_infiniteOperandAndNormalValues_branches() throws Throwable {
+        assertEquals(Complex.INF, new Complex(1.0, 1.0).multiply(Complex.INF));
+        Complex result = new Complex(1.0, 2.0).multiply(new Complex(3.0, 4.0));
+        assertEquals(-5.0, result.getReal(), 1e-9);
+        assertEquals(10.0, result.getImaginary(), 1e-9);
+    }
+
+    // Covers multiply(int) normal scaling path
+    @Test
+    public void testMultiplyInt_normal_returnsScaledComponents() throws Throwable {
+        Complex result = new Complex(2.0, 3.0).multiply(2);
+        assertEquals(4.0, result.getReal(), 1e-9);
+        assertEquals(6.0, result.getImaginary(), 1e-9);
+    }
+
+    // Covers multiply(double) NaN-factor branch and infinite-factor branch
+    @Test
+    public void testMultiplyDouble_NaNAndInfiniteFactor_branches() throws Throwable {
+        assertTrue(new Complex(1.0, 1.0).multiply(Double.NaN).isNaN());
+        assertEquals(Complex.INF, new Complex(1.0, 1.0).multiply(Double.POSITIVE_INFINITY));
+    }
+
+    // Covers negate() isNaN branch and normal negation branch
+    @Test
+    public void testNegate_NaNAndNormal_branches() throws Throwable {
+        assertTrue(Complex.NaN.negate().isNaN());
+        Complex result = new Complex(2.0, -3.0).negate();
+        assertEquals(-2.0, result.getReal(), 1e-9);
+        assertEquals(3.0, result.getImaginary(), 1e-9);
+    }
+
+    // Covers MathUtils.checkNotNull(subtrahend) throw path in subtract(Complex)
+    @Test
+    public void testSubtract_nullSubtrahend_throwsNullArgumentException() throws Throwable {
+        try {
+            Complex.ONE.subtract((Complex) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // Covers subtract(Complex) normal definitional-formula branch
+    @Test
+    public void testSubtract_normal_returnsComponentwiseDifference() throws Throwable {
+        Complex result = new Complex(5.0, 3.0).subtract(new Complex(2.0, 1.0));
+        assertEquals(3.0, result.getReal(), 1e-9);
+        assertEquals(2.0, result.getImaginary(), 1e-9);
+    }
+
+    // Covers subtract(double) normal path leaving imaginary part untouched
+    @Test
+    public void testSubtractDouble_normal_returnsRealOnlyDifference() throws Throwable {
+        Complex result = new Complex(5.0, 3.0).subtract(2.0);
+        assertEquals(3.0, result.getReal(), 1e-9);
+        assertEquals(3.0, result.getImaginary(), 1e-9);
+    }
+
+    // Covers getArgument() using atan2 for normal values and NaN propagation
+    @Test
+    public void testGetArgument_normalAndNaN_branches() throws Throwable {
+        assertEquals(Math.PI / 4.0, new Complex(1.0, 1.0).getArgument(), 1e-9);
+        assertTrue(Double.isNaN(Complex.NaN.getArgument()));
+    }
+
+    // Covers sqrt() real==0&&imaginary==0 branch and real<0 branch
+    @Test
+    public void testSqrt_zeroAndNegativeReal_branches() throws Throwable {
+        Complex zeroResult = Complex.ZERO.sqrt();
+        assertEquals(0.0, zeroResult.getReal(), 1e-9);
+        assertEquals(0.0, zeroResult.getImaginary(), 1e-9);
+        Complex negResult = new Complex(-3.0, 4.0).sqrt();
+        assertEquals(1.0, negResult.getReal(), 1e-9);
+        assertEquals(2.0, negResult.getImaginary(), 1e-9);
+    }
+
+    // Covers n<=0 throw branch of nthRoot
+    @Test
+    public void testNthRoot_nonPositiveN_throwsNotPositiveException() throws Throwable {
+        try {
+            Complex.ONE.nthRoot(0);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // Covers isNaN -> single-NaN-list branch and normal loop producing n roots
+    @Test
+    public void testNthRoot_NaNAndNormal_branches() throws Throwable {
+        List<Complex> nanRoots = Complex.NaN.nthRoot(2);
+        assertEquals(1, nanRoots.size());
+        assertTrue(nanRoots.get(0).isNaN());
+        List<Complex> roots = Complex.ONE.nthRoot(4);
+        assertEquals(4, roots.size());
+        assertEquals(1.0, roots.get(0).getReal(), 1e-9);
+        assertEquals(0.0, roots.get(0).getImaginary(), 1e-9);
+    }
+
+    // Covers valueOf(double,double) NaN-detection branch and normal construction branch
+    @Test
+    public void testValueOfTwoArgs_NaNAndNormal_branches() throws Throwable {
+        assertTrue(Complex.valueOf(Double.NaN, 1.0).isNaN());
+        Complex c = Complex.valueOf(2.0, 3.0);
+        assertEquals(2.0, c.getReal(), 1e-9);
+        assertEquals(3.0, c.getImaginary(), 1e-9);
+    }
+
+    // Covers valueOf(double) NaN-detection branch and normal construction branch
+    @Test
+    public void testValueOfOneArg_NaNAndNormal_branches() throws Throwable {
+        assertTrue(Complex.valueOf(Double.NaN).isNaN());
+        Complex c = Complex.valueOf(5.0);
+        assertEquals(5.0, c.getReal(), 1e-9);
+        assertEquals(0.0, c.getImaginary(), 1e-9);
+    }
+}

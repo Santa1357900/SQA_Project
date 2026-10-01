@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Mockito-32-ebk04n_p/Mockito-32b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 23
+     Lines covered: 21
+  Conditions total: 12
+Conditions covered: 12
+     Line coverage: 91.3%
+Condition coverage: 100.0%
+[exit 0]

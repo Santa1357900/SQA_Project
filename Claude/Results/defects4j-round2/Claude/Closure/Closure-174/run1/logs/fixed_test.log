@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-174-1el0dt1z/Closure-174f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - com.google.javascript.jscomp.JsAstClaudeTest::testGetAstRoot_mismatchedBraces_triggersHaltingError
+  - com.google.javascript.jscomp.JsAstClaudeTest::testGetAstRoot_unterminatedStringLiteral_triggersHaltingError
+  - com.google.javascript.jscomp.JsAstClaudeTest::testGetAstRoot_missingIdentifierAfterVar_triggersHaltingError
+  - com.google.javascript.jscomp.JsAstClaudeTest::testConstructor_emptyFileName_allowedAndPreserved
+[exit 0]

@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Lang-7-qpdsoxa7/Lang-7f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.lang3.math.NumberUtilsClaudeTest::testCreateNumber_doubleMinusPrefix_returnsNull
+  - org.apache.commons.lang3.math.NumberUtilsClaudeTest::testCreateNumber_leadingZero_notInterpretedAsOctal
+[exit 0]

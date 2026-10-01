@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-2-bz2gwl73/Cli-2f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_longTokenExactOptionMatchWithArg_associatesFollowingValue
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_burstToken_invalidChars_stopAtNonOptionFalse_addsDashChars
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_longTokenNoExactMatch_burstsAllInvalidChars
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_burstToken_argOptionAtEnd_noRemainderAdded
+[exit 0]

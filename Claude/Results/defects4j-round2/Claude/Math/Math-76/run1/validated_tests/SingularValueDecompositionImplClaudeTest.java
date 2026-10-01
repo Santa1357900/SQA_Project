@@ -1,0 +1,295 @@
+package org.apache.commons.math.linear;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class SingularValueDecompositionImplClaudeTest {
+
+    private RealMatrix matrix(double[][] data) {
+        return new Array2DRowRealMatrix(data, false);
+    }
+
+    private void assertMatrixEquals(double[][] expected, RealMatrix actual, double delta) {
+        double[][] a = actual.getData();
+        assertEquals(expected.length, a.length);
+        for (int i = 0; i < expected.length; i++) {
+            assertEquals(expected[i].length, a[i].length);
+            for (int j = 0; j < expected[i].length; j++) {
+                assertEquals(expected[i][j], a[i][j], delta);
+            }
+        }
+    }
+
+    // Constructor: full rank 2x2, singular values must be {3,2} regardless of internal order
+    @Test
+    public void testConstructor_fullRankSquare_singularValuesHaveExpectedMagnitudes() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        double[] sv = svd.getSingularValues();
+        assertEquals(2, sv.length);
+        assertEquals(3.0, Math.max(sv[0], sv[1]), 1e-9);
+        assertEquals(2.0, Math.min(sv[0], sv[1]), 1e-9);
+    }
+
+    // Constructor with max=1: truncated SVD keeps only the largest singular value
+    @Test
+    public void testConstructor_maxLimitsSingularValueCount() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}), 1);
+        double[] sv = svd.getSingularValues();
+        assertEquals(1, sv.length);
+        assertEquals(3.0, sv[0], 1e-9);
+    }
+
+    // Constructor with max greater than min(m,n): capped naturally, no overflow/exception
+    @Test
+    public void testConstructor_maxGreaterThanDimension_noOverflow() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}), 5);
+        assertEquals(2, svd.getSingularValues().length);
+    }
+
+    // Constructor on zero matrix: no positive eigenvalues, singularValues length must be 0
+    @Test
+    public void testConstructor_zeroMatrix_noPositiveSingularValues() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{0,0},{0,0}}));
+        assertEquals(0, svd.getSingularValues().length);
+    }
+
+    // getU dimensions: m x p for a full rank square matrix
+    @Test
+    public void testGetU_dimensions_fullRankSquare() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        RealMatrix u = svd.getU();
+        assertEquals(2, u.getRowDimension());
+        assertEquals(2, u.getColumnDimension());
+    }
+
+    // Reconstruction identity A = U*S*Vt must hold for full rank square matrix
+    @Test
+    public void testGetU_reconstruction_fullRankSquare() throws Throwable {
+        double[][] data = {{3,0},{0,2}};
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(data));
+        RealMatrix recon = svd.getU().multiply(svd.getS()).multiply(svd.getVT());
+        assertMatrixEquals(data, recon, 1e-6);
+    }
+
+    // Reconstruction identity for m>n, full column rank rectangular matrix
+    @Test
+    public void testGetU_reconstruction_rectangularMGreaterThanN() throws Throwable {
+        double[][] data = {{1,2},{3,4},{5,6}};
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(data));
+        RealMatrix recon = svd.getU().multiply(svd.getS()).multiply(svd.getVT());
+        assertMatrixEquals(data, recon, 1e-6);
+    }
+
+    // Reconstruction identity for m<n, full row rank rectangular matrix
+    @Test
+    public void testGetU_reconstruction_mLessThanN() throws Throwable {
+        double[][] data = {{1,2,3},{4,5,6}};
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(data));
+        RealMatrix recon = svd.getU().multiply(svd.getS()).multiply(svd.getVT());
+        assertMatrixEquals(data, recon, 1e-6);
+    }
+
+    // U must have orthonormal columns: Ut*U = identity for full rank square matrix
+    @Test
+    public void testGetU_orthonormalColumns_fullRankSquare() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        RealMatrix utu = svd.getUT().multiply(svd.getU());
+        assertMatrixEquals(new double[][]{{1,0},{0,1}}, utu, 1e-6);
+    }
+
+
+
+    // getUT must be the exact transpose of getU
+    @Test
+    public void testGetUT_isTransposeOfU() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{1,2},{3,4},{5,6}}));
+        double[][] u = svd.getU().getData();
+        double[][] ut = svd.getUT().getData();
+        for (int i = 0; i < u.length; i++) {
+            for (int j = 0; j < u[0].length; j++) {
+                assertEquals(u[i][j], ut[j][i], 1e-9);
+            }
+        }
+    }
+
+    // getS diagonal entries must match singular values, off-diagonal must be zero
+    @Test
+    public void testGetS_diagonalEqualsSingularValues() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        double[] sv = svd.getSingularValues();
+        double[][] s = svd.getS().getData();
+        assertEquals(sv[0], s[0][0], 1e-9);
+        assertEquals(sv[1], s[1][1], 1e-9);
+        assertEquals(0.0, s[0][1], 1e-9);
+        assertEquals(0.0, s[1][0], 1e-9);
+    }
+
+    // getS dimensions must equal p x p when truncated via max
+    @Test
+    public void testGetS_dimensionsMatchP() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}), 1);
+        RealMatrix s = svd.getS();
+        assertEquals(1, s.getRowDimension());
+        assertEquals(1, s.getColumnDimension());
+    }
+
+    // getSingularValues must return a defensive copy, not the internal array
+    @Test
+    public void testGetSingularValues_returnsDefensiveCopy() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        double[] sv1 = svd.getSingularValues();
+        sv1[0] = -999.0;
+        double[] sv2 = svd.getSingularValues();
+        assertTrue(sv2[0] > 0.0);
+    }
+
+    // getV dimensions: n x p for a full rank square matrix
+    @Test
+    public void testGetV_dimensions_fullRankSquare() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        RealMatrix v = svd.getV();
+        assertEquals(2, v.getRowDimension());
+        assertEquals(2, v.getColumnDimension());
+    }
+
+
+
+    // V must have orthonormal columns: Vt*V = identity for full rank square matrix
+    @Test
+    public void testGetV_orthonormalColumns_fullRankSquare() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        RealMatrix vtv = svd.getVT().multiply(svd.getV());
+        assertMatrixEquals(new double[][]{{1,0},{0,1}}, vtv, 1e-6);
+    }
+
+    // getVT must be the exact transpose of getV
+    @Test
+    public void testGetVT_isTransposeOfV() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{1,2,3},{4,5,6}}));
+        double[][] v = svd.getV().getData();
+        double[][] vt = svd.getVT().getData();
+        for (int i = 0; i < v.length; i++) {
+            for (int j = 0; j < v[0].length; j++) {
+                assertEquals(v[i][j], vt[j][i], 1e-9);
+            }
+        }
+    }
+
+    // getCovariance with cutoff 0: all singular values kept, equals inverse of A^T.A for invertible A
+    @Test
+    public void testGetCovariance_allSingularValues() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        RealMatrix cov = svd.getCovariance(0.0);
+        assertMatrixEquals(new double[][]{{1.0/9,0},{0,0.25}}, cov, 1e-6);
+    }
+
+    // getCovariance with cutoff between the two singular values: only top vector contributes
+    @Test
+    public void testGetCovariance_partialDimension() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        RealMatrix cov = svd.getCovariance(2.5);
+        assertMatrixEquals(new double[][]{{1.0/9,0},{0,0}}, cov, 1e-6);
+    }
+
+    // Boundary: cutoff exactly equal to largest singular value must still be included (>=)
+    @Test
+    public void testGetCovariance_boundaryEqualToLargestSingularValue() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        RealMatrix cov = svd.getCovariance(3.0);
+        assertMatrixEquals(new double[][]{{1.0/9,0},{0,0}}, cov, 1e-6);
+    }
+
+    // Cutoff above the largest singular value: dimension becomes 0, must throw IllegalArgumentException
+    @Test
+    public void testGetCovariance_minSingularValueExceedsLargest_throws() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        try {
+            svd.getCovariance(100.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // getNorm must equal the largest singular value
+    @Test
+    public void testGetNorm_equalsLargestSingularValue() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        assertEquals(3.0, svd.getNorm(), 1e-9);
+    }
+
+    // getConditionNumber must equal largest/smallest singular value ratio
+    @Test
+    public void testGetConditionNumber_ratioOfExtremes() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        assertEquals(1.5, svd.getConditionNumber(), 1e-9);
+    }
+
+    // getRank of a full rank square matrix equals its dimension
+    @Test
+    public void testGetRank_fullRankSquare() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        assertEquals(2, svd.getRank());
+    }
+
+    // getRank of a rank-deficient 3x3 matrix equals its true mathematical rank
+    @Test
+    public void testGetRank_rankDeficientSquare() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{1,0,0},{0,1,0},{0,0,0}}));
+        assertEquals(2, svd.getRank());
+    }
+
+
+
+    // getSolver().isNonSingular() true when rank equals max(m,n) (invertible square matrix)
+    @Test
+    public void testGetSolver_isNonSingular_trueFullRank() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        assertTrue(svd.getSolver().isNonSingular());
+    }
+
+    // getSolver().isNonSingular() false when rank is less than max(m,n) (singular square matrix)
+    @Test
+    public void testGetSolver_isNonSingular_falseRankDeficient() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{1,0,0},{0,1,0},{0,0,0}}));
+        assertFalse(svd.getSolver().isNonSingular());
+    }
+
+    // Solver.solve(double[]) solves A*x=b for an invertible diagonal matrix
+    @Test
+    public void testSolverSolveDoubleArray_solvesSystem() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        double[] x = svd.getSolver().solve(new double[]{6.0, 4.0});
+        assertEquals(2.0, x[0], 1e-6);
+        assertEquals(2.0, x[1], 1e-6);
+    }
+
+    // Solver.solve(RealMatrix) applied to identity yields the inverse matrix
+    @Test
+    public void testSolverSolveRealMatrix_computesInverse() throws Throwable {
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(new double[][]{{3,0},{0,2}}));
+        RealMatrix identity = matrix(new double[][]{{1,0},{0,1}});
+        RealMatrix result = svd.getSolver().solve(identity);
+        assertMatrixEquals(new double[][]{{1.0/3,0},{0,0.5}}, result, 1e-6);
+    }
+
+    // Solver.getInverse() multiplied by the original matrix yields identity
+    @Test
+    public void testSolverGetInverse_isActualInverse() throws Throwable {
+        double[][] data = {{3,0},{0,2}};
+        SingularValueDecompositionImpl svd = new SingularValueDecompositionImpl(matrix(data));
+        RealMatrix product = svd.getSolver().getInverse().multiply(matrix(data));
+        assertMatrixEquals(new double[][]{{1,0},{0,1}}, product, 1e-6);
+    }
+
+    // Underdetermined system (m<n): pseudo-inverse solution must satisfy A*x=b exactly
+    @Test
+    public void testSolverSolve_underdetermined_consistentSolution() throws Throwable {
+        double[][] data = {{1,2,3},{4,5,6}};
+        RealMatrix a = matrix(data);
+        DecompositionSolver solver = new SingularValueDecompositionImpl(a).getSolver();
+        double[] x = solver.solve(new double[]{1.0, 1.0});
+        double[] check = a.operate(x);
+        assertEquals(1.0, check[0], 1e-6);
+        assertEquals(1.0, check[1], 1e-6);
+    }
+}

@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Chart-22-x29vf4m5/Chart-22f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.jfree.data.KeyedObjects2DClaudeTest::testHashCode_consistentWithEquals
+  - org.jfree.data.KeyedObjects2DClaudeTest::testRemoveObject_rowNotEmpty_rowRemains
+  - org.jfree.data.KeyedObjects2DClaudeTest::testRemoveRowByKey_unknownKey_throws
+[exit 0]

@@ -1,0 +1,282 @@
+package org.apache.commons.cli2.builder;
+
+import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.Test;
+
+import org.apache.commons.cli2.Option;
+
+public class PatternBuilderClaudeTest {
+
+    private PatternBuilder builder;
+
+    @Before
+    public void setUp() throws Throwable {
+        builder = new PatternBuilder();
+    }
+
+    // covers no-arg constructor creating a usable, non-null instance
+    @Test
+    public void testDefaultConstructor_createsInstance() throws Throwable {
+        PatternBuilder pb = new PatternBuilder();
+        assertNotNull(pb);
+    }
+
+    // covers 3-arg constructor storing injected builders and remaining usable
+    @Test
+    public void testParameterizedConstructor_createsInstance() throws Throwable {
+        PatternBuilder pb = new PatternBuilder(new GroupBuilder(), new DefaultOptionBuilder(), new ArgumentBuilder());
+        assertNotNull(pb);
+    }
+
+    // covers reset() clearing options and returning the same builder instance for chaining
+    @Test
+    public void testReset_returnsSameInstance() throws Throwable {
+        PatternBuilder returned = builder.reset();
+        assertSame(builder, returned);
+    }
+
+    // covers reset() clearing previously added options so a later pattern produces an independent single option
+    @Test
+    public void testReset_clearsPreviouslyAddedOptions() throws Throwable {
+        builder.withPattern("a!");
+        builder.reset();
+        builder.withPattern("b");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers withPattern loop executing zero iterations with no side effects (empty pattern)
+    @Test
+    public void testWithPattern_emptyPatternThenOption_notRequired() throws Throwable {
+        builder.withPattern("");
+        builder.withPattern("c");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers default switch branch when a space character precedes the real option char
+    @Test
+    public void testWithPattern_leadingSpaceCharacter_optionStillCreated() throws Throwable {
+        builder.withPattern(" d");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers a type character encountered before any opt char is set (opt still at sentinel)
+    @Test
+    public void testWithPattern_typeCharBeforeOpt_appliesToFollowingOption() throws Throwable {
+        builder.withPattern("@e");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers withPattern being called multiple times, accumulating options in the shared field
+    @Test
+    public void testWithPattern_calledTwice_accumulatesOptions() throws Throwable {
+        builder.withPattern("a");
+        builder.withPattern("b");
+        Option option = builder.create();
+        assertNotNull(option);
+    }
+
+    // covers null pattern causing NullPointerException via pattern.length()
+    @Test
+    public void testWithPattern_nullPattern_throwsNullPointerException() throws Throwable {
+        try {
+            builder.withPattern(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+            // pattern.length() on null throws
+        }
+    }
+
+    // covers repeated type-char cases overwriting the local type variable (last one wins)
+    @Test
+    public void testWithPattern_typeCharacterOverridden_lastWins() throws Throwable {
+        builder.withPattern("o%#");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers parameterized constructor integrated with withPattern/create producing a required option
+    @Test
+    public void testParameterizedConstructor_withPattern_requiredOption() throws Throwable {
+        PatternBuilder pb = new PatternBuilder(new GroupBuilder(), new DefaultOptionBuilder(), new ArgumentBuilder());
+        pb.withPattern("x!");
+        Option option = pb.create();
+        assertTrue(option.isRequired());
+    }
+
+    // covers options.size() > 1 branch (group creation) with two options
+    @Test
+    public void testCreate_twoOptions_notNull() throws Throwable {
+        builder.withPattern("ab");
+        Option option = builder.create();
+        assertNotNull(option);
+    }
+
+    // covers options.size() > 1 branch (group creation) with three options
+    @Test
+    public void testCreate_threeOptions_notNull() throws Throwable {
+        builder.withPattern("abc");
+        Option option = builder.create();
+        assertNotNull(option);
+    }
+
+    // covers type == ' ' branch (no argument) and required == false
+    @Test
+    public void testWithPattern_singleOption_noType_notRequired() throws Throwable {
+        builder.withPattern("a");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers type == ' ' branch (no argument) with required == true, required still propagated
+    @Test
+    public void testWithPattern_singleOption_noType_required() throws Throwable {
+        builder.withPattern("a!");
+        Option option = builder.create();
+        assertTrue(option.isRequired());
+    }
+
+    // covers the '!' case reached before any opt char, then applied to the following option
+    @Test
+    public void testWithPattern_requiredMarkerBeforeOpt_appliesToOption() throws Throwable {
+        builder.withPattern("!z");
+        Option option = builder.create();
+        assertTrue(option.isRequired());
+    }
+
+    // covers type '@' (class-instance) switch branch, not required
+    @Test
+    public void testWithPattern_typeClassInstance_notRequired() throws Throwable {
+        builder.withPattern("f@");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers type '@' (class-instance) switch branch, required -> withMinimum(1) branch
+    @Test
+    public void testWithPattern_typeClassInstance_required() throws Throwable {
+        builder.withPattern("f!@");
+        Option option = builder.create();
+        assertTrue(option.isRequired());
+    }
+
+
+
+
+
+    // covers type '%' (number) switch branch, not required
+    @Test
+    public void testWithPattern_typeNumber_notRequired() throws Throwable {
+        builder.withPattern("h%");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers type '%' (number) switch branch, required
+    @Test
+    public void testWithPattern_typeNumber_required() throws Throwable {
+        builder.withPattern("h!%");
+        Option option = builder.create();
+        assertTrue(option.isRequired());
+    }
+
+    // covers type '+' (class) switch branch, not required
+    @Test
+    public void testWithPattern_typeClass_notRequired() throws Throwable {
+        builder.withPattern("i+");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers type '+' (class) switch branch, required
+    @Test
+    public void testWithPattern_typeClass_required() throws Throwable {
+        builder.withPattern("i!+");
+        Option option = builder.create();
+        assertTrue(option.isRequired());
+    }
+
+    // covers type '#' (date) switch branch, not required
+    @Test
+    public void testWithPattern_typeDate_notRequired() throws Throwable {
+        builder.withPattern("j#");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers type '#' (date) switch branch, required
+    @Test
+    public void testWithPattern_typeDate_required() throws Throwable {
+        builder.withPattern("j!#");
+        Option option = builder.create();
+        assertTrue(option.isRequired());
+    }
+
+    // covers type '<' (existing file) switch branch, not required
+    @Test
+    public void testWithPattern_typeExistingFile_notRequired() throws Throwable {
+        builder.withPattern("k<");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers type '<' (existing file) switch branch, required
+    @Test
+    public void testWithPattern_typeExistingFile_required() throws Throwable {
+        builder.withPattern("k!<");
+        Option option = builder.create();
+        assertTrue(option.isRequired());
+    }
+
+    // covers type '>' (file) switch branch, not required
+    @Test
+    public void testWithPattern_typeFile_notRequired() throws Throwable {
+        builder.withPattern("l>");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers type '>' (file) switch branch, required
+    @Test
+    public void testWithPattern_typeFile_required() throws Throwable {
+        builder.withPattern("l!>");
+        Option option = builder.create();
+        assertTrue(option.isRequired());
+    }
+
+    // covers type '*' (multiple) switch branch, not required, skips withMaximum call
+    @Test
+    public void testWithPattern_typeMultiple_notRequired() throws Throwable {
+        builder.withPattern("m*");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers type '*' (multiple) switch branch, required, skips withMaximum but sets withMinimum
+    @Test
+    public void testWithPattern_typeMultiple_required() throws Throwable {
+        builder.withPattern("m!*");
+        Option option = builder.create();
+        assertTrue(option.isRequired());
+    }
+
+    // covers type '/' (url) switch branch, not required
+    @Test
+    public void testWithPattern_typeUrl_notRequired() throws Throwable {
+        builder.withPattern("n/");
+        Option option = builder.create();
+        assertFalse(option.isRequired());
+    }
+
+    // covers type '/' (url) switch branch, required
+    @Test
+    public void testWithPattern_typeUrl_required() throws Throwable {
+        builder.withPattern("n!/");
+        Option option = builder.create();
+        assertTrue(option.isRequired());
+    }
+}

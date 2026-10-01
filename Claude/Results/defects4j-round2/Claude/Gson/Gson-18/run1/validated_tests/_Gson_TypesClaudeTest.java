@@ -1,0 +1,398 @@
+package com.google.gson.internal;
+
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+
+import com.google.gson.reflect.TypeToken;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class _Gson_TypesClaudeTest {
+
+  // non-static inner class used to trigger the "owner type required" branch
+  class NonStaticInner {
+  }
+
+  // covers newParameterizedTypeWithOwner: basic construction of List<String>
+  @Test
+  public void testNewParameterizedTypeWithOwner_basicListString() throws Throwable {
+    ParameterizedType pt = $Gson$Types.newParameterizedTypeWithOwner(null, List.class, String.class);
+    assertEquals(List.class, pt.getRawType());
+    assertNull(pt.getOwnerType());
+    assertEquals(1, pt.getActualTypeArguments().length);
+    assertEquals(String.class, pt.getActualTypeArguments()[0]);
+  }
+
+  // covers newParameterizedTypeWithOwner: non-static inner class without owner must throw
+  @Test
+  public void testNewParameterizedTypeWithOwner_missingOwnerForInnerClass_throws() throws Throwable {
+    try {
+      $Gson$Types.newParameterizedTypeWithOwner(null, NonStaticInner.class);
+      fail("expected exception: owner type required for non-static inner class");
+    } catch (RuntimeException expected) {
+    }
+  }
+
+  // covers arrayOf: basic component type and toString format
+  @Test
+  public void testArrayOf_componentTypeString() throws Throwable {
+    GenericArrayType arr = $Gson$Types.arrayOf(String.class);
+    assertEquals(String.class, arr.getGenericComponentType());
+    assertEquals("java.lang.String[]", arr.toString());
+  }
+
+  // covers subtypeOf: plain class bound branch
+  @Test
+  public void testSubtypeOf_classBound_extendsCharSequence() throws Throwable {
+    WildcardType w = $Gson$Types.subtypeOf(CharSequence.class);
+    assertEquals(CharSequence.class, w.getUpperBounds()[0]);
+    assertEquals(0, w.getLowerBounds().length);
+  }
+
+  // covers subtypeOf: Object bound produces "?" toString
+  @Test
+  public void testSubtypeOf_objectBound_toStringIsQuestionMark() throws Throwable {
+    WildcardType w = $Gson$Types.subtypeOf(Object.class);
+    assertEquals("?", w.toString());
+  }
+
+  // covers subtypeOf: wildcard bound branch reuses upper bounds
+  @Test
+  public void testSubtypeOf_wildcardBound_reusesUpperBounds() throws Throwable {
+    WildcardType existing = $Gson$Types.subtypeOf(String.class);
+    WildcardType w = $Gson$Types.subtypeOf(existing);
+    assertEquals(String.class, w.getUpperBounds()[0]);
+    assertEquals(0, w.getLowerBounds().length);
+  }
+
+  // covers supertypeOf: plain class bound branch
+  @Test
+  public void testSupertypeOf_classBound_superString() throws Throwable {
+    WildcardType w = $Gson$Types.supertypeOf(String.class);
+    assertEquals(String.class, w.getLowerBounds()[0]);
+    assertEquals(Object.class, w.getUpperBounds()[0]);
+  }
+
+  // covers supertypeOf: wildcard bound branch reuses lower bounds
+  @Test
+  public void testSupertypeOf_wildcardBound_reusesLowerBounds() throws Throwable {
+    WildcardType existing = $Gson$Types.supertypeOf(String.class);
+    WildcardType w = $Gson$Types.supertypeOf(existing);
+    assertEquals(String.class, w.getLowerBounds()[0]);
+    assertEquals(Object.class, w.getUpperBounds()[0]);
+  }
+
+  // covers canonicalize: plain non-array class branch
+  @Test
+  public void testCanonicalize_plainClass_returnsSameClass() throws Throwable {
+    Type result = $Gson$Types.canonicalize(String.class);
+    assertEquals(String.class, result);
+  }
+
+  // covers canonicalize: array class branch converts to GenericArrayType
+  @Test
+  public void testCanonicalize_arrayClass_returnsGenericArrayType() throws Throwable {
+    Type result = $Gson$Types.canonicalize(String[].class);
+    assertTrue(result instanceof GenericArrayType);
+    assertEquals(String.class, ((GenericArrayType) result).getGenericComponentType());
+  }
+
+  // covers canonicalize: ParameterizedType branch
+  @Test
+  public void testCanonicalize_parameterizedType_returnsEquivalentType() throws Throwable {
+    Type listType = new TypeToken<List<String>>() {}.getType();
+    Type canon = $Gson$Types.canonicalize(listType);
+    assertTrue(canon instanceof ParameterizedType);
+    ParameterizedType pt = (ParameterizedType) canon;
+    assertEquals(List.class, pt.getRawType());
+    assertEquals(String.class, pt.getActualTypeArguments()[0]);
+  }
+
+  // covers canonicalize: GenericArrayType branch
+  @Test
+  public void testCanonicalize_genericArrayType_returnsEquivalentType() throws Throwable {
+    GenericArrayType arr = $Gson$Types.arrayOf(String.class);
+    Type canon = $Gson$Types.canonicalize(arr);
+    assertTrue(canon instanceof GenericArrayType);
+    assertEquals(String.class, ((GenericArrayType) canon).getGenericComponentType());
+  }
+
+  // covers canonicalize: WildcardType branch
+  @Test
+  public void testCanonicalize_wildcardType_returnsEquivalentType() throws Throwable {
+    WildcardType w = $Gson$Types.subtypeOf(String.class);
+    Type canon = $Gson$Types.canonicalize(w);
+    assertTrue(canon instanceof WildcardType);
+    assertTrue($Gson$Types.equals(w, canon));
+  }
+
+  // covers canonicalize: else branch returns unsupported type unchanged (method-level TypeVariable)
+  @Test
+  public void testCanonicalize_typeVariable_returnsSameInstance() throws Throwable {
+    Method m = Collections.class.getMethod("emptyList");
+    TypeVariable<?> t = m.getTypeParameters()[0];
+    Type canon = $Gson$Types.canonicalize(t);
+    assertSame(t, canon);
+  }
+
+  // covers getRawType: Class branch
+  @Test
+  public void testGetRawType_withClass_returnsClassItself() throws Throwable {
+    assertEquals(String.class, $Gson$Types.getRawType(String.class));
+  }
+
+  // covers getRawType: ParameterizedType branch
+  @Test
+  public void testGetRawType_withParameterizedType_returnsRawClass() throws Throwable {
+    Type listType = new TypeToken<List<String>>() {}.getType();
+    assertEquals(List.class, $Gson$Types.getRawType(listType));
+  }
+
+  // covers getRawType: GenericArrayType branch
+  @Test
+  public void testGetRawType_withGenericArrayType_returnsArrayClass() throws Throwable {
+    GenericArrayType arr = $Gson$Types.arrayOf(String.class);
+    assertEquals(String[].class, $Gson$Types.getRawType(arr));
+  }
+
+  // covers getRawType: TypeVariable branch returns Object.class
+  @Test
+  public void testGetRawType_withTypeVariable_returnsObjectClass() throws Throwable {
+    TypeVariable<?> tv = List.class.getTypeParameters()[0];
+    assertEquals(Object.class, $Gson$Types.getRawType(tv));
+  }
+
+  // covers getRawType: WildcardType branch
+  @Test
+  public void testGetRawType_withWildcardType_returnsUpperBoundClass() throws Throwable {
+    WildcardType w = $Gson$Types.subtypeOf(CharSequence.class);
+    assertEquals(CharSequence.class, $Gson$Types.getRawType(w));
+  }
+
+  // covers getRawType: unsupported/null branch throws IllegalArgumentException
+  @Test
+  public void testGetRawType_withNull_throwsIllegalArgumentException() throws Throwable {
+    try {
+      $Gson$Types.getRawType(null);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // covers equals: Class branch (identity equal and different)
+  @Test
+  public void testEquals_classes_identityAndDifference() throws Throwable {
+    assertTrue($Gson$Types.equals(String.class, String.class));
+    assertFalse($Gson$Types.equals(String.class, Integer.class));
+  }
+
+  // covers equals: ParameterizedType branch, equal type arguments
+  @Test
+  public void testEquals_parameterizedTypes_equalArgs_returnsTrue() throws Throwable {
+    Type a = $Gson$Types.newParameterizedTypeWithOwner(null, List.class, String.class);
+    Type b = new TypeToken<List<String>>() {}.getType();
+    assertTrue($Gson$Types.equals(a, b));
+  }
+
+  // covers equals: ParameterizedType branch, different type arguments
+  @Test
+  public void testEquals_parameterizedTypes_differentArgs_returnsFalse() throws Throwable {
+    Type a = $Gson$Types.newParameterizedTypeWithOwner(null, List.class, String.class);
+    Type b = new TypeToken<List<Integer>>() {}.getType();
+    assertFalse($Gson$Types.equals(a, b));
+  }
+
+  // covers equals: GenericArrayType branch and type mismatch else-branch
+  @Test
+  public void testEquals_genericArrayTypes_sameComponent_andTypeMismatch() throws Throwable {
+    GenericArrayType a = $Gson$Types.arrayOf(String.class);
+    GenericArrayType b = $Gson$Types.arrayOf(String.class);
+    assertTrue($Gson$Types.equals(a, b));
+    assertFalse($Gson$Types.equals(a, String.class));
+  }
+
+  // covers equals: WildcardType branch
+  @Test
+  public void testEquals_wildcardTypes_sameBounds() throws Throwable {
+    WildcardType a = $Gson$Types.subtypeOf(String.class);
+    WildcardType b = $Gson$Types.subtypeOf(String.class);
+    assertTrue($Gson$Types.equals(a, b));
+  }
+
+  // covers equals: TypeVariable branch, matching and non-matching declaration
+  @Test
+  public void testEquals_typeVariables_sameAndDifferentDeclaration() throws Throwable {
+    TypeVariable<?> a = List.class.getTypeParameters()[0];
+    TypeVariable<?> b = Map.class.getTypeParameters()[0];
+    assertFalse($Gson$Types.equals(a, b));
+    TypeVariable<?> c = List.class.getTypeParameters()[0];
+    assertTrue($Gson$Types.equals(a, c));
+  }
+
+  // covers equals: final else branch for unsupported Type implementations
+  @Test
+  public void testEquals_unsupportedCustomType_returnsFalse() throws Throwable {
+    Type custom1 = new Type() { };
+    Type custom2 = new Type() { };
+    assertFalse($Gson$Types.equals(custom1, custom2));
+  }
+
+  // covers typeToString: Class branch returns getName()
+  @Test
+  public void testTypeToString_withClass_returnsClassName() throws Throwable {
+    assertEquals("java.lang.String", $Gson$Types.typeToString(String.class));
+  }
+
+  // covers typeToString: non-Class branch uses toString()
+  @Test
+  public void testTypeToString_withWildcardType_returnsToString() throws Throwable {
+    WildcardType w = $Gson$Types.subtypeOf(String.class);
+    assertEquals("? extends java.lang.String", $Gson$Types.typeToString(w));
+  }
+
+  // covers getArrayComponentType: GenericArrayType branch
+  @Test
+  public void testGetArrayComponentType_withGenericArrayType() throws Throwable {
+    GenericArrayType arr = $Gson$Types.arrayOf(String.class);
+    assertEquals(String.class, $Gson$Types.getArrayComponentType(arr));
+  }
+
+  // covers getArrayComponentType: Class array branch
+  @Test
+  public void testGetArrayComponentType_withClassArray() throws Throwable {
+    assertEquals(String.class, $Gson$Types.getArrayComponentType(String[].class));
+  }
+
+  // covers getArrayComponentType: non-array, non-Class type throws ClassCastException
+  @Test
+  public void testGetArrayComponentType_withNonArrayNonClass_throwsClassCastException() throws Throwable {
+    Type pt = new TypeToken<List<String>>() {}.getType();
+    try {
+      $Gson$Types.getArrayComponentType(pt);
+      fail("expected ClassCastException");
+    } catch (ClassCastException expected) {
+    }
+  }
+
+  // covers getCollectionElementType: parameterized List yields element type
+  @Test
+  public void testGetCollectionElementType_withListString() throws Throwable {
+    Type listType = new TypeToken<List<String>>() {}.getType();
+    Type elem = $Gson$Types.getCollectionElementType(listType, List.class);
+    assertEquals(String.class, elem);
+  }
+
+  // covers getCollectionElementType: parameterized Set yields element type
+  @Test
+  public void testGetCollectionElementType_withSetInteger() throws Throwable {
+    Type setType = new TypeToken<Set<Integer>>() {}.getType();
+    Type elem = $Gson$Types.getCollectionElementType(setType, Set.class);
+    assertEquals(Integer.class, elem);
+  }
+
+  // covers getMapKeyAndValueTypes: Properties special-case branch
+  @Test
+  public void testGetMapKeyAndValueTypes_withPropertiesContext() throws Throwable {
+    Type[] kv = $Gson$Types.getMapKeyAndValueTypes(Properties.class, Properties.class);
+    assertArrayEquals(new Type[] { String.class, String.class }, kv);
+  }
+
+  // covers getMapKeyAndValueTypes: ParameterizedType branch
+  @Test
+  public void testGetMapKeyAndValueTypes_withParameterizedMap() throws Throwable {
+    Type mapType = new TypeToken<Map<String, Integer>>() {}.getType();
+    Type[] kv = $Gson$Types.getMapKeyAndValueTypes(mapType, Map.class);
+    assertEquals(String.class, kv[0]);
+    assertEquals(Integer.class, kv[1]);
+  }
+
+  // covers resolve: toResolve is a plain Class, final else branch returns unchanged
+  @Test
+  public void testResolve_withNonGenericClass_returnsUnchanged() throws Throwable {
+    Type result = $Gson$Types.resolve(String.class, String.class, Integer.class);
+    assertEquals(Integer.class, result);
+  }
+
+  // covers resolve: array Class branch with unchanged component type
+  @Test
+  public void testResolve_withArrayClass_returnsUnchangedWhenNoTypeVariable() throws Throwable {
+    Type result = $Gson$Types.resolve(String.class, String.class, String[].class);
+    assertSame(String[].class, result);
+  }
+
+  // covers resolve: TypeVariable branch resolves via context ParameterizedType
+  @Test
+  public void testResolve_withTypeVariable_resolvesToActualArgument() throws Throwable {
+    Type context = new TypeToken<List<String>>() {}.getType();
+    TypeVariable<?> e = List.class.getTypeParameters()[0];
+    Type result = $Gson$Types.resolve(context, List.class, e);
+    assertEquals(String.class, result);
+  }
+
+  // covers package-private equal() helper: null/null, equal, unequal, one-null
+  @Test
+  public void testEqualHelper_variousInputs() throws Throwable {
+    assertTrue($Gson$Types.equal(null, null));
+    assertTrue($Gson$Types.equal("abc", new String("abc")));
+    assertFalse($Gson$Types.equal("abc", "xyz"));
+    assertFalse($Gson$Types.equal(null, "abc"));
+  }
+
+  // covers package-private hashCodeOrZero() helper: null and non-null
+  @Test
+  public void testHashCodeOrZero_nullAndNonNull() throws Throwable {
+    assertEquals(0, $Gson$Types.hashCodeOrZero(null));
+    assertEquals("test".hashCode(), $Gson$Types.hashCodeOrZero("test"));
+  }
+
+  // covers checkNotPrimitive: primitive type must throw
+  @Test
+  public void testCheckNotPrimitive_primitiveType_throws() throws Throwable {
+    try {
+      $Gson$Types.checkNotPrimitive(int.class);
+      fail("expected exception for primitive type");
+    } catch (RuntimeException expected) {
+    }
+  }
+
+  // covers getGenericSupertype: identity branch and direct-interface-match branch
+  @Test
+  public void testGetGenericSupertype_identityAndInterfaceMatch() throws Throwable {
+    Type identity = $Gson$Types.getGenericSupertype(String.class, String.class, String.class);
+    assertEquals(String.class, identity);
+
+    Type listSuper = $Gson$Types.getGenericSupertype(ArrayList.class, ArrayList.class, List.class);
+    assertTrue(listSuper instanceof ParameterizedType);
+    assertEquals(List.class, ((ParameterizedType) listSuper).getRawType());
+  }
+
+  // covers getSupertype: checkArgument failure when supertype is not assignable
+  @Test
+  public void testGetSupertype_notAssignable_throws() throws Throwable {
+    try {
+      $Gson$Types.getSupertype(String.class, String.class, List.class);
+      fail("expected exception: List is not a supertype of String");
+    } catch (RuntimeException expected) {
+    }
+  }
+
+  // covers resolveTypeVariable: declaringClassOf returns null for method-declared variable
+  @Test
+  public void testResolveTypeVariable_methodDeclaration_returnsUnchanged() throws Throwable {
+    Method m = Collections.class.getMethod("emptyList");
+    TypeVariable<?> t = m.getTypeParameters()[0];
+    Type result = $Gson$Types.resolveTypeVariable(Object.class, Object.class, t);
+    assertSame(t, result);
+  }
+}

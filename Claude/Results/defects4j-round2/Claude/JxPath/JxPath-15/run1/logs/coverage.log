@@ -1,0 +1,14 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-JxPath-15-kr_vs6md/JxPath-15b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+WARNING: Some tests failed (see /tmp/claude-JxPath-15-kr_vs6md/buggy/failing_tests)!
+       Lines total: 18
+     Lines covered: 18
+  Conditions total: 12
+Conditions covered: 11
+     Line coverage: 100.0%
+Condition coverage: 91.7%
+[exit 0]

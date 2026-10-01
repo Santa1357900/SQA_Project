@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Chart-8-0pd5hc95/Chart-8f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.jfree.data.time.WeekClaudeTest::testConstructorWeekIntYear_invalidWeekZero_throwsIllegalArgumentException
+  - org.jfree.data.time.WeekClaudeTest::testConstructorWeekIntInt_invalidWeekTooLarge_throwsIllegalArgumentException
+  - org.jfree.data.time.WeekClaudeTest::testConstructorWeekIntInt_invalidWeekZero_throwsIllegalArgumentException
+[exit 0]

@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Compress-3-e7r7iqlu/Compress-3f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamClaudeTest::testWrite_multipleFullRecordsInOneCall_noException
+  - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamClaudeTest::testWrite_smallChunksAccumulateInAssemblyBuffer_noException
+  - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamClaudeTest::testWrite_exactFullRecord_writesDirectly
+  - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamClaudeTest::testWrite_assemblyBufferCrossesRecordBoundary_noException
+  - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamClaudeTest::testCloseArchiveEntry_partialAssembledRecord_padsAndWrites
+[exit 0]

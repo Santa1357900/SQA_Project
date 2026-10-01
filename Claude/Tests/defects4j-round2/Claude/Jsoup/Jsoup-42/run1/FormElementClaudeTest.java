@@ -1,0 +1,289 @@
+package org.jsoup.nodes;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.jsoup.Jsoup;
+import org.jsoup.Connection;
+import org.jsoup.helper.HttpConnection;
+import org.jsoup.select.Elements;
+
+import java.util.List;
+
+public class FormElementClaudeTest {
+
+    private FormElement newForm() {
+        Document doc = Jsoup.parse("<form></form>");
+        return (FormElement) doc.select("form").first();
+    }
+
+    private Element parseOne(String html, String cssQuery) {
+        Document doc = Jsoup.parse(html);
+        return doc.select(cssQuery).first();
+    }
+
+    // covers: parser creates an actual FormElement instance for a <form> tag
+    @Test
+    public void testFormElement_parsedFormTagIsFormElementInstance() throws Throwable {
+        Document doc = Jsoup.parse("<form action='x'></form>");
+        Element form = doc.select("form").first();
+        assertTrue(form instanceof FormElement);
+        assertEquals("form", form.tagName());
+    }
+
+    // covers: elements() on a form with no associated controls returns empty Elements
+    @Test
+    public void testElements_initiallyEmptyForNewForm() throws Throwable {
+        FormElement form = newForm();
+        assertEquals(0, form.elements().size());
+    }
+
+    // covers: addElement adds a control and elements() reflects it
+    @Test
+    public void testAddElement_addsElementToElementsList() throws Throwable {
+        FormElement form = newForm();
+        Element input = parseOne("<input name='a'>", "input");
+        form.addElement(input);
+        assertEquals(1, form.elements().size());
+    }
+
+    // covers: addElement returns the same FormElement instance for chaining
+    @Test
+    public void testAddElement_returnsThisForChaining() throws Throwable {
+        FormElement form = newForm();
+        Element input = parseOne("<input name='a'>", "input");
+        FormElement result = form.addElement(input);
+        assertSame(form, result);
+    }
+
+    // covers: multiple addElement calls accumulate in insertion order
+    @Test
+    public void testElements_reflectsMultipleAddedElementsInOrder() throws Throwable {
+        FormElement form = newForm();
+        Element first = parseOne("<input name='a'>", "input");
+        Element second = parseOne("<input name='b'>", "input");
+        form.addElement(first);
+        form.addElement(second);
+        Elements els = form.elements();
+        assertEquals(2, els.size());
+        assertSame(first, els.get(0));
+        assertSame(second, els.get(1));
+    }
+
+    // covers: formData with zero elements returns empty list (0-iteration loop)
+    @Test
+    public void testFormData_emptyFormReturnsEmptyList() throws Throwable {
+        FormElement form = newForm();
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals(0, data.size());
+    }
+
+    // covers: elements with empty name attribute are skipped (name.length()==0 branch)
+    @Test
+    public void testFormData_skipsElementWithoutName() throws Throwable {
+        FormElement form = newForm();
+        Element input = parseOne("<input type='text' value='v'>", "input");
+        form.addElement(input);
+        assertEquals(0, form.formData().size());
+    }
+
+    // covers: default else branch adds name/value for a plain text input
+    @Test
+    public void testFormData_includesTextInputWithNameAndValue() throws Throwable {
+        FormElement form = newForm();
+        Element input = parseOne("<input type='text' name='a' value='hello'>", "input");
+        form.addElement(input);
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals(1, data.size());
+        assertEquals("a", data.get(0).key());
+        assertEquals("hello", data.get(0).value());
+    }
+
+    // covers: non-checkbox/select element (textarea) uses el.val() as value
+    @Test
+    public void testFormData_includesTextareaValue() throws Throwable {
+        FormElement form = newForm();
+        Element textarea = parseOne("<textarea name='msg'>hi there</textarea>", "textarea");
+        form.addElement(textarea);
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals(1, data.size());
+        assertEquals("msg", data.get(0).key());
+        assertEquals("hi there", data.get(0).value());
+    }
+
+    // covers: elements whose tag is not form-submittable are skipped
+    @Test
+    public void testFormData_excludesNonSubmittableTag() throws Throwable {
+        FormElement form = newForm();
+        Element div = parseOne("<div name='x'>hello</div>", "div");
+        form.addElement(div);
+        assertEquals(0, form.formData().size());
+    }
+
+    // covers: checkbox without checked attribute is excluded (hasAttr("checked") false)
+    @Test
+    public void testFormData_checkboxUnchecked_excluded() throws Throwable {
+        FormElement form = newForm();
+        Element cb = parseOne("<input type='checkbox' name='cb'>", "input");
+        form.addElement(cb);
+        assertEquals(0, form.formData().size());
+    }
+
+    // covers: checked checkbox with explicit value attribute uses that value
+    @Test
+    public void testFormData_checkboxCheckedWithExplicitValue_included() throws Throwable {
+        FormElement form = newForm();
+        Element cb = parseOne("<input type='checkbox' name='cb' value='yes' checked>", "input");
+        form.addElement(cb);
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals(1, data.size());
+        assertEquals("yes", data.get(0).value());
+    }
+
+    // covers: checked checkbox without value attribute must default to "on" per HTML forms spec
+    @Test
+    public void testFormData_checkboxCheckedNoValueAttribute_defaultsToOn() throws Throwable {
+        FormElement form = newForm();
+        Element cb = parseOne("<input type='checkbox' name='cb' checked>", "input");
+        form.addElement(cb);
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals(1, data.size());
+        assertEquals("on", data.get(0).value());
+    }
+
+    // covers: radio without checked attribute is excluded
+    @Test
+    public void testFormData_radioUnchecked_excluded() throws Throwable {
+        FormElement form = newForm();
+        Element radio = parseOne("<input type='radio' name='opt'>", "input");
+        form.addElement(radio);
+        assertEquals(0, form.formData().size());
+    }
+
+    // covers: checked radio without value attribute must default to "on" per HTML forms spec
+    @Test
+    public void testFormData_radioCheckedNoValueAttribute_defaultsToOn() throws Throwable {
+        FormElement form = newForm();
+        Element radio = parseOne("<input type='radio' name='opt' checked>", "input");
+        form.addElement(radio);
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals(1, data.size());
+        assertEquals("on", data.get(0).value());
+    }
+
+    // covers: select element with one selected option adds that option's value
+    @Test
+    public void testFormData_selectWithSelectedOption_includesSelectedValue() throws Throwable {
+        FormElement form = newForm();
+        Element select = parseOne("<select name='s'><option value='a'>A</option><option value='b' selected>B</option></select>", "select");
+        form.addElement(select);
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals(1, data.size());
+        assertEquals("b", data.get(0).value());
+    }
+
+    // covers: select loop with multiple selected options (multi-iteration)
+    @Test
+    public void testFormData_selectMultipleSelectedOptions_includesAllValues() throws Throwable {
+        FormElement form = newForm();
+        Element select = parseOne("<select name='s' multiple><option value='a' selected>A</option><option value='b' selected>B</option></select>", "select");
+        form.addElement(select);
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals(2, data.size());
+        assertEquals("a", data.get(0).value());
+        assertEquals("b", data.get(1).value());
+    }
+
+    // covers: select with no selected option falls back to first option
+    @Test
+    public void testFormData_selectNoSelectedOption_defaultsToFirstOption() throws Throwable {
+        FormElement form = newForm();
+        Element select = parseOne("<select name='s'><option value='a'>A</option><option value='b'>B</option></select>", "select");
+        form.addElement(select);
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals(1, data.size());
+        assertEquals("a", data.get(0).value());
+    }
+
+    // covers: select with no option children adds nothing (option==null branch)
+    @Test
+    public void testFormData_selectNoOptions_notIncluded() throws Throwable {
+        FormElement form = newForm();
+        Element select = parseOne("<select name='s'></select>", "select");
+        form.addElement(select);
+        assertEquals(0, form.formData().size());
+    }
+
+    // covers: javadoc contract - formData() returns a copy, not a live view
+    @Test
+    public void testFormData_returnsCopy_modifyingReturnedListDoesNotAffectSubsequentCalls() throws Throwable {
+        FormElement form = newForm();
+        Element input = parseOne("<input type='text' name='a' value='v'>", "input");
+        form.addElement(input);
+        List<Connection.KeyVal> data = form.formData();
+        data.add(HttpConnection.KeyVal.create("extra", "v2"));
+        assertEquals(1, form.formData().size());
+    }
+
+    // covers: multiple submittable elements are returned in the order iterated
+    @Test
+    public void testFormData_multipleElementsPreserveOrder() throws Throwable {
+        FormElement form = newForm();
+        form.addElement(parseOne("<input name='a' value='1'>", "input"));
+        form.addElement(parseOne("<input name='b' value='2'>", "input"));
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals("a", data.get(0).key());
+        assertEquals("b", data.get(1).key());
+    }
+
+    // covers: submit() throws when no action attribute and empty baseUri (Validate.notEmpty)
+    @Test
+    public void testSubmit_throwsIllegalArgumentException_whenActionAndBaseUriEmpty() throws Throwable {
+        FormElement form = newForm();
+        try {
+            form.submit();
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: submit() succeeds and builds a Connection when action resolves to absolute URL
+    @Test
+    public void testSubmit_returnsNonNullConnection_whenActionAbsolute() throws Throwable {
+        Element form = parseOne("<form action='http://example.com/x'></form>", "form");
+        Connection con = ((FormElement) form).submit();
+        assertNotNull(con);
+    }
+
+    // covers: equals() reflexivity via super.equals
+    @Test
+    public void testEquals_reflexive_sameInstanceReturnsTrue() throws Throwable {
+        FormElement form = newForm();
+        assertTrue(form.equals(form));
+    }
+
+    // covers: equals() returns false when compared with unrelated object type
+    @Test
+    public void testEquals_differentTypeObject_returnsFalse() throws Throwable {
+        FormElement form = newForm();
+        assertFalse(form.equals("not a form element"));
+    }
+
+    // covers: type attribute comparison for checkbox is case-insensitive (equalsIgnoreCase)
+    @Test
+    public void testFormData_checkboxTypeCaseInsensitive_included() throws Throwable {
+        FormElement form = newForm();
+        Element cb = parseOne("<input type='CHECKBOX' name='cb' value='v' checked>", "input");
+        form.addElement(cb);
+        List<Connection.KeyVal> data = form.formData();
+        assertEquals(1, data.size());
+        assertEquals("v", data.get(0).value());
+    }
+
+    // covers: elements() returns the same Elements field instance on repeated calls
+    @Test
+    public void testElements_returnsLiveFieldReference_sameAcrossCalls() throws Throwable {
+        FormElement form = newForm();
+        assertSame(form.elements(), form.elements());
+    }
+}

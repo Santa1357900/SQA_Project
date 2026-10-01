@@ -1,0 +1,253 @@
+package com.fasterxml.jackson.databind.jsontype.impl;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.List;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+
+public class ClassNameIdResolverClaudeTest {
+
+    private ObjectMapper mapper;
+    private TypeFactory typeFactory;
+    private JavaType baseType;
+    private ClassNameIdResolver resolver;
+
+    private JavaType capturedType;
+    private Throwable capturedThrowable;
+
+    public static enum TestEnumWithBody {
+        A { public String extra() { return "a"; } },
+        B;
+    }
+
+    public static class StaticNested {
+    }
+
+    public class NonStaticInner {
+    }
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+        typeFactory = mapper.getTypeFactory();
+        baseType = typeFactory.constructType(Object.class);
+        resolver = new ClassNameIdResolver(baseType, typeFactory);
+        capturedType = null;
+        capturedThrowable = null;
+    }
+
+    private void captureTypeFromId(final ClassNameIdResolver r, String id) throws IOException {
+        SimpleModule module = new SimpleModule();
+        module.addDeserializer(Object.class, new JsonDeserializer<Object>() {
+            @Override
+            public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+                String rawId = p.getText();
+                try {
+                    capturedType = r.typeFromId(ctxt, rawId);
+                } catch (Throwable t) {
+                    capturedThrowable = t;
+                }
+                p.skipChildren();
+                return null;
+            }
+        });
+        ObjectMapper localMapper = new ObjectMapper();
+        localMapper.registerModule(module);
+        localMapper.readValue("\"" + id + "\"", Object.class);
+    }
+
+    // getMechanism must always return Id.CLASS per contract
+    @Test
+    public void testGetMechanism_returnsClassId() throws Throwable {
+        assertEquals(JsonTypeInfo.Id.CLASS, resolver.getMechanism());
+    }
+
+    // registerSubtype is a no-op for class-name-based resolver; idFromValue unaffected
+    @Test
+    public void testRegisterSubtype_noOp_idFromValueUnaffected() throws Throwable {
+        resolver.registerSubtype(String.class, "custom");
+        String id = resolver.idFromValue("hello");
+        assertEquals(String.class.getName(), id);
+    }
+
+    // plain object -> class name unchanged (no java.util, no '$')
+    @Test
+    public void testIdFromValue_simpleObject_returnsClassName() throws Throwable {
+        String id = resolver.idFromValue(Integer.valueOf(5));
+        assertEquals(Integer.class.getName(), id);
+    }
+
+    // null value -> value.getClass() throws NPE
+    @Test
+    public void testIdFromValue_nullValue_throwsNullPointerException() throws Throwable {
+        try {
+            resolver.idFromValue(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) { }
+    }
+
+    // enum constant without body: cls.isEnum() true branch, no reassignment
+    @Test
+    public void testIdFromValue_enumWithoutBody_returnsEnumClassName() throws Throwable {
+        String id = resolver.idFromValue(TestEnumWithBody.B);
+        assertEquals(TestEnumWithBody.class.getName(), id);
+    }
+
+    // enum constant with body: cls.isEnum() false -> uses getSuperclass()
+    @Test
+    public void testIdFromValue_enumWithBody_returnsSuperclassName() throws Throwable {
+        String id = resolver.idFromValue(TestEnumWithBody.A);
+        assertEquals(TestEnumWithBody.class.getName(), id);
+    }
+
+    // value instanceof EnumSet branch -> canonical EnumSet<T> form
+    @Test
+    public void testIdFromValue_enumSet_returnsCanonicalEnumSetType() throws Throwable {
+        EnumSet<TestEnumWithBody> set = EnumSet.of(TestEnumWithBody.B);
+        String id = resolver.idFromValue(set);
+        String expected = typeFactory.constructCollectionType(EnumSet.class, TestEnumWithBody.class).toCanonical();
+        assertEquals(expected, id);
+    }
+
+    // value instanceof EnumMap branch -> canonical EnumMap<T,Object> form
+    @Test
+    public void testIdFromValue_enumMap_returnsCanonicalEnumMapType() throws Throwable {
+        EnumMap<TestEnumWithBody, String> map = new EnumMap<TestEnumWithBody, String>(TestEnumWithBody.class);
+        map.put(TestEnumWithBody.B, "v");
+        String id = resolver.idFromValue(map);
+        String expected = typeFactory.constructMapType(EnumMap.class, TestEnumWithBody.class, Object.class).toCanonical();
+        assertEquals(expected, id);
+    }
+
+    // java.util.Arrays$ArrayList with "List" in name -> mapped to java.util.ArrayList
+    @Test
+    public void testIdFromValue_arraysAsList_returnsArrayListName() throws Throwable {
+        List<String> list = Arrays.asList("a", "b");
+        String id = resolver.idFromValue(list);
+        assertEquals("java.util.ArrayList", id);
+    }
+
+    // zero-element Arrays.asList() edge case, same branch as above
+    @Test
+    public void testIdFromValue_emptyArraysAsList_returnsArrayListName() throws Throwable {
+        List<Object> list = Arrays.asList();
+        String id = resolver.idFromValue(list);
+        assertEquals("java.util.ArrayList", id);
+    }
+
+    // java.util.Collections$...List -> mapped to java.util.ArrayList
+    @Test
+    public void testIdFromValue_unmodifiableList_returnsArrayListName() throws Throwable {
+        List<String> list = Collections.unmodifiableList(new ArrayList<String>());
+        String id = resolver.idFromValue(list);
+        assertEquals("java.util.ArrayList", id);
+    }
+
+    // plain java.util class not matching Arrays$/Collections$ pattern -> unchanged
+    @Test
+    public void testIdFromValue_plainArrayList_returnsUnchangedName() throws Throwable {
+        List<String> list = new ArrayList<String>();
+        String id = resolver.idFromValue(list);
+        assertEquals("java.util.ArrayList", id);
+    }
+
+    // non-static inner class: outer != null, static baseType has no outer -> falls back to baseType name
+    @Test
+    public void testIdFromValue_nonStaticInnerClass_fallsBackToBaseTypeName() throws Throwable {
+        NonStaticInner inner = this.new NonStaticInner();
+        String id = resolver.idFromValue(inner);
+        assertEquals(Object.class.getName(), id);
+    }
+
+    // static nested class: getOuterClass returns null -> original '$' name kept
+    @Test
+    public void testIdFromValue_staticNestedClass_keepsOriginalName() throws Throwable {
+        StaticNested value = new StaticNested();
+        String id = resolver.idFromValue(value);
+        assertEquals(StaticNested.class.getName(), id);
+    }
+
+    // idFromValueAndType uses the explicit type param, not value.getClass()
+    @Test
+    public void testIdFromValueAndType_usesProvidedType_notValueClass() throws Throwable {
+        String id = resolver.idFromValueAndType("hello", List.class);
+        assertEquals(List.class.getName(), id);
+    }
+
+    // idFromValueAndType with null type -> NPE from Enum.class.isAssignableFrom(null)
+    @Test
+    public void testIdFromValueAndType_nullType_throwsNullPointerException() throws Throwable {
+        try {
+            resolver.idFromValueAndType("x", null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) { }
+    }
+
+    // when explicit type isn't java.util-prefixed, EnumSet instanceof-check branch is skipped
+    @Test
+    public void testIdFromValueAndType_typeNotJavaUtil_ignoresValueInstanceCheck() throws Throwable {
+        EnumSet<TestEnumWithBody> set = EnumSet.of(TestEnumWithBody.B);
+        String id = resolver.idFromValueAndType(set, Object.class);
+        assertEquals(Object.class.getName(), id);
+    }
+
+    // typeFromId: no '<' -> findClass + constructSpecializedType path
+    @Test
+    public void testTypeFromId_simpleClassName_returnsSpecializedType() throws Throwable {
+        captureTypeFromId(resolver, "java.lang.String");
+        assertNull(capturedThrowable);
+        assertEquals(String.class, capturedType.getRawClass());
+    }
+
+    // typeFromId: '<' present -> constructFromCanonical path
+    @Test
+    public void testTypeFromId_genericClassName_returnsConstructedType() throws Throwable {
+        captureTypeFromId(resolver, "java.util.ArrayList<java.lang.String>");
+        assertNull(capturedThrowable);
+        assertEquals(ArrayList.class, capturedType.getRawClass());
+    }
+
+    // typeFromId: ClassNotFoundException -> handleUnknownTypeId is invoked and reports failure
+    @Test
+    public void testTypeFromId_unknownClassName_handlesUnknownTypeId() throws Throwable {
+        captureTypeFromId(resolver, "com.example.NoSuchClassXyz123");
+        assertNotNull(capturedThrowable);
+        assertTrue(capturedThrowable instanceof IOException);
+    }
+
+    // BUG HUNT: generic-id path must honor assignment compatibility with declared base type,
+    // just like the non-generic path does via constructSpecializedType (security contract).
+    @Test
+    public void testTypeFromId_genericIdIncompatibleWithBaseType_bugHunt() throws Throwable {
+        JavaType listBase = typeFactory.constructType(List.class);
+        ClassNameIdResolver listResolver = new ClassNameIdResolver(listBase, typeFactory);
+        captureTypeFromId(listResolver, "java.util.HashMap<java.lang.String,java.lang.String>");
+        if (capturedThrowable == null) {
+            assertTrue(List.class.isAssignableFrom(capturedType.getRawClass()));
+        } else {
+            assertTrue(capturedThrowable instanceof Exception);
+        }
+    }
+
+    // getDescForKnownTypeIds returns fixed description string
+    @Test
+    public void testGetDescForKnownTypeIds_returnsExpectedDescription() throws Throwable {
+        assertEquals("class name used as type id", resolver.getDescForKnownTypeIds());
+    }
+}

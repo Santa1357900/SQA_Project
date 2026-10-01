@@ -1,0 +1,240 @@
+package org.apache.commons.cli;
+
+import org.junit.Test;
+import org.junit.Before;
+import static org.junit.Assert.*;
+
+import java.util.Collection;
+
+public class OptionGroupClaudeTest
+{
+    private OptionGroup group;
+
+    @Before
+    public void setUp() throws Throwable
+    {
+        group = new OptionGroup();
+    }
+
+    // covers addOption return value for method chaining
+    @Test
+    public void testAddOption_returnsSameInstance_forChaining() throws Throwable {
+        Option opt = new Option("a", false, "desc a");
+        OptionGroup returned = group.addOption(opt);
+        assertSame(group, returned);
+    }
+
+    // covers addOption storing option, retrievable via getOptions
+    @Test
+    public void testAddOption_addsOptionToMap_getOptionsContainsIt() throws Throwable {
+        Option opt = new Option("a", false, "desc a");
+        group.addOption(opt);
+        assertTrue(group.getOptions().contains(opt));
+    }
+
+    // covers addOption overwriting entry when key already exists
+    @Test
+    public void testAddOption_duplicateKey_overwritesExisting() throws Throwable {
+        Option opt1 = new Option("a", false, "first");
+        Option opt2 = new Option("a", false, "second");
+        group.addOption(opt1);
+        group.addOption(opt2);
+        assertEquals(1, group.getOptions().size());
+        assertTrue(group.getOptions().contains(opt2));
+    }
+
+    // covers addOption keying on getKey() = longOpt when opt is null
+    @Test
+    public void testAddOption_optionWithOnlyLongOpt_keyIsLongOpt() throws Throwable {
+        Option opt = new Option(null, "verbose", false, "verbose desc");
+        group.addOption(opt);
+        assertTrue(group.getNames().contains("verbose"));
+    }
+
+    // covers getNames with zero options
+    @Test
+    public void testGetNames_emptyGroup_returnsEmptyCollection() throws Throwable {
+        Collection names = group.getNames();
+        assertTrue(names.isEmpty());
+    }
+
+    // covers getNames after adding options, verifying keys present
+    @Test
+    public void testGetNames_afterAddingOptions_containsKeys() throws Throwable {
+        group.addOption(new Option("a", false, "desc a"));
+        group.addOption(new Option("b", false, "desc b"));
+        Collection names = group.getNames();
+        assertTrue(names.contains("a"));
+        assertTrue(names.contains("b"));
+    }
+
+    // covers getOptions with zero options
+    @Test
+    public void testGetOptions_emptyGroup_returnsEmptyCollection() throws Throwable {
+        Collection opts = group.getOptions();
+        assertTrue(opts.isEmpty());
+    }
+
+    // covers getOptions after adding multiple options
+    @Test
+    public void testGetOptions_afterAddingOptions_containsOptions() throws Throwable {
+        Option opt1 = new Option("a", false, "desc a");
+        Option opt2 = new Option("b", false, "desc b");
+        group.addOption(opt1);
+        group.addOption(opt2);
+        assertEquals(2, group.getOptions().size());
+    }
+
+    // covers getSelected initial state before any selection
+    @Test
+    public void testGetSelected_initialState_returnsNull() throws Throwable {
+        assertNull(group.getSelected());
+    }
+
+    // covers setSelected(null) branch, resetting selected
+    @Test
+    public void testSetSelected_null_resetsSelectedToNull() throws Throwable {
+        Option opt = new Option("a", false, "desc a");
+        group.addOption(opt);
+        group.setSelected(opt);
+        group.setSelected(null);
+        assertNull(group.getSelected());
+    }
+
+    // covers first-time selection setting selected field
+    @Test
+    public void testSetSelected_firstSelection_setsSelectedOpt() throws Throwable {
+        Option opt = new Option("a", false, "desc a");
+        group.addOption(opt);
+        group.setSelected(opt);
+        assertEquals("a", group.getSelected());
+    }
+
+    // covers reselecting same option instance, no exception thrown
+    @Test
+    public void testSetSelected_sameOptionTwice_noException() throws Throwable {
+        Option opt = new Option("a", false, "desc a");
+        group.addOption(opt);
+        group.setSelected(opt);
+        group.setSelected(opt);
+        assertEquals("a", group.getSelected());
+    }
+
+    // covers reselecting a different instance with same opt string, treated as same
+    @Test
+    public void testSetSelected_differentInstanceSameOpt_treatedAsSameSelection() throws Throwable {
+        Option optA1 = new Option("a", false, "desc1");
+        Option optA2 = new Option("a", false, "desc2");
+        group.addOption(optA1);
+        group.setSelected(optA1);
+        group.setSelected(optA2);
+        assertEquals("a", group.getSelected());
+    }
+
+    // covers selecting a different option after one already selected, must throw
+    @Test
+    public void testSetSelected_differentOption_throwsAlreadySelectedException() throws Throwable {
+        Option opt1 = new Option("a", false, "desc a");
+        Option opt2 = new Option("b", false, "desc b");
+        group.addOption(opt1);
+        group.addOption(opt2);
+        group.setSelected(opt1);
+        try
+        {
+            group.setSelected(opt2);
+            fail("expected AlreadySelectedException");
+        }
+        catch (AlreadySelectedException expected)
+        {
+        }
+    }
+
+    // covers selection allowed again after resetting with null
+    @Test
+    public void testSetSelected_afterReset_allowsNewSelection() throws Throwable {
+        Option opt1 = new Option("a", false, "desc a");
+        Option opt2 = new Option("b", false, "desc b");
+        group.addOption(opt1);
+        group.addOption(opt2);
+        group.setSelected(opt1);
+        group.setSelected(null);
+        group.setSelected(opt2);
+        assertEquals("b", group.getSelected());
+    }
+
+    // bug-catching test: mutual exclusivity must hold for options that only have a long opt (no short opt)
+    @Test
+    public void testSetSelected_optionsWithOnlyLongOpt_mutualExclusionEnforced() throws Throwable {
+        Option opt1 = new Option(null, "alpha", false, "Alpha option");
+        Option opt2 = new Option(null, "beta", false, "Beta option");
+        group.addOption(opt1);
+        group.addOption(opt2);
+        group.setSelected(opt1);
+        try
+        {
+            group.setSelected(opt2);
+            fail("expected AlreadySelectedException");
+        }
+        catch (AlreadySelectedException expected)
+        {
+        }
+    }
+
+    // covers isRequired default value
+    @Test
+    public void testIsRequired_defaultFalse() throws Throwable {
+        assertFalse(group.isRequired());
+    }
+
+    // covers setRequired(true) reflected by isRequired
+    @Test
+    public void testSetRequired_true_isRequiredReturnsTrue() throws Throwable {
+        group.setRequired(true);
+        assertTrue(group.isRequired());
+    }
+
+    // covers setRequired(false) reflected by isRequired
+    @Test
+    public void testSetRequired_false_isRequiredReturnsFalse() throws Throwable {
+        group.setRequired(true);
+        group.setRequired(false);
+        assertFalse(group.isRequired());
+    }
+
+    // covers toString with zero options, loop executes zero times
+    @Test
+    public void testToString_emptyGroup_returnsBrackets() throws Throwable {
+        assertEquals("[]", group.toString());
+    }
+
+    // covers toString single option with short opt branch
+    @Test
+    public void testToString_singleOptionWithShortOpt_containsDashAndDescription() throws Throwable {
+        Option opt = new Option("a", false, "desc a");
+        group.addOption(opt);
+        String result = group.toString();
+        assertTrue(result.contains("-a"));
+        assertTrue(result.contains("desc a"));
+    }
+
+    // covers toString multiple options, separated by comma
+    @Test
+    public void testToString_multipleOptions_containsCommaSeparator() throws Throwable {
+        group.addOption(new Option("a", false, "desc a"));
+        group.addOption(new Option("b", false, "desc b"));
+        String result = group.toString();
+        assertTrue(result.contains(","));
+        assertTrue(result.startsWith("["));
+        assertTrue(result.endsWith("]"));
+    }
+
+    // covers toString long-opt-only branch when getOpt() is null
+    @Test
+    public void testToString_optionWithOnlyLongOpt_containsDoubleDash() throws Throwable {
+        Option opt = new Option(null, "verbose", false, "verbose desc");
+        group.addOption(opt);
+        String result = group.toString();
+        assertTrue(result.contains("--verbose"));
+        assertTrue(result.contains("verbose desc"));
+    }
+}

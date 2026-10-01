@@ -1,0 +1,21 @@
+{
+  "_comment": "ข้อสังเกตเฉพาะโปรเจกต์ที่แทรกเข้าไปใน <project_notes> ของ prompt เพื่อลด compile error จาก API ที่โมเดลมักเดาผิด โปรเจกต์ที่ไม่มีในนี้จะใช้ค่า default",
+  "default": "ไม่มีข้อสังเกตเพิ่มเติม ใช้เฉพาะ API ที่ปรากฏใน source_code และ JDK มาตรฐาน",
+  "Chart": "JFreeChart: สร้าง dataset ด้วย DefaultCategoryDataset / DefaultXYDataset / TimeSeries ที่มีอยู่จริง หลีกเลี่ยงการวาดจริงด้วย Graphics2D ถ้าจำเป็นให้ใช้ new BufferedImage(10,10,BufferedImage.TYPE_INT_RGB).createGraphics()",
+  "Cli": "Commons CLI: Options/Option/CommandLineParser (PosixParser, GnuParser) เป็น API หลัก ระวัง Option constructor ที่รับ (String opt, boolean hasArg, String description)",
+  "Closure": "Closure Compiler: สร้าง Node ผ่าน IR.name(String), IR.string(String), IR.number(double), IR.block() หรือ Node.newString(Token.NAME, ...) เท่านั้น ห้ามเดาเมธอดบน Node เช่น setQualifiedName ห้าม implement ErrorReporter/AbstractCompiler ใช้ new Compiler() และ CompilerOptions() จริงถ้าต้องการคอมไพล์ โดยส่ง SourceFile.fromCode(\"test.js\", \"...\")",
+  "Codec": "Commons Codec: อินพุตส่วนใหญ่เป็น byte[] หรือ String ระวังการเข้ารหัส charset ให้ระบุ \"UTF-8\" ชัดเจน",
+  "Collections": "Commons Collections: ใช้ implementation จริงเช่น ArrayList/HashMap ของ JDK เป็น backing collection สำหรับ decorator",
+  "Compress": "Commons Compress: ใช้ ByteArrayInputStream/ByteArrayOutputStream แทนไฟล์จริง ปิด stream ด้วย try/finally",
+  "Csv": "Commons CSV: ใช้ CSVFormat.DEFAULT.withXxx(...) และ CSVParser.parse(String, CSVFormat) หรือ new CSVParser(new StringReader(...), CSVFormat)",
+  "Gson": "Gson: ใช้ new Gson() / new GsonBuilder() และ TypeToken แบบ anonymous subclass `new TypeToken<List<String>>(){}.getType()` (ถูกต้องใน Java 6) JsonReader รับ StringReader",
+  "JacksonCore": "Jackson Core: สร้าง parser ด้วย new JsonFactory().createParser(String) และ generator ด้วย createGenerator(Writer) ห้าม implement JsonParser/JsonGenerator เอง",
+  "JacksonDatabind": "Jackson Databind: ใช้ new ObjectMapper() เป็นทางเข้า ห้าม implement JsonDeserializer/JsonSerializer/DeserializationConfig ที่มี abstract method มาก POJO สำหรับทดสอบให้ประกาศเป็น public static class ภายในคลาสเทสต์พร้อม public getter/setter",
+  "JacksonXml": "Jackson XML: ใช้ new XmlMapper() แทน ObjectMapper",
+  "Jsoup": "Jsoup: ใช้ Jsoup.parse(String) และ Jsoup.parseBodyFragment(String) เป็นทางเข้า import org.jsoup.nodes.* และ org.jsoup.parser.* ให้ครบ",
+  "JxPath": "JxPath: ใช้ JXPathContext.newContext(Object) กับ JavaBean/Map ธรรมดา",
+  "Lang": "Commons Lang: เมธอดส่วนใหญ่เป็น static utility เรียกตรงได้ ระวัง overload ที่รับ Object... กับ String",
+  "Math": "Commons Math: ใช้ delta ทุกครั้งที่เทียบ double ห้าม implement UnivariateRealFunction/UnivariateFunction ถ้าไม่ได้ปรากฏใน source ให้ใช้ anonymous inner class เมื่อ interface มีเมธอดเดียว exception เป็น checked หลายตัว (เช่น MathException) จึงต้อง throws Throwable",
+  "Mockito": "Mockito (ตัวโปรเจกต์เอง): ทดสอบ internal class ที่ให้มาโดยตรงด้วย JUnit ล้วน ๆ ไม่ต้องใช้ Mockito API ในการ mock เพราะเป้าหมายคือคลาสภายในของ Mockito เอง",
+  "Time": "Joda-Time: ใช้ DateTimeZone.UTC หรือ DateTimeZone.forID(\"...\") ระบุ zone ชัดเจนทุกครั้ง ห้ามพึ่ง default zone ใช้ ISOChronology.getInstanceUTC()"
+}

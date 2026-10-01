@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-6-9puhb3yn/Math-6f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.math3.optim.BaseOptimizerClaudeTest::testGetMaxEvaluations_afterMaxEvalZeroExplicit_isZero
+  - org.apache.commons.math3.optim.BaseOptimizerClaudeTest::testIncrementIterationCount_whenMaxIsZero_throwsOnFirstCall
+  - org.apache.commons.math3.optim.BaseOptimizerClaudeTest::testGetMaxIterations_defaultBeforeAnyCall_isZero
+[exit 0]

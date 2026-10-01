@@ -1,0 +1,462 @@
+package org.jfree.data.xy;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.util.List;
+
+import org.jfree.data.general.SeriesException;
+
+public class XYSeriesClaudeTest {
+
+    // Constructor: default autoSort=true, allowDuplicateXValues=true
+    @Test
+    public void testConstructor_oneArg_defaultsToAutoSortAndAllowDuplicates() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        assertTrue(series.getAutoSort());
+        assertTrue(series.getAllowDuplicateXValues());
+        assertEquals(0, series.getItemCount());
+        assertEquals(Integer.MAX_VALUE, series.getMaximumItemCount());
+    }
+
+    // Constructor: autoSort param, allowDuplicate defaults to true
+    @Test
+    public void testConstructor_twoArgs_autoSortFalse() throws Throwable {
+        XYSeries series = new XYSeries("S1", false);
+        assertFalse(series.getAutoSort());
+        assertTrue(series.getAllowDuplicateXValues());
+    }
+
+    // Constructor: all three args explicit
+    @Test
+    public void testConstructor_threeArgs_bothFalse() throws Throwable {
+        XYSeries series = new XYSeries("S1", false, false);
+        assertFalse(series.getAutoSort());
+        assertFalse(series.getAllowDuplicateXValues());
+    }
+
+    // getItemCount branch: empty series
+    @Test
+    public void testGetItemCount_emptySeries_returnsZero() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        assertEquals(0, series.getItemCount());
+    }
+
+    // getItems: unmodifiable list wrapper
+    @Test
+    public void testGetItems_returnsUnmodifiableList() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 2.0);
+        List items = series.getItems();
+        assertEquals(1, items.size());
+        try {
+            items.add(new XYDataItem(new Double(2.0), new Double(3.0)));
+            fail("expected UnsupportedOperationException");
+        }
+        catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getMaximumItemCount default value
+    @Test
+    public void testGetMaximumItemCount_default() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        assertEquals(Integer.MAX_VALUE, series.getMaximumItemCount());
+    }
+
+    // setMaximumItemCount: removes items exceeding the new max (loop multiple iterations)
+    @Test
+    public void testSetMaximumItemCount_removesExcessItems() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        series.add(2.0, 2.0);
+        series.add(3.0, 3.0);
+        series.setMaximumItemCount(2);
+        assertEquals(2, series.getItemCount());
+        assertEquals(2.0, series.getX(0).doubleValue(), 1e-9);
+        assertEquals(3.0, series.getX(1).doubleValue(), 1e-9);
+    }
+
+    // setMaximumItemCount: loop executes zero times, no exception
+    @Test
+    public void testSetMaximumItemCount_noRemovalNeeded() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.setMaximumItemCount(10);
+        assertEquals(10, series.getMaximumItemCount());
+        assertEquals(0, series.getItemCount());
+    }
+
+    // add(XYDataItem): null argument branch
+    @Test
+    public void testAdd_nullXYDataItem_throwsIllegalArgumentException() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        try {
+            series.add((XYDataItem) null);
+            fail("expected IllegalArgumentException");
+        }
+        catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // add(double, double): basic add path
+    @Test
+    public void testAdd_doubleDouble_addsItem() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 2.0);
+        assertEquals(1, series.getItemCount());
+        assertEquals(1.0, series.getX(0).doubleValue(), 1e-9);
+        assertEquals(2.0, series.getY(0).doubleValue(), 1e-9);
+    }
+
+    // add(double, double, notify): notify flag false still adds item
+    @Test
+    public void testAdd_doubleDoubleNotifyFalse_stillAdds() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 2.0, false);
+        assertEquals(1, series.getItemCount());
+    }
+
+    // add(double, Number): null y permitted
+    @Test
+    public void testAdd_doubleNullNumber_allowsNullY() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, (Number) null);
+        assertNull(series.getY(0));
+    }
+
+    // add(Number, Number): duplicate x not allowed throws SeriesException
+    @Test
+    public void testAdd_duplicateXNotAllowed_throwsSeriesException() throws Throwable {
+        XYSeries series = new XYSeries("S1", true, false);
+        series.add(new Double(1.0), new Double(1.0));
+        try {
+            series.add(new Double(1.0), new Double(2.0));
+            fail("expected SeriesException");
+        }
+        catch (SeriesException expected) {
+        }
+    }
+
+    // add: autoSort true, duplicates allowed, insertion after existing duplicates preserves order
+    @Test
+    public void testAdd_duplicatesAllowedSorted_preservesInsertionOrder() throws Throwable {
+        XYSeries series = new XYSeries("S1", true, true);
+        series.add(new Double(1.0), new Double(1.0));
+        series.add(new Double(1.0), new Double(2.0));
+        series.add(new Double(1.0), new Double(3.0));
+        assertEquals(1.0, series.getY(0).doubleValue(), 1e-9);
+        assertEquals(2.0, series.getY(1).doubleValue(), 1e-9);
+        assertEquals(3.0, series.getY(2).doubleValue(), 1e-9);
+    }
+
+    // add: unsorted series, duplicate x not allowed throws SeriesException
+    @Test
+    public void testAdd_unsortedDuplicateNotAllowed_throwsSeriesException() throws Throwable {
+        XYSeries series = new XYSeries("S1", false, false);
+        series.add(new Double(1.0), new Double(1.0));
+        try {
+            series.add(new Double(1.0), new Double(2.0));
+            fail("expected SeriesException");
+        }
+        catch (SeriesException expected) {
+        }
+    }
+
+    // add: unsorted series keeps insertion order (no sorting)
+    @Test
+    public void testAdd_unsorted_appendsWithoutSorting() throws Throwable {
+        XYSeries series = new XYSeries("S1", false, true);
+        series.add(5.0, 5.0);
+        series.add(1.0, 1.0);
+        assertEquals(5.0, series.getX(0).doubleValue(), 1e-9);
+        assertEquals(1.0, series.getX(1).doubleValue(), 1e-9);
+    }
+
+    // add: exceeding maximumItemCount removes first item
+    @Test
+    public void testAdd_exceedingMaximumItemCount_removesFirstItem() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.setMaximumItemCount(2);
+        series.add(1.0, 1.0);
+        series.add(2.0, 2.0);
+        series.add(3.0, 3.0);
+        assertEquals(2, series.getItemCount());
+        assertEquals(2.0, series.getX(0).doubleValue(), 1e-9);
+    }
+
+    // delete: removes a range of items (multiple iterations)
+    @Test
+    public void testDelete_removesRangeOfItems() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        series.add(2.0, 2.0);
+        series.add(3.0, 3.0);
+        series.add(4.0, 4.0);
+        series.delete(1, 2);
+        assertEquals(2, series.getItemCount());
+        assertEquals(1.0, series.getX(0).doubleValue(), 1e-9);
+        assertEquals(4.0, series.getX(1).doubleValue(), 1e-9);
+    }
+
+    // remove(int): returns removed item and updates count
+    @Test
+    public void testRemove_byIndex_returnsItemAndDecrementsCount() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        XYDataItem removed = series.remove(0);
+        assertEquals(0, series.getItemCount());
+        assertEquals(1.0, removed.getX().doubleValue(), 1e-9);
+    }
+
+    // remove(Number): found x-value, delegates to remove(index)
+    @Test
+    public void testRemove_byNumber_found_returnsItem() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        XYDataItem removed = series.remove(new Double(1.0));
+        assertEquals(1.0, removed.getX().doubleValue(), 1e-9);
+        assertEquals(0, series.getItemCount());
+    }
+
+    // remove(Number): x-value not found, indexOf returns negative, causes IndexOutOfBoundsException
+    @Test
+    public void testRemove_byNumber_notFound_throwsIndexOutOfBoundsException() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        try {
+            series.remove(new Double(99.0));
+            fail("expected IndexOutOfBoundsException");
+        }
+        catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // clear: non-empty series is cleared and count resets
+    @Test
+    public void testClear_nonEmptySeries_clearsData() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        series.add(2.0, 2.0);
+        series.clear();
+        assertEquals(0, series.getItemCount());
+    }
+
+    // clear: empty series branch does nothing, no exception
+    @Test
+    public void testClear_emptySeries_noException() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.clear();
+        assertEquals(0, series.getItemCount());
+    }
+
+    // getDataItem: returns correct item at valid index
+    @Test
+    public void testGetDataItem_validIndex_returnsCorrectItem() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 2.0);
+        XYDataItem item = series.getDataItem(0);
+        assertEquals(1.0, item.getX().doubleValue(), 1e-9);
+        assertEquals(2.0, item.getY().doubleValue(), 1e-9);
+    }
+
+    // getX: delegates correctly
+    @Test
+    public void testGetX_validIndex_returnsXValue() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(7.0, 8.0);
+        assertEquals(7.0, series.getX(0).doubleValue(), 1e-9);
+    }
+
+    // getY: possibly null value branch
+    @Test
+    public void testGetY_nullValue_returnsNull() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, (Number) null);
+        assertNull(series.getY(0));
+    }
+
+    // updateByIndex: updates y value at index and fires change
+    @Test
+    public void testUpdateByIndex_updatesYValue() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        series.updateByIndex(0, new Double(99.0));
+        assertEquals(99.0, series.getY(0).doubleValue(), 1e-9);
+    }
+
+    // update(Number,Number): existing x-value is updated
+    @Test
+    public void testUpdate_existingX_updatesY() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        series.update(new Double(1.0), new Double(5.0));
+        assertEquals(5.0, series.getY(0).doubleValue(), 1e-9);
+    }
+
+    // update(Number,Number): non-existing x-value throws SeriesException
+    @Test
+    public void testUpdate_nonExistingX_throwsSeriesException() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        try {
+            series.update(new Double(42.0), new Double(1.0));
+            fail("expected SeriesException");
+        }
+        catch (SeriesException expected) {
+        }
+    }
+
+    // addOrUpdate(double,double): new item on empty series, returns null
+    @Test
+    public void testAddOrUpdate_doubleDouble_newItem_returnsNull() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        XYDataItem overwritten = series.addOrUpdate(1.0, 1.0);
+        assertNull(overwritten);
+        assertEquals(1, series.getItemCount());
+    }
+
+    // addOrUpdate(Number,Number): existing x, duplicates NOT allowed -> updates and returns overwritten item
+    @Test
+    public void testAddOrUpdate_existingX_duplicatesNotAllowed_returnsOverwritten() throws Throwable {
+        XYSeries series = new XYSeries("S1", true, false);
+        series.add(new Double(1.0), new Double(1.0));
+        XYDataItem overwritten = series.addOrUpdate(new Double(1.0), new Double(2.0));
+        assertNotNull(overwritten);
+        assertEquals(1.0, overwritten.getY().doubleValue(), 1e-9);
+        assertEquals(1, series.getItemCount());
+        assertEquals(2.0, series.getY(0).doubleValue(), 1e-9);
+    }
+
+    // BUG HUNT: addOrUpdate with autoSort=true, duplicates allowed, x already present.
+    // Per contract this must add a new item (not overwrite) and return null, without throwing.
+    @Test
+    public void testAddOrUpdate_existingX_duplicatesAllowedSorted_addsNewItemNoException() throws Throwable {
+        XYSeries series = new XYSeries("S1", true, true);
+        series.add(new Double(1.0), new Double(1.0));
+        XYDataItem overwritten = series.addOrUpdate(new Double(1.0), new Double(2.0));
+        assertNull(overwritten);
+        assertEquals(2, series.getItemCount());
+    }
+
+    // addOrUpdate: null x throws IllegalArgumentException
+    @Test
+    public void testAddOrUpdate_nullX_throwsIllegalArgumentException() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        try {
+            series.addOrUpdate((Number) null, new Double(1.0));
+            fail("expected IllegalArgumentException");
+        }
+        catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // indexOf: sorted series, value found via binary search
+    @Test
+    public void testIndexOf_sorted_found() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        series.add(2.0, 2.0);
+        series.add(3.0, 3.0);
+        assertEquals(1, series.indexOf(new Double(2.0)));
+    }
+
+    // indexOf: sorted series, value not found returns negative
+    @Test
+    public void testIndexOf_sorted_notFound_negative() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        series.add(3.0, 3.0);
+        int idx = series.indexOf(new Double(2.0));
+        assertTrue(idx < 0);
+    }
+
+    // indexOf: unsorted series linear search found
+    @Test
+    public void testIndexOf_unsorted_found() throws Throwable {
+        XYSeries series = new XYSeries("S1", false, true);
+        series.add(5.0, 5.0);
+        series.add(1.0, 1.0);
+        assertEquals(1, series.indexOf(new Double(1.0)));
+    }
+
+    // indexOf: unsorted series, not found returns -1
+    @Test
+    public void testIndexOf_unsorted_notFound_returnsMinusOne() throws Throwable {
+        XYSeries series = new XYSeries("S1", false, true);
+        series.add(5.0, 5.0);
+        assertEquals(-1, series.indexOf(new Double(99.0)));
+    }
+
+    // toArray: converts items including null y-value to NaN
+    @Test
+    public void testToArray_containsValuesAndNaNForNullY() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 10.0);
+        series.add(2.0, (Number) null);
+        double[][] arr = series.toArray();
+        assertEquals(1.0, arr[0][0], 1e-9);
+        assertEquals(10.0, arr[1][0], 1e-9);
+        assertEquals(2.0, arr[0][1], 1e-9);
+        assertTrue(Double.isNaN(arr[1][1]));
+    }
+
+    // clone: produces an independent deep copy
+    @Test
+    public void testClone_independentDeepCopy() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        XYSeries clone = (XYSeries) series.clone();
+        clone.add(2.0, 2.0);
+        assertEquals(1, series.getItemCount());
+        assertEquals(2, clone.getItemCount());
+    }
+
+    // createCopy: copies subset of items within given range
+    @Test
+    public void testCreateCopy_validRange_copiesSubset() throws Throwable {
+        XYSeries series = new XYSeries("S1");
+        series.add(1.0, 1.0);
+        series.add(2.0, 2.0);
+        series.add(3.0, 3.0);
+        series.add(4.0, 4.0);
+        XYSeries copy = series.createCopy(1, 2);
+        assertEquals(2, copy.getItemCount());
+        assertEquals(2.0, copy.getX(0).doubleValue(), 1e-9);
+        assertEquals(3.0, copy.getX(1).doubleValue(), 1e-9);
+    }
+
+    // equals: identical content series are equal
+    @Test
+    public void testEquals_sameContent_returnsTrue() throws Throwable {
+        XYSeries s1 = new XYSeries("S1");
+        s1.add(1.0, 1.0);
+        XYSeries s2 = new XYSeries("S1");
+        s2.add(1.0, 1.0);
+        assertTrue(s1.equals(s2));
+    }
+
+    // equals: differing maximumItemCount makes them unequal
+    @Test
+    public void testEquals_differentMaximumItemCount_returnsFalse() throws Throwable {
+        XYSeries s1 = new XYSeries("S1");
+        XYSeries s2 = new XYSeries("S1");
+        s2.setMaximumItemCount(5);
+        assertFalse(s1.equals(s2));
+    }
+
+    // equals: comparing against non-XYSeries object returns false
+    @Test
+    public void testEquals_differentType_returnsFalse() throws Throwable {
+        XYSeries s1 = new XYSeries("S1");
+        assertFalse(s1.equals("not a series"));
+    }
+
+    // hashCode: equal objects produce equal hash codes
+    @Test
+    public void testHashCode_equalObjects_sameHashCode() throws Throwable {
+        XYSeries s1 = new XYSeries("S1");
+        s1.add(1.0, 1.0);
+        XYSeries s2 = new XYSeries("S1");
+        s2.add(1.0, 1.0);
+        assertEquals(s1.hashCode(), s2.hashCode());
+    }
+}

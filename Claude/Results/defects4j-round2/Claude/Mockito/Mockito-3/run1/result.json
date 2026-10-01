@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Claude",
+  "algorithm_version": "1.0.0",
+  "project": "Mockito",
+  "bug_id": 3,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 27,
+  "tests_validated": 26,
+  "fixed_failing_tests": 1,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 13,
+    "total_methods": 13,
+    "ratio": 1.0
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 49,
+    "lines_total": 61,
+    "line_ratio": 0.8033,
+    "branch_measure": "condition",
+    "branches_covered": 39,
+    "branches_total": 50,
+    "branch_ratio": 0.78
+  },
+  "generation_seconds": 445.771,
+  "validation_seconds": 457.034,
+  "total_seconds": 902.805,
+  "configuration": {
+    "model": "claude-sonnet-5",
+    "effort": "high",
+    "thinking": "adaptive",
+    "max_tokens": 64000,
+    "prompt_system": "Claude/Prompt/system_prompt.txt",
+    "prompt_template": "Claude/Prompt/template_prompt.txt",
+    "usage": {
+      "input_tokens": 2,
+      "output_tokens": 47185,
+      "cache_creation_input_tokens": 4978,
+      "cache_read_input_tokens": 5278,
+      "total_cost_usd": 0.49672259999999996,
+      "duration_api_ms": 445771,
+      "num_turns": 1
+    }
+  },
+  "artifacts": {
+    "tests": "Tests/defects4j-round2/Claude/Mockito/Mockito-3/run1/",
+    "logs": "Results/defects4j-round2/Claude/Mockito/Mockito-3/run1/logs/",
+    "prompt": "Claude/Prompt/history/Mockito_3.txt"
+  },
+  "created_at": "2026-10-01T11:01:30.630589+00:00",
+  "generation_wall_seconds": 448.93
+}

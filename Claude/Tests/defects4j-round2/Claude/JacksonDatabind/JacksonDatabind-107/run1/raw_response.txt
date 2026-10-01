@@ -1,0 +1,338 @@
+package com.fasterxml.jackson.databind.jsontype.impl;
+
+import org.junit.Test;
+import org.junit.Before;
+import static org.junit.Assert.*;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+
+public class TypeDeserializerBaseClaudeTest {
+
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = Dog.class, name = "dog"),
+        @JsonSubTypes.Type(value = Cat.class, name = "cat")
+    })
+    public static abstract class Animal {
+    }
+
+    public static class Dog extends Animal {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String n) { name = n; }
+    }
+
+    public static class Cat extends Animal {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String n) { name = n; }
+    }
+
+    public static class AnimalHolder {
+        private Animal animal;
+        public Animal getAnimal() { return animal; }
+        public void setAnimal(Animal a) { animal = a; }
+    }
+
+    public static class AnimalListHolder {
+        private List<Animal> animals;
+        public List<Animal> getAnimals() { return animals; }
+        public void setAnimals(List<Animal> a) { animals = a; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type", defaultImpl = DefaultDog.class)
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = DefaultDog.class, name = "dog"),
+        @JsonSubTypes.Type(value = DefaultCat.class, name = "cat")
+    })
+    public static abstract class AnimalWithDefault {
+    }
+
+    public static class DefaultDog extends AnimalWithDefault {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String n) { name = n; }
+    }
+
+    public static class DefaultCat extends AnimalWithDefault {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String n) { name = n; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type", defaultImpl = Void.class)
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = VoidDog.class, name = "dog")
+    })
+    public static abstract class AnimalVoidDefault {
+    }
+
+    public static class VoidDog extends AnimalVoidDefault {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String n) { name = n; }
+    }
+
+    public static class VoidHolder {
+        private AnimalVoidDefault animal;
+        public AnimalVoidDefault getAnimal() { return animal; }
+        public void setAnimal(AnimalVoidDefault a) { animal = a; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = ArrDog.class, name = "dog")
+    })
+    public static abstract class ArrAnimal {
+    }
+
+    public static class ArrDog extends ArrAnimal {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String n) { name = n; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_OBJECT)
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = ObjDog.class, name = "dog")
+    })
+    public static abstract class ObjAnimal {
+    }
+
+    public static class ObjDog extends ObjAnimal {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String n) { name = n; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type", visible = true)
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = VisDog.class, name = "dog")
+    })
+    public static abstract class VisAnimal {
+    }
+
+    public static class VisDog extends VisAnimal {
+        public String type;
+        private String name;
+        public String getName() { return name; }
+        public void setName(String n) { name = n; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "kind")
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = KindDog.class, name = "dog")
+    })
+    public static abstract class KindAnimal {
+    }
+
+    public static class KindDog extends KindAnimal {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String n) { name = n; }
+    }
+
+    // covers _findDeserializer happy path: known type id "dog" resolves to Dog subtype
+    @Test
+    public void testFindDeserializer_knownTypeIdDog_returnsDogInstance() throws Throwable {
+        Animal a = mapper.readValue("{\"type\":\"dog\",\"name\":\"Rex\"}", Animal.class);
+        assertTrue(a instanceof Dog);
+        assertEquals("Rex", ((Dog) a).getName());
+    }
+
+    // covers _findDeserializer happy path for second registered subtype "cat"
+    @Test
+    public void testFindDeserializer_knownTypeIdCat_returnsCatInstance() throws Throwable {
+        Animal a = mapper.readValue("{\"type\":\"cat\",\"name\":\"Tom\"}", Animal.class);
+        assertTrue(a instanceof Cat);
+        assertEquals("Tom", ((Cat) a).getName());
+    }
+
+    // covers _handleUnknownTypeId path: unknown id + FAIL_ON_INVALID_SUBTYPE enabled (default) -> exception
+    @Test
+    public void testFindDeserializer_unknownTypeIdDefaultFailEnabled_throwsException() throws Throwable {
+        try {
+            mapper.readValue("{\"animal\":{\"type\":\"bird\",\"name\":\"Tweety\"}}", AnimalHolder.class);
+            fail("expected exception for unknown subtype id");
+        } catch (JsonProcessingException expected) {
+            assertTrue(expected.getMessage().contains("bird"));
+        }
+    }
+
+    // covers _findDefaultImplDeserializer null-default branch when FAIL_ON_INVALID_SUBTYPE disabled -> null value
+    @Test
+    public void testFindDefaultImplDeserializer_noDefaultImplFailDisabled_returnsNullValue() throws Throwable {
+        mapper.disable(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE);
+        AnimalHolder h = mapper.readValue("{\"animal\":{\"type\":\"bird\",\"name\":\"Tweety\"}}", AnimalHolder.class);
+        assertNull(h.getAnimal());
+    }
+
+    // same fallback but at root level (0-depth) to confirm root null handling
+    @Test
+    public void testFindDefaultImplDeserializer_rootLevelUnknownFailDisabled_returnsNull() throws Throwable {
+        mapper.disable(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE);
+        Animal a = mapper.readValue("{\"type\":\"bird\",\"name\":\"Tweety\"}", Animal.class);
+        assertNull(a);
+    }
+
+    // covers _findDeserializer else-branch: unknown id falls back to configured defaultImpl
+    @Test
+    public void testFindDefaultImplDeserializer_unknownTypeIdWithDefaultImpl_fallsBackToDefaultImpl() throws Throwable {
+        AnimalWithDefault a = mapper.readValue("{\"type\":\"bird\",\"name\":\"Rex\"}", AnimalWithDefault.class);
+        assertTrue(a instanceof DefaultDog);
+        assertEquals("Rex", ((DefaultDog) a).getName());
+    }
+
+    // per field javadoc: defaultImpl applies "if type id is missing or cannot be resolved"
+    @Test
+    public void testHandleMissingTypeId_withDefaultImpl_returnsDefaultImplInstance() throws Throwable {
+        AnimalWithDefault a = mapper.readValue("{\"name\":\"Fido\"}", AnimalWithDefault.class);
+        assertTrue(a instanceof DefaultDog);
+        assertEquals("Fido", ((DefaultDog) a).getName());
+    }
+
+    // covers _handleMissingTypeId path without defaultImpl -> must throw
+    @Test
+    public void testHandleMissingTypeId_noDefaultImpl_throwsException() throws Throwable {
+        try {
+            mapper.readValue("{\"name\":\"Fido\"}", Animal.class);
+            fail("expected exception for missing type id");
+        } catch (JsonProcessingException expected) {
+            assertNotNull(expected.getMessage());
+        }
+    }
+
+    // covers defaultImpl == Void.class special-case documented in-line: means deserialize as null
+    @Test
+    public void testFindDefaultImplDeserializer_voidDefaultImpl_unknownTypeIdYieldsNull() throws Throwable {
+        VoidHolder h = mapper.readValue("{\"animal\":{\"type\":\"bird\",\"name\":\"X\"}}", VoidHolder.class);
+        assertNull(h.getAnimal());
+    }
+
+    // covers WRAPPER_ARRAY inclusion strategy happy path
+    @Test
+    public void testWrapperArrayInclusion_knownType_deserializesCorrectly() throws Throwable {
+        ArrAnimal a = mapper.readValue("[\"dog\",{\"name\":\"Rex\"}]", ArrAnimal.class);
+        assertTrue(a instanceof ArrDog);
+        assertEquals("Rex", ((ArrDog) a).getName());
+    }
+
+    // covers WRAPPER_OBJECT inclusion strategy happy path
+    @Test
+    public void testWrapperObjectInclusion_knownType_deserializesCorrectly() throws Throwable {
+        ObjAnimal a = mapper.readValue("{\"dog\":{\"name\":\"Rex\"}}", ObjAnimal.class);
+        assertTrue(a instanceof ObjDog);
+        assertEquals("Rex", ((ObjDog) a).getName());
+    }
+
+    // covers typeIdVisible=true: type id token also bound onto matching POJO field
+    @Test
+    public void testTypeIdVisible_true_exposesTypePropertyOnPojo() throws Throwable {
+        VisAnimal a = mapper.readValue("{\"type\":\"dog\",\"name\":\"Rex\"}", VisAnimal.class);
+        assertTrue(a instanceof VisDog);
+        assertEquals("dog", ((VisDog) a).type);
+    }
+
+    // covers getPropertyName()/_typePropertyName using a custom property name "kind"
+    @Test
+    public void testCustomPropertyName_usedForTypeId_deserializesCorrectly() throws Throwable {
+        KindAnimal a = mapper.readValue("{\"kind\":\"dog\",\"name\":\"Rex\"}", KindAnimal.class);
+        assertTrue(a instanceof KindDog);
+        assertEquals("Rex", ((KindDog) a).getName());
+    }
+
+    // covers caching in _findDeserializer: repeated type ids resolved consistently across multiple elements
+    @Test
+    public void testFindDeserializer_repeatedTypeIdInList_allEntriesResolvedConsistently() throws Throwable {
+        String json = "{\"animals\":[{\"type\":\"dog\",\"name\":\"Rex\"},{\"type\":\"dog\",\"name\":\"Fido\"},{\"type\":\"cat\",\"name\":\"Tom\"}]}";
+        AnimalListHolder h = mapper.readValue(json, AnimalListHolder.class);
+        assertEquals(3, h.getAnimals().size());
+        assertTrue(h.getAnimals().get(0) instanceof Dog);
+        assertTrue(h.getAnimals().get(1) instanceof Dog);
+        assertTrue(h.getAnimals().get(2) instanceof Cat);
+    }
+
+    // covers 0-iteration branch: empty polymorphic collection should yield empty result, no lookup errors
+    @Test
+    public void testFindDeserializer_emptyList_returnsEmptyCollection() throws Throwable {
+        AnimalListHolder h = mapper.readValue("{\"animals\":[]}", AnimalListHolder.class);
+        assertNotNull(h.getAnimals());
+        assertEquals(0, h.getAnimals().size());
+    }
+
+    // covers _handleUnknownTypeId: error message must mention the offending unknown type id
+    @Test
+    public void testHandleUnknownTypeId_exceptionMessageContainsTypeId() throws Throwable {
+        try {
+            mapper.readValue("{\"kind\":\"elephant\",\"name\":\"Ellie\"}", KindAnimal.class);
+            fail("expected exception for unknown subtype id");
+        } catch (JsonProcessingException expected) {
+            assertTrue(expected.getMessage().contains("elephant"));
+        }
+    }
+
+    // covers FAIL_ON_INVALID_SUBTYPE disabled at element granularity inside a collection
+    @Test
+    public void testFindDefaultImplDeserializer_listWithUnknownElementFailDisabled_elementBecomesNull() throws Throwable {
+        mapper.disable(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE);
+        String json = "{\"animals\":[{\"type\":\"dog\",\"name\":\"Rex\"},{\"type\":\"bird\",\"name\":\"Tweety\"}]}";
+        AnimalListHolder h = mapper.readValue(json, AnimalListHolder.class);
+        assertEquals(2, h.getAnimals().size());
+        assertTrue(h.getAnimals().get(0) instanceof Dog);
+        assertNull(h.getAnimals().get(1));
+    }
+
+    // covers _findDeserializer resolving distinct cached subtypes without cross-contamination
+    @Test
+    public void testFindDeserializer_distinctSubtypesNotConfused_afterCachingDog() throws Throwable {
+        Animal first = mapper.readValue("{\"type\":\"dog\",\"name\":\"Rex\"}", Animal.class);
+        Animal second = mapper.readValue("{\"type\":\"cat\",\"name\":\"Tom\"}", Animal.class);
+        assertTrue(first instanceof Dog);
+        assertTrue(second instanceof Cat);
+        assertEquals("Tom", ((Cat) second).getName());
+    }
+
+    // covers defaultImpl fallback engaging correctly even after a different id was already resolved/cached
+    @Test
+    public void testFindDeserializer_knownThenUnknownWithDefaultImpl_fallsBackCorrectly() throws Throwable {
+        AnimalWithDefault known = mapper.readValue("{\"type\":\"cat\",\"name\":\"Tom\"}", AnimalWithDefault.class);
+        AnimalWithDefault unknown = mapper.readValue("{\"type\":\"bird\",\"name\":\"Rex\"}", AnimalWithDefault.class);
+        assertTrue(known instanceof DefaultCat);
+        assertTrue(unknown instanceof DefaultDog);
+    }
+
+    // covers _handleUnknownTypeId also reachable through WRAPPER_ARRAY style type deserializer
+    @Test
+    public void testWrapperArrayInclusion_unknownType_throwsException() throws Throwable {
+        try {
+            mapper.readValue("[\"cat\",{\"name\":\"Tom\"}]", ArrAnimal.class);
+            fail("expected exception for unknown subtype id");
+        } catch (JsonProcessingException expected) {
+            assertTrue(expected.getMessage().contains("cat"));
+        }
+    }
+
+    // covers _idResolver.getDescForKnownTypeIds() being included in the unknown-type error description
+    @Test
+    public void testHandleUnknownTypeId_messageContainsKnownTypeIdList() throws Throwable {
+        try {
+            mapper.readValue("{\"kind\":\"elephant\",\"name\":\"Ellie\"}", KindAnimal.class);
+            fail("expected exception for unknown subtype id");
+        } catch (JsonProcessingException expected) {
+            assertTrue(expected.getMessage().contains("dog"));
+        }
+    }
+}

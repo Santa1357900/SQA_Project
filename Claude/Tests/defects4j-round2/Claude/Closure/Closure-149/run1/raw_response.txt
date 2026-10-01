@@ -1,0 +1,486 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
+public class AbstractCommandLineRunnerClaudeTest {
+
+  private static class TestRunner
+      extends AbstractCommandLineRunner<Compiler, CompilerOptions> {
+    TestRunner() {
+      super();
+    }
+    TestRunner(PrintStream out, PrintStream err) {
+      super(out, err);
+    }
+    protected Compiler createCompiler() {
+      return new Compiler();
+    }
+    protected CompilerOptions createOptions() {
+      return new CompilerOptions();
+    }
+  }
+
+  private TestRunner runner;
+
+  @Before
+  public void setUp() throws Throwable {
+    runner = new TestRunner();
+  }
+
+  // Default constructor must produce a usable, non-null CommandLineConfig.
+  @Test
+  public void testConstructorDefault_initializesConfig() throws Throwable {
+    assertNotNull(runner.getCommandLineConfig());
+  }
+
+  // Constructor taking out/err streams must store the err stream exactly.
+  @Test
+  public void testConstructorWithStreams_setsErrorStream() throws Throwable {
+    PrintStream outPs = new PrintStream(new ByteArrayOutputStream());
+    PrintStream errPs = new PrintStream(new ByteArrayOutputStream());
+    TestRunner r = new TestRunner(outPs, errPs);
+    assertSame(errPs, r.getErrorPrintStream());
+  }
+
+  // getCommandLineConfig() must always return the same config instance.
+  @Test
+  public void testGetCommandLineConfig_returnsSameInstanceAcrossCalls() throws Throwable {
+    assertSame(runner.getCommandLineConfig(), runner.getCommandLineConfig());
+  }
+
+  // getDiagnosticGroups() returns a new, non-null DiagnosticGroups each call.
+  @Test
+  public void testGetDiagnosticGroups_returnsNewInstanceEachCall() throws Throwable {
+    DiagnosticGroups g1 = runner.getDiagnosticGroups();
+    DiagnosticGroups g2 = runner.getDiagnosticGroups();
+    assertNotNull(g1);
+    assertNotNull(g2);
+    assertNotSame(g1, g2);
+  }
+
+  // getCompiler() before doRun() is invoked must be null.
+  @Test
+  public void testGetCompiler_beforeDoRun_returnsNull() throws Throwable {
+    assertNull(runner.getCompiler());
+  }
+
+  // config.jsOutputFile length>0 branch assigns options.jsOutputFile.
+  @Test
+  public void testSetRunOptions_jsOutputFileSet_appliedToOptions() throws Throwable {
+    runner.getCommandLineConfig().setJsOutputFile("out.js");
+    CompilerOptions options = new CompilerOptions();
+    runner.setRunOptions(options);
+    assertEquals("out.js", options.jsOutputFile);
+  }
+
+  // config.createSourceMap length>0 branch assigns options.sourceMapOutputPath.
+  @Test
+  public void testSetRunOptions_createSourceMapSet_appliedToOptions() throws Throwable {
+    runner.getCommandLineConfig().setCreateSourceMap("map.out");
+    CompilerOptions options = new CompilerOptions();
+    runner.setRunOptions(options);
+    assertEquals("map.out", options.sourceMapOutputPath);
+  }
+
+  // options.sourceMapDetailLevel is unconditionally copied from config default.
+  @Test
+  public void testSetRunOptions_defaultSourceMapDetailLevel_isAll() throws Throwable {
+    CompilerOptions options = new CompilerOptions();
+    runner.setRunOptions(options);
+    assertEquals(SourceMap.DetailLevel.ALL, options.sourceMapDetailLevel);
+  }
+
+  // options.manageClosureDependencies is unconditionally copied from config.
+  @Test
+  public void testSetRunOptions_manageClosureDependenciesTrue_appliedToOptions() throws Throwable {
+    runner.getCommandLineConfig().setManageClosureDependencies(true);
+    CompilerOptions options = new CompilerOptions();
+    runner.setRunOptions(options);
+    assertTrue(options.manageClosureDependencies);
+  }
+
+  // options.devMode is unconditionally copied from config default (OFF).
+  @Test
+  public void testSetRunOptions_defaultDevMode_isOff() throws Throwable {
+    CompilerOptions options = new CompilerOptions();
+    runner.setRunOptions(options);
+    assertEquals(CompilerOptions.DevMode.OFF, options.devMode);
+  }
+
+  // Invalid charset flag must raise FlagUsageException via getInputCharset().
+  @Test
+  public void testSetRunOptions_invalidCharset_throwsFlagUsageException() throws Throwable {
+    runner.getCommandLineConfig().setCharset("not-a-real-charset-xyz-123");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      runner.setRunOptions(options);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("not a valid charset"));
+    }
+  }
+
+  // Preconditions.checkState(specs != null) branch.
+  @Test
+  public void testCreateJsModules_nullSpecs_throwsIllegalStateException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(null, new ArrayList<String>());
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) { }
+  }
+
+  // Preconditions.checkState(!specs.isEmpty()) branch.
+  @Test
+  public void testCreateJsModules_emptySpecs_throwsIllegalStateException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(
+          new ArrayList<String>(), new ArrayList<String>());
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) { }
+  }
+
+  // Preconditions.checkState(jsFiles != null) branch.
+  @Test
+  public void testCreateJsModules_nullJsFiles_throwsIllegalStateException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(Arrays.asList("m1:0"), null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) { }
+  }
+
+  // parts.length < 2 branch.
+  @Test
+  public void testCreateJsModules_tooFewParts_throwsFlagUsageException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(
+          Arrays.asList("onlyname"), new ArrayList<String>());
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("2-4"));
+    }
+  }
+
+  // parts.length > 4 branch.
+  @Test
+  public void testCreateJsModules_tooManyParts_throwsFlagUsageException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(
+          Arrays.asList("a:1:b:c:d"), new ArrayList<String>());
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("2-4"));
+    }
+  }
+
+  // !TokenStream.isJSIdentifier(name) branch.
+  @Test
+  public void testCreateJsModules_invalidModuleName_throwsFlagUsageException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(
+          Arrays.asList("123bad:0"), new ArrayList<String>());
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Invalid module name"));
+    }
+  }
+
+  // modulesByName.containsKey(name) branch.
+  @Test
+  public void testCreateJsModules_duplicateModuleName_throwsFlagUsageException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(
+          Arrays.asList("m1:0", "m1:0"), new ArrayList<String>());
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Duplicate module name"));
+    }
+  }
+
+  // NumberFormatException caught, numJsFiles set to -1 branch.
+  @Test
+  public void testCreateJsModules_nonNumericFileCount_throwsFlagUsageException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(
+          Arrays.asList("m1:abc"), new ArrayList<String>());
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Invalid js file count"));
+    }
+  }
+
+  // numJsFiles < 0 via successfully parsed negative literal branch.
+  @Test
+  public void testCreateJsModules_negativeFileCount_throwsFlagUsageException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(
+          Arrays.asList("m1:-1"), new ArrayList<String>());
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Invalid js file count"));
+    }
+  }
+
+  // nextJsFileIndex + numJsFiles > totalNumJsFiles branch.
+  @Test
+  public void testCreateJsModules_notEnoughJsFiles_throwsFlagUsageException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(
+          Arrays.asList("m1:1"), new ArrayList<String>());
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Not enough js files"));
+    }
+  }
+
+  // nextJsFileIndex < totalNumJsFiles after loop branch.
+  @Test
+  public void testCreateJsModules_tooManyJsFiles_throwsFlagUsageException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(
+          Arrays.asList("m1:0"), Arrays.asList("a.js"));
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Too many js files"));
+    }
+  }
+
+  // modulesByName.get(dep) == null branch (unknown dependency).
+  @Test
+  public void testCreateJsModules_unknownDependency_throwsFlagUsageException() throws Throwable {
+    try {
+      AbstractCommandLineRunner.createJsModules(
+          Arrays.asList("m1:0:unknown"), new ArrayList<String>());
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("depends on unknown module"));
+    }
+  }
+
+  // Fully valid single-module spec returns a module array of size 1.
+  @Test
+  public void testCreateJsModules_validSingleModule_returnsModuleArray() throws Throwable {
+    JSModule[] result = AbstractCommandLineRunner.createJsModules(
+        Arrays.asList("m1:0"), new ArrayList<String>());
+    assertEquals(1, result.length);
+    assertEquals("m1", result[0].getName());
+  }
+
+  // Preconditions.checkState(specs != null) branch in parseModuleWrappers.
+  @Test
+  public void testParseModuleWrappers_nullSpecs_throwsIllegalStateException() throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1") };
+    try {
+      AbstractCommandLineRunner.parseModuleWrappers(null, modules);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) { }
+  }
+
+  // spec.indexOf(':') == -1 branch.
+  @Test
+  public void testParseModuleWrappers_missingColon_throwsFlagUsageException() throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1") };
+    try {
+      AbstractCommandLineRunner.parseModuleWrappers(
+          Arrays.asList("nowrapper"), modules);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Expected module wrapper"));
+    }
+  }
+
+  // !wrappers.containsKey(name) branch.
+  @Test
+  public void testParseModuleWrappers_unknownModule_throwsFlagUsageException() throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1") };
+    try {
+      AbstractCommandLineRunner.parseModuleWrappers(
+          Arrays.asList("bad:%s"), modules);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Unknown module"));
+    }
+  }
+
+  // !wrapper.contains("%s") branch.
+  @Test
+  public void testParseModuleWrappers_missingPlaceholder_throwsFlagUsageException() throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1") };
+    try {
+      AbstractCommandLineRunner.parseModuleWrappers(
+          Arrays.asList("m1:nowrap"), modules);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("No %s placeholder"));
+    }
+  }
+
+  // Valid wrapper spec stores the wrapper text for the named module.
+  @Test
+  public void testParseModuleWrappers_validSpec_setsWrapper() throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1") };
+    Map<String, String> result = AbstractCommandLineRunner.parseModuleWrappers(
+        Arrays.asList("m1:(%s);"), modules);
+    assertEquals("(%s);", result.get("m1"));
+  }
+
+  // Empty specs leaves each module prepopulated with the empty wrapper.
+  @Test
+  public void testParseModuleWrappers_emptySpecs_defaultsToEmptyWrapper() throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1") };
+    Map<String, String> result = AbstractCommandLineRunner.parseModuleWrappers(
+        new ArrayList<String>(), modules);
+    assertEquals("", result.get("m1"));
+  }
+
+  // Placeholder in the middle: prefix + code + suffix + newline.
+  @Test
+  public void testWriteOutput_placeholderInMiddle_wrapsCode() throws Throwable {
+    StringBuilder sb = new StringBuilder();
+    AbstractCommandLineRunner.writeOutput(
+        sb, null, "CODE", "PREFIX_%s_SUFFIX", "%s");
+    assertEquals("PREFIX_CODE_SUFFIX\n", sb.toString());
+  }
+
+  // Placeholder at position 0: no prefix branch (pos > 0 is false).
+  @Test
+  public void testWriteOutput_placeholderAtStart_noPrefix() throws Throwable {
+    StringBuilder sb = new StringBuilder();
+    AbstractCommandLineRunner.writeOutput(
+        sb, null, "CODE", "%s_SUFFIX", "%s");
+    assertEquals("CODE_SUFFIX\n", sb.toString());
+  }
+
+  // suffixStart == wrapper.length(): no suffix branch.
+  @Test
+  public void testWriteOutput_placeholderAtEnd_noSuffix() throws Throwable {
+    StringBuilder sb = new StringBuilder();
+    AbstractCommandLineRunner.writeOutput(
+        sb, null, "CODE", "PREFIX_%s", "%s");
+    assertEquals("PREFIX_CODE\n", sb.toString());
+  }
+
+  // pos == -1 branch: wrapper is ignored entirely.
+  @Test
+  public void testWriteOutput_noPlaceholder_ignoresWrapper() throws Throwable {
+    StringBuilder sb = new StringBuilder();
+    AbstractCommandLineRunner.writeOutput(
+        sb, null, "CODE", "NO_PLACEHOLDER_HERE", "%s");
+    assertEquals("CODE\n", sb.toString());
+  }
+
+  // Strings.isEmpty(sourceMapOutputPath) true branch returns null.
+  @Test
+  public void testExpandSourceMapPath_emptyPath_returnsNull() throws Throwable {
+    CompilerOptions options = new CompilerOptions();
+    options.sourceMapOutputPath = "";
+    assertNull(runner.expandSourceMapPath(options, null));
+  }
+
+  // forModule == null, config.module empty: substitutes config.jsOutputFile.
+  @Test
+  public void testExpandSourceMapPath_noModule_usesJsOutputFile() throws Throwable {
+    runner.getCommandLineConfig().setJsOutputFile("out.js");
+    CompilerOptions options = new CompilerOptions();
+    options.sourceMapOutputPath = "map_%outname%.map";
+    assertEquals("map_out.js.map", runner.expandSourceMapPath(options, null));
+  }
+
+  // forModule != null: substitutes moduleOutputPathPrefix + name + ".js".
+  @Test
+  public void testExpandSourceMapPath_withModule_usesModulePrefix() throws Throwable {
+    runner.getCommandLineConfig().setModuleOutputPathPrefix("build/");
+    JSModule mod = new JSModule("mymod");
+    CompilerOptions options = new CompilerOptions();
+    options.sourceMapOutputPath = "src_%outname%_end";
+    assertEquals("src_build/mymod.js_end",
+        runner.expandSourceMapPath(options, mod));
+  }
+
+  // Strings.isEmpty(config.outputManifest) true branch returns null.
+  @Test
+  public void testExpandManifest_emptyPath_returnsNull() throws Throwable {
+    assertNull(runner.expandManifest(null));
+  }
+
+  // forModule == null, config.module empty: substitutes config.jsOutputFile.
+  @Test
+  public void testExpandManifest_withPlaceholder_usesJsOutputFile() throws Throwable {
+    runner.getCommandLineConfig().setOutputManifest("manifest_%outname%.txt");
+    runner.getCommandLineConfig().setJsOutputFile("app.js");
+    assertEquals("manifest_app.js.txt", runner.expandManifest(null));
+  }
+
+  // files.isEmpty() branch returns the single "/dev/null" placeholder input.
+  @Test
+  public void testCreateExterns_emptyConfig_returnsSingleDefaultInput() throws Throwable {
+    List<JSSourceFile> externs = runner.createExterns();
+    assertEquals(1, externs.size());
+  }
+
+  // defName.length() == 0 branch falls through to the final RuntimeException.
+  @Test
+  public void testCreateDefineReplacements_emptyDefName_throwsRuntimeException() throws Throwable {
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(
+          Arrays.asList("=5"), options);
+      fail("expected RuntimeException");
+    } catch (RuntimeException expected) {
+      assertTrue(expected.getMessage().contains("--define flag syntax invalid"));
+    }
+  }
+
+  // NumberFormatException branch: non-numeric, non-boolean, non-quoted value.
+  @Test
+  public void testCreateDefineReplacements_invalidNumericValue_throwsRuntimeException() throws Throwable {
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(
+          Arrays.asList("FOO=notanumber"), options);
+      fail("expected RuntimeException");
+    } catch (RuntimeException expected) {
+      assertTrue(expected.getMessage().contains("--define flag syntax invalid"));
+    }
+  }
+
+  // Quoted string containing the same quote char internally is rejected.
+  @Test
+  public void testCreateDefineReplacements_embeddedQuoteInString_throwsRuntimeException() throws Throwable {
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(
+          Arrays.asList("FOO='it's'"), options);
+      fail("expected RuntimeException");
+    } catch (RuntimeException expected) {
+      assertTrue(expected.getMessage().contains("--define flag syntax invalid"));
+    }
+  }
+
+  // FlagUsageException constructor must store the given message.
+  @Test
+  public void testFlagUsageException_constructor_storesMessage() throws Throwable {
+    AbstractCommandLineRunner.FlagUsageException ex =
+        new AbstractCommandLineRunner.FlagUsageException("bad flag usage");
+    assertEquals("bad flag usage", ex.getMessage());
+    assertTrue(ex instanceof Exception);
+  }
+
+  // Fluent builder setters on CommandLineConfig must return the same instance.
+  @Test
+  public void testCommandLineConfig_fluentSetters_returnSameInstance() throws Throwable {
+    AbstractCommandLineRunner.CommandLineConfig config = runner.getCommandLineConfig();
+    AbstractCommandLineRunner.CommandLineConfig chained =
+        config.setPrintTree(true).setJsOutputFile("x.js").setManageClosureDependencies(true);
+    assertSame(config, chained);
+  }
+}

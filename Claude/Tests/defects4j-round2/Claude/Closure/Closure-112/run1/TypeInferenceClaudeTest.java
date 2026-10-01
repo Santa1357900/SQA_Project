@@ -1,0 +1,287 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.javascript.rhino.jstype.BooleanLiteralSet;
+
+public class TypeInferenceClaudeTest {
+
+  private Compiler compiler;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+  }
+
+  private JSError[] compileAndGetWarnings(String js) {
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    compiler.compile(externs, input, options);
+    return compiler.getWarnings();
+  }
+
+  // covers getBooleanOutcomes: left==EMPTY -> intersection is EMPTY, result == right (condition true)
+  @Test
+  public void testGetBooleanOutcomes_emptyLeftConditionTrue_returnsRight() throws Throwable {
+    BooleanLiteralSet result =
+        TypeInference.getBooleanOutcomes(BooleanLiteralSet.EMPTY, BooleanLiteralSet.BOTH, true);
+    assertEquals(BooleanLiteralSet.BOTH, result);
+  }
+
+  // covers getBooleanOutcomes: left==EMPTY -> intersection is EMPTY, result == right (condition false)
+  @Test
+  public void testGetBooleanOutcomes_emptyLeftConditionFalse_returnsRight() throws Throwable {
+    BooleanLiteralSet result =
+        TypeInference.getBooleanOutcomes(BooleanLiteralSet.EMPTY, BooleanLiteralSet.BOTH, false);
+    assertEquals(BooleanLiteralSet.BOTH, result);
+  }
+
+  // covers getBooleanOutcomes: left==BOTH, right==BOTH -> union stays BOTH (condition true)
+  @Test
+  public void testGetBooleanOutcomes_bothLeftBothRightConditionTrue_returnsBoth() throws Throwable {
+    BooleanLiteralSet result =
+        TypeInference.getBooleanOutcomes(BooleanLiteralSet.BOTH, BooleanLiteralSet.BOTH, true);
+    assertEquals(BooleanLiteralSet.BOTH, result);
+  }
+
+  // covers getBooleanOutcomes: left==BOTH, right==BOTH -> union stays BOTH (condition false)
+  @Test
+  public void testGetBooleanOutcomes_bothLeftBothRightConditionFalse_returnsBoth() throws Throwable {
+    BooleanLiteralSet result =
+        TypeInference.getBooleanOutcomes(BooleanLiteralSet.BOTH, BooleanLiteralSet.BOTH, false);
+    assertEquals(BooleanLiteralSet.BOTH, result);
+  }
+
+  // covers getBooleanOutcomes: left==EMPTY, right==EMPTY -> result EMPTY
+  @Test
+  public void testGetBooleanOutcomes_emptyLeftEmptyRight_returnsEmpty() throws Throwable {
+    BooleanLiteralSet result =
+        TypeInference.getBooleanOutcomes(BooleanLiteralSet.EMPTY, BooleanLiteralSet.EMPTY, true);
+    assertEquals(BooleanLiteralSet.EMPTY, result);
+  }
+
+  // covers Token.ADD: string + number -> STRING_TYPE, no mismatch warning
+  @Test
+  public void testTraverseAdd_stringPlusNumber_resultIsString_noWarning() throws Throwable {
+    String js = "/** @type {string} */ var s = 'a' + 1;";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers Token.ADD: number + number -> NUMBER_TYPE, mismatch when assigned to string
+  @Test
+  public void testTraverseAdd_numberPlusNumber_warnsOnStringAssign() throws Throwable {
+    String js = "/** @type {string} */ var s = 1 + 2;";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers isAddedAsNumber branch: null + number -> NUMBER_TYPE, no warning
+  @Test
+  public void testTraverseAdd_nullPlusNumber_resultIsNumber_noWarning() throws Throwable {
+    String js = "/** @type {number} */ var n = null + 1;";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers Token.HOOK: both branches number -> joined NUMBER_TYPE, no warning
+  @Test
+  public void testTraverseHook_bothBranchesNumber_noWarning() throws Throwable {
+    String js = "/** @type {number} */ var x = true ? 1 : 2;";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers Token.HOOK: number/string branches -> union type, warns when assigned to number
+  @Test
+  public void testTraverseHook_numberOrString_warnsOnNumberAssign() throws Throwable {
+    String js = "/** @type {number} */ var x = true ? 1 : 'a';";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers Token.NAME: inferred (undeclared) var reassigned to a different type -> no warning
+  @Test
+  public void testTraverseName_inferredVarReassignedDifferentType_noWarning() throws Throwable {
+    String js = "var a = 1; a = 'hello';";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers Token.GETPROP: declared instance property type, warns on mismatched usage
+  @Test
+  public void testTraverseGetProp_constructorPropertyType_warnsOnMismatch() throws Throwable {
+    String js =
+        "/** @constructor */\n"
+        + "function Foo() { /** @type {number} */ this.x = 1; }\n"
+        + "var f = new Foo();\n"
+        + "/** @type {string} */ var s = f.x;";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers Token.NEW: constructor instance type, no warning when matching
+  @Test
+  public void testTraverseNew_constructorInstanceType_noWarning() throws Throwable {
+    String js =
+        "/** @constructor */ function Foo() {}\n"
+        + "/** @type {Foo} */ var f = new Foo();";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers Token.NEW: constructor instance type, warns on mismatch
+  @Test
+  public void testTraverseNew_constructorInstanceType_warnsOnMismatch() throws Throwable {
+    String js =
+        "/** @constructor */ function Foo() {}\n"
+        + "/** @type {number} */ var n = new Foo();";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers Token.CALL: argument type mismatch detected via inferred call type
+  @Test
+  public void testTraverseCall_argumentTypeMismatch_warns() throws Throwable {
+    String js =
+        "/** @param {number} x */ function f(x) {}\n"
+        + "f('a');";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers Token.CALL: argument type matches declared parameter type, no warning
+  @Test
+  public void testTraverseCall_argumentTypeMatches_noWarning() throws Throwable {
+    String js =
+        "/** @param {number} x */ function f(x) {}\n"
+        + "f(1);";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers Token.CALL: return type propagation, warns on mismatched assignment
+  @Test
+  public void testTraverseCall_returnTypeMismatch_warns() throws Throwable {
+    String js =
+        "/** @return {number} */ function f() { return 1; }\n"
+        + "/** @type {string} */ var s = f();";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers Token.AND: numeric operands joined, no warning
+  @Test
+  public void testTraverseAnd_simpleNumbers_noWarning() throws Throwable {
+    String js = "/** @type {number} */ var x = 1 && 2;";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers Token.TYPEOF: always produces string type, no warning
+  @Test
+  public void testTypeof_alwaysString_noWarning() throws Throwable {
+    String js = "/** @type {string} */ var t = typeof 5;";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers Token.TYPEOF: string result warns when assigned to number
+  @Test
+  public void testTypeof_assignedToNumber_warns() throws Throwable {
+    String js = "/** @type {number} */ var t = typeof 5;";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers comparison operator (LT): result boolean, no warning
+  @Test
+  public void testComparisonOperator_resultBoolean_noWarning() throws Throwable {
+    String js = "/** @type {boolean} */ var b = (1 < 2);";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers comparison operator (LT): result boolean, warns on string assign
+  @Test
+  public void testComparisonOperator_resultBoolean_warnsOnStringAssign() throws Throwable {
+    String js = "/** @type {string} */ var b = (1 < 2);";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers arithmetic operators (SUB/MUL): result number, no warning
+  @Test
+  public void testArithmeticOperators_resultNumber_noWarning() throws Throwable {
+    String js = "/** @type {number} */ var n = 5 - 2 * 3;";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers arithmetic operators: result number, warns on string assign
+  @Test
+  public void testArithmeticOperators_resultNumber_warnsOnStringAssign() throws Throwable {
+    String js = "/** @type {string} */ var n = 5 - 2;";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers Token.ARRAYLIT: result Array type, warns on number assign
+  @Test
+  public void testArrayLiteral_resultArrayType_warnsOnNumberAssign() throws Throwable {
+    String js = "/** @type {number} */ var arr = [1, 2, 3];";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers Token.RETURN: mismatched return type against declared @return
+  @Test
+  public void testReturnStatement_mismatchedReturnType_warns() throws Throwable {
+    String js = "/** @return {number} */ function f() { return 'str'; }";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers Token.RETURN: matching return type, no warning
+  @Test
+  public void testReturnStatement_matchingReturnType_noWarning() throws Throwable {
+    String js = "/** @return {number} */ function f() { return 5; }";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers Token.CATCH: unknown type is compatible with any declared type, no warning
+  @Test
+  public void testCatchClause_unknownType_noWarning() throws Throwable {
+    String js =
+        "function f() {\n"
+        + "  try { throw 1; } catch (e) {\n"
+        + "    /** @type {number} */ var n = e;\n"
+        + "  }\n"
+        + "}";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers for-in branch (NodeUtil.isForIn): loop key narrowed to string, no warning
+  @Test
+  public void testForIn_keyTypeString_noWarning() throws Throwable {
+    String js =
+        "function f(obj) {\n"
+        + "  for (var key in obj) {\n"
+        + "    /** @type {string} */ var k = key;\n"
+        + "  }\n"
+        + "}";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // covers Token.NEG: unary numeric result, warns on string assign
+  @Test
+  public void testUnaryNeg_resultNumber_warnsOnStringAssign() throws Throwable {
+    String js = "/** @type {string} */ var n = -5;";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+
+  // covers Token.POS: unary numeric result, no warning when assigned number
+  @Test
+  public void testUnaryPos_resultNumber_noWarning() throws Throwable {
+    String js = "/** @type {number} */ var n = +5;";
+    assertEquals(0, compileAndGetWarnings(js).length);
+  }
+
+  // targets traverseObjectLiteral inferred-property widening: repeated object-literal
+  // assignments to the same qualified name should union the property's types, so passing
+  // the resulting (number|string) value where a number is required should warn.
+  @Test
+  public void testObjectLiteralReassignment_unionsPropertyTypeAcrossAssignments_warns()
+      throws Throwable {
+    String js =
+        "var ns = {prop: 1};\n"
+        + "ns = {prop: 'hello'};\n"
+        + "/** @param {number} x */ function f(x) {}\n"
+        + "f(ns.prop);";
+    assertTrue(compileAndGetWarnings(js).length > 0);
+  }
+}

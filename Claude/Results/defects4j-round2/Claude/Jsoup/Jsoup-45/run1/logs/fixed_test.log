@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-45-sjw3jg0d/Jsoup-45f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.jsoup.parser.HtmlTreeBuilderClaudeTest::testGenerateImpliedEndTags_popsMatchingTags
+  - org.jsoup.parser.HtmlTreeBuilderClaudeTest::testParseFragment_tdContext_doesNotForceInCellMode
+[exit 0]

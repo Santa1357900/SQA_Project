@@ -1,0 +1,30 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-11-2f0yxhwj/JxPath-11f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 24
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetNodePointer_positionZero_returnsFirstMatchingAttribute
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetPosition_initialState_returnsZero
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testSetPosition_zero_returnsFalse
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetNodePointer_afterExplicitSetPositionTwo_returnsSecondAttribute
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testSetPosition_beyondSize_returnsFalse
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_knownPrefixedName_findsAttributeViaNamespace
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetNodePointer_emptyAttributes_returnsNull
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_specificMissingName_addsNoAttribute
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testSetPosition_upperBoundValid_returnsTrue
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_nonElementNodeWildcard_emptyAttributes
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_unknownPrefixedName_fallsBackToLocalNameLookup
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetPosition_afterSetPositionOne_returnsOne
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetNodePointer_positionBeyondSize_throwsIndexOutOfBounds
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetNodePointer_positionZeroWithAttributes_initializesPositionToOne
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testSetPosition_negative_returnsFalse
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_wildcardName_countsOnlyMatchingUnprefixedAttrs
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testSetPosition_emptyAttributes_returnsFalse
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetNodePointer_negativePositionEmptyAttributes_throwsIndexOutOfBounds
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetPosition_afterInvalidSetPosition_stillReflectsGivenValue
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_nonElementNodeSpecificName_emptyAttributes
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_specificExistingName_addsOneAttribute
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetNodePointer_afterExplicitSetPositionOne_returnsFirstAttribute
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testTestAttr_defaultXmlnsDeclaration_excludedFromWildcard
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testSetPosition_lowerBoundValid_returnsTrue
+[exit 0]

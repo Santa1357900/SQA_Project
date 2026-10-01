@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-31-f66psog7/JacksonDatabind-31f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - com.fasterxml.jackson.databind.util.TokenBufferClaudeTest::testWriteRawValueCharArray_treatedAsRawValueDuringSerialize
+[exit 0]

@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-125-t4huixwa/Closure-125f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testWithNonObject_warns
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testInOperatorNonObjectRight_warns
+[exit 0]

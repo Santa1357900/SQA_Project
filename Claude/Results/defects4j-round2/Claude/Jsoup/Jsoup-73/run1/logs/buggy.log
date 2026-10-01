@@ -1,0 +1,20 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Jsoup -v 73b -w /tmp/claude-Jsoup-73-5qa2djjq/buggy
+Checking out 3475dc84 to /tmp/claude-Jsoup-73-5qa2djjq/buggy............... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Jsoup-73-5qa2djjq/buggy/pom.xml......... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 3475dc84:8c7414da..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Jsoup-73b....................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Jsoup-73-5qa2djjq/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

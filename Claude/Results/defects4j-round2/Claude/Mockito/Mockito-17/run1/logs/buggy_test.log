@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Mockito-17-q9b8ha99/Mockito-17b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.mockito.internal.creation.MockSettingsImplClaudeTest::testExtraInterfaces_afterSerializable_keepsSerializableTrue
+[exit 0]

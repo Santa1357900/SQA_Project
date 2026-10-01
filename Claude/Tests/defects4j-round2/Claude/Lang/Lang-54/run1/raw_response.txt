@@ -1,0 +1,361 @@
+package org.apache.commons.lang;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.UnsupportedOperationException;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class LocaleUtilsClaudeTest {
+
+    // null input -> null per Javadoc
+    @Test
+    public void testToLocale_null_returnsNull() throws Throwable {
+        assertNull(LocaleUtils.toLocale(null));
+    }
+
+    // length 2 lowercase -> Locale(lang,"")
+    @Test
+    public void testToLocale_twoLetterLowercase_returnsLanguageOnlyLocale() throws Throwable {
+        Locale loc = LocaleUtils.toLocale("fr");
+        assertEquals("fr", loc.getLanguage());
+        assertEquals("", loc.getCountry());
+        assertEquals("", loc.getVariant());
+    }
+
+    // length 5 -> Locale(lang,country) per Javadoc example
+    @Test
+    public void testToLocale_fiveChars_returnsLanguageCountryLocale() throws Throwable {
+        Locale loc = LocaleUtils.toLocale("en_GB");
+        assertEquals("en", loc.getLanguage());
+        assertEquals("GB", loc.getCountry());
+        assertEquals("", loc.getVariant());
+    }
+
+    // length >=7 -> Locale(lang,country,variant) per Javadoc example
+    @Test
+    public void testToLocale_sevenPlusCharsWithVariant_returnsFullLocale() throws Throwable {
+        Locale loc = LocaleUtils.toLocale("en_GB_xxx");
+        assertEquals("en", loc.getLanguage());
+        assertEquals("GB", loc.getCountry());
+        assertEquals("xxx", loc.getVariant());
+    }
+
+    // variant chars not case-restricted, digits allowed
+    @Test
+    public void testToLocale_variantWithDigits_returnsFullLocale() throws Throwable {
+        Locale loc = LocaleUtils.toLocale("en_GB_123");
+        assertEquals("en", loc.getLanguage());
+        assertEquals("GB", loc.getCountry());
+        assertEquals("123", loc.getVariant());
+    }
+
+    // BUG TARGET: double-underscore "lang__variant" means empty country with
+    // variant, a standard Locale string form (Locale(lang,"",variant).toString()
+    // == "lang__variant"); correct toLocale must honor this round-trip.
+    @Test
+    public void testToLocale_doubleUnderscoreVariantNoCountry_returnsLocaleWithEmptyCountry() throws Throwable {
+        Locale loc = LocaleUtils.toLocale("en__POSIX");
+        assertEquals("en", loc.getLanguage());
+        assertEquals("", loc.getCountry());
+        assertEquals("POSIX", loc.getVariant());
+    }
+
+    // empty string: length check must throw before any charAt access
+    @Test
+    public void testToLocale_emptyString_throwsException() throws Throwable {
+        try {
+            LocaleUtils.toLocale("");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // length 1 invalid format
+    @Test
+    public void testToLocale_lengthOne_throwsException() throws Throwable {
+        try {
+            LocaleUtils.toLocale("e");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // length 3 invalid (between 2 and 5)
+    @Test
+    public void testToLocale_lengthThree_throwsException() throws Throwable {
+        try {
+            LocaleUtils.toLocale("en_");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // length 4 invalid
+    @Test
+    public void testToLocale_lengthFour_throwsException() throws Throwable {
+        try {
+            LocaleUtils.toLocale("en_G");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // length 6 boundary just below the min variant length of 7
+    @Test
+    public void testToLocale_lengthSix_throwsException() throws Throwable {
+        try {
+            LocaleUtils.toLocale("en_GB_");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // language code must be lowercase (ch0 boundary)
+    @Test
+    public void testToLocale_uppercaseLanguage_throwsException() throws Throwable {
+        try {
+            LocaleUtils.toLocale("EN");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // mixed-case language also rejected (ch1 boundary)
+    @Test
+    public void testToLocale_mixedCaseLanguage_throwsException() throws Throwable {
+        try {
+            LocaleUtils.toLocale("eN");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // separator at index 2 must be underscore
+    @Test
+    public void testToLocale_wrongSeparatorAtIndexTwo_throwsException() throws Throwable {
+        try {
+            LocaleUtils.toLocale("en-GB");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // country code must be uppercase (ch3/ch4 boundary)
+    @Test
+    public void testToLocale_lowercaseCountry_throwsException() throws Throwable {
+        try {
+            LocaleUtils.toLocale("en_gb");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // separator at index 5 must be underscore when variant present
+    @Test
+    public void testToLocale_wrongSeparatorAtIndexFive_throwsException() throws Throwable {
+        try {
+            LocaleUtils.toLocale("en_GBxxx");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // single-arg localeLookupList, Javadoc example fr_CA_xxx
+    @Test
+    public void testLocaleLookupListSingle_fullLocale_matchesJavadocExample() throws Throwable {
+        Locale locale = new Locale("fr", "CA", "xxx");
+        List result = LocaleUtils.localeLookupList(locale);
+        List expected = new ArrayList();
+        expected.add(new Locale("fr", "CA", "xxx"));
+        expected.add(new Locale("fr", "CA"));
+        expected.add(new Locale("fr", ""));
+        assertEquals(expected, result);
+    }
+
+    // language-only locale: no variant/country branches entered, default == locale
+    @Test
+    public void testLocaleLookupListSingle_languageOnly_returnsSingleElementList() throws Throwable {
+        Locale locale = new Locale("de");
+        List result = LocaleUtils.localeLookupList(locale);
+        assertEquals(1, result.size());
+        assertEquals(new Locale("de"), result.get(0));
+    }
+
+    // null locale -> empty list, never null
+    @Test
+    public void testLocaleLookupListSingle_null_returnsEmptyList() throws Throwable {
+        List result = LocaleUtils.localeLookupList(null);
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    // two-arg localeLookupList, Javadoc example with distinct defaultLocale
+    @Test
+    public void testLocaleLookupListTwoArg_javadocExample() throws Throwable {
+        Locale locale = new Locale("fr", "CA", "xxx");
+        Locale def = new Locale("en");
+        List result = LocaleUtils.localeLookupList(locale, def);
+        List expected = new ArrayList();
+        expected.add(new Locale("fr", "CA", "xxx"));
+        expected.add(new Locale("fr", "CA"));
+        expected.add(new Locale("fr", ""));
+        expected.add(new Locale("en"));
+        assertEquals(expected, result);
+    }
+
+    // defaultLocale equal to a generated intermediate entry must not duplicate
+    @Test
+    public void testLocaleLookupListTwoArg_defaultEqualsGenerated_noDuplicateAdded() throws Throwable {
+        Locale locale = new Locale("en", "US");
+        Locale def = new Locale("en", "");
+        List result = LocaleUtils.localeLookupList(locale, def);
+        List expected = new ArrayList();
+        expected.add(new Locale("en", "US"));
+        expected.add(new Locale("en", ""));
+        assertEquals(expected, result);
+    }
+
+    // null locale param -> empty list regardless of defaultLocale
+    @Test
+    public void testLocaleLookupListTwoArg_nullLocale_returnsEmptyList() throws Throwable {
+        List result = LocaleUtils.localeLookupList(null, new Locale("en"));
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    // result list must be unmodifiable
+    @Test
+    public void testLocaleLookupListTwoArg_resultIsUnmodifiable() throws Throwable {
+        List result = LocaleUtils.localeLookupList(new Locale("en"), new Locale("en"));
+        try {
+            result.add(new Locale("fr"));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // wrapper around Locale.getAvailableLocales(), must contain a known locale
+    @Test
+    public void testAvailableLocaleList_containsKnownLocale() throws Throwable {
+        List list = LocaleUtils.availableLocaleList();
+        assertNotNull(list);
+        assertTrue(list.contains(Locale.US));
+    }
+
+    // availableLocaleList must be unmodifiable
+    @Test
+    public void testAvailableLocaleList_isUnmodifiable() throws Throwable {
+        List list = LocaleUtils.availableLocaleList();
+        try {
+            list.add(new Locale("zz"));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // set content must equal the list content
+    @Test
+    public void testAvailableLocaleSet_matchesAvailableLocaleListContent() throws Throwable {
+        List list = LocaleUtils.availableLocaleList();
+        Set set = LocaleUtils.availableLocaleSet();
+        assertEquals(new HashSet(list), set);
+    }
+
+    // availableLocaleSet must be unmodifiable
+    @Test
+    public void testAvailableLocaleSet_isUnmodifiable() throws Throwable {
+        Set set = LocaleUtils.availableLocaleSet();
+        try {
+            set.add(new Locale("zz"));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // known/installed locale must be reported available
+    @Test
+    public void testIsAvailableLocale_knownLocale_returnsTrue() throws Throwable {
+        assertTrue(LocaleUtils.isAvailableLocale(Locale.US));
+    }
+
+    // bogus locale not installed must be reported unavailable
+    @Test
+    public void testIsAvailableLocale_unknownLocale_returnsFalse() throws Throwable {
+        assertFalse(LocaleUtils.isAvailableLocale(new Locale("zz", "ZZ")));
+    }
+
+    // null locale handled gracefully via List.contains(null)
+    @Test
+    public void testIsAvailableLocale_null_returnsFalse() throws Throwable {
+        assertFalse(LocaleUtils.isAvailableLocale(null));
+    }
+
+    // null country code -> empty list, never null
+    @Test
+    public void testLanguagesByCountry_null_returnsEmptyList() throws Throwable {
+        List result = LocaleUtils.languagesByCountry(null);
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    // known country code -> contains expected locale, all entries variant-free
+    @Test
+    public void testLanguagesByCountry_knownCountry_containsExpectedLocaleWithNoVariant() throws Throwable {
+        List result = LocaleUtils.languagesByCountry("US");
+        assertTrue(result.contains(new Locale("en", "US")));
+        for (int i = 0; i < result.size(); i++) {
+            Locale loc = (Locale) result.get(i);
+            assertEquals("", loc.getVariant());
+            assertEquals("US", loc.getCountry());
+        }
+    }
+
+    // unknown country code -> empty list
+    @Test
+    public void testLanguagesByCountry_unknownCountry_returnsEmptyList() throws Throwable {
+        List result = LocaleUtils.languagesByCountry("XX_BOGUS");
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    // null language code -> empty list, never null
+    @Test
+    public void testCountriesByLanguage_null_returnsEmptyList() throws Throwable {
+        List result = LocaleUtils.countriesByLanguage(null);
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    // known language code -> contains expected locale, country non-empty, no variant
+    @Test
+    public void testCountriesByLanguage_knownLanguage_containsExpectedLocaleWithNonEmptyCountry() throws Throwable {
+        List result = LocaleUtils.countriesByLanguage("en");
+        assertTrue(result.contains(new Locale("en", "US")));
+        for (int i = 0; i < result.size(); i++) {
+            Locale loc = (Locale) result.get(i);
+            assertEquals("", loc.getVariant());
+            assertTrue(loc.getCountry().length() != 0);
+            assertEquals("en", loc.getLanguage());
+        }
+    }
+
+    // unknown language code -> empty list
+    @Test
+    public void testCountriesByLanguage_unknownLanguage_returnsEmptyList() throws Throwable {
+        List result = LocaleUtils.countriesByLanguage("zz");
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    // public constructor must be usable (JavaBean convention per Javadoc)
+    @Test
+    public void testConstructor_createsNonNullInstance() throws Throwable {
+        LocaleUtils instance = new LocaleUtils();
+        assertNotNull(instance);
+    }
+}

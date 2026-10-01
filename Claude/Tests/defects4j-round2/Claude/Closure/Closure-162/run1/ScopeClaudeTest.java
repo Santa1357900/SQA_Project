@@ -1,0 +1,428 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.jstype.ObjectType;
+
+import java.util.Iterator;
+
+public class ScopeClaudeTest {
+
+  private Scope rootScope;
+
+  @Before
+  public void setUp() throws Throwable {
+    rootScope = new Scope(IR.block(), (ObjectType) null);
+  }
+
+  // covers Preconditions.checkNotNull(parent) in Scope(Scope,Node)
+  @Test
+  public void testConstructor_nullParent_throwsNullPointerException() throws Throwable {
+    try {
+      new Scope((Scope) null, IR.block());
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // covers Preconditions.checkArgument(rootNode != parent.rootNode)
+  @Test
+  public void testConstructor_sameRootNodeAsParent_throwsIllegalArgumentException() throws Throwable {
+    try {
+      new Scope(rootScope, rootScope.getRootNode());
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // covers normal Scope(Scope,Node) construction: depth/parent/rootNode/isBottom
+  @Test
+  public void testConstructor_childScope_depthParentRootNodeCorrect() throws Throwable {
+    Node n = IR.block();
+    Scope child = new Scope(rootScope, n);
+    assertEquals(1, child.getDepth());
+    assertSame(rootScope, child.getParent());
+    assertSame(rootScope, child.getParentScope());
+    assertSame(n, child.getRootNode());
+    assertFalse(child.isBottom());
+  }
+
+  // covers depth = parent.depth + 1 across two nesting levels
+  @Test
+  public void testConstructor_grandchildScope_depthIncrementsByOne() throws Throwable {
+    Scope child = new Scope(rootScope, IR.block());
+    Scope grandchild = new Scope(child, IR.block());
+    assertEquals(2, grandchild.getDepth());
+    assertSame(child, grandchild.getParent());
+  }
+
+  // covers Scope(Node,ObjectType) bottom-of-lattice constructor
+  @Test
+  public void testBottomScopeConstructor_rootPropertiesCorrect() throws Throwable {
+    assertTrue(rootScope.isBottom());
+    assertEquals(0, rootScope.getDepth());
+    assertNull(rootScope.getParent());
+    assertNull(rootScope.getParentScope());
+    assertNull(rootScope.getTypeOfThis());
+    assertTrue(rootScope.isGlobal());
+    assertFalse(rootScope.isLocal());
+  }
+
+  // covers Scope(Node,AbstractCompiler) global constructor and GLOBAL_THIS lookup
+  @Test
+  public void testGlobalConstructorWithCompiler_rootPropertiesAndThisTypeNotNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node globalRoot = IR.block();
+    Scope globalScope = new Scope(globalRoot, compiler);
+    assertTrue(globalScope.isGlobal());
+    assertFalse(globalScope.isBottom());
+    assertEquals(0, globalScope.getDepth());
+    assertNotNull(globalScope.getTypeOfThis());
+  }
+
+  // covers isGlobal/isLocal for a scope whose parent is non-null
+  @Test
+  public void testChildScope_isLocalTrueIsGlobalFalse() throws Throwable {
+    Scope child = new Scope(rootScope, IR.block());
+    assertFalse(child.isGlobal());
+    assertTrue(child.isLocal());
+  }
+
+  // covers getGlobalScope walking multiple parent links
+  @Test
+  public void testGetGlobalScope_fromGrandchildReturnsRoot() throws Throwable {
+    Scope child = new Scope(rootScope, IR.block());
+    Scope grandchild = new Scope(child, IR.block());
+    assertSame(rootScope, grandchild.getGlobalScope());
+  }
+
+  // covers getGlobalScope loop condition false immediately (no parent)
+  @Test
+  public void testGetGlobalScope_fromRootReturnsSelf() throws Throwable {
+    assertSame(rootScope, rootScope.getGlobalScope());
+  }
+
+  // covers declare(name,node,type,input) delegating with inferred=true
+  @Test
+  public void testDeclareFourArg_createsInferredVarWithDefaults() throws Throwable {
+    Node n = IR.name("x");
+    Scope.Var v = rootScope.declare("x", n, null, null);
+    assertTrue(v.isTypeInferred());
+    assertNull(v.getType());
+    assertSame(n, v.getNode());
+    assertEquals("x", v.getName());
+    assertEquals("<non-file>", v.getInputName());
+  }
+
+  // covers declare(...,inferred=false) branch
+  @Test
+  public void testDeclareFiveArgFalse_createsNonInferredVar() throws Throwable {
+    Scope.Var v = rootScope.declare("y", IR.name("y"), null, null, false);
+    assertFalse(v.isTypeInferred());
+  }
+
+  // covers checkState(name.length() > 0) failing on empty string
+  @Test
+  public void testDeclare_emptyName_throwsIllegalStateException() throws Throwable {
+    try {
+      rootScope.declare("", IR.name("z"), null, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // covers checkState(name != null) short-circuit failing on null name
+  @Test
+  public void testDeclare_nullName_throwsIllegalStateException() throws Throwable {
+    try {
+      rootScope.declare((String) null, IR.name("z"), null, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // covers checkState(vars.get(name) == null) preventing re-declaration
+  @Test
+  public void testDeclare_duplicateNameSameScope_throwsIllegalStateException() throws Throwable {
+    rootScope.declare("dup", IR.name("dup"), null, null);
+    try {
+      rootScope.declare("dup", IR.name("dup"), null, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // covers each Scope keeping an independent vars map (shadowing allowed)
+  @Test
+  public void testDeclare_sameNameDifferentScopes_allowedShadowing() throws Throwable {
+    Scope child = new Scope(rootScope, IR.block());
+    rootScope.declare("dup2", IR.name("dup2"), null, null);
+    Scope.Var inChild = child.declare("dup2", IR.name("dup2"), null, null);
+    assertNotNull(inChild);
+    assertNotNull(rootScope.getOwnSlot("dup2"));
+  }
+
+  // covers undeclare removing entry so getVar/isDeclared reflect removal
+  @Test
+  public void testUndeclare_removesVarFromScope() throws Throwable {
+    Scope.Var v = rootScope.declare("a", IR.name("a"), null, null);
+    rootScope.undeclare(v);
+    assertNull(rootScope.getVar("a"));
+    assertFalse(rootScope.isDeclared("a", false));
+    assertEquals(0, rootScope.getVarCount());
+  }
+
+  // covers checkState(var.scope == this) in undeclare
+  @Test
+  public void testUndeclare_wrongScope_throwsIllegalStateException() throws Throwable {
+    Scope scopeA = new Scope(rootScope, IR.block());
+    Scope scopeB = new Scope(rootScope, IR.block());
+    Scope.Var v = scopeA.declare("wv", IR.name("wv"), null, null);
+    try {
+      scopeB.undeclare(v);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // covers checkState(vars.get(var.name) == var) after prior removal
+  @Test
+  public void testUndeclare_alreadyRemoved_throwsIllegalStateException() throws Throwable {
+    Scope.Var v = rootScope.declare("b", IR.name("b"), null, null);
+    rootScope.undeclare(v);
+    try {
+      rootScope.undeclare(v);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // covers getSlot delegating to getVar's parent recursion
+  @Test
+  public void testGetSlot_recursesLikeGetVar() throws Throwable {
+    rootScope.declare("p", IR.name("p"), null, null);
+    Scope child = new Scope(rootScope, IR.block());
+    assertNotNull(child.getSlot("p"));
+    assertEquals("p", child.getSlot("p").getName());
+  }
+
+  // covers getOwnSlot reading only this scope's own vars map
+  @Test
+  public void testGetOwnSlot_doesNotRecurseToParent() throws Throwable {
+    rootScope.declare("q", IR.name("q"), null, null);
+    Scope child = new Scope(rootScope, IR.block());
+    assertNull(child.getOwnSlot("q"));
+    assertNotNull(rootScope.getOwnSlot("q"));
+  }
+
+  // covers both branches: found via parent recursion, and base-case null
+  @Test
+  public void testGetVar_recursesToParentAndReturnsNullIfMissing() throws Throwable {
+    rootScope.declare("r", IR.name("r"), null, null);
+    Scope child = new Scope(rootScope, IR.block());
+    assertNotNull(child.getVar("r"));
+    assertNull(child.getVar("doesNotExist"));
+  }
+
+  // covers lazy singleton creation and Arguments field defaults
+  @Test
+  public void testGetArgumentsVar_sameInstanceAndDefaults() throws Throwable {
+    Scope child = new Scope(rootScope, IR.block());
+    Scope.Var args1 = child.getArgumentsVar();
+    Scope.Var args2 = child.getArgumentsVar();
+    assertSame(args1, args2);
+    assertEquals("arguments", args1.getName());
+    assertFalse(args1.isTypeInferred());
+    assertNull(args1.getType());
+    assertNull(args1.getParentNode());
+  }
+
+  // covers Arguments.equals comparing owning scopes' root nodes
+  @Test
+  public void testGetArgumentsVar_differentScopesNotEqual() throws Throwable {
+    Scope scopeA = new Scope(rootScope, IR.block());
+    Scope scopeB = new Scope(rootScope, IR.block());
+    Scope.Var argsA = scopeA.getArgumentsVar();
+    Scope.Var argsB = scopeB.getArgumentsVar();
+    assertFalse(argsA.equals(argsB));
+  }
+
+  // covers Arguments.equals returning false for a non-Arguments Var
+  @Test
+  public void testArgumentsVar_notEqualToRegularVar() throws Throwable {
+    Scope.Var regular = rootScope.declare("notArgs", IR.name("notArgs"), null, null);
+    Scope.Var args = rootScope.getArgumentsVar();
+    assertFalse(args.equals(regular));
+  }
+
+  // covers both the recurse=true and recurse=false branches of isDeclared
+  @Test
+  public void testIsDeclared_recurseFlagControlsParentLookup() throws Throwable {
+    rootScope.declare("s", IR.name("s"), null, null);
+    Scope child = new Scope(rootScope, IR.block());
+    assertFalse(child.isDeclared("s", false));
+    assertTrue(child.isDeclared("s", true));
+    assertTrue(rootScope.isDeclared("s", false));
+  }
+
+  // covers getVars iterator reflecting LinkedHashMap insertion order
+  @Test
+  public void testGetVars_iteratesInInsertionOrder() throws Throwable {
+    Scope child = new Scope(rootScope, IR.block());
+    child.declare("m1", IR.name("m1"), null, null);
+    child.declare("m2", IR.name("m2"), null, null);
+    Iterator<Scope.Var> it = child.getVars();
+    assertEquals("m1", it.next().getName());
+    assertEquals("m2", it.next().getName());
+    assertFalse(it.hasNext());
+  }
+
+  // covers getReferences returning exactly the given var
+  @Test
+  public void testGetReferences_returnsSingletonContainingVar() throws Throwable {
+    Scope.Var v = rootScope.declare("ref", IR.name("ref"), null, null);
+    Iterator<Scope.Var> it = rootScope.getReferences(v).iterator();
+    assertSame(v, it.next());
+    assertFalse(it.hasNext());
+  }
+
+  // covers getScope(var) returning var's owning scope
+  @Test
+  public void testGetScope_returnsDeclaringScope() throws Throwable {
+    Scope.Var v = rootScope.declare("gs", IR.name("gs"), null, null);
+    assertSame(rootScope, rootScope.getScope(v));
+  }
+
+  // covers getAllSymbols exposing only this scope's own vars map
+  @Test
+  public void testGetAllSymbols_onlyOwnScopeVars() throws Throwable {
+    rootScope.declare("o1", IR.name("o1"), null, null);
+    Scope child = new Scope(rootScope, IR.block());
+    child.declare("o2", IR.name("o2"), null, null);
+    Iterator<Scope.Var> it = child.getAllSymbols().iterator();
+    assertEquals("o2", it.next().getName());
+    assertFalse(it.hasNext());
+  }
+
+  // covers getVarCount increasing then decreasing
+  @Test
+  public void testGetVarCount_reflectsDeclareAndUndeclare() throws Throwable {
+    Scope child = new Scope(rootScope, IR.block());
+    Scope.Var v1 = child.declare("c1", IR.name("c1"), null, null);
+    child.declare("c2", IR.name("c2"), null, null);
+    assertEquals(2, child.getVarCount());
+    child.undeclare(v1);
+    assertEquals(1, child.getVarCount());
+  }
+
+  // covers predicate short-circuiting when getParentNode() == null
+  @Test
+  public void testGetDeclarativelyUnboundVarsWithoutTypes_excludesVarWithNullParentNode() throws Throwable {
+    Scope child = new Scope(rootScope, IR.block());
+    child.declare("u1", IR.name("u1"), null, null);
+    Iterator<Scope.Var> it = child.getDeclarativelyUnboundVarsWithoutTypes();
+    assertFalse(it.hasNext());
+  }
+
+  // covers getInitialValue() dereferencing a null parent node
+  @Test
+  public void testVarGetInitialValue_noParentNode_throwsNullPointerException() throws Throwable {
+    Scope.Var v = rootScope.declare("iv", IR.name("iv"), null, null);
+    try {
+      v.getInitialValue();
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // covers isExtern() short-circuit when input == null
+  @Test
+  public void testVarIsExtern_nullInput_returnsTrue() throws Throwable {
+    Scope.Var v = rootScope.declare("ext", IR.name("ext"), null, null);
+    assertTrue(v.isExtern());
+  }
+
+  // covers isConst() recognizing the ALL_CAPS constant naming convention
+  @Test
+  public void testVarIsConst_upperCaseConventionName_true() throws Throwable {
+    Scope.Var v = rootScope.declare("MAX_LIMIT", IR.name("MAX_LIMIT"), null, null);
+    assertTrue(v.isConst());
+  }
+
+  // covers isConst() rejecting ordinary lower-case identifiers
+  @Test
+  public void testVarIsConst_lowerCaseName_false() throws Throwable {
+    Scope.Var v = rootScope.declare("count", IR.name("count"), null, null);
+    assertFalse(v.isConst());
+  }
+
+  // covers info == null branches for isNoShadow/getJSDocInfo/isDefine
+  @Test
+  public void testVarDefaultsIsNoShadowJSDocInfoIsDefine() throws Throwable {
+    Scope.Var v = rootScope.declare("plain", IR.name("plain"), null, null);
+    assertFalse(v.isNoShadow());
+    assertNull(v.getJSDocInfo());
+    assertFalse(v.isDefine());
+  }
+
+  // covers toString() concatenation with a null type
+  @Test
+  public void testVarToString_formatsNameAndType() throws Throwable {
+    Scope.Var v = rootScope.declare("tv", IR.name("tv"), null, null);
+    assertEquals("Scope.Var tv{null}", v.toString());
+  }
+
+  // covers equals()/hashCode() based on nameNode identity across scopes
+  @Test
+  public void testVarEquals_sameNameNodeDifferentScopes_true() throws Throwable {
+    Node shared = IR.name("dup3");
+    Scope child = new Scope(rootScope, IR.block());
+    Scope.Var v1 = rootScope.declare("dup3", shared, null, null);
+    Scope.Var v2 = child.declare("dup3", shared, null, null);
+    assertTrue(v1.equals(v2));
+    assertEquals(v1.hashCode(), v2.hashCode());
+  }
+
+  // covers equals() instanceof guard for non-Var and null arguments
+  @Test
+  public void testVarEquals_nonVarOrNull_false() throws Throwable {
+    Scope.Var v = rootScope.declare("eq", IR.name("eq"), null, null);
+    assertFalse(v.equals("not a var"));
+    assertFalse(v.equals(null));
+  }
+
+  // covers Var.isGlobal/isLocal delegating to its owning scope
+  @Test
+  public void testVarIsGlobalIsLocal_matchesScope() throws Throwable {
+    Scope child = new Scope(rootScope, IR.block());
+    Scope.Var vRoot = rootScope.declare("vr", IR.name("vr"), null, null);
+    Scope.Var vChild = child.declare("vc", IR.name("vc"), null, null);
+    assertTrue(vRoot.isGlobal());
+    assertFalse(vRoot.isLocal());
+    assertFalse(vChild.isGlobal());
+    assertTrue(vChild.isLocal());
+  }
+
+  // covers setType() checkState failing when the type is not inferred
+  @Test
+  public void testVarSetType_declaredVar_throwsIllegalStateException() throws Throwable {
+    Scope.Var v = rootScope.declare("dv", IR.name("dv"), null, null, false);
+    try {
+      v.setType(null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // covers setType() succeeding when the var's type is inferred
+  @Test
+  public void testVarSetType_inferredVar_succeeds() throws Throwable {
+    Scope.Var v = rootScope.declare("iv2", IR.name("iv2"), null, null, true);
+    v.setType(null);
+    assertNull(v.getType());
+  }
+}

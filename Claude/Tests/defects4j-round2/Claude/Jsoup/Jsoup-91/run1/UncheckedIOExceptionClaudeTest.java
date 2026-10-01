@@ -1,0 +1,227 @@
+package org.jsoup;
+
+import java.io.IOException;
+import java.io.FileNotFoundException;
+import java.io.EOFException;
+import java.io.UnsupportedEncodingException;
+import java.io.InterruptedIOException;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class UncheckedIOExceptionClaudeTest {
+
+    // Constructor: cause is stored and retrievable via getCause()
+    @Test
+    public void testConstructor_withIOExceptionCause_setsCauseCorrectly() throws Throwable {
+        IOException io = new IOException("boom");
+        UncheckedIOException e = new UncheckedIOException(io);
+        assertSame(io, e.getCause());
+    }
+
+    // Constructor: null cause is accepted, getCause() returns null
+    @Test
+    public void testConstructor_withNullCause_getCauseReturnsNull() throws Throwable {
+        UncheckedIOException e = new UncheckedIOException(null);
+        assertNull(e.getCause());
+    }
+
+    // ioException(): returns the exact same instance passed to constructor
+    @Test
+    public void testIoException_returnsSameInstancePassedToConstructor() throws Throwable {
+        IOException io = new IOException("disk error");
+        UncheckedIOException e = new UncheckedIOException(io);
+        assertSame(io, e.ioException());
+    }
+
+    // ioException(): cast of null cause yields null, no ClassCastException
+    @Test
+    public void testIoException_withNullCause_returnsNull() throws Throwable {
+        UncheckedIOException e = new UncheckedIOException(null);
+        assertNull(e.ioException());
+    }
+
+    // ioException(): returned value is actually an IOException type
+    @Test
+    public void testIoException_returnedObjectIsInstanceOfIOException() throws Throwable {
+        UncheckedIOException e = new UncheckedIOException(new IOException("x"));
+        assertTrue(e.ioException() instanceof IOException);
+    }
+
+    // RuntimeException(Throwable) contract: message equals cause.toString() when cause has a message
+    @Test
+    public void testGetMessage_withCauseHavingMessage_equalsCauseToString() throws Throwable {
+        IOException io = new IOException("disk error");
+        UncheckedIOException e = new UncheckedIOException(io);
+        assertEquals(io.toString(), e.getMessage());
+    }
+
+    // RuntimeException(Throwable) contract: cause with null message -> toString() is just class name
+    @Test
+    public void testGetMessage_withCauseHavingNullMessage_equalsCauseClassName() throws Throwable {
+        IOException io = new IOException();
+        UncheckedIOException e = new UncheckedIOException(io);
+        assertEquals(io.toString(), e.getMessage());
+        assertEquals(IOException.class.getName(), e.getMessage());
+    }
+
+    // RuntimeException(Throwable) contract: null cause -> message is null
+    @Test
+    public void testGetMessage_withNullCause_returnsNull() throws Throwable {
+        UncheckedIOException e = new UncheckedIOException(null);
+        assertNull(e.getMessage());
+    }
+
+    // getLocalizedMessage() default delegates to getMessage()
+    @Test
+    public void testGetLocalizedMessage_matchesGetMessage() throws Throwable {
+        IOException io = new IOException("io failure");
+        UncheckedIOException e = new UncheckedIOException(io);
+        assertEquals(e.getMessage(), e.getLocalizedMessage());
+    }
+
+    // Class hierarchy: UncheckedIOException is a RuntimeException (unchecked)
+    @Test
+    public void testIsInstanceOfRuntimeException() throws Throwable {
+        UncheckedIOException e = new UncheckedIOException(new IOException("x"));
+        assertTrue(e instanceof RuntimeException);
+    }
+
+    // toString() of Throwable: starts with fully qualified class name
+    @Test
+    public void testToString_startsWithClassName() throws Throwable {
+        UncheckedIOException e = new UncheckedIOException(new IOException("x"));
+        assertTrue(e.toString().startsWith("org.jsoup.UncheckedIOException"));
+    }
+
+    // initCause() throws IllegalStateException because cause was already set via constructor
+    @Test
+    public void testInitCause_afterConstruction_throwsIllegalStateException() throws Throwable {
+        UncheckedIOException e = new UncheckedIOException(new IOException("x"));
+        try {
+            e.initCause(new IOException("other"));
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // ioException(): calling twice returns the same stable reference
+    @Test
+    public void testIoException_calledMultipleTimes_returnsSameInstance() throws Throwable {
+        IOException io = new IOException("x");
+        UncheckedIOException e = new UncheckedIOException(io);
+        assertSame(e.ioException(), e.ioException());
+    }
+
+    // Constructor accepts IOException subclass: FileNotFoundException, cast succeeds
+    @Test
+    public void testConstructor_withFileNotFoundException_castSucceeds() throws Throwable {
+        FileNotFoundException fnf = new FileNotFoundException("missing");
+        UncheckedIOException e = new UncheckedIOException(fnf);
+        assertSame(fnf, e.ioException());
+    }
+
+    // Constructor accepts IOException subclass: EOFException, cast succeeds
+    @Test
+    public void testConstructor_withEOFException_castSucceeds() throws Throwable {
+        EOFException eof = new EOFException("end of stream");
+        UncheckedIOException e = new UncheckedIOException(eof);
+        assertSame(eof, e.ioException());
+    }
+
+    // Constructor accepts IOException subclass: UnsupportedEncodingException, cast succeeds
+    @Test
+    public void testConstructor_withUnsupportedEncodingException_castSucceeds() throws Throwable {
+        UnsupportedEncodingException uee = new UnsupportedEncodingException("bad-enc");
+        UncheckedIOException e = new UncheckedIOException(uee);
+        assertSame(uee, e.ioException());
+    }
+
+    // Constructor accepts IOException subclass: InterruptedIOException, cast succeeds
+    @Test
+    public void testConstructor_withInterruptedIOException_castSucceeds() throws Throwable {
+        InterruptedIOException iioe = new InterruptedIOException("interrupted");
+        UncheckedIOException e = new UncheckedIOException(iioe);
+        assertSame(iioe, e.ioException());
+    }
+
+    // Throwing: UncheckedIOException can be caught as RuntimeException
+    @Test
+    public void testThrow_canBeCaughtAsRuntimeException() throws Throwable {
+        IOException io = new IOException("fail");
+        try {
+            throw new UncheckedIOException(io);
+        } catch (RuntimeException caught) {
+            assertSame(io, ((UncheckedIOException) caught).ioException());
+        }
+    }
+
+    // Throwing: UncheckedIOException can be caught as its own type
+    @Test
+    public void testThrow_canBeCaughtAsUncheckedIOException() throws Throwable {
+        IOException io = new IOException("fail2");
+        try {
+            throw new UncheckedIOException(io);
+        } catch (UncheckedIOException caught) {
+            assertEquals(io, caught.getCause());
+        }
+    }
+
+    // Unchecked exception: propagates out of a method with no throws clause
+    @Test
+    public void testThrow_withoutThrowsDeclaration_compilesAndPropagates() throws Throwable {
+        try {
+            throwUnchecked(new IOException("propagated"));
+            fail("expected UncheckedIOException");
+        } catch (UncheckedIOException expected) {
+            assertEquals("propagated", expected.ioException().getMessage());
+        }
+    }
+
+    private void throwUnchecked(IOException io) {
+        throw new UncheckedIOException(io);
+    }
+
+    // Two instances built from different causes are independent
+    @Test
+    public void testConstructor_differentInstancesHaveIndependentCauses() throws Throwable {
+        IOException io1 = new IOException("a");
+        IOException io2 = new IOException("b");
+        UncheckedIOException e1 = new UncheckedIOException(io1);
+        UncheckedIOException e2 = new UncheckedIOException(io2);
+        assertNotSame(e1.ioException(), e2.ioException());
+        assertEquals("a", e1.ioException().getMessage());
+        assertEquals("b", e2.ioException().getMessage());
+    }
+
+    // getCause() and ioException() both refer to the exact same object
+    @Test
+    public void testGetCause_sameReferenceAsIoExceptionResult() throws Throwable {
+        IOException io = new IOException("same-ref");
+        UncheckedIOException e = new UncheckedIOException(io);
+        assertSame(e.getCause(), e.ioException());
+    }
+
+    // Throwable fills in a stack trace automatically upon construction
+    @Test
+    public void testStackTrace_isNonEmptyAfterConstruction() throws Throwable {
+        UncheckedIOException e = new UncheckedIOException(new IOException("x"));
+        assertTrue(e.getStackTrace().length > 0);
+    }
+
+    // Subclass cause's original message is preserved through getCause()
+    @Test
+    public void testIoException_withSubclassMessagePreserved() throws Throwable {
+        FileNotFoundException fnf = new FileNotFoundException("not found here");
+        UncheckedIOException e = new UncheckedIOException(fnf);
+        assertEquals("not found here", e.ioException().getMessage());
+    }
+
+    // getCause() preserves the concrete runtime type of the original IOException subclass
+    @Test
+    public void testGetCause_typeIsPreservedForSubclass() throws Throwable {
+        EOFException eof = new EOFException("eof");
+        UncheckedIOException e = new UncheckedIOException(eof);
+        assertTrue(e.getCause() instanceof EOFException);
+    }
+}

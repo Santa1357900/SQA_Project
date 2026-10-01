@@ -1,0 +1,382 @@
+package org.apache.commons.math.optimization.direct;
+
+import java.util.Arrays;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.analysis.MultivariateFunction;
+import org.apache.commons.math.optimization.GoalType;
+import org.apache.commons.math.optimization.RealPointValuePair;
+import org.apache.commons.math.exception.NumberIsTooSmallException;
+import org.apache.commons.math.exception.OutOfRangeException;
+
+public class BOBYQAOptimizerClaudeTest {
+
+    private static final int MAX_EVAL = 20000;
+
+    private MultivariateFunction sumOfSquares(final double[] center) {
+        return new MultivariateFunction() {
+            public double value(double[] point) {
+                double sum = 0;
+                for (int i = 0; i < point.length; i++) {
+                    double d = point[i] - center[i];
+                    sum += d * d;
+                }
+                return sum;
+            }
+        };
+    }
+
+    private MultivariateFunction negatedSumOfSquares(final double offset) {
+        return new MultivariateFunction() {
+            public double value(double[] point) {
+                double sum = offset;
+                for (int i = 0; i < point.length; i++) {
+                    sum -= point[i] * point[i];
+                }
+                return sum;
+            }
+        };
+    }
+
+    private MultivariateFunction linearSum() {
+        return new MultivariateFunction() {
+            public double value(double[] point) {
+                double sum = 0;
+                for (int i = 0; i < point.length; i++) {
+                    sum += point[i];
+                }
+                return sum;
+            }
+        };
+    }
+
+    private MultivariateFunction quartic(final double[] center) {
+        return new MultivariateFunction() {
+            public double value(double[] point) {
+                double sum = 0;
+                for (int i = 0; i < point.length; i++) {
+                    double d = point[i] - center[i];
+                    sum += d * d * d * d;
+                }
+                return sum;
+            }
+        };
+    }
+
+    private double[] fill(int n, double v) {
+        double[] a = new double[n];
+        Arrays.fill(a, v);
+        return a;
+    }
+
+    // Covers the public static final constants documented via Javadoc {@value}.
+    @Test
+    public void testConstants_haveExpectedValues() throws Throwable {
+        assertEquals(2, BOBYQAOptimizer.MINIMUM_PROBLEM_DIMENSION);
+        assertEquals(10.0, BOBYQAOptimizer.DEFAULT_INITIAL_RADIUS, 1e-9);
+        assertEquals(1E-8, BOBYQAOptimizer.DEFAULT_STOPPING_RADIUS, 1e-12);
+    }
+
+    // Covers unconstrained interior minimum, main bobyqb iteration branches.
+    @Test
+    public void testOptimize_sphereFunction2D_minimize_convergesToOrigin() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {3.0, -4.0};
+        double[] lower = {-10.0, -10.0};
+        double[] upper = {10.0, 10.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(0.0, result.getPoint()[0], 1e-3);
+        assertEquals(0.0, result.getPoint()[1], 1e-3);
+        assertEquals(0.0, result.getValue(), 1e-4);
+    }
+
+    // Covers finding an offset interior minimum (not at origin).
+    @Test
+    public void testOptimize_shiftedQuadratic2D_minimize_findsOffsetMinimum() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-10.0, -10.0};
+        double[] upper = {10.0, 10.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{1.0, -2.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(1.0, result.getPoint()[0], 1e-3);
+        assertEquals(-2.0, result.getPoint()[1], 1e-3);
+        assertEquals(0.0, result.getValue(), 1e-4);
+    }
+
+    // Covers GoalType.MAXIMIZE branch and sign handling in doOptimize().
+    @Test
+    public void testOptimize_maximizeGoal_negatedQuadratic_findsMaximum() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {1.0, 1.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, negatedSumOfSquares(100.0),
+                                                        GoalType.MAXIMIZE, start, lower, upper);
+        assertEquals(0.0, result.getPoint()[0], 1e-3);
+        assertEquals(0.0, result.getPoint()[1], 1e-3);
+        assertEquals(100.0, result.getValue(), 1e-4);
+    }
+
+    // Covers box-constrained minimum clipped to the lower corner of both dims.
+    @Test
+    public void testOptimize_boundsActiveBothLower_minimize_clipsToCorner() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {3.0, 3.0};
+        double[] lower = {2.0, 2.0};
+        double[] upper = {5.0, 5.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(2.0, result.getPoint()[0], 1e-3);
+        assertEquals(2.0, result.getPoint()[1], 1e-3);
+        assertEquals(8.0, result.getValue(), 1e-3);
+    }
+
+
+
+
+
+    // Covers the "else" sub-branch: start within initialTrustRegionRadius of lower bound.
+    @Test
+    public void testOptimize_startNearLowerBoundWithinRadius_minimize() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {-9.99, -9.99};
+        double[] lower = {-10.0, -10.0};
+        double[] upper = {10.0, 10.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(0.0, result.getPoint()[0], 1e-3);
+        assertEquals(0.0, result.getPoint()[1], 1e-3);
+    }
+
+    // Covers dimension 3 (above minimum), npt = 2n+1, interior minimum.
+    @Test
+    public void testOptimize_dimension3Sphere_minimize_convergesToOrigin() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(7);
+        double[] start = {1.0, 2.0, -3.0};
+        double[] lower = fill(3, -10.0);
+        double[] upper = fill(3, 10.0);
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0, 0.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(0.0, result.getValue(), 1e-3);
+        assertEquals(3, result.getPoint().length);
+    }
+
+
+
+    // Covers npt at its maximum valid boundary (n+2)(n+1)/2 for dimension 2.
+    @Test
+    public void testOptimize_nptMaximumBoundaryValid_minimize() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(6);
+        double[] start = {2.0, 2.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(0.0, result.getValue(), 1e-3);
+    }
+
+    // Covers the 3-arg constructor with custom initial/stopping radii.
+    @Test
+    public void testOptimize_customRadiiConstructor_minimize() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5, 5.0, 1e-6);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-10.0, -10.0};
+        double[] upper = {10.0, 10.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{1.0, 1.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(1.0, result.getPoint()[0], 1e-3);
+        assertEquals(1.0, result.getPoint()[1], 1e-3);
+    }
+
+    // Covers a linear (zero-curvature) objective minimized to the lower corner.
+    @Test
+    public void testOptimize_linearFunctionMinimize_cornerAtLowerBound() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {0.5, 0.5};
+        double[] lower = {0.0, 0.0};
+        double[] upper = {1.0, 1.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, linearSum(),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(0.0, result.getValue(), 1e-3);
+    }
+
+    // Covers a linear objective maximized to the upper corner.
+    @Test
+    public void testOptimize_linearFunctionMaximize_cornerAtUpperBound() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {0.5, 0.5};
+        double[] lower = {0.0, 0.0};
+        double[] upper = {1.0, 1.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, linearSum(),
+                                                        GoalType.MAXIMIZE, start, lower, upper);
+        assertEquals(2.0, result.getValue(), 1e-3);
+    }
+
+    // Covers setup(): dimension below MINIMUM_PROBLEM_DIMENSION must throw.
+    @Test
+    public void testOptimize_dimensionTooSmall_throwsNumberIsTooSmallException() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(4);
+        double[] start = {0.0};
+        double[] lower = {-1.0};
+        double[] upper = {1.0};
+        try {
+            optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0}),
+                               GoalType.MINIMIZE, start, lower, upper);
+            fail("expected NumberIsTooSmallException");
+        } catch (NumberIsTooSmallException expected) {
+        }
+    }
+
+    // Covers setup(): numberOfInterpolationPoints below n+2 must throw.
+    @Test
+    public void testOptimize_nptTooFew_throwsOutOfRangeException() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(3);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        try {
+            optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0}),
+                               GoalType.MINIMIZE, start, lower, upper);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // Covers setup(): numberOfInterpolationPoints above (n+2)(n+1)/2 must throw.
+    @Test
+    public void testOptimize_nptTooMany_throwsOutOfRangeException() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(7);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        try {
+            optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0}),
+                               GoalType.MINIMIZE, start, lower, upper);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // Covers an asymmetric, wide box far from the origin with an interior minimum.
+    @Test
+    public void testOptimize_asymmetricBoundsFarFromOrigin_minimize() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-1.0, -1.0};
+        double[] upper = {100.0, 100.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{50.0, 70.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(50.0, result.getPoint()[0], 1e-2);
+        assertEquals(70.0, result.getPoint()[1], 1e-2);
+    }
+
+    // Covers that the returned point has the same dimension as the start point.
+    @Test
+    public void testOptimize_returnedPointLength_matchesDimension() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {1.0, 1.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(2, result.getPoint().length);
+    }
+
+    // Covers consistency: different start points converge to the same global minimum.
+    @Test
+    public void testOptimize_differentStartPoints_sameMinimumFound() throws Throwable {
+        BOBYQAOptimizer optimizer1 = new BOBYQAOptimizer(5);
+        BOBYQAOptimizer optimizer2 = new BOBYQAOptimizer(5);
+        double[] lower = {-10.0, -10.0};
+        double[] upper = {10.0, 10.0};
+        RealPointValuePair r1 = optimizer1.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0}),
+                                                     GoalType.MINIMIZE, new double[]{3.0, 3.0}, lower, upper);
+        RealPointValuePair r2 = optimizer2.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0}),
+                                                     GoalType.MINIMIZE, new double[]{-3.0, -3.0}, lower, upper);
+        assertEquals(0.0, r1.getValue(), 1e-3);
+        assertEquals(0.0, r2.getValue(), 1e-3);
+    }
+
+    // Covers recommended npt = 2n+1 choice for dimension 3 with offset minimum.
+    @Test
+    public void testOptimize_recommendedNpt2NPlus1_dimension3_minimize() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(7);
+        double[] start = {0.0, 0.0, 0.0};
+        double[] lower = fill(3, -10.0);
+        double[] upper = fill(3, 10.0);
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{1.0, 2.0, 3.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(1.0, result.getPoint()[0], 1e-2);
+        assertEquals(2.0, result.getPoint()[1], 1e-2);
+        assertEquals(3.0, result.getPoint()[2], 1e-2);
+    }
+
+    // Covers dimension 4 (higher dimensional) interior minimum at the origin.
+    @Test
+    public void testOptimize_dimension4_minimize() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(9);
+        double[] start = {5.0, -5.0, 5.0, -5.0};
+        double[] lower = fill(4, -10.0);
+        double[] upper = fill(4, 10.0);
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0, 0.0, 0.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(0.0, result.getValue(), 1e-2);
+    }
+
+    // Covers a box entirely in the negative range, clipping to the closest feasible point.
+    @Test
+    public void testOptimize_negativeBoundsOnly_minimize() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {-5.0, -5.0};
+        double[] lower = {-10.0, -10.0};
+        double[] upper = {-1.0, -1.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{0.0, 0.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(-1.0, result.getPoint()[0], 1e-3);
+        assertEquals(-1.0, result.getPoint()[1], 1e-3);
+        assertEquals(2.0, result.getValue(), 1e-3);
+    }
+
+    // Covers a very small stoppingTrustRegionRadius yielding high precision convergence.
+    @Test
+    public void testOptimize_customStoppingRadiusHighPrecision_minimize() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5, 10.0, 1e-10);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-20.0, -20.0};
+        double[] upper = {20.0, 20.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{3.0, 4.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(3.0, result.getPoint()[0], 1e-4);
+        assertEquals(4.0, result.getPoint()[1], 1e-4);
+    }
+
+    // Covers a large custom initialTrustRegionRadius still within the wide bounds.
+    @Test
+    public void testOptimize_customInitialRadiusLarge_minimize() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5, 50.0, 1e-8);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-100.0, -100.0};
+        double[] upper = {100.0, 100.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, sumOfSquares(new double[]{-10.0, 10.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(-10.0, result.getPoint()[0], 1e-2);
+        assertEquals(10.0, result.getPoint()[1], 1e-2);
+    }
+
+    // Covers a non-quadratic (quartic) convex objective, exercising multiple refinement iterations.
+    @Test
+    public void testOptimize_quarticFunction_minimize_convergesNearMinimum() throws Throwable {
+        BOBYQAOptimizer optimizer = new BOBYQAOptimizer(5);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-10.0, -10.0};
+        double[] upper = {10.0, 10.0};
+        RealPointValuePair result = optimizer.optimize(MAX_EVAL, quartic(new double[]{1.0, 2.0}),
+                                                        GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(1.0, result.getPoint()[0], 1e-2);
+        assertEquals(2.0, result.getPoint()[1], 1e-2);
+    }
+}

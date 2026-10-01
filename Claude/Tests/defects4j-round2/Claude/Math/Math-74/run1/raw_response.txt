@@ -1,0 +1,339 @@
+package org.apache.commons.math.ode.nonstiff;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.apache.commons.math.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math.ode.DerivativeException;
+
+public class EmbeddedRungeKuttaIntegratorClaudeTest {
+
+    private static class LinearODE implements FirstOrderDifferentialEquations {
+        private final double coeff;
+        private final int dim;
+        LinearODE(double coeff, int dim) {
+            this.coeff = coeff;
+            this.dim = dim;
+        }
+        public int getDimension() {
+            return dim;
+        }
+        public void computeDerivatives(double t, double[] y, double[] yDot) throws DerivativeException {
+            for (int i = 0; i < dim; i++) {
+                yDot[i] = coeff * y[i];
+            }
+        }
+    }
+
+    private static class HarmonicODE implements FirstOrderDifferentialEquations {
+        public int getDimension() {
+            return 2;
+        }
+        public void computeDerivatives(double t, double[] y, double[] yDot) throws DerivativeException {
+            yDot[0] = y[1];
+            yDot[1] = -y[0];
+        }
+    }
+
+    /** Heun-Euler embedded pair (order 2 / order 1), non-fsal, 2 stages. */
+    private static class EmbeddedRK2 extends EmbeddedRungeKuttaIntegrator {
+        private final double absTol;
+        private final double relTol;
+        private final double[] absTolVec;
+        private final double[] relTolVec;
+
+        EmbeddedRK2(double minStep, double maxStep, double scalAbsTol, double scalRelTol) {
+            super("heun-euler", false, new double[] {1.0}, new double[][] { {1.0} },
+                  new double[] {0.5, 0.5}, (RungeKuttaStepInterpolator) null,
+                  minStep, maxStep, scalAbsTol, scalRelTol);
+            this.absTol = scalAbsTol;
+            this.relTol = scalRelTol;
+            this.absTolVec = null;
+            this.relTolVec = null;
+        }
+
+        EmbeddedRK2(double minStep, double maxStep, double[] vecAbsTol, double[] vecRelTol) {
+            super("heun-euler", false, new double[] {1.0}, new double[][] { {1.0} },
+                  new double[] {0.5, 0.5}, (RungeKuttaStepInterpolator) null,
+                  minStep, maxStep, vecAbsTol, vecRelTol);
+            this.absTol = 0;
+            this.relTol = 0;
+            this.absTolVec = vecAbsTol;
+            this.relTolVec = vecRelTol;
+        }
+
+        public int getOrder() {
+            return 2;
+        }
+
+        protected double estimateError(double[][] yDotK, double[] y0, double[] y1, double h) {
+            int n = y0.length;
+            double sum = 0;
+            for (int j = 0; j < n; j++) {
+                double errEst = h * 0.5 * (yDotK[1][j] - yDotK[0][j]);
+                double yScale = Math.max(Math.abs(y0[j]), Math.abs(y1[j]));
+                double a = (absTolVec == null) ? absTol : absTolVec[j];
+                double r = (relTolVec == null) ? relTol : relTolVec[j];
+                double tol = a + r * yScale;
+                double ratio = errEst / tol;
+                sum += ratio * ratio;
+            }
+            return Math.sqrt(sum / n);
+        }
+    }
+
+    /** Fsal variant: cs = 1, constant error estimate, order 1. */
+    private static class FsalEmbeddedRK2 extends EmbeddedRungeKuttaIntegrator {
+        FsalEmbeddedRK2(double minStep, double maxStep, double scalAbsTol, double scalRelTol) {
+            super("fsal-euler", true, new double[] {1.0}, new double[][] { {1.0} },
+                  new double[] {1.0, 0.0}, (RungeKuttaStepInterpolator) null,
+                  minStep, maxStep, scalAbsTol, scalRelTol);
+        }
+
+        public int getOrder() {
+            return 1;
+        }
+
+        protected double estimateError(double[][] yDotK, double[] y0, double[] y1, double h) {
+            return 0.1;
+        }
+    }
+
+    // Covers: scalar-tolerance constructor configures abstract getOrder() dispatch correctly
+    @Test
+    public void testConstructorScalarTolerance_getOrder_returnsConfiguredValue() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.5, 1.0e-6, 1.0e-6);
+        assertEquals(2, integrator.getOrder());
+    }
+
+    // Covers: vector-tolerance constructor configures abstract getOrder() dispatch correctly
+    @Test
+    public void testConstructorVectorTolerance_getOrder_returnsConfiguredValue() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.5,
+                new double[] {1.0e-6}, new double[] {1.0e-6});
+        assertEquals(2, integrator.getOrder());
+    }
+
+    // Covers: getSafety() default value set by constructor (setSafety(0.9))
+    @Test
+    public void testGetSafety_defaultIsPointNine() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.5, 1.0e-6, 1.0e-6);
+        assertEquals(0.9, integrator.getSafety(), 1.0e-12);
+    }
+
+    // Covers: setSafety() mutates the stored field, reflected by getSafety()
+    @Test
+    public void testSetSafety_updatesValue() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.5, 1.0e-6, 1.0e-6);
+        integrator.setSafety(0.75);
+        assertEquals(0.75, integrator.getSafety(), 1.0e-12);
+    }
+
+    // Covers: setSafety() with a negative edge value, no validation documented, stored as-is
+    @Test
+    public void testSetSafety_negativeValue_storesAsIs() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.5, 1.0e-6, 1.0e-6);
+        integrator.setSafety(-1.0);
+        assertEquals(-1.0, integrator.getSafety(), 1.0e-12);
+    }
+
+    // Covers: setSafety() with a value greater than one, no validation documented, stored as-is
+    @Test
+    public void testSetSafety_valueGreaterThanOne_storesAsIs() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.5, 1.0e-6, 1.0e-6);
+        integrator.setSafety(5.0);
+        assertEquals(5.0, integrator.getSafety(), 1.0e-12);
+    }
+
+    // Covers: integrate() forward branch (forward=true), arraycopy branch (y != y0), normal accept loop
+    @Test
+    public void testIntegrate_forwardExponentialGrowth_matchesAnalyticSolution() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        double[] y0 = {1.0};
+        double[] y = new double[1];
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, y0, 1.0, y);
+        assertEquals(Math.E, y[0], 1.0e-3);
+    }
+
+    // Covers: integrate() backward branch (forward=false, t < t0)
+    @Test
+    public void testIntegrate_backwardExponentialDecay_matchesAnalyticSolution() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        double[] y0 = {Math.E};
+        double[] y = new double[1];
+        integrator.integrate(new LinearODE(1.0, 1), 1.0, y0, 0.0, y);
+        assertEquals(1.0, y[0], 1.0e-3);
+    }
+
+    // Covers: integrate() branch where y == y0 (arraycopy skipped)
+    @Test
+    public void testIntegrate_sameArrayReference_skipsArrayCopyBranch() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        double[] arr = {1.0};
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, arr, 1.0, arr);
+        assertEquals(Math.E, arr[0], 1.0e-3);
+    }
+
+    // Covers: integrate() branch where y != y0 (arraycopy executed), y0 left unmodified
+    @Test
+    public void testIntegrate_differentArrayReference_leavesInitialArrayUnchanged() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        double[] y0 = {1.0};
+        double[] y = new double[1];
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, y0, 1.0, y);
+        assertEquals(1.0, y0[0], 1.0e-12);
+        assertEquals(Math.E, y[0], 1.0e-3);
+    }
+
+    // Covers: integrate() vector tolerance branch (vecAbsoluteTolerance != null), multi-dimensional system
+    @Test
+    public void testIntegrate_vectorTolerance_harmonicOscillator_matchesAnalyticSolution() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2,
+                new double[] {1.0e-6, 1.0e-6}, new double[] {1.0e-6, 1.0e-6});
+        double[] y0 = {1.0, 0.0};
+        double[] y = new double[2];
+        integrator.integrate(new HarmonicODE(), 0.0, y0, Math.PI / 2.0, y);
+        assertEquals(0.0, y[0], 1.0e-3);
+        assertEquals(-1.0, y[1], 1.0e-3);
+    }
+
+    // Covers: integrate() return value equals requested end time when no events are registered
+    @Test
+    public void testIntegrate_returnedStopTime_matchesTargetTime() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        double[] y0 = {1.0};
+        double[] y = new double[1];
+        double stopTime = integrator.integrate(new LinearODE(1.0, 1), 0.0, y0, 1.0, y);
+        assertEquals(1.0, stopTime, 1.0e-6);
+    }
+
+    // Covers: Math.min(maxGrowth, ...) clamp branch in the stepsize control formula
+    @Test
+    public void testIntegrate_lowMaxGrowth_clampsGrowthFactor_stillConverges() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        integrator.setMaxGrowth(1.5);
+        double[] y0 = {1.0};
+        double[] y = new double[1];
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, y0, 1.0, y);
+        assertEquals(Math.E, y[0], 1.0e-3);
+    }
+
+    // Covers: Math.max(minReduction, ...) branch with a non-default reduction factor
+    @Test
+    public void testIntegrate_customMinReduction_stillConverges() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        integrator.setMinReduction(0.3);
+        double[] y0 = {1.0};
+        double[] y = new double[1];
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, y0, 1.0, y);
+        assertEquals(Math.E, y[0], 1.0e-3);
+    }
+
+    // Covers: zero-valued state edge case, verifies loop stays numerically exact (no NaN)
+    @Test
+    public void testIntegrate_zeroInitialState_staysExactlyZero() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        double[] y0 = {0.0};
+        double[] y = new double[1];
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, y0, 1.0, y);
+        assertEquals(0.0, y[0], 1.0e-12);
+    }
+
+    // Covers: multiple while-loop iterations over a longer interval
+    @Test
+    public void testIntegrate_longerInterval_multipleStepsConverges() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        double[] y0 = {1.0};
+        double[] y = new double[1];
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, y0, 5.0, y);
+        assertEquals(Math.exp(5.0), y[0], 0.1);
+    }
+
+    // Covers: maxStep clamp forcing many small accepted steps, final accuracy still contract-correct
+    @Test
+    public void testIntegrate_tightMaxStep_forcesManySmallSteps_stillAccurate() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.01, 1.0e-4, 1.0e-4);
+        double[] y0 = {1.0};
+        double[] y = new double[1];
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, y0, 1.0, y);
+        assertEquals(Math.E, y[0], 1.0e-3);
+    }
+
+    // Covers: negative initial value edge case through the main accept loop
+    @Test
+    public void testIntegrate_negativeInitialValue_matchesAnalyticSolution() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        double[] y0 = {-1.0};
+        double[] y = new double[1];
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, y0, 1.0, y);
+        assertEquals(-Math.E, y[0], 1.0e-3);
+    }
+
+    // Covers: reused integrator instance across two independent integrate() calls (local state reset)
+    @Test
+    public void testIntegrate_multipleCallsOnSameIntegrator_independentResults() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        double[] yA = new double[1];
+        double[] yB = new double[1];
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, new double[] {1.0}, 1.0, yA);
+        integrator.integrate(new LinearODE(1.0, 1), 0.0, new double[] {2.0}, 1.0, yB);
+        assertEquals(Math.E, yA[0], 1.0e-3);
+        assertEquals(2.0 * Math.E, yB[0], 1.0e-3);
+    }
+
+    // Covers: fsal=true branches (skip first-stage recompute, arraycopy of last stage derivative)
+    @Test
+    public void testIntegrate_fsalMethod_completesAndReturnsTargetTime() throws Throwable {
+        FsalEmbeddedRK2 integrator = new FsalEmbeddedRK2(1.0e-6, 0.5, 1.0e-3, 1.0e-3);
+        double[] y0 = {1.0};
+        double[] y = new double[1];
+        double stopTime = integrator.integrate(new LinearODE(1.0, 1), 0.0, y0, 1.0, y);
+        assertEquals(1.0, stopTime, 1.0e-6);
+        assertTrue(y[0] > 1.0 && !Double.isInfinite(y[0]) && !Double.isNaN(y[0]));
+    }
+
+    // Covers: getMinReduction() default value set by constructor (setMinReduction(0.2))
+    @Test
+    public void testGetMinReduction_defaultIsPointTwo() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        assertEquals(0.2, integrator.getMinReduction(), 1.0e-12);
+    }
+
+    // Covers: setMinReduction() mutates the stored field, reflected by getMinReduction()
+    @Test
+    public void testSetMinReduction_updatesValue() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        integrator.setMinReduction(0.4);
+        assertEquals(0.4, integrator.getMinReduction(), 1.0e-12);
+    }
+
+    // Covers: setMinReduction() with zero edge value, no validation documented, stored as-is
+    @Test
+    public void testSetMinReduction_zeroValue_storesAsIs() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        integrator.setMinReduction(0.0);
+        assertEquals(0.0, integrator.getMinReduction(), 1.0e-12);
+    }
+
+    // Covers: getMaxGrowth() default value set by constructor (setMaxGrowth(10.0))
+    @Test
+    public void testGetMaxGrowth_defaultIsTen() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        assertEquals(10.0, integrator.getMaxGrowth(), 1.0e-12);
+    }
+
+    // Covers: setMaxGrowth() mutates the stored field, reflected by getMaxGrowth()
+    @Test
+    public void testSetMaxGrowth_updatesValue() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        integrator.setMaxGrowth(20.0);
+        assertEquals(20.0, integrator.getMaxGrowth(), 1.0e-12);
+    }
+
+    // Covers: setMaxGrowth() with a value below one, no validation documented, stored as-is
+    @Test
+    public void testSetMaxGrowth_valueLessThanOne_storesAsIs() throws Throwable {
+        EmbeddedRK2 integrator = new EmbeddedRK2(1.0e-9, 0.2, 1.0e-6, 1.0e-6);
+        integrator.setMaxGrowth(0.8);
+        assertEquals(0.8, integrator.getMaxGrowth(), 1.0e-12);
+    }
+}

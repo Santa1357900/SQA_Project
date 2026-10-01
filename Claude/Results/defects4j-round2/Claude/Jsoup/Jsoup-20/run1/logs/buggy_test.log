@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-20-p_i8_5nf/Jsoup-20b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.jsoup.helper.DataUtilClaudeTest::testLoadInputStreamThreeArg_bomPresent_bomStrippedFromBody
+  - org.jsoup.helper.DataUtilClaudeTest::testParseByteData_bomPresent_shouldBeStrippedFromOutput
+[exit 0]

@@ -1,0 +1,17 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Compress-20-g99hj7nb/Compress-20f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 11
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testGetNextCPIOEntry_newFormatEntry_returnsEntryWithCorrectAttributes
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testAvailable_afterEntryFullyRead_returnsZero
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testRead_multipleReadsAcrossEntry_returnsPartialChunksCorrectly
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testGetNextEntry_delegatesToGetNextCPIOEntry
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testConstructor_withCustomBlockSize_readsEntrySuccessfully
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testGetNextCPIOEntry_multipleEntriesThenTrailer_returnsInOrderThenNull
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testRead_entryData_returnsCorrectContentThenMinusOne
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testSkip_validValue_skipsAndAdvancesReadPosition
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testGetNextCPIOEntry_newCrcFormatCorrectChecksum_noExceptionOnClose
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testGetNextCPIOEntry_oldAsciiEntry_returnsEntryWithCorrectNameAndSize
+  - org.apache.commons.compress.archivers.cpio.CpioArchiveInputStreamClaudeTest::testGetNextCPIOEntry_newCrcFormatWrongChecksum_throwsIOExceptionOnClose
+[exit 0]

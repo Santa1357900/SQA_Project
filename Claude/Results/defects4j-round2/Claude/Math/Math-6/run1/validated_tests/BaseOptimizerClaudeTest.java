@@ -1,0 +1,276 @@
+package org.apache.commons.math3.optim;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.apache.commons.math3.exception.TooManyEvaluationsException;
+import org.apache.commons.math3.exception.TooManyIterationsException;
+
+public class BaseOptimizerClaudeTest {
+
+    private static class TestOptimizer extends BaseOptimizer<String> {
+        private final String result;
+
+        TestOptimizer(ConvergenceChecker<String> checker, String result) {
+            super(checker);
+            this.result = result;
+        }
+
+        protected String doOptimize() {
+            return result;
+        }
+    }
+
+    private TestOptimizer newOptimizer() {
+        return new TestOptimizer(null, "done");
+    }
+
+    // constructor stores null checker, getter returns it
+    @Test
+    public void testConstructor_withNullChecker_getConvergenceCheckerReturnsNull() throws Throwable {
+        TestOptimizer opt = new TestOptimizer(null, "r");
+        assertNull(opt.getConvergenceChecker());
+    }
+
+    // constructor stores given checker instance, getter returns same reference
+    @Test
+    public void testConstructor_withChecker_getConvergenceCheckerReturnsSameInstance() throws Throwable {
+        ConvergenceChecker<String> checker = new ConvergenceChecker<String>() {
+            public boolean converged(int iteration, String previous, String current) {
+                return true;
+            }
+        };
+        TestOptimizer opt = new TestOptimizer(checker, "r");
+        assertSame(checker, opt.getConvergenceChecker());
+    }
+
+    // default maximal evaluations before any optimize() call is 0
+    @Test
+    public void testGetMaxEvaluations_defaultBeforeAnyCall_isZero() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        assertEquals(0, opt.getMaxEvaluations());
+    }
+
+    // default evaluation count before any optimize() call is 0
+    @Test
+    public void testGetEvaluations_defaultBeforeAnyCall_isZero() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        assertEquals(0, opt.getEvaluations());
+    }
+
+
+
+    // default iteration count before any optimize() call is 0
+    @Test
+    public void testGetIterations_defaultBeforeAnyCall_isZero() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        assertEquals(0, opt.getIterations());
+    }
+
+    // parseOptimizationData branch: instanceof MaxEval sets evaluations.maximalCount
+    @Test
+    public void testOptimize_withMaxEval_setsMaxEvaluations() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.optimize(new MaxEval(50));
+        assertEquals(50, opt.getMaxEvaluations());
+    }
+
+    // parseOptimizationData branch: instanceof MaxIter sets iterations.maximalCount
+    @Test
+    public void testOptimize_withMaxIter_setsMaxIterations() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.optimize(new MaxIter(30));
+        assertEquals(30, opt.getMaxIterations());
+    }
+
+    // both MaxEval and MaxIter present in same call: both get applied
+    @Test
+    public void testOptimize_withBothMaxEvalAndMaxIter_setsBothValues() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.optimize(new MaxEval(20), new MaxIter(15));
+        assertEquals(20, opt.getMaxEvaluations());
+        assertEquals(15, opt.getMaxIterations());
+    }
+
+    // empty optData array: previous maxEvaluations value is retained, not reset
+    @Test
+    public void testOptimize_withEmptyOptData_retainsPreviouslySetMaxEvaluations() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.optimize(new MaxEval(77));
+        opt.optimize();
+        assertEquals(77, opt.getMaxEvaluations());
+    }
+
+    // empty optData array: previous maxIterations value is retained, not reset
+    @Test
+    public void testOptimize_withEmptyOptData_retainsPreviouslySetMaxIterations() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.optimize(new MaxIter(44));
+        opt.optimize();
+        assertEquals(44, opt.getMaxIterations());
+    }
+
+    // unrecognized OptimizationData falls through both instanceof checks silently
+    @Test
+    public void testOptimize_withUnrecognizedOptimizationData_doesNotChangeMaxEvaluations() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.optimize(new MaxEval(10));
+        OptimizationData dummy = new OptimizationData() { };
+        opt.optimize(dummy);
+        assertEquals(10, opt.getMaxEvaluations());
+    }
+
+    // optimize() always resets evaluation count to 0 before doOptimize runs
+    @Test
+    public void testOptimize_resetsEvaluationCountToZeroEachCall() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.optimize(new MaxEval(10));
+        opt.incrementEvaluationCount();
+        opt.incrementEvaluationCount();
+        opt.optimize();
+        assertEquals(0, opt.getEvaluations());
+    }
+
+    // optimize() always resets iteration count to 0 before doOptimize runs
+    @Test
+    public void testOptimize_resetsIterationCountToZeroEachCall() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.optimize(new MaxIter(10));
+        opt.incrementIterationCount();
+        opt.incrementIterationCount();
+        opt.optimize();
+        assertEquals(0, opt.getIterations());
+    }
+
+    // optimize() returns exactly the value produced by doOptimize()
+    @Test
+    public void testOptimize_returnsValueProducedByDoOptimize() throws Throwable {
+        TestOptimizer opt = new TestOptimizer(null, "RESULT");
+        String result = opt.optimize();
+        assertEquals("RESULT", result);
+    }
+
+    // incrementEvaluationCount below the configured max: no exception
+    @Test
+    public void testIncrementEvaluationCount_belowMax_doesNotThrow() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.parseOptimizationData(new MaxEval(5));
+        opt.incrementEvaluationCount();
+        opt.incrementEvaluationCount();
+        assertEquals(2, opt.getEvaluations());
+    }
+
+    // incrementEvaluationCount exactly up to the configured max: must not exceed, no exception
+    @Test
+    public void testIncrementEvaluationCount_exactlyAtMax_doesNotThrow() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.parseOptimizationData(new MaxEval(3));
+        opt.incrementEvaluationCount();
+        opt.incrementEvaluationCount();
+        opt.incrementEvaluationCount();
+        assertEquals(3, opt.getEvaluations());
+    }
+
+    // one increment beyond the configured max: evaluations exceeded, must throw
+    @Test
+    public void testIncrementEvaluationCount_oneBeyondMax_throwsTooManyEvaluationsException() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.parseOptimizationData(new MaxEval(2));
+        opt.incrementEvaluationCount();
+        opt.incrementEvaluationCount();
+        try {
+            opt.incrementEvaluationCount();
+            fail("expected TooManyEvaluationsException");
+        } catch (TooManyEvaluationsException expected) {
+        }
+    }
+
+    // default max (0) means the very first evaluation already exceeds it
+    @Test
+    public void testIncrementEvaluationCount_whenMaxIsZero_throwsOnFirstCall() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        try {
+            opt.incrementEvaluationCount();
+            fail("expected TooManyEvaluationsException");
+        } catch (TooManyEvaluationsException expected) {
+        }
+    }
+
+    // incrementIterationCount below the configured max: no exception
+    @Test
+    public void testIncrementIterationCount_belowMax_doesNotThrow() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.parseOptimizationData(new MaxIter(5));
+        opt.incrementIterationCount();
+        opt.incrementIterationCount();
+        assertEquals(2, opt.getIterations());
+    }
+
+    // incrementIterationCount exactly up to the configured max: must not exceed, no exception
+    @Test
+    public void testIncrementIterationCount_exactlyAtMax_doesNotThrow() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.parseOptimizationData(new MaxIter(3));
+        opt.incrementIterationCount();
+        opt.incrementIterationCount();
+        opt.incrementIterationCount();
+        assertEquals(3, opt.getIterations());
+    }
+
+    // one increment beyond the configured max: iterations exceeded, must throw
+    @Test
+    public void testIncrementIterationCount_oneBeyondMax_throwsTooManyIterationsException() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.parseOptimizationData(new MaxIter(2));
+        opt.incrementIterationCount();
+        opt.incrementIterationCount();
+        try {
+            opt.incrementIterationCount();
+            fail("expected TooManyIterationsException");
+        } catch (TooManyIterationsException expected) {
+        }
+    }
+
+
+
+    // getEvaluations reflects the exact number of successful increments so far
+    @Test
+    public void testGetEvaluations_afterSeveralIncrements_reflectsCount() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.parseOptimizationData(new MaxEval(10));
+        opt.incrementEvaluationCount();
+        opt.incrementEvaluationCount();
+        opt.incrementEvaluationCount();
+        assertEquals(3, opt.getEvaluations());
+    }
+
+    // getIterations reflects the exact number of successful increments so far
+    @Test
+    public void testGetIterations_afterSeveralIncrements_reflectsCount() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.parseOptimizationData(new MaxIter(10));
+        opt.incrementIterationCount();
+        opt.incrementIterationCount();
+        assertEquals(2, opt.getIterations());
+    }
+
+    // parseOptimizationData with only MaxIter leaves a previously set MaxEval untouched
+    @Test
+    public void testParseOptimizationData_withMaxIterOnly_evalMaxUnchanged() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.parseOptimizationData(new MaxEval(99));
+        opt.parseOptimizationData(new MaxIter(5));
+        assertEquals(99, opt.getMaxEvaluations());
+        assertEquals(5, opt.getMaxIterations());
+    }
+
+    // calling optimize() twice with different MaxEval values updates to the newest value
+    @Test
+    public void testOptimize_calledTwiceWithDifferentMaxEval_updatesToNewValue() throws Throwable {
+        TestOptimizer opt = newOptimizer();
+        opt.optimize(new MaxEval(10));
+        opt.optimize(new MaxEval(25));
+        assertEquals(25, opt.getMaxEvaluations());
+    }
+
+
+}

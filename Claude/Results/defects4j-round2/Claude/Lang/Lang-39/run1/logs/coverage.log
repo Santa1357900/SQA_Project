@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Lang-39-oqp1xecb/Lang-39b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 1126
+     Lines covered: 608
+  Conditions total: 1005
+Conditions covered: 471
+     Line coverage: 54.0%
+Condition coverage: 46.9%
+[exit 0]

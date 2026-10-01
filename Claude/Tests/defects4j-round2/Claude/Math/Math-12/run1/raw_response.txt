@@ -1,0 +1,283 @@
+package org.apache.commons.math3.random;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math3.exception.NotStrictlyPositiveException;
+
+public class BitsStreamGeneratorClaudeTest {
+
+    /** Concrete subclass whose next(int) is fully controlled by a prescribed queue of values. */
+    private static class TestGenerator extends BitsStreamGenerator {
+        private int[] values;
+        private int index;
+
+        void setNextValues(int[] vals) {
+            values = vals;
+            index = 0;
+        }
+
+        public void setSeed(int seed) { }
+        public void setSeed(int[] seed) { }
+        public void setSeed(long seed) { }
+
+        protected int next(int bits) {
+            return values[index++];
+        }
+    }
+
+    private TestGenerator generator;
+
+    @Before
+    public void setUp() throws Throwable {
+        generator = new TestGenerator();
+    }
+
+    // nextBoolean: next(1) == 0 -> false
+    @Test
+    public void testNextBoolean_zeroBits_returnsFalse() throws Throwable {
+        generator.setNextValues(new int[] {0});
+        assertFalse(generator.nextBoolean());
+    }
+
+    // nextBoolean: next(1) == 1 -> true
+    @Test
+    public void testNextBoolean_oneBit_returnsTrue() throws Throwable {
+        generator.setNextValues(new int[] {1});
+        assertTrue(generator.nextBoolean());
+    }
+
+    // nextBoolean: next(1) != 0 for a negative value -> true
+    @Test
+    public void testNextBoolean_negativeBit_returnsTrue() throws Throwable {
+        generator.setNextValues(new int[] {-1});
+        assertTrue(generator.nextBoolean());
+    }
+
+    // nextBytes: length 0 -> main loop and remainder loop both skipped, array stays empty
+    @Test
+    public void testNextBytes_emptyArray_remainsEmpty() throws Throwable {
+        generator.setNextValues(new int[] {0});
+        byte[] bytes = new byte[0];
+        generator.nextBytes(bytes);
+        assertEquals(0, bytes.length);
+    }
+
+    // nextBytes: length exactly 4 -> one full block iteration, no remainder loop
+    @Test
+    public void testNextBytes_lengthFour_fillsExactBlock() throws Throwable {
+        generator.setNextValues(new int[] {0x12345678, 0});
+        byte[] bytes = new byte[4];
+        generator.nextBytes(bytes);
+        assertEquals((byte) 0x78, bytes[0]);
+        assertEquals((byte) 0x56, bytes[1]);
+        assertEquals((byte) 0x34, bytes[2]);
+        assertEquals((byte) 0x12, bytes[3]);
+    }
+
+    // nextBytes: length 6 -> one full block plus a 2-byte remainder loop
+    @Test
+    public void testNextBytes_lengthSix_fillsBlockPlusRemainder() throws Throwable {
+        generator.setNextValues(new int[] {0x12345678, 0x0000ABCD});
+        byte[] bytes = new byte[6];
+        generator.nextBytes(bytes);
+        assertEquals((byte) 0x78, bytes[0]);
+        assertEquals((byte) 0x56, bytes[1]);
+        assertEquals((byte) 0x34, bytes[2]);
+        assertEquals((byte) 0x12, bytes[3]);
+        assertEquals((byte) 0xCD, bytes[4]);
+        assertEquals((byte) 0xAB, bytes[5]);
+    }
+
+    // nextBytes: length 3 -> main loop never runs (iEnd <= 0), only the remainder loop fills bytes
+    @Test
+    public void testNextBytes_lengthThree_onlyRemainderLoop() throws Throwable {
+        generator.setNextValues(new int[] {0x00112233});
+        byte[] bytes = new byte[3];
+        generator.nextBytes(bytes);
+        assertEquals((byte) 0x33, bytes[0]);
+        assertEquals((byte) 0x22, bytes[1]);
+        assertEquals((byte) 0x11, bytes[2]);
+    }
+
+    // nextDouble: both next(26) calls return 0 -> result is exactly 0.0
+    @Test
+    public void testNextDouble_zeroBits_returnsZero() throws Throwable {
+        generator.setNextValues(new int[] {0, 0});
+        assertEquals(0.0, generator.nextDouble(), 1e-15);
+    }
+
+    // nextDouble: both next(26) calls return the maximum 26-bit value -> result close to but less than 1
+    @Test
+    public void testNextDouble_maxBits_lessThanOne() throws Throwable {
+        int maxBits = (1 << 26) - 1;
+        generator.setNextValues(new int[] {maxBits, maxBits});
+        long high = ((long) maxBits) << 26;
+        long combined = high | maxBits;
+        double expected = combined / 4503599627370496.0;
+        double result = generator.nextDouble();
+        assertEquals(expected, result, 1e-15);
+        assertTrue(result < 1.0);
+    }
+
+    // nextDouble: distinct high/low bits -> result matches the documented bit-packing formula
+    @Test
+    public void testNextDouble_midRangeBits_matchesFormula() throws Throwable {
+        generator.setNextValues(new int[] {12345, 6789});
+        long high = ((long) 12345) << 26;
+        long combined = high | 6789;
+        double expected = combined / 4503599627370496.0;
+        double result = generator.nextDouble();
+        assertEquals(expected, result, 1e-15);
+        assertTrue(result >= 0.0 && result < 1.0);
+    }
+
+    // nextFloat: next(23) == 0 -> result is exactly 0.0f
+    @Test
+    public void testNextFloat_zeroBits_returnsZero() throws Throwable {
+        generator.setNextValues(new int[] {0});
+        assertEquals(0.0f, generator.nextFloat(), 1e-9f);
+    }
+
+    // nextFloat: next(23) at maximum 23-bit value -> matches 2^-23 scaling and stays below 1
+    @Test
+    public void testNextFloat_maxBits_matchesFormulaLessThanOne() throws Throwable {
+        int maxBits = (1 << 23) - 1;
+        generator.setNextValues(new int[] {maxBits});
+        float expected = maxBits / 8388608f;
+        float result = generator.nextFloat();
+        assertEquals(expected, result, 1e-6f);
+        assertTrue(result < 1.0f);
+    }
+
+    // nextGaussian: first call (NaN cache) generates a fresh pair via the Box-Muller transform
+    @Test
+    public void testNextGaussian_firstCall_matchesBoxMullerFormula() throws Throwable {
+        // x = 0.0 (angle 0), y = 0.5 (radius term)
+        generator.setNextValues(new int[] {0, 0, 33554432, 0});
+        double result = generator.nextGaussian();
+        double r = Math.sqrt(-2 * Math.log(0.5));
+        assertEquals(r, result, 1e-6);
+    }
+
+    // nextGaussian: second call reuses the cached second element without consuming new bits
+    @Test
+    public void testNextGaussian_secondCall_returnsCachedValue() throws Throwable {
+        generator.setNextValues(new int[] {0, 0, 33554432, 0});
+        double first = generator.nextGaussian();
+        double second = generator.nextGaussian();
+        double r = Math.sqrt(-2 * Math.log(0.5));
+        assertEquals(r, first, 1e-6);
+        assertEquals(0.0, second, 1e-6);
+    }
+
+    // clear(): discards the cached gaussian so the next call regenerates a fresh pair from new bits
+    @Test
+    public void testClear_afterCachedPair_regeneratesFreshPairOnNextCall() throws Throwable {
+        generator.setNextValues(new int[] {0, 0, 33554432, 0, 0, 0, 33554432, 0});
+        double r = Math.sqrt(-2 * Math.log(0.5));
+
+        double first = generator.nextGaussian();
+        assertEquals(r, first, 1e-6);
+
+        generator.clear();
+
+        double afterClear = generator.nextGaussian();
+        assertEquals(r, afterClear, 1e-6);
+    }
+
+    // nextInt(): directly returns next(32) for a positive value
+    @Test
+    public void testNextInt_positiveBits_returnsSameValue() throws Throwable {
+        generator.setNextValues(new int[] {42});
+        assertEquals(42, generator.nextInt());
+    }
+
+    // nextInt(): directly returns next(32) for a negative value
+    @Test
+    public void testNextInt_negativeBits_returnsSameValue() throws Throwable {
+        generator.setNextValues(new int[] {-7});
+        assertEquals(-7, generator.nextInt());
+    }
+
+    // nextInt(n): n == 0 is not strictly positive -> NotStrictlyPositiveException
+    @Test
+    public void testNextIntN_zero_throwsNotStrictlyPositiveException() throws Throwable {
+        try {
+            generator.nextInt(0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+            // expected
+        }
+    }
+
+    // nextInt(n): negative n -> NotStrictlyPositiveException
+    @Test
+    public void testNextIntN_negative_throwsNotStrictlyPositiveException() throws Throwable {
+        try {
+            generator.nextInt(-5);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+            // expected
+        }
+    }
+
+    // nextInt(n): n is a power of two -> uses the documented shift formula (int)((n*(long)next(31))>>31)
+    @Test
+    public void testNextIntN_powerOfTwo_matchesShiftFormula() throws Throwable {
+        int bits = 1073741824; // 2^30
+        generator.setNextValues(new int[] {bits});
+        long product = 4L * bits;
+        int expected = (int) (product >> 31);
+        assertEquals(expected, generator.nextInt(4));
+    }
+
+    // nextInt(n): n == 1 (power of two edge case) always returns 0 regardless of the bits supplied
+    @Test
+    public void testNextIntN_one_alwaysZero() throws Throwable {
+        generator.setNextValues(new int[] {Integer.MAX_VALUE});
+        assertEquals(0, generator.nextInt(1));
+    }
+
+    // nextInt(n): non power of two, first generated bits already satisfy the rejection test -> accepted immediately
+    @Test
+    public void testNextIntN_nonPowerOfTwo_acceptsValidBitsImmediately() throws Throwable {
+        generator.setNextValues(new int[] {5});
+        assertEquals(5 % 3, generator.nextInt(3));
+    }
+
+    // nextInt(n): non power of two, first bits cause overflow/rejection, loop regenerates and accepts the second value
+    @Test
+    public void testNextIntN_nonPowerOfTwo_rejectsOverflowThenAccepts() throws Throwable {
+        generator.setNextValues(new int[] {Integer.MAX_VALUE, 5});
+        assertEquals(5 % 3, generator.nextInt(3));
+    }
+
+    // nextLong(): both next(32) calls return 0 -> result is 0L
+    @Test
+    public void testNextLong_zeroBits_returnsZero() throws Throwable {
+        generator.setNextValues(new int[] {0, 0});
+        assertEquals(0L, generator.nextLong());
+    }
+
+    // nextLong(): combines high (shifted) and low (masked) 32-bit values correctly
+    @Test
+    public void testNextLong_combinesHighAndLow_matchesFormula() throws Throwable {
+        generator.setNextValues(new int[] {1, -1});
+        long high = ((long) 1) << 32;
+        long low = ((long) -1) & 0xffffffffL;
+        long expected = high | low;
+        assertEquals(expected, generator.nextLong());
+    }
+
+    // nextLong(): a negative high value sign-extends correctly before shifting
+    @Test
+    public void testNextLong_negativeHighBits_signExtendsCorrectly() throws Throwable {
+        generator.setNextValues(new int[] {-1, 0});
+        long high = ((long) -1) << 32;
+        long low = ((long) 0) & 0xffffffffL;
+        long expected = high | low;
+        assertEquals(expected, generator.nextLong());
+    }
+}

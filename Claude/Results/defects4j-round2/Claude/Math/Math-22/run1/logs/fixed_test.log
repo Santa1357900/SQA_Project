@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-22-_zevmrth/Math-22f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.apache.commons.math3.distribution.FDistributionClaudeTest::testIsSupportLowerBoundInclusive_returnsTrue
+  - org.apache.commons.math3.distribution.FDistributionClaudeTest::testDensity_zeroX_numeratorDFGreaterThanTwo_returnsZero
+  - org.apache.commons.math3.distribution.FDistributionClaudeTest::testDensity_zeroX_numeratorDFLessThanTwo_returnsPositiveInfinity
+  - org.apache.commons.math3.distribution.FDistributionClaudeTest::testDensity_zeroX_numeratorDFEqualsTwo_returnsOne
+[exit 0]

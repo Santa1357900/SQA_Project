@@ -1,0 +1,20 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p JacksonXml -v 6f -w /tmp/claude-JacksonXml-6-8wds4nee/fixed
+Checking out 8fd9463d to /tmp/claude-JacksonXml-6-8wds4nee/fixed........... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Backing up build file: /tmp/claude-JacksonXml-6-8wds4nee/fixed/maven-build. OK
+Backing up build file: /tmp/claude-JacksonXml-6-8wds4nee/fixed/pom.xml..... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 8fd9463d:17f39695..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: JacksonXml-6f................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-JacksonXml-6-8wds4nee/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

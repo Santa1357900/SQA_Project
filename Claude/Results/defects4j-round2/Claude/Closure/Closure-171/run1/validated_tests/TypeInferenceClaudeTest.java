@@ -1,0 +1,266 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
+import com.google.javascript.rhino.jstype.BooleanLiteralSet;
+
+import java.util.List;
+
+public class TypeInferenceClaudeTest {
+
+  /** Compiles the given script with type checking enabled and returns total error+warning count. */
+  private int compileAndCountProblems(String js) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+    List<SourceFile> externs = Lists.newArrayList();
+    List<SourceFile> inputs = Lists.newArrayList();
+    inputs.add(SourceFile.fromCode("test.js", js));
+    compiler.compile(externs, inputs, options);
+    return compiler.getErrorCount() + compiler.getWarningCount();
+  }
+
+  // Branch: traverse() LT case sets BOOLEAN_TYPE, which mismatches a string declaration.
+  @Test
+  public void testTraverse_lessThanComparison_booleanAssignedToStringIsMismatch() throws Throwable {
+    String js = "/** @type {string} */\nvar s = (1 < 2);\n";
+    assertTrue(compileAndCountProblems(js) > 0);
+  }
+
+  // Branch: traverse() INSTANCEOF case sets BOOLEAN_TYPE, compatible with a boolean declaration.
+  @Test
+  public void testTraverse_instanceofOperator_resultIsBooleanAssignableToBoolean() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\nvar f = new Foo();\n"
+        + "/** @type {boolean} */\nvar b = (f instanceof Foo);\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverse() DELPROP case sets BOOLEAN_TYPE, compatible with a boolean declaration.
+  @Test
+  public void testTraverse_delpropOperator_resultIsBooleanAssignableToBoolean() throws Throwable {
+    String js = "var obj = {a: 1};\n/** @type {boolean} */\nvar b = (delete obj.a);\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverse() TYPEOF case always sets STRING_TYPE, per JS spec.
+  @Test
+  public void testTraverse_typeofOperator_resultIsStringAssignableToString() throws Throwable {
+    String js = "/** @type {string} */\nvar t = (typeof 5);\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverse() BITNOT case sets NUMBER_TYPE.
+  @Test
+  public void testTraverse_bitnotOperator_resultIsNumberAssignableToNumber() throws Throwable {
+    String js = "/** @type {number} */\nvar n = (~5);\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverse() INC case sets NUMBER_TYPE.
+  @Test
+  public void testTraverse_incrementOperator_resultIsNumberAssignableToNumber() throws Throwable {
+    String js = "var i = 0;\n/** @type {number} */\nvar n = (i++);\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverse() COMMA case sets the type of the last child expression.
+  @Test
+  public void testTraverse_commaOperator_resultIsTypeOfLastExpression() throws Throwable {
+    String js = "/** @type {number} */\nvar n = (1, 2, 3);\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverse() SWITCH/CASE evaluates the discriminant and each case without error.
+  @Test
+  public void testTraverse_switchCaseDefault_compilesWithoutTypeProblems() throws Throwable {
+    String js = "var x = 1;\nswitch (x) {\n  case 1:\n    var y = 2;\n    break;\n"
+        + "  default:\n    var z = 3;\n}\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseCatch() treats the catch parameter as UNKNOWN_TYPE (per Javadoc), so it is
+  // assignable to anything, including a declared string.
+  @Test
+  public void testTraverseCatch_undeclaredCatchParam_treatedAsUnknownAssignableToString() throws Throwable {
+    String js = "try {\n  throw 1;\n} catch (e) {\n  /** @type {string} */\n  var s = e;\n}\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseArrayLiteral() sets ARRAY_TYPE, compatible with an Array declaration.
+  @Test
+  public void testTraverseArrayLiteral_assignedToArrayType_noMismatch() throws Throwable {
+    String js = "/** @type {!Array} */\nvar arr = [1, 2, 3];\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseArrayLiteral() sets ARRAY_TYPE, which mismatches a string declaration.
+  @Test
+  public void testTraverseArrayLiteral_assignedToStringType_isMismatch() throws Throwable {
+    String js = "/** @type {string} */\nvar arr = [1, 2, 3];\n";
+    assertTrue(compileAndCountProblems(js) > 0);
+  }
+
+  // BUG TARGET: traverseObjectLiteral() must JOIN the old inferred type with the new value type
+  // (oldType.getLeastSupertype(valueType)), not collapse it to oldType alone. Re-assigning the
+  // whole namespace object with a differently-typed property must widen "ns.a" to (number|string),
+  // so assigning it to a strictly-"number" variable should be flagged as a type mismatch.
+  @Test
+  public void testTraverseObjectLiteral_reassignedPropertyWidensInferredType_typeMismatchDetected()
+      throws Throwable {
+    String js = "var ns = {};\nns.a = 1;\nns = {a: 'hello'};\n"
+        + "/** @type {number} */\nvar n = ns.a;\n";
+    assertTrue(compileAndCountProblems(js) > 0);
+  }
+
+  // Branch: traverseAdd() with two numbers (isAddedAsNumber both true) sets NUMBER_TYPE.
+  @Test
+  public void testTraverseAdd_numberPlusNumber_resultIsNumber() throws Throwable {
+    String js = "/** @type {number} */\nvar n = (1 + 2);\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseAdd() with number+string (rightType.isString()) sets STRING_TYPE.
+  @Test
+  public void testTraverseAdd_numberPlusString_resultIsString() throws Throwable {
+    String js = "/** @type {string} */\nvar s = (1 + 'a');\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseHook() joins the true/false branch types via getLeastSupertype.
+  @Test
+  public void testTraverseHook_bothBranchesNumber_resultIsNumber() throws Throwable {
+    String js = "/** @type {number} */\nvar n = (true ? 1 : 2);\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseCall() sets the node type from the callee's declared return type.
+  @Test
+  public void testTraverseCall_returnTypeNumber_assignableToNumber() throws Throwable {
+    String js = "/**\n * @return {number}\n */\nfunction f() { return 1; }\n"
+        + "/** @type {number} */\nvar n = f();\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseCall() + declared return type mismatching the destination triggers a warning.
+  @Test
+  public void testTraverseCall_returnTypeNumber_assignedToString_isMismatch() throws Throwable {
+    String js = "/**\n * @return {number}\n */\nfunction f() { return 1; }\n"
+        + "/** @type {string} */\nvar n = f();\n";
+    assertTrue(compileAndCountProblems(js) > 0);
+  }
+
+  // Branch: traverseNew() sets the node type to the constructor's instance type.
+  @Test
+  public void testTraverseNew_constructorInstance_assignableToOwnType() throws Throwable {
+    String js = "/**\n * @constructor\n */\nfunction Foo() {}\n"
+        + "/** @type {!Foo} */\nvar f = new Foo();\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseNew() instance type mismatching an unrelated declared type is a warning.
+  @Test
+  public void testTraverseNew_constructorInstance_assignedToString_isMismatch() throws Throwable {
+    String js = "/**\n * @constructor\n */\nfunction Foo() {}\n"
+        + "/** @type {string} */\nvar f = new Foo();\n";
+    assertTrue(compileAndCountProblems(js) > 0);
+  }
+
+  // Branch: traverseAnd()/traverseShortCircuitingBinOp() with two booleans produces boolean.
+  @Test
+  public void testTraverseAnd_bothBooleans_resultIsBoolean() throws Throwable {
+    String js = "/** @type {boolean} */\nvar b = (true && false);\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseOr()/traverseShortCircuitingBinOp() with two booleans produces boolean.
+  @Test
+  public void testTraverseOr_bothBooleans_resultIsBoolean() throws Throwable {
+    String js = "/** @type {boolean} */\nvar b = (false || true);\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseGetElem() on an array literal, no declared constraint, compiles cleanly.
+  @Test
+  public void testTraverseGetElem_arrayElementAccess_compilesWithoutTypeProblems() throws Throwable {
+    String js = "var arr = [1, 2, 3];\nvar e = arr[0];\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseGetProp() resolves a declared instance property's type correctly.
+  @Test
+  public void testTraverseGetProp_declaredNumberProperty_assignableToNumber() throws Throwable {
+    String js = "/**\n * @constructor\n */\nfunction Foo() {\n"
+        + "  /** @type {number} */\n  this.x = 1;\n}\nvar f = new Foo();\n"
+        + "/** @type {number} */\nvar n = f.x;\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Branch: traverseGetProp() declared property type mismatching the destination is a warning.
+  @Test
+  public void testTraverseGetProp_declaredNumberProperty_assignedToString_isMismatch() throws Throwable {
+    String js = "/**\n * @constructor\n */\nfunction Foo() {\n"
+        + "  /** @type {number} */\n  this.x = 1;\n}\nvar f = new Foo();\n"
+        + "/** @type {string} */\nvar n = f.x;\n";
+    assertTrue(compileAndCountProblems(js) > 0);
+  }
+
+
+
+  // Branch: branchedFlowThrough() ON_TRUE for-in sets the loop item's type to string (per Javadoc).
+  @Test
+  public void testBranchedFlowThrough_forIn_itemTypeIsString() throws Throwable {
+    String js = "var obj = {a: 1, b: 2};\nfor (var key in obj) {\n"
+        + "  /** @type {string} */\n  var k = key;\n}\n";
+    assertEquals(0, compileAndCountProblems(js));
+  }
+
+  // Pure-logic branch: EMPTY/EMPTY always collapses to EMPTY regardless of condition.
+  @Test
+  public void testGetBooleanOutcomes_bothEmptySets_resultIsEmpty() throws Throwable {
+    BooleanLiteralSet result =
+        TypeInference.getBooleanOutcomes(BooleanLiteralSet.EMPTY, BooleanLiteralSet.EMPTY, true);
+    assertEquals(BooleanLiteralSet.EMPTY, result);
+  }
+
+  // Pure-logic branch: BOTH/BOTH with condition=true collapses to BOTH (right.union(...) with right=BOTH).
+  @Test
+  public void testGetBooleanOutcomes_bothFullSetsConditionTrue_resultIsBoth() throws Throwable {
+    BooleanLiteralSet result =
+        TypeInference.getBooleanOutcomes(BooleanLiteralSet.BOTH, BooleanLiteralSet.BOTH, true);
+    assertEquals(BooleanLiteralSet.BOTH, result);
+  }
+
+  // Pure-logic branch: BOTH/BOTH with condition=false also collapses to BOTH.
+  @Test
+  public void testGetBooleanOutcomes_bothFullSetsConditionFalse_resultIsBoth() throws Throwable {
+    BooleanLiteralSet result =
+        TypeInference.getBooleanOutcomes(BooleanLiteralSet.BOTH, BooleanLiteralSet.BOTH, false);
+    assertEquals(BooleanLiteralSet.BOTH, result);
+  }
+
+  // Pure-logic branch: left=EMPTY, right=BOTH -> right.union(EMPTY.intersection(x)) = BOTH.
+  @Test
+  public void testGetBooleanOutcomes_leftEmptyRightBoth_resultIsBoth() throws Throwable {
+    BooleanLiteralSet result =
+        TypeInference.getBooleanOutcomes(BooleanLiteralSet.EMPTY, BooleanLiteralSet.BOTH, true);
+    assertEquals(BooleanLiteralSet.BOTH, result);
+  }
+
+  // Pure-logic branch: left=BOTH, right=EMPTY -> EMPTY.union(BOTH.intersection(get(!cond))) = get(!cond).
+  @Test
+  public void testGetBooleanOutcomes_leftBothRightEmpty_matchesNegatedConditionSet() throws Throwable {
+    BooleanLiteralSet expected = BooleanLiteralSet.get(false);
+    BooleanLiteralSet result =
+        TypeInference.getBooleanOutcomes(BooleanLiteralSet.BOTH, BooleanLiteralSet.EMPTY, true);
+    assertEquals(expected, result);
+  }
+
+  // Sanity check: the package-private diagnostic constant used by TypeInference is initialized.
+  @Test
+  public void testFunctionLiteralUndefinedThisDiagnostic_isInitialized() throws Throwable {
+    assertNotNull(TypeInference.FUNCTION_LITERAL_UNDEFINED_THIS);
+  }
+}

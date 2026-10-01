@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Chart-22-x29vf4m5/Chart-22b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.jfree.data.KeyedObjects2DClaudeTest::testRemoveObject_columnBecomesEmpty_columnRemoved
+[exit 0]

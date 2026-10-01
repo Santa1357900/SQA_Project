@@ -1,0 +1,458 @@
+package com.google.javascript.jscomp;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+
+public class NodeTraversalClaudeTest {
+
+  private Compiler compiler;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+  }
+
+  /** Records nodes passed to visit(); if nodeToSkip is not null its own shouldTraverse() returns false. */
+  private static class RecordingCallback implements NodeTraversal.Callback {
+    final List<Node> visited = new ArrayList<Node>();
+    final Node nodeToSkip;
+
+    RecordingCallback(Node nodeToSkip) {
+      this.nodeToSkip = nodeToSkip;
+    }
+
+    public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+      return n != nodeToSkip;
+    }
+
+    public void visit(NodeTraversal t, Node n, Node parent) {
+      visited.add(n);
+    }
+  }
+
+  /** Captures scope/traversal state visible from inside visit() calls. */
+  private static class InspectingCallback implements NodeTraversal.Callback {
+    Node enclosingFunctionAtFirstVisit;
+    boolean inGlobalScopeAtVisit;
+    int scopeDepthAtVisit;
+    boolean hasScopeAtVisit;
+    Node scopeRootAtVisit;
+    Scope firstScope;
+    Scope lastScope;
+    private boolean captured = false;
+
+    public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+      return true;
+    }
+
+    public void visit(NodeTraversal t, Node n, Node parent) {
+      if (!captured) {
+        enclosingFunctionAtFirstVisit = t.getEnclosingFunction();
+        inGlobalScopeAtVisit = t.inGlobalScope();
+        scopeDepthAtVisit = t.getScopeDepth();
+        hasScopeAtVisit = t.hasScope();
+        scopeRootAtVisit = t.getScopeRoot();
+        firstScope = t.getScope();
+        captured = true;
+      }
+      lastScope = t.getScope();
+    }
+  }
+
+  // Covers constructor(compiler, cb): fresh instance has no current node and empty source name.
+  @Test
+  public void testConstructor_withCallbackOnly_initialStateIsEmpty() throws Throwable {
+    NodeTraversal.Callback cb = new NodeTraversal.AbstractPostOrderCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    assertNull(t.getCurrentNode());
+    assertEquals("", t.getSourceName());
+  }
+
+  // Covers constructor(compiler, cb, scopeCreator) overload with explicit SyntacticScopeCreator.
+  @Test
+  public void testConstructor_withExplicitScopeCreator_traversesSuccessfully() throws Throwable {
+    Node root = IR.name("a");
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb, new SyntacticScopeCreator(compiler));
+    t.traverse(root);
+    assertEquals(1, cb.visited.size());
+    assertSame(root, cb.visited.get(0));
+  }
+
+
+
+
+
+  // Covers default-case loop with more than one child: both visited before parent, in order.
+  @Test
+  public void testTraverse_multipleChildren_visitsAllInPostOrderBeforeParent() throws Throwable {
+    Node root = IR.block();
+    Node c1 = IR.name("a");
+    Node c2 = IR.name("b");
+    root.addChildToBack(c1);
+    root.addChildToBack(c2);
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverse(root);
+    assertEquals(3, cb.visited.size());
+    assertSame(c1, cb.visited.get(0));
+    assertSame(c2, cb.visited.get(1));
+    assertSame(root, cb.visited.get(2));
+  }
+
+  // Covers default-case loop with zero children.
+  @Test
+  public void testTraverse_leafNodeNoChildren_visitsOnlyRoot() throws Throwable {
+    Node root = IR.name("a");
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverse(root);
+    assertEquals(1, cb.visited.size());
+    assertSame(root, cb.visited.get(0));
+  }
+
+  // Covers that curNode is set to n right before visit() is invoked.
+  @Test
+  public void testTraverse_capturesCurrentNodeDuringVisit() throws Throwable {
+    final List<Node> seenCurrent = new ArrayList<Node>();
+    Node root = IR.name("a");
+    NodeTraversal.Callback cb = new NodeTraversal.AbstractPostOrderCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {
+        seenCurrent.add(t.getCurrentNode());
+      }
+    };
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverse(root);
+    assertSame(root, seenCurrent.get(0));
+  }
+
+  // Covers that after traverse() completes, curNode remains the root (last node processed).
+  @Test
+  public void testTraverse_afterCompletion_currentNodeIsRoot() throws Throwable {
+    Node root = IR.block();
+    Node child = IR.name("a");
+    root.addChildToBack(child);
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverse(root);
+    assertSame(root, t.getCurrentNode());
+  }
+
+  // Covers "if (roots.isEmpty()) return;" branch: nothing happens, no state change.
+  @Test
+  public void testTraverseRoots_emptyList_doesNothingAndLeavesCurrentNodeNull() throws Throwable {
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverseRoots(new ArrayList<Node>());
+    assertNull(t.getCurrentNode());
+    assertEquals(0, cb.visited.size());
+  }
+
+  // Covers traverseRoots(Node...) varargs overload delegating to the empty-list branch.
+  @Test
+  public void testTraverseRoots_emptyVarargs_doesNothingAndLeavesCurrentNodeNull() throws Throwable {
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverseRoots();
+    assertNull(t.getCurrentNode());
+    assertEquals(0, cb.visited.size());
+  }
+
+  // Covers traverseRoots with a single root: only that subtree is visited, parent itself is not.
+  @Test
+  public void testTraverseRoots_singleRoot_traversesOnlyThatSubtree() throws Throwable {
+    Node parent = IR.block();
+    Node child = IR.name("a");
+    parent.addChildToBack(child);
+    List<Node> roots = new ArrayList<Node>();
+    roots.add(child);
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverseRoots(roots);
+    assertEquals(1, cb.visited.size());
+    assertSame(child, cb.visited.get(0));
+  }
+
+  // Covers the for-loop over roots with more than one element sharing the same parent.
+  @Test
+  public void testTraverseRoots_multipleRootsSameParent_visitsEachInListOrder() throws Throwable {
+    Node parent = IR.block();
+    Node c1 = IR.name("a");
+    Node c2 = IR.name("b");
+    parent.addChildToBack(c1);
+    parent.addChildToBack(c2);
+    List<Node> roots = new ArrayList<Node>();
+    roots.add(c1);
+    roots.add(c2);
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverseRoots(roots);
+    assertEquals(2, cb.visited.size());
+    assertSame(c1, cb.visited.get(0));
+    assertSame(c2, cb.visited.get(1));
+  }
+
+  // Covers getLineNumber() when curNode is null: loop runs zero times, returns 0.
+  @Test
+  public void testGetLineNumber_noCurrentNode_returnsZero() throws Throwable {
+    NodeTraversal.Callback cb = new NodeTraversal.AbstractPostOrderCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    assertEquals(0, t.getLineNumber());
+  }
+
+  // Covers getLineNumber() loop running once then stopping at a null parent, returning 0.
+  @Test
+  public void testGetLineNumber_afterTraverseUnpositionedNode_returnsZero() throws Throwable {
+    Node root = IR.name("a");
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverse(root);
+    assertEquals(0, t.getLineNumber());
+  }
+
+  // Covers getSourceName() default value before any traversal.
+  @Test
+  public void testGetSourceName_beforeTraverse_returnsEmptyString() throws Throwable {
+    NodeTraversal.Callback cb = new NodeTraversal.AbstractPostOrderCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    assertEquals("", t.getSourceName());
+  }
+
+  // Covers getSourceName() remaining "" when traversed root is not a SCRIPT node.
+  @Test
+  public void testGetSourceName_afterTraverseNonScriptNode_remainsEmptyString() throws Throwable {
+    Node root = IR.block();
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverse(root);
+    assertEquals("", t.getSourceName());
+  }
+
+  // Covers getCurrentNode() default null value prior to any traversal.
+  @Test
+  public void testGetCurrentNode_beforeAnyTraversal_returnsNull() throws Throwable {
+    NodeTraversal.Callback cb = new NodeTraversal.AbstractPostOrderCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    assertNull(t.getCurrentNode());
+  }
+
+  // Covers static traverse(compiler, root, cb) delegating correctly to instance traversal.
+  @Test
+  public void testStaticTraverse_delegatesAndVisitsNodes() throws Throwable {
+    Node root = IR.block();
+    Node child = IR.name("z");
+    root.addChildToBack(child);
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal.traverse(compiler, root, cb);
+    assertEquals(2, cb.visited.size());
+    assertSame(child, cb.visited.get(0));
+    assertSame(root, cb.visited.get(1));
+  }
+
+  // Covers static traverseRoots(compiler, List<Node>, cb) overload.
+  @Test
+  public void testStaticTraverseRoots_listOverload_visitsGivenRoots() throws Throwable {
+    Node parent = IR.block();
+    Node c1 = IR.name("a");
+    Node c2 = IR.name("b");
+    parent.addChildToBack(c1);
+    parent.addChildToBack(c2);
+    List<Node> roots = new ArrayList<Node>();
+    roots.add(c1);
+    roots.add(c2);
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal.traverseRoots(compiler, roots, cb);
+    assertEquals(2, cb.visited.size());
+    assertSame(c1, cb.visited.get(0));
+  }
+
+  // Covers static traverseRoots(compiler, cb, Node...) varargs overload.
+  @Test
+  public void testStaticTraverseRoots_varargsOverload_visitsGivenRootsInOrder() throws Throwable {
+    Node parent = IR.block();
+    Node c1 = IR.name("a");
+    Node c2 = IR.name("b");
+    parent.addChildToBack(c1);
+    parent.addChildToBack(c2);
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal.traverseRoots(compiler, cb, c1, c2);
+    assertEquals(2, cb.visited.size());
+    assertSame(c2, cb.visited.get(1));
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // Covers getCompiler() returning the same compiler instance passed to the constructor.
+  @Test
+  public void testGetCompiler_returnsSameInstancePassedIn() throws Throwable {
+    NodeTraversal.Callback cb = new NodeTraversal.AbstractPostOrderCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    assertSame(compiler, t.getCompiler());
+  }
+
+  // Covers makeError(Node, DiagnosticType, String...) returning a non-null JSError.
+  @Test
+  public void testMakeError_withDiagnosticTypeOnly_returnsNonNullError() throws Throwable {
+    Node root = IR.name("a");
+    NodeTraversal.Callback cb = new NodeTraversal.AbstractPostOrderCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    JSError error = t.makeError(root, NodeTraversal.NODE_TRAVERSAL_ERROR, "boom");
+    assertNotNull(error);
+  }
+
+  // Covers AbstractPostOrderCallback.shouldTraverse() always returning true.
+  @Test
+  public void testAbstractPostOrderCallback_shouldTraverseAlwaysReturnsTrue() throws Throwable {
+    NodeTraversal.AbstractPostOrderCallback cb = new NodeTraversal.AbstractPostOrderCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    assertTrue(cb.shouldTraverse(null, null, null));
+  }
+
+  // Covers AbstractScopedCallback default enterScope/exitScope no-ops and shouldTraverse() true.
+  @Test
+  public void testAbstractScopedCallback_defaultHooksAndShouldTraverse() throws Throwable {
+    NodeTraversal.AbstractScopedCallback cb = new NodeTraversal.AbstractScopedCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    assertTrue(cb.shouldTraverse(null, null, null));
+    cb.enterScope(null);
+    cb.exitScope(null);
+  }
+
+  // Covers AbstractShallowCallback.shouldTraverse() returning true when parent is null.
+  @Test
+  public void testAbstractShallowCallback_parentNull_returnsTrue() throws Throwable {
+    NodeTraversal.AbstractShallowCallback cb = new NodeTraversal.AbstractShallowCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    assertTrue(cb.shouldTraverse(null, null, null));
+  }
+
+  // Covers AbstractShallowCallback.shouldTraverse() returning true for a non-function parent.
+  @Test
+  public void testAbstractShallowCallback_nonFunctionParent_returnsTrue() throws Throwable {
+    NodeTraversal.AbstractShallowCallback cb = new NodeTraversal.AbstractShallowCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    Node block = IR.block();
+    assertTrue(cb.shouldTraverse(null, null, block));
+  }
+
+  // Covers AbstractShallowStatementCallback.shouldTraverse() returning true when parent is null.
+  @Test
+  public void testAbstractShallowStatementCallback_parentNull_returnsTrue() throws Throwable {
+    NodeTraversal.AbstractShallowStatementCallback cb =
+        new NodeTraversal.AbstractShallowStatementCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    assertTrue(cb.shouldTraverse(null, null, null));
+  }
+
+  // Covers AbstractShallowStatementCallback.shouldTraverse() true for a statement-block parent.
+  @Test
+  public void testAbstractShallowStatementCallback_blockParent_returnsTrue() throws Throwable {
+    NodeTraversal.AbstractShallowStatementCallback cb =
+        new NodeTraversal.AbstractShallowStatementCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    Node block = IR.block();
+    assertTrue(cb.shouldTraverse(null, null, block));
+  }
+
+  // Covers AbstractShallowStatementCallback.shouldTraverse() false for a non-structural parent.
+  @Test
+  public void testAbstractShallowStatementCallback_nonStatementParent_returnsFalse() throws Throwable {
+    NodeTraversal.AbstractShallowStatementCallback cb =
+        new NodeTraversal.AbstractShallowStatementCallback() {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    Node nameParent = IR.name("y");
+    assertFalse(cb.shouldTraverse(null, null, nameParent));
+  }
+
+  // Covers AbstractNodeTypePruningCallback with include=true: only listed types traverse.
+  @Test
+  public void testAbstractNodeTypePruningCallback_includeTrue_filtersMatchingType() throws Throwable {
+    Set<Integer> types = new HashSet<Integer>();
+    types.add(Token.NAME);
+    NodeTraversal.AbstractNodeTypePruningCallback cb =
+        new NodeTraversal.AbstractNodeTypePruningCallback(types) {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    Node nameNode = IR.name("a");
+    Node blockNode = IR.block();
+    assertTrue(cb.shouldTraverse(null, nameNode, null));
+    assertFalse(cb.shouldTraverse(null, blockNode, null));
+  }
+
+  // Covers AbstractNodeTypePruningCallback with include=false: listed types are excluded.
+  @Test
+  public void testAbstractNodeTypePruningCallback_includeFalse_invertsFilter() throws Throwable {
+    Set<Integer> types = new HashSet<Integer>();
+    types.add(Token.NAME);
+    NodeTraversal.AbstractNodeTypePruningCallback cb =
+        new NodeTraversal.AbstractNodeTypePruningCallback(types, false) {
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    };
+    Node nameNode = IR.name("a");
+    Node blockNode = IR.block();
+    assertFalse(cb.shouldTraverse(null, nameNode, null));
+    assertTrue(cb.shouldTraverse(null, blockNode, null));
+  }
+
+  // Covers the NODE_TRAVERSAL_ERROR public static constant is properly initialized.
+  @Test
+  public void testNodeTraversalErrorConstant_isNotNull() throws Throwable {
+    assertNotNull(NodeTraversal.NODE_TRAVERSAL_ERROR);
+  }
+
+  // Covers a three-level nested tree is visited in correct post order (grandchild, child, root).
+  @Test
+  public void testTraverse_nestedThreeLevelTree_visitsInCorrectPostOrder() throws Throwable {
+    Node root = IR.block();
+    Node child = IR.block();
+    Node grandchild = IR.name("a");
+    child.addChildToBack(grandchild);
+    root.addChildToBack(child);
+    RecordingCallback cb = new RecordingCallback(null);
+    NodeTraversal t = new NodeTraversal(compiler, cb);
+    t.traverse(root);
+    assertEquals(3, cb.visited.size());
+    assertSame(grandchild, cb.visited.get(0));
+    assertSame(child, cb.visited.get(1));
+    assertSame(root, cb.visited.get(2));
+  }
+}

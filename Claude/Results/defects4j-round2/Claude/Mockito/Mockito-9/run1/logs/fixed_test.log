@@ -1,0 +1,26 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Mockito-9-cs38buu7/Mockito-9f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 20
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodReturnsNull_returnsNull
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodThrowsCustomCheckedException_propagatesSameType
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodThrowsRuntimeException_propagatesSameInstance
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodThrowsError_propagatesSameInstance
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodReturnsInteger_returnsSameInteger
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodThrowsThrowable_propagatesSameInstance
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodReturnsArray_returnsSameArrayInstance
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_calledTwice_invokesCallRealMethodTwice
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_sequentialStubbing_returnsValuesInOrder
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodThrowsCheckedException_propagatesSameInstance
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_exceptionMessageKeywordPreserved
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_withDifferentInvocationInstances_delegatesIndependently
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodReturnsString_returnsSameString
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodReturnsDouble_preservesValue
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_invokesCallRealMethodExactlyOnce
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodReturnsCustomObject_returnsSameInstance
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodReturnsEmptyString_returnsEmptyString
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_newInstance_behavesConsistently
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodReturnsBooleanFalse_returnsSameBoolean
+  - org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest::testAnswer_callRealMethodReturnsLong_preservesTypeAndValue
+[exit 0]

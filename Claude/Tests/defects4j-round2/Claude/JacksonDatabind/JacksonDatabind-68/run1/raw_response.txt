@@ -1,0 +1,408 @@
+package com.fasterxml.jackson.databind.deser;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.IgnoredPropertyException;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+
+public class BeanDeserializerBaseClaudeTest {
+
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    public static class SimpleBean {
+        public String name;
+        public int age;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class IgnoreUnknownBean {
+        public String name;
+    }
+
+    @JsonIgnoreProperties({"secret"})
+    public static class IgnorePropsBean {
+        public String name;
+    }
+
+    public static class AnySetterBean {
+        public String name;
+        private Map<String, Object> extra = new HashMap<String, Object>();
+
+        @JsonAnySetter
+        public void addExtra(String key, Object value) {
+            extra.put(key, value);
+        }
+
+        public Map<String, Object> getExtra() {
+            return extra;
+        }
+    }
+
+    public static class ThrowingSetterBean {
+        private String value;
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            throw new RuntimeException("boom");
+        }
+    }
+
+    public static class StringCreatorBean {
+        private final String value;
+
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public StringCreatorBean(String value) {
+            this.value = value;
+        }
+
+        public String getValue() {
+            return value;
+        }
+    }
+
+    public static class IntCreatorBean {
+        private final int value;
+
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public IntCreatorBean(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+    }
+
+    public static class LongCreatorBean {
+        private final long value;
+
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public LongCreatorBean(long value) {
+            this.value = value;
+        }
+
+        public long getValue() {
+            return value;
+        }
+    }
+
+    public static class DoubleCreatorBean {
+        private final double value;
+
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public DoubleCreatorBean(double value) {
+            this.value = value;
+        }
+
+        public double getValue() {
+            return value;
+        }
+    }
+
+    public static class BooleanCreatorBean {
+        private final boolean value;
+
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public BooleanCreatorBean(boolean value) {
+            this.value = value;
+        }
+
+        public boolean getValue() {
+            return value;
+        }
+    }
+
+    public static class Address {
+        public String city;
+    }
+
+    public static class Person2 {
+        public String name;
+        @JsonUnwrapped
+        public Address address;
+    }
+
+    public static class ParentBean {
+        public String name;
+        @JsonManagedReference
+        public List<ChildBean> children;
+    }
+
+    public static class ChildBean {
+        public String name;
+        @JsonBackReference
+        public ParentBean parent;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    public static class IdNode {
+        public int id;
+        public String label;
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
+    public static class TypedBean {
+        public String value;
+    }
+
+    // Covers resolve()/deserializeFromObject vanilla path: all properties bound via default creator
+    @Test
+    public void testVanillaDeserialize_allPropertiesSet() throws Throwable {
+        SimpleBean bean = mapper.readValue("{\"name\":\"Alice\",\"age\":30}", SimpleBean.class);
+        assertEquals("Alice", bean.name);
+        assertEquals(30, bean.age);
+    }
+
+    // Covers _resolveUnwrappedProperty: @JsonUnwrapped flattens nested object properties
+    @Test
+    public void testJsonUnwrapped_flattensNestedProperties() throws Throwable {
+        Person2 p = mapper.readValue("{\"name\":\"Bob\",\"city\":\"Paris\"}", Person2.class);
+        assertEquals("Bob", p.name);
+        assertNotNull(p.address);
+        assertEquals("Paris", p.address.city);
+    }
+
+    // Covers _resolveManagedReferenceProperty: back reference auto-linked to parent (loop 1 element)
+    @Test
+    public void testManagedAndBackReference_linksParentToChild() throws Throwable {
+        ParentBean parent = mapper.readValue(
+                "{\"name\":\"P\",\"children\":[{\"name\":\"C1\"}]}", ParentBean.class);
+        assertEquals(1, parent.children.size());
+        assertEquals("C1", parent.children.get(0).name);
+        assertSame(parent, parent.children.get(0).parent);
+    }
+
+    // Covers managed reference property with zero-element container (loop 0 iterations)
+    @Test
+    public void testManagedReference_emptyChildrenList_noLinkingNeeded() throws Throwable {
+        ParentBean parent = mapper.readValue("{\"name\":\"P\",\"children\":[]}", ParentBean.class);
+        assertEquals("P", parent.name);
+        assertEquals(0, parent.children.size());
+    }
+
+    // Covers _resolvedObjectIdProperty: @JsonIdentityInfo wraps id property, normal fields still set
+    @Test
+    public void testObjectIdentityProperty_deserializesIdField() throws Throwable {
+        IdNode node = mapper.readValue("{\"id\":5,\"label\":\"root\"}", IdNode.class);
+        assertEquals(5, node.id);
+        assertEquals("root", node.label);
+    }
+
+    // Covers deserializeWithType default path: typeDeserializer.deserializeTypedFromObject
+    @Test
+    public void testPolymorphicClassTypeInfo_deserializesUsingClassProperty() throws Throwable {
+        String json = "{\"@class\":\"" + TypedBean.class.getName() + "\",\"value\":\"x\"}";
+        TypedBean result = mapper.readValue(json, TypedBean.class);
+        assertEquals("x", result.value);
+    }
+
+    // Covers deserializeFromNumber INT case using delegating creator
+    @Test
+    public void testDeserializeFromNumberInt_delegatingCreator_constructsBean() throws Throwable {
+        IntCreatorBean bean = mapper.readValue("42", IntCreatorBean.class);
+        assertEquals(42, bean.getValue());
+    }
+
+    // Covers deserializeFromNumber LONG case using delegating creator
+    @Test
+    public void testDeserializeFromNumberLong_delegatingCreator_constructsBean() throws Throwable {
+        LongCreatorBean bean = mapper.readValue("9999999999", LongCreatorBean.class);
+        assertEquals(9999999999L, bean.getValue());
+    }
+
+    // Covers deserializeFromString using delegating creator
+    @Test
+    public void testDeserializeFromString_delegatingCreator_constructsBean() throws Throwable {
+        StringCreatorBean bean = mapper.readValue("\"hello\"", StringCreatorBean.class);
+        assertEquals("hello", bean.getValue());
+    }
+
+    // Covers deserializeFromDouble DOUBLE/FLOAT branch using delegating creator
+    @Test
+    public void testDeserializeFromDouble_delegatingCreator_constructsBean() throws Throwable {
+        DoubleCreatorBean bean = mapper.readValue("3.5", DoubleCreatorBean.class);
+        assertEquals(3.5, bean.getValue(), 1e-9);
+    }
+
+    // Covers deserializeFromDouble fallback (BigDecimal NumberType) branch with delegate present
+    @Test
+    public void testDeserializeFromDouble_bigDecimalNumberType_delegateBranch_constructsBean() throws Throwable {
+        ObjectMapper m = new ObjectMapper();
+        m.configure(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS, true);
+        DoubleCreatorBean bean = m.readValue("3.5", DoubleCreatorBean.class);
+        assertEquals(3.5, bean.getValue(), 1e-9);
+    }
+
+    // Covers deserializeFromBoolean true value using delegating creator
+    @Test
+    public void testDeserializeFromBoolean_trueValue_delegatingCreator_constructsBean() throws Throwable {
+        BooleanCreatorBean bean = mapper.readValue("true", BooleanCreatorBean.class);
+        assertTrue(bean.getValue());
+    }
+
+    // Covers deserializeFromBoolean false value using delegating creator
+    @Test
+    public void testDeserializeFromBoolean_falseValue_delegatingCreator_constructsBean() throws Throwable {
+        BooleanCreatorBean bean = mapper.readValue("false", BooleanCreatorBean.class);
+        assertFalse(bean.getValue());
+    }
+
+    // BUG HUNT: deserializeFromArray fallback-to-non-array-delegate branch must call createUsingDelegate
+    // (not createUsingArrayDelegate) when only a plain (non-array) delegate creator is available.
+    @Test
+    public void testDeserializeFromArray_singleValueUnwrapWithNonArrayDelegate_usesDelegateCreator() throws Throwable {
+        ObjectMapper m = new ObjectMapper();
+        m.configure(DeserializationFeature.UNWRAP_SINGLE_VALUE_ARRAYS, true);
+        StringCreatorBean bean = m.readValue("[\"hello\"]", StringCreatorBean.class);
+        assertEquals("hello", bean.getValue());
+    }
+
+    // Covers deserializeFromArray ACCEPT_EMPTY_ARRAY_AS_NULL_OBJECT branch: empty array -> null
+    @Test
+    public void testDeserializeFromArray_emptyArrayAcceptedAsNull_returnsNull() throws Throwable {
+        ObjectMapper m = new ObjectMapper();
+        m.configure(DeserializationFeature.ACCEPT_EMPTY_ARRAY_AS_NULL_OBJECT, true);
+        SimpleBean bean = m.readValue("[]", SimpleBean.class);
+        assertNull(bean);
+    }
+
+    // Covers deserializeFromArray UNWRAP_SINGLE_VALUE_ARRAYS branch for plain bean: single element unwrapped
+    @Test
+    public void testDeserializeFromArray_unwrapSingleValue_deserializesInnerObject() throws Throwable {
+        ObjectMapper m = new ObjectMapper();
+        m.configure(DeserializationFeature.UNWRAP_SINGLE_VALUE_ARRAYS, true);
+        SimpleBean bean = m.readValue("[{\"name\":\"n\",\"age\":7}]", SimpleBean.class);
+        assertEquals("n", bean.name);
+        assertEquals(7, bean.age);
+    }
+
+    // Covers handleMissingEndArrayForSingle: more than one value while unwrap is enabled -> exception
+    @Test
+    public void testDeserializeFromArray_multipleValuesWithUnwrapEnabled_throwsException() throws Throwable {
+        ObjectMapper m = new ObjectMapper();
+        m.configure(DeserializationFeature.UNWRAP_SINGLE_VALUE_ARRAYS, true);
+        try {
+            m.readValue("[{\"name\":\"a\",\"age\":1},{\"name\":\"b\",\"age\":2}]", SimpleBean.class);
+            fail("expected exception for multiple values with single-value unwrap");
+        } catch (IOException expected) {
+            assertNotNull(expected.getMessage());
+        }
+    }
+
+    // Covers final fallback handleUnexpectedToken: array token with no special feature enabled -> exception
+    @Test
+    public void testDeserializeFromArray_noSpecialHandling_throwsException() throws Throwable {
+        ObjectMapper m = new ObjectMapper();
+        try {
+            m.readValue("[]", SimpleBean.class);
+            fail("expected exception for unexpected array token");
+        } catch (IOException expected) {
+            assertNotNull(expected.getMessage());
+        }
+    }
+
+    // Covers handleUnknownProperty default path: unknown property throws UnrecognizedPropertyException
+    @Test
+    public void testUnknownProperty_default_throwsUnrecognizedPropertyException() throws Throwable {
+        try {
+            mapper.readValue("{\"name\":\"n\",\"age\":1,\"extra\":\"x\"}", SimpleBean.class);
+            fail("expected UnrecognizedPropertyException");
+        } catch (UnrecognizedPropertyException expected) {
+            assertTrue(expected.getMessage().contains("extra"));
+        }
+    }
+
+    // Covers handleUnknownProperty _ignoreAllUnknown branch via @JsonIgnoreProperties(ignoreUnknown=true)
+    @Test
+    public void testUnknownProperty_ignoreAllUnknownAnnotation_skipsSilently() throws Throwable {
+        IgnoreUnknownBean bean = mapper.readValue("{\"name\":\"n\",\"extra\":\"x\"}", IgnoreUnknownBean.class);
+        assertEquals("n", bean.name);
+    }
+
+    // Covers handleUnknownProperty default path with FAIL_ON_UNKNOWN_PROPERTIES disabled: skips silently
+    @Test
+    public void testUnknownProperty_failOnUnknownFeatureDisabled_skipsSilently() throws Throwable {
+        ObjectMapper m = new ObjectMapper();
+        m.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        SimpleBean bean = m.readValue("{\"name\":\"n\",\"age\":2,\"extra\":\"x\"}", SimpleBean.class);
+        assertEquals("n", bean.name);
+        assertEquals(2, bean.age);
+    }
+
+    // Covers handleIgnoredProperty default path: annotation-listed ignorable property skipped without error
+    @Test
+    public void testIgnorableProperty_annotationListed_skippedWithoutException() throws Throwable {
+        IgnorePropsBean bean = mapper.readValue("{\"name\":\"n\",\"secret\":\"s\"}", IgnorePropsBean.class);
+        assertEquals("n", bean.name);
+    }
+
+    // Covers handleIgnoredProperty FAIL_ON_IGNORED_PROPERTIES branch: throws IgnoredPropertyException
+    @Test
+    public void testIgnorableProperty_failOnIgnoredEnabled_throwsIgnoredPropertyException() throws Throwable {
+        ObjectMapper m = new ObjectMapper();
+        m.configure(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, true);
+        try {
+            m.readValue("{\"name\":\"n\",\"secret\":\"s\"}", IgnorePropsBean.class);
+            fail("expected IgnoredPropertyException");
+        } catch (IgnoredPropertyException expected) {
+            assertTrue(expected.getMessage().contains("secret"));
+        }
+    }
+
+    // Covers handleUnknownVanilla _anySetter branch: unmapped property captured via @JsonAnySetter
+    @Test
+    public void testAnySetter_capturesUnmappedProperties() throws Throwable {
+        AnySetterBean bean = mapper.readValue("{\"name\":\"n\",\"foo\":\"bar\"}", AnySetterBean.class);
+        assertEquals("n", bean.name);
+        assertEquals("bar", bean.getExtra().get("foo"));
+    }
+
+    // Covers wrapAndThrow: exception thrown from setter is wrapped as JsonMappingException with path info
+    @Test
+    public void testSetterException_wrapAndThrow_wrapsWithJsonMappingException() throws Throwable {
+        try {
+            mapper.readValue("{\"value\":\"x\"}", ThrowingSetterBean.class);
+            fail("expected JsonMappingException wrapping setter RuntimeException");
+        } catch (JsonMappingException expected) {
+            Throwable cause = expected.getCause();
+            assertNotNull(cause);
+            assertTrue(cause.getMessage().contains("boom"));
+        }
+    }
+
+    // Covers vanilla property setting with explicit JSON null value assigned without error
+    @Test
+    public void testDeserialize_explicitNullField_setsNullWithoutError() throws Throwable {
+        SimpleBean bean = mapper.readValue("{\"name\":null,\"age\":5}", SimpleBean.class);
+        assertNull(bean.name);
+        assertEquals(5, bean.age);
+    }
+}

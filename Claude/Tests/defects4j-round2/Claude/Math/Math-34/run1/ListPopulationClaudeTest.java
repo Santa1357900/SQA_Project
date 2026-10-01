@@ -1,0 +1,406 @@
+package org.apache.commons.math3.genetics;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+
+import org.apache.commons.math3.exception.NotPositiveException;
+import org.apache.commons.math3.exception.NullArgumentException;
+import org.apache.commons.math3.exception.NumberIsTooLargeException;
+import org.apache.commons.math3.exception.NumberIsTooSmallException;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ListPopulationClaudeTest {
+
+    private static class TestChromosome extends Chromosome {
+        private final double fitnessValue;
+        TestChromosome(double fitnessValue) {
+            this.fitnessValue = fitnessValue;
+        }
+        public double fitness() {
+            return fitnessValue;
+        }
+    }
+
+    private static class ListPopulationTestImpl extends ListPopulation {
+        public ListPopulationTestImpl(int populationLimit) {
+            super(populationLimit);
+        }
+        public ListPopulationTestImpl(List<Chromosome> chromosomes, int populationLimit) {
+            super(chromosomes, populationLimit);
+        }
+        public Population nextGeneration() {
+            return this;
+        }
+    }
+
+    // constructor(int): valid positive limit creates empty population
+    @Test
+    public void testConstructorInt_validLimit_createsEmptyPopulation() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        assertEquals(0, pop.getPopulationSize());
+        assertEquals(5, pop.getPopulationLimit());
+    }
+
+    // constructor(int): populationLimit == 0 throws NotPositiveException
+    @Test
+    public void testConstructorInt_zeroLimit_throwsNotPositiveException() throws Throwable {
+        try {
+            new ListPopulationTestImpl(0);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // constructor(int): negative limit throws NotPositiveException
+    @Test
+    public void testConstructorInt_negativeLimit_throwsNotPositiveException() throws Throwable {
+        try {
+            new ListPopulationTestImpl(-1);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // constructor(List,int): null list throws NullArgumentException
+    @Test
+    public void testConstructorListInt_nullList_throwsNullArgumentException() throws Throwable {
+        try {
+            new ListPopulationTestImpl((List<Chromosome>) null, 5);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // constructor(List,int): populationLimit <= 0 throws NotPositiveException
+    @Test
+    public void testConstructorListInt_nonPositiveLimit_throwsNotPositiveException() throws Throwable {
+        List<Chromosome> list = new ArrayList<Chromosome>();
+        try {
+            new ListPopulationTestImpl(list, 0);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // constructor(List,int): list larger than limit throws NumberIsTooLargeException
+    @Test
+    public void testConstructorListInt_listBiggerThanLimit_throwsNumberIsTooLargeException() throws Throwable {
+        List<Chromosome> list = new ArrayList<Chromosome>();
+        list.add(new TestChromosome(1.0));
+        list.add(new TestChromosome(2.0));
+        try {
+            new ListPopulationTestImpl(list, 1);
+            fail("expected NumberIsTooLargeException");
+        } catch (NumberIsTooLargeException expected) {
+        }
+    }
+
+    // constructor(List,int): list size equals limit is allowed (boundary)
+    @Test
+    public void testConstructorListInt_listSizeEqualsLimit_succeeds() throws Throwable {
+        List<Chromosome> list = new ArrayList<Chromosome>();
+        list.add(new TestChromosome(1.0));
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(list, 1);
+        assertEquals(1, pop.getPopulationSize());
+    }
+
+    // constructor(List,int): chromosomes of input list are copied into population
+    @Test
+    public void testConstructorListInt_addsAllChromosomes() throws Throwable {
+        List<Chromosome> list = new ArrayList<Chromosome>();
+        Chromosome c1 = new TestChromosome(1.0);
+        list.add(c1);
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(list, 5);
+        assertTrue(pop.getChromosomes().contains(c1));
+    }
+
+    // setChromosomes: null throws NullArgumentException
+    @Test
+    public void testSetChromosomes_null_throwsNullArgumentException() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        try {
+            pop.setChromosomes(null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // setChromosomes: list size bigger than limit throws NumberIsTooLargeException
+    @Test
+    public void testSetChromosomes_biggerThanLimit_throwsNumberIsTooLargeException() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(1);
+        List<Chromosome> list = new ArrayList<Chromosome>();
+        list.add(new TestChromosome(1.0));
+        list.add(new TestChromosome(2.0));
+        try {
+            pop.setChromosomes(list);
+            fail("expected NumberIsTooLargeException");
+        } catch (NumberIsTooLargeException expected) {
+        }
+    }
+
+    // setChromosomes: valid replace clears old chromosomes and sets new ones
+    @Test
+    public void testSetChromosomes_valid_replacesExistingList() throws Throwable {
+        List<Chromosome> initial = new ArrayList<Chromosome>();
+        initial.add(new TestChromosome(1.0));
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(initial, 5);
+        List<Chromosome> replacement = new ArrayList<Chromosome>();
+        Chromosome c2 = new TestChromosome(2.0);
+        replacement.add(c2);
+        pop.setChromosomes(replacement);
+        assertEquals(1, pop.getPopulationSize());
+        assertTrue(pop.getChromosomes().contains(c2));
+    }
+
+    // addChromosomes: collection exceeding limit throws NumberIsTooLargeException
+    @Test
+    public void testAddChromosomes_exceedingLimit_throwsNumberIsTooLargeException() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(1);
+        Collection<Chromosome> coll = new ArrayList<Chromosome>();
+        coll.add(new TestChromosome(1.0));
+        coll.add(new TestChromosome(2.0));
+        try {
+            pop.addChromosomes(coll);
+            fail("expected NumberIsTooLargeException");
+        } catch (NumberIsTooLargeException expected) {
+        }
+    }
+
+    // addChromosomes: total equal to limit boundary succeeds
+    @Test
+    public void testAddChromosomes_totalEqualsLimit_succeeds() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(2);
+        Collection<Chromosome> coll = new ArrayList<Chromosome>();
+        coll.add(new TestChromosome(1.0));
+        coll.add(new TestChromosome(2.0));
+        pop.addChromosomes(coll);
+        assertEquals(2, pop.getPopulationSize());
+    }
+
+    // addChromosomes: valid add increases population size appropriately
+    @Test
+    public void testAddChromosomes_valid_increasesSize() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        Collection<Chromosome> coll = new ArrayList<Chromosome>();
+        coll.add(new TestChromosome(1.0));
+        pop.addChromosomes(coll);
+        assertEquals(1, pop.getPopulationSize());
+    }
+
+    // getChromosomes: returned list is unmodifiable per javadoc
+    @Test
+    public void testGetChromosomes_returnsUnmodifiableList() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        pop.addChromosome(new TestChromosome(1.0));
+        List<Chromosome> list = pop.getChromosomes();
+        try {
+            list.add(new TestChromosome(2.0));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getChromosomes: reflects current contents of population
+    @Test
+    public void testGetChromosomes_reflectsCurrentContents() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        Chromosome c = new TestChromosome(3.0);
+        pop.addChromosome(c);
+        assertEquals(1, pop.getChromosomes().size());
+        assertTrue(pop.getChromosomes().contains(c));
+    }
+
+    // getChromosomeList (protected, package access): returns mutable backing list
+    @Test
+    public void testGetChromosomeList_returnsMutableBackingList() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        List<Chromosome> internal = pop.getChromosomeList();
+        internal.add(new TestChromosome(1.0));
+        assertEquals(1, pop.getPopulationSize());
+    }
+
+    // addChromosome: size equal to limit throws NumberIsTooLargeException
+    @Test
+    public void testAddChromosome_atLimit_throwsNumberIsTooLargeException() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(1);
+        pop.addChromosome(new TestChromosome(1.0));
+        try {
+            pop.addChromosome(new TestChromosome(2.0));
+            fail("expected NumberIsTooLargeException");
+        } catch (NumberIsTooLargeException expected) {
+        }
+    }
+
+    // addChromosome: below limit succeeds and increases size by one
+    @Test
+    public void testAddChromosome_belowLimit_increasesSizeByOne() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(2);
+        pop.addChromosome(new TestChromosome(1.0));
+        assertEquals(1, pop.getPopulationSize());
+        pop.addChromosome(new TestChromosome(2.0));
+        assertEquals(2, pop.getPopulationSize());
+    }
+
+    // getFittestChromosome: single chromosome population returns that chromosome
+    @Test
+    public void testGetFittestChromosome_singleChromosome_returnsIt() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        Chromosome only = new TestChromosome(1.0);
+        pop.addChromosome(only);
+        assertSame(only, pop.getFittestChromosome());
+    }
+
+    // getFittestChromosome: multiple chromosomes returns the one with highest fitness
+    @Test
+    public void testGetFittestChromosome_multipleChromosomes_returnsHighestFitness() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        Chromosome low = new TestChromosome(1.0);
+        Chromosome best = new TestChromosome(10.0);
+        Chromosome mid = new TestChromosome(5.0);
+        pop.addChromosome(low);
+        pop.addChromosome(best);
+        pop.addChromosome(mid);
+        assertSame(best, pop.getFittestChromosome());
+    }
+
+    // getFittestChromosome: when best is first in list it remains the result
+    @Test
+    public void testGetFittestChromosome_bestFirst_stillReturnsBest() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        Chromosome best = new TestChromosome(10.0);
+        Chromosome low = new TestChromosome(1.0);
+        pop.addChromosome(best);
+        pop.addChromosome(low);
+        assertSame(best, pop.getFittestChromosome());
+    }
+
+    // getPopulationLimit: returns value provided at construction
+    @Test
+    public void testGetPopulationLimit_returnsConfiguredLimit() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(7);
+        assertEquals(7, pop.getPopulationLimit());
+    }
+
+    // setPopulationLimit: zero or negative throws NotPositiveException
+    @Test
+    public void testSetPopulationLimit_nonPositive_throwsNotPositiveException() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        try {
+            pop.setPopulationLimit(0);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // setPopulationLimit: smaller than current population size throws NumberIsTooSmallException
+    @Test
+    public void testSetPopulationLimit_smallerThanCurrentSize_throwsNumberIsTooSmallException() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        pop.addChromosome(new TestChromosome(1.0));
+        pop.addChromosome(new TestChromosome(2.0));
+        try {
+            pop.setPopulationLimit(1);
+            fail("expected NumberIsTooSmallException");
+        } catch (NumberIsTooSmallException expected) {
+        }
+    }
+
+    // setPopulationLimit: equal to current size is boundary and succeeds
+    @Test
+    public void testSetPopulationLimit_equalToCurrentSize_succeeds() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        pop.addChromosome(new TestChromosome(1.0));
+        pop.setPopulationLimit(1);
+        assertEquals(1, pop.getPopulationLimit());
+    }
+
+    // setPopulationLimit: valid larger limit updates value
+    @Test
+    public void testSetPopulationLimit_valid_updatesLimit() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        pop.setPopulationLimit(10);
+        assertEquals(10, pop.getPopulationLimit());
+    }
+
+    // getPopulationSize: empty population returns zero
+    @Test
+    public void testGetPopulationSize_emptyPopulation_returnsZero() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        assertEquals(0, pop.getPopulationSize());
+    }
+
+    // getPopulationSize: after adding chromosomes reflects correct count
+    @Test
+    public void testGetPopulationSize_afterAdds_returnsCorrectCount() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        pop.addChromosome(new TestChromosome(1.0));
+        pop.addChromosome(new TestChromosome(2.0));
+        pop.addChromosome(new TestChromosome(3.0));
+        assertEquals(3, pop.getPopulationSize());
+    }
+
+    // toString: matches underlying chromosome list's toString representation
+    @Test
+    public void testToString_matchesChromosomeListToString() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        Chromosome c = new TestChromosome(1.0);
+        pop.addChromosome(c);
+        assertEquals(pop.getChromosomeList().toString(), pop.toString());
+    }
+
+    // iterator: zero-element population returns iterator with hasNext() false
+    @Test
+    public void testIterator_emptyPopulation_hasNextFalse() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        Iterator<Chromosome> it = pop.iterator();
+        assertFalse(it.hasNext());
+    }
+
+    // iterator: iterates over all chromosomes in population (multiple elements)
+    @Test
+    public void testIterator_multipleElements_iteratesAll() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        pop.addChromosome(new TestChromosome(1.0));
+        pop.addChromosome(new TestChromosome(2.0));
+        Iterator<Chromosome> it = pop.iterator();
+        int count = 0;
+        while (it.hasNext()) {
+            it.next();
+            count++;
+        }
+        assertEquals(2, count);
+    }
+
+    // iterator: per javadoc, remove() must throw UnsupportedOperationException (covers Math-34 bug)
+    @Test
+    public void testIterator_remove_throwsUnsupportedOperationException() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        pop.addChromosome(new TestChromosome(1.0));
+        Iterator<Chromosome> it = pop.iterator();
+        it.next();
+        try {
+            it.remove();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // iterator: remove() attempt must not mutate the population's size (consistency with javadoc contract)
+    @Test
+    public void testIterator_removeAttempt_populationSizeUnchanged() throws Throwable {
+        ListPopulationTestImpl pop = new ListPopulationTestImpl(5);
+        pop.addChromosome(new TestChromosome(1.0));
+        Iterator<Chromosome> it = pop.iterator();
+        it.next();
+        try {
+            it.remove();
+        } catch (UnsupportedOperationException expected) {
+        }
+        assertEquals(1, pop.getPopulationSize());
+    }
+}

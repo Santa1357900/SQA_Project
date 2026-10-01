@@ -1,0 +1,242 @@
+package org.apache.commons.jxpath.ri.model.beans;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.JXPathInvalidAccessException;
+import org.apache.commons.jxpath.ri.QName;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class NullPropertyPointerClaudeTest {
+
+    public static class SimpleBean {
+        private String name = "init";
+        public String getName() {
+            return name;
+        }
+        public void setName(String name) {
+            this.name = name;
+        }
+    }
+
+    private Map map;
+    private JXPathContext mapContext;
+    private NodePointer mapRootPointer;
+
+    @Before
+    public void setUp() throws Throwable {
+        map = new HashMap();
+        map.put("existing", "value1");
+        mapContext = JXPathContext.newContext(map);
+        mapRootPointer = (NodePointer) mapContext.getPointer(".");
+    }
+
+    // ครอบคลุม constructor พื้นฐาน
+    @Test
+    public void testConstructor_withValidParent_createsPointer() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertNotNull(pointer);
+    }
+
+    // ครอบคลุม getName() ด้วยค่า propertyName เริ่มต้น "*"
+    @Test
+    public void testGetName_defaultPropertyName_returnsNonNullQName() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        QName name = pointer.getName();
+        assertNotNull(name);
+    }
+
+    // ครอบคลุม setPropertyIndex() ซึ่งเป็น no-op และ isCollection() ยังคงเป็น false
+    @Test
+    public void testSetPropertyIndex_noOp_isCollectionFalse() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        pointer.setPropertyIndex(5);
+        assertFalse(pointer.isCollection());
+    }
+
+    // ครอบคลุม getLength() ที่ตรึงค่า 0 เสมอ
+    @Test
+    public void testGetLength_alwaysReturnsZero() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertEquals(0, pointer.getLength());
+    }
+
+    // ครอบคลุม getBaseValue() ที่ตรึงค่า null เสมอ
+    @Test
+    public void testGetBaseValue_alwaysReturnsNull() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertNull(pointer.getBaseValue());
+    }
+
+    // ครอบคลุม getImmediateNode() ที่ตรึงค่า null เสมอ
+    @Test
+    public void testGetImmediateNode_alwaysReturnsNull() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertNull(pointer.getImmediateNode());
+    }
+
+    // ครอบคลุม isLeaf() ที่ตรึงค่า true เสมอ
+    @Test
+    public void testIsLeaf_alwaysReturnsTrue() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertTrue(pointer.isLeaf());
+    }
+
+    // ครอบคลุม getValuePointer() ต้องคืนค่า pointer ที่ไม่เป็น null
+    @Test
+    public void testGetValuePointer_returnsNonNullPointer() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertNotNull(pointer.getValuePointer());
+    }
+
+    // ครอบคลุม isActualProperty() (protected, เรียกได้เพราะอยู่ package เดียวกัน) ที่ตรึงค่า false
+    @Test
+    public void testIsActualProperty_alwaysReturnsFalse() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertFalse(pointer.isActualProperty());
+    }
+
+    // ครอบคลุม isActual() ที่ตรึงค่า false เสมอ
+    @Test
+    public void testIsActual_alwaysReturnsFalse() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertFalse(pointer.isActual());
+    }
+
+    // ครอบคลุม isContainer() ที่ตรึงค่า true เสมอ
+    @Test
+    public void testIsContainer_alwaysReturnsTrue() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertTrue(pointer.isContainer());
+    }
+
+    // จุดบั๊ก: setValue เมื่อ parent เป็น container ที่มีอยู่จริง (Map) และรองรับ dynamic property
+    // ต้องสร้าง key ใหม่สำเร็จ ไม่ throw exception
+    @Test
+    public void testContextSetValue_mapNewKey_dynamicallyCreatesEntry() throws Throwable {
+        mapContext.setValue("brandNewKey", "v9");
+        assertEquals("v9", map.get("brandNewKey"));
+    }
+
+
+
+    // ครอบคลุม createPath(context) ผ่านช่องทาง context.createPathAndSetValue บน Map ที่ยังไม่มี key นี้
+    @Test
+    public void testContextCreatePathAndSetValue_mapNewKey_createsEntry() throws Throwable {
+        mapContext.createPathAndSetValue("anotherKey", "v2");
+        assertEquals("v2", map.get("anotherKey"));
+    }
+
+
+
+    // ครอบคลุม createPath(JXPathContext, Object) เรียกตรง ต้องสร้าง entry ใหม่พร้อมค่าใน Map
+    @Test
+    public void testCreatePathWithValue_withMapRootParent_setsValueInMap() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        pointer.setPropertyName("keyWithValue");
+        pointer.createPath(mapContext, "valX");
+        assertEquals("valX", map.get("keyWithValue"));
+    }
+
+    // ครอบคลุม getPropertyName() ค่าเริ่มต้น "*"
+    @Test
+    public void testGetPropertyName_defaultValue_returnsAsterisk() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertEquals("*", pointer.getPropertyName());
+    }
+
+    // ครอบคลุม setPropertyName() กรณีค่าปกติ
+    @Test
+    public void testSetPropertyName_updatesPropertyName() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        pointer.setPropertyName("foo");
+        assertEquals("foo", pointer.getPropertyName());
+    }
+
+    // ครอบคลุม setPropertyName() ค่าขอบสตริงว่าง ""
+    @Test
+    public void testSetPropertyName_emptyString_returnsEmptyString() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        pointer.setPropertyName("");
+        assertEquals("", pointer.getPropertyName());
+    }
+
+    // ครอบคลุม setNameAttributeValue() ตั้งค่า propertyName และ byNameAttribute=true
+    @Test
+    public void testSetNameAttributeValue_setsPropertyName() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        pointer.setNameAttributeValue("bar");
+        assertEquals("bar", pointer.getPropertyName());
+    }
+
+    // ครอบคลุม asPath() สาขา byNameAttribute == true ต้องมีรูปแบบ [@name='...']
+    @Test
+    public void testAsPath_byNameAttributeTrue_includesNameAttributeSyntax() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        pointer.setNameAttributeValue("key1");
+        String path = pointer.asPath();
+        assertTrue(path.contains("[@name='key1']"));
+    }
+
+    // ครอบคลุม escape() เมื่อ propertyName มี single quote ต้องถูกแปลงเป็น &apos;
+    @Test
+    public void testAsPath_byNameAttributeTrue_escapesSingleQuote() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        pointer.setNameAttributeValue("o'clock");
+        String path = pointer.asPath();
+        assertTrue(path.contains("o&apos;clock"));
+    }
+
+    // ครอบคลุม escape() เมื่อ propertyName มี double quote ต้องถูกแปลงเป็น &quot;
+    @Test
+    public void testAsPath_byNameAttributeTrue_escapesDoubleQuote() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        pointer.setNameAttributeValue("a\"b");
+        String path = pointer.asPath();
+        assertTrue(path.contains("a&quot;b"));
+    }
+
+    // ครอบคลุม asPath() ค่าขอบ propertyName เป็นสตริงว่างหลัง setNameAttributeValue
+    @Test
+    public void testSetNameAttributeValue_emptyString_asPathFormatsCorrectly() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        pointer.setNameAttributeValue("");
+        String path = pointer.asPath();
+        assertTrue(path.contains("[@name='']"));
+    }
+
+    // ครอบคลุม asPath() สาขา byNameAttribute == false (ค่าเริ่มต้น) ต้องไม่ใช้รูปแบบ [@name=
+    @Test
+    public void testAsPath_byNameAttributeFalse_doesNotUseNameAttributeSyntax() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        String path = pointer.asPath();
+        assertFalse(path.contains("[@name="));
+    }
+
+    // ครอบคลุม isCollection() เมื่อยังไม่ตั้ง index เฉพาะ (ค่าเริ่มต้นควรเป็น WHOLE_COLLECTION)
+    @Test
+    public void testIsCollection_defaultIndex_returnsFalse() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertFalse(pointer.isCollection());
+    }
+
+    // ครอบคลุม getPropertyCount() ที่ตรึงค่า 0 เสมอ
+    @Test
+    public void testGetPropertyCount_alwaysReturnsZero() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        assertEquals(0, pointer.getPropertyCount());
+    }
+
+    // ครอบคลุม getPropertyNames() ที่ตรึงค่าอาเรย์ว่างเสมอ
+    @Test
+    public void testGetPropertyNames_alwaysReturnsEmptyArray() throws Throwable {
+        NullPropertyPointer pointer = new NullPropertyPointer(mapRootPointer);
+        String[] names = pointer.getPropertyNames();
+        assertEquals(0, names.length);
+    }
+}

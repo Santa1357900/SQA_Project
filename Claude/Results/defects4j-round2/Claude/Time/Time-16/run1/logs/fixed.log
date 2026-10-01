@@ -1,0 +1,22 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Time -v 16f -w /tmp/claude-Time-16-m23rm1nb/fixed
+Checking out 706513d5 to /tmp/claude-Time-16-m23rm1nb/fixed................ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Time-16-m23rm1nb/fixed/build.xml........ OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 706513d5:dba7c37e..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Time-16f........................................ OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Time-16-m23rm1nb/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

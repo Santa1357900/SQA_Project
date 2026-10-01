@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Gson-9-pdlam83k/Gson-9f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - com.google.gson.internal.bind.JsonTreeWriterClaudeTest::testName_null_throwsNullPointerException
+  - com.google.gson.internal.bind.JsonTreeWriterClaudeTest::testNullValue_serializeNullsFalse_skipsAddingToObject
+[exit 0]

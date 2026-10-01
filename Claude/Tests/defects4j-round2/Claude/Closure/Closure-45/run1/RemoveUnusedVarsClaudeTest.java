@@ -1,0 +1,251 @@
+package com.google.javascript.jscomp;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class RemoveUnusedVarsClaudeTest {
+
+  private static final String EXTERNS =
+      "function SIDEEFFECT(x) {}\n" +
+      "function SIDEEFFECTRET() {}\n";
+
+  private String compileWithLevel(String js, CompilationLevel level) throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    level.apply(options);
+    List<SourceFile> externs = new ArrayList<SourceFile>();
+    externs.add(SourceFile.fromCode("externs.js", EXTERNS));
+    List<SourceFile> inputs = new ArrayList<SourceFile>();
+    inputs.add(SourceFile.fromCode("input.js", js));
+    Result result = compiler.compile(externs, inputs, options);
+    assertTrue("compilation should succeed: " + js, result.success);
+    return compiler.toSource();
+  }
+
+  private String compileAdvanced(String js) throws Throwable {
+    return compileWithLevel(js, CompilationLevel.ADVANCED_OPTIMIZATIONS);
+  }
+
+  private String compileSimple(String js) throws Throwable {
+    return compileWithLevel(js, CompilationLevel.SIMPLE_OPTIMIZATIONS);
+  }
+
+  // isRemovableVar: global unused literal var is removable when removeGlobals=true (ADVANCED).
+  @Test
+  public void testProcess_GlobalUnusedLiteralVar_AdvancedRemovesDeclaration() throws Throwable {
+    String js = "var fingerprintA123 = 918273;";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("918273"));
+  }
+
+  // isRemovableVar: !removeGlobals && var.isGlobal() -> global var must NOT be removed (SIMPLE).
+  @Test
+  public void testProcess_GlobalUnusedLiteralVar_SimplePreservesDeclaration() throws Throwable {
+    String js = "var fingerprintA123 = 918273;";
+    String out = compileSimple(js);
+    assertTrue(out.contains("918273"));
+  }
+
+  // markReferencedVar: a global var referenced via a call keeps its value.
+  @Test
+  public void testProcess_GlobalUsedVar_ValuePreservedAdvanced() throws Throwable {
+    String js = "var usedGlobal = 445566; SIDEEFFECT(usedGlobal);";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("445566"));
+  }
+
+  // Local unused var with literal init is always removable regardless of global scope.
+  @Test
+  public void testProcess_LocalUnusedLiteralVar_AdvancedRemoved() throws Throwable {
+    String js = "function f(){ var localUnused = 112233; SIDEEFFECT('keepLocal'); } f();";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("112233"));
+    assertTrue(out.contains("keepLocal"));
+  }
+
+  // Local var referenced by name keeps its value available to the call.
+  @Test
+  public void testProcess_LocalUsedVar_ValuePreserved() throws Throwable {
+    String js = "function f(){ var localUsed = 334455; SIDEEFFECT(localUsed); } f();";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("334455"));
+  }
+
+  // removeUnreferencedVars: unreferenced var with side-effecting init -> "var a=foo();" => "foo();".
+  @Test
+  public void testProcess_LocalUnusedVarSideEffectInit_SideEffectPreserved() throws Throwable {
+    String js = "function f(){ var temp = SIDEEFFECT('sideEffectMarker1'); } f();";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("sideEffectMarker1"));
+  }
+
+  // removeUnreferencedVars: multi-name var decl, only the unreferenced literal name is removed.
+  @Test
+  public void testProcess_MultiNameVarDecl_OnlyUnusedLiteralNameRemoved() throws Throwable {
+    String js = "function f(){ var unusedOne=998877, usedOne=665544; SIDEEFFECT(usedOne); } f();";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("998877"));
+    assertTrue(out.contains("665544"));
+  }
+
+  // removeUnreferencedVars: multi-name decl with side-effecting unused member keeps side effect.
+  @Test
+  public void testProcess_MultiNameVarDeclSideEffectMember_DeclarationNotStripped() throws Throwable {
+    String js = "function f(){ var sideFx=SIDEEFFECT('marker2'), usedTwo=7; SIDEEFFECT(usedTwo);} f();";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("marker2"));
+  }
+
+  // Token.FUNCTION continuation: unused global function declaration is removed with its body.
+  @Test
+  public void testProcess_UnusedGlobalFunctionDeclaration_RemovedWithBody() throws Throwable {
+    String js = "function neverCalled(){ SIDEEFFECT('shouldBeGone'); } SIDEEFFECT('markerAlive');";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("shouldBeGone"));
+    assertTrue(out.contains("markerAlive"));
+  }
+
+  // Used function declaration: body is traversed and preserved when the function is called.
+  @Test
+  public void testProcess_UsedFunctionDeclaration_BodyPreserved() throws Throwable {
+    String js = "function calledFn(){ SIDEEFFECT('markerBody'); } calledFn();";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("markerBody"));
+  }
+
+  // removeUnreferencedFunctionArgs + CallSiteOptimizer: trailing unused arg w/o side effects removed.
+  @Test
+  public void testProcess_UnusedTrailingParamNoSideEffectArg_RemovedFromCallSite() throws Throwable {
+    String js = "function g(a, b) { SIDEEFFECT(a); } g(SIDEEFFECT('onlyUsedArg'), 654321);";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("654321"));
+    assertTrue(out.contains("onlyUsedArg"));
+  }
+
+  // tryRemoveArgFromCallSites: side-effecting trailing arg of unused param is preserved.
+  @Test
+  public void testProcess_UnusedTrailingParamSideEffectArg_SideEffectPreserved() throws Throwable {
+    String js = "function h(a, b) { SIDEEFFECT(a); } h(SIDEEFFECT('argKeepA'), SIDEEFFECT('argKeepB'));";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("argKeepA"));
+    assertTrue(out.contains("argKeepB"));
+  }
+
+  // Token.NAME "arguments" branch: using arguments marks ALL formal params as referenced.
+  @Test
+  public void testProcess_ArgumentsObjectUsage_AllParamsReferenced() throws Throwable {
+    String js = "function k(a, b) { SIDEEFFECT(arguments[1]); } k(111111, 222222);";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("111111"));
+    assertTrue(out.contains("222222"));
+  }
+
+  // Javadoc: "var x = {}; x.foo = 3;" is NOT a reference -> both removable when init is literal.
+  @Test
+  public void testProcess_PropertyAssignOnLiteralInitUnusedVar_AssignAndDeclRemoved() throws Throwable {
+    String js = "function f(){ var obj1 = {}; obj1.marker = 918234; } f(); SIDEEFFECT('afterPropTest');";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("918234"));
+    assertTrue(out.contains("afterPropTest"));
+  }
+
+  // Javadoc: "var y = foo(); y.foo = 3;" IS a reference -> var kept, property assign preserved.
+  @Test
+  public void testProcess_PropertyAssignOnUnknownInitUnusedVar_VarBecomesReferenced() throws Throwable {
+    String js = "function f(){ var y = SIDEEFFECTRET(); y.marker = 445511; } f();";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("445511"));
+  }
+
+  // interpretAssigns: function params are always "unknown value" -> property assign => referenced.
+  @Test
+  public void testProcess_PropertyAssignOnFunctionParam_TreatedAsReferenced() throws Throwable {
+    String js = "function f(param1) { param1.marker = 778899; } f(SIDEEFFECTRET());";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("778899"));
+  }
+
+  // traverseFunction recursion: unused var inside nested inner function is removed.
+  @Test
+  public void testProcess_NestedFunctionUnusedInnerVar_Removed() throws Throwable {
+    String js = "function outer(){ function inner(){ var deep=24681; SIDEEFFECT('innerCalled'); } inner(); } outer();";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("24681"));
+    assertTrue(out.contains("innerCalled"));
+  }
+
+  // traverseFunction + unused FUNCTION continuation: unused nested function removed with body.
+  @Test
+  public void testProcess_UnusedInnerFunctionDeclaration_RemovedWithBody() throws Throwable {
+    String js = "function outer(){ function neverUsedInner(){ SIDEEFFECT('deadInner'); } SIDEEFFECT('outerAlive'); } outer();";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("deadInner"));
+    assertTrue(out.contains("outerAlive"));
+  }
+
+  // NodeUtil.isLiteralValue(value,true): unused function-expression init has no side effect, removed.
+  @Test
+  public void testProcess_VarWithUnusedFunctionExpressionInit_RemovedEntirely() throws Throwable {
+    String js = "function f(){ var cb=function(){ SIDEEFFECT('cbNeverRuns'); }; SIDEEFFECT('afterCb'); } f();";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("cbNeverRuns"));
+    assertTrue(out.contains("afterCb"));
+  }
+
+  // Used function-expression variable: it is called, so its body is preserved.
+  @Test
+  public void testProcess_UsedFunctionExpression_BodyPreserved() throws Throwable {
+    String js = "var cb = function(){ SIDEEFFECT('cbRuns'); }; cb();";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("cbRuns"));
+  }
+
+  // Multiple independent unused global vars are all removed when removeGlobals=true.
+  @Test
+  public void testProcess_MultipleUnusedGlobalVars_AllRemoved() throws Throwable {
+    String js = "var unusedG1 = 100100; var unusedG2 = 200200; SIDEEFFECT('aliveMarker');";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("100100"));
+    assertFalse(out.contains("200200"));
+    assertTrue(out.contains("aliveMarker"));
+  }
+
+  // Continuation chaining: var referenced transitively through another var's initializer NAME.
+  @Test
+  public void testProcess_ChainedReferenceThroughAssign_PreservesValue() throws Throwable {
+    String js = "function f(){ var a = 112211; var b = a; SIDEEFFECT(b); } f();";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("112211"));
+  }
+
+  // Unused var inside a function with control flow: var removed, both branches' effects kept.
+  @Test
+  public void testProcess_UnusedVarInIfBlock_RemovedButBranchesPreserved() throws Throwable {
+    String js = "function f(){ var unusedX=332211; if (SIDEEFFECT('condMarker')) { SIDEEFFECT('thenMarker'); } } f();";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("332211"));
+    assertTrue(out.contains("condMarker"));
+    assertTrue(out.contains("thenMarker"));
+  }
+
+  // Nested scope: unused var inside a used/called function is still correctly removed.
+  @Test
+  public void testProcess_NestedUnusedVarInsideUsedFunction_StillRemoved() throws Throwable {
+    String js = "function f(){ SIDEEFFECT('alwaysRuns'); var neverRead=556677; } f();";
+    String out = compileAdvanced(js);
+    assertTrue(out.contains("alwaysRuns"));
+    assertFalse(out.contains("556677"));
+  }
+
+  // Deep nesting: unused var two scopes deep inside used outer/inner functions is removed.
+  @Test
+  public void testProcess_DeeplyNestedUnusedVar_Removed() throws Throwable {
+    String js = "function a(){ function b(){ var deadDeep=887766; SIDEEFFECT('deepAlive'); } b(); } a();";
+    String out = compileAdvanced(js);
+    assertFalse(out.contains("887766"));
+    assertTrue(out.contains("deepAlive"));
+  }
+}

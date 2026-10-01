@@ -1,0 +1,17 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Codec -v 11b -w /tmp/claude-Codec-11-jzivxn_y/buggy
+Checking out 7e8c20bd to /tmp/claude-Codec-11-jzivxn_y/buggy............... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Run post-checkout hook..................................................... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 7e8c20bd:99999379..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Codec-11b....................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Codec-11-jzivxn_y/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

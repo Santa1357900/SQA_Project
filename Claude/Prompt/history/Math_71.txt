@@ -1,0 +1,498 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Math (Defects4J bug Math-71)
+package: org.apache.commons.math.ode.nonstiff
+class_under_test: EmbeddedRungeKuttaIntegrator
+test_class_to_write: EmbeddedRungeKuttaIntegratorClaudeTest
+</target>
+
+<project_notes>
+Commons Math: ใช้ delta ทุกครั้งที่เทียบ double ห้าม implement UnivariateRealFunction/UnivariateFunction ถ้าไม่ได้ปรากฏใน source ให้ใช้ anonymous inner class เมื่อ interface มีเมธอดเดียว exception เป็น checked หลายตัว (เช่น MathException) จึงต้อง throws Throwable
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.math.ode.nonstiff;
+
+import org.apache.commons.math.ode.DerivativeException;
+import org.apache.commons.math.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math.ode.IntegratorException;
+import org.apache.commons.math.ode.events.CombinedEventsManager;
+import org.apache.commons.math.ode.sampling.AbstractStepInterpolator;
+import org.apache.commons.math.ode.sampling.DummyStepInterpolator;
+import org.apache.commons.math.ode.sampling.StepHandler;
+
+/**
+ * This class implements the common part of all embedded Runge-Kutta
+ * integrators for Ordinary Differential Equations.
+ *
+ * <p>These methods are embedded explicit Runge-Kutta methods with two
+ * sets of coefficients allowing to estimate the error, their Butcher
+ * arrays are as follows :
+ * <pre>
+ *    0  |
+ *   c2  | a21
+ *   c3  | a31  a32
+ *   ... |        ...
+ *   cs  | as1  as2  ...  ass-1
+ *       |--------------------------
+ *       |  b1   b2  ...   bs-1  bs
+ *       |  b'1  b'2 ...   b's-1 b's
+ * </pre>
+ * </p>
+ *
+ * <p>In fact, we rather use the array defined by ej = bj - b'j to
+ * compute directly the error rather than computing two estimates and
+ * then comparing them.</p>
+ *
+ * <p>Some methods are qualified as <i>fsal</i> (first same as last)
+ * methods. This means the last evaluation of the derivatives in one
+ * step is the same as the first in the next step. Then, this
+ * evaluation can be reused from one step to the next one and the cost
+ * of such a method is really s-1 evaluations despite the method still
+ * has s stages. This behaviour is true only for successful steps, if
+ * the step is rejected after the error estimation phase, no
+ * evaluation is saved. For an <i>fsal</i> method, we have cs = 1 and
+ * asi = bi for all i.</p>
+ *
+ * @version $Revision$ $Date$
+ * @since 1.2
+ */
+
+public abstract class EmbeddedRungeKuttaIntegrator
+  extends AdaptiveStepsizeIntegrator {
+
+    /** Indicator for <i>fsal</i> methods. */
+    private final boolean fsal;
+
+    /** Time steps from Butcher array (without the first zero). */
+    private final double[] c;
+
+    /** Internal weights from Butcher array (without the first empty row). */
+    private final double[][] a;
+
+    /** External weights for the high order method from Butcher array. */
+    private final double[] b;
+
+    /** Prototype of the step interpolator. */
+    private final RungeKuttaStepInterpolator prototype;
+
+    /** Stepsize control exponent. */
+    private final double exp;
+
+    /** Safety factor for stepsize control. */
+    private double safety;
+
+    /** Minimal reduction factor for stepsize control. */
+    private double minReduction;
+
+    /** Maximal growth factor for stepsize control. */
+    private double maxGrowth;
+
+  /** Build a Runge-Kutta integrator with the given Butcher array.
+   * @param name name of the method
+   * @param fsal indicate that the method is an <i>fsal</i>
+   * @param c time steps from Butcher array (without the first zero)
+   * @param a internal weights from Butcher array (without the first empty row)
+   * @param b propagation weights for the high order method from Butcher array
+   * @param prototype prototype of the step interpolator to use
+   * @param minStep minimal step (must be positive even for backward
+   * integration), the last step can be smaller than this
+   * @param maxStep maximal step (must be positive even for backward
+   * integration)
+   * @param scalAbsoluteTolerance allowed absolute error
+   * @param scalRelativeTolerance allowed relative error
+   */
+  protected EmbeddedRungeKuttaIntegrator(final String name, final boolean fsal,
+                                         final double[] c, final double[][] a, final double[] b,
+                                         final RungeKuttaStepInterpolator prototype,
+                                         final double minStep, final double maxStep,
+                                         final double scalAbsoluteTolerance,
+                                         final double scalRelativeTolerance) {
+
+    super(name, minStep, maxStep, scalAbsoluteTolerance, scalRelativeTolerance);
+
+    this.fsal      = fsal;
+    this.c         = c;
+    this.a         = a;
+    this.b         = b;
+    this.prototype = prototype;
+
+    exp = -1.0 / getOrder();
+
+    // set the default values of the algorithm control parameters
+    setSafety(0.9);
+    setMinReduction(0.2);
+    setMaxGrowth(10.0);
+
+  }
+
+  /** Build a Runge-Kutta integrator with the given Butcher array.
+   * @param name name of the method
+   * @param fsal indicate that the method is an <i>fsal</i>
+   * @param c time steps from Butcher array (without the first zero)
+   * @param a internal weights from Butcher array (without the first empty row)
+   * @param b propagation weights for the high order method from Butcher array
+   * @param prototype prototype of the step interpolator to use
+   * @param minStep minimal step (must be positive even for backward
+   * integration), the last step can be smaller than this
+   * @param maxStep maximal step (must be positive even for backward
+   * integration)
+   * @param vecAbsoluteTolerance allowed absolute error
+   * @param vecRelativeTolerance allowed relative error
+   */
+  protected EmbeddedRungeKuttaIntegrator(final String name, final boolean fsal,
+                                         final double[] c, final double[][] a, final double[] b,
+                                         final RungeKuttaStepInterpolator prototype,
+                                         final double   minStep, final double maxStep,
+                                         final double[] vecAbsoluteTolerance,
+                                         final double[] vecRelativeTolerance) {
+
+    super(name, minStep, maxStep, vecAbsoluteTolerance, vecRelativeTolerance);
+
+    this.fsal      = fsal;
+    this.c         = c;
+    this.a         = a;
+    this.b         = b;
+    this.prototype = prototype;
+
+    exp = -1.0 / getOrder();
+
+    // set the default values of the algorithm control parameters
+    setSafety(0.9);
+    setMinReduction(0.2);
+    setMaxGrowth(10.0);
+
+  }
+
+  /** Get the order of the method.
+   * @return order of the method
+   */
+  public abstract int getOrder();
+
+  /** Get the safety factor for stepsize control.
+   * @return safety factor
+   */
+  public double getSafety() {
+    return safety;
+  }
+
+  /** Set the safety factor for stepsize control.
+   * @param safety safety factor
+   */
+  public void setSafety(final double safety) {
+    this.safety = safety;
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public double integrate(final FirstOrderDifferentialEquations equations,
+                          final double t0, final double[] y0,
+                          final double t, final double[] y)
+  throws DerivativeException, IntegratorException {
+
+    sanityChecks(equations, t0, y0, t, y);
+    setEquations(equations);
+    resetEvaluations();
+    final boolean forward = t > t0;
+
+    // create some internal working arrays
+    final int stages = c.length + 1;
+    if (y != y0) {
+      System.arraycopy(y0, 0, y, 0, y0.length);
+    }
+    final double[][] yDotK = new double[stages][y0.length];
+    final double[] yTmp = new double[y0.length];
+
+    // set up an interpolator sharing the integrator arrays
+    AbstractStepInterpolator interpolator;
+    if (requiresDenseOutput() || (! eventsHandlersManager.isEmpty())) {
+      final RungeKuttaStepInterpolator rki = (RungeKuttaStepInterpolator) prototype.copy();
+      rki.reinitialize(this, yTmp, yDotK, forward);
+      interpolator = rki;
+    } else {
+      interpolator = new DummyStepInterpolator(yTmp, yDotK[stages - 1], forward);
+    }
+    interpolator.storeTime(t0);
+
+    // set up integration control objects
+    stepStart         = t0;
+    double  hNew      = 0;
+    boolean firstTime = true;
+    for (StepHandler handler : stepHandlers) {
+        handler.reset();
+    }
+    CombinedEventsManager manager = addEndTimeChecker(t0, t, eventsHandlersManager);
+    boolean lastStep = false;
+
+    // main integration loop
+    while (!lastStep) {
+
+      interpolator.shift();
+
+      double error = 0;
+      for (boolean loop = true; loop;) {
+
+        if (firstTime || !fsal) {
+          // first stage
+          computeDerivatives(stepStart, y, yDotK[0]);
+        }
+
+        if (firstTime) {
+          final double[] scale = new double[y0.length];
+          if (vecAbsoluteTolerance == null) {
+              for (int i = 0; i < scale.length; ++i) {
+                scale[i] = scalAbsoluteTolerance + scalRelativeTolerance * Math.abs(y[i]);
+              }
+            } else {
+              for (int i = 0; i < scale.length; ++i) {
+                scale[i] = vecAbsoluteTolerance[i] + vecRelativeTolerance[i] * Math.abs(y[i]);
+              }
+            }
+          hNew = initializeStep(equations, forward, getOrder(), scale,
+                                stepStart, y, yDotK[0], yTmp, yDotK[1]);
+          firstTime = false;
+        }
+
+        stepSize = hNew;
+
+        // next stages
+        for (int k = 1; k < stages; ++k) {
+
+          for (int j = 0; j < y0.length; ++j) {
+            double sum = a[k-1][0] * yDotK[0][j];
+            for (int l = 1; l < k; ++l) {
+              sum += a[k-1][l] * yDotK[l][j];
+            }
+            yTmp[j] = y[j] + stepSize * sum;
+          }
+
+          computeDerivatives(stepStart + c[k-1] * stepSize, yTmp, yDotK[k]);
+
+        }
+
+        // estimate the state at the end of the step
+        for (int j = 0; j < y0.length; ++j) {
+          double sum    = b[0] * yDotK[0][j];
+          for (int l = 1; l < stages; ++l) {
+            sum    += b[l] * yDotK[l][j];
+          }
+          yTmp[j] = y[j] + stepSize * sum;
+        }
+
+        // estimate the error at the end of the step
+        error = estimateError(yDotK, y, yTmp, stepSize);
+        if (error <= 1.0) {
+
+          // discrete events handling
+          interpolator.storeTime(stepStart + stepSize);
+          if (manager.evaluateStep(interpolator)) {
+              final double dt = manager.getEventTime() - stepStart;
+              if (Math.abs(dt) <= Math.ulp(stepStart)) {
+                  // we cannot simply truncate the step, reject the current computation
+                  // and let the loop compute another state with the truncated step.
+                  // it is so small (much probably exactly 0 due to limited accuracy)
+                  // that the code above would fail handling it.
+                  // So we set up an artificial 0 size step by copying states
+                  loop     = false;
+              } else {
+                  // reject the step to match exactly the next switch time
+                  hNew = dt;
+              }
+          } else {
+            // accept the step
+            loop = false;
+          }
+
+        } else {
+          // reject the step and attempt to reduce error by stepsize control
+          final double factor =
+              Math.min(maxGrowth,
+                       Math.max(minReduction, safety * Math.pow(error, exp)));
+          hNew = filterStep(stepSize * factor, forward, false);
+        }
+
+      }
+
+      // the step has been accepted
+      final double nextStep = stepStart + stepSize;
+      System.arraycopy(yTmp, 0, y, 0, y0.length);
+      manager.stepAccepted(nextStep, y);
+      lastStep = manager.stop();
+
+      // provide the step data to the step handler
+      interpolator.storeTime(nextStep);
+      for (StepHandler handler : stepHandlers) {
+          handler.handleStep(interpolator, lastStep);
+      }
+      stepStart = nextStep;
+
+      if (fsal) {
+        // save the last evaluation for the next step
+        System.arraycopy(yDotK[stages - 1], 0, yDotK[0], 0, y0.length);
+      }
+
+      if (manager.reset(stepStart, y) && ! lastStep) {
+        // some event handler has triggered changes that
+        // invalidate the derivatives, we need to recompute them
+        computeDerivatives(stepStart, y, yDotK[0]);
+      }
+
+      if (! lastStep) {
+        // in some rare cases we may get here with stepSize = 0, for example
+        // when an event occurs at integration start, reducing the first step
+        // to zero; we have to reset the step to some safe non zero value
+          stepSize = filterStep(stepSize, forward, true);
+
+        // stepsize control for next step
+        final double factor = Math.min(maxGrowth,
+                                       Math.max(minReduction,
+                                                safety * Math.pow(error, exp)));
+        final double  scaledH    = stepSize * factor;
+        final double  nextT      = stepStart + scaledH;
+        final boolean nextIsLast = forward ? (nextT >= t) : (nextT <= t);
+        hNew = filterStep(scaledH, forward, nextIsLast);
+      }
+
+    }
+
+    final double stopTime = stepStart;
+    resetInternalState();
+    return stopTime;
+
+  }
+
+  /** Get the minimal reduction factor for stepsize control.
+   * @return minimal reduction factor
+   */
+  public double getMinReduction() {
+    return minReduction;
+  }
+
+  /** Set the minimal reduction factor for stepsize control.
+   * @param minReduction minimal reduction factor
+   */
+  public void setMinReduction(final double minReduction) {
+    this.minReduction = minReduction;
+  }
+
+  /** Get the maximal growth factor for stepsize control.
+   * @return maximal growth factor
+   */
+  public double getMaxGrowth() {
+    return maxGrowth;
+  }
+
+  /** Set the maximal growth factor for stepsize control.
+   * @param maxGrowth maximal growth factor
+   */
+  public void setMaxGrowth(final double maxGrowth) {
+    this.maxGrowth = maxGrowth;
+  }
+
+  /** Compute the error ratio.
+   * @param yDotK derivatives computed during the first stages
+   * @param y0 estimate of the step at the start of the step
+   * @param y1 estimate of the step at the end of the step
+   * @param h  current step
+   * @return error ratio, greater than 1 if step should be rejected
+   */
+  protected abstract double estimateError(double[][] yDotK,
+                                          double[] y0, double[] y1,
+                                          double h);
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ EmbeddedRungeKuttaIntegratorClaudeTest ใน package org.apache.commons.math.ode.nonstiff เพื่อทดสอบคลาส EmbeddedRungeKuttaIntegrator ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.math.ode.nonstiff;` เท่านั้น
+</instructions>

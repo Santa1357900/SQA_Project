@@ -1,0 +1,17 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Chart-10-o6inyes_/Chart-10b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 11
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_greaterThan_escaped
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_repeatedQuotes_allEscaped
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_lessThanAtEnd_escaped
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_repeatedAmpersands_allEscaped
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_allSpecialChars_allEscaped
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_ampersand_escaped
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_doubleQuote_escaped
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_lessThan_escaped
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_onlyDoubleQuote_escaped
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_greaterThanInMiddle_escaped
+  - org.jfree.chart.imagemap.StandardToolTipTagFragmentGeneratorClaudeTest::testGenerateToolTipFragment_ampersandAtStart_escaped
+[exit 0]

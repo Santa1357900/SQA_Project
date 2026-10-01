@@ -1,0 +1,40 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-117-hncmh81z/Closure-117f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 34
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectStringOrNumber_stringType_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectObject_objectType_matchesReturnsTrue
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectCanAssignTo_arraySubtypeOfObject_returnsTrue
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectCanOverride_unrelatedTypes_mismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testGetMismatches_initially_returnsEmpty
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectArgumentMatchesParameter_subtypeMatches_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectValidTypeofName_called_doesNotRegisterMismatch
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectStringOrNumber_numberType_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectNumber_numberType_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectCanAssignTo_unknownType_alwaysAssignableReturnsTrue
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectNumber_objectType_mismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectCanOverride_subtypeMatches_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testGetReadableJSTypeName_nameNode_returnsQualifiedName
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectCanCast_unrelatedTypes_mismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectCanAssignToPropertyOf_subtypeMatches_returnsTrue
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectActualObject_numberType_mismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectString_stringType_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectBitwiseable_numberType_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectAnyObject_numberType_mismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectCanCast_sameType_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectString_numberType_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectNotNullOrUndefined_unknownType_returnsTrueBypassed
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectSwitchMatchesCase_sameType_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectNotNullOrUndefined_nullTypeOnNameNode_returnsFalse
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectActualObject_objectType_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testGetReadableJSTypeName_stringNode_returnsUnknownTypeToString
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectBitwiseable_objectType_mismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testSetShouldReport_trueNoWarningTriggered_noException
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectAnyObject_objectType_noMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectObject_nullType_doesNotMatchReturnsFalse
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectNotNullOrUndefined_stringType_returnsTrue
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectCanAssignTo_sameType_returnsTrueNoMismatch
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectCanAssignTo_unrelatedTypes_returnsFalseMismatchRecorded
+  - com.google.javascript.jscomp.TypeValidatorClaudeTest::testExpectCanAssignToPropertyOf_unrelatedTypes_mismatchRecorded
+[exit 0]

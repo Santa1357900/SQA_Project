@@ -1,0 +1,328 @@
+package org.apache.commons.lang;
+
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ClassUtilsClaudeTest {
+
+    // public no-arg constructor is callable
+    @Test
+    public void testConstructor_publicNoArg_createsInstance() throws Throwable {
+        ClassUtils cu = new ClassUtils();
+        assertNotNull(cu);
+    }
+
+    // getShortClassName(Object,String): null -> valueIfNull branch; non-null -> delegates to Class
+    @Test
+    public void testGetShortClassName_ObjectNullAndNonNull_returnsValueIfNullOrShortName() throws Throwable {
+        assertEquals("NULL", ClassUtils.getShortClassName((Object) null, "NULL"));
+        assertEquals("String", ClassUtils.getShortClassName("hello", "NULL"));
+    }
+
+    // getShortClassName(Class): null -> empty string branch; non-null simple class
+    @Test
+    public void testGetShortClassName_ClassNullAndSimple_returnsEmptyOrShortName() throws Throwable {
+        assertEquals("", ClassUtils.getShortClassName((Class<?>) null));
+        assertEquals("Integer", ClassUtils.getShortClassName(Integer.class));
+    }
+
+    // bug hunt: object array class name uses JVM encoding "[Ljava.lang.String;" and must be stripped to "String[]"
+    @Test
+    public void testGetShortClassName_ObjectArrayClass_bug_returnsArrayNotation() throws Throwable {
+        assertEquals("String[]", ClassUtils.getShortClassName(String[].class));
+    }
+
+    // bug hunt: primitive array class name uses JVM encoding "[I" and must be converted to "int[]"
+    @Test
+    public void testGetShortClassName_PrimitiveArrayClass_bug_returnsArrayNotation() throws Throwable {
+        assertEquals("int[]", ClassUtils.getShortClassName(int[].class));
+    }
+
+    // getShortClassName(String): null and empty length==0 early-return branches
+    @Test
+    public void testGetShortClassName_StringNullAndEmpty_returnsEmptyString() throws Throwable {
+        assertEquals("", ClassUtils.getShortClassName((String) null));
+        assertEquals("", ClassUtils.getShortClassName(""));
+    }
+
+    // getShortClassName(String): no package (lastDotIdx==-1) and with package branches
+    @Test
+    public void testGetShortClassName_StringNoPackageAndWithPackage_stripsPackage() throws Throwable {
+        assertEquals("Foo", ClassUtils.getShortClassName("Foo"));
+        assertEquals("String", ClassUtils.getShortClassName("java.lang.String"));
+    }
+
+    // getShortClassName(String): inner class '$' replaced with '.' branch
+    @Test
+    public void testGetShortClassName_StringInnerClass_replacesDollarWithDot() throws Throwable {
+        assertEquals("Map.Entry", ClassUtils.getShortClassName("java.util.Map$Entry"));
+    }
+
+    // getPackageName(Object,String): null -> valueIfNull; non-null delegates
+    @Test
+    public void testGetPackageName_ObjectNullAndNonNull_returnsValueIfNullOrPackage() throws Throwable {
+        assertEquals("NULL", ClassUtils.getPackageName((Object) null, "NULL"));
+        assertEquals("java.lang", ClassUtils.getPackageName("hello", "NULL"));
+    }
+
+    // getPackageName(Class): null -> empty string branch
+    @Test
+    public void testGetPackageName_ClassNull_returnsEmptyString() throws Throwable {
+        assertEquals("", ClassUtils.getPackageName((Class<?>) null));
+    }
+
+    // getPackageName(String): no dot (i==-1) branch and with dot branch
+    @Test
+    public void testGetPackageName_StringNoDotAndWithDot_returnsEmptyOrPackage() throws Throwable {
+        assertEquals("", ClassUtils.getPackageName("Foo"));
+        assertEquals("java.lang", ClassUtils.getPackageName("java.lang.String"));
+    }
+
+    // getAllSuperclasses: null input -> null branch
+    @Test
+    public void testGetAllSuperclasses_Null_returnsNull() throws Throwable {
+        assertNull(ClassUtils.getAllSuperclasses(null));
+    }
+
+    // getAllSuperclasses: Object.class has no superclass -> loop executes 0 times, empty list
+    @Test
+    public void testGetAllSuperclasses_ObjectClass_returnsEmptyList() throws Throwable {
+        List<Class<?>> result = ClassUtils.getAllSuperclasses(Object.class);
+        assertTrue(result.isEmpty());
+    }
+
+    // getAllSuperclasses: ArrayList has a chain, Object.class must be the last element
+    @Test
+    public void testGetAllSuperclasses_ArrayListClass_containsObjectAsLast() throws Throwable {
+        List<Class<?>> result = ClassUtils.getAllSuperclasses(ArrayList.class);
+        assertTrue(result.contains(Object.class));
+        assertEquals(Object.class, result.get(result.size() - 1));
+    }
+
+    // getAllInterfaces: null input -> null branch
+    @Test
+    public void testGetAllInterfaces_Null_returnsNull() throws Throwable {
+        assertNull(ClassUtils.getAllInterfaces(null));
+    }
+
+    // getAllInterfaces: ArrayList implements List, recursion through interface hierarchy
+    @Test
+    public void testGetAllInterfaces_ArrayListClass_containsListInterface() throws Throwable {
+        List<Class<?>> result = ClassUtils.getAllInterfaces(ArrayList.class);
+        assertTrue(result.contains(List.class));
+    }
+
+    // convertClassNamesToClasses: null input -> null branch
+    @Test
+    public void testConvertClassNamesToClasses_Null_returnsNull() throws Throwable {
+        assertNull(ClassUtils.convertClassNamesToClasses(null));
+    }
+
+    // convertClassNamesToClasses: valid class name resolves via Class.forName
+    @Test
+    public void testConvertClassNamesToClasses_ValidName_returnsClass() throws Throwable {
+        List<String> names = new ArrayList<String>();
+        names.add("java.lang.String");
+        List<Class<?>> result = ClassUtils.convertClassNamesToClasses(names);
+        assertEquals(String.class, result.get(0));
+    }
+
+    // convertClassNamesToClasses: invalid class name -> catch branch stores null
+    @Test
+    public void testConvertClassNamesToClasses_InvalidName_returnsNullElement() throws Throwable {
+        List<String> names = new ArrayList<String>();
+        names.add("org.apache.commons.lang.NoSuchClassXyz123");
+        List<Class<?>> result = ClassUtils.convertClassNamesToClasses(names);
+        assertNull(result.get(0));
+    }
+
+    // convertClassesToClassNames: null input -> null branch
+    @Test
+    public void testConvertClassesToClassNames_Null_returnsNull() throws Throwable {
+        assertNull(ClassUtils.convertClassesToClassNames(null));
+    }
+
+    // convertClassesToClassNames: null element in list copied as null branch
+    @Test
+    public void testConvertClassesToClassNames_NullElement_copiedAsNull() throws Throwable {
+        List<Class<?>> classes = new ArrayList<Class<?>>();
+        classes.add(null);
+        List<String> result = ClassUtils.convertClassesToClassNames(classes);
+        assertNull(result.get(0));
+    }
+
+    // convertClassesToClassNames: non-null class -> getName() branch
+    @Test
+    public void testConvertClassesToClassNames_ValidClass_returnsName() throws Throwable {
+        List<Class<?>> classes = new ArrayList<Class<?>>();
+        classes.add(String.class);
+        List<String> result = ClassUtils.convertClassesToClassNames(classes);
+        assertEquals("java.lang.String", result.get(0));
+    }
+
+    // isAssignable(Class[],Class[]): different lengths -> isSameLength false branch
+    @Test
+    public void testIsAssignableArray_DifferentLength_returnsFalse() throws Throwable {
+        boolean result = ClassUtils.isAssignable(new Class[] { String.class },
+                new Class[] { String.class, Object.class });
+        assertFalse(result);
+    }
+
+    // isAssignable(Class[],Class[]): same length, compatible types -> true branch
+    @Test
+    public void testIsAssignableArray_CompatibleTypes_returnsTrue() throws Throwable {
+        boolean result = ClassUtils.isAssignable(new Class[] { String.class }, new Class[] { Object.class });
+        assertTrue(result);
+    }
+
+    // isAssignable(Class,Class): toClass null -> false branch
+    @Test
+    public void testIsAssignable_ToClassNull_returnsFalse() throws Throwable {
+        assertFalse(ClassUtils.isAssignable(String.class, null));
+    }
+
+    // isAssignable(Class,Class): cls null and toClass non-primitive -> true branch
+    @Test
+    public void testIsAssignable_ClsNullToNonPrimitive_returnsTrue() throws Throwable {
+        assertTrue(ClassUtils.isAssignable((Class<?>) null, String.class));
+    }
+
+    // isAssignable(Class,Class): cls null and toClass primitive -> false branch
+    @Test
+    public void testIsAssignable_ClsNullToPrimitive_returnsFalse() throws Throwable {
+        assertFalse(ClassUtils.isAssignable((Class<?>) null, Integer.TYPE));
+    }
+
+    // isAssignable(Class,Class): primitive widening int -> long branch
+    @Test
+    public void testIsAssignable_IntToLong_wideningReturnsTrue() throws Throwable {
+        assertTrue(ClassUtils.isAssignable(Integer.TYPE, Long.TYPE));
+    }
+
+    // isAssignable(Class,Class): narrowing conversions not allowed (long->int, short->byte)
+    @Test
+    public void testIsAssignable_NarrowingCases_returnFalse() throws Throwable {
+        assertFalse(ClassUtils.isAssignable(Long.TYPE, Integer.TYPE));
+        assertFalse(ClassUtils.isAssignable(Short.TYPE, Byte.TYPE));
+    }
+
+    // isAssignable(Class,Class,boolean): autoboxing primitive to wrapper branch
+    @Test
+    public void testIsAssignable_AutoboxPrimitiveToWrapper_returnsTrue() throws Throwable {
+        assertTrue(ClassUtils.isAssignable(Integer.TYPE, Integer.class, true));
+    }
+
+    // isAssignable(Class,Class,boolean): autoboxing wrapper to primitive branch
+    @Test
+    public void testIsAssignable_AutoboxWrapperToPrimitive_returnsTrue() throws Throwable {
+        assertTrue(ClassUtils.isAssignable(Integer.class, Integer.TYPE, true));
+    }
+
+    // primitiveToWrapper: null input -> convertedClass stays null branch
+    @Test
+    public void testPrimitiveToWrapper_Null_returnsNull() throws Throwable {
+        assertNull(ClassUtils.primitiveToWrapper(null));
+    }
+
+    // primitiveToWrapper: primitive -> looked up wrapper branch
+    @Test
+    public void testPrimitiveToWrapper_Primitive_returnsWrapper() throws Throwable {
+        assertEquals(Integer.class, ClassUtils.primitiveToWrapper(Integer.TYPE));
+    }
+
+    // primitiveToWrapper: non-primitive -> unchanged branch
+    @Test
+    public void testPrimitiveToWrapper_NonPrimitive_returnsSameClass() throws Throwable {
+        assertEquals(String.class, ClassUtils.primitiveToWrapper(String.class));
+    }
+
+    // primitivesToWrappers: null branch, empty-array branch, and loop-conversion branch
+    @Test
+    public void testPrimitivesToWrappers_NullEmptyAndContent_convertsEachElement() throws Throwable {
+        assertNull(ClassUtils.primitivesToWrappers(null));
+        Class<?>[] emptyResult = ClassUtils.primitivesToWrappers(new Class[0]);
+        assertEquals(0, emptyResult.length);
+        Class<?>[] contentResult = ClassUtils.primitivesToWrappers(new Class[] { Integer.TYPE, Boolean.TYPE });
+        assertEquals(Integer.class, contentResult[0]);
+        assertEquals(Boolean.class, contentResult[1]);
+    }
+
+    // wrapperToPrimitive: wrapper found in map vs non-wrapper -> null branch
+    @Test
+    public void testWrapperToPrimitive_WrapperAndNonWrapper_returnsCorrectResult() throws Throwable {
+        assertEquals(Integer.TYPE, ClassUtils.wrapperToPrimitive(Integer.class));
+        assertNull(ClassUtils.wrapperToPrimitive(String.class));
+    }
+
+    // wrappersToPrimitives: mixed wrapper/non-wrapper array exercises loop with null element
+    @Test
+    public void testWrappersToPrimitives_MixedArray_returnsPrimitivesAndNull() throws Throwable {
+        Class<?>[] result = ClassUtils.wrappersToPrimitives(new Class[] { Integer.class, String.class });
+        assertEquals(Integer.TYPE, result[0]);
+        assertNull(result[1]);
+    }
+
+    // isInnerClass: null input and top-level class (no '$') -> false branches
+    @Test
+    public void testIsInnerClass_NullAndTopLevel_returnsFalse() throws Throwable {
+        assertFalse(ClassUtils.isInnerClass(null));
+        assertFalse(ClassUtils.isInnerClass(String.class));
+    }
+
+    // isInnerClass: name contains '$' -> true branch
+    @Test
+    public void testIsInnerClass_InnerClass_returnsTrue() throws Throwable {
+        assertTrue(ClassUtils.isInnerClass(Map.Entry.class));
+    }
+
+    // getClass(String): plain class name resolves via Class.forName in else branch
+    @Test
+    public void testGetClass_SimpleName_returnsClass() throws Throwable {
+        assertEquals(String.class, ClassUtils.getClass("java.lang.String"));
+    }
+
+    // getClass(String): array object type name "Foo[]" handled by toCanonicalName encoding branch
+    @Test
+    public void testGetClass_ArrayName_returnsArrayClass() throws Throwable {
+        assertEquals(String[].class, ClassUtils.getClass("java.lang.String[]"));
+    }
+
+    // getClass(String): unresolvable class name -> ClassNotFoundException propagates
+    @Test
+    public void testGetClass_InvalidName_throwsClassNotFoundException() throws Throwable {
+        try {
+            ClassUtils.getClass("org.apache.commons.lang.NoSuchClassXyz123");
+            fail("expected ClassNotFoundException");
+        } catch (ClassNotFoundException expected) {
+            // expected
+        }
+    }
+
+    // getPublicMethod: public declaring class -> returns declaredMethod directly branch
+    @Test
+    public void testGetPublicMethod_ValidMethod_returnsMethod() throws Throwable {
+        Method m = ClassUtils.getPublicMethod(ArrayList.class, "size", new Class[0]);
+        assertEquals("size", m.getName());
+    }
+
+    // toClass: null input branch and empty array branch
+    @Test
+    public void testToClass_NullAndEmpty_returnsNullOrEmptyArray() throws Throwable {
+        assertNull(ClassUtils.toClass(null));
+        Class<?>[] emptyResult = ClassUtils.toClass(new Object[0]);
+        assertEquals(0, emptyResult.length);
+    }
+
+    // toClass: non-empty array -> loop fills classes[] with getClass() of each element
+    @Test
+    public void testToClass_WithElements_returnsCorrespondingClasses() throws Throwable {
+        Class<?>[] result = ClassUtils.toClass(new Object[] { "foo", Integer.valueOf(1) });
+        assertEquals(String.class, result[0]);
+        assertEquals(Integer.class, result[1]);
+    }
+}

@@ -1,0 +1,275 @@
+package org.jsoup.nodes;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.jsoup.Jsoup;
+
+import java.util.List;
+
+public class LeafNodeClaudeTest {
+
+    private LeafNode textLeaf;
+    private LeafNode commentLeaf;
+
+    @Before
+    public void setUp() throws Throwable {
+        Document doc = Jsoup.parse("<p>Hello</p>");
+        Element p = doc.body().child(0);
+        textLeaf = (LeafNode) p.childNode(0);
+
+        Document commentDoc = Jsoup.parseBodyFragment("<!--remark-->");
+        commentLeaf = (LeafNode) commentDoc.body().childNode(0);
+    }
+
+    // hasAttributes(): โหนดที่เพิ่ง parse มา เก็บ core value เป็น String ยังไม่ใช่ Attributes
+    @Test
+    public void testHasAttributes_freshTextNode_falseInitially() throws Throwable {
+        assertFalse(textLeaf.hasAttributes());
+    }
+
+    // hasAttributes(): หลังเรียก attributes() ต้องถูกแปลงเป็น Attributes map แล้ว
+    @Test
+    public void testHasAttributes_afterAttributesCall_true() throws Throwable {
+        textLeaf.attributes();
+        assertTrue(textLeaf.hasAttributes());
+    }
+
+    // hasAttributes(): ตรวจสอบโดยตรงจาก field value เมื่อกำหนดเป็น Attributes instance
+    @Test
+    public void testHasAttributes_directAttributesAssignment_true() throws Throwable {
+        textLeaf.value = new Attributes();
+        assertTrue(textLeaf.hasAttributes());
+    }
+
+    // attributes(): เรียกซ้ำต้องได้ Attributes instance เดียวกัน (ensureAttributes ทำครั้งเดียว)
+    @Test
+    public void testAttributes_sameInstanceOnRepeatedCalls() throws Throwable {
+        Attributes a1 = textLeaf.attributes();
+        Attributes a2 = textLeaf.attributes();
+        assertSame(a1, a2);
+    }
+
+    // attributes(): หลังแปลงเป็น map แล้ว core value เดิมต้องยังอ่านได้ผ่าน attr(nodeName())
+    @Test
+    public void testAttributes_afterConversionPreservesCoreValue() throws Throwable {
+        textLeaf.attributes();
+        assertEquals("Hello", textLeaf.attr(textLeaf.nodeName()));
+    }
+
+    // coreValue(): get ต้องเท่ากับ attr(nodeName())
+    @Test
+    public void testCoreValueGet_returnsAttrOfNodeName() throws Throwable {
+        assertEquals("Hello", textLeaf.coreValue());
+    }
+
+    // coreValue(String): set ต้องอัปเดตค่าที่อ่านกลับได้
+    @Test
+    public void testCoreValueSet_updatesRetrievableValue() throws Throwable {
+        textLeaf.coreValue("World");
+        assertEquals("World", textLeaf.coreValue());
+        assertEquals("World", textLeaf.attr(textLeaf.nodeName()));
+    }
+
+    // attr(key) get: key เป็น null ต้องโยน IllegalArgumentException (Validate.notNull)
+    @Test
+    public void testAttrGet_nullKey_throwsIllegalArgumentException() throws Throwable {
+        try {
+            textLeaf.attr((String) null);
+            fail("expected IllegalArgumentException for null key");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // attr(key) get: ยังไม่มี attributes map, key เท่ากับ nodeName() ต้องคืน core value
+    @Test
+    public void testAttrGet_keyEqualsNodeNameWithoutAttributesMap_returnsCoreValue() throws Throwable {
+        assertFalse(textLeaf.hasAttributes());
+        assertEquals("Hello", textLeaf.attr(textLeaf.nodeName()));
+    }
+
+    // attr(key) get: ยังไม่มี attributes map, key ไม่ตรง nodeName() ต้องคืนค่าว่าง ไม่ใช่ null
+    @Test
+    public void testAttrGet_keyNotEqualsNodeNameWithoutAttributesMap_returnsEmptyString() throws Throwable {
+        String result = textLeaf.attr("href");
+        assertNotNull(result);
+        assertEquals("", result);
+    }
+
+    // attr(key) get: key เป็น string ว่าง ("") ก็ยังต้องคืนค่าว่างเมื่อไม่ตรง nodeName()
+    @Test
+    public void testAttrGet_blankKeyWithoutAttributesMap_returnsEmptyString() throws Throwable {
+        assertEquals("", textLeaf.attr(""));
+    }
+
+    // attr(key) get: เมื่อมี attributes map แล้ว ต้อง delegate ไปที่ super.attr(key)
+    @Test
+    public void testAttrGet_afterAttributesMapCreated_delegatesToSuper() throws Throwable {
+        textLeaf.attr("data-id", "5");
+        assertTrue(textLeaf.hasAttributes());
+        assertEquals("5", textLeaf.attr("data-id"));
+    }
+
+    // attr(key,value) set: ยังไม่มี map, key เท่ากับ nodeName() -> เก็บตรงเป็น core value โดยไม่สร้าง map
+    @Test
+    public void testAttrSet_keyEqualsNodeNameWithoutMap_storesDirectlyAsCoreValue() throws Throwable {
+        textLeaf.attr(textLeaf.nodeName(), "NewText");
+        assertFalse(textLeaf.hasAttributes());
+        assertEquals("NewText", textLeaf.coreValue());
+    }
+
+    // BUG: attr(key,value) ไม่ validate ค่า null เมื่อ key เท่ากับ nodeName() และยังไม่มี attributes map
+    // สัญญาของ attr() คือค่าที่เก็บ/คืนต้องไม่เป็น null (ไม่ตรงกับ Validate.notNull ที่ฝั่ง getter บังคับไว้กับ key)
+    // บนโค้ดที่มีบั๊ก ค่า null จะถูกเก็บตรง ๆ โดยไม่ throw ทำให้เทสต์นี้ fail; เวอร์ชันที่แก้ต้อง validate และ throw
+    @Test
+    public void testAttrSet_nullValueForNodeNameKey_mustRejectNull() throws Throwable {
+        assertFalse(textLeaf.hasAttributes());
+        try {
+            textLeaf.attr(textLeaf.nodeName(), null);
+            fail("expected IllegalArgumentException for null attribute value");
+        } catch (IllegalArgumentException expected) {
+            // ok: ค่า null ถูกปฏิเสธอย่างถูกต้อง
+        }
+    }
+
+    // attr(key,value) set: ยังไม่มี map, key เป็น null -> key.equals(nodeName()) จะโยน NullPointerException
+    @Test
+    public void testAttrSet_nullKeyWithoutAttributesMap_throwsNullPointerException() throws Throwable {
+        try {
+            textLeaf.attr(null, "value");
+            fail("expected NullPointerException for null key");
+        } catch (NullPointerException expected) {
+            // ok
+        }
+    }
+
+    // attr(key,value) set: key ไม่ตรง nodeName() -> ต้องสร้าง attributes map และคง core value เดิมไว้
+    @Test
+    public void testAttrSet_keyNotEqualsNodeName_createsAttributesMapAndPreservesCoreValue() throws Throwable {
+        textLeaf.attr("class", "foo");
+        assertTrue(textLeaf.hasAttributes());
+        assertEquals("foo", textLeaf.attr("class"));
+        assertEquals("Hello", textLeaf.attr(textLeaf.nodeName()));
+    }
+
+    // attr(key,value) set: เมื่อมี map แล้ว key เท่ากับ nodeName() ต้องอัปเดตค่าผ่าน map ได้
+    @Test
+    public void testAttrSet_keyEqualsNodeNameAfterMapExists_updatesCoreValueInMap() throws Throwable {
+        textLeaf.attr("class", "foo");
+        textLeaf.attr(textLeaf.nodeName(), "Updated");
+        assertEquals("Updated", textLeaf.coreValue());
+    }
+
+    // attr(key,value) set: ต้องคืน instance เดิมของ node เพื่อ chaining
+    @Test
+    public void testAttrSet_returnsSameNodeForChaining() throws Throwable {
+        Node returned = textLeaf.attr("x", "y");
+        assertSame(textLeaf, returned);
+    }
+
+    // hasAttr(): ยังไม่มี map, key เท่ากับ nodeName() และมี core value -> true
+    @Test
+    public void testHasAttr_keyEqualsNodeNameWithoutMap_true() throws Throwable {
+        assertTrue(textLeaf.hasAttr(textLeaf.nodeName()));
+    }
+
+    // hasAttr(): ยังไม่มี map, key ไม่ตรง nodeName() -> false
+    @Test
+    public void testHasAttr_keyNotEqualsNodeNameWithoutMap_false() throws Throwable {
+        assertFalse(textLeaf.hasAttr("missing-attr"));
+    }
+
+    // hasAttr(): ผลข้างเคียงบังคับให้เกิด ensureAttributes() เสมอ
+    @Test
+    public void testHasAttr_forcesAttributesMapCreation() throws Throwable {
+        assertFalse(textLeaf.hasAttributes());
+        textLeaf.hasAttr("whatever");
+        assertTrue(textLeaf.hasAttributes());
+    }
+
+    // removeAttr(): ลบ attribute ที่มีอยู่จริงออกจาก map ได้
+    @Test
+    public void testRemoveAttr_existingAttribute_removed() throws Throwable {
+        textLeaf.attr("data-x", "1");
+        textLeaf.removeAttr("data-x");
+        assertFalse(textLeaf.hasAttr("data-x"));
+    }
+
+    // removeAttr(): ลบ key ที่เป็น nodeName() ทำให้ core value หายไป (คืนค่าว่าง)
+    @Test
+    public void testRemoveAttr_coreValueKey_clearsCoreValue() throws Throwable {
+        textLeaf.removeAttr(textLeaf.nodeName());
+        assertFalse(textLeaf.hasAttr(textLeaf.nodeName()));
+        assertEquals("", textLeaf.attr(textLeaf.nodeName()));
+    }
+
+    // removeAttr(): ต้องคืน instance เดิมของ node
+    @Test
+    public void testRemoveAttr_returnsSameNodeInstance() throws Throwable {
+        Node returned = textLeaf.removeAttr("nonexistent");
+        assertSame(textLeaf, returned);
+    }
+
+    // absUrl(): attribute ที่ไม่มีอยู่ ต้องคืนค่าว่าง ไม่ใช่ null
+    @Test
+    public void testAbsUrl_missingAttribute_returnsEmptyString() throws Throwable {
+        String result = textLeaf.absUrl("href");
+        assertNotNull(result);
+        assertEquals("", result);
+    }
+
+    // absUrl(): href ที่เป็น absolute URL อยู่แล้ว ต้องคืนค่าเดิม
+    @Test
+    public void testAbsUrl_absoluteHrefAttribute_returnsSameUrl() throws Throwable {
+        textLeaf.attr("href", "http://example.com/page");
+        assertEquals("http://example.com/page", textLeaf.absUrl("href"));
+    }
+
+    // absUrl(): ต้องบังคับให้เกิด ensureAttributes() เช่นกัน
+    @Test
+    public void testAbsUrl_forcesAttributesMapCreation() throws Throwable {
+        assertFalse(textLeaf.hasAttributes());
+        textLeaf.absUrl("href");
+        assertTrue(textLeaf.hasAttributes());
+    }
+
+    // baseUri(): โหนดมี parent -> คืนค่า baseUri ของ parent (ที่นี่คือ "" เพราะ parse ด้วย Jsoup.parse(String))
+    @Test
+    public void testBaseUri_withParent_returnsParentBaseUri() throws Throwable {
+        assertEquals("", textLeaf.baseUri());
+    }
+
+    // childNodeSize(): leaf node ต้องไม่มีลูกเสมอ
+    @Test
+    public void testChildNodeSize_alwaysZero() throws Throwable {
+        assertEquals(0, textLeaf.childNodeSize());
+    }
+
+    // ensureChildNodes(): ต้องโยน UnsupportedOperationException เสมอ เพราะ leaf ไม่มีลูก
+    @Test
+    public void testEnsureChildNodes_throwsUnsupportedOperationException() throws Throwable {
+        try {
+            List<Node> children = textLeaf.ensureChildNodes();
+            fail("expected UnsupportedOperationException, got size " + children.size());
+        } catch (UnsupportedOperationException expected) {
+            assertTrue(expected.getMessage().contains("child"));
+        }
+    }
+
+    // ตรวจ subclass อื่น (Comment) ว่า hasAttributes() เริ่มต้นเป็น false เหมือนกัน
+    @Test
+    public void testCommentNode_hasAttributesFalseInitially() throws Throwable {
+        assertFalse(commentLeaf.hasAttributes());
+        assertEquals("remark", commentLeaf.coreValue());
+    }
+
+    // ตรวจ subclass อื่น (Comment): ตั้ง attribute ใหม่ต้องคง core value เดิมไว้เหมือนกับ TextNode
+    @Test
+    public void testCommentNode_attrSetAndCoreValuePreserved() throws Throwable {
+        commentLeaf.attr("data-note", "1");
+        assertTrue(commentLeaf.hasAttributes());
+        assertEquals("remark", commentLeaf.attr(commentLeaf.nodeName()));
+    }
+}

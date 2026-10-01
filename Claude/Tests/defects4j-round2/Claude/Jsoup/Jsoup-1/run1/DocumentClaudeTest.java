@@ -1,0 +1,258 @@
+package org.jsoup.nodes;
+
+import org.jsoup.Jsoup;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class DocumentClaudeTest {
+
+    // Constructor should set root node name and store baseUri without creating html/head/body
+    @Test
+    public void testConstructor_setsNodeNameAndBaseUri() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertEquals("#document", doc.nodeName());
+        assertEquals("http://example.com/", doc.baseUri());
+    }
+
+    // createShell(): should produce a document containing html, head and body
+    @Test
+    public void testCreateShell_createsHtmlHeadBody() throws Throwable {
+        Document doc = Document.createShell("http://example.com/");
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+        assertFalse(doc.select("html").isEmpty());
+    }
+
+    // createShell(): null baseUri must be rejected via Validate.notNull
+    @Test
+    public void testCreateShell_nullBaseUri_throwsException() throws Throwable {
+        try {
+            Document.createShell(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // head(): no html structure present -> no head element found
+    @Test
+    public void testHead_noHtmlStructure_returnsNull() throws Throwable {
+        Document doc = new Document("");
+        assertNull(doc.head());
+    }
+
+    // head(): after createShell a head element must be found
+    @Test
+    public void testHead_afterCreateShell_returnsNonNull() throws Throwable {
+        Document doc = Document.createShell("");
+        assertNotNull(doc.head());
+    }
+
+    // body(): no html structure present -> no body element found
+    @Test
+    public void testBody_noHtmlStructure_returnsNull() throws Throwable {
+        Document doc = new Document("");
+        assertNull(doc.body());
+    }
+
+    // body(): after createShell a body element must be found
+    @Test
+    public void testBody_afterCreateShell_returnsNonNull() throws Throwable {
+        Document doc = Document.createShell("");
+        assertNotNull(doc.body());
+    }
+
+    // title(): document without a title element returns empty string
+    @Test
+    public void testTitle_noTitleElement_returnsEmptyString() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body><p>Hi</p></body></html>");
+        assertEquals("", doc.title());
+    }
+
+    // title(): title element containing only whitespace trims to empty string
+    @Test
+    public void testTitle_whitespaceTitle_returnsEmptyString() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>   </title></head><body></body></html>");
+        assertEquals("", doc.title());
+    }
+
+    // title(): surrounding whitespace in title text is trimmed
+    @Test
+    public void testTitle_returnsTrimmedTitle() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>  Hello World  </title></head><body></body></html>");
+        assertEquals("Hello World", doc.title());
+    }
+
+    // title(String): updates text of an already existing title element
+    @Test
+    public void testTitleSetter_updatesExistingTitle() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>Old</title></head><body></body></html>");
+        doc.title("New");
+        assertEquals("New", doc.title());
+    }
+
+    // title(String): when no title element exists, one is added under head
+    @Test
+    public void testTitleSetter_addsTitleWhenAbsent() throws Throwable {
+        Document doc = Document.createShell("");
+        doc.title("Added");
+        assertEquals("Added", doc.title());
+    }
+
+    // title(String): setting empty string is accepted and reflected back
+    @Test
+    public void testTitleSetter_emptyStringTitle_setsEmpty() throws Throwable {
+        Document doc = Document.createShell("");
+        doc.title("");
+        assertEquals("", doc.title());
+    }
+
+    // title(String): null argument must be rejected via Validate.notNull
+    @Test
+    public void testTitleSetter_nullTitle_throwsException() throws Throwable {
+        Document doc = Document.createShell("");
+        try {
+            doc.title(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // createElement(): new element carries the document's base uri
+    @Test
+    public void testCreateElement_setsDocumentBaseUri() throws Throwable {
+        Document doc = new Document("http://example.com/base/");
+        Element el = doc.createElement("span");
+        assertEquals("http://example.com/base/", el.baseUri());
+    }
+
+    // createElement(): the new element is not made a child of the document
+    @Test
+    public void testCreateElement_notAttachedToDocument() throws Throwable {
+        Document doc = new Document("");
+        doc.createElement("span");
+        assertTrue(doc.getElementsByTag("span").isEmpty());
+    }
+
+    // normalise(): an empty document gains html, head and body
+    @Test
+    public void testNormalise_createsHtmlHeadBodyWhenMissing() throws Throwable {
+        Document doc = new Document("");
+        doc.normalise();
+        assertFalse(doc.select("html").isEmpty());
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+    }
+
+    // normalise(): a pre-existing stray head element without an html wrapper still yields full structure
+    @Test
+    public void testNormalise_existingStrayHeadWithoutHtml_stillHasStructure() throws Throwable {
+        Document doc = new Document("");
+        doc.appendElement("head");
+        doc.normalise();
+        assertFalse(doc.select("html").isEmpty());
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+    }
+
+    // normalise(): non-blank text directly under the document root is moved into body
+    @Test
+    public void testNormalise_movesStrayTextFromRootIntoBody() throws Throwable {
+        Document doc = Document.createShell("");
+        doc.appendChild(new TextNode("Stray", ""));
+        doc.normalise();
+        assertTrue(doc.body().text().indexOf("Stray") >= 0);
+    }
+
+    // normalise(): non-blank text directly under head is moved out into body
+    @Test
+    public void testNormalise_movesStrayTextFromHeadIntoBody() throws Throwable {
+        Document doc = Document.createShell("");
+        doc.head().appendChild(new TextNode("HeadStray", ""));
+        doc.normalise();
+        assertTrue(doc.body().text().indexOf("HeadStray") >= 0);
+        assertEquals("", doc.head().text());
+    }
+
+    // normalise(): blank/whitespace-only text is left untouched, not moved to body
+    @Test
+    public void testNormalise_blankTextNotMoved() throws Throwable {
+        Document doc = Document.createShell("");
+        doc.appendChild(new TextNode("   ", ""));
+        doc.normalise();
+        assertEquals("", doc.body().text());
+    }
+
+    // normalise(): calling twice on an already well formed document keeps it valid
+    @Test
+    public void testNormalise_idempotentOnWellFormedDocument() throws Throwable {
+        Document doc = Document.createShell("");
+        doc.normalise();
+        doc.normalise();
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+    }
+
+    // outerHtml(): renders full content without wrapping the document in an extra tag
+    @Test
+    public void testOuterHtml_containsFullContentNoExtraWrapper() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body><p>Hi</p></body></html>");
+        String out = doc.outerHtml();
+        assertTrue(out.indexOf("Hi") >= 0);
+        assertTrue(out.indexOf("html") >= 0);
+    }
+
+    // text(String): overridden setter only clears/sets body content, keeping document structure
+    @Test
+    public void testText_setsBodyTextOnly() throws Throwable {
+        Document doc = Document.createShell("");
+        doc.text("Hello Body");
+        assertEquals("Hello Body", doc.body().text());
+        assertNotNull(doc.head());
+    }
+
+    // nodeName(): always reports the document constant
+    @Test
+    public void testNodeName_returnsDocumentConstant() throws Throwable {
+        Document doc = new Document("");
+        assertEquals("#document", doc.nodeName());
+    }
+
+    // Jsoup.parse(""): parser must always guarantee head and body elements exist
+    @Test
+    public void testParse_emptyString_headAndBodyExist() throws Throwable {
+        Document doc = Jsoup.parse("");
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+    }
+
+    // Jsoup.parse("<html>"): parser must always guarantee head and body elements exist
+    @Test
+    public void testParse_onlyHtmlTag_headAndBodyExist() throws Throwable {
+        Document doc = Jsoup.parse("<html>");
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+    }
+
+    // Jsoup.parse("<head>"): parser must always guarantee head and body elements exist
+    @Test
+    public void testParse_onlyHeadTag_headAndBodyExist() throws Throwable {
+        Document doc = Jsoup.parse("<head>");
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+    }
+
+    // Jsoup.parse("<body>"): parser must always guarantee head and body elements exist
+    @Test
+    public void testParse_onlyBodyTag_headAndBodyExist() throws Throwable {
+        Document doc = Jsoup.parse("<body>");
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+    }
+
+    // Jsoup.parseBodyFragment(): produces a document whose body contains the fragment content
+    @Test
+    public void testParseBodyFragment_hasBodyWithContent() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<p>Hello</p>");
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+        assertTrue(doc.body().text().indexOf("Hello") >= 0);
+    }
+}

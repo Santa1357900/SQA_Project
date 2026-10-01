@@ -1,0 +1,226 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.9285714285714286" branch-rate="0.7272727272727273" lines-covered="39" lines-valid="42" branches-covered="16" branches-valid="22" complexity="2.4" version="2.0.3" timestamp="1790853353015">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="org.mockito.internal.util" line-rate="0.9285714285714286" branch-rate="0.7272727272727273" complexity="2.4">
+			<classes>
+				<class name="org.mockito.internal.util.MockUtil" filename="org/mockito/internal/util/MockUtil.java" line-rate="0.9285714285714286" branch-rate="0.7272727272727273" complexity="2.4">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="31" hits="33" branch="false"/>
+								<line number="32" hits="33" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Lorg/mockito/internal/util/MockCreationValidator;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="26" hits="34" branch="false"/>
+								<line number="27" hits="34" branch="false"/>
+								<line number="28" hits="34" branch="false"/>
+							</lines>
+						</method>
+						<method name="createMock" signature="(Ljava/lang/Class;Lorg/mockito/internal/creation/MockSettingsImpl;)Ljava/lang/Object;" line-rate="0.8571428571428571" branch-rate="0.375">
+							<lines>
+								<line number="35" hits="11" branch="false"/>
+								<line number="36" hits="11" branch="false"/>
+								<line number="37" hits="10" branch="false"/>
+								<line number="39" hits="10" branch="false"/>
+								<line number="41" hits="10" branch="false"/>
+								<line number="42" hits="10" branch="false"/>
+								<line number="45" hits="10" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="46" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="48" hits="10" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="51" hits="10" branch="false"/>
+								<line number="53" hits="10" branch="false"/>
+								<line number="55" hits="10" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="56" hits="0" branch="false"/>
+								<line number="59" hits="10" branch="false"/>
+							</lines>
+						</method>
+						<method name="getInterceptor" signature="(Ljava/lang/Object;)Lorg/mockito/internal/creation/MethodInterceptorFilter;" line-rate="0.8571428571428571" branch-rate="0.75">
+							<lines>
+								<line number="96" hits="35" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="97" hits="12" branch="false"/>
+								<line number="99" hits="23" branch="false"/>
+								<line number="100" hits="23" branch="false"/>
+								<line number="101" hits="23" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="102" hits="23" branch="false"/>
+								<line number="104" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getMockHandler" signature="(Ljava/lang/Object;)Lorg/mockito/internal/MockHandlerInterface;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="76" hits="20" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="77" hits="4" branch="false"/>
+								<line number="80" hits="16" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="81" hits="10" branch="false"/>
+								<line number="83" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="getMockName" signature="(Ljava/lang/Object;)Lorg/mockito/internal/util/MockName;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="108" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="isMock" signature="(Ljava/lang/Object;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="92" hits="10" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="isMockitoMock" signature="(Ljava/lang/Object;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="88" hits="25" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="newMethodInterceptorFilter" signature="(Lorg/mockito/internal/creation/MockSettingsImpl;)Lorg/mockito/internal/creation/MethodInterceptorFilter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="70" hits="10" branch="false"/>
+								<line number="71" hits="10" branch="false"/>
+								<line number="72" hits="10" branch="false"/>
+							</lines>
+						</method>
+						<method name="resetMock" signature="(Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="63" hits="5" branch="false"/>
+								<line number="64" hits="3" branch="false"/>
+								<line number="65" hits="3" branch="false"/>
+								<line number="66" hits="3" branch="false"/>
+								<line number="67" hits="3" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="26" hits="34" branch="false"/>
+						<line number="27" hits="34" branch="false"/>
+						<line number="28" hits="34" branch="false"/>
+						<line number="31" hits="33" branch="false"/>
+						<line number="32" hits="33" branch="false"/>
+						<line number="35" hits="11" branch="false"/>
+						<line number="36" hits="11" branch="false"/>
+						<line number="37" hits="10" branch="false"/>
+						<line number="39" hits="10" branch="false"/>
+						<line number="41" hits="10" branch="false"/>
+						<line number="42" hits="10" branch="false"/>
+						<line number="45" hits="10" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="46" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="48" hits="10" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="51" hits="10" branch="false"/>
+						<line number="53" hits="10" branch="false"/>
+						<line number="55" hits="10" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="56" hits="0" branch="false"/>
+						<line number="59" hits="10" branch="false"/>
+						<line number="63" hits="5" branch="false"/>
+						<line number="64" hits="3" branch="false"/>
+						<line number="65" hits="3" branch="false"/>
+						<line number="66" hits="3" branch="false"/>
+						<line number="67" hits="3" branch="false"/>
+						<line number="70" hits="10" branch="false"/>
+						<line number="71" hits="10" branch="false"/>
+						<line number="72" hits="10" branch="false"/>
+						<line number="76" hits="20" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="77" hits="4" branch="false"/>
+						<line number="80" hits="16" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="81" hits="10" branch="false"/>
+						<line number="83" hits="6" branch="false"/>
+						<line number="88" hits="25" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="92" hits="10" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="96" hits="35" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="97" hits="12" branch="false"/>
+						<line number="99" hits="23" branch="false"/>
+						<line number="100" hits="23" branch="false"/>
+						<line number="101" hits="23" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="102" hits="23" branch="false"/>
+						<line number="104" hits="0" branch="false"/>
+						<line number="108" hits="6" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

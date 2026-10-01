@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Compress-9-tspsckwe/Compress-9f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamClaudeTest::testWrite_assemblyFlushAcrossBoundary_bytesWrittenMatchesActualBytes
+  - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamClaudeTest::testWrite_multipleFullRecordsDirectly_bytesWrittenMatchesActualBytes
+  - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamClaudeTest::testWrite_exactlyOneRecordSize_bytesWrittenMatchesActualBytes
+  - org.apache.commons.compress.archivers.tar.TarArchiveOutputStreamClaudeTest::testWrite_smallChunksBelowRecordSize_bytesWrittenCountedCorrectly
+[exit 0]

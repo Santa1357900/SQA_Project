@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Codec-13-i0hryuud/Codec-13f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - org.apache.commons.codec.binary.CharSequenceUtilsClaudeTest::testNewStringUtf16Be_nullBytes_returnsNull
+  - org.apache.commons.codec.binary.CharSequenceUtilsClaudeTest::testNewStringUsAscii_nullBytes_returnsNull
+  - org.apache.commons.codec.binary.CharSequenceUtilsClaudeTest::testNewStringUtf16_nullBytes_returnsNull
+  - org.apache.commons.codec.binary.CharSequenceUtilsClaudeTest::testNewStringIso8859_1_nullBytes_returnsNull
+  - org.apache.commons.codec.binary.CharSequenceUtilsClaudeTest::testNewStringUtf16Le_nullBytes_returnsNull
+[exit 0]

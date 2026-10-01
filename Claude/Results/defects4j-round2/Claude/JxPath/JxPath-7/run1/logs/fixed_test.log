@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-7-9fe878y4/JxPath-7f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationGreaterThanClaudeTest::testComputeValue_nonNumericStringRight_returnsFalse
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationGreaterThanClaudeTest::testComputeValue_nonNumericStringLeft_returnsFalse
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationGreaterThanClaudeTest::testComputeValue_booleanFalseGreaterTrue_returnsFalse
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationGreaterThanClaudeTest::testComputeValue_booleanTrueGreaterFalse_returnsTrue
+[exit 0]

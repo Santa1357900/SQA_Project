@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-90-7kbm551g/Jsoup-90f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.jsoup.helper.HttpConnectionClaudeTest::testDataVarargs_nullAndOddLength_throwIllegalArgumentException
+  - org.jsoup.helper.HttpConnectionClaudeTest::testKeyValCreate_nullInputStream_mustBeRejected
+[exit 0]

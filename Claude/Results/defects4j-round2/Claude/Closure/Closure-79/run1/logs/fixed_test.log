@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-79-0g_tjuai/Closure-79f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 7
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testSplitVarDeclarations_emptyVarWithAssertOnChangeTrue_throwsIllegalStateException
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testSplitVarDeclarations_multipleDeclarators_allSplitStatementsShareOriginalSourceLine
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testParseAndNormalizeSyntheticCode_whileLoop_convertedToFor
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testPropagateConstantAnnotationsOverVars_nameByConvention_annotated
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testVisit_nameFollowingConstantConvention_annotatedAsConstant
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testSplitVarDeclarations_withAssertOnChangeTrue_throwsIllegalStateException
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testVisit_whileLoopWithAssertOnChangeTrue_throwsIllegalStateException
+[exit 0]

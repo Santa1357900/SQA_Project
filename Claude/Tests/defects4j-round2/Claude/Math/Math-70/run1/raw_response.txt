@@ -1,0 +1,264 @@
+package org.apache.commons.math.analysis.solvers;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.FunctionEvaluationException;
+import org.apache.commons.math.MaxIterationsExceededException;
+import org.apache.commons.math.analysis.UnivariateRealFunction;
+
+public class BisectionSolverClaudeTest {
+
+    // f(x) = x - root ; a continuous linear function whose unique zero is "root"
+    private UnivariateRealFunction linear(final double root) {
+        return new UnivariateRealFunction() {
+            public double value(double x) {
+                return x - root;
+            }
+        };
+    }
+
+    // Covers: default constructor + solve(f,min,max) normal convergence
+    @Test
+    public void testDefaultConstructor_thenSolveFunctionMinMax_findsRoot() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f = linear(0.75);
+        double root = solver.solve(f, 0.0, 1.0);
+        assertEquals(0.75, root, 1e-5);
+    }
+
+    // Covers: deprecated constructor(f) + deprecated solve(min,max) using instance field f
+    @Test
+    public void testDeprecatedConstructorWithFunction_solveMinMax_usesFieldFunction() throws Throwable {
+        UnivariateRealFunction f = linear(0.3);
+        BisectionSolver solver = new BisectionSolver(f);
+        double root = solver.solve(0.0, 1.0);
+        assertEquals(0.3, root, 1e-5);
+    }
+
+    // Covers: fm*fmin > 0.0 branch likely exercised near lower bound (min = m assignment path)
+    @Test
+    public void testSolveFunctionMinMax_rootNearLowerBound_findsRoot() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f = linear(0.1);
+        double root = solver.solve(f, 0.0, 1.0);
+        assertEquals(0.1, root, 1e-5);
+    }
+
+    // Covers: fm*fmin <= 0.0 branch likely exercised near upper bound (max = m assignment path)
+    @Test
+    public void testSolveFunctionMinMax_rootNearUpperBound_findsRoot() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f = linear(0.9);
+        double root = solver.solve(f, 0.0, 1.0);
+        assertEquals(0.9, root, 1e-5);
+    }
+
+    // Covers: root exactly at interval midpoint -> fm == 0.0 boundary of ">0.0" condition
+    @Test
+    public void testSolveFunctionMinMax_rootAtExactMidpoint_findsRoot() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f = linear(0.5);
+        double root = solver.solve(f, 0.0, 1.0);
+        assertEquals(0.5, root, 1e-5);
+    }
+
+    // Covers: decreasing function (negative slope) still brackets and converges correctly
+    @Test
+    public void testSolveFunctionMinMax_decreasingFunction_findsRoot() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        final double root = 0.4;
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) {
+                return root - x;
+            }
+        };
+        double result = solver.solve(f, 0.0, 1.0);
+        assertEquals(0.4, result, 1e-5);
+    }
+
+    // Covers: negative interval, negative root value
+    @Test
+    public void testSolveFunctionMinMax_negativeInterval_findsNegativeRoot() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f = linear(-0.5);
+        double root = solver.solve(f, -1.0, 0.0);
+        assertEquals(-0.5, root, 1e-5);
+    }
+
+    // Covers: wide interval requiring several loop iterations, within maximalIterationCount
+    @Test
+    public void testSolveFunctionMinMax_largeInterval_findsRootWithinAccuracy() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f = linear(37.123456);
+        double root = solver.solve(f, -100.0, 100.0);
+        assertEquals(37.123456, root, 1e-5);
+    }
+
+    // Covers: verifyInterval branch - invalid bracket (min > max) must raise an exception
+    @Test
+    public void testSolveFunctionMinMax_invalidInterval_throwsException() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f = linear(0.5);
+        try {
+            solver.solve(f, 1.0, 0.0);
+            fail("expected exception for invalid interval (min > max)");
+        } catch (Exception expected) {
+            // verifyInterval must reject min > max
+        }
+    }
+
+    // Covers: loop exhaustion branch - astronomically wide interval cannot converge in 100 halvings
+    @Test
+    public void testSolveFunctionMinMax_extremelyWideInterval_throwsMaxIterationsExceededException() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction identity = new UnivariateRealFunction() {
+            public double value(double x) {
+                return x;
+            }
+        };
+        try {
+            solver.solve(identity, -Double.MAX_VALUE, Double.MAX_VALUE);
+            fail("expected MaxIterationsExceededException");
+        } catch (MaxIterationsExceededException expected) {
+            // width halves each iteration; cannot reach 1e-6 accuracy within 100 iterations here
+        }
+    }
+
+    // Covers: already-tight interval - result must remain bracketed within the original bounds
+    @Test
+    public void testSolveFunctionMinMax_tightInterval_resultWithinOriginalBounds() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f = linear(0.5);
+        double min = 0.4999995;
+        double max = 0.5000005;
+        double root = solver.solve(f, min, max);
+        assertTrue(root >= min && root <= max);
+        assertEquals(0.5, root, 1e-6);
+    }
+
+    // Covers: clearResult() resets state between calls - reusing same solver instance
+    @Test
+    public void testSolveFunctionMinMax_calledTwiceOnSameSolver_independentResults() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f1 = linear(0.2);
+        UnivariateRealFunction f2 = linear(0.8);
+        double r1 = solver.solve(f1, 0.0, 1.0);
+        double r2 = solver.solve(f2, 0.0, 1.0);
+        assertEquals(0.2, r1, 1e-5);
+        assertEquals(0.8, r2, 1e-5);
+    }
+
+    // Covers: bracket invariant - returned root always lies within the original [min,max]
+    @Test
+    public void testSolveFunctionMinMax_resultLiesWithinOriginalInterval() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f = linear(0.33);
+        double min = 0.0;
+        double max = 1.0;
+        double root = solver.solve(f, min, max);
+        assertTrue(root >= min && root <= max);
+        assertEquals(0.33, root, 1e-5);
+    }
+
+    // Covers: deprecated solve(min,max,initial) delegates to instance field function
+    @Test
+    public void testSolveMinMaxInitialDeprecated_usesFieldFunction_findsRoot() throws Throwable {
+        UnivariateRealFunction f = linear(0.65);
+        BisectionSolver solver = new BisectionSolver(f);
+        double root = solver.solve(0.0, 1.0, 0.5);
+        assertEquals(0.65, root, 1e-5);
+    }
+
+    // Covers: "initial" parameter is unused by bisection - result independent of its value
+    @Test
+    public void testSolveMinMaxInitialDeprecated_initialValueHasNoEffect() throws Throwable {
+        UnivariateRealFunction f = linear(0.35);
+        BisectionSolver solver = new BisectionSolver(f);
+        double r1 = solver.solve(0.0, 1.0, 0.05);
+        double r2 = solver.solve(0.0, 1.0, 0.95);
+        assertEquals(r1, r2, 1e-9);
+        assertEquals(0.35, r1, 1e-5);
+    }
+
+    // Covers: deprecated solve(min,max,initial) propagates invalid interval exception
+    @Test
+    public void testSolveMinMaxInitialDeprecated_invalidInterval_throwsException() throws Throwable {
+        UnivariateRealFunction f = linear(0.5);
+        BisectionSolver solver = new BisectionSolver(f);
+        try {
+            solver.solve(1.0, 0.0, 0.5);
+            fail("expected exception for invalid interval (min > max)");
+        } catch (Exception expected) {
+            // verifyInterval must reject min > max
+        }
+    }
+
+    // Covers: deprecated solve(min,max) delegates to instance field function
+    @Test
+    public void testSolveMinMaxDeprecated_usesFieldFunction_findsRoot() throws Throwable {
+        UnivariateRealFunction f = linear(0.55);
+        BisectionSolver solver = new BisectionSolver(f);
+        double root = solver.solve(0.0, 1.0);
+        assertEquals(0.55, root, 1e-5);
+    }
+
+    // Covers: deprecated solve(min,max) propagates invalid interval exception
+    @Test
+    public void testSolveMinMaxDeprecated_invalidInterval_throwsException() throws Throwable {
+        UnivariateRealFunction f = linear(0.5);
+        BisectionSolver solver = new BisectionSolver(f);
+        try {
+            solver.solve(1.0, 0.0);
+            fail("expected exception for invalid interval (min > max)");
+        } catch (Exception expected) {
+            // verifyInterval must reject min > max
+        }
+    }
+
+    // Covers: solve(f,min,max,initial) when instance field equals passed function (sanity, passes on both versions)
+    @Test
+    public void testSolveFunctionMinMaxInitial_fieldFunctionSameAsPassedFunction_findsRoot() throws Throwable {
+        UnivariateRealFunction f = linear(0.6);
+        BisectionSolver solver = new BisectionSolver(f);
+        double root = solver.solve(f, 0.0, 1.0, 0.5);
+        assertEquals(0.6, root, 1e-5);
+    }
+
+    // Bug-catching test: contract requires solve(f,min,max,initial) to use the PASSED function f,
+    // not the instance field set by the deprecated constructor. Fails on the buggy version
+    // (which delegates to solve(min,max) and ignores the passed f), passes on the fixed version.
+    @Test
+    public void testSolveFunctionMinMaxInitial_mustUsePassedFunctionNotFieldFunction() throws Throwable {
+        UnivariateRealFunction fieldFunc = linear(0.2);
+        BisectionSolver solver = new BisectionSolver(fieldFunc);
+        UnivariateRealFunction paramFunc = linear(0.8);
+        double root = solver.solve(paramFunc, 0.0, 1.0, 0.5);
+        assertEquals(0.8, root, 1e-5);
+    }
+
+    // Covers: "initial" parameter of solve(f,min,max,initial) must not affect the computed result
+    @Test
+    public void testSolveFunctionMinMaxInitial_initialValueIgnored_sameRootForDifferentInitials() throws Throwable {
+        UnivariateRealFunction f = linear(0.45);
+        BisectionSolver solver = new BisectionSolver(f);
+        double r1 = solver.solve(f, 0.0, 1.0, 0.1);
+        double r2 = solver.solve(f, 0.0, 1.0, 0.9);
+        assertEquals(r1, r2, 1e-9);
+        assertEquals(0.45, r1, 1e-5);
+    }
+
+    // Covers: solve(f,min,max,initial) invalid interval is rejected before the function is ever used
+    // (verifyInterval runs first, so this holds regardless of which function ends up being used)
+    @Test
+    public void testSolveFunctionMinMaxInitial_invalidInterval_throwsExceptionBeforeUsingFunction() throws Throwable {
+        BisectionSolver solver = new BisectionSolver();
+        UnivariateRealFunction f = linear(0.5);
+        try {
+            solver.solve(f, 2.0, 1.0, 1.5);
+            fail("expected exception for invalid interval (min > max)");
+        } catch (Exception expected) {
+            // verifyInterval must reject min > max
+        }
+    }
+}

@@ -1,0 +1,422 @@
+package org.apache.commons.math.stat.descriptive.moment;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.apache.commons.math.exception.NullArgumentException;
+
+public class VarianceClaudeTest {
+
+    // Default constructor: isBiasCorrected property defaults to true
+    @Test
+    public void testDefaultConstructor_isBiasCorrectedTrue() throws Throwable {
+        Variance v = new Variance();
+        assertTrue(v.isBiasCorrected());
+    }
+
+    // Boolean constructor sets isBiasCorrected to false
+    @Test
+    public void testBooleanConstructor_notBiasCorrected() throws Throwable {
+        Variance v = new Variance(false);
+        assertFalse(v.isBiasCorrected());
+    }
+
+    // Variance(SecondMoment): shared moment, incrementing m2 reflects in variance
+    @Test
+    public void testSecondMomentConstructor_sharedMomentReflected() throws Throwable {
+        SecondMoment m2 = new SecondMoment();
+        Variance v = new Variance(m2);
+        m2.increment(5.0);
+        m2.increment(7.0);
+        assertEquals(2L, v.getN());
+        assertEquals(2.0, v.getResult(), 1e-9);
+    }
+
+    // Variance(SecondMoment): v.increment() is a no-op since incMoment=false
+    @Test
+    public void testSecondMomentConstructor_varianceIncrementNoOp() throws Throwable {
+        SecondMoment m2 = new SecondMoment();
+        Variance v = new Variance(m2);
+        v.increment(100.0);
+        assertEquals(0L, v.getN());
+        assertTrue(Double.isNaN(v.getResult()));
+    }
+
+    // Variance(boolean, SecondMoment): combined bias flag + external moment
+    @Test
+    public void testBooleanSecondMomentConstructor_combined() throws Throwable {
+        SecondMoment m2 = new SecondMoment();
+        Variance v = new Variance(false, m2);
+        assertFalse(v.isBiasCorrected());
+        m2.increment(2.0);
+        m2.increment(4.0);
+        m2.increment(6.0);
+        assertEquals(8.0 / 3.0, v.getResult(), 1e-9);
+    }
+
+    // Copy constructor duplicates state of original
+    @Test
+    public void testCopyConstructor_copiesState() throws Throwable {
+        Variance original = new Variance(false);
+        original.increment(2.0);
+        original.increment(4.0);
+        original.increment(6.0);
+        Variance copyV = new Variance(original);
+        assertEquals(original.getResult(), copyV.getResult(), 1e-9);
+        assertEquals(original.isBiasCorrected(), copyV.isBiasCorrected());
+        assertEquals(original.getN(), copyV.getN());
+    }
+
+    // increment(): accumulates n and produces bias corrected result
+    @Test
+    public void testIncrement_defaultConstructor_accumulates() throws Throwable {
+        Variance v = new Variance();
+        v.increment(5.0);
+        v.increment(7.0);
+        v.increment(9.0);
+        assertEquals(3L, v.getN());
+        assertEquals(4.0, v.getResult(), 1e-9);
+    }
+
+    // getResult(): branch moment.n==0 -> NaN
+    @Test
+    public void testGetResult_noIncrements_NaN() throws Throwable {
+        Variance v = new Variance();
+        assertTrue(Double.isNaN(v.getResult()));
+    }
+
+    // getResult(): branch moment.n==1 -> 0
+    @Test
+    public void testGetResult_oneIncrement_zero() throws Throwable {
+        Variance v = new Variance();
+        v.increment(42.0);
+        assertEquals(0.0, v.getResult(), 1e-9);
+    }
+
+    // getResult(): branch n>1, isBiasCorrected true
+    @Test
+    public void testGetResult_multipleIncrements_biasCorrected() throws Throwable {
+        Variance v = new Variance();
+        v.increment(1.0);
+        v.increment(2.0);
+        v.increment(3.0);
+        assertEquals(1.0, v.getResult(), 1e-9);
+    }
+
+    // getResult(): branch n>1, isBiasCorrected false (population variance)
+    @Test
+    public void testGetResult_multipleIncrements_notBiasCorrected() throws Throwable {
+        Variance v = new Variance(false);
+        v.increment(1.0);
+        v.increment(2.0);
+        v.increment(3.0);
+        assertEquals(2.0 / 3.0, v.getResult(), 1e-9);
+    }
+
+    // getN(): zero before any increment
+    @Test
+    public void testGetN_beforeIncrements_zero() throws Throwable {
+        Variance v = new Variance();
+        assertEquals(0L, v.getN());
+    }
+
+    // clear(): resets internal moment when incMoment=true
+    @Test
+    public void testClear_defaultConstructor_resetsState() throws Throwable {
+        Variance v = new Variance();
+        v.increment(1.0);
+        v.increment(2.0);
+        v.clear();
+        assertEquals(0L, v.getN());
+        assertTrue(Double.isNaN(v.getResult()));
+    }
+
+    // clear(): no-op when constructed with external SecondMoment (incMoment=false)
+    @Test
+    public void testClear_externalMoment_noOp() throws Throwable {
+        SecondMoment m2 = new SecondMoment();
+        m2.increment(3.0);
+        m2.increment(5.0);
+        Variance v = new Variance(m2);
+        v.clear();
+        assertEquals(2L, v.getN());
+        assertEquals(2L, m2.getN());
+    }
+
+    // evaluate(double[]): null array throws IllegalArgumentException
+    @Test
+    public void testEvaluateArray_null_throws() throws Throwable {
+        Variance v = new Variance();
+        try {
+            v.evaluate((double[]) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // evaluate(double[]): empty array returns NaN
+    @Test
+    public void testEvaluateArray_empty_NaN() throws Throwable {
+        Variance v = new Variance();
+        double result = v.evaluate(new double[0]);
+        assertTrue(Double.isNaN(result));
+    }
+
+    // evaluate(double[]): single-value array returns 0
+    @Test
+    public void testEvaluateArray_singleValue_zero() throws Throwable {
+        Variance v = new Variance();
+        double result = v.evaluate(new double[]{5.0});
+        assertEquals(0.0, result, 1e-9);
+    }
+
+    // evaluate(double[]): multiple values, bias corrected (default)
+    @Test
+    public void testEvaluateArray_multipleValues_biasCorrected() throws Throwable {
+        Variance v = new Variance();
+        double result = v.evaluate(new double[]{2.0, 4.0, 6.0});
+        assertEquals(4.0, result, 1e-9);
+    }
+
+    // evaluate(double[],begin,length): null array throws
+    @Test
+    public void testEvaluateArrayBeginLength_null_throws() throws Throwable {
+        Variance v = new Variance();
+        try {
+            v.evaluate((double[]) null, 0, 1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // evaluate(double[],begin,length): sub-array selection computes correct variance
+    @Test
+    public void testEvaluateArrayBeginLength_subArray_correct() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {100.0, 2.0, 4.0, 6.0, 200.0};
+        double result = v.evaluate(values, 1, 3);
+        assertEquals(4.0, result, 1e-9);
+    }
+
+    // evaluate(double[],begin,length): length==1 branch returns 0
+    @Test
+    public void testEvaluateArrayBeginLength_lengthOne_zero() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {100.0, 2.0, 4.0, 6.0, 200.0};
+        double result = v.evaluate(values, 1, 1);
+        assertEquals(0.0, result, 1e-9);
+    }
+
+    // evaluate(double[],begin,length): length==0 returns NaN
+    @Test
+    public void testEvaluateArrayBeginLength_lengthZero_NaN() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {100.0, 2.0, 4.0, 6.0, 200.0};
+        double result = v.evaluate(values, 1, 0);
+        assertTrue(Double.isNaN(result));
+    }
+
+    // evaluate(double[],begin,length): negative begin throws
+    @Test
+    public void testEvaluateArrayBeginLength_negativeBegin_throws() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {1.0, 2.0, 3.0};
+        try {
+            v.evaluate(values, -1, 2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // evaluate(double[],begin,length): out-of-bounds range throws
+    @Test
+    public void testEvaluateArrayBeginLength_outOfBounds_throws() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {1.0, 2.0, 3.0, 4.0, 5.0};
+        try {
+            v.evaluate(values, 3, 10);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // evaluate(values,weights): equal weights match unweighted variance
+    @Test
+    public void testEvaluateWeighted_equalWeights_matchesUnweighted() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {2.0, 4.0, 6.0};
+        double[] weights = {1.0, 1.0, 1.0};
+        double result = v.evaluate(values, weights);
+        assertEquals(4.0, result, 1e-9);
+    }
+
+    // evaluate(values,weights): unequal weights produce correct weighted variance
+    @Test
+    public void testEvaluateWeighted_unequalWeights_correct() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {1.0, 2.0, 3.0};
+        double[] weights = {1.0, 2.0, 3.0};
+        double result = v.evaluate(values, weights);
+        assertEquals(2.0 / 3.0, result, 1e-9);
+    }
+
+    // evaluate(values,weights): null weights throws
+    @Test
+    public void testEvaluateWeighted_nullWeights_throws() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {1.0, 2.0, 3.0};
+        try {
+            v.evaluate(values, (double[]) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // evaluate(values,weights): mismatched lengths throws
+    @Test
+    public void testEvaluateWeighted_mismatchedLength_throws() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {1.0, 2.0, 3.0};
+        double[] weights = {1.0, 2.0};
+        try {
+            v.evaluate(values, weights);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // evaluate(values,weights): negative weight throws
+    @Test
+    public void testEvaluateWeighted_negativeWeight_throws() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {1.0, 2.0, 3.0};
+        double[] weights = {-1.0, 2.0, 3.0};
+        try {
+            v.evaluate(values, weights);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // evaluate(values,weights,begin,length): length==1 branch returns 0
+    @Test
+    public void testEvaluateWeightedBeginLength_lengthOne_zero() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {5.0, 6.0, 7.0};
+        double[] weights = {1.0, 1.0, 1.0};
+        double result = v.evaluate(values, weights, 0, 1);
+        assertEquals(0.0, result, 1e-9);
+    }
+
+    // evaluate(values,mean,begin,length): bias corrected computation
+    @Test
+    public void testEvaluateMeanBeginLength_biasCorrected() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {2.0, 4.0, 6.0};
+        double result = v.evaluate(values, 4.0, 0, 3);
+        assertEquals(4.0, result, 1e-9);
+    }
+
+    // evaluate(values,mean,begin,length): not bias corrected (population variance)
+    @Test
+    public void testEvaluateMeanBeginLength_notBiasCorrected() throws Throwable {
+        Variance v = new Variance(false);
+        double[] values = {2.0, 4.0, 6.0};
+        double result = v.evaluate(values, 4.0, 0, 3);
+        assertEquals(8.0 / 3.0, result, 1e-9);
+    }
+
+    // evaluate(values,mean,begin,length): length==1 branch returns 0
+    @Test
+    public void testEvaluateMeanBeginLength_lengthOne_zero() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {9.0};
+        double result = v.evaluate(values, 9.0, 0, 1);
+        assertEquals(0.0, result, 1e-9);
+    }
+
+    // evaluate(values,mean): convenience method matches explicit full-range call
+    @Test
+    public void testEvaluateMean_convenience_matchesExplicit() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {2.0, 4.0, 6.0};
+        double result = v.evaluate(values, 4.0);
+        assertEquals(4.0, result, 1e-9);
+    }
+
+    // evaluate(values,weights,mean,begin,length): full range sanity check
+    @Test
+    public void testEvaluateWeightedMeanBeginLength_fullRange_correct() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {2.0, 4.0, 6.0};
+        double[] weights = {1.0, 1.0, 1.0};
+        double result = v.evaluate(values, weights, 4.0, 0, 3);
+        assertEquals(4.0, result, 1e-9);
+    }
+
+    // evaluate(values,weights,mean,begin,length): sub-range must sum only the
+    // weights within [begin,begin+length), not the whole weights array (bug site)
+    @Test
+    public void testEvaluateWeightedMeanBeginLength_subRange_sumsOnlyRangeWeights() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {10.0, 2.0, 3.0, 4.0, 100.0};
+        double[] weights = {1.0, 1.0, 1.0, 1.0, 1.0};
+        double result = v.evaluate(values, weights, 3.0, 1, 3);
+        assertEquals(1.0, result, 1e-9);
+    }
+
+    // evaluate(values,weights,mean): convenience method matches explicit full-range call
+    @Test
+    public void testEvaluateWeightedMean_convenience_matchesExplicit() throws Throwable {
+        Variance v = new Variance();
+        double[] values = {2.0, 4.0, 6.0};
+        double[] weights = {1.0, 1.0, 1.0};
+        double result = v.evaluate(values, weights, 4.0);
+        assertEquals(4.0, result, 1e-9);
+    }
+
+    // setBiasCorrected(): toggling flag changes evaluate() outcome
+    @Test
+    public void testSetBiasCorrected_togglesResult() throws Throwable {
+        Variance v = new Variance();
+        assertTrue(v.isBiasCorrected());
+        v.setBiasCorrected(false);
+        assertFalse(v.isBiasCorrected());
+        double result = v.evaluate(new double[]{2.0, 4.0, 6.0});
+        assertEquals(8.0 / 3.0, result, 1e-9);
+    }
+
+    // copy(): instance method produces an equivalent, independent copy
+    @Test
+    public void testCopyInstanceMethod_producesEqualState() throws Throwable {
+        Variance v = new Variance(false);
+        v.increment(2.0);
+        v.increment(4.0);
+        v.increment(6.0);
+        Variance copyV = v.copy();
+        assertEquals(v.getResult(), copyV.getResult(), 1e-9);
+        assertEquals(v.isBiasCorrected(), copyV.isBiasCorrected());
+        assertEquals(v.getN(), copyV.getN());
+    }
+
+    // copy(source,dest) static: null source throws NullArgumentException
+    @Test
+    public void testCopyStatic_nullSource_throws() throws Throwable {
+        Variance dest = new Variance();
+        try {
+            Variance.copy(null, dest);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // copy(source,dest) static: null dest throws NullArgumentException
+    @Test
+    public void testCopyStatic_nullDest_throws() throws Throwable {
+        Variance source = new Variance();
+        try {
+            Variance.copy(source, null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+}

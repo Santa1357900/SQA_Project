@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Compress-19-v9o_3i92/Compress-19f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.apache.commons.compress.archivers.zip.Zip64ExtendedInformationExtraFieldClaudeTest::testFourArgConstructor_nullCompressedSize_throwsIllegalArgumentException
+  - org.apache.commons.compress.archivers.zip.Zip64ExtendedInformationExtraFieldClaudeTest::testFourArgConstructor_nullSize_throwsIllegalArgumentException
+  - org.apache.commons.compress.archivers.zip.Zip64ExtendedInformationExtraFieldClaudeTest::testTwoArgConstructor_nullCompressedSize_throwsIllegalArgumentException
+  - org.apache.commons.compress.archivers.zip.Zip64ExtendedInformationExtraFieldClaudeTest::testTwoArgConstructor_nullSize_throwsIllegalArgumentException
+[exit 0]

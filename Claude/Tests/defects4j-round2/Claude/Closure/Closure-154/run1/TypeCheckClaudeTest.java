@@ -1,0 +1,342 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+public class TypeCheckClaudeTest {
+
+  private Result compile(String js) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+    SourceFile extern = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    return compiler.compile(extern, input, options);
+  }
+
+  // DELPROP: operand is NUMBER literal, not a reference -> BAD_DELETE warning
+  @Test
+  public void testDelete_nonReferenceOperand_warnsBadDelete() throws Throwable {
+    Result result = compile("delete 5;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // DELPROP: operand is GETPROP reference with existing property -> no warning
+  @Test
+  public void testDelete_referenceOperand_noWarning() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() {} Foo.prototype.bar = function() {}; "
+        + "var f = new Foo(); delete f.bar;");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // NEW: constructor target is a plain (non-constructor) function -> NOT_A_CONSTRUCTOR
+  @Test
+  public void testNew_nonConstructorFunction_warnsNotAConstructor() throws Throwable {
+    Result result = compile("function f() {} new f();");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // NEW: constructor target is a real @constructor -> no warning
+  @Test
+  public void testNew_constructorFunction_noWarning() throws Throwable {
+    Result result = compile("/** @constructor */ function Foo() {} new Foo();");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // CALL: callee type (number) cannot be called -> NOT_CALLABLE
+  @Test
+  public void testCall_numberNotCallable_warnsNotCallable() throws Throwable {
+    Result result = compile("var x = 1; x();");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // CALL: constructor function invoked without 'new' -> CONSTRUCTOR_NOT_CALLABLE
+  @Test
+  public void testCall_constructorCalledWithoutNew_warnsConstructorNotCallable() throws Throwable {
+    Result result = compile("/** @constructor */ function Foo() {} Foo();");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // visitParameterList: too many arguments -> WRONG_ARGUMENT_COUNT
+  @Test
+  public void testCall_tooManyArguments_warnsWrongArgumentCount() throws Throwable {
+    Result result = compile("/** @param {number} a */ function f(a) {} f(1, 2);");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // visitParameterList: too few arguments -> WRONG_ARGUMENT_COUNT
+  @Test
+  public void testCall_tooFewArguments_warnsWrongArgumentCount() throws Throwable {
+    Result result = compile(
+        "/** @param {number} a @param {number} b */ function f(a, b) {} f(1);");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // visitParameterList: correct argument count/type -> no warning
+  @Test
+  public void testCall_correctArgumentCount_noWarning() throws Throwable {
+    Result result = compile("/** @param {number} a */ function f(a) {} f(1);");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // RETURN: returned number does not match declared string return type
+  @Test
+  public void testReturn_mismatchedType_warns() throws Throwable {
+    Result result = compile("/** @return {string} */ function f() { return 1; }");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // RETURN: returned type matches declared return type -> no warning
+  @Test
+  public void testReturn_matchingType_noWarning() throws Throwable {
+    Result result = compile("/** @return {number} */ function f() { return 1; }");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // EQ: comparing instances of unrelated constructors is deterministically false
+  @Test
+  public void testEquality_unrelatedConstructorTypes_warnsDeterministicTest() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() {} /** @constructor */ function Bar() {} "
+        + "var r = (new Foo() == new Bar());");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // SHEQ: string can never be shallowly equal to number -> DETERMINISTIC_TEST_NO_RESULT
+  @Test
+  public void testShallowEquality_stringVsNumber_warnsNoResult() throws Throwable {
+    Result result = compile("var r = (\"a\" === 3);");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // SHEQ: two strings can be shallowly compared -> no warning
+  @Test
+  public void testShallowEquality_sameTypeStrings_noWarning() throws Throwable {
+    Result result = compile("var r = (\"a\" === \"b\");");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // BITNOT: operand is an object instance, not int32-compatible -> BIT_OPERATION
+  @Test
+  public void testBitwiseNot_onObjectInstance_warnsBitOperation() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() {} var f = new Foo(); var x = ~f;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // BITOR: both operands are numbers -> no warning
+  @Test
+  public void testBitwiseOr_validNumbers_noWarning() throws Throwable {
+    Result result = compile("var x = (1 | 2);");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // INC: operand is an object instance, expectNumber fails
+  @Test
+  public void testIncrement_onObjectInstance_warnsExpectNumber() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() {} var f = new Foo(); f++;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // INC: operand is a number -> no warning
+  @Test
+  public void testIncrement_onNumber_noWarning() throws Throwable {
+    Result result = compile("var x = 1; x++;");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // visitVar: declared @type string but initialized with number -> mismatch warning
+  @Test
+  public void testVar_typeAnnotationMismatch_warns() throws Throwable {
+    Result result = compile("/** @type {string} */ var s = 5;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // visitVar: declared @type string initialized with string -> no warning
+  @Test
+  public void testVar_typeAnnotationMatch_noWarning() throws Throwable {
+    Result result = compile("/** @type {string} */ var s = \"hello\";");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // INSTANCEOF: right operand is a number, not an object -> warning
+  @Test
+  public void testInstanceof_nonObjectRightOperand_warns() throws Throwable {
+    Result result = compile("var n = 5; var r = (n instanceof n);");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // INSTANCEOF: right operand is a real constructor -> no warning
+  @Test
+  public void testInstanceof_validConstructor_noWarning() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() {} var f = new Foo(); var r = (f instanceof Foo);");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // IN: right operand is a number, not an object -> warning
+  @Test
+  public void testIn_nonObjectRightOperand_warns() throws Throwable {
+    Result result = compile("var n = 5; var r = (\"x\" in n);");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // IN: right operand is an object literal -> no warning
+  @Test
+  public void testIn_validObject_noWarning() throws Throwable {
+    Result result = compile("var o = {}; var r = (\"x\" in o);");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // checkPropertyAccess: accessing a nonexistent enum element -> INEXISTENT_ENUM_ELEMENT
+  @Test
+  public void testEnumPropertyAccess_nonexistentElement_warns() throws Throwable {
+    Result result = compile(
+        "/** @enum {number} */ var Color = {RED: 1, GREEN: 2}; var c = Color.BLUE;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // checkPropertyAccess: accessing an existing enum element -> no warning
+  @Test
+  public void testEnumPropertyAccess_existingElement_noWarning() throws Throwable {
+    Result result = compile(
+        "/** @enum {number} */ var Color = {RED: 1, GREEN: 2}; var c = Color.RED;");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // checkDeclaredPropertyInheritance: @override with no matching super/interface property
+  @Test
+  public void testOverride_unknownOverride_warns() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() {} "
+        + "/** @constructor @extends {Foo} */ function Bar() {} "
+        + "/** @override */ Bar.prototype.method = function() {};");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // checkDeclaredPropertyInheritance: @override matches a compatible superclass property
+  @Test
+  public void testOverride_validSuperclassOverride_noWarning() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() {} "
+        + "/** @return {number} */ Foo.prototype.method = function() { return 1; }; "
+        + "/** @constructor @extends {Foo} */ function Bar() {} "
+        + "/** @override @return {number} */ "
+        + "Bar.prototype.method = function() { return 2; };");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // checkDeclaredPropertyInheritance: @override type is incompatible with superclass type
+  @Test
+  public void testOverride_mismatchedReturnType_warns() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() {} "
+        + "/** @return {string} */ Foo.prototype.method = function() { return \"a\"; }; "
+        + "/** @constructor @extends {Foo} */ function Bar() {} "
+        + "/** @override @return {number} */ "
+        + "Bar.prototype.method = function() { return 1; };");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // visitFunction: @implements a type that is not declared as @interface -> BAD_IMPLEMENTED_TYPE
+  @Test
+  public void testImplements_nonInterfaceType_warns() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function NotInterface() {} "
+        + "/** @constructor @implements {NotInterface} */ function Impl() {}");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // visitFunction: constructor extends an interface -> CONFLICTING_EXTENDED_TYPE
+  @Test
+  public void testExtends_constructorExtendingInterface_warnsConflictingType() throws Throwable {
+    Result result = compile(
+        "/** @interface */ function Iface() {} "
+        + "/** @constructor @extends {Iface} */ function Impl() {}");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // visitInterfaceGetprop: interface method body is not empty -> INTERFACE_FUNCTION_NOT_EMPTY
+  @Test
+  public void testInterfaceMethod_nonEmptyBody_warnsNotEmpty() throws Throwable {
+    Result result = compile(
+        "/** @interface */ function Iface() {} "
+        + "Iface.prototype.method = function() { return 1; };");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // visitInterfaceGetprop: interface method body is empty -> no warning
+  @Test
+  public void testInterfaceMethod_emptyBody_noWarning() throws Throwable {
+    Result result = compile(
+        "/** @interface */ function Iface() {} "
+        + "Iface.prototype.method = function() {};");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // visitInterfaceGetprop: interface member assigned a non-function, non-abstract value
+  @Test
+  public void testInterfaceMember_nonFunctionValue_warns() throws Throwable {
+    Result result = compile(
+        "/** @interface */ function Iface() {} Iface.prototype.method = 5;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // CASE: switch discriminant type does not match case type
+  @Test
+  public void testSwitchCase_typeMismatch_warns() throws Throwable {
+    Result result = compile("var x = 5; switch (x) { case \"a\": break; }");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // CASE: switch discriminant type matches case type -> no warning
+  @Test
+  public void testSwitchCase_typeMatch_noWarning() throws Throwable {
+    Result result = compile("var x = 5; switch (x) { case 1: break; }");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // visitAssign: assigning incompatible type to a declared string property
+  @Test
+  public void testPropertyAssignment_typeMismatch_warns() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() { /** @type {string} */ this.name = \"\"; } "
+        + "var f = new Foo(); f.name = 5;");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // visitAssign: assigning compatible type to a declared string property -> no warning
+  @Test
+  public void testPropertyAssignment_typeMatch_noWarning() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() { /** @type {string} */ this.name = \"\"; } "
+        + "var f = new Foo(); f.name = \"bar\";");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // visitBinaryOperator: ADD performs no type validation regardless of operand types
+  @Test
+  public void testBinaryAdd_anyTypes_noTypeWarning() throws Throwable {
+    Result result = compile("var r = ({} + {});");
+    assertEquals(0, result.warnings.length);
+  }
+
+  // visitBinaryOperator: DIV requires numeric operands
+  @Test
+  public void testBinaryDiv_nonNumberOperand_warns() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() {} var f = new Foo(); var r = (f / 2);");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // visitBinaryOperator: BITAND requires bitwise-compatible operands
+  @Test
+  public void testBinaryBitAnd_nonBitwiseOperand_warns() throws Throwable {
+    Result result = compile(
+        "/** @constructor */ function Foo() {} var f = new Foo(); var r = (f & 1);");
+    assertTrue(result.warnings.length > 0);
+  }
+}

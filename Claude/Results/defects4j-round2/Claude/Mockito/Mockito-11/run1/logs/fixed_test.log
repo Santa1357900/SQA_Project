@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Mockito-11-o8ikj7h8/Mockito-11f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.mockito.internal.creation.DelegatingMethodClaudeTest::testHashCode_forAnyMethod_returnsOne
+  - org.mockito.internal.creation.DelegatingMethodClaudeTest::testHashCode_consistentAcrossDifferentInstances
+[exit 0]

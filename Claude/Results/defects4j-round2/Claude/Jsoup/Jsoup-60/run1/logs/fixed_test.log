@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-60-thjpqfqn/Jsoup-60f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.jsoup.parser.TokenQueueClaudeTest::testChompBalanced_unbalanced_grabsAsMuchAsPossible
+  - org.jsoup.parser.TokenQueueClaudeTest::testUnescape_tripleBackslashFollowedByChar_pairsCorrectly
+[exit 0]

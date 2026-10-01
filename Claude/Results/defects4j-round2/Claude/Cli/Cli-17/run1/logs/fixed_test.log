@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-17-7csiul3t/Cli-17f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_burstToken_unknownCharStopAtNonOptionFalse_addsCharWithDashPrefix
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_burstToken_firstCharUnknownStopAtNonOptionFalse_addsCharWithDashPrefix
+[exit 0]

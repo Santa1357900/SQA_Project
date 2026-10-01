@@ -1,0 +1,327 @@
+package org.apache.commons.lang3;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class SerializationUtilsClaudeTest {
+
+    private static class SimpleBean implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private final int value;
+        private final String name;
+
+        public SimpleBean(int value, String name) {
+            this.value = value;
+            this.name = name;
+        }
+
+        public int getValue() {
+            return value;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (!(obj instanceof SimpleBean)) {
+                return false;
+            }
+            SimpleBean other = (SimpleBean) obj;
+            return value == other.value && name.equals(other.name);
+        }
+
+        @Override
+        public int hashCode() {
+            return value;
+        }
+    }
+
+    private static class NestedBean implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private final SimpleBean inner;
+        private final String label;
+
+        public NestedBean(SimpleBean inner, String label) {
+            this.inner = inner;
+            this.label = label;
+        }
+
+        public SimpleBean getInner() {
+            return inner;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+    }
+
+    private static class PrimitiveClassHolder implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private final Class<?> type;
+
+        public PrimitiveClassHolder(Class<?> type) {
+            this.type = type;
+        }
+
+        public Class<?> getType() {
+            return type;
+        }
+    }
+
+    private static class ThrowingOutputStream extends OutputStream {
+        @Override
+        public void write(int b) throws IOException {
+            throw new IOException("forced failure");
+        }
+    }
+
+    private static class FailingClassLoader extends ClassLoader {
+        @Override
+        public Class<?> loadClass(String name) throws ClassNotFoundException {
+            throw new ClassNotFoundException("forced: " + name);
+        }
+    }
+
+    // Constructor: public no-arg constructor should create a usable instance
+    @Test
+    public void testConstructor_publicNoArgConstructor_createsInstance() throws Throwable {
+        SerializationUtils utils = new SerializationUtils();
+        assertNotNull(utils);
+    }
+
+    // clone(T): object == null branch returns null directly
+    @Test
+    public void testClone_nullObject_returnsNull() throws Throwable {
+        String result = SerializationUtils.clone((String) null);
+        assertNull(result);
+    }
+
+    // clone(T): successful round trip for a simple immutable object
+    @Test
+    public void testClone_stringObject_returnsEqualValue() throws Throwable {
+        String original = "clone-me";
+        String cloned = SerializationUtils.clone(original);
+        assertEquals(original, cloned);
+    }
+
+    // clone(T): successful deep clone produces an equal but distinct instance
+    @Test
+    public void testClone_customSerializableObject_returnsEqualButDistinctInstance() throws Throwable {
+        SimpleBean bean = new SimpleBean(5, "five");
+        SimpleBean cloned = SerializationUtils.clone(bean);
+        assertEquals(bean, cloned);
+        assertNotSame(bean, cloned);
+    }
+
+    // บั๊ก Lang-13: ClassLoaderAwareObjectInputStream.resolveClass ไม่รองรับชนิด primitive (เช่น "int")
+    // ทำให้ clone ของ object ที่มีฟิลด์ Class<?> เป็น primitive type ล้มเหลวด้วย SerializationException
+    @Test
+    public void testClone_objectWithPrimitiveClassField_returnsEqualPrimitiveType() throws Throwable {
+        PrimitiveClassHolder holder = new PrimitiveClassHolder(Integer.TYPE);
+        PrimitiveClassHolder cloned = SerializationUtils.clone(holder);
+        assertEquals(Integer.TYPE, cloned.getType());
+    }
+
+    // clone(T): works with array types (arrays are implicitly Serializable)
+    @Test
+    public void testClone_integerArray_preservesAllElements() throws Throwable {
+        Integer[] original = new Integer[] { 1, 2, 3 };
+        Integer[] cloned = SerializationUtils.clone(original);
+        assertEquals(3, cloned.length);
+        assertEquals(Integer.valueOf(2), cloned[1]);
+    }
+
+    // serialize(obj, OutputStream): outputStream == null throws IllegalArgumentException
+    @Test
+    public void testSerializeToStream_nullOutputStream_throwsIllegalArgumentException() throws Throwable {
+        try {
+            SerializationUtils.serialize("data", null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // serialize(obj, OutputStream): valid object produces non-empty byte output
+    @Test
+    public void testSerializeToStream_validObject_writesNonEmptyBytes() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        SerializationUtils.serialize("data", baos);
+        assertTrue(baos.toByteArray().length > 0);
+    }
+
+    // serialize(obj, OutputStream): null obj is a valid value that can be written and later read back as null
+    @Test
+    public void testSerializeToStream_nullObject_writesRecoverableNullMarker() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        SerializationUtils.serialize((Serializable) null, baos);
+        Object result = SerializationUtils.deserialize(baos.toByteArray());
+        assertNull(result);
+    }
+
+    // serialize(obj, OutputStream): IOException from the underlying stream is wrapped as SerializationException
+    @Test
+    public void testSerializeToStream_outputStreamThrowsIOException_throwsSerializationException() throws Throwable {
+        try {
+            SerializationUtils.serialize("data", new ThrowingOutputStream());
+            fail("expected SerializationException");
+        } catch (SerializationException expected) {
+        }
+    }
+
+    // serialize(obj): byte array form returns non-empty data for a valid object
+    @Test
+    public void testSerializeToByteArray_validObject_returnsNonEmptyByteArray() throws Throwable {
+        byte[] data = SerializationUtils.serialize("abc");
+        assertTrue(data.length > 0);
+    }
+
+    // serialize(obj) + deserialize(byte[]): null object round trips back to null
+    @Test
+    public void testSerializeToByteArray_nullObject_roundTripReturnsNull() throws Throwable {
+        byte[] data = SerializationUtils.serialize((Serializable) null);
+        Object result = SerializationUtils.deserialize(data);
+        assertNull(result);
+    }
+
+    // deserialize(InputStream): inputStream == null throws IllegalArgumentException
+    @Test
+    public void testDeserializeFromStream_nullInputStream_throwsIllegalArgumentException() throws Throwable {
+        try {
+            SerializationUtils.deserialize((InputStream) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // deserialize(InputStream): valid serialized data returns the original object
+    @Test
+    public void testDeserializeFromStream_validSerializedData_returnsOriginalObject() throws Throwable {
+        byte[] data = SerializationUtils.serialize("hello");
+        ByteArrayInputStream bais = new ByteArrayInputStream(data);
+        Object result = SerializationUtils.deserialize((InputStream) bais);
+        assertEquals("hello", result);
+    }
+
+    // deserialize(InputStream): corrupted stream header causes IOException wrapped as SerializationException
+    @Test
+    public void testDeserializeFromStream_corruptedStreamHeader_throwsSerializationException() throws Throwable {
+        byte[] garbage = new byte[] { 0, 0, 0, 0 };
+        ByteArrayInputStream bais = new ByteArrayInputStream(garbage);
+        try {
+            SerializationUtils.deserialize((InputStream) bais);
+            fail("expected SerializationException");
+        } catch (SerializationException expected) {
+        }
+    }
+
+    // deserialize(byte[]): objectData == null throws IllegalArgumentException
+    @Test
+    public void testDeserializeFromByteArray_nullArray_throwsIllegalArgumentException() throws Throwable {
+        try {
+            SerializationUtils.deserialize((byte[]) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // deserialize(byte[]): valid data returns an object equal to the original
+    @Test
+    public void testDeserializeFromByteArray_validData_returnsEqualObject() throws Throwable {
+        SimpleBean bean = new SimpleBean(7, "seven");
+        byte[] data = SerializationUtils.serialize(bean);
+        Object result = SerializationUtils.deserialize(data);
+        assertEquals(bean, result);
+    }
+
+    // deserialize(byte[]): empty array causes EOFException/IOException wrapped as SerializationException
+    @Test
+    public void testDeserializeFromByteArray_emptyArray_throwsSerializationException() throws Throwable {
+        try {
+            SerializationUtils.deserialize(new byte[0]);
+            fail("expected SerializationException");
+        } catch (SerializationException expected) {
+        }
+    }
+
+    // deserialize(byte[]): arbitrary garbage bytes cause IOException wrapped as SerializationException
+    @Test
+    public void testDeserializeFromByteArray_garbageData_throwsSerializationException() throws Throwable {
+        try {
+            SerializationUtils.deserialize(new byte[] { 1, 2, 3, 4, 5 });
+            fail("expected SerializationException");
+        } catch (SerializationException expected) {
+        }
+    }
+
+    // serialize/deserialize round trip for a Map preserves entries
+    @Test
+    public void testRoundTrip_hashMap_preservesEntries() throws Throwable {
+        Map<String, Integer> map = new HashMap<String, Integer>();
+        map.put("a", 1);
+        map.put("b", 2);
+        byte[] data = SerializationUtils.serialize((Serializable) map);
+        Object deserialized = SerializationUtils.deserialize(data);
+        Map<?, ?> result = (Map<?, ?>) deserialized;
+        assertEquals(2, result.size());
+        assertEquals(Integer.valueOf(1), result.get("a"));
+    }
+
+    // ClassLoaderAwareObjectInputStream: resolveClass succeeds via the provided classloader (try branch)
+    @Test
+    public void testClassLoaderAwareObjectInputStream_validClassLoader_resolvesClassSuccessfully() throws Throwable {
+        byte[] data = SerializationUtils.serialize("hello");
+        ByteArrayInputStream bais = new ByteArrayInputStream(data);
+        SerializationUtils.ClassLoaderAwareObjectInputStream in =
+                new SerializationUtils.ClassLoaderAwareObjectInputStream(bais, this.getClass().getClassLoader());
+        Object result = in.readObject();
+        in.close();
+        assertEquals("hello", result);
+    }
+
+    // ClassLoaderAwareObjectInputStream: resolveClass falls back to the thread context classloader when the given one fails (catch branch)
+    @Test
+    public void testClassLoaderAwareObjectInputStream_classLoaderThrowsCNFE_fallsBackToContextClassLoader() throws Throwable {
+        byte[] data = SerializationUtils.serialize("hello");
+        ByteArrayInputStream bais = new ByteArrayInputStream(data);
+        SerializationUtils.ClassLoaderAwareObjectInputStream in =
+                new SerializationUtils.ClassLoaderAwareObjectInputStream(bais, new FailingClassLoader());
+        Object result = in.readObject();
+        in.close();
+        assertEquals("hello", result);
+    }
+
+    // clone(T): works with a List implementation, preserving order and values
+    @Test
+    public void testClone_listOfStrings_preservesOrderAndValues() throws Throwable {
+        ArrayList<String> list = new ArrayList<String>();
+        list.add("x");
+        list.add("y");
+        ArrayList<String> cloned = SerializationUtils.clone(list);
+        assertEquals(2, cloned.size());
+        assertEquals("x", cloned.get(0));
+        assertEquals("y", cloned.get(1));
+    }
+
+    // serialize/deserialize round trip for a nested custom object preserves all field values
+    @Test
+    public void testSerializeDeserialize_nestedCustomObject_preservesFieldValues() throws Throwable {
+        SimpleBean inner = new SimpleBean(3, "three");
+        NestedBean outer = new NestedBean(inner, "wrapper");
+        byte[] data = SerializationUtils.serialize(outer);
+        NestedBean result = (NestedBean) SerializationUtils.deserialize(data);
+        assertEquals(inner, result.getInner());
+        assertEquals("wrapper", result.getLabel());
+    }
+}

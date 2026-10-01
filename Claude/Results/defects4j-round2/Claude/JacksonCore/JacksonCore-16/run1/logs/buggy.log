@@ -1,0 +1,19 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p JacksonCore -v 16b -w /tmp/claude-JacksonCore-16-ablfingg/buggy
+Checking out e052c319 to /tmp/claude-JacksonCore-16-ablfingg/buggy......... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Backing up build file: /tmp/claude-JacksonCore-16-ablfingg/buggy/maven-buil OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff e052c319:4601785e..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: JacksonCore-16b................................. OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-JacksonCore-16-ablfingg/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

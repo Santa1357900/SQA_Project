@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Claude",
+  "algorithm_version": "1.0.0",
+  "project": "Gson",
+  "bug_id": 16,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 46,
+  "tests_validated": 46,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 34,
+    "total_methods": 40,
+    "ratio": 0.85
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 215,
+    "lines_total": 248,
+    "line_ratio": 0.8669,
+    "branch_measure": "condition",
+    "branches_covered": 135,
+    "branches_total": 194,
+    "branch_ratio": 0.6959
+  },
+  "generation_seconds": 291.881,
+  "validation_seconds": 59.402,
+  "total_seconds": 351.283,
+  "configuration": {
+    "model": "claude-sonnet-5",
+    "effort": "high",
+    "thinking": "adaptive",
+    "max_tokens": 64000,
+    "prompt_system": "Claude/Prompt/system_prompt.txt",
+    "prompt_template": "Claude/Prompt/template_prompt.txt",
+    "usage": {
+      "input_tokens": 1,
+      "output_tokens": 37147,
+      "cache_creation_input_tokens": 9981,
+      "cache_read_input_tokens": 2690,
+      "total_cost_usd": 1.0380740000000002,
+      "duration_api_ms": 291881,
+      "num_turns": 1
+    }
+  },
+  "artifacts": {
+    "tests": "Tests/defects4j-round2/Claude/Gson/Gson-16/run1/",
+    "logs": "Results/defects4j-round2/Claude/Gson/Gson-16/run1/logs/",
+    "prompt": "Claude/Prompt/history/Gson_16.txt"
+  },
+  "created_at": "2026-09-30T21:25:17.852817+00:00",
+  "generation_wall_seconds": 294.174
+}

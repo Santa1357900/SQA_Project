@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-5-64thmljb/JxPath-5f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.jxpath.ri.model.NodePointerClaudeTest::testCompareTo_unrelatedRootsSameDepth_throwsJXPathException
+  - org.apache.commons.jxpath.ri.model.NodePointerClaudeTest::testClone_notCloneable_returnsNull
+[exit 0]

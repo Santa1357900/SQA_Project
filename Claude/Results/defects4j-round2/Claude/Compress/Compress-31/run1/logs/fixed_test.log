@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Compress-31-__mjiqwr/Compress-31f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.compress.archivers.tar.TarUtilsClaudeTest::testParseBoolean_leadingSpaceIgnoredPerJavadoc_returnsTrue
+  - org.apache.commons.compress.archivers.tar.TarUtilsClaudeTest::testParseBoolean_leadingNulIgnoredPerJavadoc_returnsTrue
+  - org.apache.commons.compress.archivers.tar.TarUtilsClaudeTest::testParseName_stopsAtNul
+[exit 0]

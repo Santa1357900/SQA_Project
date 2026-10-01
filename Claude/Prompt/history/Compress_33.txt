@@ -1,0 +1,465 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Compress (Defects4J bug Compress-33)
+package: org.apache.commons.compress.compressors
+class_under_test: CompressorStreamFactory
+test_class_to_write: CompressorStreamFactoryClaudeTest
+</target>
+
+<project_notes>
+Commons Compress: ใช้ ByteArrayInputStream/ByteArrayOutputStream แทนไฟล์จริง ปิด stream ด้วย try/finally
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.commons.compress.compressors;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
+import org.apache.commons.compress.compressors.deflate.DeflateCompressorInputStream;
+import org.apache.commons.compress.compressors.deflate.DeflateCompressorOutputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
+import org.apache.commons.compress.compressors.lzma.LZMACompressorInputStream;
+import org.apache.commons.compress.compressors.lzma.LZMAUtils;
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream;
+import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream;
+import org.apache.commons.compress.compressors.xz.XZUtils;
+import org.apache.commons.compress.compressors.pack200.Pack200CompressorInputStream;
+import org.apache.commons.compress.compressors.pack200.Pack200CompressorOutputStream;
+import org.apache.commons.compress.compressors.snappy.FramedSnappyCompressorInputStream;
+import org.apache.commons.compress.compressors.snappy.SnappyCompressorInputStream;
+import org.apache.commons.compress.compressors.z.ZCompressorInputStream;
+import org.apache.commons.compress.utils.IOUtils;
+
+/**
+ * <p>Factory to create Compressor[In|Out]putStreams from names. To add other
+ * implementations you should extend CompressorStreamFactory and override the
+ * appropriate methods (and call their implementation from super of course).</p>
+ * 
+ * Example (Compressing a file):
+ * 
+ * <pre>
+ * final OutputStream out = new FileOutputStream(output); 
+ * CompressorOutputStream cos = 
+ *      new CompressorStreamFactory().createCompressorOutputStream(CompressorStreamFactory.BZIP2, out);
+ * IOUtils.copy(new FileInputStream(input), cos);
+ * cos.close();
+ * </pre>
+ * 
+ * Example (Decompressing a file):
+ * <pre>
+ * final InputStream is = new FileInputStream(input); 
+ * CompressorInputStream in = 
+ *      new CompressorStreamFactory().createCompressorInputStream(CompressorStreamFactory.BZIP2, is);
+ * IOUtils.copy(in, new FileOutputStream(output));
+ * in.close();
+ * </pre>
+ * @Immutable provided that the deprecated method setDecompressConcatenated is not used.
+ * @ThreadSafe even if the deprecated method setDecompressConcatenated is used
+ */
+public class CompressorStreamFactory {
+
+    /**
+     * Constant (value {@value}) used to identify the BZIP2 compression algorithm.
+     * @since 1.1
+     */
+    public static final String BZIP2 = "bzip2";
+
+    /**
+     * Constant (value {@value}) used to identify the GZIP compression algorithm.
+     * Not supported as an output stream type.
+     * @since 1.1
+     */
+    public static final String GZIP = "gz";
+    /**
+     * Constant (value {@value}) used to identify the PACK200 compression algorithm.
+     * @since 1.3
+     */
+    public static final String PACK200 = "pack200";
+
+    /**
+     * Constant (value {@value}) used to identify the XZ compression method.
+     * @since 1.4
+     */
+    public static final String XZ = "xz";
+
+    /**
+     * Constant (value {@value}) used to identify the LZMA compression method.
+     * Not supported as an output stream type.
+     * @since 1.6
+     */
+    public static final String LZMA = "lzma";
+
+    /**
+     * Constant (value {@value}) used to identify the "framed" Snappy compression method.
+     * Not supported as an output stream type.
+     * @since 1.7
+     */
+    public static final String SNAPPY_FRAMED = "snappy-framed";
+
+    /**
+     * Constant (value {@value}) used to identify the "raw" Snappy compression method.
+     * Not supported as an output stream type.
+     * @since 1.7
+     */
+    public static final String SNAPPY_RAW = "snappy-raw";
+
+    /**
+     * Constant (value {@value}) used to identify the traditional Unix compress method.
+     * Not supported as an output stream type.
+     * @since 1.7
+     */
+    public static final String Z = "z";
+
+    /**
+     * Constant (value {@value}) used to identify the Deflate compress method.
+     * @since 1.9
+     */
+    public static final String DEFLATE = "deflate";
+
+    /**
+     * If true, decompress until the end of the input.
+     * If false, stop after the first stream and leave the 
+     * input position to point to the next byte after the stream
+     */
+    private final Boolean decompressUntilEOF;
+    // This is Boolean so setDecompressConcatenated can determine whether it has been set by the ctor
+    // once the setDecompressConcatenated method has been removed, it can revert to boolean
+
+    /**
+     * If true, decompress until the end of the input.
+     * If false, stop after the first stream and leave the 
+     * input position to point to the next byte after the stream
+     */
+
+    private volatile boolean decompressConcatenated = false;
+
+    /**
+     * Create an instance with the decompress Concatenated option set to false.
+     */
+    public CompressorStreamFactory() {
+        this.decompressUntilEOF = null;  
+    }
+
+    /**
+     * Create an instance with the provided decompress Concatenated option.
+     * @param       decompressUntilEOF
+     *                          if true, decompress until the end of the
+     *                          input; if false, stop after the first
+     *                          stream and leave the input position to point
+     *                          to the next byte after the stream.
+     *           This setting applies to the gzip, bzip2 and xz formats only.
+     * @since 1.10
+     */
+    public CompressorStreamFactory(boolean decompressUntilEOF) {
+        this.decompressUntilEOF = Boolean.valueOf(decompressUntilEOF);
+        // Also copy to existing variable so can continue to use that as the current value
+        this.decompressConcatenated = decompressUntilEOF;
+    }
+
+    /**
+     * Whether to decompress the full input or only the first stream
+     * in formats supporting multiple concatenated input streams.
+     *
+     * <p>This setting applies to the gzip, bzip2 and xz formats only.</p>
+     *
+     * @param       decompressConcatenated
+     *                          if true, decompress until the end of the
+     *                          input; if false, stop after the first
+     *                          stream and leave the input position to point
+     *                          to the next byte after the stream
+     * @since 1.5
+     * @deprecated 1.10 use the {@link #CompressorStreamFactory(boolean)} constructor instead
+     * @throws IllegalStateException if the constructor {@link #CompressorStreamFactory(boolean)} 
+     * was used to create the factory
+     */
+    @Deprecated
+    public void setDecompressConcatenated(boolean decompressConcatenated) {
+        if (this.decompressUntilEOF != null) {
+            throw new IllegalStateException("Cannot override the setting defined by the constructor");
+        }
+        this.decompressConcatenated = decompressConcatenated;
+    }
+
+    /**
+     * Create an compressor input stream from an input stream, autodetecting
+     * the compressor type from the first few bytes of the stream. The InputStream
+     * must support marks, like BufferedInputStream.
+     * 
+     * @param in the input stream
+     * @return the compressor input stream
+     * @throws CompressorException if the compressor name is not known
+     * @throws IllegalArgumentException if the stream is null or does not support mark
+     * @since 1.1
+     */
+    public CompressorInputStream createCompressorInputStream(final InputStream in)
+            throws CompressorException {
+        if (in == null) {
+            throw new IllegalArgumentException("Stream must not be null.");
+        }
+
+        if (!in.markSupported()) {
+            throw new IllegalArgumentException("Mark is not supported.");
+        }
+
+        final byte[] signature = new byte[12];
+        in.mark(signature.length);
+        try {
+            int signatureLength = IOUtils.readFully(in, signature);
+            in.reset();
+
+            if (BZip2CompressorInputStream.matches(signature, signatureLength)) {
+                return new BZip2CompressorInputStream(in, decompressConcatenated);
+            }
+
+            if (GzipCompressorInputStream.matches(signature, signatureLength)) {
+                return new GzipCompressorInputStream(in, decompressConcatenated);
+            }
+
+            if (Pack200CompressorInputStream.matches(signature, signatureLength)) {
+                return new Pack200CompressorInputStream(in);
+            }
+
+            if (FramedSnappyCompressorInputStream.matches(signature, signatureLength)) {
+                return new FramedSnappyCompressorInputStream(in);
+            }
+
+            if (ZCompressorInputStream.matches(signature, signatureLength)) {
+                return new ZCompressorInputStream(in);
+            }
+
+
+            if (XZUtils.matches(signature, signatureLength) &&
+                XZUtils.isXZCompressionAvailable()) {
+                return new XZCompressorInputStream(in, decompressConcatenated);
+            }
+
+            if (LZMAUtils.matches(signature, signatureLength) &&
+                LZMAUtils.isLZMACompressionAvailable()) {
+                return new LZMACompressorInputStream(in);
+            }
+
+        } catch (IOException e) {
+            throw new CompressorException("Failed to detect Compressor from InputStream.", e);
+        }
+
+        throw new CompressorException("No Compressor found for the stream signature.");
+    }
+
+    /**
+     * Create a compressor input stream from a compressor name and an input stream.
+     * 
+     * @param name of the compressor,
+     * i.e. {@value #GZIP}, {@value #BZIP2}, {@value #XZ}, {@value #LZMA},
+     * {@value #PACK200}, {@value #SNAPPY_RAW}, {@value #SNAPPY_FRAMED}, 
+     * {@value #Z} or {@value #DEFLATE} 
+     * @param in the input stream
+     * @return compressor input stream
+     * @throws CompressorException if the compressor name is not known
+     * @throws IllegalArgumentException if the name or input stream is null
+     */
+    public CompressorInputStream createCompressorInputStream(final String name,
+            final InputStream in) throws CompressorException {
+        if (name == null || in == null) {
+            throw new IllegalArgumentException(
+                    "Compressor name and stream must not be null.");
+        }
+
+        try {
+
+            if (GZIP.equalsIgnoreCase(name)) {
+                return new GzipCompressorInputStream(in, decompressConcatenated);
+            }
+
+            if (BZIP2.equalsIgnoreCase(name)) {
+                return new BZip2CompressorInputStream(in, decompressConcatenated);
+            }
+
+            if (XZ.equalsIgnoreCase(name)) {
+                return new XZCompressorInputStream(in, decompressConcatenated);
+            }
+
+            if (LZMA.equalsIgnoreCase(name)) {
+                return new LZMACompressorInputStream(in);
+            }
+
+            if (PACK200.equalsIgnoreCase(name)) {
+                return new Pack200CompressorInputStream(in);
+            }
+
+            if (SNAPPY_RAW.equalsIgnoreCase(name)) {
+                return new SnappyCompressorInputStream(in);
+            }
+
+            if (SNAPPY_FRAMED.equalsIgnoreCase(name)) {
+                return new FramedSnappyCompressorInputStream(in);
+            }
+
+            if (Z.equalsIgnoreCase(name)) {
+                return new ZCompressorInputStream(in);
+            }
+
+            if (DEFLATE.equalsIgnoreCase(name)) {
+                return new DeflateCompressorInputStream(in);
+            }
+
+        } catch (IOException e) {
+            throw new CompressorException(
+                    "Could not create CompressorInputStream.", e);
+        }
+        throw new CompressorException("Compressor: " + name + " not found.");
+    }
+
+    /**
+     * Create an compressor output stream from an compressor name and an output stream.
+     * 
+     * @param name the compressor name,
+     * i.e. {@value #GZIP}, {@value #BZIP2}, {@value #XZ},
+     * {@value #PACK200} or {@value #DEFLATE} 
+     * @param out the output stream
+     * @return the compressor output stream
+     * @throws CompressorException if the archiver name is not known
+     * @throws IllegalArgumentException if the archiver name or stream is null
+     */
+    public CompressorOutputStream createCompressorOutputStream(
+            final String name, final OutputStream out)
+            throws CompressorException {
+        if (name == null || out == null) {
+            throw new IllegalArgumentException(
+                    "Compressor name and stream must not be null.");
+        }
+
+        try {
+
+            if (GZIP.equalsIgnoreCase(name)) {
+                return new GzipCompressorOutputStream(out);
+            }
+
+            if (BZIP2.equalsIgnoreCase(name)) {
+                return new BZip2CompressorOutputStream(out);
+            }
+
+            if (XZ.equalsIgnoreCase(name)) {
+                return new XZCompressorOutputStream(out);
+            }
+
+            if (PACK200.equalsIgnoreCase(name)) {
+                return new Pack200CompressorOutputStream(out);
+            }
+
+            if (DEFLATE.equalsIgnoreCase(name)) {
+                return new DeflateCompressorOutputStream(out);
+            }
+
+        } catch (IOException e) {
+            throw new CompressorException(
+                    "Could not create CompressorOutputStream", e);
+        }
+        throw new CompressorException("Compressor: " + name + " not found.");
+    }
+
+    // For Unit tests
+    boolean getDecompressConcatenated() {
+        return decompressConcatenated;
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ CompressorStreamFactoryClaudeTest ใน package org.apache.commons.compress.compressors เพื่อทดสอบคลาส CompressorStreamFactory ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.compress.compressors;` เท่านั้น
+</instructions>

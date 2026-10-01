@@ -1,0 +1,255 @@
+package org.apache.commons.math3.geometry.euclidean.threed;
+
+import java.util.List;
+
+import org.apache.commons.math3.exception.MathIllegalArgumentException;
+import org.apache.commons.math3.geometry.euclidean.oned.IntervalsSet;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class SubLineClaudeTest {
+
+    // Constructor(Line, IntervalsSet): verifies fields stored, round trip through getSegments
+    @Test
+    public void testConstructor_LineAndIntervalsSet_StoresFields() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(0, 0, 1));
+        IntervalsSet set = new IntervalsSet(-2.0, 2.0);
+        SubLine sub = new SubLine(line, set);
+        List<Segment> segs = sub.getSegments();
+        assertEquals(1, segs.size());
+        assertEquals(-2.0, segs.get(0).getStart().getZ(), 1e-9);
+        assertEquals(2.0, segs.get(0).getEnd().getZ(), 1e-9);
+    }
+
+    // Constructor(Vector3D,Vector3D) normal path, line not through global origin
+    @Test
+    public void testConstructor_TwoPoints_CreatesValidSubLine() throws Throwable {
+        SubLine sub = new SubLine(new Vector3D(2, 3, 4), new Vector3D(2, 3, 10));
+        List<Segment> segs = sub.getSegments();
+        assertEquals(1, segs.size());
+        assertEquals(4.0, segs.get(0).getStart().getZ(), 1e-9);
+        assertEquals(10.0, segs.get(0).getEnd().getZ(), 1e-9);
+    }
+
+    // Constructor(Vector3D,Vector3D): equal points must throw per javadoc contract
+    @Test
+    public void testConstructor_TwoEqualPoints_ThrowsMathIllegalArgumentException() throws Throwable {
+        Vector3D p = new Vector3D(1, 1, 1);
+        try {
+            new SubLine(p, p);
+            fail("expected MathIllegalArgumentException");
+        } catch (MathIllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // Constructor(Segment): normal path, endpoints preserved
+    @Test
+    public void testConstructor_FromSegment_CreatesValidSubLine() throws Throwable {
+        Line line = new Line(new Vector3D(1, 1, 1), new Vector3D(1, 1, 5));
+        Segment segment = new Segment(new Vector3D(1, 1, 2), new Vector3D(1, 1, 4), line);
+        SubLine sub = new SubLine(segment);
+        List<Segment> segs = sub.getSegments();
+        assertEquals(1, segs.size());
+        assertEquals(2.0, segs.get(0).getStart().getZ(), 1e-9);
+        assertEquals(4.0, segs.get(0).getEnd().getZ(), 1e-9);
+    }
+
+    // Constructor(Segment): equal segment endpoints must throw per javadoc contract
+    @Test
+    public void testConstructor_FromSegmentWithEqualEndpoints_ThrowsMathIllegalArgumentException() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 1, 1));
+        Vector3D pt = new Vector3D(3, 3, 3);
+        Segment segment = new Segment(pt, pt, line);
+        try {
+            new SubLine(segment);
+            fail("expected MathIllegalArgumentException");
+        } catch (MathIllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // getSegments(): finite interval returns one segment with correct endpoints
+    @Test
+    public void testGetSegments_FiniteInterval_ReturnsCorrectEndpoints() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        IntervalsSet set = new IntervalsSet(2.0, 8.0);
+        SubLine sub = new SubLine(line, set);
+        List<Segment> segs = sub.getSegments();
+        assertEquals(1, segs.size());
+        assertEquals(2.0, segs.get(0).getStart().getX(), 1e-9);
+        assertEquals(8.0, segs.get(0).getEnd().getX(), 1e-9);
+    }
+
+    // getSegments(): unbounded on both sides -> both endpoints have infinite primary coordinate
+    @Test
+    public void testGetSegments_UnboundedBothDirections_ReturnsInfiniteEndpoints() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        IntervalsSet set = new IntervalsSet(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
+        SubLine sub = new SubLine(line, set);
+        List<Segment> segs = sub.getSegments();
+        assertEquals(1, segs.size());
+        assertTrue(Double.isInfinite(segs.get(0).getStart().getX()));
+        assertTrue(Double.isInfinite(segs.get(0).getEnd().getX()));
+    }
+
+    // getSegments(): unbounded in negative direction only -> start has infinite coordinate, end finite
+    @Test
+    public void testGetSegments_UnboundedNegativeDirection_ReturnsInfiniteStart() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        IntervalsSet set = new IntervalsSet(Double.NEGATIVE_INFINITY, 5.0);
+        SubLine sub = new SubLine(line, set);
+        List<Segment> segs = sub.getSegments();
+        assertTrue(Double.isInfinite(segs.get(0).getStart().getX()));
+        assertEquals(5.0, segs.get(0).getEnd().getX(), 1e-9);
+    }
+
+    // getSegments(): unbounded in positive direction only -> end has infinite coordinate, start finite
+    @Test
+    public void testGetSegments_UnboundedPositiveDirection_ReturnsInfiniteEnd() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(1, 0, 0));
+        IntervalsSet set = new IntervalsSet(5.0, Double.POSITIVE_INFINITY);
+        SubLine sub = new SubLine(line, set);
+        List<Segment> segs = sub.getSegments();
+        assertEquals(5.0, segs.get(0).getStart().getX(), 1e-9);
+        assertTrue(Double.isInfinite(segs.get(0).getEnd().getX()));
+    }
+
+    // getSegments() built from the two-point constructor returns exactly one matching segment
+    @Test
+    public void testGetSegments_FromTwoPointConstructor_ReturnsMatchingSegment() throws Throwable {
+        SubLine sub = new SubLine(new Vector3D(1, 2, 3), new Vector3D(4, 2, 3));
+        List<Segment> segs = sub.getSegments();
+        assertEquals(1, segs.size());
+        assertEquals(1.0, segs.get(0).getStart().getX(), 1e-9);
+        assertEquals(4.0, segs.get(0).getEnd().getX(), 1e-9);
+        assertEquals(2.0, segs.get(0).getStart().getY(), 1e-9);
+    }
+
+    // getSegments() called twice must be idempotent / consistent
+    @Test
+    public void testGetSegments_CalledTwice_ReturnsConsistentResults() throws Throwable {
+        SubLine sub = new SubLine(new Vector3D(0, 0, 0), new Vector3D(6, 0, 0));
+        List<Segment> first = sub.getSegments();
+        List<Segment> second = sub.getSegments();
+        assertEquals(first.size(), second.size());
+        assertEquals(first.get(0).getEnd().getX(), second.get(0).getEnd().getX(), 1e-9);
+    }
+
+    // getSegments() preserves original start/end order even when end has smaller coordinate than start
+    @Test
+    public void testGetSegments_ReversedPointOrder_PreservesInputOrder() throws Throwable {
+        SubLine sub = new SubLine(new Vector3D(10, 0, 0), new Vector3D(0, 0, 0));
+        List<Segment> segs = sub.getSegments();
+        assertEquals(10.0, segs.get(0).getStart().getX(), 1e-9);
+        assertEquals(0.0, segs.get(0).getEnd().getX(), 1e-9);
+    }
+
+    // getSegments() with negative interval bounds maps to correct negative coordinates
+    @Test
+    public void testGetSegments_NegativeBoundsInterval_ReturnsCorrectEndpoints() throws Throwable {
+        Line line = new Line(new Vector3D(0, 0, 0), new Vector3D(0, 0, 1));
+        IntervalsSet set = new IntervalsSet(-8.0, -2.0);
+        SubLine sub = new SubLine(line, set);
+        List<Segment> segs = sub.getSegments();
+        assertEquals(-8.0, segs.get(0).getStart().getZ(), 1e-9);
+        assertEquals(-2.0, segs.get(0).getEnd().getZ(), 1e-9);
+    }
+
+    // BUG: javadoc says "null if the sub-lines don't intersect"; parallel lines must return null,
+    // not throw NullPointerException, with includeEndPoints = true
+    @Test
+    public void testIntersection_NonIntersectingParallelLines_ReturnsNull_IncludeEndpointsTrue() throws Throwable {
+        SubLine sub1 = new SubLine(new Vector3D(-10, 0, 0), new Vector3D(10, 0, 0));
+        SubLine sub2 = new SubLine(new Vector3D(-10, 1, 0), new Vector3D(10, 1, 0));
+        Vector3D result = sub1.intersection(sub2, true);
+        assertNull(result);
+    }
+
+    // BUG: same contract must hold with includeEndPoints = false
+    @Test
+    public void testIntersection_NonIntersectingParallelLines_ReturnsNull_IncludeEndpointsFalse() throws Throwable {
+        SubLine sub1 = new SubLine(new Vector3D(-10, 0, 0), new Vector3D(10, 0, 0));
+        SubLine sub2 = new SubLine(new Vector3D(-10, 1, 0), new Vector3D(10, 1, 0));
+        Vector3D result = sub1.intersection(sub2, false);
+        assertNull(result);
+    }
+
+    // Both sublines strictly contain the intersection point (INSIDE/INSIDE), includeEndPoints = true
+    @Test
+    public void testIntersection_BothInside_IncludeEndpointsTrue_ReturnsPoint() throws Throwable {
+        SubLine subA = new SubLine(new Vector3D(-10, 0, 0), new Vector3D(10, 0, 0));
+        SubLine subB = new SubLine(new Vector3D(5, -10, 0), new Vector3D(5, 10, 0));
+        Vector3D result = subA.intersection(subB, true);
+        assertNotNull(result);
+        assertEquals(5.0, result.getX(), 1e-9);
+        assertEquals(0.0, result.getY(), 1e-9);
+    }
+
+    // Both sublines strictly contain the intersection point, includeEndPoints = false
+    @Test
+    public void testIntersection_BothInside_IncludeEndpointsFalse_ReturnsPoint() throws Throwable {
+        SubLine subA = new SubLine(new Vector3D(-10, 0, 0), new Vector3D(10, 0, 0));
+        SubLine subB = new SubLine(new Vector3D(5, -10, 0), new Vector3D(5, 10, 0));
+        Vector3D result = subA.intersection(subB, false);
+        assertNotNull(result);
+        assertEquals(5.0, result.getX(), 1e-9);
+    }
+
+    // Intersection point is on the boundary (endpoint) of the first subline; includeEndPoints = true closes the set
+    @Test
+    public void testIntersection_BoundaryOnFirst_IncludeEndpointsTrue_ReturnsPoint() throws Throwable {
+        SubLine subA = new SubLine(new Vector3D(0, 0, 0), new Vector3D(5, 0, 0));
+        SubLine subB = new SubLine(new Vector3D(5, -10, 0), new Vector3D(5, 10, 0));
+        Vector3D result = subA.intersection(subB, true);
+        assertNotNull(result);
+        assertEquals(5.0, result.getX(), 1e-9);
+    }
+
+    // Same boundary case but includeEndPoints = false treats the set as open -> null
+    @Test
+    public void testIntersection_BoundaryOnFirst_IncludeEndpointsFalse_ReturnsNull() throws Throwable {
+        SubLine subA = new SubLine(new Vector3D(0, 0, 0), new Vector3D(5, 0, 0));
+        SubLine subB = new SubLine(new Vector3D(5, -10, 0), new Vector3D(5, 10, 0));
+        Vector3D result = subA.intersection(subB, false);
+        assertNull(result);
+    }
+
+    // Intersection point is outside the first subline's bounded range -> null regardless of includeEndPoints
+    @Test
+    public void testIntersection_OutsideFirst_BothFlags_ReturnsNull() throws Throwable {
+        SubLine subA = new SubLine(new Vector3D(0, 0, 0), new Vector3D(3, 0, 0));
+        SubLine subB = new SubLine(new Vector3D(5, -10, 0), new Vector3D(5, 10, 0));
+        assertNull(subA.intersection(subB, true));
+        assertNull(subA.intersection(subB, false));
+    }
+
+    // Intersection point is on the boundary of the second subline; includeEndPoints = true closes the set
+    @Test
+    public void testIntersection_BoundaryOnSecond_IncludeEndpointsTrue_ReturnsPoint() throws Throwable {
+        SubLine subA = new SubLine(new Vector3D(-10, 0, 0), new Vector3D(10, 0, 0));
+        SubLine subB = new SubLine(new Vector3D(5, 0, 0), new Vector3D(5, 10, 0));
+        Vector3D result = subA.intersection(subB, true);
+        assertNotNull(result);
+        assertEquals(5.0, result.getX(), 1e-9);
+    }
+
+    // Same boundary case on second subline but includeEndPoints = false -> null
+    @Test
+    public void testIntersection_BoundaryOnSecond_IncludeEndpointsFalse_ReturnsNull() throws Throwable {
+        SubLine subA = new SubLine(new Vector3D(-10, 0, 0), new Vector3D(10, 0, 0));
+        SubLine subB = new SubLine(new Vector3D(5, 0, 0), new Vector3D(5, 10, 0));
+        Vector3D result = subA.intersection(subB, false);
+        assertNull(result);
+    }
+
+    // Intersection point is outside the second subline's bounded range -> null
+    @Test
+    public void testIntersection_OutsideSecond_ReturnsNull() throws Throwable {
+        SubLine subA = new SubLine(new Vector3D(-10, 0, 0), new Vector3D(10, 0, 0));
+        SubLine subB = new SubLine(new Vector3D(5, 1, 0), new Vector3D(5, 10, 0));
+        Vector3D result = subA.intersection(subB, true);
+        assertNull(result);
+    }
+}

@@ -1,0 +1,14 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Time-5-w0nty62_/Time-5b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+WARNING: Some tests failed (see /tmp/claude-Time-5-w0nty62_/buggy/failing_tests)!
+       Lines total: 283
+     Lines covered: 195
+  Conditions total: 62
+Conditions covered: 41
+     Line coverage: 68.9%
+Condition coverage: 66.1%
+[exit 0]

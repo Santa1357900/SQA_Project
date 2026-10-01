@@ -1,0 +1,483 @@
+package org.apache.commons.collections.set;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ListOrderedSetClaudeTest {
+
+    // no-arg constructor: creates empty HashSet/ArrayList backed set
+    @Test
+    public void testNoArgConstructor_createsEmptySet() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        assertEquals(0, los.size());
+        assertTrue(los.isEmpty());
+    }
+
+    // listOrderedSet(Set,List): null set branch throws IllegalArgumentException
+    @Test
+    public void testListOrderedSetFactorySetList_null_set_throws() throws Throwable {
+        List<String> emptyList = new ArrayList<String>();
+        try {
+            ListOrderedSet.listOrderedSet((Set<String>) null, emptyList);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // listOrderedSet(Set,List): null list branch throws IllegalArgumentException
+    @Test
+    public void testListOrderedSetFactorySetList_null_list_throws() throws Throwable {
+        try {
+            ListOrderedSet.listOrderedSet(new HashSet<String>(), (List<String>) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // listOrderedSet(Set,List): non-empty set branch throws IllegalArgumentException
+    @Test
+    public void testListOrderedSetFactorySetList_nonEmptySet_throws() throws Throwable {
+        Set<String> set = new HashSet<String>();
+        set.add("a");
+        List<String> list = new ArrayList<String>();
+        try {
+            ListOrderedSet.listOrderedSet(set, list);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // listOrderedSet(Set,List): non-empty list branch throws IllegalArgumentException
+    @Test
+    public void testListOrderedSetFactorySetList_nonEmptyList_throws() throws Throwable {
+        Set<String> set = new HashSet<String>();
+        List<String> list = new ArrayList<String>();
+        list.add("a");
+        try {
+            ListOrderedSet.listOrderedSet(set, list);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // listOrderedSet(Set,List): valid empty args wraps (not copies) the given set/list
+    @Test
+    public void testListOrderedSetFactorySetList_valid_wrapsGiven() throws Throwable {
+        Set<String> set = new HashSet<String>();
+        List<String> list = new ArrayList<String>();
+        ListOrderedSet<String> los = ListOrderedSet.listOrderedSet(set, list);
+        los.add("a");
+        assertTrue(set.contains("a"));
+        assertEquals("a", list.get(0));
+    }
+
+    // listOrderedSet(Set): wraps an existing non-empty set
+    @Test
+    public void testListOrderedSetFactorySet_wrapsExistingElements() throws Throwable {
+        Set<String> set = new HashSet<String>();
+        set.add("x");
+        ListOrderedSet<String> los = ListOrderedSet.listOrderedSet(set);
+        assertEquals(1, los.size());
+        assertTrue(los.contains("x"));
+    }
+
+    // listOrderedSet(List): null list branch throws IllegalArgumentException
+    @Test
+    public void testListOrderedSetFactoryList_null_throws() throws Throwable {
+        try {
+            ListOrderedSet.listOrderedSet((List<String>) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Bug hunt: Javadoc states duplicates are removed from the list, altering it;
+    // retainAll(set) cannot strip duplicate occurrences since each value is still "contained" in set
+    @Test
+    public void testListOrderedSetFactoryList_withDuplicates_removesDuplicates() throws Throwable {
+        List<String> list = new ArrayList<String>();
+        list.add("a");
+        list.add("b");
+        list.add("a");
+        list.add("c");
+        list.add("b");
+        ListOrderedSet<String> result = ListOrderedSet.listOrderedSet(list);
+        assertEquals(3, result.size());
+        assertEquals(3, result.asList().size());
+        assertEquals(3, list.size());
+    }
+
+    // listOrderedSet(List): no duplicates branch preserves insertion order
+    @Test
+    public void testListOrderedSetFactoryList_noDuplicates_preservesOrder() throws Throwable {
+        List<String> list = new ArrayList<String>();
+        list.add("x");
+        list.add("y");
+        list.add("z");
+        ListOrderedSet<String> los = ListOrderedSet.listOrderedSet(list);
+        assertEquals(3, los.size());
+        assertEquals("x", los.get(0));
+        assertEquals("y", los.get(1));
+        assertEquals("z", los.get(2));
+    }
+
+    // protected Set-only constructor: wraps elements and builds matching setOrder
+    @Test
+    public void testProtectedConstructorSet_wrapsElements() throws Throwable {
+        Set<String> set = new HashSet<String>();
+        set.add("p");
+        ListOrderedSet<String> los = new ListOrderedSet<String>(set);
+        assertEquals(1, los.size());
+        assertTrue(los.contains("p"));
+    }
+
+    // protected Set/List constructor: null list branch throws IllegalArgumentException
+    @Test
+    public void testProtectedConstructorSetList_null_list_throws() throws Throwable {
+        try {
+            new ListOrderedSet<String>(new HashSet<String>(), (List<String>) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // asList(): returns a view reflecting the insertion order
+    @Test
+    public void testAsList_returnsUnmodifiableView() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        List<String> view = los.asList();
+        assertEquals(2, view.size());
+        assertEquals("a", view.get(0));
+    }
+
+    // asList(): returned list is unmodifiable, mutating it throws UnsupportedOperationException
+    @Test
+    public void testAsList_unmodifiable_throwsOnAdd() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        List<String> view = los.asList();
+        try {
+            view.add("b");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // clear(): empties both the backing collection and the setOrder list
+    @Test
+    public void testClear_emptiesSetAndList() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        los.clear();
+        assertEquals(0, los.size());
+        assertTrue(los.asList().isEmpty());
+    }
+
+    // iterator(): iterates multiple elements in insertion order (loop many-rounds branch)
+    @Test
+    public void testIterator_iteratesInInsertionOrder() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        los.add("c");
+        Iterator<String> it = los.iterator();
+        assertTrue(it.hasNext());
+        assertEquals("a", it.next());
+        assertEquals("b", it.next());
+        assertEquals("c", it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // iterator().remove(): removes from both the underlying set and the order list
+    @Test
+    public void testIterator_remove_removesFromBoth() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        Iterator<String> it = los.iterator();
+        it.next();
+        it.remove();
+        assertEquals(1, los.size());
+        assertFalse(los.contains("a"));
+    }
+
+    // add(E): new element branch returns true and appends to order
+    @Test
+    public void testAdd_newElement_returnsTrueAndAppends() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        boolean changed = los.add("a");
+        assertTrue(changed);
+        assertEquals(1, los.size());
+        assertEquals(0, los.indexOf("a"));
+    }
+
+    // add(E): duplicate element branch returns false and keeps original position
+    @Test
+    public void testAdd_duplicateElement_returnsFalseAndKeepsPosition() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        boolean changed = los.add("a");
+        assertFalse(changed);
+        assertEquals(2, los.size());
+        assertEquals(0, los.indexOf("a"));
+    }
+
+    // addAll(Collection): only new elements are added, duplicates skipped
+    @Test
+    public void testAddAll_collection_addsOnlyNewElements() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        List<String> toAdd = new ArrayList<String>();
+        toAdd.add("a");
+        toAdd.add("b");
+        boolean changed = los.addAll(toAdd);
+        assertTrue(changed);
+        assertEquals(2, los.size());
+        assertTrue(los.contains("b"));
+    }
+
+    // remove(Object): existing element branch returns true and removes from order
+    @Test
+    public void testRemove_existingElement_returnsTrueAndRemoves() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        boolean result = los.remove("a");
+        assertTrue(result);
+        assertEquals(1, los.size());
+        assertFalse(los.contains("a"));
+        assertEquals(0, los.indexOf("b"));
+    }
+
+    // remove(Object): non-existing element branch returns false, no change
+    @Test
+    public void testRemove_nonExistingElement_returnsFalse() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        boolean result = los.remove("z");
+        assertFalse(result);
+        assertEquals(1, los.size());
+    }
+
+    // removeAll(Collection): removes every matching element (loop multiple rounds)
+    @Test
+    public void testRemoveAll_removesAllGivenElements() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        los.add("c");
+        List<String> toRemove = new ArrayList<String>();
+        toRemove.add("a");
+        toRemove.add("c");
+        boolean result = los.removeAll(toRemove);
+        assertTrue(result);
+        assertEquals(1, los.size());
+        assertTrue(los.contains("b"));
+    }
+
+    // retainAll(Collection): partial retain branch triggers the else-loop filtering setOrder
+    @Test
+    public void testRetainAll_retainsOnlyGivenElements_resultTrue() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        los.add("c");
+        List<String> toRetain = new ArrayList<String>();
+        toRetain.add("b");
+        boolean result = los.retainAll(toRetain);
+        assertTrue(result);
+        assertEquals(1, los.size());
+        assertEquals(0, los.indexOf("b"));
+    }
+
+    // retainAll(Collection): no-change branch returns false immediately
+    @Test
+    public void testRetainAll_noChange_returnsFalse() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        List<String> toRetain = new ArrayList<String>();
+        toRetain.add("a");
+        toRetain.add("b");
+        toRetain.add("c");
+        boolean result = los.retainAll(toRetain);
+        assertFalse(result);
+        assertEquals(2, los.size());
+    }
+
+    // retainAll(Collection): empty-result branch clears setOrder directly
+    @Test
+    public void testRetainAll_emptyResult_clearsSetOrder() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        List<String> toRetain = new ArrayList<String>();
+        toRetain.add("z");
+        boolean result = los.retainAll(toRetain);
+        assertTrue(result);
+        assertEquals(0, los.size());
+        assertEquals(0, los.asList().size());
+    }
+
+    // toArray(): returns elements in insertion order
+    @Test
+    public void testToArray_noArg_returnsElementsInOrder() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("x");
+        los.add("y");
+        Object[] arr = los.toArray();
+        assertEquals(2, arr.length);
+        assertEquals("x", arr[0]);
+        assertEquals("y", arr[1]);
+    }
+
+    // toArray(T[]): returns elements in insertion order using provided array type
+    @Test
+    public void testToArray_withArg_returnsElementsInOrder() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("x");
+        los.add("y");
+        String[] arr = los.toArray(new String[0]);
+        assertEquals(2, arr.length);
+        assertEquals("x", arr[0]);
+        assertEquals("y", arr[1]);
+    }
+
+    // get(int): valid index returns the element at that position
+    @Test
+    public void testGet_validIndex_returnsElement() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        assertEquals("b", los.get(1));
+    }
+
+    // get(int): out-of-range index throws IndexOutOfBoundsException
+    @Test
+    public void testGet_invalidIndex_throwsIndexOutOfBounds() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        try {
+            los.get(5);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // indexOf(Object): existing element branch returns its position
+    @Test
+    public void testIndexOf_existingElement_returnsIndex() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        assertEquals(1, los.indexOf("b"));
+    }
+
+    // indexOf(Object): non-existing element branch returns -1
+    @Test
+    public void testIndexOf_nonExistingElement_returnsMinusOne() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        assertEquals(-1, los.indexOf("z"));
+    }
+
+    // add(int,E): not-contained branch inserts element at the given position
+    @Test
+    public void testAddIndexed_newElement_insertsAtPosition() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("c");
+        los.add(1, "b");
+        assertEquals("b", los.get(1));
+        assertEquals(3, los.size());
+    }
+
+    // add(int,E): already-contained branch is a no-op
+    @Test
+    public void testAddIndexed_existingElement_noChange() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        los.add(0, "a");
+        assertEquals(2, los.size());
+        assertEquals(0, los.indexOf("a"));
+    }
+
+    // addAll(int,Collection): new elements inserted at given index (changed branch)
+    @Test
+    public void testAddAllIndexed_insertsNewElementsAtPosition() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("d");
+        List<String> toAdd = new ArrayList<String>();
+        toAdd.add("b");
+        toAdd.add("c");
+        boolean changed = los.addAll(1, toAdd);
+        assertTrue(changed);
+        assertEquals("b", los.get(1));
+        assertEquals("c", los.get(2));
+        assertEquals("d", los.get(3));
+    }
+
+    // addAll(int,Collection): all elements already contained branch returns false
+    @Test
+    public void testAddAllIndexed_allDuplicates_noChange() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        List<String> toAdd = new ArrayList<String>();
+        toAdd.add("a");
+        toAdd.add("b");
+        boolean changed = los.addAll(1, toAdd);
+        assertFalse(changed);
+        assertEquals(2, los.size());
+    }
+
+    // remove(int): valid index removes and returns the element, reflected in set membership
+    @Test
+    public void testRemoveIndexed_removesElementAndReturnsIt() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        los.add("c");
+        Object removed = los.remove(1);
+        assertEquals("b", removed);
+        assertEquals(2, los.size());
+        assertFalse(los.contains("b"));
+    }
+
+    // remove(int): out-of-range index throws IndexOutOfBoundsException
+    @Test
+    public void testRemoveIndexed_invalidIndex_throwsIndexOutOfBounds() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        try {
+            los.remove(5);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // toString(): delegates to the order-preserving list's toString representation
+    @Test
+    public void testToString_matchesOrderedListRepresentation() throws Throwable {
+        ListOrderedSet<String> los = new ListOrderedSet<String>();
+        los.add("a");
+        los.add("b");
+        List<String> expectedOrder = new ArrayList<String>();
+        expectedOrder.add("a");
+        expectedOrder.add("b");
+        assertEquals(expectedOrder.toString(), los.toString());
+    }
+}

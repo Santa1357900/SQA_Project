@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-50-3dxhzgaw/Jsoup-50f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.jsoup.helper.DataUtilClaudeTest::testGetCharsetFromContentType_lowercaseCharset_returnsUppercasedPerContract
+[exit 0]

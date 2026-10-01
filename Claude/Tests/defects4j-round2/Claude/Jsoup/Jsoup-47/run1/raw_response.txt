@@ -1,0 +1,275 @@
+package org.jsoup.nodes;
+
+import org.jsoup.Jsoup;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class EntitiesClaudeTest {
+
+    // isNamedEntity: known entity "amp" should be recognized
+    @Test
+    public void testIsNamedEntity_knownAmp_true() throws Throwable {
+        assertTrue(Entities.isNamedEntity("amp"));
+    }
+
+    // isNamedEntity: known entity "lt" should be recognized
+    @Test
+    public void testIsNamedEntity_knownLt_true() throws Throwable {
+        assertTrue(Entities.isNamedEntity("lt"));
+    }
+
+    // isNamedEntity: unknown entity name returns false
+    @Test
+    public void testIsNamedEntity_unknown_false() throws Throwable {
+        assertFalse(Entities.isNamedEntity("notarealentityname12345"));
+    }
+
+    // isNamedEntity: empty string is not a named entity
+    @Test
+    public void testIsNamedEntity_emptyString_false() throws Throwable {
+        assertFalse(Entities.isNamedEntity(""));
+    }
+
+    // isBaseNamedEntity: "amp" is present in the base entity subset
+    @Test
+    public void testIsBaseNamedEntity_knownAmp_true() throws Throwable {
+        assertTrue(Entities.isBaseNamedEntity("amp"));
+    }
+
+    // isBaseNamedEntity: "quot" is present in the base entity subset
+    @Test
+    public void testIsBaseNamedEntity_knownQuot_true() throws Throwable {
+        assertTrue(Entities.isBaseNamedEntity("quot"));
+    }
+
+    // isBaseNamedEntity: unknown entity name returns false
+    @Test
+    public void testIsBaseNamedEntity_unknown_false() throws Throwable {
+        assertFalse(Entities.isBaseNamedEntity("notarealentityname12345"));
+    }
+
+    // getCharacterByName: "amp" maps to '&'
+    @Test
+    public void testGetCharacterByName_amp_ampersandChar() throws Throwable {
+        assertEquals(Character.valueOf('&'), Entities.getCharacterByName("amp"));
+    }
+
+    // getCharacterByName: "lt" maps to '<'
+    @Test
+    public void testGetCharacterByName_lt_lessThanChar() throws Throwable {
+        assertEquals(Character.valueOf('<'), Entities.getCharacterByName("lt"));
+    }
+
+    // getCharacterByName: "gt" maps to '>'
+    @Test
+    public void testGetCharacterByName_gt_greaterThanChar() throws Throwable {
+        assertEquals(Character.valueOf('>'), Entities.getCharacterByName("gt"));
+    }
+
+    // getCharacterByName: "quot" maps to '"'
+    @Test
+    public void testGetCharacterByName_quot_quoteChar() throws Throwable {
+        assertEquals(Character.valueOf('"'), Entities.getCharacterByName("quot"));
+    }
+
+    // getCharacterByName: unknown entity name returns null (Map.get contract)
+    @Test
+    public void testGetCharacterByName_unknown_null() throws Throwable {
+        assertNull(Entities.getCharacterByName("notarealentityname12345"));
+    }
+
+    // escape(String,OutputSettings): delegates with inAttribute=false, normalises nothing
+    @Test
+    public void testEscapeStringOverload_wrapsAccumCorrectly() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        String result = Entities.escape("a&b<c", doc.outputSettings());
+        assertEquals("a&amp;b&lt;c", result);
+    }
+
+    // escape: '&' is always escaped regardless of position
+    @Test
+    public void testEscape_ampersand_alwaysEscaped() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a&b", doc.outputSettings(), false, false, false);
+        assertEquals("a&amp;b", accum.toString());
+    }
+
+    // escape: '<' in character data (not in attribute) is escaped to &lt;
+    @Test
+    public void testEscape_lessThanCharacterData_escaped() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a<b", doc.outputSettings(), false, false, false);
+        assertEquals("a&lt;b", accum.toString());
+    }
+
+    // escape: '<' in html attribute value need not be escaped
+    @Test
+    public void testEscape_lessThanAttributeHtmlMode_notEscaped() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a<b", doc.outputSettings(), true, false, false);
+        assertEquals("a<b", accum.toString());
+    }
+
+    // escape: per XML spec AttValue excludes literal '<'; in xhtml mode it MUST be escaped (bug-catching test)
+    @Test
+    public void testEscape_lessThanAttributeXhtmlMode_escaped() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        doc.outputSettings().escapeMode(Entities.EscapeMode.xhtml);
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a<b", doc.outputSettings(), true, false, false);
+        assertEquals("a&lt;b", accum.toString());
+    }
+
+    // escape: '>' in character data is escaped
+    @Test
+    public void testEscape_greaterThanCharacterData_escaped() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a>b", doc.outputSettings(), false, false, false);
+        assertEquals("a&gt;b", accum.toString());
+    }
+
+    // escape: '>' in attribute value is not escaped (optional per XML spec)
+    @Test
+    public void testEscape_greaterThanAttribute_notEscaped() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a>b", doc.outputSettings(), true, false, false);
+        assertEquals("a>b", accum.toString());
+    }
+
+    // escape: '"' in attribute value is escaped to &quot; to avoid terminating the value
+    @Test
+    public void testEscape_quoteInAttribute_escaped() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a\"b", doc.outputSettings(), true, false, false);
+        assertEquals("a&quot;b", accum.toString());
+    }
+
+    // escape: '"' in character data need not be escaped
+    @Test
+    public void testEscape_quoteInCharacterData_notEscaped() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a\"b", doc.outputSettings(), false, false, false);
+        assertEquals("a\"b", accum.toString());
+    }
+
+    // escape: nbsp char in base(html) mode becomes named entity &nbsp;
+    @Test
+    public void testEscape_nbspHtmlMode_entityNbsp() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a\u00A0b", doc.outputSettings(), false, false, false);
+        assertEquals("a&nbsp;b", accum.toString());
+    }
+
+    // escape: nbsp char in xhtml mode becomes numeric reference &#xa0; (no &nbsp; in XML)
+    @Test
+    public void testEscape_nbspXhtmlMode_numericEscape() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        doc.outputSettings().escapeMode(Entities.EscapeMode.xhtml);
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a\u00A0b", doc.outputSettings(), false, false, false);
+        assertEquals("a&#xa0;b", accum.toString());
+    }
+
+    // escape: normaliseWhite collapses consecutive whitespace into single space
+    @Test
+    public void testEscape_normalizeWhitespace_collapsesMultipleSpaces() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "a   b", doc.outputSettings(), false, true, false);
+        assertEquals("a b", accum.toString());
+    }
+
+    // escape: stripLeadingWhite removes whitespace before first non-whitespace char
+    @Test
+    public void testEscape_stripLeadingWhite_removesLeadingSpace() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, "   a", doc.outputSettings(), false, true, true);
+        assertEquals("a", accum.toString());
+    }
+
+    // escape: supplementary (surrogate pair) codepoint encodable in UTF-8 is appended as-is
+    @Test
+    public void testEscape_supplementaryCodepoint_encodableAppendedAsIs() throws Throwable {
+        Document doc = Jsoup.parse("<html></html>");
+        String emoji = "\uD83D\uDE00";
+        StringBuilder accum = new StringBuilder();
+        Entities.escape(accum, emoji, doc.outputSettings(), false, false, false);
+        assertEquals(emoji, accum.toString());
+    }
+
+    // unescape(String): named entity with semicolon is decoded
+    @Test
+    public void testUnescape_defaultOverload_namedEntityWithSemicolon() throws Throwable {
+        assertEquals("<", Entities.unescape("&lt;"));
+    }
+
+    // unescape(String,boolean) non-strict: trailing ';' is optional, entity still decoded
+    @Test
+    public void testUnescape_nonStrict_namedEntityWithoutSemicolon_decoded() throws Throwable {
+        String result = Entities.unescape("&amp", false);
+        assertEquals("&", result);
+    }
+
+    // unescape(String,boolean) strict: trailing ';' required, left unchanged without it
+    @Test
+    public void testUnescape_strict_namedEntityWithoutSemicolon_notDecoded() throws Throwable {
+        String result = Entities.unescape("&amp", true);
+        assertEquals("&amp", result);
+    }
+
+    // unescape(String,boolean) strict: entity with trailing ';' is decoded
+    @Test
+    public void testUnescape_strict_namedEntityWithSemicolon_decoded() throws Throwable {
+        assertEquals("&", Entities.unescape("&amp;", true));
+    }
+
+    // unescape: decimal numeric character reference decoded
+    @Test
+    public void testUnescape_numericDecimalEntity_decoded() throws Throwable {
+        assertEquals("A", Entities.unescape("&#65;"));
+    }
+
+    // unescape: hexadecimal numeric character reference decoded
+    @Test
+    public void testUnescape_numericHexEntity_decoded() throws Throwable {
+        assertEquals("A", Entities.unescape("&#x41;"));
+    }
+
+    // unescape: plain text without entities is unchanged
+    @Test
+    public void testUnescape_plainText_unchanged() throws Throwable {
+        assertEquals("hello world", Entities.unescape("hello world"));
+    }
+
+    // unescape: unknown named entity is left literally unchanged
+    @Test
+    public void testUnescape_unknownNamedEntity_unchanged() throws Throwable {
+        String result = Entities.unescape("&notarealentity;");
+        assertEquals("&notarealentity;", result);
+    }
+
+    // integration: ampersand in parsed text is re-escaped when rendering outerHtml
+    @Test
+    public void testJsoupParse_textWithAmpersand_outerHtmlEscaped() throws Throwable {
+        Document doc = Jsoup.parse("<p>A & B</p>");
+        String outer = doc.select("p").first().outerHtml();
+        assertTrue(outer.contains("&amp;"));
+    }
+
+    // integration: named entity in source html is decoded during parsing, visible via text()
+    @Test
+    public void testJsoupParseBodyFragment_namedEntityInText_unescapedOnParse() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<p>A &amp; B</p>");
+        String text = doc.body().text();
+        assertEquals("A & B", text);
+    }
+}

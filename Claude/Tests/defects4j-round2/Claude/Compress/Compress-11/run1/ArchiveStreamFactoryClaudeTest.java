@@ -1,0 +1,372 @@
+package org.apache.commons.compress.archivers;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream;
+import org.apache.commons.compress.archivers.ar.ArArchiveOutputStream;
+import org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream;
+import org.apache.commons.compress.archivers.cpio.CpioArchiveOutputStream;
+import org.apache.commons.compress.archivers.jar.JarArchiveInputStream;
+import org.apache.commons.compress.archivers.jar.JarArchiveOutputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+
+public class ArchiveStreamFactoryClaudeTest {
+
+    private ArchiveStreamFactory factory;
+
+    @Before
+    public void setUp() throws Throwable {
+        factory = new ArchiveStreamFactory();
+    }
+
+    // covers constant definitions used throughout the factory
+    @Test
+    public void testConstants_haveExpectedValues() throws Throwable {
+        assertEquals("ar", ArchiveStreamFactory.AR);
+        assertEquals("cpio", ArchiveStreamFactory.CPIO);
+        assertEquals("dump", ArchiveStreamFactory.DUMP);
+        assertEquals("jar", ArchiveStreamFactory.JAR);
+        assertEquals("tar", ArchiveStreamFactory.TAR);
+        assertEquals("zip", ArchiveStreamFactory.ZIP);
+    }
+
+    // covers: archiverName == null branch in createArchiveInputStream(String, InputStream)
+    @Test
+    public void testCreateArchiveInputStreamByName_nullArchiverName_throwsIllegalArgumentException() throws Throwable {
+        InputStream in = new ByteArrayInputStream(new byte[16]);
+        try {
+            factory.createArchiveInputStream((String) null, in);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Archivername"));
+        }
+    }
+
+    // covers: in == null branch in createArchiveInputStream(String, InputStream)
+    @Test
+    public void testCreateArchiveInputStreamByName_nullInputStream_throwsIllegalArgumentException() throws Throwable {
+        try {
+            factory.createArchiveInputStream(ArchiveStreamFactory.ZIP, (InputStream) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("InputStream"));
+        }
+    }
+
+    // covers: AR.equalsIgnoreCase branch
+    @Test
+    public void testCreateArchiveInputStreamByName_ar_returnsArArchiveInputStream() throws Throwable {
+        InputStream in = new ByteArrayInputStream(new byte[16]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.AR, in);
+        try {
+            assertTrue(result instanceof ArArchiveInputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: AR.equalsIgnoreCase case-insensitive matching
+    @Test
+    public void testCreateArchiveInputStreamByName_arUppercase_returnsArArchiveInputStream() throws Throwable {
+        InputStream in = new ByteArrayInputStream(new byte[16]);
+        ArchiveInputStream result = factory.createArchiveInputStream("AR", in);
+        try {
+            assertTrue(result instanceof ArArchiveInputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: ZIP.equalsIgnoreCase branch
+    @Test
+    public void testCreateArchiveInputStreamByName_zip_returnsZipArchiveInputStream() throws Throwable {
+        InputStream in = new ByteArrayInputStream(new byte[16]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.ZIP, in);
+        try {
+            assertTrue(result instanceof ZipArchiveInputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: TAR.equalsIgnoreCase branch
+    @Test
+    public void testCreateArchiveInputStreamByName_tar_returnsTarArchiveInputStream() throws Throwable {
+        InputStream in = new ByteArrayInputStream(new byte[16]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.TAR, in);
+        try {
+            assertTrue(result instanceof TarArchiveInputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: JAR.equalsIgnoreCase branch
+    @Test
+    public void testCreateArchiveInputStreamByName_jar_returnsJarArchiveInputStream() throws Throwable {
+        InputStream in = new ByteArrayInputStream(new byte[16]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.JAR, in);
+        try {
+            assertTrue(result instanceof JarArchiveInputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: CPIO.equalsIgnoreCase branch
+    @Test
+    public void testCreateArchiveInputStreamByName_cpio_returnsCpioArchiveInputStream() throws Throwable {
+        InputStream in = new ByteArrayInputStream(new byte[16]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.CPIO, in);
+        try {
+            assertTrue(result instanceof CpioArchiveInputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: final throw new ArchiveException for unknown archiver name
+    @Test
+    public void testCreateArchiveInputStreamByName_unknown_throwsArchiveException() throws Throwable {
+        InputStream in = new ByteArrayInputStream(new byte[16]);
+        try {
+            factory.createArchiveInputStream("rar", in);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+            assertTrue(expected.getMessage().contains("not found"));
+        }
+    }
+
+    // covers: empty string archiver name falls through all equalsIgnoreCase checks to final throw
+    @Test
+    public void testCreateArchiveInputStreamByName_emptyString_throwsArchiveException() throws Throwable {
+        InputStream in = new ByteArrayInputStream(new byte[16]);
+        try {
+            factory.createArchiveInputStream("", in);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+            assertTrue(expected.getMessage().contains("not found"));
+        }
+    }
+
+    // covers: archiverName == null branch in createArchiveOutputStream(String, OutputStream)
+    @Test
+    public void testCreateArchiveOutputStreamByName_nullArchiverName_throwsIllegalArgumentException() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            factory.createArchiveOutputStream((String) null, out);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Archivername"));
+        }
+    }
+
+    // covers: out == null branch in createArchiveOutputStream(String, OutputStream)
+    @Test
+    public void testCreateArchiveOutputStreamByName_nullOutputStream_throwsIllegalArgumentException() throws Throwable {
+        try {
+            factory.createArchiveOutputStream(ArchiveStreamFactory.ZIP, null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("OutputStream"));
+        }
+    }
+
+    // covers: AR.equalsIgnoreCase branch for output stream
+    @Test
+    public void testCreateArchiveOutputStreamByName_ar_returnsArArchiveOutputStream() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.AR, out);
+        try {
+            assertTrue(result instanceof ArArchiveOutputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: ZIP.equalsIgnoreCase branch for output stream
+    @Test
+    public void testCreateArchiveOutputStreamByName_zip_returnsZipArchiveOutputStream() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.ZIP, out);
+        try {
+            assertTrue(result instanceof ZipArchiveOutputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: TAR.equalsIgnoreCase branch for output stream
+    @Test
+    public void testCreateArchiveOutputStreamByName_tar_returnsTarArchiveOutputStream() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.TAR, out);
+        try {
+            assertTrue(result instanceof TarArchiveOutputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: TAR.equalsIgnoreCase case-insensitive matching for output stream
+    @Test
+    public void testCreateArchiveOutputStreamByName_tarMixedCase_returnsTarArchiveOutputStream() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream("TaR", out);
+        try {
+            assertTrue(result instanceof TarArchiveOutputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: JAR.equalsIgnoreCase branch for output stream
+    @Test
+    public void testCreateArchiveOutputStreamByName_jar_returnsJarArchiveOutputStream() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.JAR, out);
+        try {
+            assertTrue(result instanceof JarArchiveOutputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: CPIO.equalsIgnoreCase branch for output stream
+    @Test
+    public void testCreateArchiveOutputStreamByName_cpio_returnsCpioArchiveOutputStream() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.CPIO, out);
+        try {
+            assertTrue(result instanceof CpioArchiveOutputStream);
+        } finally {
+            result.close();
+        }
+    }
+
+    // covers: DUMP has no output-stream branch, must fall through to final throw
+    @Test
+    public void testCreateArchiveOutputStreamByName_dump_throwsArchiveException() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            factory.createArchiveOutputStream(ArchiveStreamFactory.DUMP, out);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+            assertTrue(expected.getMessage().contains("not found"));
+        }
+    }
+
+    // covers: final throw new ArchiveException for unknown archiver name (output)
+    @Test
+    public void testCreateArchiveOutputStreamByName_unknown_throwsArchiveException() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            factory.createArchiveOutputStream("rar", out);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+            assertTrue(expected.getMessage().contains("not found"));
+        }
+    }
+
+    // covers: empty string falls through all checks to final throw (output)
+    @Test
+    public void testCreateArchiveOutputStreamByName_emptyString_throwsArchiveException() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            factory.createArchiveOutputStream("", out);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+            assertTrue(expected.getMessage().contains("not found"));
+        }
+    }
+
+    // covers: in == null branch in createArchiveInputStream(InputStream) autodetect
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_nullStream_throwsIllegalArgumentException() throws Throwable {
+        try {
+            factory.createArchiveInputStream((InputStream) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Stream"));
+        }
+    }
+
+    // covers: !in.markSupported() branch in createArchiveInputStream(InputStream)
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_markNotSupported_throwsIllegalArgumentException() throws Throwable {
+        InputStream noMark = new InputStream() {
+            private final byte[] data = new byte[] { 1, 2, 3, 4, 5 };
+            private int pos = 0;
+            public int read() {
+                if (pos >= data.length) {
+                    return -1;
+                }
+                return data[pos++] & 0xFF;
+            }
+            public boolean markSupported() {
+                return false;
+            }
+        };
+        try {
+            factory.createArchiveInputStream(noMark);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Mark"));
+        }
+    }
+
+    // covers: ZipArchiveInputStream.matches(...) branch returning true during autodetection
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_zipSignature_returnsZipArchiveInputStream() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ArchiveOutputStream aos = factory.createArchiveOutputStream(ArchiveStreamFactory.ZIP, baos);
+        aos.putArchiveEntry(new ZipArchiveEntry("test.txt"));
+        aos.closeArchiveEntry();
+        aos.close();
+        ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+        ArchiveInputStream ais = factory.createArchiveInputStream(bais);
+        try {
+            assertTrue(ais instanceof ZipArchiveInputStream);
+        } finally {
+            ais.close();
+        }
+    }
+
+    // covers: ArArchiveInputStream.matches(...) branch returning true during autodetection
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_arSignature_returnsArArchiveInputStream() throws Throwable {
+        byte[] arMagic = "!<arch>\n".getBytes("US-ASCII");
+        byte[] data = new byte[60];
+        System.arraycopy(arMagic, 0, data, 0, arMagic.length);
+        ByteArrayInputStream bais = new ByteArrayInputStream(data);
+        ArchiveInputStream ais = factory.createArchiveInputStream(bais);
+        try {
+            assertTrue(ais instanceof ArArchiveInputStream);
+        } finally {
+            ais.close();
+        }
+    }
+
+    // covers: no signature matches any known format, final throw new ArchiveException("No Archiver found...")
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_noMatchingSignature_throwsArchiveException() throws Throwable {
+        byte[] data = "This is definitely not an archive file at all!!".getBytes("US-ASCII");
+        ByteArrayInputStream bais = new ByteArrayInputStream(data);
+        try {
+            factory.createArchiveInputStream(bais);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+            assertTrue(expected.getMessage().contains("No Archiver found"));
+        }
+    }
+}

@@ -1,0 +1,21 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Compress -v 23f -w /tmp/claude-Compress-23-77v6qqkb/fixed
+Checking out cbb5a1ad to /tmp/claude-Compress-23-77v6qqkb/fixed............ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Compress-23-77v6qqkb/fixed/maven-build.x OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff cbb5a1ad:71e4eead..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Compress-23f.................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Compress-23-77v6qqkb/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

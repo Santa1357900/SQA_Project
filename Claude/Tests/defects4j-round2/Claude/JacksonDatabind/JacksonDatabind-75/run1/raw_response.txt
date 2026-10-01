@@ -1,0 +1,289 @@
+package com.fasterxml.jackson.databind.ser.std;
+
+import java.io.StringWriter;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationConfig;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.util.EnumValues;
+
+public class EnumSerializerClaudeTest
+{
+    private ObjectMapper mapper;
+
+    public static enum TestEnum { A, B, C }
+
+    public static enum ToStringEnum {
+        X {
+            public String toString() { return "x-str"; }
+        },
+        Y {
+            public String toString() { return "y-str"; }
+        }
+    }
+
+    public static class PlainHolder {
+        private TestEnum value;
+        public PlainHolder() { }
+        public PlainHolder(TestEnum value) { this.value = value; }
+        public TestEnum getValue() { return value; }
+        public void setValue(TestEnum value) { this.value = value; }
+    }
+
+    public static class IndexFormatHolder {
+        private TestEnum value;
+        public IndexFormatHolder() { }
+        public IndexFormatHolder(TestEnum value) { this.value = value; }
+        @JsonFormat(shape = JsonFormat.Shape.NUMBER)
+        public TestEnum getValue() { return value; }
+        public void setValue(TestEnum value) { this.value = value; }
+    }
+
+    public static class StringFormatHolder {
+        private TestEnum value;
+        public StringFormatHolder() { }
+        public StringFormatHolder(TestEnum value) { this.value = value; }
+        @JsonFormat(shape = JsonFormat.Shape.STRING)
+        public TestEnum getValue() { return value; }
+        public void setValue(TestEnum value) { this.value = value; }
+    }
+
+    public static class AnyFormatHolder {
+        private TestEnum value;
+        public AnyFormatHolder() { }
+        public AnyFormatHolder(TestEnum value) { this.value = value; }
+        @JsonFormat(shape = JsonFormat.Shape.ANY)
+        public TestEnum getValue() { return value; }
+        public void setValue(TestEnum value) { this.value = value; }
+    }
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    @Test
+    // covers two-arg constructor: stores provided EnumValues and index flag (Boolean.TRUE) as-is
+    public void testConstructor_twoArgWithIndexTrue_storesValuesAndIndexFlag() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        Class<?> enumClass = TestEnum.class;
+        EnumValues v = EnumValues.constructFromName(config, (Class<Enum<?>>) enumClass);
+        EnumSerializer ser = new EnumSerializer(v, Boolean.TRUE);
+        assertSame(v, ser.getEnumValues());
+        assertEquals(Boolean.TRUE, ser._serializeAsIndex);
+    }
+
+    @Test
+    // covers two-arg constructor: null index flag stored as-is (dynamic mode)
+    public void testConstructor_twoArgWithNullIndex_storesNullIndexFlag() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        Class<?> enumClass = TestEnum.class;
+        EnumValues v = EnumValues.constructFromName(config, (Class<Enum<?>>) enumClass);
+        EnumSerializer ser = new EnumSerializer(v, null);
+        assertSame(v, ser.getEnumValues());
+        assertNull(ser._serializeAsIndex);
+    }
+
+    @Test
+    // covers deprecated one-arg constructor: delegates to two-arg constructor with null index flag
+    public void testConstructor_deprecatedOneArg_delegatesWithNullIndex() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        Class<?> enumClass = TestEnum.class;
+        EnumValues v = EnumValues.constructFromName(config, (Class<Enum<?>>) enumClass);
+        EnumSerializer ser = new EnumSerializer(v);
+        assertSame(v, ser.getEnumValues());
+        assertNull(ser._serializeAsIndex);
+    }
+
+    @Test
+    // covers getEnumValues(): returns exactly the instance passed to constructor
+    public void testGetEnumValues_returnsSameInstancePassedToConstructor() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        Class<?> enumClass = TestEnum.class;
+        EnumValues v = EnumValues.constructFromName(config, (Class<Enum<?>>) enumClass);
+        EnumSerializer ser = new EnumSerializer(v, Boolean.FALSE);
+        assertSame(v, ser.getEnumValues());
+    }
+
+    @Test
+    // covers construct(): format == null -> shape null -> dynamic index (null)
+    public void testConstruct_nullFormat_dynamicIndexIsNull() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        EnumSerializer ser = EnumSerializer.construct(TestEnum.class, config, null, null);
+        assertNull(ser._serializeAsIndex);
+        assertNotNull(ser.getEnumValues());
+    }
+
+    @Test
+    // covers _isShapeWrittenUsingIndex(): shape ANY -> dynamic index (null)
+    public void testConstruct_shapeAny_dynamicIndexIsNull() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        JsonFormat.Value format = JsonFormat.Value.forShape(JsonFormat.Shape.ANY);
+        EnumSerializer ser = EnumSerializer.construct(TestEnum.class, config, null, format);
+        assertNull(ser._serializeAsIndex);
+    }
+
+    @Test
+    // covers _isShapeWrittenUsingIndex(): shape SCALAR -> dynamic index (null)
+    public void testConstruct_shapeScalar_dynamicIndexIsNull() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        JsonFormat.Value format = JsonFormat.Value.forShape(JsonFormat.Shape.SCALAR);
+        EnumSerializer ser = EnumSerializer.construct(TestEnum.class, config, null, format);
+        assertNull(ser._serializeAsIndex);
+    }
+
+    @Test
+    // covers _isShapeWrittenUsingIndex(): shape STRING -> index explicitly FALSE
+    public void testConstruct_shapeString_indexIsFalse() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        JsonFormat.Value format = JsonFormat.Value.forShape(JsonFormat.Shape.STRING);
+        EnumSerializer ser = EnumSerializer.construct(TestEnum.class, config, null, format);
+        assertEquals(Boolean.FALSE, ser._serializeAsIndex);
+    }
+
+    @Test
+    // covers _isShapeWrittenUsingIndex(): shape NATURAL -> index explicitly FALSE (same as STRING)
+    public void testConstruct_shapeNatural_indexIsFalse() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        JsonFormat.Value format = JsonFormat.Value.forShape(JsonFormat.Shape.NATURAL);
+        EnumSerializer ser = EnumSerializer.construct(TestEnum.class, config, null, format);
+        assertEquals(Boolean.FALSE, ser._serializeAsIndex);
+    }
+
+    @Test
+    // covers _isShapeWrittenUsingIndex(): numeric shape NUMBER -> index explicitly TRUE
+    public void testConstruct_shapeNumber_indexIsTrue() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        JsonFormat.Value format = JsonFormat.Value.forShape(JsonFormat.Shape.NUMBER);
+        EnumSerializer ser = EnumSerializer.construct(TestEnum.class, config, null, format);
+        assertEquals(Boolean.TRUE, ser._serializeAsIndex);
+    }
+
+    @Test
+    // covers _isShapeWrittenUsingIndex(): shape ARRAY -> index explicitly TRUE
+    public void testConstruct_shapeArray_indexIsTrue() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        JsonFormat.Value format = JsonFormat.Value.forShape(JsonFormat.Shape.ARRAY);
+        EnumSerializer ser = EnumSerializer.construct(TestEnum.class, config, null, format);
+        assertEquals(Boolean.TRUE, ser._serializeAsIndex);
+    }
+
+    @Test
+    // covers _isShapeWrittenUsingIndex(): unsupported shape OBJECT from class -> throws with "class" wording
+    public void testConstruct_shapeObjectFromClass_throwsIllegalArgumentExceptionWithClassMessage() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        JsonFormat.Value format = JsonFormat.Value.forShape(JsonFormat.Shape.OBJECT);
+        try {
+            EnumSerializer.construct(TestEnum.class, config, null, format);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("class"));
+        }
+    }
+
+    @Test
+    // covers _isShapeWrittenUsingIndex(): unsupported shape BOOLEAN from property -> throws with "property" wording
+    public void testIsShapeWrittenUsingIndex_shapeBooleanFromProperty_throwsWithPropertyMessage() throws Throwable {
+        JsonFormat.Value format = JsonFormat.Value.forShape(JsonFormat.Shape.BOOLEAN);
+        try {
+            EnumSerializer._isShapeWrittenUsingIndex(TestEnum.class, format, false);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("property"));
+        }
+    }
+
+    @Test
+    // covers createContextual(): property == null -> returns same instance unchanged
+    public void testCreateContextual_nullProperty_returnsSameInstance() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        Class<?> enumClass = TestEnum.class;
+        EnumValues v = EnumValues.constructFromName(config, (Class<Enum<?>>) enumClass);
+        EnumSerializer ser = new EnumSerializer(v, null);
+        Object result = ser.createContextual(null, null);
+        assertSame(ser, result);
+    }
+
+    @Test
+    // covers serialize(): explicit index TRUE writes ordinal number for each enum constant (multi-round loop)
+    public void testSerialize_explicitIndexTrue_writesOrdinalNumberForEachConstant() throws Throwable {
+        SerializationConfig config = mapper.getSerializationConfig();
+        Class<?> enumClass = TestEnum.class;
+        EnumValues v = EnumValues.constructFromName(config, (Class<Enum<?>>) enumClass);
+        EnumSerializer ser = new EnumSerializer(v, Boolean.TRUE);
+        TestEnum[] constants = TestEnum.values();
+        for (int i = 0; i < constants.length; i++) {
+            StringWriter sw = new StringWriter();
+            JsonGenerator gen = new JsonFactory().createGenerator(sw);
+            ser.serialize(constants[i], gen, null);
+            gen.close();
+            assertEquals(String.valueOf(constants[i].ordinal()), sw.toString());
+        }
+    }
+
+    @Test
+    // covers serialize(): default behavior via full pipeline writes enum name() as JSON string
+    public void testSerialize_defaultViaObjectMapper_writesEnumName() throws Throwable {
+        String json = mapper.writeValueAsString(TestEnum.B);
+        assertEquals("\"B\"", json);
+    }
+
+    @Test
+    // covers serialize(): WRITE_ENUMS_USING_INDEX global feature enabled writes ordinal number
+    public void testSerialize_globalIndexFeatureEnabled_writesOrdinalNumber() throws Throwable {
+        mapper.configure(SerializationFeature.WRITE_ENUMS_USING_INDEX, true);
+        String json = mapper.writeValueAsString(TestEnum.C);
+        assertEquals(String.valueOf(TestEnum.C.ordinal()), json);
+    }
+
+    @Test
+    // covers serialize(): WRITE_ENUMS_USING_TO_STRING feature writes toString() value instead of name()
+    public void testSerialize_writeEnumsUsingToStringFeature_writesToStringValue() throws Throwable {
+        mapper.configure(SerializationFeature.WRITE_ENUMS_USING_TO_STRING, true);
+        String json = mapper.writeValueAsString(ToStringEnum.X);
+        assertEquals("\"x-str\"", json);
+    }
+
+    @Test
+    // covers createContextual(): property @JsonFormat(shape=NUMBER) overrides to index serialization
+    public void testCreateContextual_propertyFormatNumber_overridesToIndexSerialization() throws Throwable {
+        IndexFormatHolder holder = new IndexFormatHolder(TestEnum.B);
+        String json = mapper.writeValueAsString(holder);
+        assertEquals("{\"value\":1}", json);
+    }
+
+    @Test
+    // covers createContextual(): property @JsonFormat(shape=STRING) overrides global index feature to name serialization
+    public void testCreateContextual_propertyFormatString_overridesGlobalIndexToNameSerialization() throws Throwable {
+        mapper.configure(SerializationFeature.WRITE_ENUMS_USING_INDEX, true);
+        StringFormatHolder holder = new StringFormatHolder(TestEnum.B);
+        String json = mapper.writeValueAsString(holder);
+        assertEquals("{\"value\":\"B\"}", json);
+    }
+
+    @Test
+    // covers createContextual(): property without @JsonFormat annotation -> findFormatOverrides null -> default behavior
+    public void testCreateContextual_propertyWithoutAnnotation_usesDefaultSerializerBehavior() throws Throwable {
+        PlainHolder holder = new PlainHolder(TestEnum.A);
+        String json = mapper.writeValueAsString(holder);
+        assertEquals("{\"value\":\"A\"}", json);
+    }
+
+    @Test
+    // covers createContextual(): property @JsonFormat(shape=ANY) remains dynamic, following global index feature
+    public void testCreateContextual_propertyFormatAny_behavesLikeDynamicDefault() throws Throwable {
+        mapper.configure(SerializationFeature.WRITE_ENUMS_USING_INDEX, true);
+        AnyFormatHolder holder = new AnyFormatHolder(TestEnum.B);
+        String json = mapper.writeValueAsString(holder);
+        assertEquals("{\"value\":1}", json);
+    }
+}

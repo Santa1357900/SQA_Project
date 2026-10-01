@@ -1,0 +1,369 @@
+package org.jsoup.parser;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.io.StringReader;
+
+public class CharacterReaderClaudeTest {
+
+    // pos() starts at 0 for a freshly constructed reader
+    @Test
+    public void testPos_initial_returnsZero() throws Throwable {
+        CharacterReader r = new CharacterReader("abc");
+        assertEquals(0, r.pos());
+    }
+
+    // pos() increments by the number of consumed chars
+    @Test
+    public void testPos_afterConsume_incrementsByConsumedChars() throws Throwable {
+        CharacterReader r = new CharacterReader("abcdef");
+        r.consume();
+        r.consume();
+        assertEquals(2, r.pos());
+    }
+
+    // isEmpty() is true only when the cursor is at or past the end of the content
+    @Test
+    public void testIsEmpty_trueWhenAtEnd_falseOtherwise() throws Throwable {
+        CharacterReader empty = new CharacterReader("");
+        assertTrue(empty.isEmpty());
+        CharacterReader nonEmpty = new CharacterReader("a");
+        assertFalse(nonEmpty.isEmpty());
+    }
+
+    // isEmpty() becomes true after consuming all available chars
+    @Test
+    public void testIsEmpty_afterConsumingAll_returnsTrue() throws Throwable {
+        CharacterReader r = new CharacterReader("a");
+        r.consume();
+        assertTrue(r.isEmpty());
+    }
+
+    // current() returns first char without advancing the position
+    @Test
+    public void testCurrent_nonEmpty_returnsFirstCharWithoutAdvancing() throws Throwable {
+        CharacterReader r = new CharacterReader("xyz");
+        assertEquals('x', r.current());
+        assertEquals(0, r.pos());
+    }
+
+    // current() returns the EOF sentinel when the input is exhausted
+    @Test
+    public void testCurrent_atEnd_returnsEOF() throws Throwable {
+        CharacterReader r = new CharacterReader("a");
+        r.consume();
+        assertEquals(CharacterReader.EOF, r.current());
+    }
+
+    // consume() returns chars in order and advances the position each call
+    @Test
+    public void testConsume_returnsCharsInOrder_andAdvances() throws Throwable {
+        CharacterReader r = new CharacterReader("ab");
+        assertEquals('a', r.consume());
+        assertEquals('b', r.consume());
+        assertEquals(2, r.pos());
+    }
+
+    // consume() at end of input returns EOF
+    @Test
+    public void testConsume_atEnd_returnsEOF() throws Throwable {
+        CharacterReader r = new CharacterReader("a");
+        r.consume();
+        assertEquals(CharacterReader.EOF, r.consume());
+    }
+
+    // unconsume() moves the position back by one, allowing re-read of same char
+    @Test
+    public void testUnconsume_afterConsume_revertsPosition() throws Throwable {
+        CharacterReader r = new CharacterReader("ab");
+        r.consume();
+        r.unconsume();
+        assertEquals('a', r.consume());
+    }
+
+    // advance() moves the current position forward by one without returning a char
+    @Test
+    public void testAdvance_movesPositionForward() throws Throwable {
+        CharacterReader r = new CharacterReader("ab");
+        r.advance();
+        assertEquals(1, r.pos());
+        assertEquals('b', r.current());
+    }
+
+    // mark()/rewindToMark() save and restore the cursor position
+    @Test
+    public void testMarkAndRewindToMark_restoresPosition() throws Throwable {
+        CharacterReader r = new CharacterReader("abcdef");
+        r.consume();
+        r.mark();
+        r.consume();
+        r.consume();
+        r.rewindToMark();
+        assertEquals(1, r.pos());
+        assertEquals('b', r.current());
+    }
+
+    // nextIndexOf(char) returns offset to the next occurrence of the target char
+    @Test
+    public void testNextIndexOfChar_found_returnsOffset() throws Throwable {
+        CharacterReader r = new CharacterReader("abcdef");
+        assertEquals(3, r.nextIndexOf('d'));
+    }
+
+    // nextIndexOf(char) returns -1 when the char is not present
+    @Test
+    public void testNextIndexOfChar_notFound_returnsMinusOne() throws Throwable {
+        CharacterReader r = new CharacterReader("abcdef");
+        assertEquals(-1, r.nextIndexOf('z'));
+    }
+
+    // nextIndexOf(CharSequence) returns offset to the next occurrence of the sequence
+    @Test
+    public void testNextIndexOfSeq_found_returnsOffset() throws Throwable {
+        CharacterReader r = new CharacterReader("abc__def__");
+        assertEquals(3, r.nextIndexOf("__"));
+    }
+
+    // nextIndexOf(CharSequence) returns -1 when the sequence is not present
+    @Test
+    public void testNextIndexOfSeq_notFound_returnsMinusOne() throws Throwable {
+        CharacterReader r = new CharacterReader("abcdef");
+        assertEquals(-1, r.nextIndexOf("zz"));
+    }
+
+    // consumeTo(char) reads up to (not including) the delimiter, leaving cursor there
+    @Test
+    public void testConsumeToChar_found_stopsBeforeDelimiter() throws Throwable {
+        CharacterReader r = new CharacterReader("foo,bar");
+        assertEquals("foo", r.consumeTo(','));
+        assertEquals(',', r.current());
+    }
+
+    // consumeTo(char) consumes to end when delimiter is absent
+    @Test
+    public void testConsumeToChar_notFound_consumesToEnd() throws Throwable {
+        CharacterReader r = new CharacterReader("foobar");
+        assertEquals("foobar", r.consumeTo('z'));
+        assertTrue(r.isEmpty());
+    }
+
+    // consumeTo(String) reads up to the first matched sequence
+    @Test
+    public void testConsumeToStringSeq_found_stopsBeforeSequence() throws Throwable {
+        CharacterReader r = new CharacterReader("fooSTOPbar");
+        assertEquals("foo", r.consumeTo("STOP"));
+    }
+
+    // consumeTo(String) consumes to end when the sequence is absent
+    @Test
+    public void testConsumeToStringSeq_notFound_consumesToEnd() throws Throwable {
+        CharacterReader r = new CharacterReader("foobar");
+        assertEquals("foobar", r.consumeTo("STOP"));
+        assertTrue(r.isEmpty());
+    }
+
+    // consumeToAny stops at the first matching delimiter char
+    @Test
+    public void testConsumeToAny_stopsAtDelimiter() throws Throwable {
+        CharacterReader r = new CharacterReader("foo bar");
+        assertEquals("foo", r.consumeToAny(' ', '\t'));
+        assertEquals(' ', r.current());
+    }
+
+    // consumeToAny returns empty string when the current char is already a delimiter
+    @Test
+    public void testConsumeToAny_delimiterAtStart_returnsEmptyString() throws Throwable {
+        CharacterReader r = new CharacterReader(" foo");
+        assertEquals("", r.consumeToAny(' '));
+    }
+
+    // consumeToAnySorted behaves like consumeToAny given a sorted delimiter array
+    @Test
+    public void testConsumeToAnySorted_stopsAtSortedDelimiter() throws Throwable {
+        CharacterReader r = new CharacterReader("abc-def");
+        char[] delims = {'-'};
+        assertEquals("abc", r.consumeToAnySorted(delims));
+    }
+
+    // consumeData stops at '&', '<' or the null char
+    @Test
+    public void testConsumeData_stopsAtAmpersand() throws Throwable {
+        CharacterReader r = new CharacterReader("a&b");
+        assertEquals("a", r.consumeData());
+        assertEquals('&', r.current());
+    }
+
+    // consumeTagName stops at whitespace, '/', '>' or the null char
+    @Test
+    public void testConsumeTagName_stopsAtWhitespace() throws Throwable {
+        CharacterReader r = new CharacterReader("div class");
+        assertEquals("div", r.consumeTagName());
+    }
+
+    // consumeToEnd returns all remaining content and leaves the reader empty
+    @Test
+    public void testConsumeToEnd_returnsRemainingAndSetsEmpty() throws Throwable {
+        CharacterReader r = new CharacterReader("hello");
+        assertEquals("hello", r.consumeToEnd());
+        assertTrue(r.isEmpty());
+    }
+
+    // consumeLetterSequence stops at the first non-letter character
+    @Test
+    public void testConsumeLetterSequence_stopsAtNonLetter() throws Throwable {
+        CharacterReader r = new CharacterReader("abc123");
+        assertEquals("abc", r.consumeLetterSequence());
+        assertEquals('1', r.current());
+    }
+
+    // consumeLetterSequence treats unicode letters (Character.isLetter) as letters too
+    @Test
+    public void testConsumeLetterSequence_unicodeLetter_included() throws Throwable {
+        CharacterReader r = new CharacterReader("caf\u00e9!");
+        assertEquals("caf\u00e9", r.consumeLetterSequence());
+    }
+
+    // consumeLetterThenDigitSequence consumes letters then digits, stopping at the next letter
+    @Test
+    public void testConsumeLetterThenDigitSequence_mixed() throws Throwable {
+        CharacterReader r = new CharacterReader("abc123def");
+        assertEquals("abc123", r.consumeLetterThenDigitSequence());
+    }
+
+    // consumeHexSequence stops at the first non-hex character
+    @Test
+    public void testConsumeHexSequence_stopsAtNonHex() throws Throwable {
+        CharacterReader r = new CharacterReader("1A2Gxyz");
+        assertEquals("1A2", r.consumeHexSequence());
+    }
+
+    // consumeDigitSequence stops at the first non-digit character
+    @Test
+    public void testConsumeDigitSequence_stopsAtNonDigit() throws Throwable {
+        CharacterReader r = new CharacterReader("123abc");
+        assertEquals("123", r.consumeDigitSequence());
+    }
+
+    // matches(char) is true only when it equals the current char
+    @Test
+    public void testMatchesChar_trueWhenEqualsCurrent() throws Throwable {
+        CharacterReader r = new CharacterReader("abc");
+        assertTrue(r.matches('a'));
+        assertFalse(r.matches('b'));
+    }
+
+    // matches(String) is true when the upcoming text equals seq, without consuming it
+    @Test
+    public void testMatchesString_trueWithoutConsuming() throws Throwable {
+        CharacterReader r = new CharacterReader("hello world");
+        assertTrue(r.matches("hello"));
+        assertEquals(0, r.pos());
+    }
+
+    // matches(String) is false when seq is longer than the remaining input
+    @Test
+    public void testMatchesString_longerThanRemaining_returnsFalse() throws Throwable {
+        CharacterReader r = new CharacterReader("ab");
+        assertFalse(r.matches("abc"));
+    }
+
+    // matchesIgnoreCase ignores letter case when comparing
+    @Test
+    public void testMatchesIgnoreCase_caseInsensitiveMatch() throws Throwable {
+        CharacterReader r = new CharacterReader("HELLO world");
+        assertTrue(r.matchesIgnoreCase("hello"));
+    }
+
+    // matchesAny is true if current char is in the given set, false for a non-matching set
+    @Test
+    public void testMatchesAny_trueAndFalseAndEmptySet() throws Throwable {
+        CharacterReader r = new CharacterReader("a");
+        assertTrue(r.matchesAny('x', 'a', 'z'));
+        assertFalse(r.matchesAny('x', 'y', 'z'));
+    }
+
+    // matchesAnySorted is true if current char is present in a sorted set via binary search
+    @Test
+    public void testMatchesAnySorted_trueAndFalse() throws Throwable {
+        CharacterReader r = new CharacterReader("e");
+        char[] sorted = {'a', 'e', 'i', 'o', 'u'};
+        assertTrue(r.matchesAnySorted(sorted));
+        CharacterReader r2 = new CharacterReader("x");
+        assertFalse(r2.matchesAnySorted(sorted));
+    }
+
+    // matchesLetter is true for an alphabetic current char, false for a digit
+    @Test
+    public void testMatchesLetter_trueForLetter_falseForDigit() throws Throwable {
+        CharacterReader r = new CharacterReader("a1");
+        assertTrue(r.matchesLetter());
+        r.advance();
+        assertFalse(r.matchesLetter());
+    }
+
+    // matchesDigit is true for a digit current char, false for a letter
+    @Test
+    public void testMatchesDigit_trueForDigit_falseForLetter() throws Throwable {
+        CharacterReader r = new CharacterReader("1a");
+        assertTrue(r.matchesDigit());
+        r.advance();
+        assertFalse(r.matchesDigit());
+    }
+
+    // matchConsume advances past seq and returns true only on a match; no advance otherwise
+    @Test
+    public void testMatchConsume_advancesOnMatch_elseNoAdvance() throws Throwable {
+        CharacterReader r = new CharacterReader("Hello World");
+        assertTrue(r.matchConsume("Hello"));
+        assertEquals(5, r.pos());
+        assertFalse(r.matchConsume("xyz"));
+        assertEquals(5, r.pos());
+    }
+
+    // matchConsumeIgnoreCase advances past seq case-insensitively on a match
+    @Test
+    public void testMatchConsumeIgnoreCase_advancesOnMatch() throws Throwable {
+        CharacterReader r = new CharacterReader("HELLO world");
+        assertTrue(r.matchConsumeIgnoreCase("hello"));
+        assertEquals(5, r.pos());
+    }
+
+    // containsIgnoreCase finds the target when it appears in a single consistent case
+    @Test
+    public void testContainsIgnoreCase_consistentCaseFound() throws Throwable {
+        CharacterReader r = new CharacterReader("see the TITLE here");
+        assertTrue(r.containsIgnoreCase("title"));
+    }
+
+    // containsIgnoreCase returns false when the target does not appear at all
+    @Test
+    public void testContainsIgnoreCase_notPresent_returnsFalse() throws Throwable {
+        CharacterReader r = new CharacterReader("nothing to see");
+        assertFalse(r.containsIgnoreCase("title"));
+    }
+
+    // toString returns the not-yet-consumed remainder of the input
+    @Test
+    public void testToString_returnsRemainingContent() throws Throwable {
+        CharacterReader r = new CharacterReader("hello world");
+        r.consumeTo(' ');
+        assertEquals(" world", r.toString());
+    }
+
+    // rangeEquals is true when the buffer range exactly matches the given string, false otherwise
+    @Test
+    public void testRangeEquals_trueAndFalse() throws Throwable {
+        CharacterReader r = new CharacterReader("hello");
+        assertTrue(r.rangeEquals(0, 5, "hello"));
+        assertFalse(r.rangeEquals(0, 5, "world"));
+    }
+
+    // CharacterReader constructed from a Reader behaves like the String-based constructor
+    @Test
+    public void testConstructorFromReader_readsContentCorrectly() throws Throwable {
+        CharacterReader r = new CharacterReader(new StringReader("xy"), 10);
+        assertEquals('x', r.consume());
+        assertEquals('y', r.consume());
+        assertTrue(r.isEmpty());
+    }
+}

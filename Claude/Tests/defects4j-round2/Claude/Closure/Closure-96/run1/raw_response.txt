@@ -1,0 +1,315 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+public class TypeCheckClaudeTest {
+
+  private Result runTypeCheck(String js) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.checkTypes = true;
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    return compiler.compile(externs, input, options);
+  }
+
+  private int diagnosticCount(Result result) {
+    return result.errors.length + result.warnings.length;
+  }
+
+  // Token.ADD: no validation performed, expression should type-check cleanly
+  @Test
+  public void testVisit_addNumbers_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = 1;\nvar y = x + 2;\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.CALL: calling a number value must report NOT_CALLABLE
+  @Test
+  public void testVisit_callNumberValue_reportsNotCallable() throws Throwable {
+    Result result = runTypeCheck("var x = 1;\nx();\n");
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // Token.NEW: constructing a number value must report NOT_A_CONSTRUCTOR
+  @Test
+  public void testVisit_newNumberValue_reportsNotAConstructor() throws Throwable {
+    Result result = runTypeCheck("var x = 1;\nnew x();\n");
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // Token.DELPROP: deleting a non-reference literal must report BAD_DELETE
+  @Test
+  public void testVisit_deleteLiteral_reportsBadDelete() throws Throwable {
+    Result result = runTypeCheck("delete 1;\n");
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // Token.DELPROP: deleting a NAME reference is allowed, isReference true branch
+  @Test
+  public void testVisit_deleteNameReference_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x;\ndelete x;\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // visitAssign: @type number assigned a string literal must report a type mismatch
+  @Test
+  public void testVisit_assignTypeMismatch_reportsWarning() throws Throwable {
+    Result result = runTypeCheck("/** @type {number} */\nvar x;\nx = 'hello';\n");
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // visitAssign: @type number assigned a matching number literal, no diagnostics
+  @Test
+  public void testVisit_assignValidType_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("/** @type {number} */\nvar x;\nx = 5;\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // visitParameterList: calling with more arguments than declared reports WRONG_ARGUMENT_COUNT
+  @Test
+  public void testVisit_callTooManyArguments_reportsWrongArgumentCount() throws Throwable {
+    String js = "/**\n * @param {number} a\n */\nfunction f(a) {}\nf(1, 2);\n";
+    Result result = runTypeCheck(js);
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // visitParameterList: calling with fewer arguments than declared reports WRONG_ARGUMENT_COUNT
+  @Test
+  public void testVisit_callTooFewArguments_reportsWrongArgumentCount() throws Throwable {
+    Result result = runTypeCheck("function f(a, b) {}\nf(1);\n");
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // visitParameterList: calling with exactly the declared argument count is valid
+  @Test
+  public void testVisit_callCorrectArgumentCount_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("function f(a, b) {}\nf(1, 2);\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // checkPropertyAccess: accessing a non-existent enum element reports INEXISTENT_ENUM_ELEMENT
+  @Test
+  public void testVisit_inexistentEnumElement_reportsWarning() throws Throwable {
+    String js = "/** @enum {number} */\nvar Color = {RED: 1, BLUE: 2};\nvar x = Color.GREEN;\n";
+    Result result = runTypeCheck(js);
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // checkPropertyAccess: accessing an existing enum element is valid
+  @Test
+  public void testVisit_validEnumElement_noDiagnostics() throws Throwable {
+    String js = "/** @enum {number} */\nvar Color = {RED: 1, BLUE: 2};\nvar x = Color.RED;\n";
+    Result result = runTypeCheck(js);
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.VOID: no type validation performed
+  @Test
+  public void testVisit_voidOperator_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("void 0;\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.TYPEOF: no type validation performed
+  @Test
+  public void testVisit_typeofOperator_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = typeof 5;\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.ARRAYLIT: always typed as ARRAY_TYPE, no diagnostics
+  @Test
+  public void testVisit_arrayLiteral_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = [1, 2, 3];\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.REGEXP: always typed as REGEXP_TYPE, no diagnostics
+  @Test
+  public void testVisit_regexpLiteral_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = /abc/;\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.ADD on strings: concatenation, no validation performed
+  @Test
+  public void testVisit_stringConcatenation_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = 'a' + 'b';\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.INC on a number: valid numeric operand
+  @Test
+  public void testVisit_incrementNumber_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = 5;\nx++;\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.INC on a string: validator.expectNumber("increment/decrement") must warn
+  @Test
+  public void testVisit_incrementString_reportsWarning() throws Throwable {
+    Result result = runTypeCheck("var x = 'hello';\nx++;\n");
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // Token.NEG: sign operator on a valid number operand
+  @Test
+  public void testVisit_negateNumber_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = 5;\nvar y = -x;\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.BITNOT on a number: matches int32 context, no diagnostics
+  @Test
+  public void testVisit_bitwiseNotNumber_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = 5;\nvar y = ~x;\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.COMMA: type comes from last child, no diagnostics expected
+  @Test
+  public void testVisit_commaOperator_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = (1, 2);\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.OBJECTLIT: not an enum parent, type inference path, no diagnostics
+  @Test
+  public void testVisit_objectLiteral_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = {a: 1, b: 2};\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.WITH on an object: validator.expectObject passes, no diagnostics
+  @Test
+  public void testVisit_withObject_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("with ({}) {}\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.WITH on a number: "with requires an object" must warn
+  @Test
+  public void testVisit_withNumber_reportsWarning() throws Throwable {
+    Result result = runTypeCheck("with (5) {}\n");
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // Token.IN: string left, object right is a valid combination
+  @Test
+  public void testVisit_inOperatorValid_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = {};\nvar y = ('a' in x);\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.IN: "'in' requires an object", a number right side must warn
+  @Test
+  public void testVisit_inOperatorNonObjectRight_reportsWarning() throws Throwable {
+    Result result = runTypeCheck("var y = ('a' in 5);\n");
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // Token.NOT: always typed BOOLEAN_TYPE, no diagnostics
+  @Test
+  public void testVisit_notOperator_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = !true;\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.LT: numeric comparison with two numbers is valid
+  @Test
+  public void testVisit_lessThanNumbers_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = 1;\nvar y = 2;\nvar z = (x < y);\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.EQ: comparing two numbers of the same type is not deterministic, no diagnostics
+  @Test
+  public void testVisit_eqSameTypeNumbers_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = 1;\nvar y = 1;\nvar z = (x == y);\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // Token.SHEQ: numbers can be shallowly compared, no diagnostics
+  @Test
+  public void testVisit_sheqNumbers_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("var x = 1;\nvar y = 2;\nvar z = (x === y);\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // visitFunction: plain function, not interface nor constructor, no diagnostics
+  @Test
+  public void testVisit_plainFunctionDeclaration_noDiagnostics() throws Throwable {
+    Result result = runTypeCheck("function f() {}\n");
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // visitNew: calling a real constructor with "new" is valid
+  @Test
+  public void testVisit_validConstructorNew_noDiagnostics() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\nvar f = new Foo();\n";
+    Result result = runTypeCheck(js);
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // visitCall: calling a non-native constructor without "new" reports CONSTRUCTOR_NOT_CALLABLE
+  @Test
+  public void testVisit_constructorCalledWithoutNew_reportsWarning() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\nFoo();\n";
+    Result result = runTypeCheck(js);
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // visitFunction: implementing a constructor (not interface) reports BAD_IMPLEMENTED_TYPE
+  @Test
+  public void testVisit_implementNonInterface_reportsBadImplementedType() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\n"
+        + "/**\n * @constructor\n * @implements {Foo}\n */\nfunction Bar() {}\n";
+    Result result = runTypeCheck(js);
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // visitFunction: implementing a real interface with no members is valid
+  @Test
+  public void testVisit_implementValidInterface_noDiagnostics() throws Throwable {
+    String js = "/** @interface */\nfunction Foo() {}\n"
+        + "/**\n * @constructor\n * @implements {Foo}\n */\nfunction Bar() {}\n";
+    Result result = runTypeCheck(js);
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // checkDeclaredPropertyInheritance: @override with no superclass/interface property reports UNKNOWN_OVERRIDE
+  @Test
+  public void testCheckDeclaredPropertyInheritance_overrideWithoutSuperclass_reportsUnknownOverride()
+      throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\n"
+        + "/** @override */\nFoo.prototype.bar = function() {};\n";
+    Result result = runTypeCheck(js);
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+
+  // checkDeclaredPropertyInheritance: valid override with matching types is allowed
+  @Test
+  public void testCheckDeclaredPropertyInheritance_validOverride_noDiagnostics() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\nFoo.prototype.bar = function() {};\n"
+        + "/**\n * @constructor\n * @extends {Foo}\n */\nfunction Baz() {}\n"
+        + "Baz.prototype = new Foo();\n"
+        + "/** @override */\nBaz.prototype.bar = function() {};\n";
+    Result result = runTypeCheck(js);
+    assertEquals(0, diagnosticCount(result));
+  }
+
+  // checkDeclaredPropertyInheritance: @override with an incompatible type reports HIDDEN_SUPERCLASS_PROPERTY_MISMATCH
+  @Test
+  public void testCheckDeclaredPropertyInheritance_overrideTypeMismatch_reportsHiddenSuperclassMismatch()
+      throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\n"
+        + "/** @type {number} */\nFoo.prototype.bar = 1;\n"
+        + "/**\n * @constructor\n * @extends {Foo}\n */\nfunction Baz() {}\n"
+        + "Baz.prototype = new Foo();\n"
+        + "/**\n * @override\n * @type {string}\n */\nBaz.prototype.bar = 'hello';\n";
+    Result result = runTypeCheck(js);
+    assertTrue(diagnosticCount(result) >= 1);
+  }
+}

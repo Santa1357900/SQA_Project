@@ -1,0 +1,313 @@
+package com.fasterxml.jackson.databind.ser;
+
+import java.util.List;
+import java.util.ArrayList;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationConfig;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.BeanDescription;
+import com.fasterxml.jackson.databind.BeanPropertyDefinition;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.introspect.Annotations;
+import com.fasterxml.jackson.databind.introspect.AnnotatedMember;
+
+public class PropertyBuilderClaudeTest
+{
+    private ObjectMapper mapper;
+    private SerializationConfig config;
+    private BeanDescription plainBeanDesc;
+    private PropertyBuilder genericPb;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+        config = mapper.getSerializationConfig();
+        plainBeanDesc = config.introspect(mapper.constructType(PlainBean.class));
+        genericPb = new PropertyBuilder(config, plainBeanDesc);
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    public static class NonDefaultBean {
+        public int getX() { return 0; }
+    }
+
+    public static class PlainBean {
+        public String getValue() { return "x"; }
+    }
+
+    public static class DefaultCtorBean {
+        private int x = 5;
+        public DefaultCtorBean() { }
+        public int getX() { return x; }
+    }
+
+    public static class NoDefaultCtorBean {
+        private final String value;
+        public NoDefaultCtorBean(String value) { this.value = value; }
+        public String getValue() { return value; }
+    }
+
+    public static class BadTypeBean {
+        @JsonSerialize(as = Integer.class)
+        public String getValue() { return "x"; }
+    }
+
+    public static class ListPropBean {
+        public List<String> getItems() { return new ArrayList<String>(); }
+    }
+
+    // คุม branch: class-level @JsonInclude(NON_DEFAULT) -> inclPerType.getValueInclusion()==NON_DEFAULT -> _useRealPropertyDefaults=true
+    @Test
+    public void testConstructor_classLevelNonDefaultInclusion_setsUseRealPropertyDefaultsTrue() throws Throwable {
+        BeanDescription beanDesc = config.introspect(mapper.constructType(NonDefaultBean.class));
+        PropertyBuilder pb = new PropertyBuilder(config, beanDesc);
+        assertTrue(pb._useRealPropertyDefaults);
+        assertEquals(JsonInclude.Include.NON_DEFAULT, pb._defaultInclusion.getValueInclusion());
+    }
+
+    // คุม branch: ไม่มี annotation ระดับคลาส -> inclPerType ไม่ใช่ NON_DEFAULT -> _useRealPropertyDefaults=false
+    @Test
+    public void testConstructor_noInclusionAnnotation_setsUseRealPropertyDefaultsFalse() throws Throwable {
+        assertFalse(genericPb._useRealPropertyDefaults);
+    }
+
+    // คุม getClassAnnotations(): คืน Annotations ของ beanDesc ที่มี @JsonInclude
+    @Test
+    public void testGetClassAnnotations_classWithJsonInclude_hasAnnotation() throws Throwable {
+        BeanDescription beanDesc = config.introspect(mapper.constructType(NonDefaultBean.class));
+        PropertyBuilder pb = new PropertyBuilder(config, beanDesc);
+        Annotations ann = pb.getClassAnnotations();
+        assertNotNull(ann);
+        assertTrue(ann.has(JsonInclude.class));
+    }
+
+    // คุม buildWriter: path ปกติไม่มี annotation ใดๆ -> คืน BeanPropertyWriter ชื่อ property ถูกต้อง
+    @Test
+    public void testBuildWriter_simpleProperty_returnsWriterWithCorrectName() throws Throwable {
+        SerializerProvider prov = mapper.getSerializerProviderInstance();
+        BeanPropertyDefinition propDef = plainBeanDesc.findProperties().get(0);
+        AnnotatedMember am = propDef.getAccessor();
+        JavaType declaredType = mapper.constructType(String.class);
+        BeanPropertyWriter bpw = genericPb.buildWriter(prov, propDef, declaredType, null, null, null, am, false);
+        assertNotNull(bpw);
+        assertEquals(propDef.getName(), bpw.getName());
+    }
+
+    // คุม buildWriter: branch container-type + WRITE_EMPTY_JSON_ARRAYS disabled -> valueToSuppress ถูกตั้งค่า
+    @Test
+    public void testBuildWriter_containerPropertyEmptyArraysDisabled_returnsWriterNonNull() throws Throwable {
+        mapper.disable(SerializationFeature.WRITE_EMPTY_JSON_ARRAYS);
+        SerializationConfig localConfig = mapper.getSerializationConfig();
+        BeanDescription beanDesc = localConfig.introspect(mapper.constructType(ListPropBean.class));
+        PropertyBuilder pb = new PropertyBuilder(localConfig, beanDesc);
+        SerializerProvider prov = mapper.getSerializerProviderInstance();
+        BeanPropertyDefinition propDef = beanDesc.findProperties().get(0);
+        AnnotatedMember am = propDef.getAccessor();
+        JavaType declaredType = mapper.getTypeFactory().constructCollectionType(ArrayList.class, String.class);
+        BeanPropertyWriter bpw = pb.buildWriter(prov, propDef, declaredType, null, null, null, am, false);
+        assertNotNull(bpw);
+        assertEquals(propDef.getName(), bpw.getName());
+    }
+
+    // คุม findSerializationType: useStaticTyping=false, ไม่มี annotation -> คืน null
+    @Test
+    public void testFindSerializationType_dynamicTypingNoAnnotation_returnsNull() throws Throwable {
+        BeanPropertyDefinition propDef = plainBeanDesc.findProperties().get(0);
+        AnnotatedMember member = propDef.getAccessor();
+        JavaType declaredType = mapper.constructType(String.class);
+        JavaType result = genericPb.findSerializationType(member, false, declaredType);
+        assertNull(result);
+    }
+
+    // คุม findSerializationType: useStaticTyping=true, ไม่มี annotation -> คืน declaredType.withStaticTyping() ไม่ null
+    @Test
+    public void testFindSerializationType_staticTypingNoAnnotation_returnsStaticDeclaredType() throws Throwable {
+        BeanPropertyDefinition propDef = plainBeanDesc.findProperties().get(0);
+        AnnotatedMember member = propDef.getAccessor();
+        JavaType declaredType = mapper.constructType(String.class);
+        JavaType result = genericPb.findSerializationType(member, true, declaredType);
+        assertNotNull(result);
+        assertEquals(String.class, result.getRawClass());
+    }
+
+    // คุม findSerializationType: @JsonSerialize(as=...) ไม่สัมพันธ์กับ declaredType -> throw IllegalArgumentException
+    @Test
+    public void testFindSerializationType_incompatibleJsonSerializeAs_throwsIllegalArgumentException() throws Throwable {
+        BeanDescription beanDesc = config.introspect(mapper.constructType(BadTypeBean.class));
+        PropertyBuilder pb = new PropertyBuilder(config, beanDesc);
+        BeanPropertyDefinition propDef = beanDesc.findProperties().get(0);
+        AnnotatedMember member = propDef.getAccessor();
+        JavaType declaredType = mapper.constructType(String.class);
+        try {
+            pb.findSerializationType(member, false, declaredType);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Illegal concrete-type annotation"));
+        }
+    }
+
+    // คุม getDefaultBean: มี no-arg constructor -> instantiateBean สำเร็จ คืน instance จริง
+    @Test
+    public void testGetDefaultBean_withNoArgConstructor_returnsInstance() throws Throwable {
+        BeanDescription beanDesc = config.introspect(mapper.constructType(DefaultCtorBean.class));
+        PropertyBuilder pb = new PropertyBuilder(config, beanDesc);
+        Object bean = pb.getDefaultBean();
+        assertNotNull(bean);
+        assertTrue(bean instanceof DefaultCtorBean);
+    }
+
+    // คุม getDefaultBean: ไม่มี no-arg constructor -> instantiateBean ล้มเหลว -> marker -> คืน null
+    @Test
+    public void testGetDefaultBean_withoutNoArgConstructor_returnsNull() throws Throwable {
+        BeanDescription beanDesc = config.introspect(mapper.constructType(NoDefaultCtorBean.class));
+        PropertyBuilder pb = new PropertyBuilder(config, beanDesc);
+        Object bean = pb.getDefaultBean();
+        assertNull(bean);
+    }
+
+    // คุม getPropertyDefaultValue: defaultBean != null -> คืนค่าจริงจาก property ของ instance เริ่มต้น
+    @Test
+    public void testGetPropertyDefaultValue_withDefaultBean_returnsActualPropertyValue() throws Throwable {
+        BeanDescription beanDesc = config.introspect(mapper.constructType(DefaultCtorBean.class));
+        PropertyBuilder pb = new PropertyBuilder(config, beanDesc);
+        BeanPropertyDefinition propDef = beanDesc.findProperties().get(0);
+        AnnotatedMember member = propDef.getAccessor();
+        JavaType intType = mapper.constructType(int.class);
+        Object def = pb.getPropertyDefaultValue(propDef.getName(), member, intType);
+        assertEquals(Integer.valueOf(5), def);
+    }
+
+    // คุม getPropertyDefaultValue: defaultBean == null -> fallback ไปที่ getDefaultValue(type)
+    @Test
+    public void testGetPropertyDefaultValue_withoutDefaultBean_fallsBackToTypeDefault() throws Throwable {
+        BeanDescription beanDesc = config.introspect(mapper.constructType(NoDefaultCtorBean.class));
+        PropertyBuilder pb = new PropertyBuilder(config, beanDesc);
+        BeanPropertyDefinition propDef = beanDesc.findProperties().get(0);
+        AnnotatedMember member = propDef.getAccessor();
+        JavaType stringType = mapper.constructType(String.class);
+        Object def = pb.getPropertyDefaultValue(propDef.getName(), member, stringType);
+        assertEquals("", def);
+    }
+
+    // คุม getDefaultValue: int primitive -> 0
+    @Test
+    public void testGetDefaultValue_intPrimitive_returnsIntegerZero() throws Throwable {
+        JavaType type = mapper.constructType(int.class);
+        Object def = genericPb.getDefaultValue(type);
+        assertEquals(Integer.valueOf(0), def);
+    }
+
+    // คุม getDefaultValue: wrapper Integer ก็ถือเป็น primitive-wrapper ตาม Javadoc -> 0
+    @Test
+    public void testGetDefaultValue_integerWrapper_returnsIntegerZero() throws Throwable {
+        JavaType type = mapper.constructType(Integer.class);
+        Object def = genericPb.getDefaultValue(type);
+        assertEquals(Integer.valueOf(0), def);
+    }
+
+    // คุม getDefaultValue: boolean primitive -> false
+    @Test
+    public void testGetDefaultValue_booleanPrimitive_returnsFalse() throws Throwable {
+        JavaType type = mapper.constructType(boolean.class);
+        Object def = genericPb.getDefaultValue(type);
+        assertEquals(Boolean.FALSE, def);
+    }
+
+    // คุม getDefaultValue: long primitive -> 0L
+    @Test
+    public void testGetDefaultValue_longPrimitive_returnsLongZero() throws Throwable {
+        JavaType type = mapper.constructType(long.class);
+        Object def = genericPb.getDefaultValue(type);
+        assertEquals(Long.valueOf(0L), def);
+    }
+
+    // คุม getDefaultValue: double primitive -> 0.0
+    @Test
+    public void testGetDefaultValue_doublePrimitive_returnsDoubleZero() throws Throwable {
+        JavaType type = mapper.constructType(double.class);
+        Object def = genericPb.getDefaultValue(type);
+        assertEquals(Double.valueOf(0.0), def);
+    }
+
+    // คุม getDefaultValue: String -> ""
+    @Test
+    public void testGetDefaultValue_stringType_returnsEmptyString() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        Object def = genericPb.getDefaultValue(type);
+        assertEquals("", def);
+    }
+
+    // คุม getDefaultValue: container type (Collection) -> JsonInclude.Include.NON_EMPTY marker
+    @Test
+    public void testGetDefaultValue_collectionType_returnsNonEmptyMarker() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructCollectionType(ArrayList.class, String.class);
+        Object def = genericPb.getDefaultValue(type);
+        assertEquals(JsonInclude.Include.NON_EMPTY, def);
+    }
+
+    // คุม getDefaultValue: ไม่ใช่ primitive/container/String -> null
+    @Test
+    public void testGetDefaultValue_plainObjectType_returnsNull() throws Throwable {
+        JavaType type = mapper.constructType(Object.class);
+        Object def = genericPb.getDefaultValue(type);
+        assertNull(def);
+    }
+
+    // คุม _throwWrapped: e เป็น RuntimeException โดยตรง ไม่มี cause -> rethrow ตัวเดิม
+    @Test
+    public void testThrowWrapped_runtimeExceptionNoCause_rethrowsSameException() throws Throwable {
+        IllegalStateException ex = new IllegalStateException("boom");
+        try {
+            genericPb._throwWrapped(ex, "value", new Object());
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            assertSame(ex, expected);
+        }
+    }
+
+    // คุม _throwWrapped: e เป็น checked Exception ไม่มี cause -> ห่อเป็น IllegalArgumentException
+    @Test
+    public void testThrowWrapped_checkedExceptionNoCause_wrapsInIllegalArgumentException() throws Throwable {
+        Exception ex = new Exception("checked");
+        try {
+            genericPb._throwWrapped(ex, "value", new PlainBean());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Failed to get property"));
+        }
+    }
+
+    // คุม _throwWrapped: ไล่ cause chain จนถึง RuntimeException ที่ลึกที่สุด -> rethrow cause นั้น
+    @Test
+    public void testThrowWrapped_causeChainEndsInRuntimeException_rethrowsDeepestCause() throws Throwable {
+        IllegalStateException inner = new IllegalStateException("inner");
+        Exception outer = new Exception("outer", inner);
+        try {
+            genericPb._throwWrapped(outer, "value", new Object());
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            assertSame(inner, expected);
+        }
+    }
+
+    // คุม _throwWrapped: ไล่ cause chain จนถึง Error -> rethrow Error นั้น
+    @Test
+    public void testThrowWrapped_causeChainEndsInError_rethrowsError() throws Throwable {
+        AssertionError inner = new AssertionError("inner-error");
+        Exception outer = new Exception("outer", inner);
+        try {
+            genericPb._throwWrapped(outer, "value", new Object());
+            fail("expected AssertionError");
+        } catch (AssertionError expected) {
+            assertSame(inner, expected);
+        }
+    }
+}

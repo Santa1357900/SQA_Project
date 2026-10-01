@@ -1,0 +1,261 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.google.javascript.rhino.InputId;
+import com.google.javascript.rhino.Node;
+
+import org.junit.Before;
+import org.junit.Test;
+
+public class JsAstClaudeTest {
+
+  private Compiler compiler;
+  private CompilerOptions options;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    options = new CompilerOptions();
+    compiler.initOptions(options);
+  }
+
+  // Constructor: fields fileName/inputId/sourceFile are populated from the given SourceFile
+  @Test
+  public void testConstructor_validSourceFile_storesInputIdAndSourceFile() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("ctor.js", "var x;");
+    JsAst ast = new JsAst(sf);
+    assertNotNull(ast.getInputId());
+    assertSame(sf, ast.getSourceFile());
+  }
+
+  // Constructor boundary: empty string file name is accepted and preserved verbatim
+  @Test
+  public void testConstructor_emptyFileName_allowedAndPreserved() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("", "var x;");
+    JsAst ast = new JsAst(sf);
+    assertEquals("", ast.getSourceFile().getName());
+    assertNotNull(ast.getInputId());
+  }
+
+  // getAstRoot: valid simple statement parses without halting errors, root non-null
+  @Test
+  public void testGetAstRoot_validSimpleStatement_returnsNonNullRootWithoutHaltingErrors() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("valid1.js", "var x = 1;");
+    JsAst ast = new JsAst(sf);
+    Node root = ast.getAstRoot(compiler);
+    assertNotNull(root);
+    assertFalse(compiler.hasHaltingErrors());
+  }
+
+  // getAstRoot: empty source (0 statements) is valid JS, no halting errors
+  @Test
+  public void testGetAstRoot_emptySource_returnsNonNullRootWithoutHaltingErrors() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("empty.js", "");
+    JsAst ast = new JsAst(sf);
+    Node root = ast.getAstRoot(compiler);
+    assertNotNull(root);
+    assertFalse(compiler.hasHaltingErrors());
+  }
+
+  // getAstRoot: whitespace-only source is valid JS, no halting errors
+  @Test
+  public void testGetAstRoot_whitespaceOnlySource_returnsNonNullRootWithoutHaltingErrors() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("ws.js", "   \n\t  ");
+    JsAst ast = new JsAst(sf);
+    Node root = ast.getAstRoot(compiler);
+    assertNotNull(root);
+    assertFalse(compiler.hasHaltingErrors());
+  }
+
+  // getAstRoot: multiple statements and a function declaration parse without error (loop, multiple branches)
+  @Test
+  public void testGetAstRoot_multipleStatementsAndFunction_returnsNonNullRootWithoutHaltingErrors() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("multi.js",
+        "var a = 1; var b = 2; function f() { return a + b; }");
+    JsAst ast = new JsAst(sf);
+    Node root = ast.getAstRoot(compiler);
+    assertNotNull(root);
+    assertFalse(compiler.hasHaltingErrors());
+  }
+
+  // getAstRoot: unicode escape sequence inside a string literal parses without error
+  @Test
+  public void testGetAstRoot_unicodeEscapeInStringLiteral_returnsNonNullRootWithoutHaltingErrors() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("unicode.js", "var s = '\\u00e9\\n';");
+    JsAst ast = new JsAst(sf);
+    Node root = ast.getAstRoot(compiler);
+    assertNotNull(root);
+    assertFalse(compiler.hasHaltingErrors());
+  }
+
+  // getAstRoot: second call with root already cached (root != null) must not reparse, same instance returned
+  @Test
+  public void testGetAstRoot_calledTwiceWithoutClear_returnsSameCachedRootInstance() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("cache.js", "var x = 1;");
+    JsAst ast = new JsAst(sf);
+    Node root1 = ast.getAstRoot(compiler);
+    Node root2 = ast.getAstRoot(compiler);
+    assertSame(root1, root2);
+  }
+
+  // getAstRoot: unterminated string literal is a parse error -> halting error, dummy root still non-null
+  @Test
+  public void testGetAstRoot_unterminatedStringLiteral_triggersHaltingError() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("bad1.js", "var s = 'abc;");
+    JsAst ast = new JsAst(sf);
+    Node root = ast.getAstRoot(compiler);
+    assertNotNull(root);
+    assertTrue(compiler.hasHaltingErrors());
+  }
+
+  // getAstRoot: mismatched/unclosed braces is a parse error -> halting error, dummy root still non-null
+  @Test
+  public void testGetAstRoot_mismatchedBraces_triggersHaltingError() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("bad2.js", "function f() { var x = 1;");
+    JsAst ast = new JsAst(sf);
+    Node root = ast.getAstRoot(compiler);
+    assertNotNull(root);
+    assertTrue(compiler.hasHaltingErrors());
+  }
+
+  // getAstRoot: missing identifier after var keyword is a syntax error -> halting error
+  @Test
+  public void testGetAstRoot_missingIdentifierAfterVar_triggersHaltingError() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("bad3.js", "var = 5;");
+    JsAst ast = new JsAst(sf);
+    Node root = ast.getAstRoot(compiler);
+    assertNotNull(root);
+    assertTrue(compiler.hasHaltingErrors());
+  }
+
+  // getAstRoot: setSourceFile swaps the file but does not clear the cached root (only clearAst does)
+  @Test
+  public void testGetAstRoot_afterSetSourceFileWithoutClearAst_returnsStaleCachedRootInstance() throws Throwable {
+    SourceFile sf1 = SourceFile.fromCode("stale.js", "var a = 1;");
+    JsAst ast = new JsAst(sf1);
+    Node root1 = ast.getAstRoot(compiler);
+    SourceFile sf2 = SourceFile.fromCode("stale.js", "var a = 2;");
+    ast.setSourceFile(sf2);
+    Node root2 = ast.getAstRoot(compiler);
+    assertSame(root1, root2);
+  }
+
+  // clearAst: resets root to null so the next getAstRoot triggers a fresh parse (new Node instance)
+  @Test
+  public void testClearAst_resetsRootCausingReparseWithNewInstance() throws Throwable {
+    SourceFile sf1 = SourceFile.fromCode("clear1.js", "var a = 1;");
+    JsAst ast = new JsAst(sf1);
+    Node root1 = ast.getAstRoot(compiler);
+    ast.clearAst();
+    ast.setSourceFile(SourceFile.fromCode("clear1.js", "var a = 2;"));
+    Node root2 = ast.getAstRoot(compiler);
+    assertNotSame(root1, root2);
+  }
+
+  // clearAst: does not modify the inputId field, only resets root and clears cached source
+  @Test
+  public void testClearAst_doesNotChangeInputId() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("clear2.js", "var a = 1;");
+    JsAst ast = new JsAst(sf);
+    InputId id1 = ast.getInputId();
+    ast.clearAst();
+    InputId id2 = ast.getInputId();
+    assertSame(id1, id2);
+  }
+
+  // clearAst: does not replace the sourceFile reference, only mutates its cached source state
+  @Test
+  public void testClearAst_doesNotChangeSourceFileReference() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("clear3.js", "var a = 1;");
+    JsAst ast = new JsAst(sf);
+    ast.clearAst();
+    assertSame(sf, ast.getSourceFile());
+  }
+
+  // getInputId: repeated calls return the exact same InputId instance (no recomputation)
+  @Test
+  public void testGetInputId_returnsSameInstanceOnRepeatedCalls() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("id1.js", "var a;");
+    JsAst ast = new JsAst(sf);
+    InputId id1 = ast.getInputId();
+    InputId id2 = ast.getInputId();
+    assertSame(id1, id2);
+  }
+
+  // getInputId: immediately available (non-null) right after construction, before any parsing
+  @Test
+  public void testGetInputId_notNullImmediatelyAfterConstruction() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("id2.js", "var a;");
+    JsAst ast = new JsAst(sf);
+    assertNotNull(ast.getInputId());
+  }
+
+  // getSourceFile: returns exactly the instance passed to the constructor
+  @Test
+  public void testGetSourceFile_returnsConstructorProvidedInstance() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("sf1.js", "var a;");
+    JsAst ast = new JsAst(sf);
+    assertSame(sf, ast.getSourceFile());
+  }
+
+  // getSourceFile: reflects the new instance after a successful setSourceFile call
+  @Test
+  public void testGetSourceFile_reflectsUpdateAfterSetSourceFile() throws Throwable {
+    SourceFile sf1 = SourceFile.fromCode("sf2.js", "var a;");
+    JsAst ast = new JsAst(sf1);
+    SourceFile sf2 = SourceFile.fromCode("sf2.js", "var b;");
+    ast.setSourceFile(sf2);
+    assertSame(sf2, ast.getSourceFile());
+  }
+
+  // setSourceFile: same file name but a different SourceFile instance is accepted and stored
+  @Test
+  public void testSetSourceFile_sameFileNameDifferentInstance_updatesSourceFile() throws Throwable {
+    SourceFile sf1 = SourceFile.fromCode("set1.js", "var a;");
+    JsAst ast = new JsAst(sf1);
+    SourceFile sf2 = SourceFile.fromCode("set1.js", "var a = 2;");
+    ast.setSourceFile(sf2);
+    assertEquals("set1.js", ast.getSourceFile().getName());
+  }
+
+  // setSourceFile: passing back the exact same instance is a no-op, no exception thrown
+  @Test
+  public void testSetSourceFile_sameFileNameSameInstance_noExceptionThrown() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("set2.js", "var a;");
+    JsAst ast = new JsAst(sf);
+    ast.setSourceFile(sf);
+    assertSame(sf, ast.getSourceFile());
+  }
+
+  // setSourceFile: mismatched file name violates the precondition -> IllegalStateException
+  @Test
+  public void testSetSourceFile_differentFileName_throwsIllegalStateException() throws Throwable {
+    SourceFile sf1 = SourceFile.fromCode("set3.js", "var a;");
+    JsAst ast = new JsAst(sf1);
+    SourceFile sf2 = SourceFile.fromCode("other3.js", "var a;");
+    try {
+      ast.setSourceFile(sf2);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // setSourceFile: null file causes a NullPointerException when its name is dereferenced
+  @Test
+  public void testSetSourceFile_nullFile_throwsNullPointerException() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("set4.js", "var a;");
+    JsAst ast = new JsAst(sf);
+    try {
+      ast.setSourceFile(null);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+}

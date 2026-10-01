@@ -1,0 +1,299 @@
+package com.fasterxml.jackson.databind.type;
+
+import java.util.Map;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.ArrayList;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.databind.JavaType;
+
+public class SimpleTypeClaudeTest
+{
+    // constructUnsafe: by-passes checks, simple class -> not a container type
+    @Test
+    public void testConstructUnsafe_simpleClass_notContainerType() throws Throwable {
+        SimpleType t = SimpleType.constructUnsafe(String.class);
+        assertFalse(t.isContainerType());
+    }
+
+    // constructUnsafe: no sanity checks, array class allowed (unlike construct())
+    @Test
+    public void testConstructUnsafe_arrayClass_doesNotThrow() throws Throwable {
+        SimpleType t = SimpleType.constructUnsafe(int[].class);
+        assertFalse(t.isContainerType());
+    }
+
+    // constructUnsafe: no sanity checks, Map class allowed (unlike construct())
+    @Test
+    public void testConstructUnsafe_mapClass_doesNotThrowUnlikeConstruct() throws Throwable {
+        SimpleType t = SimpleType.constructUnsafe(HashMap.class);
+        assertNotNull(t);
+    }
+
+    // construct(): normal simple class returns non-container SimpleType
+    @Test
+    public void testConstruct_simpleClass_notContainerType() throws Throwable {
+        SimpleType t = SimpleType.construct(String.class);
+        assertFalse(t.isContainerType());
+    }
+
+    // construct(): superclass chain recursion should work for deeper hierarchy
+    @Test
+    public void testConstruct_classWithSuperclassHierarchy_notContainerType() throws Throwable {
+        SimpleType t = SimpleType.construct(Integer.class);
+        assertFalse(t.isContainerType());
+    }
+
+    // construct(): Map interface must throw IllegalArgumentException
+    @Test
+    public void testConstruct_mapInterface_throwsIllegalArgumentException() throws Throwable {
+        try {
+            SimpleType.construct(Map.class);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Map"));
+        }
+    }
+
+    // construct(): concrete Map implementation must also throw
+    @Test
+    public void testConstruct_concreteMapClass_throwsIllegalArgumentException() throws Throwable {
+        try {
+            SimpleType.construct(HashMap.class);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Map"));
+        }
+    }
+
+    // construct(): Collection interface must throw IllegalArgumentException
+    @Test
+    public void testConstruct_collectionInterface_throwsIllegalArgumentException() throws Throwable {
+        try {
+            SimpleType.construct(Collection.class);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Collection"));
+        }
+    }
+
+    // construct(): concrete Collection implementation must also throw
+    @Test
+    public void testConstruct_concreteListClass_throwsIllegalArgumentException() throws Throwable {
+        try {
+            SimpleType.construct(ArrayList.class);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Collection"));
+        }
+    }
+
+    // construct(): array type must throw IllegalArgumentException
+    @Test
+    public void testConstruct_arrayClass_throwsIllegalArgumentException() throws Throwable {
+        try {
+            SimpleType.construct(int[].class);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("array"));
+        }
+    }
+
+    // _narrow(): same class -> identity branch returns this
+    @Test
+    public void testNarrow_sameClass_returnsSameInstance() throws Throwable {
+        SimpleType base = new SimpleType(String.class);
+        JavaType result = base._narrow(String.class);
+        assertSame(base, result);
+    }
+
+    // _narrow(): different class -> new instance representing that subclass
+    @Test
+    public void testNarrow_differentClass_returnsNewInstanceWithNewClass() throws Throwable {
+        SimpleType base = new SimpleType(String.class);
+        JavaType result = base._narrow(Integer.class);
+        assertNotSame(base, result);
+        assertEquals("[simple type, class java.lang.Integer]", result.toString());
+    }
+
+    // withContentType(): must always throw for simple types
+    @Test
+    public void testWithContentType_throwsIllegalArgumentException() throws Throwable {
+        SimpleType base = new SimpleType(String.class);
+        try {
+            base.withContentType(base);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("content types"));
+        }
+    }
+
+    // withTypeHandler(): same handler (null==null) -> returns this
+    @Test
+    public void testWithTypeHandler_sameHandlerNull_returnsSameInstance() throws Throwable {
+        SimpleType base = new SimpleType(String.class);
+        assertSame(base, base.withTypeHandler(null));
+    }
+
+    // withTypeHandler(): different handler -> new instance that then stabilizes
+    @Test
+    public void testWithTypeHandler_differentHandler_returnsNewInstanceThatSticks() throws Throwable {
+        SimpleType base = new SimpleType(String.class);
+        Object handler = new Object();
+        SimpleType withHandler = base.withTypeHandler(handler);
+        assertNotSame(base, withHandler);
+        assertSame(withHandler, withHandler.withTypeHandler(handler));
+    }
+
+    // withContentTypeHandler(): must always throw for simple types
+    @Test
+    public void testWithContentTypeHandler_throwsIllegalArgumentException() throws Throwable {
+        SimpleType base = new SimpleType(String.class);
+        try {
+            base.withContentTypeHandler(new Object());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("content types"));
+        }
+    }
+
+    // withValueHandler(): same handler (null==null) -> returns this
+    @Test
+    public void testWithValueHandler_sameHandlerNull_returnsSameInstance() throws Throwable {
+        SimpleType base = new SimpleType(String.class);
+        assertSame(base, base.withValueHandler(null));
+    }
+
+    // withValueHandler(): different handler -> new instance that then stabilizes
+    @Test
+    public void testWithValueHandler_differentHandler_returnsNewInstanceThatSticks() throws Throwable {
+        SimpleType base = new SimpleType(String.class);
+        Object handler = new Object();
+        SimpleType withHandler = base.withValueHandler(handler);
+        assertNotSame(base, withHandler);
+        assertSame(withHandler, withHandler.withValueHandler(handler));
+    }
+
+    // withContentValueHandler(): must always throw for simple types
+    @Test
+    public void testWithContentValueHandler_throwsIllegalArgumentException() throws Throwable {
+        SimpleType base = new SimpleType(String.class);
+        try {
+            base.withContentValueHandler(new Object());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("content types"));
+        }
+    }
+
+    // withStaticTyping(): already static -> returns this (ternary true branch)
+    @Test
+    public void testWithStaticTyping_alreadyStatic_returnsSameInstance() throws Throwable {
+        SimpleType staticType = new SimpleType(String.class, TypeBindings.emptyBindings(),
+                null, null, null, null, true);
+        assertSame(staticType, staticType.withStaticTyping());
+    }
+
+    // withStaticTyping(): not static -> new instance, then stabilizes to static
+    @Test
+    public void testWithStaticTyping_notStatic_returnsNewInstanceStable() throws Throwable {
+        SimpleType nonStatic = new SimpleType(String.class);
+        SimpleType t1 = nonStatic.withStaticTyping();
+        assertNotSame(nonStatic, t1);
+        SimpleType t2 = t1.withStaticTyping();
+        assertSame(t1, t2);
+    }
+
+    // refine(): SimpleType is not specialized, must always return null
+    @Test
+    public void testRefine_alwaysReturnsNull() throws Throwable {
+        SimpleType base = new SimpleType(String.class);
+        JavaType result = base.refine(Integer.class, TypeBindings.emptyBindings(), null, null);
+        assertNull(result);
+    }
+
+    // buildCanonicalName() via toString(): no generic bindings -> just class name
+    @Test
+    public void testToString_noBindings_formatsWithClassName() throws Throwable {
+        SimpleType t = new SimpleType(String.class);
+        assertEquals("[simple type, class java.lang.String]", t.toString());
+    }
+
+    // isContainerType(): always false, even for classes that look like containers
+    @Test
+    public void testIsContainerType_alwaysFalseForVariousClasses() throws Throwable {
+        assertFalse(new SimpleType(String.class).isContainerType());
+        assertFalse(new SimpleType(HashMap.class).isContainerType());
+        assertFalse(new SimpleType(ArrayList.class).isContainerType());
+    }
+
+    // getErasedSignature(): appends content to provided StringBuilder
+    @Test
+    public void testGetErasedSignature_appendsContent() throws Throwable {
+        SimpleType t = new SimpleType(String.class);
+        StringBuilder sb = new StringBuilder();
+        StringBuilder result = t.getErasedSignature(sb);
+        assertNotNull(result);
+        assertTrue(result.length() > 0);
+    }
+
+    // getGenericSignature(): no bindings -> no '<' block, must end with ';'
+    @Test
+    public void testGetGenericSignature_noBindings_endsWithSemicolonNoAngleBracket() throws Throwable {
+        SimpleType t = new SimpleType(String.class);
+        StringBuilder sb = new StringBuilder();
+        StringBuilder result = t.getGenericSignature(sb);
+        String s = result.toString();
+        assertTrue(s.endsWith(";"));
+        assertFalse(s.contains("<"));
+    }
+
+    // equals(): reflexive identity branch (o == this)
+    @Test
+    public void testEquals_sameInstance_true() throws Throwable {
+        SimpleType t = new SimpleType(String.class);
+        assertTrue(t.equals(t));
+    }
+
+    // equals(): null argument branch must return false
+    @Test
+    public void testEquals_null_false() throws Throwable {
+        SimpleType t = new SimpleType(String.class);
+        assertFalse(t.equals(null));
+    }
+
+    // equals(): different runtime type branch must return false
+    @Test
+    public void testEquals_differentObjectType_false() throws Throwable {
+        SimpleType t = new SimpleType(String.class);
+        assertFalse(t.equals("not a simple type"));
+    }
+
+    // equals(): same raw class and same (empty) bindings -> true
+    @Test
+    public void testEquals_sameClassEmptyBindings_true() throws Throwable {
+        SimpleType t1 = new SimpleType(String.class);
+        SimpleType t2 = new SimpleType(String.class);
+        assertTrue(t1.equals(t2));
+    }
+
+    // equals(): different raw class -> false
+    @Test
+    public void testEquals_differentClass_false() throws Throwable {
+        SimpleType t1 = new SimpleType(String.class);
+        SimpleType t2 = new SimpleType(Integer.class);
+        assertFalse(t1.equals(t2));
+    }
+
+    // copy constructor: preserves class identity, matches original via equals/toString
+    @Test
+    public void testCopyConstructor_sameClassEqualsOriginal() throws Throwable {
+        SimpleType original = new SimpleType(String.class);
+        SimpleType copy = new SimpleType(original);
+        assertTrue(copy.equals(original));
+        assertEquals(original.toString(), copy.toString());
+    }
+}

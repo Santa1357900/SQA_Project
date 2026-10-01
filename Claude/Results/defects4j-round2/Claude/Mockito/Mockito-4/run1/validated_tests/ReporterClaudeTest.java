@@ -1,0 +1,564 @@
+package org.mockito.exceptions;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.mockito.exceptions.base.MockitoException;
+import org.mockito.exceptions.base.MockitoAssertionError;
+import org.mockito.internal.debugging.LocationImpl;
+import org.mockito.invocation.Location;
+import org.mockito.internal.matchers.LocalizedMatcher;
+
+public class ReporterClaudeTest {
+
+    private Reporter reporter;
+    private String dummyField;
+
+    @Before
+    public void setUp() throws Throwable {
+        reporter = new Reporter();
+    }
+
+    // checkedExceptionInvalid: no branches, must wrap throwable description into MockitoException
+    @Test
+    public void testCheckedExceptionInvalid_withThrowable_throwsMockitoExceptionWithDetails() throws Throwable {
+        try {
+            reporter.checkedExceptionInvalid(new RuntimeException("boomCause"));
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("boomCause"));
+        }
+    }
+
+    // cannotStubWithNullThrowable: straight-line throw
+    @Test
+    public void testCannotStubWithNullThrowable_throwsMockitoException() throws Throwable {
+        try {
+            reporter.cannotStubWithNullThrowable();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("Cannot stub with null throwable"));
+        }
+    }
+
+    // unfinishedStubbing: covers Location rendering in message
+    @Test
+    public void testUnfinishedStubbing_withLocation_throwsUnfinishedStubbingException() throws Throwable {
+        Location loc = new LocationImpl();
+        try {
+            reporter.unfinishedStubbing(loc);
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("UnfinishedStubbingException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("Unfinished stubbing detected"));
+        }
+    }
+
+    // incorrectUseOfApi: straight-line throw
+    @Test
+    public void testIncorrectUseOfApi_throwsMockitoException() throws Throwable {
+        try {
+            reporter.incorrectUseOfApi();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("Incorrect use of API"));
+        }
+    }
+
+    // missingMethodInvocation: straight-line throw, specific exception type
+    @Test
+    public void testMissingMethodInvocation_throwsMissingMethodInvocationException() throws Throwable {
+        try {
+            reporter.missingMethodInvocation();
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("MissingMethodInvocationException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("when() requires an argument"));
+        }
+    }
+
+    // unfinishedVerificationException: covers Location rendering
+    @Test
+    public void testUnfinishedVerificationException_withLocation_throwsUnfinishedVerificationException() throws Throwable {
+        Location loc = new LocationImpl();
+        try {
+            reporter.unfinishedVerificationException(loc);
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("UnfinishedVerificationException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("Missing method call for verify(mock)"));
+        }
+    }
+
+    // notAMockPassedToVerify: covers type.getSimpleName() usage
+    @Test
+    public void testNotAMockPassedToVerify_withClass_throwsNotAMockException() throws Throwable {
+        try {
+            reporter.notAMockPassedToVerify(String.class);
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("NotAMockException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("String"));
+            assertTrue(e.getMessage().contains("is not a mock"));
+        }
+    }
+
+    // nullPassedToVerify: straight-line throw, distinct exception from notAMock variant
+    @Test
+    public void testNullPassedToVerify_throwsNullInsteadOfMockException() throws Throwable {
+        try {
+            reporter.nullPassedToVerify();
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("NullInsteadOfMockException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("should be a mock but is null"));
+        }
+    }
+
+    // notAMockPassedToWhenMethod: straight-line throw
+    @Test
+    public void testNotAMockPassedToWhenMethod_throwsNotAMockException() throws Throwable {
+        try {
+            reporter.notAMockPassedToWhenMethod();
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("NotAMockException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("Argument passed to when() is not a mock"));
+        }
+    }
+
+    // nullPassedToWhenMethod: straight-line throw
+    @Test
+    public void testNullPassedToWhenMethod_throwsNullInsteadOfMockException() throws Throwable {
+        try {
+            reporter.nullPassedToWhenMethod();
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("NullInsteadOfMockException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("Argument passed to when() is null"));
+        }
+    }
+
+    // mocksHaveToBePassedToVerifyNoMoreInteractions: straight-line throw
+    @Test
+    public void testMocksHaveToBePassedToVerifyNoMoreInteractions_throwsMockitoException() throws Throwable {
+        try {
+            reporter.mocksHaveToBePassedToVerifyNoMoreInteractions();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("Method requires argument(s)"));
+        }
+    }
+
+    // notAMockPassedToVerifyNoMoreInteractions: straight-line throw
+    @Test
+    public void testNotAMockPassedToVerifyNoMoreInteractions_throwsNotAMockException() throws Throwable {
+        try {
+            reporter.notAMockPassedToVerifyNoMoreInteractions();
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("NotAMockException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("Argument(s) passed is not a mock"));
+        }
+    }
+
+    // notAMockPassedWhenCreatingInOrder: straight-line throw
+    @Test
+    public void testNotAMockPassedWhenCreatingInOrder_throwsNotAMockException() throws Throwable {
+        try {
+            reporter.notAMockPassedWhenCreatingInOrder();
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("NotAMockException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("Pass mocks that require verification in order"));
+        }
+    }
+
+    // nullPassedWhenCreatingInOrder: straight-line throw
+    @Test
+    public void testNullPassedWhenCreatingInOrder_throwsNullInsteadOfMockException() throws Throwable {
+        try {
+            reporter.nullPassedWhenCreatingInOrder();
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("NullInsteadOfMockException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("Pass mocks that require verification in order"));
+        }
+    }
+
+    // mocksHaveToBePassedWhenCreatingInOrder: straight-line throw
+    @Test
+    public void testMocksHaveToBePassedWhenCreatingInOrder_throwsMockitoException() throws Throwable {
+        try {
+            reporter.mocksHaveToBePassedWhenCreatingInOrder();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("InOrder inOrder = inOrder(mockOne, mockTwo)"));
+        }
+    }
+
+    // inOrderRequiresFamiliarMock: straight-line throw
+    @Test
+    public void testInOrderRequiresFamiliarMock_throwsMockitoException() throws Throwable {
+        try {
+            reporter.inOrderRequiresFamiliarMock();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("InOrder can only verify mocks"));
+        }
+    }
+
+    // invalidUseOfMatchers: covers empty matcher list branch, checks counts rendered
+    @Test
+    public void testInvalidUseOfMatchers_withEmptyList_messageContainsCounts() throws Throwable {
+        List<LocalizedMatcher> matchers = new ArrayList<LocalizedMatcher>();
+        try {
+            reporter.invalidUseOfMatchers(3, matchers);
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("InvalidUseOfMatchersException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("3 matchers expected, 0 recorded"));
+        }
+    }
+
+    // incorrectUseOfAdditionalMatchers: covers empty matcherStack branch, name interpolation
+    @Test
+    public void testIncorrectUseOfAdditionalMatchers_withEmptyCollection_messageContainsNameAndCounts() throws Throwable {
+        List<LocalizedMatcher> matchers = new ArrayList<LocalizedMatcher>();
+        try {
+            reporter.incorrectUseOfAdditionalMatchers("myAdd", 2, matchers);
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("InvalidUseOfMatchersException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("myAdd"));
+            assertTrue(e.getMessage().contains("2 sub matchers expected, 0 recorded"));
+        }
+    }
+
+    // stubPassedToVerify: straight-line throw
+    @Test
+    public void testStubPassedToVerify_throwsCannotVerifyStubOnlyMock() throws Throwable {
+        try {
+            reporter.stubPassedToVerify();
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("CannotVerifyStubOnlyMock", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("stubOnly() mock"));
+        }
+    }
+
+    // reportNoSubMatchersFound: covers additionalMatcherName interpolation
+    @Test
+    public void testReportNoSubMatchersFound_withName_messageContainsName() throws Throwable {
+        try {
+            reporter.reportNoSubMatchersFound("addM");
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("InvalidUseOfMatchersException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("No matchers found for additional matcher addM"));
+        }
+    }
+
+    // argumentsAreDifferent: delegates to JUnitTool, oracle checks both values surface in message
+    @Test
+    public void testArgumentsAreDifferent_withWantedActual_throwsWithBothValuesInMessage() throws Throwable {
+        Location loc = new LocationImpl();
+        try {
+            reporter.argumentsAreDifferent("wantedValue", "actualValue", loc);
+            fail("expected an exception describing different arguments");
+        } catch (Throwable e) {
+            assertTrue(e.getMessage().contains("wantedValue"));
+            assertTrue(e.getMessage().contains("actualValue"));
+        }
+    }
+
+    // cannotMockFinalClass: covers clazz.toString() interpolation
+    @Test
+    public void testCannotMockFinalClass_withClass_messageContainsClassAndReason() throws Throwable {
+        try {
+            reporter.cannotMockFinalClass(String.class);
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("String"));
+            assertTrue(e.getMessage().contains("final classes"));
+        }
+    }
+
+    // cannotStubVoidMethodWithAReturnValue: covers methodName interpolation
+    @Test
+    public void testCannotStubVoidMethodWithAReturnValue_withMethodName_messageContainsMethodName() throws Throwable {
+        try {
+            reporter.cannotStubVoidMethodWithAReturnValue("doIt");
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("CannotStubVoidMethodWithReturnValue", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("'doIt' is a *void method*"));
+        }
+    }
+
+    // onlyVoidMethodsCanBeSetToDoNothing: straight-line throw
+    @Test
+    public void testOnlyVoidMethodsCanBeSetToDoNothing_throwsMockitoException() throws Throwable {
+        try {
+            reporter.onlyVoidMethodsCanBeSetToDoNothing();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("Only void methods can doNothing()"));
+        }
+    }
+
+    // wrongTypeOfReturnValue: covers expectedType/actualType/methodName interpolation
+    @Test
+    public void testWrongTypeOfReturnValue_withTypes_messageContainsExpectedAndActual() throws Throwable {
+        try {
+            reporter.wrongTypeOfReturnValue("String", "Integer", "getX");
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("WrongTypeOfReturnValue", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("Integer cannot be returned by getX()"));
+            assertTrue(e.getMessage().contains("getX() should return String"));
+        }
+    }
+
+    // wantedAtMostX: covers pluralize(max) and foundSize interpolation, uses MockitoAssertionError
+    @Test
+    public void testWantedAtMostX_withCounts_throwsMockitoAssertionErrorWithFoundSize() throws Throwable {
+        try {
+            reporter.wantedAtMostX(2, 5);
+            fail("expected MockitoAssertionError");
+        } catch (MockitoAssertionError e) {
+            assertTrue(e.getMessage().contains("but was 5"));
+        }
+    }
+
+    // smartNullPointerException: covers invocation description interpolation
+    @Test
+    public void testSmartNullPointerException_withInvocationAndLocation_throwsWithInvocationInMessage() throws Throwable {
+        Location loc = new LocationImpl();
+        try {
+            reporter.smartNullPointerException("someInvocationDesc", loc);
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("SmartNullPointerException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("someInvocationDesc"));
+            assertTrue(e.getMessage().contains("NullPointerException"));
+        }
+    }
+
+    // noArgumentValueWasCaptured: straight-line throw
+    @Test
+    public void testNoArgumentValueWasCaptured_throwsMockitoException() throws Throwable {
+        try {
+            reporter.noArgumentValueWasCaptured();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("No argument value was captured"));
+        }
+    }
+
+    // extraInterfacesDoesNotAcceptNullParameters: straight-line throw
+    @Test
+    public void testExtraInterfacesDoesNotAcceptNullParameters_throwsMockitoException() throws Throwable {
+        try {
+            reporter.extraInterfacesDoesNotAcceptNullParameters();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("does not accept null parameters"));
+        }
+    }
+
+    // extraInterfacesAcceptsOnlyInterfaces: covers wrongType.getSimpleName() interpolation
+    @Test
+    public void testExtraInterfacesAcceptsOnlyInterfaces_withNonInterfaceClass_messageContainsTypeName() throws Throwable {
+        try {
+            reporter.extraInterfacesAcceptsOnlyInterfaces(String.class);
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("String"));
+            assertTrue(e.getMessage().contains("is not an interface"));
+        }
+    }
+
+    // extraInterfacesRequiresAtLeastOneInterface: straight-line throw
+    @Test
+    public void testExtraInterfacesRequiresAtLeastOneInterface_throwsMockitoException() throws Throwable {
+        try {
+            reporter.extraInterfacesRequiresAtLeastOneInterface();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("requires at least one interface"));
+        }
+    }
+
+    // mockedTypeIsInconsistentWithSpiedInstanceType: covers spiedInstance/mockedType simple name ordering
+    @Test
+    public void testMockedTypeIsInconsistentWithSpiedInstanceType_messageContainsBothTypeNames() throws Throwable {
+        try {
+            reporter.mockedTypeIsInconsistentWithSpiedInstanceType(List.class, new ArrayList<Object>());
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("ArrayList"));
+            assertTrue(e.getMessage().contains("List"));
+        }
+    }
+
+    // cannotCallAbstractRealMethod: straight-line throw
+    @Test
+    public void testCannotCallAbstractRealMethod_throwsMockitoException() throws Throwable {
+        try {
+            reporter.cannotCallAbstractRealMethod();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("Cannot call abstract real method"));
+        }
+    }
+
+    // cannotVerifyToString: straight-line throw
+    @Test
+    public void testCannotVerifyToString_throwsMockitoException() throws Throwable {
+        try {
+            reporter.cannotVerifyToString();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("cannot verify toString()"));
+        }
+    }
+
+    // moreThanOneAnnotationNotAllowed: covers fieldName interpolation
+    @Test
+    public void testMoreThanOneAnnotationNotAllowed_withFieldName_messageContainsFieldName() throws Throwable {
+        try {
+            reporter.moreThanOneAnnotationNotAllowed("fld");
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("fld"));
+            assertTrue(e.getMessage().contains("more than one Mockito annotation"));
+        }
+    }
+
+    // cannotInitializeForSpyAnnotation: covers fieldName and details.getMessage() interpolation (direct, no cause involved)
+    @Test
+    public void testCannotInitializeForSpyAnnotation_withDetails_messageContainsFieldAndDetailMessage() throws Throwable {
+        try {
+            reporter.cannotInitializeForSpyAnnotation("fld2", new Exception("boomSpy"));
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("fld2"));
+            assertTrue(e.getMessage().contains("boomSpy"));
+        }
+    }
+
+    // cannotInitializeForInjectMocksAnnotation: covers fieldName and details.getMessage() interpolation
+    @Test
+    public void testCannotInitializeForInjectMocksAnnotation_withDetails_messageContainsFieldAndDetailMessage() throws Throwable {
+        try {
+            reporter.cannotInitializeForInjectMocksAnnotation("fld3", new Exception("boomInj"));
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("fld3"));
+            assertTrue(e.getMessage().contains("boomInj"));
+        }
+    }
+
+    // atMostAndNeverShouldNotBeUsedWithTimeout: straight-line throw, distinct exception type
+    @Test
+    public void testAtMostAndNeverShouldNotBeUsedWithTimeout_throwsFriendlyReminderException() throws Throwable {
+        try {
+            reporter.atMostAndNeverShouldNotBeUsedWithTimeout();
+            fail("expected an exception");
+        } catch (Throwable e) {
+            assertEquals("FriendlyReminderException", e.getClass().getSimpleName());
+            assertTrue(e.getMessage().contains("timeout() should not be used with atMost()"));
+        }
+    }
+
+    // fieldInitialisationThrewException: covers field.getName() and details.getMessage() interpolation
+    @Test
+    public void testFieldInitialisationThrewException_withField_messageContainsFieldNameAndDetailMessage() throws Throwable {
+        Field field = ReporterClaudeTest.class.getDeclaredField("dummyField");
+        try {
+            reporter.fieldInitialisationThrewException(field, new RuntimeException("oops"));
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("dummyField"));
+            assertTrue(e.getMessage().contains("oops"));
+        }
+    }
+
+    // invocationListenerDoesNotAcceptNullParameters: straight-line throw
+    @Test
+    public void testInvocationListenerDoesNotAcceptNullParameters_throwsMockitoException() throws Throwable {
+        try {
+            reporter.invocationListenerDoesNotAcceptNullParameters();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("invocationListeners() does not accept null parameters"));
+        }
+    }
+
+    // spyAndDelegateAreMutuallyExclusive: straight-line throw
+    @Test
+    public void testSpyAndDelegateAreMutuallyExclusive_throwsMockitoException() throws Throwable {
+        try {
+            reporter.spyAndDelegateAreMutuallyExclusive();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("spy instance and a delegated instance"));
+        }
+    }
+
+    // invalidArgumentRangeAtIdentityAnswerCreationTime: straight-line throw
+    @Test
+    public void testInvalidArgumentRangeAtIdentityAnswerCreationTime_throwsMockitoException() throws Throwable {
+        try {
+            reporter.invalidArgumentRangeAtIdentityAnswerCreationTime();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("Invalid argument index"));
+        }
+    }
+
+    // defaultAnswerDoesNotAcceptNullParameter: straight-line throw, direct string message
+    @Test
+    public void testDefaultAnswerDoesNotAcceptNullParameter_throwsMockitoException() throws Throwable {
+        try {
+            reporter.defaultAnswerDoesNotAcceptNullParameter();
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("defaultAnswer() does not accept null parameter"));
+        }
+    }
+
+    // serializableWontWorkForObjectsThatDontImplementSerializable: covers classToMock.getSimpleName() interpolation
+    @Test
+    public void testSerializableWontWorkForObjectsThatDontImplementSerializable_withClass_messageContainsClassName() throws Throwable {
+        try {
+            reporter.serializableWontWorkForObjectsThatDontImplementSerializable(String.class);
+            fail("expected MockitoException");
+        } catch (MockitoException e) {
+            assertTrue(e.getMessage().contains("String"));
+            assertTrue(e.getMessage().contains("Serializable"));
+        }
+    }
+
+    // cannotInjectDependency: exceptionCauseMessageIfAvailable calls details.getCause().getMessage()
+    // without a null-check despite its name promising safety; a cause-less Exception must not leak NPE
+    @Test
+    public void testCannotInjectDependency_detailsWithoutCause_doesNotLeakNullPointerException() throws Throwable {
+        Field field = ReporterClaudeTest.class.getDeclaredField("dummyField");
+        Exception details = new Exception("no cause set");
+        try {
+            reporter.cannotInjectDependency(field, "someMockName", details);
+            fail("expected an exception to be thrown");
+        } catch (NullPointerException npe) {
+            fail("cannotInjectDependency must not throw NullPointerException when exception has no cause");
+        } catch (RuntimeException expected) {
+            assertNotNull(expected);
+        }
+    }
+}

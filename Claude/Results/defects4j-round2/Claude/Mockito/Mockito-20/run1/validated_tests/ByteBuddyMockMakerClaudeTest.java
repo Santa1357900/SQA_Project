@@ -1,0 +1,224 @@
+package org.mockito.internal.creation.bytebuddy;
+
+import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.exceptions.base.MockitoException;
+import org.mockito.invocation.MockHandler;
+import org.mockito.mock.MockCreationSettings;
+import org.mockito.mock.SerializableMode;
+import org.mockito.plugins.MockMaker;
+
+public class ByteBuddyMockMakerClaudeTest {
+
+    private ByteBuddyMockMaker mockMaker;
+
+    @Before
+    public void setUp() throws Throwable {
+        mockMaker = new ByteBuddyMockMaker();
+    }
+
+    // Constructor: should produce a usable, non-null instance
+    @Test
+    public void testConstructor_createsNonNullInstance() throws Throwable {
+        ByteBuddyMockMaker maker = new ByteBuddyMockMaker();
+        assertNotNull(maker);
+    }
+
+    // Constructor: class declares implements MockMaker
+    @Test
+    public void testConstructor_isInstanceOfMockMaker() throws Throwable {
+        ByteBuddyMockMaker maker = new ByteBuddyMockMaker();
+        assertTrue(maker instanceof MockMaker);
+    }
+
+    // Constructor: two invocations yield two distinct, independent objects
+    @Test
+    public void testConstructor_multipleCallsProduceDistinctInstances() throws Throwable {
+        ByteBuddyMockMaker first = new ByteBuddyMockMaker();
+        ByteBuddyMockMaker second = new ByteBuddyMockMaker();
+        assertNotSame(first, second);
+    }
+
+    // getHandler: instanceof check is false for null -> returns null, no NPE
+    @Test
+    public void testGetHandler_null_returnsNull() throws Throwable {
+        MockHandler handler = mockMaker.getHandler(null);
+        assertNull(handler);
+    }
+
+    // getHandler: plain Object is not a MockAccess -> false branch -> null
+    @Test
+    public void testGetHandler_plainObject_returnsNull() throws Throwable {
+        MockHandler handler = mockMaker.getHandler(new Object());
+        assertNull(handler);
+    }
+
+    // getHandler: empty string edge value, not a MockAccess -> null
+    @Test
+    public void testGetHandler_emptyString_returnsNull() throws Throwable {
+        MockHandler handler = mockMaker.getHandler("");
+        assertNull(handler);
+    }
+
+    // getHandler: non-empty string, not a MockAccess -> null
+    @Test
+    public void testGetHandler_nonEmptyString_returnsNull() throws Throwable {
+        MockHandler handler = mockMaker.getHandler("mock");
+        assertNull(handler);
+    }
+
+    // getHandler: unicode/escape content string, not a MockAccess -> null
+    @Test
+    public void testGetHandler_unicodeString_returnsNull() throws Throwable {
+        MockHandler handler = mockMaker.getHandler("\u00e9\u00e8\n\t");
+        assertNull(handler);
+    }
+
+    // getHandler: boundary numeric value Integer.MIN_VALUE -> null
+    @Test
+    public void testGetHandler_integerMinValue_returnsNull() throws Throwable {
+        MockHandler handler = mockMaker.getHandler(Integer.valueOf(Integer.MIN_VALUE));
+        assertNull(handler);
+    }
+
+    // getHandler: boundary numeric value Integer.MAX_VALUE -> null
+    @Test
+    public void testGetHandler_integerMaxValue_returnsNull() throws Throwable {
+        MockHandler handler = mockMaker.getHandler(Integer.valueOf(Integer.MAX_VALUE));
+        assertNull(handler);
+    }
+
+    // getHandler: empty array (0 elements), not a MockAccess -> null
+    @Test
+    public void testGetHandler_emptyIntArray_returnsNull() throws Throwable {
+        int[] arr = new int[0];
+        MockHandler handler = mockMaker.getHandler(arr);
+        assertNull(handler);
+    }
+
+    // getHandler: single element array, not a MockAccess -> null
+    @Test
+    public void testGetHandler_singleElementIntArray_returnsNull() throws Throwable {
+        int[] arr = new int[] { 1 };
+        MockHandler handler = mockMaker.getHandler(arr);
+        assertNull(handler);
+    }
+
+    // getHandler: ByteBuddyMockMaker itself does not implement MockAccess -> null
+    @Test
+    public void testGetHandler_mockMakerSelfInstance_returnsNull() throws Throwable {
+        MockHandler handler = mockMaker.getHandler(mockMaker);
+        assertNull(handler);
+    }
+
+    // getHandler: an enum constant referenced in source is not a MockAccess -> null
+    @Test
+    public void testGetHandler_serializableModeEnumConstant_returnsNull() throws Throwable {
+        MockHandler handler = mockMaker.getHandler(SerializableMode.ACROSS_CLASSLOADERS);
+        assertNull(handler);
+    }
+
+    // getHandler: repeated calls on same non-mock input stay consistent (no hidden state)
+    @Test
+    public void testGetHandler_calledRepeatedly_consistentlyReturnsNull() throws Throwable {
+        Object plain = new Object();
+        assertNull(mockMaker.getHandler(plain));
+        assertNull(mockMaker.getHandler(plain));
+    }
+
+    // createMock: settings is dereferenced first (settings.getSerializableMode()); null settings -> NPE
+    @Test
+    public void testCreateMock_nullSettings_throwsNullPointerException() throws Throwable {
+        MockCreationSettings<Object> settings = null;
+        MockHandler handler = null;
+        try {
+            mockMaker.createMock(settings, handler);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // resetMock: (MockAccess) cast of a plain Object fails immediately -> ClassCastException
+    @Test
+    public void testResetMock_mockPlainObject_throwsClassCastException() throws Throwable {
+        MockHandler handler = null;
+        MockCreationSettings settings = null;
+        try {
+            mockMaker.resetMock(new Object(), handler, settings);
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // resetMock: String mock is not a MockAccess -> ClassCastException on the cast
+    @Test
+    public void testResetMock_mockEmptyString_throwsClassCastException() throws Throwable {
+        MockHandler handler = null;
+        MockCreationSettings settings = null;
+        try {
+            mockMaker.resetMock("", handler, settings);
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // resetMock: boxed Integer mock is not a MockAccess -> ClassCastException
+    @Test
+    public void testResetMock_mockInteger_throwsClassCastException() throws Throwable {
+        MockHandler handler = null;
+        MockCreationSettings settings = null;
+        try {
+            mockMaker.resetMock(Integer.valueOf(7), handler, settings);
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // resetMock: array mock is not a MockAccess -> ClassCastException
+    @Test
+    public void testResetMock_mockIntArray_throwsClassCastException() throws Throwable {
+        MockHandler handler = null;
+        MockCreationSettings settings = null;
+        try {
+            mockMaker.resetMock(new int[] { 1, 2 }, handler, settings);
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // resetMock: ByteBuddyMockMaker instance itself is not a MockAccess -> ClassCastException
+    @Test
+    public void testResetMock_mockMakerInstance_throwsClassCastException() throws Throwable {
+        MockHandler handler = null;
+        MockCreationSettings settings = null;
+        try {
+            mockMaker.resetMock(mockMaker, handler, settings);
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // resetMock: null mock casts without error; then asInternalMockHandler(null) throws MockitoException
+    @Test
+    public void testResetMock_nullMockNullHandler_throwsMockitoException() throws Throwable {
+        MockHandler handler = null;
+        MockCreationSettings settings = null;
+        try {
+            mockMaker.resetMock(null, handler, settings);
+            fail("expected MockitoException");
+        } catch (MockitoException expected) {
+            assertTrue(expected.getMessage().contains("MockHandler"));
+        }
+    }
+
+    // resetMock: cast failure is evaluated before arguments, so null handler/settings do not change outcome
+    @Test
+    public void testResetMock_nonMockAccessMock_withNullHandlerAndSettings_throwsClassCastException() throws Throwable {
+        try {
+            mockMaker.resetMock(new Object(), null, null);
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+}

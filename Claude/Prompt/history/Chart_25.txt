@@ -1,0 +1,646 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Chart (Defects4J bug Chart-25)
+package: org.jfree.chart.renderer.category
+class_under_test: StatisticalBarRenderer
+test_class_to_write: StatisticalBarRendererClaudeTest
+</target>
+
+<project_notes>
+JFreeChart: สร้าง dataset ด้วย DefaultCategoryDataset / DefaultXYDataset / TimeSeries ที่มีอยู่จริง หลีกเลี่ยงการวาดจริงด้วย Graphics2D ถ้าจำเป็นให้ใช้ new BufferedImage(10,10,BufferedImage.TYPE_INT_RGB).createGraphics()
+</project_notes>
+
+<source_code>
+/* ===========================================================
+ * JFreeChart : a free chart library for the Java(tm) platform
+ * ===========================================================
+ *
+ * (C) Copyright 2000-2007, by Object Refinery Limited and Contributors.
+ *
+ * Project Info:  http://www.jfree.org/jfreechart/index.html
+ *
+ * This library is free software; you can redistribute it and/or modify it 
+ * under the terms of the GNU Lesser General Public License as published by 
+ * the Free Software Foundation; either version 2.1 of the License, or 
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful, but 
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY 
+ * or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public 
+ * License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, 
+ * USA.  
+ *
+ * [Java is a trademark or registered trademark of Sun Microsystems, Inc. 
+ * in the United States and other countries.]
+ *
+ * ---------------------------
+ * StatisticalBarRenderer.java
+ * ---------------------------
+ * (C) Copyright 2002-2007, by Pascal Collet and Contributors.
+ *
+ * Original Author:  Pascal Collet;
+ * Contributor(s):   David Gilbert (for Object Refinery Limited);
+ *                   Christian W. Zuckschwerdt;
+ *
+ * $Id: StatisticalBarRenderer.java,v 1.4.2.6 2007/02/02 15:52:07 mungady Exp $
+ *
+ * Changes
+ * -------
+ * 21-Aug-2002 : Version 1, contributed by Pascal Collet (DG);
+ * 01-Oct-2002 : Fixed errors reported by Checkstyle (DG);
+ * 24-Oct-2002 : Changes to dataset interface (DG);
+ * 05-Nov-2002 : Base dataset is now TableDataset not CategoryDataset (DG);
+ * 05-Feb-2003 : Updates for new DefaultStatisticalCategoryDataset (DG);
+ * 25-Mar-2003 : Implemented Serializable (DG);
+ * 30-Jul-2003 : Modified entity constructor (CZ);
+ * 06-Oct-2003 : Corrected typo in exception message (DG);
+ * 05-Nov-2004 : Modified drawItem() signature (DG);
+ * 15-Jun-2005 : Added errorIndicatorPaint attribute (DG);
+ * ------------- JFREECHART 1.0.x ---------------------------------------------
+ * 19-May-2006 : Added support for tooltips and URLs (DG);
+ * 12-Jul-2006 : Added support for item labels (DG);
+ * 02-Feb-2007 : Removed author tags all over JFreeChart sources (DG);
+ * 20-Jun-2007 : Removed JCommon dependencies (DG);
+ * 06-Jul-2007 : Added errorIndicatorStroke attribute (DG);
+ * 11-Jul-2007 : Fixed serialization for new errorIndicatorStroke field (DG);
+ * 28-Aug-2007 : Fixed NullPointerException - see bug 1779941 (DG);
+ * 
+ */
+
+package org.jfree.chart.renderer.category;
+
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.Paint;
+import java.awt.Stroke;
+import java.awt.geom.Line2D;
+import java.awt.geom.Rectangle2D;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+
+import org.jfree.chart.axis.CategoryAxis;
+import org.jfree.chart.axis.ValueAxis;
+import org.jfree.chart.entity.EntityCollection;
+import org.jfree.chart.event.RendererChangeEvent;
+import org.jfree.chart.labels.CategoryItemLabelGenerator;
+import org.jfree.chart.plot.CategoryPlot;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.chart.util.PaintUtilities;
+import org.jfree.chart.util.PublicCloneable;
+import org.jfree.chart.util.RectangleEdge;
+import org.jfree.chart.util.SerialUtilities;
+import org.jfree.data.category.CategoryDataset;
+import org.jfree.data.statistics.StatisticalCategoryDataset;
+
+/**
+ * A renderer that handles the drawing a bar plot where
+ * each bar has a mean value and a standard deviation line.
+ */
+public class StatisticalBarRenderer extends BarRenderer
+                                    implements CategoryItemRenderer, 
+                                               Cloneable, PublicCloneable, 
+                                               Serializable {
+
+    /** For serialization. */
+    private static final long serialVersionUID = -4986038395414039117L;
+    
+    /** The paint used to show the error indicator. */
+    private transient Paint errorIndicatorPaint;
+    
+    /**
+     * The stroke used to draw the error indicator. 
+     * 
+     * @since 1.2.0
+     */
+    private transient Stroke errorIndicatorStroke;
+    
+    /**
+     * Default constructor.
+     */
+    public StatisticalBarRenderer() {
+        super();
+        this.errorIndicatorPaint = Color.gray;
+        this.errorIndicatorStroke = new BasicStroke(0.5f);
+    }
+
+    /**
+     * Returns the paint used for the error indicators.
+     * 
+     * @return The paint used for the error indicators (possibly 
+     *         <code>null</code>).
+     *         
+     * @see #setErrorIndicatorPaint(Paint)
+     */
+    public Paint getErrorIndicatorPaint() {
+        return this.errorIndicatorPaint;   
+    }
+
+    /**
+     * Sets the paint used for the error indicators (if <code>null</code>, 
+     * the item outline paint is used instead)
+     * 
+     * @param paint  the paint (<code>null</code> permitted).
+     * 
+     * @see #getErrorIndicatorPaint()
+     */
+    public void setErrorIndicatorPaint(Paint paint) {
+        this.errorIndicatorPaint = paint;
+        notifyListeners(new RendererChangeEvent(this));
+    }
+    
+    /**
+     * Returns the stroke used for the error indicators.
+     * 
+     * @return The stroke (possibly <code>null</code>).
+     *         
+     * @see #setErrorIndicatorStroke(Stroke)
+     *
+     * @since 1.2.0
+     */
+    public Stroke getErrorIndicatorStroke() {
+        return this.errorIndicatorStroke;   
+    }
+
+    /**
+     * Sets the stroke used for the error indicators (if <code>null</code>, 
+     * the item outline stroke is used instead)
+     * 
+     * @param stroke  the stroke (<code>null</code> permitted).
+     * 
+     * @see #getErrorIndicatorStroke()
+     *
+     * @since 1.2.0
+     */
+    public void setErrorIndicatorStroke(Stroke stroke) {
+        this.errorIndicatorStroke = stroke;
+        notifyListeners(new RendererChangeEvent(this));
+    }
+    
+    /**
+     * Draws the bar with its standard deviation line range for a single 
+     * (series, category) data item.
+     *
+     * @param g2  the graphics device.
+     * @param state  the renderer state.
+     * @param dataArea  the data area.
+     * @param plot  the plot.
+     * @param domainAxis  the domain axis.
+     * @param rangeAxis  the range axis.
+     * @param data  the data.
+     * @param row  the row index (zero-based).
+     * @param column  the column index (zero-based).
+     * @param pass  the pass index.
+     */
+    public void drawItem(Graphics2D g2,
+                         CategoryItemRendererState state,
+                         Rectangle2D dataArea,
+                         CategoryPlot plot,
+                         CategoryAxis domainAxis,
+                         ValueAxis rangeAxis,
+                         CategoryDataset data,
+                         int row,
+                         int column,
+                         int pass) {
+
+        // defensive check
+        if (!(data instanceof StatisticalCategoryDataset)) {
+            throw new IllegalArgumentException(
+                "Requires StatisticalCategoryDataset.");
+        }
+        StatisticalCategoryDataset statData = (StatisticalCategoryDataset) data;
+
+        PlotOrientation orientation = plot.getOrientation();
+        if (orientation == PlotOrientation.HORIZONTAL) {
+            drawHorizontalItem(g2, state, dataArea, plot, domainAxis, 
+                    rangeAxis, statData, row, column);
+        }
+        else if (orientation == PlotOrientation.VERTICAL) {
+            drawVerticalItem(g2, state, dataArea, plot, domainAxis, rangeAxis, 
+                    statData, row, column);
+        }
+    }
+                
+    /**
+     * Draws an item for a plot with a horizontal orientation.
+     * 
+     * @param g2  the graphics device.
+     * @param state  the renderer state.
+     * @param dataArea  the data area.
+     * @param plot  the plot.
+     * @param domainAxis  the domain axis.
+     * @param rangeAxis  the range axis.
+     * @param dataset  the data.
+     * @param row  the row index (zero-based).
+     * @param column  the column index (zero-based).
+     */
+    protected void drawHorizontalItem(Graphics2D g2,
+                                      CategoryItemRendererState state,
+                                      Rectangle2D dataArea,
+                                      CategoryPlot plot,
+                                      CategoryAxis domainAxis,
+                                      ValueAxis rangeAxis,
+                                      StatisticalCategoryDataset dataset,
+                                      int row,
+                                      int column) {
+                                     
+        RectangleEdge xAxisLocation = plot.getDomainAxisEdge();
+        
+        // BAR Y
+        double rectY = domainAxis.getCategoryStart(column, getColumnCount(), 
+                dataArea, xAxisLocation);
+
+        int seriesCount = getRowCount();
+        int categoryCount = getColumnCount();
+        if (seriesCount > 1) {
+            double seriesGap = dataArea.getHeight() * getItemMargin()
+                               / (categoryCount * (seriesCount - 1));
+            rectY = rectY + row * (state.getBarWidth() + seriesGap);
+        }
+        else {
+            rectY = rectY + row * state.getBarWidth();
+        }
+
+        // BAR X
+        Number meanValue = dataset.getMeanValue(row, column);
+
+        double value = meanValue.doubleValue();
+        double base = 0.0;
+        double lclip = getLowerClip();
+        double uclip = getUpperClip();
+
+        if (uclip <= 0.0) {  // cases 1, 2, 3 and 4
+            if (value >= uclip) {
+                return; // bar is not visible
+            }
+            base = uclip;
+            if (value <= lclip) {
+                value = lclip;
+            }
+        }
+        else if (lclip <= 0.0) { // cases 5, 6, 7 and 8
+            if (value >= uclip) {
+                value = uclip;
+            }
+            else {
+                if (value <= lclip) {
+                    value = lclip;
+                }
+            }
+        }
+        else { // cases 9, 10, 11 and 12
+            if (value <= lclip) {
+                return; // bar is not visible
+            }
+            base = getLowerClip();
+            if (value >= uclip) {
+               value = uclip;
+            }
+        }
+
+        RectangleEdge yAxisLocation = plot.getRangeAxisEdge();
+        double transY1 = rangeAxis.valueToJava2D(base, dataArea, yAxisLocation);
+        double transY2 = rangeAxis.valueToJava2D(value, dataArea, 
+                yAxisLocation);
+        double rectX = Math.min(transY2, transY1);
+
+        double rectHeight = state.getBarWidth();
+        double rectWidth = Math.abs(transY2 - transY1);
+
+        Rectangle2D bar = new Rectangle2D.Double(rectX, rectY, rectWidth, 
+                rectHeight);
+        Paint seriesPaint = getItemPaint(row, column);
+        g2.setPaint(seriesPaint);
+        g2.fill(bar);
+        if (isDrawBarOutline() && state.getBarWidth() > 3) {
+            g2.setStroke(getItemStroke(row, column));
+            g2.setPaint(getItemOutlinePaint(row, column));
+            g2.draw(bar);
+        }
+
+        // standard deviation lines
+            double valueDelta = dataset.getStdDevValue(row, column).doubleValue();
+            double highVal = rangeAxis.valueToJava2D(meanValue.doubleValue() 
+                    + valueDelta, dataArea, yAxisLocation);
+            double lowVal = rangeAxis.valueToJava2D(meanValue.doubleValue() 
+                    - valueDelta, dataArea, yAxisLocation);
+
+            if (this.errorIndicatorStroke != null) {
+                g2.setStroke(this.errorIndicatorStroke);
+            }
+            else {
+                g2.setStroke(getItemOutlineStroke(row, column));
+            }
+            if (this.errorIndicatorPaint != null) {
+                g2.setPaint(this.errorIndicatorPaint);  
+            }
+            else {
+                g2.setPaint(getItemOutlinePaint(row, column));   
+            }
+        
+            Line2D line = null;
+            line = new Line2D.Double(lowVal, rectY + rectHeight / 2.0d, 
+                                     highVal, rectY + rectHeight / 2.0d);
+            g2.draw(line);
+            line = new Line2D.Double(highVal, rectY + rectHeight * 0.25, 
+                                     highVal, rectY + rectHeight * 0.75);
+            g2.draw(line);
+            line = new Line2D.Double(lowVal, rectY + rectHeight * 0.25, 
+                                     lowVal, rectY + rectHeight * 0.75);
+            g2.draw(line);
+        
+        CategoryItemLabelGenerator generator = getItemLabelGenerator(row, 
+                column);
+        if (generator != null && isItemLabelVisible(row, column)) {
+            drawItemLabel(g2, dataset, row, column, plot, generator, bar, 
+                    (value < 0.0));
+        }        
+
+        // add an item entity, if this information is being collected
+        EntityCollection entities = state.getEntityCollection();
+        if (entities != null) {
+            addItemEntity(entities, dataset, row, column, bar);
+        }
+
+    }
+
+    /**
+     * Draws an item for a plot with a vertical orientation.
+     * 
+     * @param g2  the graphics device.
+     * @param state  the renderer state.
+     * @param dataArea  the data area.
+     * @param plot  the plot.
+     * @param domainAxis  the domain axis.
+     * @param rangeAxis  the range axis.
+     * @param dataset  the data.
+     * @param row  the row index (zero-based).
+     * @param column  the column index (zero-based).
+     */
+    protected void drawVerticalItem(Graphics2D g2,
+                                    CategoryItemRendererState state,
+                                    Rectangle2D dataArea,
+                                    CategoryPlot plot,
+                                    CategoryAxis domainAxis,
+                                    ValueAxis rangeAxis,
+                                    StatisticalCategoryDataset dataset,
+                                    int row,
+                                    int column) {
+                                     
+        RectangleEdge xAxisLocation = plot.getDomainAxisEdge();
+        
+        // BAR X
+        double rectX = domainAxis.getCategoryStart(
+            column, getColumnCount(), dataArea, xAxisLocation
+        );
+
+        int seriesCount = getRowCount();
+        int categoryCount = getColumnCount();
+        if (seriesCount > 1) {
+            double seriesGap = dataArea.getWidth() * getItemMargin()
+                               / (categoryCount * (seriesCount - 1));
+            rectX = rectX + row * (state.getBarWidth() + seriesGap);
+        }
+        else {
+            rectX = rectX + row * state.getBarWidth();
+        }
+
+        // BAR Y
+        Number meanValue = dataset.getMeanValue(row, column);
+
+        double value = meanValue.doubleValue();
+        double base = 0.0;
+        double lclip = getLowerClip();
+        double uclip = getUpperClip();
+
+        if (uclip <= 0.0) {  // cases 1, 2, 3 and 4
+            if (value >= uclip) {
+                return; // bar is not visible
+            }
+            base = uclip;
+            if (value <= lclip) {
+                value = lclip;
+            }
+        }
+        else if (lclip <= 0.0) { // cases 5, 6, 7 and 8
+            if (value >= uclip) {
+                value = uclip;
+            }
+            else {
+                if (value <= lclip) {
+                    value = lclip;
+                }
+            }
+        }
+        else { // cases 9, 10, 11 and 12
+            if (value <= lclip) {
+                return; // bar is not visible
+            }
+            base = getLowerClip();
+            if (value >= uclip) {
+               value = uclip;
+            }
+        }
+
+        RectangleEdge yAxisLocation = plot.getRangeAxisEdge();
+        double transY1 = rangeAxis.valueToJava2D(base, dataArea, yAxisLocation);
+        double transY2 = rangeAxis.valueToJava2D(value, dataArea, 
+                yAxisLocation);
+        double rectY = Math.min(transY2, transY1);
+
+        double rectWidth = state.getBarWidth();
+        double rectHeight = Math.abs(transY2 - transY1);
+
+        Rectangle2D bar = new Rectangle2D.Double(rectX, rectY, rectWidth, 
+                rectHeight);
+        Paint seriesPaint = getItemPaint(row, column);
+        g2.setPaint(seriesPaint);
+        g2.fill(bar);
+        if (isDrawBarOutline() && state.getBarWidth() > 3) {
+            g2.setStroke(getItemStroke(row, column));
+            g2.setPaint(getItemOutlinePaint(row, column));
+            g2.draw(bar);
+        }
+
+        // standard deviation lines
+            double valueDelta = dataset.getStdDevValue(row, column).doubleValue();
+            double highVal = rangeAxis.valueToJava2D(meanValue.doubleValue() 
+                    + valueDelta, dataArea, yAxisLocation);
+            double lowVal = rangeAxis.valueToJava2D(meanValue.doubleValue() 
+                    - valueDelta, dataArea, yAxisLocation);
+
+            if (this.errorIndicatorStroke != null) {
+                g2.setStroke(this.errorIndicatorStroke);
+            }
+            else {
+                g2.setStroke(getItemOutlineStroke(row, column));
+            }
+            if (this.errorIndicatorPaint != null) {
+                g2.setPaint(this.errorIndicatorPaint);  
+            }
+            else {
+                g2.setPaint(getItemOutlinePaint(row, column));   
+            }
+            Line2D line = null;
+            line = new Line2D.Double(rectX + rectWidth / 2.0d, lowVal,
+                                     rectX + rectWidth / 2.0d, highVal);
+            g2.draw(line);
+            line = new Line2D.Double(rectX + rectWidth / 2.0d - 5.0d, highVal,
+                                     rectX + rectWidth / 2.0d + 5.0d, highVal);
+            g2.draw(line);
+            line = new Line2D.Double(rectX + rectWidth / 2.0d - 5.0d, lowVal,
+                                     rectX + rectWidth / 2.0d + 5.0d, lowVal);
+            g2.draw(line);
+        
+        CategoryItemLabelGenerator generator = getItemLabelGenerator(row, 
+                column);
+        if (generator != null && isItemLabelVisible(row, column)) {
+            drawItemLabel(g2, dataset, row, column, plot, generator, bar, 
+                    (value < 0.0));
+        }        
+
+        // add an item entity, if this information is being collected
+        EntityCollection entities = state.getEntityCollection();
+        if (entities != null) {
+            addItemEntity(entities, dataset, row, column, bar);
+        }
+    }
+    
+    /**
+     * Tests this renderer for equality with an arbitrary object.
+     * 
+     * @param obj  the object (<code>null</code> permitted).
+     * 
+     * @return A boolean.
+     */
+    public boolean equals(Object obj) {
+        if (obj == this) {
+            return true;   
+        }
+        if (!(obj instanceof StatisticalBarRenderer)) {
+            return false;   
+        }
+        if (!super.equals(obj)) {
+            return false;   
+        }
+        StatisticalBarRenderer that = (StatisticalBarRenderer) obj;
+        if (!PaintUtilities.equal(this.errorIndicatorPaint, 
+                that.errorIndicatorPaint)) {
+            return false;
+        }
+        return true;
+    }
+    
+    /**
+     * Provides serialization support.
+     *
+     * @param stream  the output stream.
+     *
+     * @throws IOException  if there is an I/O error.
+     */
+    private void writeObject(ObjectOutputStream stream) throws IOException {
+        stream.defaultWriteObject();
+        SerialUtilities.writePaint(this.errorIndicatorPaint, stream);
+        SerialUtilities.writeStroke(this.errorIndicatorStroke, stream);
+    }
+
+    /**
+     * Provides serialization support.
+     *
+     * @param stream  the input stream.
+     *
+     * @throws IOException  if there is an I/O error.
+     * @throws ClassNotFoundException  if there is a classpath problem.
+     */
+    private void readObject(ObjectInputStream stream) 
+        throws IOException, ClassNotFoundException {
+        stream.defaultReadObject();
+        this.errorIndicatorPaint = SerialUtilities.readPaint(stream);
+        this.errorIndicatorStroke = SerialUtilities.readStroke(stream);
+    }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ StatisticalBarRendererClaudeTest ใน package org.jfree.chart.renderer.category เพื่อทดสอบคลาส StatisticalBarRenderer ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.jfree.chart.renderer.category;` เท่านั้น
+</instructions>

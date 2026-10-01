@@ -1,0 +1,416 @@
+package com.fasterxml.jackson.databind.jsontype.impl;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonMappingException;
+
+/**
+ * Indirect tests for TypeDeserializerBase, exercised through ObjectMapper's
+ * polymorphic (@JsonTypeInfo) deserialization since the class itself is abstract
+ * and its sibling concrete implementations are not part of the given source.
+ */
+public class TypeDeserializerBaseClaudeTest {
+
+    // ---- POJOs: As.PROPERTY, no defaultImpl ----
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = Dog.class, name = "dog"),
+        @JsonSubTypes.Type(value = Cat.class, name = "cat")
+    })
+    public static abstract class Animal {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class Dog extends Animal {
+        private String breed;
+        public String getBreed() { return breed; }
+        public void setBreed(String breed) { this.breed = breed; }
+    }
+
+    public static class Cat extends Animal {
+        private boolean indoor;
+        public boolean isIndoor() { return indoor; }
+        public void setIndoor(boolean indoor) { this.indoor = indoor; }
+    }
+
+    public static class Container {
+        private Animal pet;
+        public Animal getPet() { return pet; }
+        public void setPet(Animal pet) { this.pet = pet; }
+    }
+
+    // ---- POJOs: As.PROPERTY, with defaultImpl ----
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY,
+            property = "type", defaultImpl = Fish.class)
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = Dog2.class, name = "dog")
+    })
+    public static abstract class AnimalWithDefault {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class Dog2 extends AnimalWithDefault {
+        private String breed;
+        public String getBreed() { return breed; }
+        public void setBreed(String breed) { this.breed = breed; }
+    }
+
+    public static class Fish extends AnimalWithDefault {
+        private boolean saltwater;
+        public boolean isSaltwater() { return saltwater; }
+        public void setSaltwater(boolean saltwater) { this.saltwater = saltwater; }
+    }
+
+    // ---- POJOs: As.WRAPPER_ARRAY, no defaultImpl ----
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = Square.class, name = "square"),
+        @JsonSubTypes.Type(value = Circle.class, name = "circle")
+    })
+    public static abstract class Shape {
+        private double area;
+        public double getArea() { return area; }
+        public void setArea(double area) { this.area = area; }
+    }
+
+    public static class Square extends Shape {
+        private double side;
+        public double getSide() { return side; }
+        public void setSide(double side) { this.side = side; }
+    }
+
+    public static class Circle extends Shape {
+        private double radius;
+        public double getRadius() { return radius; }
+        public void setRadius(double radius) { this.radius = radius; }
+    }
+
+    // ---- POJOs: As.WRAPPER_ARRAY, with defaultImpl ----
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY,
+            defaultImpl = UnknownShape.class)
+    public static abstract class ShapeWithDefault {
+        private double area;
+        public double getArea() { return area; }
+        public void setArea(double area) { this.area = area; }
+    }
+
+    public static class UnknownShape extends ShapeWithDefault {
+        private String note;
+        public String getNote() { return note; }
+        public void setNote(String note) { this.note = note; }
+    }
+
+    // ---- POJOs: As.WRAPPER_OBJECT ----
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_OBJECT)
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = Triangle.class, name = "triangle")
+    })
+    public static abstract class Poly {
+        private int sides;
+        public int getSides() { return sides; }
+        public void setSides(int sides) { this.sides = sides; }
+    }
+
+    public static class Triangle extends Poly {
+        private double base;
+        public double getBase() { return base; }
+        public void setBase(double base) { this.base = base; }
+    }
+
+    // ---- POJOs: visible type id ----
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY,
+            property = "type", visible = true)
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = Bike.class, name = "bike")
+    })
+    public static abstract class Vehicle {
+        private String type;
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+    }
+
+    public static class Bike extends Vehicle {
+        private int wheels;
+        public int getWheels() { return wheels; }
+        public void setWheels(int wheels) { this.wheels = wheels; }
+    }
+
+    // ---- POJOs: Id.CLASS round trip (tests type narrowing branch) ----
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
+    public static abstract class Shape2 {
+        private double area;
+        public double getArea() { return area; }
+        public void setArea(double area) { this.area = area; }
+    }
+
+    public static class Hexagon extends Shape2 {
+        private int sidesCount;
+        public int getSidesCount() { return sidesCount; }
+        public void setSidesCount(int sidesCount) { this.sidesCount = sidesCount; }
+    }
+
+    // ================= Tests =================
+
+    // known type id resolves via _findDeserializer's "type != null" branch, narrows correctly
+    @Test
+    public void testDeserializeProperty_knownDog_returnsDogWithFields() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"type\":\"dog\",\"name\":\"Rex\",\"breed\":\"Lab\"}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertTrue(result instanceof Dog);
+        assertEquals("Rex", result.getName());
+        assertEquals("Lab", ((Dog) result).getBreed());
+    }
+
+    // known type id resolves to a different registered subtype
+    @Test
+    public void testDeserializeProperty_knownCat_returnsCatWithFields() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"type\":\"cat\",\"name\":\"Whiskers\",\"indoor\":true}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertTrue(result instanceof Cat);
+        assertEquals("Whiskers", result.getName());
+        assertTrue(((Cat) result).isIndoor());
+    }
+
+    // unknown id, idResolver returns null, no defaultImpl, FAIL_ON_INVALID_SUBTYPE enabled -> _handleUnknownTypeId throws
+    @Test
+    public void testDeserializeProperty_unknownType_noDefaultImpl_throwsJsonMappingException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"type\":\"bird\",\"name\":\"Tweety\"}";
+        try {
+            mapper.readValue(json, Animal.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            // ok
+        }
+    }
+
+    // empty-string type id is also unresolvable -> same failure branch
+    @Test
+    public void testDeserializeProperty_emptyStringType_noDefaultImpl_throwsJsonMappingException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"type\":\"\",\"name\":\"Tweety\"}";
+        try {
+            mapper.readValue(json, Animal.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            // ok
+        }
+    }
+
+    // unknown id with defaultImpl configured -> _findDefaultImplDeserializer resolves to default
+    @Test
+    public void testDeserializeProperty_unknownType_withDefaultImpl_returnsDefaultInstance() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"type\":\"bird\",\"name\":\"Tweety\"}";
+        AnimalWithDefault result = mapper.readValue(json, AnimalWithDefault.class);
+        assertTrue(result instanceof Fish);
+        assertEquals("Tweety", result.getName());
+    }
+
+    // known id still resolves to its specific subtype even though a defaultImpl exists
+    @Test
+    public void testDeserializeProperty_knownType_withDefaultImplConfigured_returnsSpecificSubtype() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"type\":\"dog\",\"name\":\"Fido\",\"breed\":\"Poodle\"}";
+        AnimalWithDefault result = mapper.readValue(json, AnimalWithDefault.class);
+        assertTrue(result instanceof Dog2);
+        assertEquals("Poodle", ((Dog2) result).getBreed());
+    }
+
+    // missing type property entirely, with defaultImpl configured -> falls back to default
+    @Test
+    public void testDeserializeProperty_missingTypeField_withDefaultImpl_returnsDefaultInstance() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"name\":\"Nemo\"}";
+        AnimalWithDefault result = mapper.readValue(json, AnimalWithDefault.class);
+        assertTrue(result instanceof Fish);
+        assertEquals("Nemo", result.getName());
+    }
+
+    // missing type property, no defaultImpl -> must fail
+    @Test
+    public void testDeserializeProperty_missingTypeField_noDefaultImpl_throwsJsonMappingException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"name\":\"Tweety\"}";
+        try {
+            mapper.readValue(json, Animal.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            // ok
+        }
+    }
+
+    // unknown id, no defaultImpl, FAIL_ON_INVALID_SUBTYPE disabled -> NullifyingDeserializer path returns null
+    @Test
+    public void testDeserializeProperty_unknownType_failOnInvalidSubtypeDisabled_returnsNull() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE, false);
+        String json = "{\"type\":\"bird\",\"name\":\"Tweety\"}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertNull(result);
+    }
+
+    // As.WRAPPER_ARRAY known subtype
+    @Test
+    public void testDeserializeWrapperArray_square_returnsCorrectType() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "[\"square\",{\"area\":10.0,\"side\":3.16}]";
+        Shape result = mapper.readValue(json, Shape.class);
+        assertTrue(result instanceof Square);
+        assertEquals(10.0, result.getArea(), 1e-9);
+        assertEquals(3.16, ((Square) result).getSide(), 1e-9);
+    }
+
+    // As.WRAPPER_ARRAY different known subtype
+    @Test
+    public void testDeserializeWrapperArray_circle_returnsCorrectType() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "[\"circle\",{\"area\":78.5,\"radius\":5.0}]";
+        Shape result = mapper.readValue(json, Shape.class);
+        assertTrue(result instanceof Circle);
+        assertEquals(5.0, ((Circle) result).getRadius(), 1e-9);
+    }
+
+    // As.WRAPPER_ARRAY unknown id, no defaultImpl -> throws
+    @Test
+    public void testDeserializeWrapperArray_unknownType_noDefaultImpl_throws() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "[\"hexagon\",{\"area\":1.0}]";
+        try {
+            mapper.readValue(json, Shape.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            // ok
+        }
+    }
+
+    // As.WRAPPER_ARRAY unknown id, defaultImpl configured -> falls back
+    @Test
+    public void testDeserializeWrapperArray_unknownType_withDefaultImpl_returnsDefault() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "[\"hexagon\",{\"area\":1.0,\"note\":\"mystery\"}]";
+        ShapeWithDefault result = mapper.readValue(json, ShapeWithDefault.class);
+        assertTrue(result instanceof UnknownShape);
+        assertEquals("mystery", ((UnknownShape) result).getNote());
+    }
+
+    // As.WRAPPER_OBJECT known subtype
+    @Test
+    public void testDeserializeWrapperObject_triangle_returnsCorrectType() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"triangle\":{\"sides\":3,\"base\":5.0}}";
+        Poly result = mapper.readValue(json, Poly.class);
+        assertTrue(result instanceof Triangle);
+        assertEquals(3, result.getSides());
+        assertEquals(5.0, ((Triangle) result).getBase(), 1e-9);
+    }
+
+    // visible=true exposes the type id value into the POJO's own matching property
+    @Test
+    public void testDeserializeProperty_visibleTypeId_exposesTypeOnPojo() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"type\":\"bike\",\"wheels\":2}";
+        Vehicle result = mapper.readValue(json, Vehicle.class);
+        assertTrue(result instanceof Bike);
+        assertEquals("bike", result.getType());
+        assertEquals(2, ((Bike) result).getWheels());
+    }
+
+    // nested bean property triggers forProperty() copy with non-null BeanProperty context
+    @Test
+    public void testDeserializeNestedProperty_dog_returnsCorrectPet() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"pet\":{\"type\":\"dog\",\"name\":\"Rex\",\"breed\":\"Lab\"}}";
+        Container result = mapper.readValue(json, Container.class);
+        assertTrue(result.getPet() instanceof Dog);
+        assertEquals("Rex", result.getPet().getName());
+    }
+
+    // nested bean property with a second subtype
+    @Test
+    public void testDeserializeNestedProperty_cat_returnsCorrectPet() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"pet\":{\"type\":\"cat\",\"name\":\"Whiskers\",\"indoor\":false}}";
+        Container result = mapper.readValue(json, Container.class);
+        assertTrue(result.getPet() instanceof Cat);
+        assertFalse(((Cat) result.getPet()).isIndoor());
+    }
+
+    // JSON null for a polymorphic field must not invoke the type deserializer at all
+    @Test
+    public void testDeserializeNestedProperty_nullValue_doesNotInvokeTypeDeserializer() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"pet\":null}";
+        Container result = mapper.readValue(json, Container.class);
+        assertNull(result.getPet());
+    }
+
+    // Id.CLASS round trip exercises the type-narrowing branch in _findDeserializer
+    @Test
+    public void testRoundTrip_classIdResolution_hexagon_preservesTypeAndFields() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        Hexagon original = new Hexagon();
+        original.setArea(12.5);
+        original.setSidesCount(6);
+        String json = mapper.writeValueAsString((Shape2) original);
+        Shape2 result = mapper.readValue(json, Shape2.class);
+        assertTrue(result instanceof Hexagon);
+        assertEquals(12.5, result.getArea(), 1e-9);
+        assertEquals(6, ((Hexagon) result).getSidesCount());
+    }
+
+    // repeated resolution of the same type id must stay consistent (covers _deserializers cache path)
+    @Test
+    public void testDeserializeProperty_reuseSameTypeId_cachingConsistent() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        Animal first = mapper.readValue("{\"type\":\"dog\",\"name\":\"A\",\"breed\":\"B1\"}", Animal.class);
+        Animal second = mapper.readValue("{\"type\":\"dog\",\"name\":\"C\",\"breed\":\"B2\"}", Animal.class);
+        assertTrue(first instanceof Dog);
+        assertTrue(second instanceof Dog);
+        assertEquals("B1", ((Dog) first).getBreed());
+        assertEquals("B2", ((Dog) second).getBreed());
+    }
+
+    // array of mixed known subtypes, each resolved independently through the same deserializer
+    @Test
+    public void testDeserializeProperty_arrayOfMixedTypes_dogAndCat() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "[{\"type\":\"dog\",\"name\":\"Rex\",\"breed\":\"Lab\"},"
+                + "{\"type\":\"cat\",\"name\":\"Whiskers\",\"indoor\":true}]";
+        Animal[] result = mapper.readValue(json, Animal[].class);
+        assertEquals(2, result.length);
+        assertTrue(result[0] instanceof Dog);
+        assertTrue(result[1] instanceof Cat);
+    }
+
+    // whitespace-only type id is also unresolvable -> unknown-id failure branch
+    @Test
+    public void testDeserializeProperty_whitespaceTypeId_treatedAsUnknown_throws() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"type\":\" \",\"name\":\"Tweety\"}";
+        try {
+            mapper.readValue(json, Animal.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            // ok
+        }
+    }
+}

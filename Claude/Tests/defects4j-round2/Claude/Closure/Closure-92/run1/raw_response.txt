@@ -1,0 +1,455 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ProcessClosurePrimitivesClaudeTest {
+
+  private Compiler compiler;
+  private Node externsRoot;
+  private Node mainRoot;
+  private Node script;
+
+  private void parse(String js) {
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    List<SourceFile> externs = new ArrayList<SourceFile>();
+    externs.add(SourceFile.fromCode("externs.js", ""));
+    List<SourceFile> inputs = new ArrayList<SourceFile>();
+    inputs.add(SourceFile.fromCode("test.js", js));
+    compiler.init(externs, inputs, options);
+    Node root = compiler.parseInputs();
+    externsRoot = root.getFirstChild();
+    mainRoot = root.getLastChild();
+    script = mainRoot.getFirstChild();
+  }
+
+  private ProcessClosurePrimitives newPass(CheckLevel level, boolean rewriteDate) {
+    return new ProcessClosurePrimitives(compiler, level, rewriteDate);
+  }
+
+  private Node findNode(Node n, int type) {
+    if (n == null) {
+      return null;
+    }
+    if (n.getType() == type) {
+      return n;
+    }
+    for (Node c = n.getFirstChild(); c != null; c = c.getNext()) {
+      Node r = findNode(c, type);
+      if (r != null) {
+        return r;
+      }
+    }
+    return null;
+  }
+
+  private int countVarNamed(Node n, String name) {
+    int count = 0;
+    if (n.getType() == Token.VAR && n.getFirstChild() != null
+        && name.equals(n.getFirstChild().getString())) {
+      count++;
+    }
+    for (Node c = n.getFirstChild(); c != null; c = c.getNext()) {
+      count += countVarNamed(c, name);
+    }
+    return count;
+  }
+
+  private int countAssignTo(Node n, String qname) {
+    int count = 0;
+    if (n.getType() == Token.ASSIGN && n.getFirstChild() != null
+        && qname.equals(n.getFirstChild().getQualifiedName())) {
+      count++;
+    }
+    for (Node c = n.getFirstChild(); c != null; c = c.getNext()) {
+      count += countAssignTo(c, qname);
+    }
+    return count;
+  }
+
+  private boolean containsCall(Node n, String qname) {
+    if (n.getType() == Token.CALL) {
+      Node callee = n.getFirstChild();
+      if (qname.equals(callee.getQualifiedName())) {
+        return true;
+      }
+    }
+    for (Node c = n.getFirstChild(); c != null; c = c.getNext()) {
+      if (containsCall(c, qname)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // process(): empty script with no primitives should produce no errors and no AST changes.
+  @Test
+  public void testProcess_emptyScript_noErrorsNoChanges() throws Throwable {
+    parse("");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertNull(script.getFirstChild());
+  }
+
+  // processProvideCall: simple namespace creates a var declaration and removes the call.
+  @Test
+  public void testProcessProvideCall_simpleNamespace_declaresVar() throws Throwable {
+    parse("goog.provide('foo');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertEquals(1, countVarNamed(script, "foo"));
+    assertFalse(containsCall(script, "goog.provide"));
+  }
+
+  // processProvideCall: dotted namespace creates prefix var and dotted assignment.
+  @Test
+  public void testProcessProvideCall_dottedNamespace_createsPrefixAndAssignment() throws Throwable {
+    parse("goog.provide('foo.bar');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertEquals(1, countVarNamed(script, "foo"));
+    assertEquals(1, countAssignTo(script, "foo.bar"));
+    assertFalse(containsCall(script, "goog.provide"));
+  }
+
+  // processProvideCall: duplicate explicit provide reports DUPLICATE_NAMESPACE_ERROR.
+  @Test
+  public void testProcessProvideCall_duplicateNamespace_reportsError() throws Throwable {
+    parse("goog.provide('foo');\ngoog.provide('foo');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // verifyProvide: invalid property name part reports INVALID_PROVIDE_ERROR.
+  @Test
+  public void testProcessProvideCall_invalidPropertyName_reportsError() throws Throwable {
+    parse("goog.provide('foo.1bar');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // verifyArgument: missing argument reports NULL_ARGUMENT_ERROR.
+  @Test
+  public void testProcessProvideCall_nullArgument_reportsError() throws Throwable {
+    parse("goog.provide();");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // verifyArgument: non-string argument reports INVALID_ARGUMENT_ERROR.
+  @Test
+  public void testProcessProvideCall_nonStringArgument_reportsError() throws Throwable {
+    parse("goog.provide(123);");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // verifyArgument: too many arguments reports TOO_MANY_ARGUMENTS_ERROR.
+  @Test
+  public void testProcessProvideCall_tooManyArguments_reportsError() throws Throwable {
+    parse("goog.provide('foo', 'bar');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // visit(CALL): non-EXPR context must not be processed as a provide.
+  @Test
+  public void testProcessProvideCall_notInExprContext_notProcessed() throws Throwable {
+    parse("var x = goog.provide('foo');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertTrue(containsCall(script, "goog.provide"));
+    assertEquals(0, countVarNamed(script, "foo"));
+  }
+
+  // processRequireCall: requiring an unprovided namespace reports MISSING_PROVIDE_ERROR.
+  @Test
+  public void testProcessRequireCall_withoutProvide_reportsMissingProvideError() throws Throwable {
+    parse("goog.require('foo');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // processRequireCall: requiring a provided namespace removes the call with no error.
+  @Test
+  public void testProcessRequireCall_withProvide_removesCallNoError() throws Throwable {
+    parse("goog.provide('foo');\ngoog.require('foo');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertFalse(containsCall(script, "goog.require"));
+    assertEquals(1, countVarNamed(script, "foo"));
+  }
+
+  // processRequireCall: requiresLevel OFF means missing provide is not reported and call stays.
+  @Test
+  public void testProcessRequireCall_requiresLevelOff_noErrorCallRemains() throws Throwable {
+    parse("goog.require('foo');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.OFF, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertTrue(containsCall(script, "goog.require"));
+  }
+
+  // verifyArgument via require: missing argument reports NULL_ARGUMENT_ERROR, call stays.
+  @Test
+  public void testProcessRequireCall_nullArgument_reportsError() throws Throwable {
+    parse("goog.require();");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+    assertTrue(containsCall(script, "goog.require"));
+  }
+
+  // verifyArgument via require: non-string argument reports INVALID_ARGUMENT_ERROR.
+  @Test
+  public void testProcessRequireCall_nonStringArgument_reportsError() throws Throwable {
+    parse("goog.require(123);");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // verifyArgument via require: too many arguments reports TOO_MANY_ARGUMENTS_ERROR.
+  @Test
+  public void testProcessRequireCall_tooManyArguments_reportsError() throws Throwable {
+    parse("goog.require('foo', 'bar');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // process(): require before its provide reports LATE_PROVIDE_ERROR.
+  @Test
+  public void testProcessRequireCall_lateProvide_reportsError() throws Throwable {
+    parse("goog.require('foo');\ngoog.provide('foo');");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // exportSymbol: dotted name records only the root identifier.
+  @Test
+  public void testExportSymbol_withDot_recordsRootName() throws Throwable {
+    parse("goog.exportSymbol('foo.bar', foo);");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertTrue(pass.getExportedVariableNames().contains("foo"));
+  }
+
+  // exportSymbol: non-dotted name records the full name.
+  @Test
+  public void testExportSymbol_withoutDot_recordsFullName() throws Throwable {
+    parse("goog.exportSymbol('bar', bar);");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertTrue(pass.getExportedVariableNames().contains("bar"));
+  }
+
+  // visit(FUNCTION): a declared function sharing a provided name reports FUNCTION_NAMESPACE_ERROR.
+  @Test
+  public void testVisitFunction_providedNameDeclaredAsFunction_reportsError() throws Throwable {
+    parse("goog.provide('foo');\nfunction foo() {}");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // visit(FUNCTION): a function with no matching provide causes no error.
+  @Test
+  public void testVisitFunction_notProvided_noError() throws Throwable {
+    parse("function foo() {}");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // handleCandidateProvideDefinition: a var definition becomes the single replacement declaration.
+  @Test
+  public void testHandleCandidateProvideDefinition_varDefinition_keptAsDeclaration() throws Throwable {
+    parse("goog.provide('foo');\nvar foo = {};");
+    Node originalVar = findNode(script, Token.VAR);
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertEquals(1, countVarNamed(script, "foo"));
+    assertSame(originalVar, findNode(script, Token.VAR));
+  }
+
+  // handleCandidateProvideDefinition: an assign definition is kept and marked as the namespace.
+  @Test
+  public void testHandleCandidateProvideDefinition_assignDefinition_keptAsNamespace() throws Throwable {
+    parse("goog.provide('foo.bar');\nfoo.bar = {};");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertEquals(1, countAssignTo(script, "foo.bar"));
+    assertEquals(1, countVarNamed(script, "foo"));
+    assertFalse(containsCall(script, "goog.provide"));
+  }
+
+  // processProvideFromPreviousPass: a pre-marked namespace placeholder is removed and replaced.
+  @Test
+  public void testProcessProvideFromPreviousPass_removesDuplicatePlaceholder() throws Throwable {
+    parse("goog.provide('foo');\nvar foo = {};");
+    Node originalVar = findNode(script, Token.VAR);
+    originalVar.putBooleanProp(Node.IS_NAMESPACE, true);
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertEquals(1, countVarNamed(script, "foo"));
+    assertNotSame(originalVar, findNode(script, Token.VAR));
+  }
+
+  // processBaseClassCall: constructor usage is rewritten to call the base class directly.
+  @Test
+  public void testProcessBaseClassCall_constructor_rewritesToBaseClassCall() throws Throwable {
+    parse("function Foo() {\n  goog.base(this);\n}\ngoog.inherits(Foo, Bar);\n");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertTrue(containsCall(script, "Bar.call"));
+  }
+
+  // processBaseClassCall: constructor without goog.inherits reports BASE_CLASS_ERROR.
+  @Test
+  public void testProcessBaseClassCall_constructor_missingInheritsReportsError() throws Throwable {
+    parse("function Foo() {\n  goog.base(this);\n}\n");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // processBaseClassCall: first argument not 'this' reports BASE_CLASS_ERROR.
+  @Test
+  public void testProcessBaseClassCall_notThisArgument_reportsError() throws Throwable {
+    parse("goog.base(x);");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // processBaseClassCall: called from global scope with no enclosing method reports BASE_CLASS_ERROR.
+  @Test
+  public void testProcessBaseClassCall_globalScope_reportsError() throws Throwable {
+    parse("goog.base(this);");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // processBaseClassCall: method name argument not matching enclosing method reports BASE_CLASS_ERROR.
+  @Test
+  public void testProcessBaseClassCall_methodNameMismatch_reportsError() throws Throwable {
+    parse("Foo.prototype.bar = function() {\n  goog.base(this, 'baz');\n};\n");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // processBaseClassCall: matching method call is rewritten to Foo.superClass_.method.call.
+  @Test
+  public void testProcessBaseClassCall_method_rewritesToSuperClassCall() throws Throwable {
+    parse("Foo.prototype.bar = function() {\n  goog.base(this, 'bar', 1);\n};\n");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertTrue(containsCall(script, "Foo.superClass_.bar.call"));
+  }
+
+  // visit(GETPROP): standalone reference to goog.base outside a call reports BASE_CLASS_ERROR.
+  @Test
+  public void testVisitGetProp_standaloneGoogBase_reportsError() throws Throwable {
+    parse("var x = goog.base;");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // processSetCssNameMapping: valid object literal mapping removes the call with no error.
+  @Test
+  public void testSetCssNameMapping_validMapping_removesCallNoError() throws Throwable {
+    parse("goog.setCssNameMapping({'foo': 'bar', 'baz': 'qux'});");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    assertFalse(containsCall(script, "goog.setCssNameMapping"));
+  }
+
+  // processSetCssNameMapping: a non-string value reports NON_STRING_PASSED_TO_SET_CSS_NAME_MAPPING_ERROR.
+  @Test
+  public void testSetCssNameMapping_nonStringValue_reportsError() throws Throwable {
+    parse("goog.setCssNameMapping({'foo': 1});");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // verifyArgument via setCssNameMapping: missing argument reports NULL_ARGUMENT_ERROR.
+  @Test
+  public void testSetCssNameMapping_nullArgument_reportsError() throws Throwable {
+    parse("goog.setCssNameMapping();");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(1, compiler.getErrorCount());
+  }
+
+  // trySimplifyNewDate: when enabled, "new Date(goog.now())" drops the goog.now() argument.
+  @Test
+  public void testTrySimplifyNewDate_rewriteEnabled_removesGoogNowCall() throws Throwable {
+    parse("new Date(goog.now());");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, true);
+    pass.process(externsRoot, mainRoot);
+    assertEquals(0, compiler.getErrorCount());
+    Node newNode = findNode(script, Token.NEW);
+    assertNull(newNode.getFirstChild().getNext());
+  }
+
+  // trySimplifyNewDate: when disabled, the goog.now() argument is left untouched.
+  @Test
+  public void testTrySimplifyNewDate_rewriteDisabled_keepsCall() throws Throwable {
+    parse("new Date(goog.now());");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    pass.process(externsRoot, mainRoot);
+    Node newNode = findNode(script, Token.NEW);
+    assertNotNull(newNode.getFirstChild().getNext());
+  }
+
+  // trySimplifyNewDate: a non-Date constructor is never simplified.
+  @Test
+  public void testTrySimplifyNewDate_nonDateConstructor_noChange() throws Throwable {
+    parse("new Foo(goog.now());");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, true);
+    pass.process(externsRoot, mainRoot);
+    Node newNode = findNode(script, Token.NEW);
+    assertNotNull(newNode.getFirstChild().getNext());
+  }
+
+  // getExportedVariableNames: a freshly constructed pass has no exported variables yet.
+  @Test
+  public void testGetExportedVariableNames_initiallyEmpty() throws Throwable {
+    parse("");
+    ProcessClosurePrimitives pass = newPass(CheckLevel.ERROR, false);
+    assertTrue(pass.getExportedVariableNames().isEmpty());
+  }
+}

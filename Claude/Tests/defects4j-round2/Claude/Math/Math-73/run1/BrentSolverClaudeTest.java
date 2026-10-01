@@ -1,0 +1,329 @@
+package org.apache.commons.math.analysis.solvers;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.apache.commons.math.analysis.UnivariateRealFunction;
+import org.apache.commons.math.FunctionEvaluationException;
+
+public class BrentSolverClaudeTest {
+
+    // Constructor: default no-arg; solve(f,min,max) with linear function, sign<0 branch.
+    @Test
+    public void testDefaultConstructor_solveLinearFunction_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 3;
+            }
+        };
+        double result = solver.solve(f, 0.0, 5.0);
+        assertEquals(3.0, result, 1e-6);
+    }
+
+    // Deprecated constructor BrentSolver(f) + deprecated solve(min,max); sign<0 branch.
+    @Test
+    public void testDeprecatedFunctionConstructor_solveMinMax_returnsRoot() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 3;
+            }
+        };
+        BrentSolver solver = new BrentSolver(f);
+        double result = solver.solve(0.0, 5.0);
+        assertEquals(3.0, result, 1e-6);
+    }
+
+    // Deprecated solve(min,max): sign>0 and neither endpoint near zero -> IllegalArgumentException.
+    @Test
+    public void testDeprecatedSolveMinMax_nonBracketing_throwsIllegalArgumentException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x + 10;
+            }
+        };
+        BrentSolver solver = new BrentSolver(f);
+        try {
+            solver.solve(0.0, 1.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Deprecated solve(min,max,initial): min & initial bracket root (branch c, linear interpolation).
+    @Test
+    public void testDeprecatedSolveMinMaxInitial_returnsRoot() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 2;
+            }
+        };
+        BrentSolver solver = new BrentSolver(f);
+        double result = solver.solve(0.0, 10.0, 5.0);
+        assertEquals(2.0, result, 1e-6);
+    }
+
+    // Deprecated solve(min,max,initial): initial outside [min,max] -> IllegalArgumentException.
+    @Test
+    public void testDeprecatedSolveMinMaxInitial_outOfRange_throwsIllegalArgumentException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 2;
+            }
+        };
+        BrentSolver solver = new BrentSolver(f);
+        try {
+            solver.solve(0.0, 10.0, 15.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // solve(f,min,max,initial): |yInitial| near zero -> returns initial itself.
+    @Test
+    public void testSolveWithInitial_initialIsRoot_returnsInitial() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 4;
+            }
+        };
+        double result = solver.solve(f, 0.0, 10.0, 4.0);
+        assertEquals(4.0, result, 1e-9);
+    }
+
+    // solve(f,min,max,initial): min is exact root -> contract says return min (x-value), not f(min).
+    @Test
+    public void testSolveWithInitial_minIsRoot_returnsMinValue() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 5;
+            }
+        };
+        double result = solver.solve(f, 5.0, 10.0, 7.0);
+        assertEquals(5.0, result, 1e-9);
+    }
+
+    // solve(f,min,max,initial): max is exact root -> contract says return max (x-value), not f(max).
+    @Test
+    public void testSolveWithInitial_maxIsRoot_returnsMaxValue() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 10;
+            }
+        };
+        double result = solver.solve(f, 5.0, 7.0, 10.0);
+        assertEquals(10.0, result, 1e-9);
+    }
+
+    // solve(f,min,max,initial): min & initial bracket (branch c), linear interpolation path.
+    @Test
+    public void testSolveWithInitial_minAndInitialBracket_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 2;
+            }
+        };
+        double result = solver.solve(f, 0.0, 10.0, 5.0);
+        assertEquals(2.0, result, 1e-6);
+    }
+
+    // solve(f,min,max,initial): initial & max bracket (branch e).
+    @Test
+    public void testSolveWithInitial_initialAndMaxBracket_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 8;
+            }
+        };
+        double result = solver.solve(f, 0.0, 10.0, 5.0);
+        assertEquals(8.0, result, 1e-6);
+    }
+
+    // solve(f,min,max,initial): initial above max -> verifySequence throws IllegalArgumentException.
+    @Test
+    public void testSolveWithInitial_initialAboveMax_throwsIllegalArgumentException() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 2;
+            }
+        };
+        try {
+            solver.solve(f, 0.0, 10.0, 15.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // solve(f,min,max,initial): initial below min -> verifySequence throws IllegalArgumentException.
+    @Test
+    public void testSolveWithInitial_initialBelowMin_throwsIllegalArgumentException() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 2;
+            }
+        };
+        try {
+            solver.solve(f, 0.0, 10.0, -5.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // solve(f,min,max,initial): branch e with cubic function, multi-iteration convergence.
+    @Test
+    public void testSolveWithInitial_cubicBranchE_convergesNearRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        final UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x * x * x - x - 2;
+            }
+        };
+        double result = solver.solve(f, 1.0, 2.0, 1.2);
+        assertTrue(Math.abs(f.value(result)) <= 1e-3);
+    }
+
+    // solve(f,min,max): sign>0 and neither close to zero -> non-bracketing IllegalArgumentException.
+    @Test
+    public void testSolveMinMax_nonBracketing_throwsIllegalArgumentException() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x + 10;
+            }
+        };
+        try {
+            solver.solve(f, 0.0, 1.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // solve(f,min,max): sign==0 branch, yMin exactly zero -> returns min.
+    @Test
+    public void testSolveMinMax_signZero_yMinZero_returnsMin() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        double result = solver.solve(f, 0.0, 5.0);
+        assertEquals(0.0, result, 1e-9);
+    }
+
+    // solve(f,min,max): sign==0 branch, yMin nonzero so else path returns max.
+    @Test
+    public void testSolveMinMax_signZero_yMaxZero_returnsMax() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 5;
+            }
+        };
+        double result = solver.solve(f, 0.0, 5.0);
+        assertEquals(5.0, result, 1e-9);
+    }
+
+    // solve(f,min,max): sign<0 branch, quadratic function, positive root.
+    @Test
+    public void testSolveMinMax_quadraticPositiveRoot_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x * x - 4;
+            }
+        };
+        double result = solver.solve(f, 0.0, 3.0);
+        assertEquals(2.0, result, 1e-6);
+    }
+
+    // solve(f,min,max): sign<0 branch, quadratic function, negative root.
+    @Test
+    public void testSolveMinMax_quadraticNegativeRoot_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x * x - 4;
+            }
+        };
+        double result = solver.solve(f, -3.0, 0.0);
+        assertEquals(-2.0, result, 1e-6);
+    }
+
+    // solve(f,min,max): invalid interval min > max -> verifyInterval throws IllegalArgumentException.
+    @Test
+    public void testSolveMinMax_invalidInterval_minGreaterThanMax_throwsIllegalArgumentException() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        try {
+            solver.solve(f, 5.0, 1.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // solve(f,min,max): invalid interval min == max -> verifyInterval throws IllegalArgumentException.
+    @Test
+    public void testSolveMinMax_invalidInterval_minEqualsMax_throwsIllegalArgumentException() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        try {
+            solver.solve(f, 3.0, 3.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // solve(f,min,max): cubic function requiring several Brent iterations to converge.
+    @Test
+    public void testSolveMinMax_cubicConvergesNearRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        final UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x * x * x - x - 2;
+            }
+        };
+        double result = solver.solve(f, 1.0, 2.0);
+        assertTrue(Math.abs(f.value(result)) <= 1e-3);
+    }
+
+    // solve(f,min,max,initial): boundary initial == min is allowed (per Javadoc), branch e taken.
+    @Test
+    public void testSolveWithInitial_initialEqualsMin_boundary_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 8;
+            }
+        };
+        double result = solver.solve(f, 0.0, 10.0, 0.0);
+        assertEquals(8.0, result, 1e-6);
+    }
+
+    // solve(f,min,max,initial): boundary initial == max is allowed, branch c taken.
+    @Test
+    public void testSolveWithInitial_initialEqualsMax_boundary_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver();
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 3;
+            }
+        };
+        double result = solver.solve(f, 0.0, 10.0, 10.0);
+        assertEquals(3.0, result, 1e-6);
+    }
+}

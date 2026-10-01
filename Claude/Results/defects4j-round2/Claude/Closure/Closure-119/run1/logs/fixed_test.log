@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-119-7h3cql8y/Closure-119f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - com.google.javascript.jscomp.GlobalNamespaceClaudeTest::testIsNestedAssign_outerFalseInnerTrue
+[exit 0]

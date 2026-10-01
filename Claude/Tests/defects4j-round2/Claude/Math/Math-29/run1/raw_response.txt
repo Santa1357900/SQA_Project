@@ -1,0 +1,457 @@
+package org.apache.commons.math3.linear;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math3.exception.DimensionMismatchException;
+import org.apache.commons.math3.exception.NotPositiveException;
+import org.apache.commons.math3.exception.MathArithmeticException;
+
+public class OpenMapRealVectorClaudeTest {
+
+    private static final double DELTA = 1e-9;
+
+    // Default constructor: zero-length vector
+    @Test
+    public void testDefaultConstructor_zeroLength_dimensionZero() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector();
+        assertEquals(0, v.getDimension());
+    }
+
+    // int dimension constructor: all entries default to zero
+    @Test
+    public void testDimensionConstructor_positiveDimension_allZeroEntries() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(4);
+        assertEquals(4, v.getDimension());
+        assertEquals(0.0, v.getEntry(0), DELTA);
+        assertEquals(0.0, v.getEntry(3), DELTA);
+    }
+
+    // int dimension, double epsilon constructor: value below epsilon treated as zero
+    @Test
+    public void testDimensionEpsilonConstructor_valueBelowEpsilon_treatedAsZero() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(3, 1.0);
+        v.setEntry(0, 0.5);
+        assertEquals(0.0, v.getEntry(0), DELTA);
+    }
+
+    // protected resize constructor, same-package access: dimension grows, original entries preserved
+    @Test
+    public void testResizeConstructor_samePackageAccess_preservesOriginalEntries() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {1.0, 2.0});
+        OpenMapRealVector resized = new OpenMapRealVector(v, 3);
+        assertEquals(5, resized.getDimension());
+        assertEquals(1.0, resized.getEntry(0), DELTA);
+        assertEquals(2.0, resized.getEntry(1), DELTA);
+        assertEquals(0.0, resized.getEntry(2), DELTA);
+    }
+
+    // expectedSize constructor: dimension correct and entries default zero
+    @Test
+    public void testExpectedSizeConstructor_positiveDimension_allZeroEntries() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(4, 2);
+        assertEquals(4, v.getDimension());
+        assertEquals(0.0, v.getEntry(1), DELTA);
+    }
+
+    // double[] constructor: non-zero and zero values preserved exactly
+    @Test
+    public void testDoubleArrayConstructor_nonZeroValues_entriesPreserved() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {0.0, 5.0, -3.0});
+        assertEquals(3, v.getDimension());
+        assertEquals(0.0, v.getEntry(0), DELTA);
+        assertEquals(5.0, v.getEntry(1), DELTA);
+        assertEquals(-3.0, v.getEntry(2), DELTA);
+    }
+
+    // double[] + epsilon constructor: value within epsilon tolerance stored as zero
+    @Test
+    public void testDoubleArrayEpsilonConstructor_valueWithinEpsilon_storedAsZero() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {0.5}, 1.0);
+        assertEquals(0.0, v.getEntry(0), DELTA);
+    }
+
+    // Double[] constructor: boxed values preserved
+    @Test
+    public void testBoxedDoubleArrayConstructor_nonZeroValues_entriesPreserved() throws Throwable {
+        Double[] values = new Double[] {2.0, 0.0};
+        OpenMapRealVector v = new OpenMapRealVector(values);
+        assertEquals(2.0, v.getEntry(0), DELTA);
+        assertEquals(0.0, v.getEntry(1), DELTA);
+    }
+
+    // Copy constructor: equals() true with source
+    @Test
+    public void testCopyConstructor_openMapRealVector_equalsOriginal() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {1.0, 2.0});
+        OpenMapRealVector copyV = new OpenMapRealVector(v);
+        assertTrue(copyV.equals(v));
+        assertEquals(v.getDimension(), copyV.getDimension());
+    }
+
+    // Generic RealVector constructor path: entries copied from source via getEntry loop
+    @Test
+    public void testGenericRealVectorConstructor_copiesEntries_matchesSource() throws Throwable {
+        OpenMapRealVector source = new OpenMapRealVector(new double[] {3.0, 0.0, 5.0});
+        RealVector rv = source;
+        OpenMapRealVector generic = new OpenMapRealVector(rv);
+        assertEquals(3, generic.getDimension());
+        assertEquals(3.0, generic.getEntry(0), DELTA);
+        assertEquals(5.0, generic.getEntry(2), DELTA);
+    }
+
+    // isDefaultValue boundary: strictly below epsilon true, at/above epsilon false
+    @Test
+    public void testIsDefaultValue_belowAndAtEpsilonBoundary_trueFalse() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(2, 0.01);
+        assertTrue(v.isDefaultValue(0.005));
+        assertFalse(v.isDefaultValue(0.01));
+        assertFalse(v.isDefaultValue(0.02));
+    }
+
+    // add(RealVector): dimension mismatch throws DimensionMismatchException
+    @Test
+    public void testAddRealVector_dimensionMismatch_throwsDimensionMismatchException() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(2);
+        OpenMapRealVector b = new OpenMapRealVector(3);
+        try {
+            a.add((RealVector) b);
+            fail("expected DimensionMismatchException");
+        } catch (DimensionMismatchException expected) {
+        }
+    }
+
+    // add(RealVector) dispatch to optimized OpenMapRealVector path: correct sum
+    @Test
+    public void testAddRealVector_openMapInstance_correctSum() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {1.0, 2.0});
+        OpenMapRealVector b = new OpenMapRealVector(new double[] {3.0, 4.0});
+        RealVector sum = a.add((RealVector) b);
+        assertEquals(4.0, sum.getEntry(0), DELTA);
+        assertEquals(6.0, sum.getEntry(1), DELTA);
+    }
+
+    // add(OpenMapRealVector): both copyThis branches (this larger / v larger) give correct sum
+    @Test
+    public void testAddOpenMapRealVector_copyThisBothOrders_correctSum() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {1.0, 0.0, 0.0});
+        OpenMapRealVector b = new OpenMapRealVector(new double[] {0.0, 5.0, 7.0});
+        OpenMapRealVector sum1 = a.add(b);
+        OpenMapRealVector sum2 = b.add(a);
+        assertEquals(1.0, sum1.getEntry(0), DELTA);
+        assertEquals(5.0, sum1.getEntry(1), DELTA);
+        assertEquals(7.0, sum2.getEntry(2), DELTA);
+    }
+
+    // append(OpenMapRealVector): dimension and offset entries correct
+    @Test
+    public void testAppendOpenMapRealVector_entriesOffsetCorrectly() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {1.0, 2.0});
+        OpenMapRealVector b = new OpenMapRealVector(new double[] {3.0, 4.0, 5.0});
+        OpenMapRealVector appended = a.append(b);
+        assertEquals(5, appended.getDimension());
+        assertEquals(1.0, appended.getEntry(0), DELTA);
+        assertEquals(3.0, appended.getEntry(2), DELTA);
+        assertEquals(5.0, appended.getEntry(4), DELTA);
+    }
+
+    // append(RealVector) dispatch when argument is OpenMapRealVector
+    @Test
+    public void testAppendRealVector_openMapInstance_dispatchesCorrectly() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {1.0});
+        RealVector b = new OpenMapRealVector(new double[] {9.0, 8.0});
+        OpenMapRealVector appended = a.append(b);
+        assertEquals(3, appended.getDimension());
+        assertEquals(9.0, appended.getEntry(1), DELTA);
+        assertEquals(8.0, appended.getEntry(2), DELTA);
+    }
+
+    // append(double): dimension grows by one, new value stored at end
+    @Test
+    public void testAppendDouble_increasesDimensionAndSetsLastEntry() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {1.0, 2.0});
+        OpenMapRealVector appended = a.append(5.0);
+        assertEquals(3, appended.getDimension());
+        assertEquals(5.0, appended.getEntry(2), DELTA);
+    }
+
+    // copy(): produces an equal but distinct instance
+    @Test
+    public void testCopy_returnsEqualButDistinctInstance() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {1.0, 2.0});
+        OpenMapRealVector c = v.copy();
+        assertTrue(v.equals(c));
+        assertNotSame(v, c);
+    }
+
+    // dotProduct(OpenMapRealVector): both thisIsSmaller branches produce the same correct value
+    @Test
+    public void testDotProductOpenMapRealVector_bothOrders_correctValue() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {1.0, 0.0, 0.0});
+        OpenMapRealVector b = new OpenMapRealVector(new double[] {2.0, 3.0, 4.0});
+        assertEquals(2.0, a.dotProduct(b), DELTA);
+        assertEquals(2.0, b.dotProduct(a), DELTA);
+    }
+
+    // ebeDivide: element-wise division of two overlapping non-zero vectors
+    @Test
+    public void testEbeDivide_nonZeroValues_correctQuotient() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {6.0, 8.0});
+        RealVector b = new OpenMapRealVector(new double[] {2.0, 4.0});
+        OpenMapRealVector result = a.ebeDivide(b);
+        assertEquals(3.0, result.getEntry(0), DELTA);
+        assertEquals(2.0, result.getEntry(1), DELTA);
+    }
+
+    // ebeMultiply: element-wise multiplication of two non-zero vectors
+    @Test
+    public void testEbeMultiply_nonZeroValues_correctProduct() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {3.0, 4.0});
+        RealVector b = new OpenMapRealVector(new double[] {2.0, 5.0});
+        OpenMapRealVector result = a.ebeMultiply(b);
+        assertEquals(6.0, result.getEntry(0), DELTA);
+        assertEquals(20.0, result.getEntry(1), DELTA);
+    }
+
+    // getSubVector: valid range extracts correct contiguous entries
+    @Test
+    public void testGetSubVector_validRange_extractsCorrectEntries() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {1.0, 2.0, 3.0, 4.0, 5.0});
+        OpenMapRealVector sub = v.getSubVector(1, 3);
+        assertEquals(3, sub.getDimension());
+        assertEquals(2.0, sub.getEntry(0), DELTA);
+        assertEquals(3.0, sub.getEntry(1), DELTA);
+        assertEquals(4.0, sub.getEntry(2), DELTA);
+    }
+
+    // getSubVector: negative n throws NotPositiveException
+    @Test
+    public void testGetSubVector_negativeN_throwsNotPositiveException() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(5);
+        try {
+            v.getSubVector(0, -1);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // getDimension: returns virtual size set at construction
+    @Test
+    public void testGetDimension_returnsVirtualSize() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(7);
+        assertEquals(7, v.getDimension());
+    }
+
+    // getDistance(OpenMapRealVector) dispatch via RealVector: correct Euclidean distance with disjoint entries
+    @Test
+    public void testGetDistanceOpenMapRealVector_disjointEntries_correctEuclideanDistance() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {1.0, 0.0});
+        OpenMapRealVector b = new OpenMapRealVector(new double[] {0.0, 2.0});
+        double distance = a.getDistance((RealVector) b);
+        assertEquals(Math.sqrt(5.0), distance, DELTA);
+    }
+
+    // getEntry: after setEntry returns stored value, untouched index remains default zero
+    @Test
+    public void testGetEntry_afterSetEntry_returnsStoredValue() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(3);
+        v.setEntry(1, 9.0);
+        assertEquals(9.0, v.getEntry(1), DELTA);
+        assertEquals(0.0, v.getEntry(0), DELTA);
+    }
+
+    // getL1Distance: sum of absolute differences, including entries only present in other vector
+    @Test
+    public void testGetL1Distance_disjointEntries_correctSum() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {1.0, 0.0});
+        OpenMapRealVector b = new OpenMapRealVector(new double[] {0.0, 3.0});
+        double distance = a.getL1Distance((RealVector) b);
+        assertEquals(4.0, distance, DELTA);
+    }
+
+    // getLInfDistance: baseline case where both vectors have the overlapping entry (first loop only)
+    @Test
+    public void testGetLInfDistance_overlappingEntries_baselineCorrect() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {5.0});
+        OpenMapRealVector b = new OpenMapRealVector(new double[] {1.0});
+        double distance = a.getLInfDistance((RealVector) b);
+        assertEquals(4.0, distance, DELTA);
+    }
+
+    // getLInfDistance: entry only present in other vector with a negative value must use absolute value
+    @Test
+    public void testGetLInfDistance_entryOnlyInOtherVectorNegativeValue_bugDetection() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(1);
+        OpenMapRealVector b = new OpenMapRealVector(new double[] {-5.0});
+        double distance = a.getLInfDistance((RealVector) b);
+        assertEquals(5.0, distance, DELTA);
+    }
+
+    // isInfinite: an infinite entry present (and no NaN) yields true
+    @Test
+    public void testIsInfinite_infiniteEntry_returnsTrue() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {Double.POSITIVE_INFINITY});
+        assertTrue(v.isInfinite());
+    }
+
+    // isInfinite: a NaN entry present causes false regardless of other values
+    @Test
+    public void testIsInfinite_nanEntry_returnsFalse() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {Double.NaN});
+        assertFalse(v.isInfinite());
+    }
+
+    // isInfinite: all-zero vector is not infinite
+    @Test
+    public void testIsInfinite_allZero_returnsFalse() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(3);
+        assertFalse(v.isInfinite());
+    }
+
+    // isNaN: a NaN entry present yields true
+    @Test
+    public void testIsNaN_nanEntry_returnsTrue() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {Double.NaN});
+        assertTrue(v.isNaN());
+    }
+
+    // mapAdd: returns new vector with offset applied, original left unmodified
+    @Test
+    public void testMapAdd_doesNotMutateOriginal_returnsIncrementedCopy() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {1.0, 2.0});
+        OpenMapRealVector r = v.mapAdd(3.0);
+        assertEquals(4.0, r.getEntry(0), DELTA);
+        assertEquals(5.0, r.getEntry(1), DELTA);
+        assertEquals(1.0, v.getEntry(0), DELTA);
+        assertEquals(2.0, v.getEntry(1), DELTA);
+    }
+
+    // mapAddToSelf: mutates every entry of the vector in place
+    @Test
+    public void testMapAddToSelf_mutatesAllEntries() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {0.0, 1.0});
+        v.mapAddToSelf(2.0);
+        assertEquals(2.0, v.getEntry(0), DELTA);
+        assertEquals(3.0, v.getEntry(1), DELTA);
+    }
+
+    // projection: v scaled by (this.v)/(v.v)
+    @Test
+    public void testProjection_simpleVectors_correctProjection() throws Throwable {
+        OpenMapRealVector self = new OpenMapRealVector(new double[] {3.0, 4.0});
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {1.0, 0.0});
+        RealVector proj = self.projection(v);
+        assertEquals(3.0, proj.getEntry(0), DELTA);
+        assertEquals(0.0, proj.getEntry(1), DELTA);
+    }
+
+    // setEntry: value below epsilon removes/clears the entry, treated as zero
+    @Test
+    public void testSetEntry_belowEpsilon_removesEntry() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(2);
+        v.setEntry(0, 5.0);
+        assertEquals(5.0, v.getEntry(0), DELTA);
+        v.setEntry(0, 1e-15);
+        assertEquals(0.0, v.getEntry(0), DELTA);
+    }
+
+    // setSubVector: writes sub-vector values at the given offset, leaves rest untouched
+    @Test
+    public void testSetSubVector_validRange_updatesEntries() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(5);
+        OpenMapRealVector sub = new OpenMapRealVector(new double[] {9.0, 8.0});
+        v.setSubVector(2, sub);
+        assertEquals(0.0, v.getEntry(0), DELTA);
+        assertEquals(9.0, v.getEntry(2), DELTA);
+        assertEquals(8.0, v.getEntry(3), DELTA);
+    }
+
+    // set: every entry set to the given value across the full loop
+    @Test
+    public void testSet_allEntries_setToGivenValue() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(3);
+        v.set(7.0);
+        assertEquals(7.0, v.getEntry(0), DELTA);
+        assertEquals(7.0, v.getEntry(1), DELTA);
+        assertEquals(7.0, v.getEntry(2), DELTA);
+    }
+
+    // subtract(RealVector) dispatch: correct difference with disjoint entries
+    @Test
+    public void testSubtractOpenMapRealVector_disjointEntries_correctDifference() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {5.0, 0.0});
+        OpenMapRealVector b = new OpenMapRealVector(new double[] {0.0, 3.0});
+        RealVector diff = a.subtract((RealVector) b);
+        assertEquals(5.0, diff.getEntry(0), DELTA);
+        assertEquals(-3.0, diff.getEntry(1), DELTA);
+    }
+
+    // unitVector: returns normalized copy, original vector left unmodified
+    @Test
+    public void testUnitVector_normalizesCopyWithoutMutatingOriginal() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {3.0, 4.0});
+        OpenMapRealVector u = v.unitVector();
+        assertEquals(0.6, u.getEntry(0), DELTA);
+        assertEquals(0.8, u.getEntry(1), DELTA);
+        assertEquals(3.0, v.getEntry(0), DELTA);
+        assertEquals(4.0, v.getEntry(1), DELTA);
+    }
+
+    // unitize: zero-norm vector throws MathArithmeticException
+    @Test
+    public void testUnitize_zeroVector_throwsMathArithmeticException() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(3);
+        try {
+            v.unitize();
+            fail("expected MathArithmeticException");
+        } catch (MathArithmeticException expected) {
+        }
+    }
+
+    // toArray: produces a dense array matching sparse entries including zeros
+    @Test
+    public void testToArray_matchesEntries() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {1.0, 0.0, 3.0});
+        double[] arr = v.toArray();
+        assertEquals(3, arr.length);
+        assertEquals(1.0, arr[0], DELTA);
+        assertEquals(0.0, arr[1], DELTA);
+        assertEquals(3.0, arr[2], DELTA);
+    }
+
+    // hashCode: equal vectors produce equal hash codes
+    @Test
+    public void testHashCode_equalObjects_sameHashCode() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(new double[] {1.0, 2.0});
+        OpenMapRealVector b = new OpenMapRealVector(new double[] {1.0, 2.0});
+        assertTrue(a.equals(b));
+        assertEquals(a.hashCode(), b.hashCode());
+    }
+
+    // equals: different virtualSize returns false
+    @Test
+    public void testEquals_differentDimension_returnsFalse() throws Throwable {
+        OpenMapRealVector a = new OpenMapRealVector(2);
+        OpenMapRealVector b = new OpenMapRealVector(3);
+        assertFalse(a.equals(b));
+    }
+
+    // getSparsity: ratio of non-zero entries to dimension
+    @Test
+    public void testGetSparsity_nonZeroCount_correctRatio() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {1.0, 0.0, 2.0, 0.0});
+        assertEquals(0.5, v.getSparsity(), DELTA);
+    }
+
+    // sparseIterator: iterates only non-zero entries, exposing correct index and value
+    @Test
+    public void testSparseIterator_iteratesOnlyNonZeroEntries() throws Throwable {
+        OpenMapRealVector v = new OpenMapRealVector(new double[] {0.0, 7.0});
+        java.util.Iterator<RealVector.Entry> it = v.sparseIterator();
+        assertTrue(it.hasNext());
+        RealVector.Entry entry = it.next();
+        assertEquals(1, entry.getIndex());
+        assertEquals(7.0, entry.getValue(), DELTA);
+        assertFalse(it.hasNext());
+    }
+}

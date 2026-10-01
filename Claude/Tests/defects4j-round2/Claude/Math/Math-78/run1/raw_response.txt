@@ -1,0 +1,219 @@
+package org.apache.commons.math.ode.events;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class EventStateClaudeTest {
+
+    /** Simple recording EventHandler implementation (no mocking library available). */
+    private static class RecordingHandler implements EventHandler {
+        double lastT = Double.NaN;
+        double[] lastY = null;
+        boolean resetStateCalled = false;
+        double gValue = 1.0;
+
+        public double g(double t, double[] y) throws EventException {
+            lastT = t;
+            lastY = y;
+            return gValue;
+        }
+
+        public int eventOccurred(double t, double[] y, boolean increasing) throws EventException {
+            return EventHandler.CONTINUE;
+        }
+
+        public void resetState(double t, double[] y) throws EventException {
+            resetStateCalled = true;
+        }
+    }
+
+    private RecordingHandler handler;
+    private EventState state;
+
+    @Before
+    public void setUp() throws Throwable {
+        handler = new RecordingHandler();
+        state = new EventState(handler, 1.0, 1.0e-6, 100);
+    }
+
+    // getEventHandler: must return exactly the instance passed to the constructor
+    @Test
+    public void testGetEventHandler_returnsSameInstancePassedToConstructor() throws Throwable {
+        assertSame(handler, state.getEventHandler());
+    }
+
+    // getEventHandler: two independent instances must not share/mix their handler reference
+    @Test
+    public void testGetEventHandler_differentInstancesNotMixed() throws Throwable {
+        RecordingHandler otherHandler = new RecordingHandler();
+        EventState otherState = new EventState(otherHandler, 2.0, 1.0e-3, 50);
+        assertSame(handler, state.getEventHandler());
+        assertSame(otherHandler, otherState.getEventHandler());
+    }
+
+    // getMaxCheckInterval: constructor stores the value unchanged
+    @Test
+    public void testGetMaxCheckInterval_returnsStoredValue() throws Throwable {
+        EventState s = new EventState(handler, 42.5, 1.0e-6, 10);
+        assertEquals(42.5, s.getMaxCheckInterval(), 1e-9);
+    }
+
+    // getMaxCheckInterval: zero edge value stored as-is, no normalization
+    @Test
+    public void testGetMaxCheckInterval_zeroValueStoredAsIs() throws Throwable {
+        EventState s = new EventState(handler, 0.0, 1.0e-6, 10);
+        assertEquals(0.0, s.getMaxCheckInterval(), 1e-9);
+    }
+
+    // getMaxCheckInterval: infinite value stored as-is (no abs/clamp applied, unlike convergence)
+    @Test
+    public void testGetMaxCheckInterval_infiniteValueStoredAsIs() throws Throwable {
+        EventState s = new EventState(handler, Double.POSITIVE_INFINITY, 1.0e-6, 10);
+        assertTrue(Double.isInfinite(s.getMaxCheckInterval()));
+        assertTrue(s.getMaxCheckInterval() > 0);
+    }
+
+    // getConvergence: positive value is returned unchanged
+    @Test
+    public void testGetConvergence_positiveValueUnchanged() throws Throwable {
+        EventState s = new EventState(handler, 1.0, 0.25, 10);
+        assertEquals(0.25, s.getConvergence(), 1e-9);
+    }
+
+    // getConvergence: constructor applies Math.abs, so negative input becomes positive
+    @Test
+    public void testGetConvergence_negativeValueConvertedToAbsoluteValue() throws Throwable {
+        EventState s = new EventState(handler, 1.0, -0.25, 10);
+        assertEquals(0.25, s.getConvergence(), 1e-9);
+    }
+
+    // getConvergence: Math.abs(0.0) == 0.0 edge case
+    @Test
+    public void testGetConvergence_zeroValueStaysZero() throws Throwable {
+        EventState s = new EventState(handler, 1.0, 0.0, 10);
+        assertEquals(0.0, s.getConvergence(), 1e-9);
+    }
+
+    // getConvergence: Math.abs(NaN) is NaN per Math.abs contract
+    @Test
+    public void testGetConvergence_nanValueStaysNan() throws Throwable {
+        EventState s = new EventState(handler, 1.0, Double.NaN, 10);
+        assertTrue(Double.isNaN(s.getConvergence()));
+    }
+
+    // getMaxIterationCount: constructor stores the value unchanged
+    @Test
+    public void testGetMaxIterationCount_returnsStoredValue() throws Throwable {
+        EventState s = new EventState(handler, 1.0, 1.0e-6, 123);
+        assertEquals(123, s.getMaxIterationCount());
+    }
+
+    // getMaxIterationCount: no validation performed, negative values are kept as-is
+    @Test
+    public void testGetMaxIterationCount_negativeValueStoredWithoutValidation() throws Throwable {
+        EventState s = new EventState(handler, 1.0, 1.0e-6, -5);
+        assertEquals(-5, s.getMaxIterationCount());
+    }
+
+    // getMaxIterationCount: zero edge value
+    @Test
+    public void testGetMaxIterationCount_zeroValue() throws Throwable {
+        EventState s = new EventState(handler, 1.0, 1.0e-6, 0);
+        assertEquals(0, s.getMaxIterationCount());
+    }
+
+    // getEventTime: before any evaluateStep call, dummy NaN value from constructor is observable
+    @Test
+    public void testGetEventTime_beforeAnyEvaluation_isNaN() throws Throwable {
+        assertTrue(Double.isNaN(state.getEventTime()));
+    }
+
+    // reinitializeBegin: must forward the exact tStart/yStart arguments to handler.g
+    @Test
+    public void testReinitializeBegin_forwardsExactTimeAndStateToHandler() throws Throwable {
+        double[] y = new double[] {3.0, -2.0};
+        state.reinitializeBegin(5.0, y);
+        assertEquals(5.0, handler.lastT, 1e-9);
+        assertArrayEquals(y, handler.lastY, 1e-9);
+    }
+
+    // reinitializeBegin: empty state vector is accepted and forwarded correctly
+    @Test
+    public void testReinitializeBegin_withEmptyStateArray() throws Throwable {
+        double[] y = new double[0];
+        state.reinitializeBegin(2.0, y);
+        assertNotNull(handler.lastY);
+        assertEquals(0, handler.lastY.length);
+    }
+
+    // reinitializeBegin: second call overwrites the state captured by the first call
+    @Test
+    public void testReinitializeBegin_calledTwice_usesLatestValues() throws Throwable {
+        state.reinitializeBegin(1.0, new double[] {1.0});
+        state.reinitializeBegin(7.0, new double[] {9.0});
+        assertEquals(7.0, handler.lastT, 1e-9);
+        assertArrayEquals(new double[] {9.0}, handler.lastY, 1e-9);
+    }
+
+    // stepAccepted: without a pending event, nextAction becomes CONTINUE so stop() is false
+    @Test
+    public void testStepAccepted_noPendingEvent_resultsInStopFalse() throws Throwable {
+        state.stepAccepted(3.0, new double[] {1.0});
+        assertFalse(state.stop());
+    }
+
+    // stepAccepted: must forward the exact t/y arguments to handler.g
+    @Test
+    public void testStepAccepted_forwardsExactTimeAndStateToHandler() throws Throwable {
+        double[] y = new double[] {4.0, 5.0};
+        state.stepAccepted(6.0, y);
+        assertEquals(6.0, handler.lastT, 1e-9);
+        assertArrayEquals(y, handler.lastY, 1e-9);
+    }
+
+    // stepAccepted: multiple sequential accepted steps keep stop() false (no pending event path)
+    @Test
+    public void testStepAccepted_calledTwiceInSequence_stopRemainsFalse() throws Throwable {
+        state.stepAccepted(1.0, new double[] {1.0});
+        assertFalse(state.stop());
+        state.stepAccepted(2.0, new double[] {-1.0});
+        assertFalse(state.stop());
+    }
+
+    // stop: a freshly constructed instance has nextAction == CONTINUE, so stop() is false
+    @Test
+    public void testStop_freshlyConstructedInstance_isFalse() throws Throwable {
+        assertFalse(state.stop());
+    }
+
+    // stop: remains false after a normal (non event-triggering) accepted step
+    @Test
+    public void testStop_afterStepAcceptedWithoutPendingEvent_isFalse() throws Throwable {
+        state.reinitializeBegin(0.0, new double[] {1.0});
+        state.stepAccepted(1.0, new double[] {1.0});
+        assertFalse(state.stop());
+    }
+
+    // reset: with no pending event, contract says it must return false immediately
+    @Test
+    public void testReset_noPendingEvent_returnsFalse() throws Throwable {
+        boolean reinit = state.reset(0.0, new double[] {1.0});
+        assertFalse(reinit);
+    }
+
+    // reset: with no pending event, the handler's resetState must never be invoked
+    @Test
+    public void testReset_noPendingEvent_doesNotInvokeResetState() throws Throwable {
+        state.reset(0.0, new double[] {1.0});
+        assertFalse(handler.resetStateCalled);
+    }
+
+    // reset: repeated calls with no pending event keep returning false every time (loop case)
+    @Test
+    public void testReset_calledRepeatedly_alwaysReturnsFalseWhenNoPendingEvent() throws Throwable {
+        assertFalse(state.reset(0.0, new double[] {1.0}));
+        assertFalse(state.reset(1.0, new double[] {2.0}));
+        assertFalse(state.reset(2.0, new double[] {3.0}));
+    }
+}

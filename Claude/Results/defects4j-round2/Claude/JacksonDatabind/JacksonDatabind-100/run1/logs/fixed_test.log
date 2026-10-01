@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-100-74tfqnx0/JacksonDatabind-100f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - com.fasterxml.jackson.databind.node.TreeTraversingParserClaudeTest::testGetText_beforeFirstNextToken_returnsNullWithoutThrowing
+[exit 0]

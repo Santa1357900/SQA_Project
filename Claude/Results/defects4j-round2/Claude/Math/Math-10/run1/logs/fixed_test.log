@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-10-v_xbgjzv/Math-10f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.math3.analysis.differentiation.DSCompilerClaudeTest::testDivide_differentOffsets_catchesOffsetBug
+[exit 0]

@@ -1,0 +1,480 @@
+package org.jfree.data.time;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class WeekClaudeTest {
+
+    // Constructor Week(int,int): boundary valid values 1 and 53 should not throw
+    @Test
+    public void testConstructorWeekIntInt_boundaryValues_createsValidWeek() throws Throwable {
+        Week w1 = new Week(1, 2000);
+        Week w2 = new Week(53, 2000);
+        assertEquals(1, w1.getWeek());
+        assertEquals(53, w2.getWeek());
+    }
+
+    // Constructor Week(int,int): week=0 is below FIRST_WEEK_IN_YEAR, contract says must throw
+    @Test
+    public void testConstructorWeekIntInt_invalidWeekZero_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Week(0, 2000);
+            fail("expected IllegalArgumentException");
+        }
+        catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Constructor Week(int,int): week=54 is above LAST_WEEK_IN_YEAR, contract says must throw
+    @Test
+    public void testConstructorWeekIntInt_invalidWeekTooLarge_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Week(54, 2000);
+            fail("expected IllegalArgumentException");
+        }
+        catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Constructor Week(int,Year): valid value stores week and year correctly
+    @Test
+    public void testConstructorWeekIntYear_validValue_createsWeek() throws Throwable {
+        Week w = new Week(10, new Year(2001));
+        assertEquals(10, w.getWeek());
+        assertEquals(2001, w.getYearValue());
+    }
+
+    // Constructor Week(int,Year): week=0 invalid, must throw per contract
+    @Test
+    public void testConstructorWeekIntYear_invalidWeekZero_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Week(0, new Year(2001));
+            fail("expected IllegalArgumentException");
+        }
+        catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Constructor Week(Date): delegates to full constructor with default zone/locale
+    @Test
+    public void testDateConstructor_delegatesToFullConstructorWithDefaults() throws Throwable {
+        Date date = new Date(123456789000L);
+        Week w1 = new Week(date);
+        Week w2 = new Week(date, RegularTimePeriod.DEFAULT_TIME_ZONE, Locale.getDefault());
+        assertEquals(w2.getWeek(), w1.getWeek());
+        assertEquals(w2.getYearValue(), w1.getYearValue());
+    }
+
+    // Deprecated constructor Week(Date,TimeZone) ignores the zone param, uses DEFAULT_TIME_ZONE
+    @Test
+    public void testDeprecatedDateTimeZoneConstructor_ignoresZoneParam() throws Throwable {
+        Date date = new Date(1000000000L);
+        Week w1 = new Week(date, TimeZone.getTimeZone("Asia/Tokyo"));
+        Week w2 = new Week(date, RegularTimePeriod.DEFAULT_TIME_ZONE, Locale.getDefault());
+        assertEquals(w2.getWeek(), w1.getWeek());
+        assertEquals(w2.getYearValue(), w1.getYearValue());
+    }
+
+    // Full constructor: null time argument must throw
+    @Test
+    public void testFullConstructor_nullTime_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Week((Date) null, TimeZone.getTimeZone("GMT"), Locale.US);
+            fail("expected IllegalArgumentException");
+        }
+        catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Full constructor: null zone argument must throw
+    @Test
+    public void testFullConstructor_nullZone_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Week(new Date(), (TimeZone) null, Locale.US);
+            fail("expected IllegalArgumentException");
+        }
+        catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Full constructor: null locale argument must throw
+    @Test
+    public void testFullConstructor_nullLocale_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Week(new Date(), TimeZone.getTimeZone("GMT"), (Locale) null);
+            fail("expected IllegalArgumentException");
+        }
+        catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Full constructor: mid-year date, normal branch, week/year must match Calendar's own computation
+    @Test
+    public void testFullConstructor_midYearDate_matchesCalendarWeek() throws Throwable {
+        TimeZone zone = TimeZone.getTimeZone("GMT");
+        Locale locale = Locale.US;
+        Calendar cal = Calendar.getInstance(zone, locale);
+        cal.clear();
+        cal.set(2010, Calendar.JUNE, 15, 0, 0, 0);
+        Date date = cal.getTime();
+        int expectedWeek = cal.get(Calendar.WEEK_OF_YEAR);
+        Week w = new Week(date, zone, locale);
+        assertEquals(expectedWeek, w.getWeek());
+        assertEquals(2010, w.getYearValue());
+    }
+
+    // Full constructor: December date landing in week 1 rolls to next year (documented special case)
+    @Test
+    public void testFullConstructor_decemberRollsToNextYearWeek1() throws Throwable {
+        TimeZone zone = TimeZone.getTimeZone("GMT");
+        Locale locale = Locale.US;
+        Calendar cal = Calendar.getInstance(zone, locale);
+        cal.clear();
+        cal.set(2006, Calendar.DECEMBER, 31, 0, 0, 0);
+        Date date = cal.getTime();
+        assertEquals(1, cal.get(Calendar.WEEK_OF_YEAR));
+        assertEquals(Calendar.DECEMBER, cal.get(Calendar.MONTH));
+        Week w = new Week(date, zone, locale);
+        assertEquals(2007, w.getYearValue());
+        assertEquals(1, w.getWeek());
+    }
+
+    // Full constructor: January date landing in week>=52 rolls back to previous year (documented special case)
+    @Test
+    public void testFullConstructor_januaryRollsToPreviousYearLateWeek() throws Throwable {
+        TimeZone zone = TimeZone.getTimeZone("GMT");
+        Locale locale = Locale.GERMANY;
+        Calendar cal = Calendar.getInstance(zone, locale);
+        cal.clear();
+        cal.set(2005, Calendar.JANUARY, 1, 0, 0, 0);
+        Date date = cal.getTime();
+        int weekOfYear = cal.get(Calendar.WEEK_OF_YEAR);
+        assertEquals(Calendar.JANUARY, cal.get(Calendar.MONTH));
+        assertTrue(weekOfYear >= 52);
+        Week w = new Week(date, zone, locale);
+        assertEquals(2004, w.getYearValue());
+        assertEquals(Math.min(weekOfYear, Week.LAST_WEEK_IN_YEAR), w.getWeek());
+    }
+
+    // getYear() returns a Year object wrapping the stored year value
+    @Test
+    public void testGetYear_returnsYearObject() throws Throwable {
+        Week w = new Week(4, 2003);
+        assertEquals(2003, w.getYear().getYear());
+    }
+
+    // getYearValue() returns primitive year
+    @Test
+    public void testGetYearValue_returnsPrimitiveYear() throws Throwable {
+        Week w = new Week(4, 2003);
+        assertEquals(2003, w.getYearValue());
+    }
+
+    // getWeek() returns stored week number
+    @Test
+    public void testGetWeek_returnsWeekNumber() throws Throwable {
+        Week w = new Week(17, 2003);
+        assertEquals(17, w.getWeek());
+    }
+
+    // peg(Calendar) recalculates first/last millisecond consistent with the getters taking a calendar
+    @Test
+    public void testPeg_recalculatesMillisecondsForGivenCalendar() throws Throwable {
+        Week w = new Week(5, 2010);
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+        w.peg(cal);
+        assertEquals(w.getFirstMillisecond(cal), w.getFirstMillisecond());
+        assertEquals(w.getLastMillisecond(cal), w.getLastMillisecond());
+    }
+
+    // peg(Calendar) with null calendar must throw NullPointerException
+    @Test
+    public void testPeg_nullCalendar_throwsNullPointerException() throws Throwable {
+        Week w = new Week(5, 2010);
+        try {
+            w.peg((Calendar) null);
+            fail("expected NullPointerException");
+        }
+        catch (NullPointerException expected) {
+        }
+    }
+
+    // previous(): normal case, week-1 within same year
+    @Test
+    public void testPrevious_normalWeek_returnsWeekMinusOne() throws Throwable {
+        Week w = new Week(25, 2000);
+        Week pw = (Week) w.previous();
+        assertEquals(24, pw.getWeek());
+        assertEquals(2000, pw.getYearValue());
+    }
+
+    // previous(): from week 1, rolls back to last week of prior year (year > 1900 branch)
+    @Test
+    public void testPrevious_fromWeek1_returnsLastWeekOfPreviousYear() throws Throwable {
+        Week w = new Week(1, 2000);
+        Week pw = (Week) w.previous();
+        assertEquals(1999, pw.getYearValue());
+        Calendar cal = Calendar.getInstance();
+        cal.set(1999, Calendar.DECEMBER, 31);
+        int expectedMax = cal.getActualMaximum(Calendar.WEEK_OF_YEAR);
+        assertEquals(expectedMax, pw.getWeek());
+    }
+
+    // previous(): at week 1 of year 1900, lower limit reached -> returns null
+    @Test
+    public void testPrevious_atYear1900Week1_returnsNull() throws Throwable {
+        Week w = new Week(1, 1900);
+        assertNull(w.previous());
+    }
+
+    // next(): normal case, week<52 simply increments
+    @Test
+    public void testNext_normalWeek_returnsWeekPlusOne() throws Throwable {
+        Week w = new Week(10, 2000);
+        Week nw = (Week) w.next();
+        assertEquals(11, nw.getWeek());
+        assertEquals(2000, nw.getYearValue());
+    }
+
+    // next(): week=52 branch, either week 53 same year or week 1 next year depending on actual max
+    @Test
+    public void testNext_week52_returnsCorrectNextWeek() throws Throwable {
+        Week w = new Week(52, 2000);
+        Calendar cal = Calendar.getInstance();
+        cal.set(2000, Calendar.DECEMBER, 31);
+        int maxWeek = cal.getActualMaximum(Calendar.WEEK_OF_YEAR);
+        Week nw = (Week) w.next();
+        if (maxWeek >= 53) {
+            assertEquals(53, nw.getWeek());
+            assertEquals(2000, nw.getYearValue());
+        }
+        else {
+            assertEquals(1, nw.getWeek());
+            assertEquals(2001, nw.getYearValue());
+        }
+    }
+
+    // next(): week=53 (max for Gregorian calendar) rolls into week 1 of next year
+    @Test
+    public void testNext_week53_returnsFirstWeekOfNextYear() throws Throwable {
+        Week w = new Week(53, 2000);
+        Week nw = (Week) w.next();
+        assertEquals(1, nw.getWeek());
+        assertEquals(2001, nw.getYearValue());
+    }
+
+    // next(): upper limit year 9999 at last week of year -> returns null
+    @Test
+    public void testNext_atLastWeekOfYear9999_returnsNull() throws Throwable {
+        Calendar cal = Calendar.getInstance();
+        cal.set(9999, Calendar.DECEMBER, 31);
+        int maxWeek = cal.getActualMaximum(Calendar.WEEK_OF_YEAR);
+        Week w = new Week(maxWeek, 9999);
+        assertNull(w.next());
+    }
+
+    // getSerialIndex(): computed as year*53+week
+    @Test
+    public void testGetSerialIndex_computesCorrectly() throws Throwable {
+        Week w = new Week(5, 2000);
+        assertEquals(2000L * 53L + 5L, w.getSerialIndex());
+    }
+
+    // getFirstMillisecond(Calendar)/getLastMillisecond(Calendar): span exactly one week minus 1 ms in GMT
+    @Test
+    public void testGetFirstAndLastMillisecondCalendar_returnWeekBounds() throws Throwable {
+        Week w = new Week(2, 2000);
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+        long first = w.getFirstMillisecond(cal);
+        long last = w.getLastMillisecond(cal);
+        assertTrue(last > first);
+        assertEquals(7L * 24L * 60L * 60L * 1000L - 1L, last - first);
+    }
+
+    // getFirstMillisecond(Calendar) with null calendar must throw NullPointerException
+    @Test
+    public void testGetFirstMillisecondCalendar_nullCalendar_throwsNullPointerException() throws Throwable {
+        Week w = new Week(1, 2000);
+        try {
+            w.getFirstMillisecond((Calendar) null);
+            fail("expected NullPointerException");
+        }
+        catch (NullPointerException expected) {
+        }
+    }
+
+    // getLastMillisecond(Calendar) with null calendar must throw NullPointerException
+    @Test
+    public void testGetLastMillisecondCalendar_nullCalendar_throwsNullPointerException() throws Throwable {
+        Week w = new Week(1, 2000);
+        try {
+            w.getLastMillisecond((Calendar) null);
+            fail("expected NullPointerException");
+        }
+        catch (NullPointerException expected) {
+        }
+    }
+
+    // getFirstMillisecond()/getLastMillisecond() no-arg reflect the last peg() call
+    @Test
+    public void testGetFirstAndLastMillisecond_noArg_matchExplicitPeg() throws Throwable {
+        Week w = new Week(3, 2010);
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+        w.peg(cal);
+        assertEquals(w.getFirstMillisecond(cal), w.getFirstMillisecond());
+        assertEquals(w.getLastMillisecond(cal), w.getLastMillisecond());
+        assertTrue(w.getLastMillisecond() > w.getFirstMillisecond());
+    }
+
+    // toString(): formatted as "Week <week>, <year>"
+    @Test
+    public void testToString_formatsWeekAndYear() throws Throwable {
+        Week w = new Week(7, 1999);
+        assertEquals("Week 7, 1999", w.toString());
+    }
+
+    // equals(): same instance returns true
+    @Test
+    public void testEquals_sameInstance_returnsTrue() throws Throwable {
+        Week w = new Week(7, 1999);
+        assertTrue(w.equals(w));
+    }
+
+    // equals(): same week and year returns true
+    @Test
+    public void testEquals_sameWeekAndYear_returnsTrue() throws Throwable {
+        Week w1 = new Week(7, 1999);
+        Week w2 = new Week(7, 1999);
+        assertTrue(w1.equals(w2));
+    }
+
+    // equals(): different week returns false
+    @Test
+    public void testEquals_differentWeek_returnsFalse() throws Throwable {
+        Week w1 = new Week(7, 1999);
+        Week w2 = new Week(8, 1999);
+        assertFalse(w1.equals(w2));
+    }
+
+    // equals(): different year returns false
+    @Test
+    public void testEquals_differentYear_returnsFalse() throws Throwable {
+        Week w1 = new Week(7, 1999);
+        Week w2 = new Week(7, 2000);
+        assertFalse(w1.equals(w2));
+    }
+
+    // equals(): comparing to non-Week object returns false
+    @Test
+    public void testEquals_differentClass_returnsFalse() throws Throwable {
+        Week w = new Week(7, 1999);
+        assertFalse(w.equals("not a week"));
+    }
+
+    // hashCode(): equal objects produce equal hash codes
+    @Test
+    public void testHashCode_equalObjects_sameHashCode() throws Throwable {
+        Week w1 = new Week(7, 1999);
+        Week w2 = new Week(7, 1999);
+        assertEquals(w1.hashCode(), w2.hashCode());
+    }
+
+    // compareTo(): identical week/year returns zero
+    @Test
+    public void testCompareTo_sameWeekYear_returnsZero() throws Throwable {
+        Week w1 = new Week(7, 1999);
+        Week w2 = new Week(7, 1999);
+        assertEquals(0, w1.compareTo(w2));
+    }
+
+    // compareTo(): later week in same year returns positive
+    @Test
+    public void testCompareTo_laterWeekSameYear_returnsPositive() throws Throwable {
+        Week w1 = new Week(10, 2000);
+        Week w2 = new Week(5, 2000);
+        assertTrue(w1.compareTo(w2) > 0);
+    }
+
+    // compareTo(): earlier year returns negative
+    @Test
+    public void testCompareTo_earlierYear_returnsNegative() throws Throwable {
+        Week w1 = new Week(10, 1999);
+        Week w2 = new Week(10, 2000);
+        assertTrue(w1.compareTo(w2) < 0);
+    }
+
+    // compareTo(): comparing to unrelated non-time-period object returns 1
+    @Test
+    public void testCompareTo_unrelatedObject_returnsOne() throws Throwable {
+        Week w = new Week(10, 2000);
+        assertEquals(1, w.compareTo("not a time period"));
+    }
+
+    // parseWeek(): "YYYY-Wnn" format parses correctly
+    @Test
+    public void testParseWeek_yyyyDashWnn_parsesCorrectly() throws Throwable {
+        Week w = Week.parseWeek("2004-W12");
+        assertEquals(12, w.getWeek());
+        assertEquals(2004, w.getYearValue());
+    }
+
+    // parseWeek(): "Wnn-YYYY" format parses correctly
+    @Test
+    public void testParseWeek_WnnDashYyyy_parsesCorrectly() throws Throwable {
+        Week w = Week.parseWeek("W12-2004");
+        assertEquals(12, w.getWeek());
+        assertEquals(2004, w.getYearValue());
+    }
+
+    // parseWeek(): null input returns null
+    @Test
+    public void testParseWeek_null_returnsNull() throws Throwable {
+        assertNull(Week.parseWeek(null));
+    }
+
+    // parseWeek(): no recognizable separator throws TimePeriodFormatException
+    @Test
+    public void testParseWeek_noSeparator_throwsTimePeriodFormatException() throws Throwable {
+        try {
+            Week.parseWeek("bogus");
+            fail("expected TimePeriodFormatException");
+        }
+        catch (TimePeriodFormatException expected) {
+        }
+    }
+
+    // parseWeek(): neither side is a valid year throws TimePeriodFormatException
+    @Test
+    public void testParseWeek_unparsableYear_throwsTimePeriodFormatException() throws Throwable {
+        try {
+            Week.parseWeek("abc-def");
+            fail("expected TimePeriodFormatException");
+        }
+        catch (TimePeriodFormatException expected) {
+        }
+    }
+
+    // parseWeek(): valid year but out-of-range week throws TimePeriodFormatException
+    @Test
+    public void testParseWeek_invalidWeekNumber_throwsTimePeriodFormatException() throws Throwable {
+        try {
+            Week.parseWeek("2004-W99");
+            fail("expected TimePeriodFormatException");
+        }
+        catch (TimePeriodFormatException expected) {
+        }
+    }
+
+    // default constructor: produces a week within the valid 1-53 range for a real year
+    @Test
+    public void testDefaultConstructor_createsValidWeek() throws Throwable {
+        Week w = new Week();
+        assertTrue(w.getWeek() >= 1 && w.getWeek() <= 53);
+        assertTrue(w.getYearValue() > 1900);
+    }
+}

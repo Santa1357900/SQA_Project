@@ -1,0 +1,35 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Csv-3-1jizu8_k/Csv-3f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /tmp/claude-Csv-3-1jizu8_k/fixed && ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-Csv-3-1jizu8_k/fixed -Dd4j.test.dir=/tmp/claude-Csv-3-1jizu8_k/fixed/.test_suite compile.gen.tests 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+test-offline:
+
+get-deps:
+
+commons-csv-from-maven.compile:
+    [javac] /tmp/claude-Csv-3-1jizu8_k/fixed/maven-build.xml:79: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+
+compile:
+
+compile.gen.tests:
+     [echo] classes.dir: target/classes
+     [echo] build.home: target/classes/..
+    [mkdir] Created dir: /tmp/claude-Csv-3-1jizu8_k/fixed/.classes_testgen
+    [javac] /home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /tmp/claude-Csv-3-1jizu8_k/fixed/.classes_testgen
+    [javac] /tmp/claude-Csv-3-1jizu8_k/fixed/.test_suite/org/apache/commons/csv/LexerClaudeTest.java:205: error: cannot find symbol
+    [javac]         final Lexer lexer = createLexer("", CSVFormat.DEFAULT.withDelimiter('\t'));
+    [javac]                                                              ^
+    [javac]   symbol:   method withDelimiter(char)
+    [javac]   location: variable DEFAULT of type CSVFormat
+    [javac] 1 error
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 3 seconds
+Cannot compile extracted test suite! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

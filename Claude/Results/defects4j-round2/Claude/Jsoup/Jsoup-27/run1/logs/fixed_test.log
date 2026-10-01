@@ -1,0 +1,35 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-27-npzflrn4/Jsoup-27f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /tmp/claude-Jsoup-27-npzflrn4/fixed && ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-Jsoup-27-npzflrn4/fixed -Dd4j.test.dir=/tmp/claude-Jsoup-27-npzflrn4/fixed/.test_suite compile.gen.tests 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+test-offline:
+
+get-deps:
+
+jsoup-from-maven.compile:
+    [javac] /tmp/claude-Jsoup-27-npzflrn4/fixed/maven-build.xml:74: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+
+compile:
+
+compile.gen.tests:
+     [echo] classes.dir: target/classes
+     [echo] build.home: target/classes/..
+    [mkdir] Created dir: /tmp/claude-Jsoup-27-npzflrn4/fixed/.classes_testgen
+    [javac] /home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /tmp/claude-Jsoup-27-npzflrn4/fixed/.classes_testgen
+    [javac] /tmp/claude-Jsoup-27-npzflrn4/fixed/.test_suite/org/jsoup/helper/DataUtilClaudeTest.java:8: error: cannot find symbol
+    [javac] import org.jsoup.nodes.Elements;
+    [javac]                       ^
+    [javac]   symbol:   class Elements
+    [javac]   location: package org.jsoup.nodes
+    [javac] 1 error
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 1 second
+Cannot compile extracted test suite! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

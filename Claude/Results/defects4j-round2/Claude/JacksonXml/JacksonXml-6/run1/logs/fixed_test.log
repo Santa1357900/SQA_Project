@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonXml-6-8wds4nee/JacksonXml-6f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorClaudeTest::testInitGenerator_withXmlDeclarationFeature_writesDeclaration
+  - com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorClaudeTest::testInitGenerator_calledTwice_onlyInitializesOnce
+  - com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorClaudeTest::testClose_autoClosesOpenObjects
+  - com.fasterxml.jackson.dataformat.xml.ser.ToXmlGeneratorClaudeTest::testWriteStartObject_withNextName_writesElement
+[exit 0]

@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Compress-34-z88v54tk/Compress-34b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.compress.archivers.zip.X7875_NewUnixClaudeTest::testGetCentralDirectoryLength_perClassJavadoc_isZero
+  - org.apache.commons.compress.archivers.zip.X7875_NewUnixClaudeTest::testGetCentralDirectoryData_consistentWithCentralDirectoryLength
+[exit 0]

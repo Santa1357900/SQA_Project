@@ -1,0 +1,238 @@
+package com.google.javascript.jscomp;
+
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CodeGeneratorClaudeTest {
+
+  // isSimpleNumber: loop runs 0 times (empty string) -> false
+  @Test
+  public void testIsSimpleNumber_emptyString_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber(""));
+  }
+
+  // isSimpleNumber: all characters are digits -> true
+  @Test
+  public void testIsSimpleNumber_allDigits_returnsTrue() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("12345"));
+  }
+
+  // isSimpleNumber: contains a non-digit char -> false branch inside loop
+  @Test
+  public void testIsSimpleNumber_withNonDigitChar_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("12a45"));
+  }
+
+  // isSimpleNumber: leading zero still counts as digits -> true
+  @Test
+  public void testIsSimpleNumber_withLeadingZero_returnsTrue() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("007"));
+  }
+
+  // isSimpleNumber: negative sign is not a digit -> false
+  @Test
+  public void testIsSimpleNumber_withNegativeSign_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("-123"));
+  }
+
+  // getSimpleNumber: isSimpleNumber false branch -> NaN
+  @Test
+  public void testGetSimpleNumber_nonDigitString_returnsNaN() throws Throwable {
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("abc")));
+  }
+
+  // getSimpleNumber: within bound -> returns numeric value
+  @Test
+  public void testGetSimpleNumber_smallNumber_returnsValue() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("123");
+    assertEquals(123.0, result, 0.0);
+  }
+
+  // getSimpleNumber: boundary value exactly equal to MAX_POSITIVE_INTEGER_NUMBER
+  // must still be treated as a simple (exactly representable) number
+  @Test
+  public void testGetSimpleNumber_atMaxPositiveInteger_returnsValue() throws Throwable {
+    String s = String.valueOf(NodeUtil.MAX_POSITIVE_INTEGER_NUMBER);
+    double expected = NodeUtil.MAX_POSITIVE_INTEGER_NUMBER;
+    double result = CodeGenerator.getSimpleNumber(s);
+    assertEquals(expected, result, 0.0);
+  }
+
+  // getSimpleNumber: value strictly above the bound -> NaN
+  @Test
+  public void testGetSimpleNumber_aboveMaxPositiveInteger_returnsNaN() throws Throwable {
+    long aboveMax = NodeUtil.MAX_POSITIVE_INTEGER_NUMBER + 1;
+    String s = String.valueOf(aboveMax);
+    double result = CodeGenerator.getSimpleNumber(s);
+    assertTrue(Double.isNaN(result));
+  }
+
+  // getSimpleNumber: zero is a valid simple number
+  @Test
+  public void testGetSimpleNumber_zero_returnsZero() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("0");
+    assertEquals(0.0, result, 0.0);
+  }
+
+  // jsString: more double quotes than single -> single quote delimiter chosen
+  @Test
+  public void testJsString_moreDoubleQuotes_usesSingleQuoteDelimiter() throws Throwable {
+    String result = CodeGenerator.jsString("He said \"hi\"", null);
+    assertEquals("'He said \"hi\"'", result);
+  }
+
+  // jsString: more single quotes than double -> double quote delimiter chosen
+  @Test
+  public void testJsString_moreSingleQuotes_usesDoubleQuoteDelimiter() throws Throwable {
+    String result = CodeGenerator.jsString("He said 'hi'", null);
+    assertEquals("\"He said 'hi'\"", result);
+  }
+
+  // jsString: equal quote counts (zero) -> else branch -> double quote delimiter
+  @Test
+  public void testJsString_equalQuoteCounts_usesDoubleQuoteDelimiter() throws Throwable {
+    String result = CodeGenerator.jsString("abc", null);
+    assertEquals("\"abc\"", result);
+  }
+
+  // jsString: newline/CR/tab escape sequences
+  @Test
+  public void testJsString_newlineCarriageReturnTab_escaped() throws Throwable {
+    String result = CodeGenerator.jsString("a\nb\rc\td", null);
+    assertEquals("\"a\\nb\\rc\\td\"", result);
+  }
+
+  // jsString: NUL character escaped as \0
+  @Test
+  public void testJsString_nullCharacter_escapedAsZero() throws Throwable {
+    String result = CodeGenerator.jsString("a\0b", null);
+    assertEquals("\"a\\0b\"", result);
+  }
+
+  // jsString: backslash is doubled
+  @Test
+  public void testJsString_backslash_escaped() throws Throwable {
+    String result = CodeGenerator.jsString("a\\b", null);
+    assertEquals("\"a\\\\b\"", result);
+  }
+
+  // jsString: "</script" sequence escaped to avoid closing a real script tag
+  @Test
+  public void testJsString_scriptCloseTag_escaped() throws Throwable {
+    String result = CodeGenerator.jsString("a</script>b", null);
+    assertEquals("\"a<\\/script>b\"", result);
+  }
+
+  // jsString: "<!--" sequence escaped to avoid starting an HTML comment
+  @Test
+  public void testJsString_htmlCommentOpen_escaped() throws Throwable {
+    String result = CodeGenerator.jsString("a<!--b", null);
+    assertEquals("\"a<\\!--b\"", result);
+  }
+
+  // jsString: "-->" sequence escaped to avoid ending an HTML comment
+  @Test
+  public void testJsString_doubleDashGreaterThan_escaped() throws Throwable {
+    String result = CodeGenerator.jsString("a-->b", null);
+    assertEquals("\"a--\\>b\"", result);
+  }
+
+  // jsString: "]]>" sequence escaped
+  @Test
+  public void testJsString_bracketBracketGreaterThan_escaped() throws Throwable {
+    String result = CodeGenerator.jsString("]]>x", null);
+    assertEquals("\"]]\\>x\"", result);
+  }
+
+  // jsString: non-ASCII char with no encoder -> unicode hex escape
+  @Test
+  public void testJsString_nonAsciiCharNoEncoder_hexEscaped() throws Throwable {
+    String result = CodeGenerator.jsString("\u00e9", null);
+    assertEquals("\"\\u00e9\"", result);
+  }
+
+  // jsString: encoder that can encode the char -> left untouched
+  @Test
+  public void testJsString_withEncoderCanEncode_notEscaped() throws Throwable {
+    CharsetEncoder encoder = Charset.forName("ISO-8859-1").newEncoder();
+    String result = CodeGenerator.jsString("\u00e9", encoder);
+    assertEquals("\"\u00e9\"", result);
+  }
+
+  // jsString: encoder that cannot encode the char -> unicode hex escape
+  @Test
+  public void testJsString_withEncoderCannotEncode_hexEscaped() throws Throwable {
+    CharsetEncoder encoder = Charset.forName("US-ASCII").newEncoder();
+    String result = CodeGenerator.jsString("\u00e9", encoder);
+    assertEquals("\"\\u00e9\"", result);
+  }
+
+  // jsString: low control character escaped as unicode hex
+  @Test
+  public void testJsString_controlCharacter_hexEscaped() throws Throwable {
+    String result = CodeGenerator.jsString("\u0001", null);
+    assertEquals("\"\\u0001\"", result);
+  }
+
+  // jsString: empty string -> just the delimiter quotes
+  @Test
+  public void testJsString_emptyString_returnsQuotes() throws Throwable {
+    String result = CodeGenerator.jsString("", null);
+    assertEquals("\"\"", result);
+  }
+
+  // regexpEscape (one-arg overload): always uses '/' delimiter
+  @Test
+  public void testRegexpEscapeNoEncoder_usesSlashDelimiter() throws Throwable {
+    String result = CodeGenerator.regexpEscape("abc");
+    assertEquals("/abc/", result);
+  }
+
+  // regexpEscape: quote characters are left unescaped since '/' is delimiter
+  @Test
+  public void testRegexpEscapeWithQuotes_notEscaped() throws Throwable {
+    String result = CodeGenerator.regexpEscape("a\"b'c", null);
+    assertEquals("/a\"b'c/", result);
+  }
+
+  // regexpEscape: backslash maps to itself (single backslash, not doubled)
+  @Test
+  public void testRegexpEscapeWithBackslash_unchanged() throws Throwable {
+    String result = CodeGenerator.regexpEscape("a\\b", null);
+    assertEquals("/a\\b/", result);
+  }
+
+  // escapeToDoubleQuotedJsString: always double-quote delimiter, quotes/backslash escaped
+  @Test
+  public void testEscapeToDoubleQuotedJsString_mixedChars() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a\"b'c\\d");
+    assertEquals("\"a\\\"b'c\\\\d\"", result);
+  }
+
+  // strEscape: custom delimiters and escape strings applied directly
+  @Test
+  public void testStrEscape_customDelimiters_appliesGivenEscapes() throws Throwable {
+    String result1 = CodeGenerator.strEscape("x'y\"z", '|', "DQ", "SQ", "BS", null);
+    assertEquals("|xSQyDQz|", result1);
+    String result2 = CodeGenerator.strEscape("a\\b", '|', "DQ", "SQ", "BS", null);
+    assertEquals("|aBSb|", result2);
+  }
+
+  // identifierEscape: plain ASCII identifier (latin) returned unchanged
+  @Test
+  public void testIdentifierEscape_asciiIdentifier_unchanged() throws Throwable {
+    String result = CodeGenerator.identifierEscape("foo_Bar123");
+    assertEquals("foo_Bar123", result);
+  }
+
+  // identifierEscape: non-latin character escaped to \uXXXX hex form
+  @Test
+  public void testIdentifierEscape_nonLatinChar_hexEscaped() throws Throwable {
+    String input = "\u4e2d";
+    String result = CodeGenerator.identifierEscape(input);
+    assertEquals("\\u4e2d", result);
+  }
+}

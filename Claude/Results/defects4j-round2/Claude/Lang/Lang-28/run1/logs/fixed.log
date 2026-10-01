@@ -1,0 +1,23 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Lang -v 28f -w /tmp/claude-Lang-28-1sf5rpyt/fixed
+Checking out bef3eb6e to /tmp/claude-Lang-28-1sf5rpyt/fixed................ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Lang-28-1sf5rpyt/fixed/maven-build.xml.. OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff bef3eb6e:c0041caf..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Lang-28f........................................ OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Lang-28-1sf5rpyt/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

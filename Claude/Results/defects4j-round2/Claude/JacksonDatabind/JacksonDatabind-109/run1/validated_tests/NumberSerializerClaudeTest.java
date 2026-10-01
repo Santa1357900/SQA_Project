@@ -1,0 +1,282 @@
+package com.fasterxml.jackson.databind.ser.std;
+
+import java.io.StringWriter;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class NumberSerializerClaudeTest {
+
+    private JsonFactory factory;
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        factory = new JsonFactory();
+        mapper = new ObjectMapper();
+    }
+
+    private String serializeToString(NumberSerializer ser, Number value) throws Exception {
+        StringWriter sw = new StringWriter();
+        JsonGenerator g = factory.createGenerator(sw);
+        ser.serialize(value, g, null);
+        g.close();
+        return sw.toString();
+    }
+
+    // Constructor branch: rawType == BigInteger.class -> _isInt true -> getSchema type "integer"
+    @Test
+    public void testConstructor_bigIntegerType_schemaTypeIsInteger() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigInteger.class);
+        JsonNode schema = ser.getSchema(null, null);
+        assertEquals("integer", schema.get("type").asText());
+    }
+
+    // Constructor branch: rawType == BigDecimal.class -> _isInt false -> getSchema type "number"
+    @Test
+    public void testConstructor_bigDecimalType_schemaTypeIsNumber() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigDecimal.class);
+        JsonNode schema = ser.getSchema(null, null);
+        assertEquals("number", schema.get("type").asText());
+    }
+
+    // Constructor branch: rawType == Number.class -> _isInt false -> getSchema type "number"
+    @Test
+    public void testConstructor_numberType_schemaTypeIsNumber() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        JsonNode schema = ser.getSchema(null, null);
+        assertEquals("number", schema.get("type").asText());
+    }
+
+    // Static instance field: handledType() must be Number.class
+    @Test
+    public void testStaticInstance_handledTypeIsNumberClass() throws Throwable {
+        assertNotNull(NumberSerializer.instance);
+        assertEquals(Number.class, NumberSerializer.instance.handledType());
+    }
+
+    // Static instance field: since Number.class != BigInteger.class, schema type is "number"
+    @Test
+    public void testStaticInstance_schemaTypeIsNumber() throws Throwable {
+        JsonNode schema = NumberSerializer.instance.getSchema(null, null);
+        assertEquals("number", schema.get("type").asText());
+    }
+
+    // serialize(): branch value instanceof BigDecimal, positive value
+    @Test
+    public void testSerialize_bigDecimalPositive_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, new BigDecimal("3.14"));
+        assertEquals(0, new BigDecimal("3.14").compareTo(new BigDecimal(out)));
+    }
+
+    // serialize(): branch value instanceof BigDecimal, zero edge value
+    @Test
+    public void testSerialize_bigDecimalZero_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, new BigDecimal("0"));
+        assertEquals(0, BigDecimal.ZERO.compareTo(new BigDecimal(out)));
+    }
+
+    // serialize(): branch value instanceof BigDecimal, preserves trailing-zero scale
+    @Test
+    public void testSerialize_bigDecimalTrailingZeroScale_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, new BigDecimal("1.50"));
+        assertEquals(0, new BigDecimal("1.50").compareTo(new BigDecimal(out)));
+    }
+
+    // serialize(): branch value instanceof BigDecimal, negative value
+    @Test
+    public void testSerialize_bigDecimalNegative_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, new BigDecimal("-42.5"));
+        assertEquals(0, new BigDecimal("-42.5").compareTo(new BigDecimal(out)));
+    }
+
+    // serialize(): branch value instanceof BigInteger, positive value
+    @Test
+    public void testSerialize_bigIntegerPositive_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, BigInteger.valueOf(123456789L));
+        assertEquals(BigInteger.valueOf(123456789L), new BigInteger(out));
+    }
+
+    // serialize(): branch value instanceof BigInteger, zero edge value
+    @Test
+    public void testSerialize_bigIntegerZero_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, BigInteger.ZERO);
+        assertEquals(BigInteger.ZERO, new BigInteger(out));
+    }
+
+    // serialize(): branch value instanceof BigInteger, negative value
+    @Test
+    public void testSerialize_bigIntegerNegative_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, BigInteger.valueOf(-987654321L));
+        assertEquals(BigInteger.valueOf(-987654321L), new BigInteger(out));
+    }
+
+    // serialize(): branch value instanceof Long, edge value MAX_VALUE
+    @Test
+    public void testSerialize_longMaxValue_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, Long.valueOf(Long.MAX_VALUE));
+        assertEquals(Long.MAX_VALUE, Long.parseLong(out));
+    }
+
+    // serialize(): branch value instanceof Long, edge value MIN_VALUE
+    @Test
+    public void testSerialize_longMinValue_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, Long.valueOf(Long.MIN_VALUE));
+        assertEquals(Long.MIN_VALUE, Long.parseLong(out));
+    }
+
+    // serialize(): branch value instanceof Double
+    @Test
+    public void testSerialize_doubleValue_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, Double.valueOf(3.14159));
+        assertEquals(3.14159, Double.parseDouble(out), 1e-9);
+    }
+
+    // serialize(): branch value instanceof Float
+    @Test
+    public void testSerialize_floatValue_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, Float.valueOf(2.5f));
+        assertEquals(2.5f, Float.parseFloat(out), 1e-6);
+    }
+
+    // serialize(): branch value instanceof Integer, edge value MIN_VALUE
+    @Test
+    public void testSerialize_integerMinValue_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, Integer.valueOf(Integer.MIN_VALUE));
+        assertEquals(Integer.MIN_VALUE, Integer.parseInt(out));
+    }
+
+    // serialize(): branch value instanceof Integer, edge value MAX_VALUE
+    @Test
+    public void testSerialize_integerMaxValue_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, Integer.valueOf(Integer.MAX_VALUE));
+        assertEquals(Integer.MAX_VALUE, Integer.parseInt(out));
+    }
+
+    // serialize(): branch value instanceof Byte
+    @Test
+    public void testSerialize_byteValue_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, Byte.valueOf((byte) 5));
+        assertEquals(5, Integer.parseInt(out));
+    }
+
+    // serialize(): branch value instanceof Short
+    @Test
+    public void testSerialize_shortValue_roundTrips() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        String out = serializeToString(ser, Short.valueOf((short) 1234));
+        assertEquals(1234, Integer.parseInt(out));
+    }
+
+    // serialize(): fallback else branch, uses value.toString() for unrecognized Number subtype
+    @Test
+    public void testSerialize_fallbackCustomNumberType_usesToString() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        AtomicInteger value = new AtomicInteger(777);
+        String out = serializeToString(ser, value);
+        assertEquals(value.toString(), out);
+    }
+
+    // createContextual(): no @JsonFormat -> returns this -> plain numeric JSON for BigDecimal
+    @Test
+    public void testCreateContextual_bigDecimalNoFormat_producesNumericJson() throws Throwable {
+        BigDecimalPlainPojo pojo = new BigDecimalPlainPojo(new BigDecimal("3.14"));
+        String json = mapper.writeValueAsString(pojo);
+        JsonNode tree = mapper.readTree(json);
+        assertFalse(tree.get("value").isTextual());
+        assertEquals(0, new BigDecimal("3.14").compareTo(tree.get("value").decimalValue()));
+    }
+
+    // createContextual(): @JsonFormat(shape=STRING) -> returns ToStringSerializer -> quoted JSON for BigDecimal
+    @Test
+    public void testCreateContextual_bigDecimalWithShapeString_producesQuotedJson() throws Throwable {
+        BigDecimalStringPojo pojo = new BigDecimalStringPojo(new BigDecimal("3.14"));
+        String json = mapper.writeValueAsString(pojo);
+        JsonNode tree = mapper.readTree(json);
+        assertTrue(tree.get("value").isTextual());
+        assertEquals("3.14", tree.get("value").asText());
+    }
+
+    // createContextual(): shape=STRING preserves exact toString() scale representation
+    @Test
+    public void testCreateContextual_bigDecimalTrailingZeroWithShapeString_preservesScale() throws Throwable {
+        BigDecimalStringPojo pojo = new BigDecimalStringPojo(new BigDecimal("1.50"));
+        String json = mapper.writeValueAsString(pojo);
+        JsonNode tree = mapper.readTree(json);
+        assertEquals("1.50", tree.get("value").asText());
+    }
+
+    // createContextual(): no @JsonFormat -> returns this -> plain numeric JSON for BigInteger
+    @Test
+    public void testCreateContextual_bigIntegerNoFormat_producesNumericJson() throws Throwable {
+        BigIntegerPlainPojo pojo = new BigIntegerPlainPojo(BigInteger.valueOf(12345));
+        String json = mapper.writeValueAsString(pojo);
+        JsonNode tree = mapper.readTree(json);
+        assertFalse(tree.get("value").isTextual());
+        assertEquals(BigInteger.valueOf(12345), tree.get("value").bigIntegerValue());
+    }
+
+    // createContextual(): @JsonFormat(shape=STRING) -> returns ToStringSerializer -> quoted JSON for BigInteger
+    @Test
+    public void testCreateContextual_bigIntegerWithShapeString_producesQuotedJson() throws Throwable {
+        BigIntegerStringPojo pojo = new BigIntegerStringPojo(BigInteger.valueOf(12345));
+        String json = mapper.writeValueAsString(pojo);
+        JsonNode tree = mapper.readTree(json);
+        assertTrue(tree.get("value").isTextual());
+        assertEquals("12345", tree.get("value").asText());
+    }
+
+    public static class BigDecimalPlainPojo {
+        private BigDecimal value;
+        public BigDecimalPlainPojo(BigDecimal value) { this.value = value; }
+        public BigDecimal getValue() { return value; }
+        public void setValue(BigDecimal value) { this.value = value; }
+    }
+
+    public static class BigDecimalStringPojo {
+        private BigDecimal value;
+        public BigDecimalStringPojo(BigDecimal value) { this.value = value; }
+        @JsonFormat(shape = JsonFormat.Shape.STRING)
+        public BigDecimal getValue() { return value; }
+        public void setValue(BigDecimal value) { this.value = value; }
+    }
+
+    public static class BigIntegerPlainPojo {
+        private BigInteger value;
+        public BigIntegerPlainPojo(BigInteger value) { this.value = value; }
+        public BigInteger getValue() { return value; }
+        public void setValue(BigInteger value) { this.value = value; }
+    }
+
+    public static class BigIntegerStringPojo {
+        private BigInteger value;
+        public BigIntegerStringPojo(BigInteger value) { this.value = value; }
+        @JsonFormat(shape = JsonFormat.Shape.STRING)
+        public BigInteger getValue() { return value; }
+        public void setValue(BigInteger value) { this.value = value; }
+    }
+}

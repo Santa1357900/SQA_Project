@@ -1,0 +1,234 @@
+package org.jfree.chart.renderer;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import org.junit.Before;
+import java.awt.Color;
+import java.awt.Paint;
+import org.jfree.chart.util.PublicCloneable;
+
+public class GrayPaintScaleClaudeTest {
+
+    private GrayPaintScale defaultScale;
+
+    @Before
+    public void setUp() throws Throwable {
+        defaultScale = new GrayPaintScale();
+    }
+
+    // Default constructor: lowerBound=0.0, upperBound=1.0
+    @Test
+    public void testDefaultConstructor_setsDefaultBounds() throws Throwable {
+        assertEquals(0.0, defaultScale.getLowerBound(), 1e-9);
+        assertEquals(1.0, defaultScale.getUpperBound(), 1e-9);
+    }
+
+    // Two-arg constructor: normal valid range
+    @Test
+    public void testConstructor_validBounds_setsFields() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(10.0, 20.0);
+        assertEquals(10.0, scale.getLowerBound(), 1e-9);
+        assertEquals(20.0, scale.getUpperBound(), 1e-9);
+    }
+
+    // Constructor branch: lowerBound == upperBound must throw
+    @Test
+    public void testConstructor_equalBounds_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new GrayPaintScale(5.0, 5.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // Constructor branch: lowerBound > upperBound must throw
+    @Test
+    public void testConstructor_lowerGreaterThanUpper_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new GrayPaintScale(10.0, 5.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // Constructor with negative bounds, valid ordering
+    @Test
+    public void testConstructor_negativeBounds_validOrdering() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(-10.0, -1.0);
+        assertEquals(-10.0, scale.getLowerBound(), 1e-9);
+        assertEquals(-1.0, scale.getUpperBound(), 1e-9);
+    }
+
+    // getLowerBound returns correct value for custom scale
+    @Test
+    public void testGetLowerBound_returnsCorrectValue() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(2.5, 7.5);
+        assertEquals(2.5, scale.getLowerBound(), 1e-9);
+    }
+
+    // getUpperBound returns correct value for custom scale
+    @Test
+    public void testGetUpperBound_returnsCorrectValue() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(2.5, 7.5);
+        assertEquals(7.5, scale.getUpperBound(), 1e-9);
+    }
+
+    // getPaint at exact lowerBound should produce g=0 -> black
+    @Test
+    public void testGetPaint_atLowerBound_returnsBlack() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(0.0, 100.0);
+        Paint p = scale.getPaint(0.0);
+        assertEquals(new Color(0, 0, 0), p);
+    }
+
+    // getPaint at exact upperBound should produce g=255 -> white
+    @Test
+    public void testGetPaint_atUpperBound_returnsWhite() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(0.0, 100.0);
+        Paint p = scale.getPaint(100.0);
+        assertEquals(new Color(255, 255, 255), p);
+    }
+
+    // getPaint at midpoint should produce mid gray value
+    @Test
+    public void testGetPaint_atMidpoint_returnsMidGray() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(0.0, 100.0);
+        Paint p = scale.getPaint(50.0);
+        Color c = (Color) p;
+        assertEquals(127, c.getRed());
+        assertEquals(127, c.getGreen());
+        assertEquals(127, c.getBlue());
+    }
+
+    // Bug-catching: value below lowerBound must be clamped to lowerBound (g=0), not throw
+    @Test
+    public void testGetPaint_belowLowerBound_clampsToLowerBound() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(0.0, 100.0);
+        Paint p = scale.getPaint(-10.0);
+        assertEquals(new Color(0, 0, 0), p);
+    }
+
+    // Bug-catching: value above upperBound must be clamped to upperBound (g=255), not throw
+    @Test
+    public void testGetPaint_aboveUpperBound_clampsToUpperBound() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(0.0, 100.0);
+        Paint p = scale.getPaint(110.0);
+        assertEquals(new Color(255, 255, 255), p);
+    }
+
+    // getPaint with default scale at value within [0,1]
+    @Test
+    public void testGetPaint_defaultScale_atQuarter() throws Throwable {
+        Paint p = defaultScale.getPaint(0.25);
+        Color c = (Color) p;
+        assertEquals(63, c.getRed());
+    }
+
+    // getPaint with default scale value far below range, must clamp without throwing
+    @Test
+    public void testGetPaint_defaultScale_farBelowRange_clamps() throws Throwable {
+        Paint p = defaultScale.getPaint(-1000.0);
+        assertEquals(new Color(0, 0, 0), p);
+    }
+
+    // getPaint with default scale value far above range, must clamp without throwing
+    @Test
+    public void testGetPaint_defaultScale_farAboveRange_clamps() throws Throwable {
+        Paint p = defaultScale.getPaint(1000.0);
+        assertEquals(new Color(255, 255, 255), p);
+    }
+
+    // equals: same instance reference
+    @Test
+    public void testEquals_sameInstance_returnsTrue() throws Throwable {
+        assertTrue(defaultScale.equals(defaultScale));
+    }
+
+    // equals: null argument
+    @Test
+    public void testEquals_null_returnsFalse() throws Throwable {
+        assertFalse(defaultScale.equals(null));
+    }
+
+    // equals: different class type
+    @Test
+    public void testEquals_differentClass_returnsFalse() throws Throwable {
+        assertFalse(defaultScale.equals("not a scale"));
+    }
+
+    // equals: different instance but same bounds
+    @Test
+    public void testEquals_sameBoundsDifferentInstance_returnsTrue() throws Throwable {
+        GrayPaintScale other = new GrayPaintScale(0.0, 1.0);
+        assertTrue(defaultScale.equals(other));
+    }
+
+    // equals: different lowerBound
+    @Test
+    public void testEquals_differentLowerBound_returnsFalse() throws Throwable {
+        GrayPaintScale scale1 = new GrayPaintScale(0.0, 10.0);
+        GrayPaintScale scale2 = new GrayPaintScale(1.0, 10.0);
+        assertFalse(scale1.equals(scale2));
+    }
+
+    // equals: different upperBound
+    @Test
+    public void testEquals_differentUpperBound_returnsFalse() throws Throwable {
+        GrayPaintScale scale1 = new GrayPaintScale(0.0, 10.0);
+        GrayPaintScale scale2 = new GrayPaintScale(0.0, 20.0);
+        assertFalse(scale1.equals(scale2));
+    }
+
+    // clone: produces equal but distinct object
+    @Test
+    public void testClone_producesEqualButDistinctObject() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(1.0, 5.0);
+        Object cloned = scale.clone();
+        assertNotSame(scale, cloned);
+        assertTrue(scale.equals(cloned));
+    }
+
+    // clone: result is instance of GrayPaintScale
+    @Test
+    public void testClone_resultIsInstanceOfGrayPaintScale() throws Throwable {
+        Object cloned = defaultScale.clone();
+        assertTrue(cloned instanceof GrayPaintScale);
+    }
+
+    // clone: result implements PublicCloneable (interface contract)
+    @Test
+    public void testClone_resultImplementsPublicCloneable() throws Throwable {
+        Object cloned = defaultScale.clone();
+        assertTrue(cloned instanceof PublicCloneable);
+    }
+
+    // clone: cloned object preserves bounds
+    @Test
+    public void testClone_preservesBounds() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(3.0, 9.0);
+        GrayPaintScale cloned = (GrayPaintScale) scale.clone();
+        assertEquals(3.0, cloned.getLowerBound(), 1e-9);
+        assertEquals(9.0, cloned.getUpperBound(), 1e-9);
+    }
+
+    // getPaint: near-upper-bound value rounds down correctly (int truncation)
+    @Test
+    public void testGetPaint_nearUpperBound_truncatesCorrectly() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(0.0, 10.0);
+        Paint p = scale.getPaint(9.99);
+        Color c = (Color) p;
+        assertEquals(254, c.getRed());
+    }
+
+    // getPaint: value just above lowerBound produces g=0 due to truncation
+    @Test
+    public void testGetPaint_justAboveLowerBound_truncatesToZero() throws Throwable {
+        GrayPaintScale scale = new GrayPaintScale(0.0, 100.0);
+        Paint p = scale.getPaint(0.1);
+        Color c = (Color) p;
+        assertEquals(0, c.getRed());
+    }
+
+}

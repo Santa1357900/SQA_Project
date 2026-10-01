@@ -1,0 +1,299 @@
+package com.fasterxml.jackson.databind.cfg;
+
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Locale;
+import java.util.TimeZone;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.Base64Variant;
+import com.fasterxml.jackson.core.Version;
+import com.fasterxml.jackson.databind.AnnotationIntrospector;
+import com.fasterxml.jackson.databind.HandlerInstantiator;
+import com.fasterxml.jackson.databind.PropertyNamingStrategy;
+import com.fasterxml.jackson.databind.introspect.ClassIntrospector;
+import com.fasterxml.jackson.databind.introspect.VisibilityChecker;
+import com.fasterxml.jackson.databind.jsontype.TypeResolverBuilder;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.fasterxml.jackson.databind.util.StdDateFormat;
+
+public class BaseSettingsClaudeTest
+{
+    private ClassIntrospector ci;
+    private AnnotationIntrospector ai;
+    private VisibilityChecker<?> vc;
+    private PropertyNamingStrategy pns;
+    private TypeFactory tf;
+    private TypeResolverBuilder<?> typer;
+    private HandlerInstantiator hi;
+    private Locale locale;
+    private TimeZone tz;
+    private Base64Variant base64;
+    private BaseSettings settings;
+
+    @Before
+    public void setUp() throws Throwable {
+        ci = null;
+        ai = null;
+        vc = VisibilityChecker.Std.defaultInstance();
+        pns = new PropertyNamingStrategy();
+        tf = TypeFactory.defaultInstance();
+        typer = null;
+        hi = null;
+        locale = Locale.US;
+        tz = TimeZone.getTimeZone("UTC");
+        base64 = null;
+        settings = new BaseSettings(ci, ai, vc, pns, tf, typer, null, hi, locale, tz, base64);
+    }
+
+    private AnnotationIntrospector newIntrospector() {
+        return new AnnotationIntrospector() {
+            public Version version() {
+                return Version.unknownVersion();
+            }
+        };
+    }
+
+    // covers: constructor stores all fields, getters return exact references / null for unset fields
+    @Test
+    public void testConstructor_storesAllFieldsCorrectly() throws Throwable {
+        assertNull(settings.getClassIntrospector());
+        assertNull(settings.getAnnotationIntrospector());
+        assertSame(vc, settings.getVisibilityChecker());
+        assertSame(pns, settings.getPropertyNamingStrategy());
+        assertSame(tf, settings.getTypeFactory());
+        assertNull(settings.getTypeResolverBuilder());
+        assertNull(settings.getDateFormat());
+        assertNull(settings.getHandlerInstantiator());
+        assertSame(locale, settings.getLocale());
+        assertSame(tz, settings.getTimeZone());
+        assertNull(settings.getBase64Variant());
+    }
+
+    // covers: withClassIntrospector identity branch (ci == _classIntrospector -> return this)
+    @Test
+    public void testWithClassIntrospector_sameReference_returnsSameInstance() throws Throwable {
+        assertSame(settings, settings.withClassIntrospector(null));
+    }
+
+    // covers: withAnnotationIntrospector identity branch
+    @Test
+    public void testWithAnnotationIntrospector_sameReference_returnsSameInstance() throws Throwable {
+        assertSame(settings, settings.withAnnotationIntrospector(null));
+    }
+
+    // covers: withAnnotationIntrospector non-identity branch, new instance with updated field
+    @Test
+    public void testWithAnnotationIntrospector_differentReference_returnsNewInstanceWithUpdatedIntrospector() throws Throwable {
+        AnnotationIntrospector primary = newIntrospector();
+        AnnotationIntrospector other = newIntrospector();
+        BaseSettings s = new BaseSettings(ci, primary, vc, pns, tf, typer, null, hi, locale, tz, base64);
+        BaseSettings result = s.withAnnotationIntrospector(other);
+        assertNotSame(s, result);
+        assertSame(other, result.getAnnotationIntrospector());
+    }
+
+    // covers: withInsertedAnnotationIntrospector delegates to AnnotationIntrospectorPair.create
+    @Test
+    public void testWithInsertedAnnotationIntrospector_combinesWithExistingIntrospector() throws Throwable {
+        AnnotationIntrospector primary = newIntrospector();
+        AnnotationIntrospector inserted = newIntrospector();
+        BaseSettings s = new BaseSettings(ci, primary, vc, pns, tf, typer, null, hi, locale, tz, base64);
+        BaseSettings result = s.withInsertedAnnotationIntrospector(inserted);
+        assertNotNull(result.getAnnotationIntrospector());
+        assertNotSame(primary, result.getAnnotationIntrospector());
+    }
+
+    // covers: withAppendedAnnotationIntrospector delegates to AnnotationIntrospectorPair.create
+    @Test
+    public void testWithAppendedAnnotationIntrospector_combinesWithExistingIntrospector() throws Throwable {
+        AnnotationIntrospector primary = newIntrospector();
+        AnnotationIntrospector appended = newIntrospector();
+        BaseSettings s = new BaseSettings(ci, primary, vc, pns, tf, typer, null, hi, locale, tz, base64);
+        BaseSettings result = s.withAppendedAnnotationIntrospector(appended);
+        assertNotNull(result.getAnnotationIntrospector());
+        assertNotSame(primary, result.getAnnotationIntrospector());
+    }
+
+    // covers: withVisibilityChecker identity branch
+    @Test
+    public void testWithVisibilityChecker_sameReference_returnsSameInstance() throws Throwable {
+        assertSame(settings, settings.withVisibilityChecker(vc));
+    }
+
+    // covers: withVisibilityChecker non-identity branch, new instance with updated checker
+    @Test
+    public void testWithVisibilityChecker_differentReference_returnsNewInstanceWithUpdatedChecker() throws Throwable {
+        VisibilityChecker<?> vc2 = vc.withVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.NONE);
+        BaseSettings result = settings.withVisibilityChecker(vc2);
+        assertSame(vc2, result.getVisibilityChecker());
+    }
+
+    // covers: withVisibility always builds a new instance with a non-null updated checker
+    @Test
+    public void testWithVisibility_alwaysReturnsNewInstanceWithNonNullChecker() throws Throwable {
+        BaseSettings result = settings.withVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.NONE);
+        assertNotSame(settings, result);
+        assertNotNull(result.getVisibilityChecker());
+    }
+
+    // covers: withPropertyNamingStrategy identity branch
+    @Test
+    public void testWithPropertyNamingStrategy_sameReference_returnsSameInstance() throws Throwable {
+        assertSame(settings, settings.withPropertyNamingStrategy(pns));
+    }
+
+    // covers: withPropertyNamingStrategy non-identity branch with a different non-null strategy
+    @Test
+    public void testWithPropertyNamingStrategy_differentReference_returnsNewInstanceWithUpdatedStrategy() throws Throwable {
+        PropertyNamingStrategy pns2 = new PropertyNamingStrategy();
+        BaseSettings result = settings.withPropertyNamingStrategy(pns2);
+        assertNotSame(settings, result);
+        assertSame(pns2, result.getPropertyNamingStrategy());
+    }
+
+    // covers: withPropertyNamingStrategy non-identity branch when param is null (edge case)
+    @Test
+    public void testWithPropertyNamingStrategy_nullParameter_returnsNewInstanceWithNullStrategy() throws Throwable {
+        BaseSettings result = settings.withPropertyNamingStrategy(null);
+        assertNotSame(settings, result);
+        assertNull(result.getPropertyNamingStrategy());
+    }
+
+    // covers: withTypeFactory identity branch
+    @Test
+    public void testWithTypeFactory_sameReference_returnsSameInstance() throws Throwable {
+        assertSame(settings, settings.withTypeFactory(tf));
+    }
+
+    // covers: withTypeFactory non-identity branch (null differs from non-null default factory)
+    @Test
+    public void testWithTypeFactory_differentReference_returnsNewInstanceWithNullFactory() throws Throwable {
+        BaseSettings result = settings.withTypeFactory(null);
+        assertNotSame(settings, result);
+        assertNull(result.getTypeFactory());
+    }
+
+    // covers: withTypeResolverBuilder identity branch
+    @Test
+    public void testWithTypeResolverBuilder_sameReference_returnsSameInstance() throws Throwable {
+        assertSame(settings, settings.withTypeResolverBuilder(null));
+    }
+
+    // covers: withDateFormat identity branch (df == _dateFormat -> return this)
+    @Test
+    public void testWithDateFormat_sameReference_returnsSameInstance() throws Throwable {
+        assertSame(settings, settings.withDateFormat(null));
+    }
+
+    // covers: withDateFormat non-identity branch, ternary "df == null -> keep original timezone"
+    @Test
+    public void testWithDateFormat_nullDateFormat_keepsOriginalTimeZone() throws Throwable {
+        TimeZone original = TimeZone.getTimeZone("UTC");
+        DateFormat existing = new SimpleDateFormat("yyyy", Locale.US);
+        BaseSettings s = new BaseSettings(ci, ai, vc, pns, tf, typer, existing, hi, locale, original, base64);
+        BaseSettings result = s.withDateFormat(null);
+        assertNull(result.getDateFormat());
+        assertSame(original, result.getTimeZone());
+    }
+
+    // covers: withDateFormat non-identity branch, ternary "df != null -> use df.getTimeZone()"
+    @Test
+    public void testWithDateFormat_nonNullDateFormat_usesDateFormatsTimeZone() throws Throwable {
+        SimpleDateFormat df = new SimpleDateFormat("yyyy", Locale.US);
+        TimeZone dfTz = TimeZone.getTimeZone("Asia/Tokyo");
+        df.setTimeZone(dfTz);
+        BaseSettings result = settings.withDateFormat(df);
+        assertSame(df, result.getDateFormat());
+        assertEquals(dfTz, result.getTimeZone());
+    }
+
+    // covers: withHandlerInstantiator identity branch
+    @Test
+    public void testWithHandlerInstantiator_sameReference_returnsSameInstance() throws Throwable {
+        assertSame(settings, settings.withHandlerInstantiator(null));
+    }
+
+    // covers: with(Locale) identity branch
+    @Test
+    public void testWith_Locale_sameReference_returnsSameInstance() throws Throwable {
+        assertSame(settings, settings.with(locale));
+    }
+
+    // covers: with(Locale) non-identity branch, new instance with updated locale
+    @Test
+    public void testWith_Locale_differentReference_returnsNewInstanceWithUpdatedLocale() throws Throwable {
+        BaseSettings result = settings.with(Locale.FRANCE);
+        assertNotSame(settings, result);
+        assertSame(Locale.FRANCE, result.getLocale());
+    }
+
+    // covers: with(TimeZone) null argument -> IllegalArgumentException
+    @Test
+    public void testWith_TimeZone_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            settings.with((TimeZone) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // covers: with(TimeZone) branch where dateFormat instanceof StdDateFormat
+    @Test
+    public void testWith_TimeZone_stdDateFormat_updatesTimeZoneOnClonedFormat() throws Throwable {
+        StdDateFormat std = new StdDateFormat();
+        BaseSettings s = new BaseSettings(ci, ai, vc, pns, tf, typer, std, hi, locale, tz, base64);
+        TimeZone newTz = TimeZone.getTimeZone("Asia/Tokyo");
+        BaseSettings result = s.with(newTz);
+        assertTrue(result.getDateFormat() instanceof StdDateFormat);
+        assertEquals(newTz, result.getDateFormat().getTimeZone());
+        assertEquals(newTz, result.getTimeZone());
+    }
+
+    // covers: with(TimeZone) else branch, clone + setTimeZone, original format not mutated
+    @Test
+    public void testWith_TimeZone_nonStdDateFormat_clonesAndSetsTimeZoneWithoutMutatingOriginal() throws Throwable {
+        SimpleDateFormat original = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        TimeZone originalTz = TimeZone.getTimeZone("GMT");
+        original.setTimeZone(originalTz);
+        BaseSettings s = new BaseSettings(ci, ai, vc, pns, tf, typer, original, hi, locale, originalTz, base64);
+        TimeZone newTz = TimeZone.getTimeZone("America/New_York");
+        BaseSettings result = s.with(newTz);
+        assertNotSame(original, result.getDateFormat());
+        assertEquals(newTz, result.getDateFormat().getTimeZone());
+        assertEquals(originalTz, original.getTimeZone());
+        assertEquals(newTz, result.getTimeZone());
+    }
+
+    // covers: with(TimeZone) when _dateFormat is null must not throw and must keep null format (bug-sensitive path)
+    @Test
+    public void testWith_TimeZone_nullDateFormat_doesNotThrowAndPreservesNullFormat() throws Throwable {
+        TimeZone newTz = TimeZone.getTimeZone("Asia/Tokyo");
+        BaseSettings result = settings.with(newTz);
+        assertNull(result.getDateFormat());
+        assertEquals(newTz, result.getTimeZone());
+    }
+
+    // covers: with(TimeZone) preserves unrelated fields (immutability contract)
+    @Test
+    public void testWith_TimeZone_preservesOtherFieldsWhenChangingTimeZone() throws Throwable {
+        TimeZone newTz = TimeZone.getTimeZone("Europe/Paris");
+        BaseSettings result = settings.with(newTz);
+        assertSame(pns, result.getPropertyNamingStrategy());
+        assertSame(tf, result.getTypeFactory());
+        assertSame(locale, result.getLocale());
+        assertSame(vc, result.getVisibilityChecker());
+    }
+
+    // covers: with(Base64Variant) identity branch
+    @Test
+    public void testWith_Base64Variant_sameReference_returnsSameInstance() throws Throwable {
+        assertSame(settings, settings.with((Base64Variant) null));
+    }
+}

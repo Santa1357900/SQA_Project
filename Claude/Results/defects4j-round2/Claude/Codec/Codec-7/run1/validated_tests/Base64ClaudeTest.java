@@ -1,0 +1,373 @@
+package org.apache.commons.codec.binary;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import java.math.BigInteger;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.EncoderException;
+
+public class Base64ClaudeTest {
+
+    // Constructor: default must be URL-unsafe (STANDARD table)
+    @Test
+    public void testConstructorDefault_isUrlSafeFalse() throws Throwable {
+        Base64 b64 = new Base64();
+        assertFalse(b64.isUrlSafe());
+    }
+
+    // Constructor: Base64(true) must select URL-safe table
+    @Test
+    public void testConstructorUrlSafeTrue_isUrlSafeTrue() throws Throwable {
+        Base64 b64 = new Base64(true);
+        assertTrue(b64.isUrlSafe());
+    }
+
+    // Constructor: Base64(false) must select STANDARD table
+    @Test
+    public void testConstructorUrlSafeFalse_isUrlSafeFalse() throws Throwable {
+        Base64 b64 = new Base64(false);
+        assertFalse(b64.isUrlSafe());
+    }
+
+    // Constructor: null lineSeparator disables chunking (lineLength forced to 0)
+    @Test
+    public void testConstructorLineSeparatorNull_disablesChunking() throws Throwable {
+        Base64 b64 = new Base64(10, null);
+        String s = b64.encodeToString(new byte[] {1, 2, 3, 4, 5, 6});
+        assertFalse(s.contains("\r\n"));
+    }
+
+    // Constructor: lineSeparator containing a base64 alphabet char must throw
+    @Test
+    public void testConstructorLineSeparatorContainsBase64Char_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Base64(10, new byte[] {'A'});
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("base64"));
+        }
+    }
+
+    // Constructor: lineLength rounds down to a multiple of 4, chunk separator inserted mid-stream
+    @Test
+    public void testConstructorLineLengthRoundsDownToMultipleOf4() throws Throwable {
+        Base64 b64 = new Base64(10, Base64.CHUNK_SEPARATOR);
+        String s = b64.encodeToString(new byte[] {1, 2, 3, 4, 5, 6, 7, 8, 9});
+        assertEquals(16, s.length());
+        assertEquals("\r\n", s.substring(8, 10));
+    }
+
+    // hasData()/avail() on a freshly constructed object: no buffer yet
+    @Test
+    public void testHasDataAndAvail_initialState_falseAndZero() throws Throwable {
+        Base64 b64 = new Base64();
+        assertFalse(b64.hasData());
+        assertEquals(0, b64.avail());
+    }
+
+    // isBase64: alphabet chars true, PAD true, non-alphabet false, negative byte false
+    @Test
+    public void testIsBase64_variousOctets() throws Throwable {
+        assertTrue(Base64.isBase64((byte) 'A'));
+        assertTrue(Base64.isBase64((byte) '+'));
+        assertTrue(Base64.isBase64((byte) '/'));
+        assertTrue(Base64.isBase64((byte) '='));
+        assertFalse(Base64.isBase64((byte) ' '));
+        assertFalse(Base64.isBase64((byte) -1));
+    }
+
+    // isArrayByteBase64: empty array is valid per Javadoc
+    @Test
+    public void testIsArrayByteBase64_emptyArray_true() throws Throwable {
+        assertTrue(Base64.isArrayByteBase64(new byte[0]));
+    }
+
+    // isArrayByteBase64: all valid alphabet chars
+    @Test
+    public void testIsArrayByteBase64_validChars_true() throws Throwable {
+        byte[] data = {'T', 'W', 'F', 'u'};
+        assertTrue(Base64.isArrayByteBase64(data));
+    }
+
+    // isArrayByteBase64: an invalid char makes it false
+    @Test
+    public void testIsArrayByteBase64_invalidChar_false() throws Throwable {
+        byte[] data = {'T', '!', 'F', 'u'};
+        assertFalse(Base64.isArrayByteBase64(data));
+    }
+
+    // isArrayByteBase64: whitespace-only is treated as valid
+    @Test
+    public void testIsArrayByteBase64_whitespace_true() throws Throwable {
+        byte[] data = {' ', '\t', '\n', '\r'};
+        assertTrue(Base64.isArrayByteBase64(data));
+    }
+
+    // encodeBase64(null) must return null (per null/empty short-circuit)
+    @Test
+    public void testEncodeBase64_nullInput_returnsNull() throws Throwable {
+        assertNull(Base64.encodeBase64((byte[]) null));
+    }
+
+    // encodeBase64(empty) must return empty array
+    @Test
+    public void testEncodeBase64_emptyInput_returnsEmpty() throws Throwable {
+        byte[] result = Base64.encodeBase64(new byte[0]);
+        assertEquals(0, result.length);
+    }
+
+    // encodeBase64: classic RFC example "Man" -> "TWFu" (modulus==0 branch)
+    @Test
+    public void testEncodeBase64_knownValue_Man() throws Throwable {
+        byte[] result = Base64.encodeBase64("Man".getBytes("UTF-8"));
+        assertEquals("TWFu", new String(result, "UTF-8"));
+    }
+
+    // encode(): modulus==1 branch (single leftover byte, 2 pad chars)
+    @Test
+    public void testEncode_singleByte_modulus1Branch() throws Throwable {
+        byte[] result = new Base64().encode(new byte[] {1, 2});
+        assertEquals("AQI=", new String(result, "UTF-8"));
+    }
+
+    // encode(): modulus==2 branch (two leftover bytes, 1 pad char) via "HI"
+    @Test
+    public void testEncode_twoBytes_modulus2Branch() throws Throwable {
+        byte[] result = new Base64().encode(new byte[] {72, 73});
+        assertEquals("SEk=", new String(result, "UTF-8"));
+    }
+
+
+
+    // encodeBase64URLSafe: no padding emitted for URL-safe mode
+    @Test
+    public void testEncodeBase64URLSafe_noPadding() throws Throwable {
+        byte[] result = Base64.encodeBase64URLSafe(new byte[] {1});
+        assertEquals(2, result.length);
+        assertEquals("AQ", new String(result, "UTF-8"));
+    }
+
+    // encodeBase64URLSafe: '+' and '/' become '-' and '_'
+    @Test
+    public void testEncodeBase64URLSafe_replacesPlusSlashWithDashUnderscore() throws Throwable {
+        byte[] data = {(byte) 255, (byte) 255, (byte) 255};
+        byte[] result = Base64.encodeBase64URLSafe(data);
+        assertEquals("____", new String(result, "UTF-8"));
+    }
+
+    // encodeBase64Chunked: round trip through decode must reproduce original data
+    @Test
+    public void testEncodeBase64Chunked_roundTrip() throws Throwable {
+        byte[] original = new byte[60];
+        for (int i = 0; i < original.length; i++) {
+            original[i] = (byte) i;
+        }
+        byte[] chunked = Base64.encodeBase64Chunked(original);
+        assertEquals(84, chunked.length);
+        assertArrayEquals(original, Base64.decodeBase64(chunked));
+    }
+
+    // encodeBase64(..maxResultSize): exceeding size must throw IllegalArgumentException
+    @Test
+    public void testEncodeBase64_maxResultSizeExceeded_throwsIllegalArgumentException() throws Throwable {
+        try {
+            Base64.encodeBase64(new byte[10], false, false, 17);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("too big"));
+        }
+    }
+
+    // encodeBase64(..maxResultSize): exactly at the boundary must succeed
+    @Test
+    public void testEncodeBase64_withinMaxResultSize_ok() throws Throwable {
+        byte[] result = Base64.encodeBase64(new byte[10], false, false, 18);
+        assertEquals(16, result.length);
+    }
+
+    // decodeBase64(String): "QQ==" decodes to single byte 'A' (65)
+    @Test
+    public void testDecode_knownValue_QQEqualsEquals() throws Throwable {
+        byte[] result = Base64.decodeBase64("QQ==");
+        assertArrayEquals(new byte[] {65}, result);
+    }
+
+    // decode(): padding is optional, "QQ" (modulus==2 EOF branch) decodes same as "QQ=="
+    @Test
+    public void testDecode_optionalPadding_modulus2Branch() throws Throwable {
+        byte[] result = Base64.decodeBase64("QQ");
+        assertArrayEquals(new byte[] {65}, result);
+    }
+
+    // decode(): three leftover chars without padding (modulus==3 EOF branch)
+    @Test
+    public void testDecode_optionalPadding_modulus3Branch() throws Throwable {
+        byte[] result = Base64.decodeBase64("QQE");
+        assertArrayEquals(new byte[] {65, 1}, result);
+    }
+
+    // decode(): embedded whitespace/newlines are ignored, not counted toward modulus
+    @Test
+    public void testDecode_ignoresWhitespace() throws Throwable {
+        byte[] result = Base64.decodeBase64("QQ\r\n==");
+        assertArrayEquals(new byte[] {65}, result);
+    }
+
+    // decode(): a '=' stops processing immediately; trailing garbage is ignored
+    @Test
+    public void testDecode_padStopsProcessing_trailingGarbageIgnored() throws Throwable {
+        byte[] result = Base64.decodeBase64("QQ==XYZ");
+        assertArrayEquals(new byte[] {65}, result);
+    }
+
+    // decode(byte[] null) must return null (null/empty short-circuit)
+    @Test
+    public void testDecode_nullInput_returnsNull() throws Throwable {
+        assertNull(Base64.decodeBase64((byte[]) null));
+    }
+
+    // decode(byte[] empty) must return empty array
+    @Test
+    public void testDecode_emptyInput_returnsEmpty() throws Throwable {
+        byte[] result = Base64.decodeBase64(new byte[0]);
+        assertEquals(0, result.length);
+    }
+
+    // decode(Object): String branch
+    @Test
+    public void testDecodeObject_string_ok() throws Throwable {
+        Object result = new Base64().decode((Object) "TWFu");
+        assertArrayEquals("Man".getBytes("UTF-8"), (byte[]) result);
+    }
+
+    // decode(Object): byte[] branch
+    @Test
+    public void testDecodeObject_byteArray_ok() throws Throwable {
+        Object result = new Base64().decode((Object) "TWFu".getBytes("UTF-8"));
+        assertArrayEquals("Man".getBytes("UTF-8"), (byte[]) result);
+    }
+
+    // decode(Object): unsupported type must throw DecoderException
+    @Test
+    public void testDecodeObject_invalidType_throwsDecoderException() throws Throwable {
+        try {
+            new Base64().decode((Object) new Integer(5));
+            fail("expected DecoderException");
+        } catch (DecoderException expected) {
+            assertTrue(expected.getMessage().contains("byte[]"));
+        }
+    }
+
+    // encode(Object): byte[] branch
+    @Test
+    public void testEncodeObject_byteArray_ok() throws Throwable {
+        Object result = new Base64().encode((Object) "Man".getBytes("UTF-8"));
+        assertEquals("TWFu", new String((byte[]) result, "UTF-8"));
+    }
+
+    // encode(Object): unsupported type must throw EncoderException
+    @Test
+    public void testEncodeObject_invalidType_throwsEncoderException() throws Throwable {
+        try {
+            new Base64().encode((Object) "not a byte array");
+            fail("expected EncoderException");
+        } catch (EncoderException expected) {
+            assertTrue(expected.getMessage().contains("byte[]"));
+        }
+    }
+
+    // encodeToString: non-chunked default codec produces plain base64 text
+    @Test
+    public void testEncodeToString_knownValue() throws Throwable {
+        String s = new Base64().encodeToString("Man".getBytes("UTF-8"));
+        assertEquals("TWFu", s);
+    }
+
+    // encode/decode round trip for arbitrary bytes including negative values
+    @Test
+    public void testEncodeDecodeRoundTrip_arbitraryBytes() throws Throwable {
+        byte[] original = {-128, -1, 0, 1, 127, 42, 99};
+        Base64 b64 = new Base64();
+        byte[] decoded = b64.decode(b64.encode(original));
+        assertArrayEquals(original, decoded);
+    }
+
+    // decodeInteger/encodeInteger: round trip for a positive BigInteger
+    @Test
+    public void testEncodeInteger_decodeInteger_roundTrip() throws Throwable {
+        BigInteger original = BigInteger.valueOf(123456789L);
+        byte[] encoded = Base64.encodeInteger(original);
+        BigInteger decoded = Base64.decodeInteger(encoded);
+        assertEquals(original, decoded);
+    }
+
+    // encodeInteger(null) must throw NullPointerException
+    @Test
+    public void testEncodeInteger_null_throwsNullPointerException() throws Throwable {
+        try {
+            Base64.encodeInteger(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // toIntegerBytes: byte-aligned value strips the leading sign byte
+    @Test
+    public void testToIntegerBytes_byteAlignedValue_stripsSignByte() throws Throwable {
+        byte[] result = Base64.toIntegerBytes(BigInteger.valueOf(255));
+        assertArrayEquals(new byte[] {-1}, result);
+    }
+
+    // toIntegerBytes: non-byte-aligned value is returned as-is
+    @Test
+    public void testToIntegerBytes_nonAlignedValue_returnsAsIs() throws Throwable {
+        byte[] result = Base64.toIntegerBytes(BigInteger.valueOf(100));
+        assertArrayEquals(new byte[] {100}, result);
+    }
+
+    // discardWhitespace: removes space/tab/CR/LF, keeps other characters
+    @Test
+    public void testDiscardWhitespace_removesWhitespaceOnly() throws Throwable {
+        byte[] input = " A\tB\r\nC ".getBytes("UTF-8");
+        byte[] result = Base64.discardWhitespace(input);
+        assertArrayEquals("ABC".getBytes("UTF-8"), result);
+    }
+
+    // readResults: extracts buffered encoded data and clears hasData()
+    @Test
+    public void testReadResults_extractsBufferedData() throws Throwable {
+        Base64 b64 = new Base64();
+        b64.encode(new byte[] {72, 73}, 0, 2);
+        b64.encode(new byte[] {72, 73}, 0, -1);
+        byte[] out = new byte[b64.avail()];
+        int copied = b64.readResults(out, 0, out.length);
+        assertEquals(4, copied);
+        assertEquals("SEk=", new String(out, "UTF-8"));
+        assertFalse(b64.hasData());
+    }
+
+
+
+    // Regression: streaming encode() must still add a separator when a partial
+    // group remains pending right after a fully-flushed line (modulus != 0 at EOF)
+    @Test
+    public void testStreamingEncode_partialGroupAfterFullLine_separatorAdded() throws Throwable {
+        Base64 b64 = new Base64(4, new byte[] {'\n'});
+        b64.encode(new byte[] {1, 2, 3}, 0, 3);
+        b64.encode(new byte[] {9}, 0, 1);
+        b64.encode(new byte[] {9}, 0, -1);
+        assertEquals(10, b64.avail());
+    }
+
+    // decode(byte[],int,int): multi-round loop decodes several full groups correctly
+    @Test
+    public void testStreamingDecode_multipleFullGroups() throws Throwable {
+        Base64 b64 = new Base64();
+        byte[] input = "TWFuTWFu".getBytes("UTF-8");
+        b64.decode(input, 0, input.length);
+        b64.decode(input, 0, -1);
+        byte[] out = new byte[b64.avail()];
+        b64.readResults(out, 0, out.length);
+        assertArrayEquals("ManMan".getBytes("UTF-8"), out);
+    }
+}

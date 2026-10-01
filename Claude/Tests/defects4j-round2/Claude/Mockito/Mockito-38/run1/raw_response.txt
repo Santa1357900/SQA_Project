@@ -1,0 +1,312 @@
+package org.mockito.internal.verification.argumentmatching;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.hamcrest.BaseMatcher;
+import org.hamcrest.Description;
+import org.hamcrest.Matcher;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.mockito.internal.matchers.ContainsExtraTypeInformation;
+
+public class ArgumentMatchingToolClaudeTest {
+
+    private ArgumentMatchingTool tool;
+
+    @Before
+    public void setUp() throws Throwable {
+        tool = new ArgumentMatchingTool();
+    }
+
+    private static class PlainMatcher extends BaseMatcher {
+        private final boolean matchResult;
+        private final String text;
+
+        PlainMatcher(boolean matchResult, String text) {
+            this.matchResult = matchResult;
+            this.text = text;
+        }
+
+        public boolean matches(Object item) {
+            return matchResult;
+        }
+
+        public void describeTo(Description description) {
+            description.appendText(text);
+        }
+    }
+
+    private static class TypedMatcher extends BaseMatcher implements ContainsExtraTypeInformation {
+        private final boolean matchResult;
+        private final boolean matchThrows;
+        private final String text;
+        private final boolean typeMatchResult;
+
+        TypedMatcher(boolean matchResult, boolean matchThrows, String text, boolean typeMatchResult) {
+            this.matchResult = matchResult;
+            this.matchThrows = matchThrows;
+            this.text = text;
+            this.typeMatchResult = typeMatchResult;
+        }
+
+        public boolean matches(Object item) {
+            if (matchThrows) {
+                throw new RuntimeException("matcher failure");
+            }
+            return matchResult;
+        }
+
+        public void describeTo(Description description) {
+            description.appendText(text);
+        }
+
+        public String toStringWithType() {
+            return text;
+        }
+
+        public boolean typeMatches(Object target) {
+            return typeMatchResult;
+        }
+    }
+
+    // sizes differ (matchers > arguments): early return branch returns empty array
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_matchersSizeGreaterThanArguments_returnsEmptyArray() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new PlainMatcher(false, "a"));
+        matchers.add(new PlainMatcher(false, "b"));
+        Object[] arguments = new Object[] { "a" };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // sizes differ (arguments > matchers): early return branch returns empty array
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_argumentsSizeGreaterThanMatchers_returnsEmptyArray() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new PlainMatcher(false, "a"));
+        Object[] arguments = new Object[] { "a", "b" };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // equal sizes, both empty: loop executes zero times
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_emptyListsEqualSize_returnsEmptyArray() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        Object[] arguments = new Object[0];
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // matcher not instanceof ContainsExtraTypeInformation: first && operand false, short circuits
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_matcherNotContainsExtraTypeInformation_notSuspicious() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new PlainMatcher(false, "100"));
+        Object[] arguments = new Object[] { Integer.valueOf(100) };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // safelyMatches returns true: second && operand false, not suspicious
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_safelyMatchesTrue_notSuspicious() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(true, false, "100", false));
+        Object[] arguments = new Object[] { Integer.valueOf(100) };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // toString of matcher differs from argument toString: third && operand false, not suspicious
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_toStringDiffers_notSuspicious() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(false, false, "200", false));
+        Object[] arguments = new Object[] { Integer.valueOf(100) };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // typeMatches returns true: fourth && operand false, not suspicious
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_typeMatchesTrue_notSuspicious() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(false, false, "100", true));
+        Object[] arguments = new Object[] { Integer.valueOf(100) };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // all four && operands true: index is added to suspicious result
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_allConditionsMet_addsSuspiciousIndex() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(false, false, "100", false));
+        Object[] arguments = new Object[] { Integer.valueOf(100) };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(1, result.length);
+        assertEquals(Integer.valueOf(0), result[0]);
+    }
+
+    // matches() throws: safelyMatches catches Throwable and returns false, processing continues
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_matcherMatchesThrows_safelyCaughtAndStillSuspicious() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(false, true, "100", false));
+        Object[] arguments = new Object[] { Integer.valueOf(100) };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(1, result.length);
+        assertEquals(Integer.valueOf(0), result[0]);
+    }
+
+    // two arguments, only second one is suspicious: loop runs two rounds, index tracked correctly
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_onlySecondArgumentSuspicious_returnsIndexOne() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(true, false, "a", false));
+        matchers.add(new TypedMatcher(false, false, "b", false));
+        Object[] arguments = new Object[] { "anything", "b" };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(1, result.length);
+        assertEquals(Integer.valueOf(1), result[0]);
+    }
+
+    // two arguments, both suspicious: both indexes collected in order
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_bothArgumentsSuspicious_returnsBothIndexes() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(false, false, "x", false));
+        matchers.add(new TypedMatcher(false, false, "y", false));
+        Object[] arguments = new Object[] { "x", "y" };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(2, result.length);
+        assertEquals(Integer.valueOf(0), result[0]);
+        assertEquals(Integer.valueOf(1), result[1]);
+    }
+
+    // two arguments, neither suspicious for different reasons: empty result
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_noArgumentsSuspicious_returnsEmptyArray() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(true, false, "x", false));
+        matchers.add(new TypedMatcher(false, false, "y", true));
+        Object[] arguments = new Object[] { "x", "y" };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // null argument whose matcher does not match: method must not throw and must not mark it suspicious
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_nullArgumentNotMatching_doesNotThrowAndNotSuspicious() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(false, false, "something", false));
+        Object[] arguments = new Object[] { null };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // null argument whose matcher matches: safelyMatches true short circuits before toString handling
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_nullArgumentMatches_noExceptionNotSuspicious() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(true, false, "anything", false));
+        Object[] arguments = new Object[] { null };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // null argument with matcher not implementing ContainsExtraTypeInformation: first operand short circuits
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_nullArgumentNotContainsExtraTypeInfo_noExceptionNotSuspicious() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new PlainMatcher(false, "x"));
+        Object[] arguments = new Object[] { null };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // return type contract: result is an Integer[] instance
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_resultType_isIntegerArray() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(false, false, "100", false));
+        Object[] arguments = new Object[] { Integer.valueOf(100) };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertTrue(result instanceof Integer[]);
+    }
+
+    // empty matchers and arguments: still a proper zero-length Integer[] instance
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_emptyMatchersAndArguments_returnsIntegerArrayOfLengthZero() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        Object[] arguments = new Object[0];
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertTrue(result instanceof Integer[]);
+        assertEquals(0, result.length);
+    }
+
+    // three matchers mixing all skip reasons plus one genuine suspicious entry at the end
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_threeMatchersMixedConditions_returnsCorrectIndex() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new PlainMatcher(false, "p"));
+        matchers.add(new TypedMatcher(true, false, "q", false));
+        matchers.add(new TypedMatcher(false, false, "r", false));
+        Object[] arguments = new Object[] { "anyA", "anyB", "r" };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(1, result.length);
+        assertEquals(Integer.valueOf(2), result[0]);
+    }
+
+    // unicode text in description and argument toString must still compare equal
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_unicodeToStringEquals_addsSuspiciousIndex() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(false, false, "h\u00e9llo\u2713", false));
+        Object[] arguments = new Object[] { "h\u00e9llo\u2713" };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(1, result.length);
+        assertEquals(Integer.valueOf(0), result[0]);
+    }
+
+    // leading whitespace makes toString differ by one character: must not be suspicious
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_whitespaceDifference_notSuspicious() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(false, false, "abc", false));
+        Object[] arguments = new Object[] { " abc" };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(0, result.length);
+    }
+
+    // negative number toString equality still triggers suspicious detection
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_negativeNumberToStringEquals_addsSuspiciousIndex() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(false, false, "-1", false));
+        Object[] arguments = new Object[] { Integer.valueOf(-1) };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(1, result.length);
+        assertEquals(Integer.valueOf(0), result[0]);
+    }
+
+    // five matchers, only the last one suspicious: verifies correct index tracking over many iterations
+    @Test
+    public void testGetSuspiciouslyNotMatchingArgsIndexes_largeIndexMultipleMatchers_correctIndexAtEnd() throws Throwable {
+        List<Matcher> matchers = new ArrayList<Matcher>();
+        matchers.add(new TypedMatcher(true, false, "same", false));
+        matchers.add(new TypedMatcher(true, false, "same", false));
+        matchers.add(new TypedMatcher(true, false, "same", false));
+        matchers.add(new TypedMatcher(true, false, "same", false));
+        matchers.add(new TypedMatcher(false, false, "end", false));
+        Object[] arguments = new Object[] { "same", "same", "same", "same", "end" };
+        Integer[] result = tool.getSuspiciouslyNotMatchingArgsIndexes(matchers, arguments);
+        assertEquals(1, result.length);
+        assertEquals(Integer.valueOf(4), result[0]);
+    }
+}

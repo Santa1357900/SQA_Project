@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-16-pyq052gi/Cli-16b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.apache.commons.cli2.OptionClaudeTest::testGetParent_returnTypeIsOption
+  - org.apache.commons.cli2.OptionClaudeTest::testGetParent_methodExistsPerJavadocContract
+  - org.apache.commons.cli2.OptionClaudeTest::testSetParent_methodExistsPerJavadocContract
+  - org.apache.commons.cli2.OptionClaudeTest::testSetParent_parameterTypeIsOption
+[exit 0]

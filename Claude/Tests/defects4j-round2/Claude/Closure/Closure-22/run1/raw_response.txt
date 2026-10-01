@@ -1,0 +1,283 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.Node;
+
+import org.junit.Test;
+
+public class CheckSideEffectsClaudeTest {
+
+  private Node parseJs(Compiler compiler, String js) {
+    CompilerOptions options = new CompilerOptions();
+    compiler.compile(SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode("test.js", js), options);
+    return compiler.getRoot().getLastChild();
+  }
+
+  // Covers the constructor and the HotSwapCompilerPass contract implemented by the class.
+  @Test
+  public void testConstructor_implementsHotSwapCompilerPass() throws Throwable {
+    Compiler compiler = new Compiler();
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    assertTrue(pass instanceof HotSwapCompilerPass);
+  }
+
+  // Covers n.isEmpty() early-return branch for extra semicolons, and non-flagging of an unknown call.
+  @Test
+  public void testProcess_extraSemicolonEmptyStatement_noWarning() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "foo();;");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // Covers n.isString() branch producing the "missing '+'" message and one problem node.
+  @Test
+  public void testProcess_standaloneStringLiteral_warnsMissingPlus() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "\"a string\";");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // Covers isSimpleOp branch for a comparison operator whose result is discarded.
+  @Test
+  public void testProcess_equalityOperatorResultUnused_warnsOperatorNotUsed() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "x == 1;");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // Covers mayHaveSideEffects()=true for ASSIGN preventing a false warning.
+  @Test
+  public void testProcess_assignmentExpression_notFlagged() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "x = 1;");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // Covers mayHaveSideEffects()=true for INC preventing a false warning.
+  @Test
+  public void testProcess_incrementExpression_notFlagged() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "x++;");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // Covers the isExprResult()/parent-type guard preventing a duplicate warning on the wrapping EXPR_RESULT.
+  @Test
+  public void testProcess_bareNameExpressionStatement_singleWarningNoDuplicate() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "x;");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // Covers the special-case comma+eval exemption used by the "(0, eval)(...)" idiom.
+  @Test
+  public void testProcess_evalCommaPattern_exemptedNoWarning() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "(0, eval)('1+1');");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // Covers that the comma exemption does NOT apply when the callee name is not "eval".
+  @Test
+  public void testProcess_nonEvalCommaCallPattern_warnsForUnusedOperand() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "(0, foo)();");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // Covers n.isComma() self-skip plus both the first-child and last-child comma operand paths.
+  @Test
+  public void testProcess_commaExpressionAsStatement_warnsForBothOperands() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "1, 2;");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(2, compiler.getWarnings().length);
+  }
+
+  // Covers FOR init/update/condition slots that legitimately have side effects or are exempt.
+  @Test
+  public void testProcess_forLoopWellFormed_noWarning() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "for (i = 0; i < 10; i = i + 1) {}");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // Covers the FOR-init slot (first child) being subject to the normal side-effect check.
+  @Test
+  public void testProcess_forLoopBareNameInit_warnsForInit() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "for (i; i < 10; i++) {}");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // Covers n.isEmpty() branch for omitted FOR clauses.
+  @Test
+  public void testProcess_forLoopEmptyClauses_noWarning() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "for (;;) {}");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // Covers accumulation of one warning per independent suspicious statement.
+  @Test
+  public void testProcess_multipleSuspiciousStatements_warnsForEach() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "\"a\";\n\"b\";");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(2, compiler.getWarnings().length);
+  }
+
+  // Covers mayHaveSideEffects()=true for an unknown function call, avoiding a false warning.
+  @Test
+  public void testProcess_functionCallStatement_notFlagged() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "function f() { return 1; } f();");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // Covers the parent==BLOCK path (nested statement) as opposed to top-level parent==SCRIPT.
+  @Test
+  public void testProcess_nestedBlockStatement_warnsInsideIfBlock() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "if (true) { x == 1; }");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // Covers protectSideEffects()/addExtern(): a problem node gets wrapped in a JSCOMPILER_PRESERVE call.
+  @Test
+  public void testProcess_protectSideEffectFreeCodeTrue_wrapsProblemNodeInPreserveCall() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "\"a string\";");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, true);
+    pass.process(null, jsRoot);
+    Node script = jsRoot.getFirstChild();
+    Node exprResult = script.getFirstChild();
+    Node call = exprResult.getFirstChild();
+    assertTrue(call.isCall());
+    assertEquals(CheckSideEffects.PROTECTOR_FN, call.getFirstChild().getString());
+    assertTrue(call.getLastChild().isString());
+  }
+
+  // Covers process() when protectSideEffectFreeCode=false: problem nodes collected but AST untouched.
+  @Test
+  public void testProcess_protectSideEffectFreeCodeFalse_doesNotModifyAst() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "\"a string\";");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    Node script = jsRoot.getFirstChild();
+    Node exprResult = script.getFirstChild();
+    assertTrue(exprResult.getFirstChild().isString());
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // Covers level being routed to compiler.report as an ERROR rather than a WARNING.
+  @Test
+  public void testProcess_checkLevelError_reportsAsErrorNotWarning() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "\"a string\";");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.ERROR, false);
+    pass.process(null, jsRoot);
+    assertEquals(1, compiler.getErrors().length);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // Covers hotSwapScript() delegating to the same traversal/visit logic as process().
+  @Test
+  public void testHotSwapScript_detectsSuspiciousCode() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "\"a string\";");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.hotSwapScript(jsRoot, jsRoot);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // Covers StripProtection.visit() when the call target matches PROTECTOR_FN.
+  @Test
+  public void testStripProtection_removesProtectorCall_restoresOriginalExpression() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "\"a string\";");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, true);
+    pass.process(null, jsRoot);
+    CheckSideEffects.StripProtection strip = new CheckSideEffects.StripProtection(compiler);
+    strip.process(null, jsRoot);
+    Node script = jsRoot.getFirstChild();
+    Node restored = script.getFirstChild().getFirstChild();
+    assertTrue(restored.isString());
+  }
+
+  // Covers StripProtection.visit() when the call target does not match PROTECTOR_FN.
+  @Test
+  public void testStripProtection_nonProtectorCall_leftUnmodified() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "foo();");
+    CheckSideEffects.StripProtection strip = new CheckSideEffects.StripProtection(compiler);
+    strip.process(null, jsRoot);
+    Node script = jsRoot.getFirstChild();
+    Node call = script.getFirstChild().getFirstChild();
+    assertTrue(call.isCall());
+    assertEquals("foo", call.getFirstChild().getString());
+  }
+
+  // Covers the PROTECTOR_FN constant used to build the preserve call name.
+  @Test
+  public void testProtectorFnConstant_hasExpectedValue() throws Throwable {
+    assertEquals("JSCOMPILER_PRESERVE", CheckSideEffects.PROTECTOR_FN);
+  }
+
+  // Covers existence of the USELESS_CODE_ERROR DiagnosticType used for all reports.
+  @Test
+  public void testUselessCodeErrorDiagnostic_isNotNull() throws Throwable {
+    assertNotNull(CheckSideEffects.USELESS_CODE_ERROR);
+  }
+
+  // Covers n.isQualifiedName() branch without JSDoc info attached (should still warn).
+  @Test
+  public void testProcess_qualifiedNamePropertyAccessUnused_warns() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "a.b;");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // Covers VAR node whose parent (SCRIPT) is neither EXPR_RESULT nor BLOCK: skipped entirely.
+  @Test
+  public void testProcess_cleanVarDeclaration_noWarning() throws Throwable {
+    Compiler compiler = new Compiler();
+    Node jsRoot = parseJs(compiler, "var x = 1;");
+    CheckSideEffects pass = new CheckSideEffects(compiler, CheckLevel.WARNING, false);
+    pass.process(null, jsRoot);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+}

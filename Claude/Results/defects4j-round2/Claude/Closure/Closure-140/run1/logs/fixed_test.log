@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-140-hjpm0r_e/Closure-140f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - com.google.javascript.jscomp.CompilerClaudeTest::testCodeBuilder_endsWith_exactLengthMatch_returnsTrue
+[exit 0]

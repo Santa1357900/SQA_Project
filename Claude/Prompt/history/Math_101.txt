@@ -1,0 +1,633 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Math (Defects4J bug Math-101)
+package: org.apache.commons.math.complex
+class_under_test: ComplexFormat
+test_class_to_write: ComplexFormatClaudeTest
+</target>
+
+<project_notes>
+Commons Math: ใช้ delta ทุกครั้งที่เทียบ double ห้าม implement UnivariateRealFunction/UnivariateFunction ถ้าไม่ได้ปรากฏใน source ให้ใช้ anonymous inner class เมื่อ interface มีเมธอดเดียว exception เป็น checked หลายตัว (เช่น MathException) จึงต้อง throws Throwable
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.math.complex;
+
+import java.io.Serializable;
+import java.text.FieldPosition;
+import java.text.Format;
+import java.text.NumberFormat;
+import java.text.ParseException;
+import java.text.ParsePosition;
+import java.util.Locale;
+
+/**
+ * Formats a Complex number in cartesian format "Re(c) + Im(c)i".  'i' can
+ * be replaced with 'j', and the number format for both real and imaginary parts
+ * can be configured.
+ *
+ * @author Apache Software Foundation
+ * @version $Revision$ $Date$
+ */
+public class ComplexFormat extends Format implements Serializable {
+    
+    /** Serializable version identifier */
+    private static final long serialVersionUID = -6337346779577272306L;
+    
+    /** The default imaginary character. */
+    private static final String DEFAULT_IMAGINARY_CHARACTER = "i";
+    
+    /** The notation used to signify the imaginary part of the complex number. */
+    private String imaginaryCharacter;
+    
+    /** The format used for the imaginary part. */
+    private NumberFormat imaginaryFormat;
+
+    /** The format used for the real part. */
+    private NumberFormat realFormat;
+    
+    /**
+     * Create an instance with the default imaginary character, 'i', and the
+     * default number format for both real and imaginary parts.
+     */
+    public ComplexFormat() {
+        this(DEFAULT_IMAGINARY_CHARACTER, getDefaultNumberFormat());
+    }
+
+    /**
+     * Create an instance with a custom number format for both real and
+     * imaginary parts.
+     * @param format the custom format for both real and imaginary parts.
+     */
+    public ComplexFormat(NumberFormat format) {
+        this(DEFAULT_IMAGINARY_CHARACTER, format);
+    }
+    
+    /**
+     * Create an instance with a custom number format for the real part and a
+     * custom number format for the imaginary part.
+     * @param realFormat the custom format for the real part.
+     * @param imaginaryFormat the custom format for the imaginary part.
+     */
+    public ComplexFormat(NumberFormat realFormat,
+            NumberFormat imaginaryFormat) {
+        this(DEFAULT_IMAGINARY_CHARACTER, realFormat, imaginaryFormat);
+    }
+    
+    /**
+     * Create an instance with a custom imaginary character, and the default
+     * number format for both real and imaginary parts.
+     * @param imaginaryCharacter The custom imaginary character.
+     */
+    public ComplexFormat(String imaginaryCharacter) {
+        this(imaginaryCharacter, getDefaultNumberFormat());
+    }
+    
+    /**
+     * Create an instance with a custom imaginary character, and a custom number
+     * format for both real and imaginary parts.
+     * @param imaginaryCharacter The custom imaginary character.
+     * @param format the custom format for both real and imaginary parts.
+     */
+    public ComplexFormat(String imaginaryCharacter, NumberFormat format) {
+        this(imaginaryCharacter, format, (NumberFormat)format.clone());
+    }
+    
+    /**
+     * Create an instance with a custom imaginary character, a custom number
+     * format for the real part, and a custom number format for the imaginary
+     * part.
+     * @param imaginaryCharacter The custom imaginary character.
+     * @param realFormat the custom format for the real part.
+     * @param imaginaryFormat the custom format for the imaginary part.
+     */
+    public ComplexFormat(String imaginaryCharacter, NumberFormat realFormat,
+            NumberFormat imaginaryFormat) {
+        super();
+        setImaginaryCharacter(imaginaryCharacter);
+        setImaginaryFormat(imaginaryFormat);
+        setRealFormat(realFormat);
+    }
+
+    /**
+     * This static method calls formatComplex() on a default instance of
+     * ComplexFormat.
+     *
+     * @param c Complex object to format
+     * @return A formatted number in the form "Re(c) + Im(c)i"
+     */
+    public static String formatComplex( Complex c ) {
+        return getInstance().format( c );
+    }
+    
+    /**
+     * Formats a {@link Complex} object to produce a string.
+     *
+     * @param complex the object to format.
+     * @param toAppendTo where the text is to be appended
+     * @param pos On input: an alignment field, if desired. On output: the
+     *            offsets of the alignment field
+     * @return the value passed in as toAppendTo.
+     */
+    public StringBuffer format(Complex complex, StringBuffer toAppendTo,
+            FieldPosition pos) {
+        
+        pos.setBeginIndex(0);
+        pos.setEndIndex(0);
+
+        // format real
+        double re = complex.getReal();
+        formatDouble(re, getRealFormat(), toAppendTo, pos);
+        
+        // format sign and imaginary
+        double im = complex.getImaginary();
+        if (im < 0.0) {
+            toAppendTo.append(" - ");
+            formatDouble(-im, getImaginaryFormat(), toAppendTo, pos);
+            toAppendTo.append(getImaginaryCharacter());
+        } else if (im > 0.0 || Double.isNaN(im)) {
+            toAppendTo.append(" + ");
+            formatDouble(im, getImaginaryFormat(), toAppendTo, pos);
+            toAppendTo.append(getImaginaryCharacter());
+        }
+        
+        return toAppendTo;
+    }
+    
+    /**
+     * Formats a object to produce a string.  <code>obj</code> must be either a 
+     * {@link Complex} object or a {@link Number} object.  Any other type of
+     * object will result in an {@link IllegalArgumentException} being thrown.
+     *
+     * @param obj the object to format.
+     * @param toAppendTo where the text is to be appended
+     * @param pos On input: an alignment field, if desired. On output: the
+     *            offsets of the alignment field
+     * @return the value passed in as toAppendTo.
+     * @see java.text.Format#format(java.lang.Object, java.lang.StringBuffer, java.text.FieldPosition)
+     * @throws IllegalArgumentException is <code>obj</code> is not a valid type.
+     */
+    public StringBuffer format(Object obj, StringBuffer toAppendTo,
+            FieldPosition pos) {
+        
+        StringBuffer ret = null;
+        
+        if (obj instanceof Complex) {
+            ret = format( (Complex)obj, toAppendTo, pos);
+        } else if (obj instanceof Number) {
+            ret = format( new Complex(((Number)obj).doubleValue(), 0.0),
+                toAppendTo, pos);
+        } else { 
+            throw new IllegalArgumentException(
+                "Cannot format given Object as a Date");
+        }
+        
+        return ret;
+    }
+
+    /**
+     * Formats a double value to produce a string.  In general, the value is
+     * formatted using the formatting rules of <code>format</code>.  There are
+     * three exceptions to this:
+     * <ol>
+     * <li>NaN is formatted as '(NaN)'</li>
+     * <li>Positive infinity is formatted as '(Infinity)'</li>
+     * <li>Negative infinity is formatted as '(-Infinity)'</li>
+     * </ol>
+     *
+     * @param value the double to format.
+     * @param format the format used.
+     * @param toAppendTo where the text is to be appended
+     * @param pos On input: an alignment field, if desired. On output: the
+     *            offsets of the alignment field
+     * @return the value passed in as toAppendTo.
+     */
+    private StringBuffer formatDouble(double value, NumberFormat format,
+            StringBuffer toAppendTo, FieldPosition pos) {
+        if( Double.isNaN(value) || Double.isInfinite(value) ) {
+            toAppendTo.append('(');
+            toAppendTo.append(value);
+            toAppendTo.append(')');
+        } else {
+            format.format(value, toAppendTo, pos);
+        }
+        return toAppendTo;
+    }
+    
+    /**
+     * Get the set of locales for which complex formats are available.  This
+     * is the same set as the {@link NumberFormat} set. 
+     * @return available complex format locales.
+     */
+    public static Locale[] getAvailableLocales() {
+        return NumberFormat.getAvailableLocales();
+    }
+    
+    /**
+     * Create a default number format.  The default number format is based on
+     * {@link NumberFormat#getInstance()} with the only customizing is the
+     * maximum number of fraction digits, which is set to 2.  
+     * @return the default number format.
+     */
+    private static NumberFormat getDefaultNumberFormat() {
+        return getDefaultNumberFormat(Locale.getDefault());
+    }
+    
+    /**
+     * Create a default number format.  The default number format is based on
+     * {@link NumberFormat#getInstance(java.util.Locale)} with the only
+     * customizing is the maximum number of fraction digits, which is set to 2.  
+     * @param locale the specific locale used by the format.
+     * @return the default number format specific to the given locale.
+     */
+    private static NumberFormat getDefaultNumberFormat(Locale locale) {
+        NumberFormat nf = NumberFormat.getInstance(locale);
+        nf.setMaximumFractionDigits(2);
+        return nf;
+    }
+    
+    /**
+     * Access the imaginaryCharacter.
+     * @return the imaginaryCharacter.
+     */
+    public String getImaginaryCharacter() {
+        return imaginaryCharacter;
+    }
+    
+    /**
+     * Access the imaginaryFormat.
+     * @return the imaginaryFormat.
+     */
+    public NumberFormat getImaginaryFormat() {
+        return imaginaryFormat;
+    }
+    
+    /**
+     * Returns the default complex format for the current locale.
+     * @return the default complex format.
+     */
+    public static ComplexFormat getInstance() {
+        return getInstance(Locale.getDefault());
+    }
+    
+    /**
+     * Returns the default complex format for the given locale.
+     * @param locale the specific locale used by the format.
+     * @return the complex format specific to the given locale.
+     */
+    public static ComplexFormat getInstance(Locale locale) {
+        NumberFormat f = getDefaultNumberFormat(locale);
+        return new ComplexFormat(f);
+    }
+    
+    /**
+     * Access the realFormat.
+     * @return the realFormat.
+     */
+    public NumberFormat getRealFormat() {
+        return realFormat;
+    }
+
+    /**
+     * Parses a string to produce a {@link Complex} object.
+     *
+     * @param source the string to parse
+     * @return the parsed {@link Complex} object.
+     * @exception ParseException if the beginning of the specified string
+     *            cannot be parsed.
+     */
+    public Complex parse(String source) throws ParseException {
+        ParsePosition parsePosition = new ParsePosition(0);
+        Complex result = parse(source, parsePosition);
+        if (parsePosition.getIndex() == 0) {
+            throw new ParseException("Unparseable complex number: \"" + source +
+                "\"", parsePosition.getErrorIndex());
+        }
+        return result;
+    }
+    
+    /**
+     * Parses a string to produce a {@link Complex} object.
+     *
+     * @param source the string to parse
+     * @param pos input/ouput parsing parameter.
+     * @return the parsed {@link Complex} object.
+     */
+    public Complex parse(String source, ParsePosition pos) {
+        int initialIndex = pos.getIndex();
+
+        // parse whitespace
+        parseAndIgnoreWhitespace(source, pos);
+
+        // parse real
+        Number re = parseNumber(source, getRealFormat(), pos);
+        if (re == null) {
+            // invalid real number
+            // set index back to initial, error index should already be set
+            // character examined.
+            pos.setIndex(initialIndex);
+            return null;
+        }
+
+        // parse sign
+        int startIndex = pos.getIndex();
+        char c = parseNextCharacter(source, pos);
+        int sign = 0;
+        switch (c) {
+        case 0 :
+            // no sign
+            // return real only complex number
+            return new Complex(re.doubleValue(), 0.0);
+        case '-' :
+            sign = -1;
+            break;
+        case '+' :
+            sign = 1;
+            break;
+        default :
+            // invalid sign
+            // set index back to initial, error index should be the last
+            // character examined.
+            pos.setIndex(initialIndex);
+            pos.setErrorIndex(startIndex);
+            return null;
+        }
+
+        // parse whitespace
+        parseAndIgnoreWhitespace(source, pos);
+
+        // parse imaginary
+        Number im = parseNumber(source, getRealFormat(), pos);
+        if (im == null) {
+            // invalid imaginary number
+            // set index back to initial, error index should already be set
+            // character examined.
+            pos.setIndex(initialIndex);
+            return null;
+        }
+
+        // parse imaginary character
+        int n = getImaginaryCharacter().length();
+        startIndex = pos.getIndex();
+        int endIndex = startIndex + n;
+        if (
+            source.substring(startIndex, endIndex).compareTo(
+            getImaginaryCharacter()) != 0) {
+            // set index back to initial, error index should be the start index
+            // character examined.
+            pos.setIndex(initialIndex);
+            pos.setErrorIndex(startIndex);
+            return null;
+        }
+        pos.setIndex(endIndex);
+
+        return new Complex(re.doubleValue(), im.doubleValue() * sign);
+    }
+     
+    /**
+     * Parses <code>source</code> until a non-whitespace character is found.
+     *
+     * @param source the string to parse
+     * @param pos input/ouput parsing parameter.  On output, <code>pos</code>
+     *        holds the index of the next non-whitespace character.
+     */
+    private void parseAndIgnoreWhitespace(String source, ParsePosition pos) {
+        parseNextCharacter(source, pos);
+        pos.setIndex(pos.getIndex() - 1);
+    }
+
+    /**
+     * Parses <code>source</code> until a non-whitespace character is found.
+     *
+     * @param source the string to parse
+     * @param pos input/ouput parsing parameter.
+     * @return the first non-whitespace character.
+     */
+    private char parseNextCharacter(String source, ParsePosition pos) {
+         int index = pos.getIndex();
+         int n = source.length();
+         char ret = 0;
+
+         if (index < n) {
+             char c;
+             do {
+                 c = source.charAt(index++);
+             } while (Character.isWhitespace(c) && index < n);
+             pos.setIndex(index);
+         
+             if (index < n) {
+                 ret = c;
+             }
+         }
+         
+         return ret;
+    }
+    
+    /**
+     * Parses <code>source</code> for a special double values.  These values
+     * include Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY.
+     *
+     * @param source the string to parse
+     * @param value the special value to parse.
+     * @param pos input/ouput parsing parameter.
+     * @return the special number.
+     */
+    private Number parseNumber(String source, double value, ParsePosition pos) {
+        Number ret = null;
+        
+        StringBuffer sb = new StringBuffer();
+        sb.append('(');
+        sb.append(value);
+        sb.append(')');
+        
+        int n = sb.length();
+        int startIndex = pos.getIndex();
+        int endIndex = startIndex + n;
+        if (endIndex < source.length()) {
+            if (source.substring(startIndex, endIndex).compareTo(sb.toString()) == 0) {
+                ret = new Double(value);
+                pos.setIndex(endIndex);
+            }
+        }
+        
+        return ret;
+    }
+    
+    /**
+     * Parses <code>source</code> for a number.  This method can parse normal,
+     * numeric values as well as special values.  These special values include
+     * Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY.
+     *
+     * @param source the string to parse
+     * @param format the number format used to parse normal, numeric values.
+     * @param pos input/ouput parsing parameter.
+     * @return the parsed number.
+     */
+    private Number parseNumber(String source, NumberFormat format, ParsePosition pos) {
+        int startIndex = pos.getIndex();
+        Number number = format.parse(source, pos);
+        int endIndex = pos.getIndex();
+        
+        // check for error parsing number
+        if (startIndex == endIndex) {
+            // try parsing special numbers
+            double[] special = {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY};
+            for (int i = 0; i < special.length; ++i) {
+                number = parseNumber(source, special[i], pos);
+                if (number != null) {
+                    break;
+                }
+            }
+        }
+        
+        return number;
+    }
+
+    /**
+     * Parses a string to produce a object.
+     *
+     * @param source the string to parse
+     * @param pos input/ouput parsing parameter.
+     * @return the parsed object.
+     * @see java.text.Format#parseObject(java.lang.String, java.text.ParsePosition)
+     */
+    public Object parseObject(String source, ParsePosition pos) {
+        return parse(source, pos);
+    }
+    /**
+     * Modify the imaginaryCharacter.
+     * @param imaginaryCharacter The new imaginaryCharacter value.
+     * @throws IllegalArgumentException if <code>imaginaryCharacter</code> is
+     *         <code>null</code> or an empty string.
+     */
+    public void setImaginaryCharacter(String imaginaryCharacter) {
+        if (imaginaryCharacter == null || imaginaryCharacter.length() == 0) {
+            throw new IllegalArgumentException(
+                "imaginaryCharacter must be a non-empty string.");
+        }
+        this.imaginaryCharacter = imaginaryCharacter;
+    }
+    
+    /**
+     * Modify the imaginaryFormat.
+     * @param imaginaryFormat The new imaginaryFormat value.
+     * @throws IllegalArgumentException if <code>imaginaryFormat</code> is
+     *         <code>null</code>.
+     */
+    public void setImaginaryFormat(NumberFormat imaginaryFormat) {
+        if (imaginaryFormat == null) {
+            throw new IllegalArgumentException(
+                "imaginaryFormat can not be null.");
+        }
+        this.imaginaryFormat = imaginaryFormat;
+    }
+    
+    /**
+     * Modify the realFormat.
+     * @param realFormat The new realFormat value.
+     * @throws IllegalArgumentException if <code>realFormat</code> is
+     *         <code>null</code>.
+     */
+    public void setRealFormat(NumberFormat realFormat) {
+        if (realFormat == null) {
+            throw new IllegalArgumentException(
+                "realFormat can not be null.");
+        }
+        this.realFormat = realFormat;
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ ComplexFormatClaudeTest ใน package org.apache.commons.math.complex เพื่อทดสอบคลาส ComplexFormat ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.math.complex;` เท่านั้น
+</instructions>

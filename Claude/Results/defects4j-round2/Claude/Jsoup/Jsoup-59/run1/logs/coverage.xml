@@ -1,0 +1,814 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.95" branch-rate="0.8636363636363636" lines-covered="152" lines-valid="160" branches-covered="38" branches-valid="44" complexity="1.280701754385965" version="2.0.3" timestamp="1790809010412">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="org.jsoup.parser" line-rate="0.95" branch-rate="0.8636363636363636" complexity="1.280701754385965">
+			<classes>
+				<class name="org.jsoup.parser.Token" filename="org/jsoup/parser/Token.java" line-rate="0.9444444444444444" branch-rate="0.7857142857142857" complexity="1.280701754385965">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="14" hits="47" branch="false"/>
+								<line number="15" hits="47" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Lorg/jsoup/parser/Token$1;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="11" hits="47" branch="false"/>
+							</lines>
+						</method>
+						<method name="asCharacter" signature="()Lorg/jsoup/parser/Token$Character;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="359" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="asComment" signature="()Lorg/jsoup/parser/Token$Comment;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="351" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="asDoctype" signature="()Lorg/jsoup/parser/Token$Doctype;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="327" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="asEndTag" signature="()Lorg/jsoup/parser/Token$EndTag;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="343" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="asStartTag" signature="()Lorg/jsoup/parser/Token$StartTag;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="335" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="isCharacter" signature="()Z" line-rate="1.0" branch-rate="0.5">
+							<lines>
+								<line number="355" hits="2" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="isComment" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="347" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="isDoctype" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="323" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="isEOF" signature="()Z" line-rate="1.0" branch-rate="0.5">
+							<lines>
+								<line number="363" hits="2" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="isEndTag" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="339" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="isStartTag" signature="()Z" line-rate="1.0" branch-rate="0.5">
+							<lines>
+								<line number="331" hits="2" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="reset" signature="(Ljava/lang/StringBuilder;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="28" hits="20" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="29" hits="19" branch="false"/>
+								<line number="31" hits="20" branch="false"/>
+							</lines>
+						</method>
+						<method name="tokenType" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="18" hits="2" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="11" hits="47" branch="false"/>
+						<line number="14" hits="47" branch="false"/>
+						<line number="15" hits="47" branch="false"/>
+						<line number="18" hits="2" branch="false"/>
+						<line number="28" hits="20" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="29" hits="19" branch="false"/>
+						<line number="31" hits="20" branch="false"/>
+						<line number="323" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="327" hits="1" branch="false"/>
+						<line number="331" hits="2" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="335" hits="1" branch="false"/>
+						<line number="339" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="343" hits="0" branch="false"/>
+						<line number="347" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="351" hits="1" branch="false"/>
+						<line number="355" hits="2" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="359" hits="1" branch="false"/>
+						<line number="363" hits="2" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+					</lines>
+				</class>
+				<class name="org.jsoup.parser.Token$1" filename="org/jsoup/parser/Token.java" line-rate="1.0" branch-rate="1.0" complexity="1.280701754385965">
+					<methods>
+					</methods>
+					<lines>
+					</lines>
+				</class>
+				<class name="org.jsoup.parser.Token$Character" filename="org/jsoup/parser/Token.java" line-rate="1.0" branch-rate="1.0" complexity="1.280701754385965">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="286" hits="5" branch="false"/>
+								<line number="287" hits="5" branch="false"/>
+								<line number="288" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="data" signature="(Ljava/lang/String;)Lorg/jsoup/parser/Token$Character;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="297" hits="3" branch="false"/>
+								<line number="298" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="getData" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="302" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="()Lorg/jsoup/parser/Token;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="292" hits="1" branch="false"/>
+								<line number="293" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="307" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="286" hits="5" branch="false"/>
+						<line number="287" hits="5" branch="false"/>
+						<line number="288" hits="5" branch="false"/>
+						<line number="292" hits="1" branch="false"/>
+						<line number="293" hits="1" branch="false"/>
+						<line number="297" hits="3" branch="false"/>
+						<line number="298" hits="3" branch="false"/>
+						<line number="302" hits="4" branch="false"/>
+						<line number="307" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.jsoup.parser.Token$Comment" filename="org/jsoup/parser/Token.java" line-rate="1.0" branch-rate="1.0" complexity="1.280701754385965">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="258" hits="6" branch="false"/>
+								<line number="259" hits="6" branch="false"/>
+								<line number="268" hits="6" branch="false"/>
+								<line number="269" hits="6" branch="false"/>
+								<line number="270" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="getData" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="273" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="()Lorg/jsoup/parser/Token;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="263" hits="1" branch="false"/>
+								<line number="264" hits="1" branch="false"/>
+								<line number="265" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="278" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="258" hits="6" branch="false"/>
+						<line number="259" hits="6" branch="false"/>
+						<line number="263" hits="1" branch="false"/>
+						<line number="264" hits="1" branch="false"/>
+						<line number="265" hits="1" branch="false"/>
+						<line number="268" hits="6" branch="false"/>
+						<line number="269" hits="6" branch="false"/>
+						<line number="270" hits="6" branch="false"/>
+						<line number="273" hits="4" branch="false"/>
+						<line number="278" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.jsoup.parser.Token$Doctype" filename="org/jsoup/parser/Token.java" line-rate="1.0" branch-rate="1.0" complexity="1.280701754385965">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="34" hits="8" branch="false"/>
+								<line number="35" hits="8" branch="false"/>
+								<line number="36" hits="8" branch="false"/>
+								<line number="37" hits="8" branch="false"/>
+								<line number="38" hits="8" branch="false"/>
+								<line number="40" hits="8" branch="false"/>
+								<line number="41" hits="8" branch="false"/>
+								<line number="42" hits="8" branch="false"/>
+							</lines>
+						</method>
+						<method name="getName" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="55" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="getPubSysKey" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="59" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="getPublicIdentifier" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="63" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="getSystemIdentifier" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="67" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="isForceQuirks" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="71" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="()Lorg/jsoup/parser/Token;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="46" hits="1" branch="false"/>
+								<line number="47" hits="1" branch="false"/>
+								<line number="48" hits="1" branch="false"/>
+								<line number="49" hits="1" branch="false"/>
+								<line number="50" hits="1" branch="false"/>
+								<line number="51" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="34" hits="8" branch="false"/>
+						<line number="35" hits="8" branch="false"/>
+						<line number="36" hits="8" branch="false"/>
+						<line number="37" hits="8" branch="false"/>
+						<line number="38" hits="8" branch="false"/>
+						<line number="40" hits="8" branch="false"/>
+						<line number="41" hits="8" branch="false"/>
+						<line number="42" hits="8" branch="false"/>
+						<line number="46" hits="1" branch="false"/>
+						<line number="47" hits="1" branch="false"/>
+						<line number="48" hits="1" branch="false"/>
+						<line number="49" hits="1" branch="false"/>
+						<line number="50" hits="1" branch="false"/>
+						<line number="51" hits="1" branch="false"/>
+						<line number="55" hits="3" branch="false"/>
+						<line number="59" hits="3" branch="false"/>
+						<line number="63" hits="2" branch="false"/>
+						<line number="67" hits="2" branch="false"/>
+						<line number="71" hits="3" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.jsoup.parser.Token$EOF" filename="org/jsoup/parser/Token.java" line-rate="1.0" branch-rate="1.0" complexity="1.280701754385965">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="312" hits="3" branch="false"/>
+								<line number="313" hits="3" branch="false"/>
+								<line number="314" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="()Lorg/jsoup/parser/Token;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="318" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="312" hits="3" branch="false"/>
+						<line number="313" hits="3" branch="false"/>
+						<line number="314" hits="3" branch="false"/>
+						<line number="318" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.jsoup.parser.Token$EndTag" filename="org/jsoup/parser/Token.java" line-rate="1.0" branch-rate="1.0" complexity="1.280701754385965">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="247" hits="3" branch="false"/>
+								<line number="248" hits="3" branch="false"/>
+								<line number="249" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="253" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="247" hits="3" branch="false"/>
+						<line number="248" hits="3" branch="false"/>
+						<line number="249" hits="3" branch="false"/>
+						<line number="253" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.jsoup.parser.Token$StartTag" filename="org/jsoup/parser/Token.java" line-rate="0.9333333333333333" branch-rate="0.75" complexity="1.280701754385965">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="216" hits="22" branch="false"/>
+								<line number="217" hits="22" branch="false"/>
+								<line number="218" hits="22" branch="false"/>
+								<line number="219" hits="22" branch="false"/>
+							</lines>
+						</method>
+						<method name="nameAttr" signature="(Ljava/lang/String;Lorg/jsoup/nodes/Attributes;)Lorg/jsoup/parser/Token$StartTag;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="230" hits="1" branch="false"/>
+								<line number="231" hits="1" branch="false"/>
+								<line number="232" hits="1" branch="false"/>
+								<line number="233" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="()Lorg/jsoup/parser/Token$Tag;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="223" hits="1" branch="false"/>
+								<line number="224" hits="1" branch="false"/>
+								<line number="226" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="()Lorg/jsoup/parser/Token;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="214" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="0.75">
+							<lines>
+								<line number="238" hits="2" branch="true" condition-coverage="75% (3/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="239" hits="1" branch="false"/>
+								<line number="241" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="214" hits="0" branch="false"/>
+						<line number="216" hits="22" branch="false"/>
+						<line number="217" hits="22" branch="false"/>
+						<line number="218" hits="22" branch="false"/>
+						<line number="219" hits="22" branch="false"/>
+						<line number="223" hits="1" branch="false"/>
+						<line number="224" hits="1" branch="false"/>
+						<line number="226" hits="1" branch="false"/>
+						<line number="230" hits="1" branch="false"/>
+						<line number="231" hits="1" branch="false"/>
+						<line number="232" hits="1" branch="false"/>
+						<line number="233" hits="1" branch="false"/>
+						<line number="238" hits="2" branch="true" condition-coverage="75% (3/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="239" hits="1" branch="false"/>
+						<line number="241" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.jsoup.parser.Token$Tag" filename="org/jsoup/parser/Token.java" line-rate="0.918918918918919" branch-rate="0.9230769230769231" complexity="1.280701754385965">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="79" hits="25" branch="false"/>
+								<line number="81" hits="25" branch="false"/>
+								<line number="82" hits="25" branch="false"/>
+								<line number="83" hits="25" branch="false"/>
+							</lines>
+						</method>
+						<method name="appendAttributeName" signature="(C)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="171" hits="0" branch="false"/>
+								<line number="172" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="appendAttributeName" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="0.5">
+							<lines>
+								<line number="167" hits="11" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="168" hits="11" branch="false"/>
+							</lines>
+						</method>
+						<method name="appendAttributeValue" signature="(C)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="184" hits="0" branch="false"/>
+								<line number="185" hits="0" branch="false"/>
+								<line number="186" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="appendAttributeValue" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="175" hits="8" branch="false"/>
+								<line number="176" hits="8" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="177" hits="7" branch="false"/>
+								<line number="179" hits="1" branch="false"/>
+								<line number="181" hits="8" branch="false"/>
+							</lines>
+						</method>
+						<method name="appendAttributeValue" signature="([C)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="189" hits="1" branch="false"/>
+								<line number="190" hits="1" branch="false"/>
+								<line number="191" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="appendAttributeValue" signature="([I)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="194" hits="1" branch="false"/>
+								<line number="195" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="196" hits="2" branch="false"/>
+								<line number="198" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="appendTagName" signature="(C)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="163" hits="1" branch="false"/>
+								<line number="164" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="appendTagName" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="158" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="159" hits="4" branch="false"/>
+								<line number="160" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="ensureAttributeValue" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="205" hits="10" branch="false"/>
+								<line number="207" hits="10" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="208" hits="2" branch="false"/>
+								<line number="209" hits="2" branch="false"/>
+								<line number="211" hits="10" branch="false"/>
+							</lines>
+						</method>
+						<method name="finaliseTag" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="126" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="128" hits="1" branch="false"/>
+								<line number="130" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="getAttributes" signature="()Lorg/jsoup/nodes/Attributes;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="153" hits="15" branch="false"/>
+							</lines>
+						</method>
+						<method name="isSelfClosing" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="148" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="name" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="133" hits="10" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="134" hits="8" branch="false"/>
+							</lines>
+						</method>
+						<method name="name" signature="(Ljava/lang/String;)Lorg/jsoup/parser/Token$Tag;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="142" hits="7" branch="false"/>
+								<line number="143" hits="7" branch="false"/>
+								<line number="144" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="newAttribute" signature="()V" line-rate="0.9411764705882353" branch-rate="0.9">
+							<lines>
+								<line number="101" hits="12" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="102" hits="0" branch="false"/>
+								<line number="104" hits="12" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="106" hits="11" branch="false"/>
+								<line number="108" hits="11" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="109" hits="8" branch="false"/>
+								<line number="110" hits="8" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="111" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="112" hits="1" branch="false"/>
+								<line number="114" hits="2" branch="false"/>
+								<line number="115" hits="11" branch="false"/>
+								<line number="117" hits="12" branch="false"/>
+								<line number="118" hits="12" branch="false"/>
+								<line number="119" hits="12" branch="false"/>
+								<line number="120" hits="12" branch="false"/>
+								<line number="121" hits="12" branch="false"/>
+								<line number="122" hits="12" branch="false"/>
+							</lines>
+						</method>
+						<method name="normalName" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="138" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="()Lorg/jsoup/parser/Token$Tag;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="88" hits="2" branch="false"/>
+								<line number="89" hits="2" branch="false"/>
+								<line number="90" hits="2" branch="false"/>
+								<line number="91" hits="2" branch="false"/>
+								<line number="92" hits="2" branch="false"/>
+								<line number="93" hits="2" branch="false"/>
+								<line number="94" hits="2" branch="false"/>
+								<line number="95" hits="2" branch="false"/>
+								<line number="96" hits="2" branch="false"/>
+								<line number="97" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="()Lorg/jsoup/parser/Token;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="75" hits="25" branch="false"/>
+							</lines>
+						</method>
+						<method name="setEmptyAttributeValue" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="201" hits="1" branch="false"/>
+								<line number="202" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="75" hits="25" branch="false"/>
+						<line number="79" hits="25" branch="false"/>
+						<line number="81" hits="25" branch="false"/>
+						<line number="82" hits="25" branch="false"/>
+						<line number="83" hits="25" branch="false"/>
+						<line number="88" hits="2" branch="false"/>
+						<line number="89" hits="2" branch="false"/>
+						<line number="90" hits="2" branch="false"/>
+						<line number="91" hits="2" branch="false"/>
+						<line number="92" hits="2" branch="false"/>
+						<line number="93" hits="2" branch="false"/>
+						<line number="94" hits="2" branch="false"/>
+						<line number="95" hits="2" branch="false"/>
+						<line number="96" hits="2" branch="false"/>
+						<line number="97" hits="2" branch="false"/>
+						<line number="101" hits="12" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="102" hits="0" branch="false"/>
+						<line number="104" hits="12" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="106" hits="11" branch="false"/>
+						<line number="108" hits="11" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="109" hits="8" branch="false"/>
+						<line number="110" hits="8" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="111" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="112" hits="1" branch="false"/>
+						<line number="114" hits="2" branch="false"/>
+						<line number="115" hits="11" branch="false"/>
+						<line number="117" hits="12" branch="false"/>
+						<line number="118" hits="12" branch="false"/>
+						<line number="119" hits="12" branch="false"/>
+						<line number="120" hits="12" branch="false"/>
+						<line number="121" hits="12" branch="false"/>
+						<line number="122" hits="12" branch="false"/>
+						<line number="126" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="128" hits="1" branch="false"/>
+						<line number="130" hits="2" branch="false"/>
+						<line number="133" hits="10" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="134" hits="8" branch="false"/>
+						<line number="138" hits="3" branch="false"/>
+						<line number="142" hits="7" branch="false"/>
+						<line number="143" hits="7" branch="false"/>
+						<line number="144" hits="7" branch="false"/>
+						<line number="148" hits="4" branch="false"/>
+						<line number="153" hits="15" branch="false"/>
+						<line number="158" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="159" hits="4" branch="false"/>
+						<line number="160" hits="4" branch="false"/>
+						<line number="163" hits="1" branch="false"/>
+						<line number="164" hits="1" branch="false"/>
+						<line number="167" hits="11" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="168" hits="11" branch="false"/>
+						<line number="171" hits="0" branch="false"/>
+						<line number="172" hits="0" branch="false"/>
+						<line number="175" hits="8" branch="false"/>
+						<line number="176" hits="8" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="177" hits="7" branch="false"/>
+						<line number="179" hits="1" branch="false"/>
+						<line number="181" hits="8" branch="false"/>
+						<line number="184" hits="0" branch="false"/>
+						<line number="185" hits="0" branch="false"/>
+						<line number="186" hits="0" branch="false"/>
+						<line number="189" hits="1" branch="false"/>
+						<line number="190" hits="1" branch="false"/>
+						<line number="191" hits="1" branch="false"/>
+						<line number="194" hits="1" branch="false"/>
+						<line number="195" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="196" hits="2" branch="false"/>
+						<line number="198" hits="1" branch="false"/>
+						<line number="201" hits="1" branch="false"/>
+						<line number="202" hits="1" branch="false"/>
+						<line number="205" hits="10" branch="false"/>
+						<line number="207" hits="10" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="208" hits="2" branch="false"/>
+						<line number="209" hits="2" branch="false"/>
+						<line number="211" hits="10" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.jsoup.parser.Token$TokenType" filename="org/jsoup/parser/Token.java" line-rate="1.0" branch-rate="1.0" complexity="1.280701754385965">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="366" hits="7" branch="false"/>
+								<line number="367" hits="1" branch="false"/>
+								<line number="368" hits="1" branch="false"/>
+								<line number="369" hits="1" branch="false"/>
+								<line number="370" hits="1" branch="false"/>
+								<line number="371" hits="1" branch="false"/>
+								<line number="372" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/String;I)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="valueOf" signature="(Ljava/lang/String;)Lorg/jsoup/parser/Token$TokenType;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="values" signature="()[Lorg/jsoup/parser/Token$TokenType;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="366" hits="7" branch="false"/>
+						<line number="367" hits="1" branch="false"/>
+						<line number="368" hits="1" branch="false"/>
+						<line number="369" hits="1" branch="false"/>
+						<line number="370" hits="1" branch="false"/>
+						<line number="371" hits="1" branch="false"/>
+						<line number="372" hits="1" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

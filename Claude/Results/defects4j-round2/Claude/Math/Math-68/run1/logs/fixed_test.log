@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-68-75go7tmd/Math-68f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 7
+  - org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerClaudeTest::testOptimize_diagonalSystemDistinctCoefficients_convergesToExactSolution
+  - org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerClaudeTest::testOptimize_rankDeficientConsistentSystem_convergesToZeroResidual
+  - org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerClaudeTest::testOptimize_overDeterminedLinearRegressionTwoParameters_matchesNormalEquationSolution
+  - org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerClaudeTest::testOptimize_qrColumnsPermutation_returnsExactUniqueSolution
+  - org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerClaudeTest::testOptimize_coupledSquareSystem_convergesToExactSolution
+  - org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerClaudeTest::testOptimize_overDeterminedThreePointsOneUnknown_matchesNormalEquationSolution
+  - org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizerClaudeTest::testOptimize_fourPointsTwoUnknownsDifferentData_matchesNormalEquationSolution
+[exit 0]

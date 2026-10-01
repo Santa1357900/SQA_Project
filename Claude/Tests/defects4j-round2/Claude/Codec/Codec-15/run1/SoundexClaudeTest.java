@@ -1,0 +1,241 @@
+package org.apache.commons.codec.language;
+
+import org.apache.commons.codec.EncoderException;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class SoundexClaudeTest {
+
+    // Covers: default constructor uses US_ENGLISH_MAPPING, basic encoding works
+    @Test
+    public void testDefaultConstructor_encodesUsingUsEnglishMapping() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("R163", soundex.encode("Robert"));
+    }
+
+    // Covers: Soundex(char[]) constructor produces same mapping as default
+    @Test
+    public void testCharArrayConstructor_matchesDefaultMapping() throws Throwable {
+        Soundex soundex = new Soundex(Soundex.US_ENGLISH_MAPPING_STRING.toCharArray());
+        assertEquals("R163", soundex.encode("Robert"));
+    }
+
+    // Covers: Soundex(char[]) performs defensive copy (System.arraycopy) of the mapping array
+    @Test
+    public void testCharArrayConstructor_copiesArrayDefensively() throws Throwable {
+        char[] mapping = Soundex.US_ENGLISH_MAPPING_STRING.toCharArray();
+        Soundex soundex = new Soundex(mapping);
+        mapping[1] = '9';
+        assertEquals("A100", soundex.encode("AB"));
+    }
+
+    // Covers: Soundex(String) constructor produces same mapping as default
+    @Test
+    public void testStringConstructor_matchesDefaultMapping() throws Throwable {
+        Soundex soundex = new Soundex(Soundex.US_ENGLISH_MAPPING_STRING);
+        assertEquals("T522", soundex.encode("Tymczak"));
+    }
+
+    // Covers: static US_ENGLISH instance works identically to a default-constructed instance
+    @Test
+    public void testUsEnglishStaticInstance_producesStandardCode() throws Throwable {
+        assertEquals("A261", Soundex.US_ENGLISH.encode("Ashcraft"));
+    }
+
+    // Covers: US_ENGLISH_MAPPING_STRING constant has one entry per letter of the alphabet
+    @Test
+    public void testUsEnglishMappingStringConstant_hasLengthOfAlphabet() throws Throwable {
+        assertEquals(26, Soundex.US_ENGLISH_MAPPING_STRING.length());
+    }
+
+    // Covers: difference() with identical strings returns maximum similarity (4)
+    @Test
+    public void testDifference_sameStringTwice_returnsFour() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals(4, soundex.difference("Smith", "Smith"));
+    }
+
+    // Covers: difference() with different spellings that sound alike returns 4
+    @Test
+    public void testDifference_differentSpellingSameSound_returnsFour() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals(4, soundex.difference("Smith", "Smyth"));
+    }
+
+    // Covers: encode(Object) throws EncoderException for non-String argument
+    @Test
+    public void testEncodeObject_nonStringArgument_throwsEncoderException() throws Throwable {
+        Soundex soundex = new Soundex();
+        try {
+            soundex.encode(new Integer(5));
+            fail("expected EncoderException");
+        } catch (EncoderException expected) {
+        }
+    }
+
+    // Covers: encode(Object) throws EncoderException for null argument (null is not instanceof String)
+    @Test
+    public void testEncodeObject_nullArgument_throwsEncoderException() throws Throwable {
+        Soundex soundex = new Soundex();
+        try {
+            soundex.encode((Object) null);
+            fail("expected EncoderException");
+        } catch (EncoderException expected) {
+        }
+    }
+
+    // Covers: encode(Object) with valid String delegates to soundex() correctly
+    @Test
+    public void testEncodeObject_validString_returnsExpectedCode() throws Throwable {
+        Soundex soundex = new Soundex();
+        Object result = soundex.encode((Object) "Robert");
+        assertEquals("R163", result);
+    }
+
+    // Covers: encode(Object) return type contract (returns a String instance)
+    @Test
+    public void testEncodeObject_returnsInstanceOfString() throws Throwable {
+        Soundex soundex = new Soundex();
+        Object result = soundex.encode((Object) "Robert");
+        assertTrue(result instanceof String);
+    }
+
+    // Covers: encode(String) with null returns null (delegates to soundex(null))
+    @Test
+    public void testEncodeString_nullInput_returnsNull() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertNull(soundex.encode((String) null));
+    }
+
+    // Covers: encode(String) with empty string returns empty string
+    @Test
+    public void testEncodeString_emptyInput_returnsEmptyString() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("", soundex.encode(""));
+    }
+
+    // Covers: encode(String) basic happy path
+    @Test
+    public void testEncodeString_basicWord_returnsExpectedCode() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("R163", soundex.encode("Robert"));
+    }
+
+    // Covers: getMaxLength() default value is 4
+    @Test
+    public void testGetMaxLength_defaultValueIsFour() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals(4, soundex.getMaxLength());
+    }
+
+    // Covers: setMaxLength() updates the value returned by getMaxLength()
+    @Test
+    public void testSetMaxLength_updatesGetterValue() throws Throwable {
+        Soundex soundex = new Soundex();
+        soundex.setMaxLength(7);
+        assertEquals(7, soundex.getMaxLength());
+    }
+
+    // Covers: maxLength field is documented as unused and must not affect encoded output length
+    @Test
+    public void testSetMaxLength_doesNotChangeEncodedOutputLength() throws Throwable {
+        Soundex soundex = new Soundex();
+        soundex.setMaxLength(2);
+        assertEquals(4, soundex.encode("Robert").length());
+    }
+
+    // Covers: soundex() null branch returns null
+    @Test
+    public void testSoundex_nullInput_returnsNull() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertNull(soundex.soundex(null));
+    }
+
+    // Covers: soundex() empty-after-clean branch returns empty string
+    @Test
+    public void testSoundex_emptyInput_returnsEmptyString() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("", soundex.soundex(""));
+    }
+
+    // Covers: soundex() main loop with zero iterations (single letter), pads with zeros
+    @Test
+    public void testSoundex_singleLetter_padsThreeZeros() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("A000", soundex.soundex("A"));
+    }
+
+    // Covers: soundex() main loop with one iteration, second letter coded normally (index<=1 skips HW rule)
+    @Test
+    public void testSoundex_twoLetters_secondLetterCoded() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("A100", soundex.soundex("AB"));
+    }
+
+    // Covers: getMappingCode HW-chain rule (consonants with same code separated by H are merged) -> A261
+    @Test
+    public void testSoundex_ashcraft_hAndWChainRule_returnsA261() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("A261", soundex.soundex("Ashcraft"));
+    }
+
+    // Covers: adjacent consonants (no separator) sharing the first letter's code are merged -> P236
+    @Test
+    public void testSoundex_pfister_adjacentSameCodeNoSeparator_returnsP236() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("P236", soundex.soundex("Pfister"));
+    }
+
+    // Covers: vowel between same-code consonants allows them to be coded separately -> T522
+    @Test
+    public void testSoundex_tymczak_vowelSeparatesSameCode_returnsT522() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("T522", soundex.soundex("Tymczak"));
+    }
+
+    // Covers: standard word with no H/W or dedup edge cases
+    @Test
+    public void testSoundex_honeyman_returnsH555() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("H555", soundex.soundex("Honeyman"));
+    }
+
+    // Covers: classic reference vector Robert -> R163
+    @Test
+    public void testSoundex_robert_returnsR163() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("R163", soundex.soundex("Robert"));
+    }
+
+    // Covers: classic reference vector Rupert -> R163 (same code as Robert)
+    @Test
+    public void testSoundex_rupert_returnsR163() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("R163", soundex.soundex("Rupert"));
+    }
+
+    // Covers: input cleaning normalizes case before mapping (lowercase handled same as uppercase)
+    @Test
+    public void testSoundex_lowercaseInput_isCaseInsensitive() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals("R163", soundex.soundex("robert"));
+    }
+
+    // Covers: output array is always exactly 4 characters regardless of word length
+    @Test
+    public void testSoundex_resultAlwaysFourCharactersRegardlessOfWordLength() throws Throwable {
+        Soundex soundex = new Soundex();
+        assertEquals(4, soundex.soundex("ABCDEFGHIJKLMNOP").length());
+    }
+
+    // Covers: map() throws IllegalArgumentException when a character's index exceeds a custom short mapping
+    @Test
+    public void testSoundex_customMappingUnmappedCharacter_throwsIllegalArgumentException() throws Throwable {
+        Soundex shortMapping = new Soundex("0123");
+        try {
+            shortMapping.soundex("E");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+}

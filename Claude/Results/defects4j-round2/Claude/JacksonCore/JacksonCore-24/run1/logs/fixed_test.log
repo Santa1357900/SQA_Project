@@ -1,0 +1,37 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonCore-24-xuirfxce/JacksonCore-24f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /tmp/claude-JacksonCore-24-xuirfxce/fixed && ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-JacksonCore-24-xuirfxce/fixed -Dd4j.test.dir=/tmp/claude-JacksonCore-24-xuirfxce/fixed/.test_suite compile.gen.tests 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+test-offline:
+
+get-deps:
+
+jackson-core-from-maven.compile:
+    [javac] /tmp/claude-JacksonCore-24-xuirfxce/fixed/maven-build.xml:74: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+
+compile:
+
+compile.gen.tests:
+     [echo] classes.dir: target/classes
+     [echo] build.home: target/classes/..
+    [mkdir] Created dir: /tmp/claude-JacksonCore-24-xuirfxce/fixed/.classes_testgen
+    [javac] /home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /tmp/claude-JacksonCore-24-xuirfxce/fixed/.classes_testgen
+    [javac] /tmp/claude-JacksonCore-24-xuirfxce/fixed/.test_suite/com/fasterxml/jackson/core/base/ParserBaseClaudeTest.java:73: error: cannot find symbol
+    [javac]         assertEquals(1, p.getTokenLineNr());
+    [javac]                          ^
+    [javac]   symbol:   method getTokenLineNr()
+    [javac]   location: variable p of type JsonParser
+    [javac] Note: /tmp/claude-JacksonCore-24-xuirfxce/fixed/.test_suite/com/fasterxml/jackson/core/base/ParserBaseClaudeTest.java uses or overrides a deprecated API.
+    [javac] Note: Recompile with -Xlint:deprecation for details.
+    [javac] 1 error
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 1 second
+Cannot compile extracted test suite! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

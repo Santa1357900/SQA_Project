@@ -1,0 +1,258 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+
+import org.junit.Test;
+
+import java.util.Collection;
+
+public class MethodCompilerPassClaudeTest {
+
+  /** No-op SignatureStore test double; all methods are explicitly declared on the interface. */
+  static class NoOpSignatureStore implements MethodCompilerPass.SignatureStore {
+    public void reset() {}
+    public void addSignature(String functionName, Node functionNode, String sourceFile) {}
+    public void removeSignature(String functionName) {}
+  }
+
+  /** Minimal concrete subclass needed because MethodCompilerPass is abstract. */
+  static class ConcreteMethodCompilerPass extends MethodCompilerPass {
+    private final NoOpSignatureStore signatureStore = new NoOpSignatureStore();
+
+    ConcreteMethodCompilerPass(AbstractCompiler compiler) {
+      super(compiler);
+    }
+
+    NodeTraversal.Callback getActingCallback() {
+      return new NodeTraversal.AbstractPostOrderCallback() {
+        public void visit(NodeTraversal t, Node n, Node parent) {}
+      };
+    }
+
+    MethodCompilerPass.SignatureStore getSignatureStore() {
+      return signatureStore;
+    }
+  }
+
+  private ConcreteMethodCompilerPass runPass(String externsCode, String jsCode) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    SourceFile externsFile = SourceFile.fromCode("externs.js", externsCode);
+    SourceFile jsFile = SourceFile.fromCode("test.js", jsCode);
+    compiler.compile(externsFile, jsFile, options);
+    ConcreteMethodCompilerPass pass = new ConcreteMethodCompilerPass(compiler);
+    Node allRoot = compiler.getRoot();
+    pass.process(allRoot.getFirstChild(), allRoot.getLastChild());
+    return pass;
+  }
+
+  // covers GetExternMethods GETELEM branch: dest.getType() != STRING -> early return
+  @Test
+  public void testProcess_externsGetElemNonStringKey_notAddedToExternMethods() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("window[x] = 1;", "");
+    assertTrue(pass.externMethods.isEmpty());
+  }
+
+  // covers GetExternMethods GETPROP: assign + function -> addSignature, externMethods updated
+  @Test
+  public void testProcess_externsGetPropAssignFunction_addedWithSignature() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("Foo.bar = function(a) {};", "");
+    assertTrue(pass.externMethods.contains("bar"));
+    assertFalse(pass.externMethodsWithoutSignatures.contains("bar"));
+    assertTrue(pass.methodDefinitions.containsKey("bar"));
+  }
+
+  // covers GetExternMethods GETPROP else branch: no assignment -> withoutSignatures
+  @Test
+  public void testProcess_externsGetPropWithoutAssignment_addedWithoutSignature() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("Foo.bar;", "");
+    assertTrue(pass.externMethods.contains("bar"));
+    assertTrue(pass.externMethodsWithoutSignatures.contains("bar"));
+  }
+
+  // covers GetExternMethods GETPROP else branch: assign to non-function -> withoutSignatures
+  @Test
+  public void testProcess_externsGetPropAssignNonFunction_addedWithoutSignature() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("Foo.bar = 3;", "");
+    assertTrue(pass.externMethods.contains("bar"));
+    assertTrue(pass.externMethodsWithoutSignatures.contains("bar"));
+  }
+
+  // covers GetExternMethods GETELEM branch with string key -> addSignature
+  @Test
+  public void testProcess_externsGetElemAssignFunction_addedWithSignature() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("Foo['bar'] = function() {};", "");
+    assertTrue(pass.externMethods.contains("bar"));
+    assertTrue(pass.methodDefinitions.containsKey("bar"));
+  }
+
+  // covers GetExternMethods OBJECTLIT branch: function-valued key -> addSignature
+  @Test
+  public void testProcess_externsObjectLiteralFunctionProperty_addedWithSignature() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("var Foo = {bar: function(){}};", "");
+    assertTrue(pass.externMethods.contains("bar"));
+    assertTrue(pass.methodDefinitions.containsKey("bar"));
+  }
+
+  // covers GetExternMethods OBJECTLIT branch: non-function key -> withoutSignatures
+  @Test
+  public void testProcess_externsObjectLiteralNonFunctionProperty_addedWithoutSignature() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("var Foo = {baz: 5};", "");
+    assertTrue(pass.externMethods.contains("baz"));
+    assertTrue(pass.externMethodsWithoutSignatures.contains("baz"));
+  }
+
+  // covers GetExternMethods OBJECTLIT loop running multiple iterations (>1 key/value pair)
+  @Test
+  public void testProcess_externsObjectLiteralMultipleFunctionProperties_bothAdded() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("var Foo = {a: function(){}, b: function(){}};", "");
+    assertTrue(pass.externMethods.contains("a"));
+    assertTrue(pass.externMethods.contains("b"));
+  }
+
+  // covers GatherSignatures GETPROP: parent not ASSIGN -> addPossibleSignature never called
+  @Test
+  public void testProcess_jsPropertyUsedAsCallTarget_notTracked() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "Foo.bar();");
+    assertFalse(pass.methodDefinitions.containsKey("bar"));
+    assertFalse(pass.nonMethodProperties.contains("bar"));
+  }
+
+  // covers GatherSignatures GETPROP: non-prototype static assign of function
+  @Test
+  public void testProcess_jsStaticAssignFunction_addedToMethodDefinitions() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "Foo.staticMethod = function(){};");
+    assertTrue(pass.methodDefinitions.containsKey("staticMethod"));
+  }
+
+  // covers GatherSignatures GETELEM: non-prototype static assign via bracket notation
+  @Test
+  public void testProcess_jsStaticAssignFunctionViaGetElem_addedToMethodDefinitions() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "Foo['staticMethod'] = function(){};");
+    assertTrue(pass.methodDefinitions.containsKey("staticMethod"));
+  }
+
+  // covers GatherSignatures GETPROP: dest not STRING -> block skipped entirely
+  @Test
+  public void testProcess_jsAssignFunctionToDynamicKey_ignoredAsNonStringDest() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "var x = 'bar'; Foo[x] = function(){};");
+    assertTrue(pass.methodDefinitions.isEmpty());
+  }
+
+  // covers GatherSignatures OBJECTLIT: mixed function and non-function property values
+  @Test
+  public void testProcess_jsObjectLiteralMixedProperties_methodAndNonMethodSeparated() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "var obj = {method: function(){}, prop: 5};");
+    assertTrue(pass.methodDefinitions.containsKey("method"));
+    assertTrue(pass.nonMethodProperties.contains("prop"));
+  }
+
+  // contract test: Foo.prototype.bar = function(){} must register "bar" as a method
+  // (processPrototypeParent must look at n.getParent(), not n.getParent().getParent())
+  @Test
+  public void testProcess_jsPrototypeAssignFunction_addedToMethodDefinitions() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "Foo.prototype.bar = function(){};");
+    assertTrue(pass.methodDefinitions.containsKey("bar"));
+    Collection<Node> defs = pass.methodDefinitions.get("bar");
+    assertEquals(1, defs.size());
+    assertEquals(Token.FUNCTION, defs.iterator().next().getType());
+  }
+
+  // same contract as above but via GETELEM (Foo.prototype['bar'] = function(){})
+  @Test
+  public void testProcess_jsPrototypeGetElemAssignFunction_addedToMethodDefinitions() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "Foo.prototype['bar'] = function(){};");
+    assertTrue(pass.methodDefinitions.containsKey("bar"));
+  }
+
+  // covers addPossibleSignature: assignee is neither FUNCTION nor NAME -> nonMethodProperties
+  @Test
+  public void testProcess_jsPrototypeAssignNonFunctionNonName_addedToNonMethodProperties() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "Foo.prototype.bar = 5;");
+    assertTrue(pass.nonMethodProperties.contains("bar"));
+    assertFalse(pass.methodDefinitions.containsKey("bar"));
+  }
+
+  // covers processPrototypeParent switch default (n is ASSIGN, no GETPROP/GETELEM case matches)
+  @Test
+  public void testProcess_jsPrototypeReassignedWhole_noDefinitionsAdded() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "Foo.prototype = {};");
+    assertTrue(pass.methodDefinitions.isEmpty());
+  }
+
+  // covers Multimap accumulating multiple values for the same key across statements
+  @Test
+  public void testProcess_jsMultiplePrototypeAssignsSameName_accumulatesMultipleDefinitions() throws Throwable {
+    ConcreteMethodCompilerPass pass =
+        runPass("", "Foo.prototype.bar = function(){}; Baz.prototype.bar = function(){};");
+    assertEquals(2, pass.methodDefinitions.get("bar").size());
+  }
+
+  // covers addPossibleSignature NAME branch: var initial value is a function -> addSignature
+  @Test
+  public void testProcess_jsAssignNamedFunctionVariable_addedAsSignature() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "var helper = function(){}; Foo.bar = helper;");
+    assertTrue(pass.methodDefinitions.containsKey("bar"));
+  }
+
+  // covers addPossibleSignature NAME branch: var initial value is not a function -> nonMethodProperties
+  @Test
+  public void testProcess_jsAssignNonFunctionVariable_addedToNonMethodProperties() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "var notAFunction = 5; Foo.bar = notAFunction;");
+    assertTrue(pass.nonMethodProperties.contains("bar"));
+    assertFalse(pass.methodDefinitions.containsKey("bar"));
+  }
+
+  // covers addPossibleSignature NAME branch: var not found in scope, not IDE mode -> throws
+  @Test
+  public void testProcess_jsAssignUndeclaredName_throwsIllegalStateException() throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("j.js", "Foo.bar = undeclaredName;"), options);
+    ConcreteMethodCompilerPass pass = new ConcreteMethodCompilerPass(compiler);
+    Node allRoot = compiler.getRoot();
+    try {
+      pass.process(allRoot.getFirstChild(), allRoot.getLastChild());
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      assertTrue(expected.getMessage().contains("VarCheck"));
+    }
+  }
+
+  // covers addSignature early-return: externMethodsWithoutSignatures blocks later addition
+  @Test
+  public void testProcess_externMethodWithoutSignature_blocksLaterSignatureAddition() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("Foo.bar;", "Baz.prototype.bar = function(){};");
+    assertTrue(pass.externMethodsWithoutSignatures.contains("bar"));
+    assertFalse(pass.methodDefinitions.containsKey("bar"));
+  }
+
+  // baseline: empty externs and js produce no methods, no non-method properties, no errors
+  @Test
+  public void testProcess_emptyExternsAndJs_noMethodsFound() throws Throwable {
+    ConcreteMethodCompilerPass pass = runPass("", "");
+    assertTrue(pass.externMethods.isEmpty());
+    assertTrue(pass.methodDefinitions.isEmpty());
+    assertTrue(pass.nonMethodProperties.isEmpty());
+  }
+
+  // direct sanity check of the package-private accessor getActingCallback()
+  @Test
+  public void testGetActingCallback_returnsNonNullCallback() throws Throwable {
+    Compiler compiler = new Compiler();
+    ConcreteMethodCompilerPass pass = new ConcreteMethodCompilerPass(compiler);
+    assertNotNull(pass.getActingCallback());
+  }
+
+  // direct sanity check of the package-private accessor getSignatureStore()
+  @Test
+  public void testGetSignatureStore_returnsConfiguredStore() throws Throwable {
+    Compiler compiler = new Compiler();
+    ConcreteMethodCompilerPass pass = new ConcreteMethodCompilerPass(compiler);
+    assertNotNull(pass.getSignatureStore());
+  }
+}

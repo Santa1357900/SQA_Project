@@ -1,0 +1,439 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
+public class NodeUtilClaudeTest {
+
+  // getBooleanValue: STRING branch, empty vs non-empty
+  @Test
+  public void testGetBooleanValue_string_emptyFalseNonEmptyTrue() throws Throwable {
+    Node empty = Node.newString(Token.STRING, "");
+    Node nonEmpty = Node.newString(Token.STRING, "a");
+    assertFalse(NodeUtil.getBooleanValue(empty));
+    assertTrue(NodeUtil.getBooleanValue(nonEmpty));
+  }
+
+  // getBooleanValue: NUMBER branch, zero vs non-zero
+  @Test
+  public void testGetBooleanValue_number_zeroFalseNonZeroTrue() throws Throwable {
+    assertFalse(NodeUtil.getBooleanValue(Node.newNumber(0)));
+    assertTrue(NodeUtil.getBooleanValue(Node.newNumber(5)));
+  }
+
+  // getBooleanValue: NULL/FALSE/VOID always false; NAME undefined/NaN false, Infinity true
+  @Test
+  public void testGetBooleanValue_nullFalseVoidFalse_nameConstants() throws Throwable {
+    assertFalse(NodeUtil.getBooleanValue(new Node(Token.NULL)));
+    assertFalse(NodeUtil.getBooleanValue(new Node(Token.FALSE)));
+    assertFalse(NodeUtil.getBooleanValue(new Node(Token.VOID)));
+    assertFalse(NodeUtil.getBooleanValue(Node.newString(Token.NAME, "undefined")));
+    assertFalse(NodeUtil.getBooleanValue(Node.newString(Token.NAME, "NaN")));
+    assertTrue(NodeUtil.getBooleanValue(Node.newString(Token.NAME, "Infinity")));
+  }
+
+  // getBooleanValue: NAME that is not a recognized keyword falls through to throw
+  @Test
+  public void testGetBooleanValue_nameOther_throwsIllegalArgumentException() throws Throwable {
+    try {
+      NodeUtil.getBooleanValue(Node.newString(Token.NAME, "x"));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // getBooleanValue: TRUE / ARRAYLIT / OBJECTLIT / REGEXP always true
+  @Test
+  public void testGetBooleanValue_trueArrayObjectRegexp_true() throws Throwable {
+    assertTrue(NodeUtil.getBooleanValue(new Node(Token.TRUE)));
+    assertTrue(NodeUtil.getBooleanValue(new Node(Token.ARRAYLIT)));
+    assertTrue(NodeUtil.getBooleanValue(new Node(Token.OBJECTLIT)));
+    assertTrue(NodeUtil.getBooleanValue(new Node(Token.REGEXP)));
+  }
+
+  // getBooleanValue: non-literal node type throws IllegalArgumentException
+  @Test
+  public void testGetBooleanValue_nonLiteralType_throwsIllegalArgumentException() throws Throwable {
+    try {
+      NodeUtil.getBooleanValue(new Node(Token.ADD));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // getStringValue: NAME / STRING return their raw string
+  @Test
+  public void testGetStringValue_nameAndString_returnsString() throws Throwable {
+    assertEquals("foo", NodeUtil.getStringValue(Node.newString(Token.NAME, "foo")));
+    assertEquals("bar", NodeUtil.getStringValue(Node.newString(Token.STRING, "bar")));
+  }
+
+  // getStringValue: NUMBER with integral value -> no decimal point
+  @Test
+  public void testGetStringValue_numberInteger_noDecimalPoint() throws Throwable {
+    assertEquals("1", NodeUtil.getStringValue(Node.newNumber(1)));
+    assertEquals("0", NodeUtil.getStringValue(Node.newNumber(0)));
+  }
+
+  // getStringValue: NUMBER with fractional value -> Double.toString
+  @Test
+  public void testGetStringValue_numberNonInteger_usesDoubleToString() throws Throwable {
+    assertEquals(Double.toString(1.5), NodeUtil.getStringValue(Node.newNumber(1.5)));
+  }
+
+  // getStringValue: TRUE/FALSE/NULL use Node.tokenToName; VOID -> "undefined"
+  @Test
+  public void testGetStringValue_trueFalseNullVoid() throws Throwable {
+    assertEquals(Node.tokenToName(Token.TRUE), NodeUtil.getStringValue(new Node(Token.TRUE)));
+    assertEquals(Node.tokenToName(Token.FALSE), NodeUtil.getStringValue(new Node(Token.FALSE)));
+    assertEquals(Node.tokenToName(Token.NULL), NodeUtil.getStringValue(new Node(Token.NULL)));
+    assertEquals("undefined", NodeUtil.getStringValue(new Node(Token.VOID)));
+  }
+
+  // getStringValue: unsupported type falls through to return null
+  @Test
+  public void testGetStringValue_unsupportedType_returnsNull() throws Throwable {
+    assertNull(NodeUtil.getStringValue(new Node(Token.ADD)));
+  }
+
+  // isImmutableValue: simple literal kinds are immutable
+  @Test
+  public void testIsImmutableValue_primitiveLiterals_true() throws Throwable {
+    assertTrue(NodeUtil.isImmutableValue(Node.newString(Token.STRING, "x")));
+    assertTrue(NodeUtil.isImmutableValue(Node.newNumber(1)));
+    assertTrue(NodeUtil.isImmutableValue(new Node(Token.NULL)));
+    assertTrue(NodeUtil.isImmutableValue(new Node(Token.TRUE)));
+    assertTrue(NodeUtil.isImmutableValue(new Node(Token.FALSE)));
+    assertTrue(NodeUtil.isImmutableValue(new Node(Token.VOID)));
+  }
+
+  // isImmutableValue: NEG recurses into its child
+  @Test
+  public void testIsImmutableValue_negWrappingImmutable_true() throws Throwable {
+    Node neg = new Node(Token.NEG, Node.newNumber(5));
+    assertTrue(NodeUtil.isImmutableValue(neg));
+  }
+
+  // isImmutableValue: NAME special keywords true, other names false
+  @Test
+  public void testIsImmutableValue_nameKeywords_trueOtherFalse() throws Throwable {
+    assertTrue(NodeUtil.isImmutableValue(Node.newString(Token.NAME, "undefined")));
+    assertTrue(NodeUtil.isImmutableValue(Node.newString(Token.NAME, "Infinity")));
+    assertTrue(NodeUtil.isImmutableValue(Node.newString(Token.NAME, "NaN")));
+    assertFalse(NodeUtil.isImmutableValue(Node.newString(Token.NAME, "x")));
+  }
+
+  // isLiteralValue: ARRAYLIT with all-constant children is a literal
+  @Test
+  public void testIsLiteralValue_arrayLitAllConstChildren_true() throws Throwable {
+    Node arr = new Node(Token.ARRAYLIT, Node.newNumber(1));
+    arr.addChildToBack(Node.newString(Token.STRING, "a"));
+    assertTrue(NodeUtil.isLiteralValue(arr));
+  }
+
+  // isLiteralValue: ARRAYLIT containing a non-constant child is not a literal
+  @Test
+  public void testIsLiteralValue_arrayLitWithNonConstChild_false() throws Throwable {
+    Node arr = new Node(Token.ARRAYLIT, Node.newString(Token.NAME, "x"));
+    assertFalse(NodeUtil.isLiteralValue(arr));
+  }
+
+  // isValidDefineValue: STRING/NUMBER/TRUE/FALSE are always valid
+  @Test
+  public void testIsValidDefineValue_literalTypes_true() throws Throwable {
+    Set<String> defines = new HashSet<String>();
+    assertTrue(NodeUtil.isValidDefineValue(Node.newString(Token.STRING, "x"), defines));
+    assertTrue(NodeUtil.isValidDefineValue(Node.newNumber(1), defines));
+    assertTrue(NodeUtil.isValidDefineValue(new Node(Token.TRUE), defines));
+    assertTrue(NodeUtil.isValidDefineValue(new Node(Token.FALSE), defines));
+  }
+
+  // isValidDefineValue: NAME valid only if contained in the defines set
+  @Test
+  public void testIsValidDefineValue_name_inDefinesTrue_notInDefinesFalse() throws Throwable {
+    Set<String> defines = new HashSet<String>(Arrays.asList("FOO"));
+    assertTrue(NodeUtil.isValidDefineValue(Node.newString(Token.NAME, "FOO"), defines));
+    assertFalse(NodeUtil.isValidDefineValue(Node.newString(Token.NAME, "BAR"), defines));
+  }
+
+  // isValidDefineValue: unsupported node type is invalid
+  @Test
+  public void testIsValidDefineValue_invalidType_false() throws Throwable {
+    Set<String> defines = new HashSet<String>();
+    assertFalse(NodeUtil.isValidDefineValue(new Node(Token.ADD), defines));
+  }
+
+  // isEmptyBlock: BLOCK with no/only-EMPTY children true; otherwise false; non-BLOCK false
+  @Test
+  public void testIsEmptyBlock_variants() throws Throwable {
+    assertTrue(NodeUtil.isEmptyBlock(new Node(Token.BLOCK)));
+    Node block2 = new Node(Token.BLOCK, new Node(Token.EMPTY));
+    assertTrue(NodeUtil.isEmptyBlock(block2));
+    Node block3 = new Node(Token.BLOCK, new Node(Token.EXPR_RESULT, Node.newNumber(1)));
+    assertFalse(NodeUtil.isEmptyBlock(block3));
+    assertFalse(NodeUtil.isEmptyBlock(new Node(Token.SCRIPT)));
+  }
+
+  // isSimpleOperatorType: listed op true, unrelated op false
+  @Test
+  public void testIsSimpleOperatorType_trueForListedFalseOtherwise() throws Throwable {
+    assertTrue(NodeUtil.isSimpleOperatorType(Token.ADD));
+    assertTrue(NodeUtil.isSimpleOperatorType(Token.TYPEOF));
+    assertFalse(NodeUtil.isSimpleOperatorType(Token.CALL));
+  }
+
+  // newExpr: wraps the given child inside an EXPR_RESULT node
+  @Test
+  public void testNewExpr_wrapsChildInExprResult() throws Throwable {
+    Node child = Node.newNumber(1);
+    Node expr = NodeUtil.newExpr(child);
+    assertEquals(Token.EXPR_RESULT, expr.getType());
+    assertSame(child, expr.getFirstChild());
+  }
+
+  // mayEffectMutableState treats OBJECTLIT as state-changing; mayHaveSideEffects does not
+  @Test
+  public void testMayEffectMutableState_objectLiteral_true_mayHaveSideEffects_false() throws Throwable {
+    Node objLit = new Node(Token.OBJECTLIT);
+    assertTrue(NodeUtil.mayEffectMutableState(objLit));
+    assertFalse(NodeUtil.mayHaveSideEffects(objLit));
+  }
+
+  // mayHaveSideEffects: CALL without no-side-effect marker true; simple operator with literal children false
+  @Test
+  public void testMayHaveSideEffects_callAndSimpleOperator() throws Throwable {
+    Node call = new Node(Token.CALL, Node.newString(Token.NAME, "foo"));
+    assertTrue(NodeUtil.mayHaveSideEffects(call));
+    Node add = new Node(Token.ADD, Node.newNumber(1));
+    add.addChildToBack(Node.newNumber(2));
+    assertFalse(NodeUtil.mayHaveSideEffects(add));
+  }
+
+  // constructorCallHasSideEffects: known side-effect-free ctor false, unknown true, wrong node type throws
+  @Test
+  public void testConstructorCallHasSideEffects_knownUnknown_andWrongTypeThrows() throws Throwable {
+    Node known = new Node(Token.NEW, Node.newString(Token.NAME, "Array"));
+    assertFalse(NodeUtil.constructorCallHasSideEffects(known));
+    Node unknown = new Node(Token.NEW, Node.newString(Token.NAME, "Foo"));
+    assertTrue(NodeUtil.constructorCallHasSideEffects(unknown));
+    try {
+      NodeUtil.constructorCallHasSideEffects(new Node(Token.CALL, Node.newString(Token.NAME, "f")));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // functionCallHasSideEffects: String(...) and Math.xxx(...) are considered side-effect free
+  @Test
+  public void testFunctionCallHasSideEffects_noSideEffectCases() throws Throwable {
+    Node stringCall = new Node(Token.CALL, Node.newString(Token.NAME, "String"));
+    assertFalse(NodeUtil.functionCallHasSideEffects(stringCall));
+    Node mathProp = new Node(Token.GETPROP, Node.newString(Token.NAME, "Math"));
+    mathProp.addChildToBack(Node.newString(Token.STRING, "random"));
+    Node mathCall = new Node(Token.CALL, mathProp);
+    assertFalse(NodeUtil.functionCallHasSideEffects(mathCall));
+  }
+
+  // functionCallHasSideEffects: other call names default to true; wrong node type throws
+  @Test
+  public void testFunctionCallHasSideEffects_otherTrue_andWrongTypeThrows() throws Throwable {
+    Node call = new Node(Token.CALL, Node.newString(Token.NAME, "foo"));
+    assertTrue(NodeUtil.functionCallHasSideEffects(call));
+    try {
+      NodeUtil.functionCallHasSideEffects(new Node(Token.NEW, Node.newString(Token.NAME, "Foo")));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // isAssignmentOp: ASSIGN and ASSIGN_ADD true; ADD false
+  @Test
+  public void testIsAssignmentOp_trueForAssignVariants_falseOtherwise() throws Throwable {
+    assertTrue(NodeUtil.isAssignmentOp(new Node(Token.ASSIGN)));
+    assertTrue(NodeUtil.isAssignmentOp(new Node(Token.ASSIGN_ADD)));
+    assertFalse(NodeUtil.isAssignmentOp(new Node(Token.ADD)));
+  }
+
+  // getOpFromAssignmentOp: maps compound assignment ops to their base operator
+  @Test
+  public void testGetOpFromAssignmentOp_mapsToBaseOperator() throws Throwable {
+    assertEquals(Token.ADD, NodeUtil.getOpFromAssignmentOp(new Node(Token.ASSIGN_ADD)));
+    assertEquals(Token.SUB, NodeUtil.getOpFromAssignmentOp(new Node(Token.ASSIGN_SUB)));
+    assertEquals(Token.BITOR, NodeUtil.getOpFromAssignmentOp(new Node(Token.ASSIGN_BITOR)));
+  }
+
+  // getOpFromAssignmentOp: non assignment op throws IllegalArgumentException
+  @Test
+  public void testGetOpFromAssignmentOp_notAssignmentOp_throwsIllegalArgumentException() throws Throwable {
+    try {
+      NodeUtil.getOpFromAssignmentOp(new Node(Token.ADD));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // isForIn: FOR with exactly 3 children is a for-in loop, otherwise not
+  @Test
+  public void testIsForIn_threeChildrenTrue_otherFalse() throws Throwable {
+    Node forIn = new Node(Token.FOR, Node.newString(Token.NAME, "x"));
+    forIn.addChildToBack(Node.newString(Token.NAME, "obj"));
+    forIn.addChildToBack(new Node(Token.BLOCK));
+    assertTrue(NodeUtil.isForIn(forIn));
+
+    Node forC = new Node(Token.FOR, new Node(Token.EMPTY));
+    forC.addChildToBack(new Node(Token.EMPTY));
+    assertFalse(NodeUtil.isForIn(forC));
+  }
+
+  // isLoopStructure: FOR/DO/WHILE true, IF false
+  @Test
+  public void testIsLoopStructure_forDoWhileTrue_otherFalse() throws Throwable {
+    assertTrue(NodeUtil.isLoopStructure(new Node(Token.FOR)));
+    assertTrue(NodeUtil.isLoopStructure(new Node(Token.DO)));
+    assertTrue(NodeUtil.isLoopStructure(new Node(Token.WHILE)));
+    assertFalse(NodeUtil.isLoopStructure(new Node(Token.IF)));
+  }
+
+  // getLoopCodeBlock: FOR returns last child, DO returns first child, other returns null
+  @Test
+  public void testGetLoopCodeBlock_variants() throws Throwable {
+    Node body = new Node(Token.BLOCK);
+    Node forNode = new Node(Token.FOR, new Node(Token.EMPTY));
+    forNode.addChildToBack(new Node(Token.EMPTY));
+    forNode.addChildToBack(new Node(Token.EMPTY));
+    forNode.addChildToBack(body);
+    assertSame(body, NodeUtil.getLoopCodeBlock(forNode));
+
+    Node doBody = new Node(Token.BLOCK);
+    Node doNode = new Node(Token.DO, doBody);
+    doNode.addChildToBack(Node.newString(Token.NAME, "x"));
+    assertSame(doBody, NodeUtil.getLoopCodeBlock(doNode));
+
+    assertNull(NodeUtil.getLoopCodeBlock(new Node(Token.IF)));
+  }
+
+  // getConditionExpression: IF returns first child, DO returns last child
+  @Test
+  public void testGetConditionExpression_ifWhileDo_returnsCorrectChild() throws Throwable {
+    Node cond = Node.newString(Token.NAME, "c");
+    Node ifNode = new Node(Token.IF, cond);
+    ifNode.addChildToBack(new Node(Token.BLOCK));
+    assertSame(cond, NodeUtil.getConditionExpression(ifNode));
+
+    Node doCond = Node.newString(Token.NAME, "d");
+    Node doNode = new Node(Token.DO, new Node(Token.BLOCK));
+    doNode.addChildToBack(doCond);
+    assertSame(doCond, NodeUtil.getConditionExpression(doNode));
+  }
+
+  // getConditionExpression: FOR with 3 children (for-in) returns null, 4 children returns 2nd child
+  @Test
+  public void testGetConditionExpression_forInNull_forStandardReturnsSecondChild() throws Throwable {
+    Node forIn = new Node(Token.FOR, Node.newString(Token.NAME, "x"));
+    forIn.addChildToBack(Node.newString(Token.NAME, "obj"));
+    forIn.addChildToBack(new Node(Token.BLOCK));
+    assertNull(NodeUtil.getConditionExpression(forIn));
+
+    Node cond = Node.newString(Token.NAME, "c");
+    Node forStd = new Node(Token.FOR, new Node(Token.EMPTY));
+    forStd.addChildToBack(cond);
+    forStd.addChildToBack(new Node(Token.EMPTY));
+    forStd.addChildToBack(new Node(Token.BLOCK));
+    assertSame(cond, NodeUtil.getConditionExpression(forStd));
+  }
+
+  // getConditionExpression: unsupported node type throws IllegalArgumentException
+  @Test
+  public void testGetConditionExpression_invalidNodeType_throwsIllegalArgumentException() throws Throwable {
+    try {
+      NodeUtil.getConditionExpression(new Node(Token.BLOCK));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // isStatement: parent SCRIPT/BLOCK/LABEL -> true, parent IF -> false
+  @Test
+  public void testIsStatement_parentScriptBlockLabel_true_otherFalse() throws Throwable {
+    Node n1 = new Node(Token.EXPR_RESULT);
+    new Node(Token.SCRIPT, n1);
+    assertTrue(NodeUtil.isStatement(n1));
+
+    Node n2 = new Node(Token.EXPR_RESULT);
+    Node ifNode = new Node(Token.IF, n2);
+    ifNode.addChildToBack(new Node(Token.EMPTY));
+    assertFalse(NodeUtil.isStatement(n2));
+  }
+
+
+
+  // isFunctionAnonymous: function directly under a BLOCK is not anonymous (control case)
+  @Test
+  public void testIsFunctionAnonymous_functionUnderBlock_notAnonymous() throws Throwable {
+    Node fn = new Node(Token.FUNCTION);
+    new Node(Token.BLOCK, fn);
+    assertFalse(NodeUtil.isFunctionAnonymous(fn));
+  }
+
+  // newQualifiedNameNode: simple name yields NAME node, dotted name yields GETPROP chain
+  @Test
+  public void testNewQualifiedNameNode_simpleAndDotted() throws Throwable {
+    Node simple = NodeUtil.newQualifiedNameNode("foo", -1, -1);
+    assertEquals(Token.NAME, simple.getType());
+    assertEquals("foo", simple.getString());
+
+    Node dotted = NodeUtil.newQualifiedNameNode("foo.bar.baz", -1, -1);
+    assertEquals(Token.GETPROP, dotted.getType());
+    assertEquals("foo.bar.baz", dotted.getQualifiedName());
+  }
+
+  // getPrototypeClassName: finds the class node before ".prototype", null if no prototype segment
+  @Test
+  public void testGetPrototypeClassName_variants() throws Throwable {
+    Node qname = NodeUtil.newQualifiedNameNode("foo.prototype.bar", -1, -1);
+    Node className = NodeUtil.getPrototypeClassName(qname);
+    assertEquals("foo", className.getQualifiedName());
+
+    Node noProto = NodeUtil.newQualifiedNameNode("foo.bar", -1, -1);
+    assertNull(NodeUtil.getPrototypeClassName(noProto));
+  }
+
+  // getPrototypePropertyName: extracts the member name after ".prototype."
+  @Test
+  public void testGetPrototypePropertyName_extractsMemberName() throws Throwable {
+    Node qname = NodeUtil.newQualifiedNameNode("foo.prototype.bar", -1, -1);
+    assertEquals("bar", NodeUtil.getPrototypePropertyName(qname));
+  }
+
+  // isPrototypeProperty: true when qualified name contains ".prototype.", false otherwise
+  @Test
+  public void testIsPrototypeProperty_withPrototypeSegment_true_withoutFalse() throws Throwable {
+    assertTrue(NodeUtil.isPrototypeProperty(
+        NodeUtil.newQualifiedNameNode("foo.prototype.bar", -1, -1)));
+    assertFalse(NodeUtil.isPrototypeProperty(
+        NodeUtil.newQualifiedNameNode("foo.bar", -1, -1)));
+  }
+
+  // isLatin: pure ASCII true, string containing a char above 0x7f false
+  @Test
+  public void testIsLatin_asciiTrue_nonAsciiFalse() throws Throwable {
+    assertTrue(NodeUtil.isLatin("hello"));
+    assertFalse(NodeUtil.isLatin("h\u00e9llo"));
+  }
+
+  // opToStr: known operator returns its symbol, unknown operator returns null
+  @Test
+  public void testOpToStr_knownOperatorsReturnSymbols_unknownReturnsNull() throws Throwable {
+    assertEquals("+", NodeUtil.opToStr(Token.ADD));
+    assertEquals("&&", NodeUtil.opToStr(Token.AND));
+    assertNull(NodeUtil.opToStr(Token.BLOCK));
+  }
+}

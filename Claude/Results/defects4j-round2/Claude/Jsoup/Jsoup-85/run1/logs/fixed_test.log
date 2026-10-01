@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-85-06y4x1fi/Jsoup-85f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.jsoup.nodes.AttributeClaudeTest::testSetValue_updatesStoredValue
+  - org.jsoup.nodes.AttributeClaudeTest::testSetValue_settingNullValue_noParent_succeeds
+  - org.jsoup.nodes.AttributeClaudeTest::testSetValue_noParent_returnsOldValueWithoutException
+[exit 0]

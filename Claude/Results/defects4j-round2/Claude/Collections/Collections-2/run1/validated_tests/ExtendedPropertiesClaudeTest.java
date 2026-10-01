@@ -1,0 +1,459 @@
+package org.apache.commons.collections;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Properties;
+import java.util.Vector;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ExtendedPropertiesClaudeTest {
+
+    private ExtendedProperties p;
+
+    @Before
+    public void setUp() throws Throwable {
+        p = new ExtendedProperties();
+        // รีเซ็ต static field ให้เป็นค่าตั้งต้นก่อนทุกเทสต์ เพื่อไม่ให้ test setInclude รบกวนเทสต์อื่น
+        new ExtendedProperties().setInclude("include");
+    }
+
+    // constructor เปล่า: isInitialized ต้องเป็น false ก่อนมีการเพิ่ม property
+    @Test
+    public void testConstructorDefault_isInitializedFalse() throws Throwable {
+        assertFalse(p.isInitialized());
+    }
+
+    // isInitialized ต้องเป็น true หลังเรียก addProperty
+    @Test
+    public void testIsInitialized_afterAddProperty_true() throws Throwable {
+        p.addProperty("k", "v");
+        assertTrue(p.isInitialized());
+    }
+
+    // getInclude ค่าเริ่มต้นต้องเป็น "include" ตาม javadoc
+    @Test
+    public void testGetInclude_defaultValue_returnsInclude() throws Throwable {
+        assertEquals("include", p.getInclude());
+    }
+
+    // บั๊ก: setInclude ควรเป็น instance variable ตาม javadoc แต่ implementation ใช้ static field
+    // ทำให้การ setInclude ของ instance หนึ่งกระทบ instance อื่นที่ไม่เกี่ยวข้อง
+    @Test
+    public void testSetInclude_customValue_affectsOnlyThisInstance_notOtherInstances() throws Throwable {
+        ExtendedProperties a = new ExtendedProperties();
+        ExtendedProperties b = new ExtendedProperties();
+        a.setInclude("myCustomInclude");
+        assertEquals("myCustomInclude", a.getInclude());
+        assertEquals("include", b.getInclude());
+    }
+
+    // load: ข้ามบรรทัดคอมเมนต์, รองรับ continuation ด้วย backslash, และข้าม value ว่าง
+    @Test
+    public void testLoad_parsesLinesWithContinuationCommentsAndSkipsEmptyValue() throws Throwable {
+        String data = "# comment line\n" +
+                "key1 = value1\n" +
+                "long = aaa\\\n" +
+                "bbb\n" +
+                "emptyval = \n";
+        p.load(new ByteArrayInputStream(data.getBytes()));
+        assertEquals("value1", p.getString("key1"));
+        assertEquals("aaabbb", p.getString("long"));
+        assertNull(p.getString("emptyval"));
+        assertTrue(p.isInitialized());
+    }
+
+    // load: key เดิมซ้ำกันหลายบรรทัดต้องสะสมเป็นหลายค่า
+    @Test
+    public void testLoad_duplicateKeyAccumulatesValues() throws Throwable {
+        String data = "multi = x\nmulti = y\n";
+        p.load(new ByteArrayInputStream(data.getBytes()));
+        String[] arr = p.getStringArray("multi");
+        assertEquals(2, arr.length);
+        assertEquals("x", arr[0]);
+        assertEquals("y", arr[1]);
+    }
+
+    // addProperty: ค่าเดียวไม่มีคอมม่า เก็บเป็น String ตรงๆ
+    @Test
+    public void testAddProperty_singleValue_storedAsString() throws Throwable {
+        p.addProperty("key", "value");
+        assertEquals("value", p.getString("key"));
+    }
+
+    // addProperty: key ซ้ำครั้งที่สอง ต้องแปลงเป็น Vector 2 ค่า
+    @Test
+    public void testAddProperty_duplicateKey_convertsToVectorOfTwo() throws Throwable {
+        p.addProperty("key", "v1");
+        p.addProperty("key", "v2");
+        String[] arr = p.getStringArray("key");
+        assertEquals(2, arr.length);
+        assertEquals("v1", arr[0]);
+        assertEquals("v2", arr[1]);
+    }
+
+    // addProperty: key ซ้ำครั้งที่สามขึ้นไป ต้องถูกเติมเข้า List เดิม
+    @Test
+    public void testAddProperty_tripleKey_appendsToList() throws Throwable {
+        p.addProperty("k", "a");
+        p.addProperty("k", "b");
+        p.addProperty("k", "c");
+        String[] arr = p.getStringArray("k");
+        assertEquals(3, arr.length);
+        assertEquals("a", arr[0]);
+        assertEquals("b", arr[1]);
+        assertEquals("c", arr[2]);
+    }
+
+    // addProperty: ค่าที่มีคอมม่าไม่ escape ต้องถูกแยกเป็นหลาย token
+    @Test
+    public void testAddProperty_commaSeparatedTokens_splitsIntoMultipleValues() throws Throwable {
+        p.addProperty("tok", "first token, second token");
+        String[] arr = p.getStringArray("tok");
+        assertEquals(2, arr.length);
+        assertEquals("first token", arr[0]);
+        assertEquals("second token", arr[1]);
+    }
+
+    // addProperty: คอมม่าที่ escape ด้วย backslash ต้องไม่ถูกแยก token (ตามตัวอย่างใน javadoc)
+    @Test
+    public void testAddProperty_escapedComma_keepsSingleValue() throws Throwable {
+        p.addProperty("commas.escaped", "Hi\\, what'up?");
+        assertEquals("Hi, what'up?", p.getString("commas.escaped"));
+    }
+
+    // setProperty: ต้องล้างค่าเดิมทั้งหมดก่อนตั้งค่าใหม่ (ไม่ใช่สะสม)
+    @Test
+    public void testSetProperty_overwritesExistingValue() throws Throwable {
+        p.addProperty("k", "v1");
+        p.setProperty("k", "v2");
+        assertEquals("v2", p.getString("k"));
+        assertEquals(1, p.getStringArray("k").length);
+    }
+
+    // save: ต้องเขียน header และ key=value ของทั้ง String และ List ลง stream
+    @Test
+    public void testSave_writesKeyValueLinesForStringAndList() throws Throwable {
+        p.addProperty("single", "hello");
+        p.addProperty("multi", "x");
+        p.addProperty("multi", "y");
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        p.save(out, "HEADERTEXT");
+        String result = out.toString();
+        assertTrue(result.indexOf("HEADERTEXT") >= 0);
+        assertTrue(result.indexOf("single=hello") >= 0);
+        assertTrue(result.indexOf("multi=x") >= 0);
+        assertTrue(result.indexOf("multi=y") >= 0);
+    }
+
+    // save: output เป็น null ต้อง return เฉยๆ โดยไม่กระทบสถานะของ object
+    @Test
+    public void testSave_nullOutputStream_doesNothing() throws Throwable {
+        p.addProperty("k", "v");
+        p.save(null, "h");
+        assertEquals("v", p.getString("k"));
+    }
+
+    // combine: ต้องเพิ่ม key ใหม่และ overwrite key ที่มีอยู่แล้ว
+    @Test
+    public void testCombine_overwritesAndAddsProperties() throws Throwable {
+        p.addProperty("a", "old");
+        ExtendedProperties other = new ExtendedProperties();
+        other.addProperty("a", "new");
+        other.addProperty("b", "2");
+        p.combine(other);
+        assertEquals("new", p.getString("a"));
+        assertEquals("2", p.getString("b"));
+    }
+
+    // clearProperty: ต้องลบทั้งจาก map และจาก keysAsListed
+    @Test
+    public void testClearProperty_removesKeyAndFromKeysList() throws Throwable {
+        p.addProperty("k", "v");
+        p.clearProperty("k");
+        assertFalse(p.containsKey("k"));
+        Iterator it = p.getKeys();
+        assertFalse(it.hasNext());
+    }
+
+    // getKeys: ต้องคืนตามลำดับที่ใส่เข้ามา
+    @Test
+    public void testGetKeys_returnsInOrderAdded() throws Throwable {
+        p.addProperty("a", "1");
+        p.addProperty("b", "2");
+        Iterator it = p.getKeys();
+        assertEquals("a", it.next());
+        assertEquals("b", it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // getKeys(prefix): ต้องคืนเฉพาะ key ที่ขึ้นต้นด้วย prefix
+    @Test
+    public void testGetKeysWithPrefix_filtersMatchingKeys() throws Throwable {
+        p.addProperty("foo.a", "1");
+        p.addProperty("foo.b", "2");
+        p.addProperty("bar", "3");
+        Iterator it = p.getKeys("foo");
+        List matches = new ArrayList();
+        while (it.hasNext()) {
+            matches.add(it.next());
+        }
+        assertEquals(2, matches.size());
+        assertTrue(matches.contains("foo.a"));
+        assertTrue(matches.contains("foo.b"));
+    }
+
+    // subset: key ที่มี prefix ยาวกว่า ต้องตัด prefix ออกจากชื่อ key ใหม่
+    @Test
+    public void testSubset_withMatchingPrefix_returnsStrippedKeys() throws Throwable {
+        p.addProperty("foo.a", "1");
+        p.addProperty("foo.b", "2");
+        ExtendedProperties sub = p.subset("foo");
+        assertNotNull(sub);
+        assertEquals("1", sub.getString("a"));
+        assertEquals("2", sub.getString("b"));
+    }
+
+    // subset: key ที่ยาวเท่า prefix เป๊ะๆ ต้องใช้ prefix เองเป็น key ใหม่
+    @Test
+    public void testSubset_exactPrefixMatch_keepsPrefixAsKey() throws Throwable {
+        p.addProperty("prefix", "value");
+        ExtendedProperties sub = p.subset("prefix");
+        assertNotNull(sub);
+        assertEquals("value", sub.getString("prefix"));
+    }
+
+    // subset: ไม่มี key ตรงกับ prefix เลย ต้องคืน null
+    @Test
+    public void testSubset_noMatch_returnsNull() throws Throwable {
+        p.addProperty("other", "1");
+        assertNull(p.subset("foo"));
+    }
+
+    // getString: key ไม่มีและไม่มี defaults ต้องคืน null
+    @Test
+    public void testGetString_missingKeyNoDefault_returnsNull() throws Throwable {
+        assertNull(p.getString("missing"));
+    }
+
+    // getString: ต้อง interpolate ${key} ให้เป็นค่าจริงของ property นั้น
+    @Test
+    public void testGetString_interpolation_resolvesVariable() throws Throwable {
+        p.setProperty("base", "hello");
+        p.setProperty("ref", "${base} world");
+        assertEquals("hello world", p.getString("ref"));
+    }
+
+    // getString: interpolation ที่วนลูปอ้างอิงกันเองต้อง throw IllegalStateException
+    @Test
+    public void testGetString_infiniteLoopInterpolation_throwsIllegalStateException() throws Throwable {
+        p.setProperty("a", "${b}");
+        p.setProperty("b", "${a}");
+        try {
+            p.getString("a");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // getString: value เป็น List ต้องคืน element แรก
+    @Test
+    public void testGetString_valueIsList_returnsFirstElement() throws Throwable {
+        p.addProperty("k", "v1");
+        p.addProperty("k", "v2");
+        assertEquals("v1", p.getString("k"));
+    }
+
+    // getString: value ไม่ใช่ String หรือ List ต้อง throw ClassCastException
+    @Test
+    public void testGetString_valueNotStringOrList_throwsClassCastException() throws Throwable {
+        p.addProperty("k", "5");
+        p.getInteger("k");
+        try {
+            p.getString("k");
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // getProperties: แยก token แบบ key=value ออกมาเป็น Properties
+    @Test
+    public void testGetProperties_parsesKeyValueTokens() throws Throwable {
+        p.addProperty("conf", "a=1,b=2");
+        Properties props = p.getProperties("conf");
+        assertEquals("1", props.getProperty("a"));
+        assertEquals("2", props.getProperty("b"));
+    }
+
+    // getProperties: token ที่ไม่มี '=' ต้อง throw IllegalArgumentException
+    @Test
+    public void testGetProperties_malformedToken_throwsIllegalArgumentException() throws Throwable {
+        p.addProperty("bad", "noEqualsHere");
+        try {
+            p.getProperties("bad");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // getStringArray: key ไม่มีและไม่มี defaults ต้องคืน array ว่าง
+    @Test
+    public void testGetStringArray_missingKeyNoDefaults_returnsEmptyArray() throws Throwable {
+        String[] arr = p.getStringArray("missing");
+        assertEquals(0, arr.length);
+    }
+
+    // getStringArray: value เป็น String เดี่ยว ต้องคืน array ขนาด 1
+    @Test
+    public void testGetStringArray_singleStringValue_returnsArrayOfOne() throws Throwable {
+        p.addProperty("k", "v");
+        String[] arr = p.getStringArray("k");
+        assertEquals(1, arr.length);
+        assertEquals("v", arr[0]);
+    }
+
+    // getVector: key ไม่มีและไม่มี defaults ต้องคืน Vector ว่าง
+    @Test
+    public void testGetVector_missingKeyNoDefaults_returnsEmptyVector() throws Throwable {
+        Vector v = p.getVector("missing");
+        assertNotNull(v);
+        assertEquals(0, v.size());
+    }
+
+    // getVector: value เป็น String เดี่ยว ต้องแปลงเป็น Vector ขนาด 1
+    @Test
+    public void testGetVector_stringValue_convertsToVectorOfOne() throws Throwable {
+        p.addProperty("k", "v");
+        Vector v = p.getVector("k");
+        assertEquals(1, v.size());
+        assertEquals("v", v.get(0));
+    }
+
+    // getVector: value ไม่ใช่ String/List/null ต้อง throw ClassCastException
+    @Test
+    public void testGetVector_classCastException_whenValueWrongType() throws Throwable {
+        p.addProperty("k", "5");
+        p.getInteger("k");
+        try {
+            p.getVector("k");
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // getList: ต้องคืน copy ที่แก้ไขแยกจากข้อมูลภายในจริง
+    @Test
+    public void testGetList_listValue_returnsIndependentCopy() throws Throwable {
+        p.addProperty("k", "a");
+        p.addProperty("k", "b");
+        List list = p.getList("k");
+        assertEquals(2, list.size());
+        list.add("c");
+        List list2 = p.getList("k");
+        assertEquals(2, list2.size());
+    }
+
+    // getBoolean(key): key ไม่มีต้อง throw NoSuchElementException
+    @Test
+    public void testGetBoolean_missingKey_throwsNoSuchElementException() throws Throwable {
+        try {
+            p.getBoolean("missing");
+            fail("expected NoSuchElementException");
+        } catch (NoSuchElementException expected) {
+        }
+    }
+
+    // getBoolean: รองรับ true/yes/on เป็น true
+    @Test
+    public void testGetBoolean_validTrueVariants_returnsTrue() throws Throwable {
+        p.addProperty("a", "true");
+        assertTrue(p.getBoolean("a"));
+        p.addProperty("b", "yes");
+        assertTrue(p.getBoolean("b"));
+        p.addProperty("c", "on");
+        assertTrue(p.getBoolean("c"));
+    }
+
+    // getBoolean: รองรับ false/no/off เป็น false
+    @Test
+    public void testGetBoolean_validFalseVariants_returnsFalse() throws Throwable {
+        p.addProperty("a", "false");
+        assertFalse(p.getBoolean("a"));
+        p.addProperty("b", "no");
+        assertFalse(p.getBoolean("b"));
+        p.addProperty("c", "off");
+        assertFalse(p.getBoolean("c"));
+    }
+
+    // getBoolean(key, boolean): key ไม่มีต้องใช้ defaultValue ที่ส่งมา
+    @Test
+    public void testGetBoolean_withDefaultOverload_usesDefaultWhenMissing() throws Throwable {
+        assertTrue(p.getBoolean("missing1", true));
+        assertFalse(p.getBoolean("missing2", false));
+    }
+
+    // testBoolean: true/false variant และค่าที่ไม่ตรงรูปแบบต้องคืน null
+    @Test
+    public void testTestBoolean_variousInputs() throws Throwable {
+        assertEquals("true", p.testBoolean("TRUE"));
+        assertEquals("false", p.testBoolean("No"));
+        assertNull(p.testBoolean("maybe"));
+    }
+
+    // getByte: parse ค่าปกติได้ และ key ไม่มีต้อง throw NoSuchElementException
+    @Test
+    public void testGetByte_parsesValidValue_andThrowsWhenMissing() throws Throwable {
+        p.addProperty("b", "5");
+        assertEquals((byte) 5, p.getByte("b"));
+        try {
+            p.getByte("missingByte");
+            fail("expected NoSuchElementException");
+        } catch (NoSuchElementException expected) {
+        }
+    }
+
+    // getInteger/getInt: parse ค่าปกติ และ getInt(key,def) ต้องใช้ default เมื่อไม่มี key
+    @Test
+    public void testGetInteger_parsesValidValue_andGetIntWrapper() throws Throwable {
+        p.addProperty("i", "42");
+        assertEquals(42, p.getInteger("i"));
+        assertEquals(42, p.getInt("i"));
+        assertEquals(99, p.getInt("missingInt", 99));
+    }
+
+    // getLong: parse ค่าปกติ
+    @Test
+    public void testGetLong_parsesValidValue() throws Throwable {
+        p.addProperty("l", "123456789012");
+        assertEquals(123456789012L, p.getLong("l"));
+    }
+
+    // getFloat: parse ค่าปกติ (ต้องมี delta เพราะเป็น float)
+    @Test
+    public void testGetFloat_parsesValidValue() throws Throwable {
+        p.addProperty("f", "3.14");
+        assertEquals(3.14f, p.getFloat("f"), 0.0001f);
+    }
+
+    // getDouble: parse ค่าปกติ (ต้องมี delta เพราะเป็น double)
+    @Test
+    public void testGetDouble_parsesValidValue() throws Throwable {
+        p.addProperty("d", "2.718");
+        assertEquals(2.718, p.getDouble("d"), 0.0001);
+    }
+
+    // convertProperties: ต้องแปลงทุก property จาก Properties ธรรมดามาเก็บใน ExtendedProperties
+    @Test
+    public void testConvertProperties_copiesAllEntries() throws Throwable {
+        Properties props = new Properties();
+        props.setProperty("x", "1");
+        ExtendedProperties conv = ExtendedProperties.convertProperties(props);
+        assertEquals("1", conv.getString("x"));
+    }
+}

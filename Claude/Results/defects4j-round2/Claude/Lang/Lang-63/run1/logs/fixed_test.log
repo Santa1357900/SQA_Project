@@ -1,0 +1,36 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Lang-63-4qwekcge/Lang-63f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /tmp/claude-Lang-63-4qwekcge/fixed && ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-Lang-63-4qwekcge/fixed -Dd4j.test.dir=/tmp/claude-Lang-63-4qwekcge/fixed/.test_suite compile.gen.tests 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+init:
+     [echo] -------- commons-lang 2.3-SNAPSHOT --------
+
+prepare:
+
+static:
+
+compile:
+    [javac] /tmp/claude-Lang-63-4qwekcge/fixed/build.xml:65: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+
+compile.gen.tests:
+     [echo] classes.dir: target/classes
+     [echo] build.home: target
+    [mkdir] Created dir: /tmp/claude-Lang-63-4qwekcge/fixed/.classes_testgen
+    [javac] /home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /tmp/claude-Lang-63-4qwekcge/fixed/.classes_testgen
+    [javac] /tmp/claude-Lang-63-4qwekcge/fixed/.test_suite/org/apache/commons/lang/time/DurationFormatUtilsClaudeTest.java:225: error: cannot find symbol
+    [javac]         int result = DurationFormatUtils.reduceAndCorrect(start, end, Calendar.DAY_OF_MONTH, 26);
+    [javac]                                         ^
+    [javac]   symbol:   method reduceAndCorrect(Calendar,Calendar,int,int)
+    [javac]   location: class DurationFormatUtils
+    [javac] 1 error
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 0 seconds
+Cannot compile extracted test suite! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

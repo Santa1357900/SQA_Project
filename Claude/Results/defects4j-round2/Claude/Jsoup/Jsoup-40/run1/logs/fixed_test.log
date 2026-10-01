@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-40-vutstmrc/Jsoup-40f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.jsoup.nodes.DocumentTypeClaudeTest::testJsoupParse_systemOnlyDoctype_rendersSystemKeyword
+  - org.jsoup.nodes.DocumentTypeClaudeTest::testOuterHtmlHead_systemIdOnly_rendersSystemKeyword
+  - org.jsoup.nodes.DocumentTypeClaudeTest::testOuterHtmlHead_blankPublicIdWithSystemId_rendersSystemKeyword
+  - org.jsoup.nodes.DocumentTypeClaudeTest::testConstructor_emptyName_throwsIllegalArgumentException
+[exit 0]

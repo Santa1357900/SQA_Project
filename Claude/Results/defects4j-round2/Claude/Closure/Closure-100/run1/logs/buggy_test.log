@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-100-_ss616kl/Closure-100b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - com.google.javascript.jscomp.CheckGlobalThisClaudeTest::testShouldTraverse_barePropertyAccessOnThis_reportsWarning_bugCase
+  - com.google.javascript.jscomp.CheckGlobalThisClaudeTest::testShouldTraverse_thisPropertyReadOnRhs_reportsWarning_bugCase
+  - com.google.javascript.jscomp.CheckGlobalThisClaudeTest::testShouldTraverse_thisMethodCall_reportsWarning_bugCase
+[exit 0]

@@ -1,0 +1,21 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Compress -v 35f -w /tmp/claude-Compress-35-ver97kqi/fixed
+Checking out 7250daa4 to /tmp/claude-Compress-35-ver97kqi/fixed............ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Compress-35-ver97kqi/fixed/maven-build.x OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 7250daa4:9431b16c..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Compress-35f.................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Compress-35-ver97kqi/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

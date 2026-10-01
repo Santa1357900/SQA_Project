@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Chart-23-4rp9lsz6/Chart-23f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - org.jfree.chart.renderer.category.MinMaxCategoryRendererClaudeTest::testDrawItem_horizontalOrientation_addsEntity
+  - org.jfree.chart.renderer.category.MinMaxCategoryRendererClaudeTest::testDrawItem_nullValue_noEntityAdded
+  - org.jfree.chart.renderer.category.MinMaxCategoryRendererClaudeTest::testDrawItem_singleValue_addsOneEntity
+  - org.jfree.chart.renderer.category.MinMaxCategoryRendererClaudeTest::testDrawItem_multipleSeriesSameCategory_addsEntityPerRow
+  - org.jfree.chart.renderer.category.MinMaxCategoryRendererClaudeTest::testDrawItem_drawLinesTrueMultipleCategories_addsEntityPerDataPoint
+[exit 0]

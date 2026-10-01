@@ -1,0 +1,344 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Jsoup (Defects4J bug Jsoup-58)
+package: org.jsoup
+class_under_test: Jsoup
+test_class_to_write: JsoupClaudeTest
+</target>
+
+<project_notes>
+Jsoup: ใช้ Jsoup.parse(String) และ Jsoup.parseBodyFragment(String) เป็นทางเข้า import org.jsoup.nodes.* และ org.jsoup.parser.* ให้ครบ
+</project_notes>
+
+<source_code>
+package org.jsoup;
+
+import org.jsoup.nodes.Document;
+import org.jsoup.parser.Parser;
+import org.jsoup.safety.Cleaner;
+import org.jsoup.safety.Whitelist;
+import org.jsoup.helper.DataUtil;
+import org.jsoup.helper.HttpConnection;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+
+/**
+ The core public access point to the jsoup functionality.
+
+ @author Jonathan Hedley */
+public class Jsoup {
+    private Jsoup() {}
+
+    /**
+     Parse HTML into a Document. The parser will make a sensible, balanced document tree out of any HTML.
+
+     @param html    HTML to parse
+     @param baseUri The URL where the HTML was retrieved from. Used to resolve relative URLs to absolute URLs, that occur
+     before the HTML declares a {@code <base href>} tag.
+     @return sane HTML
+     */
+    public static Document parse(String html, String baseUri) {
+        return Parser.parse(html, baseUri);
+    }
+
+    /**
+     Parse HTML into a Document, using the provided Parser. You can provide an alternate parser, such as a simple XML
+     (non-HTML) parser.
+
+     @param html    HTML to parse
+     @param baseUri The URL where the HTML was retrieved from. Used to resolve relative URLs to absolute URLs, that occur
+     before the HTML declares a {@code <base href>} tag.
+     @param parser alternate {@link Parser#xmlParser() parser} to use.
+     @return sane HTML
+     */
+    public static Document parse(String html, String baseUri, Parser parser) {
+        return parser.parseInput(html, baseUri);
+    }
+
+    /**
+     Parse HTML into a Document. As no base URI is specified, absolute URL detection relies on the HTML including a
+     {@code <base href>} tag.
+
+     @param html HTML to parse
+     @return sane HTML
+
+     @see #parse(String, String)
+     */
+    public static Document parse(String html) {
+        return Parser.parse(html, "");
+    }
+
+    /**
+     * Creates a new {@link Connection} to a URL. Use to fetch and parse a HTML page.
+     * <p>
+     * Use examples:
+     * <ul>
+     *  <li><code>Document doc = Jsoup.connect("http://example.com").userAgent("Mozilla").data("name", "jsoup").get();</code></li>
+     *  <li><code>Document doc = Jsoup.connect("http://example.com").cookie("auth", "token").post();</code></li>
+     * </ul>
+     * @param url URL to connect to. The protocol must be {@code http} or {@code https}.
+     * @return the connection. You can add data, cookies, and headers; set the user-agent, referrer, method; and then execute.
+     */
+    public static Connection connect(String url) {
+        return HttpConnection.connect(url);
+    }
+
+    /**
+     Parse the contents of a file as HTML.
+
+     @param in          file to load HTML from
+     @param charsetName (optional) character set of file contents. Set to {@code null} to determine from {@code http-equiv} meta tag, if
+     present, or fall back to {@code UTF-8} (which is often safe to do).
+     @param baseUri     The URL where the HTML was retrieved from, to resolve relative links against.
+     @return sane HTML
+
+     @throws IOException if the file could not be found, or read, or if the charsetName is invalid.
+     */
+    public static Document parse(File in, String charsetName, String baseUri) throws IOException {
+        return DataUtil.load(in, charsetName, baseUri);
+    }
+
+    /**
+     Parse the contents of a file as HTML. The location of the file is used as the base URI to qualify relative URLs.
+
+     @param in          file to load HTML from
+     @param charsetName (optional) character set of file contents. Set to {@code null} to determine from {@code http-equiv} meta tag, if
+     present, or fall back to {@code UTF-8} (which is often safe to do).
+     @return sane HTML
+
+     @throws IOException if the file could not be found, or read, or if the charsetName is invalid.
+     @see #parse(File, String, String)
+     */
+    public static Document parse(File in, String charsetName) throws IOException {
+        return DataUtil.load(in, charsetName, in.getAbsolutePath());
+    }
+
+     /**
+     Read an input stream, and parse it to a Document.
+
+     @param in          input stream to read. Make sure to close it after parsing.
+     @param charsetName (optional) character set of file contents. Set to {@code null} to determine from {@code http-equiv} meta tag, if
+     present, or fall back to {@code UTF-8} (which is often safe to do).
+     @param baseUri     The URL where the HTML was retrieved from, to resolve relative links against.
+     @return sane HTML
+
+     @throws IOException if the file could not be found, or read, or if the charsetName is invalid.
+     */
+    public static Document parse(InputStream in, String charsetName, String baseUri) throws IOException {
+        return DataUtil.load(in, charsetName, baseUri);
+    }
+
+    /**
+     Read an input stream, and parse it to a Document. You can provide an alternate parser, such as a simple XML
+     (non-HTML) parser.
+
+     @param in          input stream to read. Make sure to close it after parsing.
+     @param charsetName (optional) character set of file contents. Set to {@code null} to determine from {@code http-equiv} meta tag, if
+     present, or fall back to {@code UTF-8} (which is often safe to do).
+     @param baseUri     The URL where the HTML was retrieved from, to resolve relative links against.
+     @param parser alternate {@link Parser#xmlParser() parser} to use.
+     @return sane HTML
+
+     @throws IOException if the file could not be found, or read, or if the charsetName is invalid.
+     */
+    public static Document parse(InputStream in, String charsetName, String baseUri, Parser parser) throws IOException {
+        return DataUtil.load(in, charsetName, baseUri, parser);
+    }
+
+    /**
+     Parse a fragment of HTML, with the assumption that it forms the {@code body} of the HTML.
+
+     @param bodyHtml body HTML fragment
+     @param baseUri  URL to resolve relative URLs against.
+     @return sane HTML document
+
+     @see Document#body()
+     */
+    public static Document parseBodyFragment(String bodyHtml, String baseUri) {
+        return Parser.parseBodyFragment(bodyHtml, baseUri);
+    }
+
+    /**
+     Parse a fragment of HTML, with the assumption that it forms the {@code body} of the HTML.
+
+     @param bodyHtml body HTML fragment
+     @return sane HTML document
+
+     @see Document#body()
+     */
+    public static Document parseBodyFragment(String bodyHtml) {
+        return Parser.parseBodyFragment(bodyHtml, "");
+    }
+
+    /**
+     Fetch a URL, and parse it as HTML. Provided for compatibility; in most cases use {@link #connect(String)} instead.
+     <p>
+     The encoding character set is determined by the content-type header or http-equiv meta tag, or falls back to {@code UTF-8}.
+
+     @param url           URL to fetch (with a GET). The protocol must be {@code http} or {@code https}.
+     @param timeoutMillis Connection and read timeout, in milliseconds. If exceeded, IOException is thrown.
+     @return The parsed HTML.
+
+     @throws java.net.MalformedURLException if the request URL is not a HTTP or HTTPS URL, or is otherwise malformed
+     @throws HttpStatusException if the response is not OK and HTTP response errors are not ignored
+     @throws UnsupportedMimeTypeException if the response mime type is not supported and those errors are not ignored
+     @throws java.net.SocketTimeoutException if the connection times out
+     @throws IOException if a connection or read error occurs
+
+     @see #connect(String)
+     */
+    public static Document parse(URL url, int timeoutMillis) throws IOException {
+        Connection con = HttpConnection.connect(url);
+        con.timeout(timeoutMillis);
+        return con.get();
+    }
+
+    /**
+     Get safe HTML from untrusted input HTML, by parsing input HTML and filtering it through a white-list of permitted
+     tags and attributes.
+
+     @param bodyHtml  input untrusted HTML (body fragment)
+     @param baseUri   URL to resolve relative URLs against
+     @param whitelist white-list of permitted HTML elements
+     @return safe HTML (body fragment)
+
+     @see Cleaner#clean(Document)
+     */
+    public static String clean(String bodyHtml, String baseUri, Whitelist whitelist) {
+        Document dirty = parseBodyFragment(bodyHtml, baseUri);
+        Cleaner cleaner = new Cleaner(whitelist);
+        Document clean = cleaner.clean(dirty);
+        return clean.body().html();
+    }
+
+    /**
+     Get safe HTML from untrusted input HTML, by parsing input HTML and filtering it through a white-list of permitted
+     tags and attributes.
+
+     @param bodyHtml  input untrusted HTML (body fragment)
+     @param whitelist white-list of permitted HTML elements
+     @return safe HTML (body fragment)
+
+     @see Cleaner#clean(Document)
+     */
+    public static String clean(String bodyHtml, Whitelist whitelist) {
+        return clean(bodyHtml, "", whitelist);
+    }
+
+    /**
+     * Get safe HTML from untrusted input HTML, by parsing input HTML and filtering it through a white-list of
+     * permitted tags and attributes.
+     * <p>The HTML is treated as a body fragment; it's expected the cleaned HTML will be used within the body of an
+     * existing document. If you want to clean full documents, use {@link Cleaner#clean(Document)} instead, and add
+     * structural tags (<code>html, head, body</code> etc) to the whitelist.
+     *
+     * @param bodyHtml input untrusted HTML (body fragment)
+     * @param baseUri URL to resolve relative URLs against
+     * @param whitelist white-list of permitted HTML elements
+     * @param outputSettings document output settings; use to control pretty-printing and entity escape modes
+     * @return safe HTML (body fragment)
+     * @see Cleaner#clean(Document)
+     */
+    public static String clean(String bodyHtml, String baseUri, Whitelist whitelist, Document.OutputSettings outputSettings) {
+        Document dirty = parseBodyFragment(bodyHtml, baseUri);
+        Cleaner cleaner = new Cleaner(whitelist);
+        Document clean = cleaner.clean(dirty);
+        clean.outputSettings(outputSettings);
+        return clean.body().html();
+    }
+
+    /**
+     Test if the input body HTML has only tags and attributes allowed by the Whitelist. Useful for form validation.
+     <p>The input HTML should still be run through the cleaner to set up enforced attributes, and to tidy the output.
+     <p>Assumes the HTML is a body fragment (i.e. will be used in an existing HTML document body.)
+     @param bodyHtml HTML to test
+     @param whitelist whitelist to test against
+     @return true if no tags or attributes were removed; false otherwise
+     @see #clean(String, org.jsoup.safety.Whitelist) 
+     */
+    public static boolean isValid(String bodyHtml, Whitelist whitelist) {
+        return new Cleaner(whitelist).isValid(parseBodyFragment(bodyHtml, ""));
+    }
+    
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ JsoupClaudeTest ใน package org.jsoup เพื่อทดสอบคลาส Jsoup ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.jsoup;` เท่านั้น
+</instructions>

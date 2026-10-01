@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-96-5kptv5ty/JacksonDatabind-96f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - com.fasterxml.jackson.databind.deser.BasicDeserializerFactoryClaudeTest::testCreateMapDeserializer_noFallbackThrowsIllegalArgumentException
+  - com.fasterxml.jackson.databind.deser.BasicDeserializerFactoryClaudeTest::testCreateCollectionDeserializer_noFallbackThrowsIllegalArgumentException
+[exit 0]

@@ -1,0 +1,412 @@
+package org.apache.commons.math.stat.inference;
+
+import org.apache.commons.math.MathException;
+import org.apache.commons.math.distribution.ChiSquaredDistributionImpl;
+import org.apache.commons.math.distribution.DistributionFactory;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ChiSquareTestImplClaudeTest {
+
+    private ChiSquareTestImpl testStatistic;
+
+    @Before
+    public void setUp() throws Throwable {
+        testStatistic = new ChiSquareTestImpl();
+    }
+
+    // Default constructor must produce a usable instance (df=1 internally)
+    @Test
+    public void testConstructorDefault_createsUsableInstance() throws Throwable {
+        ChiSquareTestImpl impl = new ChiSquareTestImpl();
+        double[] expected = {10.0, 20.0, 30.0};
+        long[] observed = {10, 20, 30};
+        double result = impl.chiSquare(expected, observed);
+        assertEquals(0.0, result, 1e-9);
+    }
+
+    // Constructor with explicit distribution must produce a usable instance
+    @Test
+    public void testConstructorWithDistribution_createsUsableInstance() throws Throwable {
+        ChiSquareTestImpl impl = new ChiSquareTestImpl(new ChiSquaredDistributionImpl(2.0));
+        double[] expected = {10.0, 20.0, 30.0};
+        long[] observed = {10, 20, 30};
+        double p = impl.chiSquareTest(expected, observed);
+        assertEquals(1.0, p, 1e-6);
+    }
+
+    // Normal loop path, sums of expected/observed equal so rescale (if any) is a no-op
+    @Test
+    public void testChiSquare_equalSums_knownValue() throws Throwable {
+        double[] expected = {8.0, 8.0};
+        long[] observed = {10, 6};
+        double result = testStatistic.chiSquare(expected, observed);
+        assertEquals(1.0, result, 1e-9);
+    }
+
+    // expected.length < 2 branch
+    @Test
+    public void testChiSquare_lengthLessThanTwo_throwsIAE() throws Throwable {
+        double[] expected = {5.0};
+        long[] observed = {5};
+        try {
+            testStatistic.chiSquare(expected, observed);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // expected.length != observed.length branch
+    @Test
+    public void testChiSquare_lengthMismatch_throwsIAE() throws Throwable {
+        double[] expected = {5.0, 10.0};
+        long[] observed = {5};
+        try {
+            testStatistic.chiSquare(expected, observed);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // isPositive boundary: expected entry == 0 must throw
+    @Test
+    public void testChiSquare_expectedZero_throwsIAE() throws Throwable {
+        double[] expected = {0.0, 10.0};
+        long[] observed = {5, 5};
+        try {
+            testStatistic.chiSquare(expected, observed);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // isPositive branch: negative expected entry must throw
+    @Test
+    public void testChiSquare_expectedNegative_throwsIAE() throws Throwable {
+        double[] expected = {-5.0, 10.0};
+        long[] observed = {5, 5};
+        try {
+            testStatistic.chiSquare(expected, observed);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // isNonNegative branch: negative observed entry must throw
+    @Test
+    public void testChiSquare_observedNegative_throwsIAE() throws Throwable {
+        double[] expected = {5.0, 10.0};
+        long[] observed = {-1, 5};
+        try {
+            testStatistic.chiSquare(expected, observed);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // Bug hunt: Javadoc promises rescaling expected so sums match observed before
+    // computing the statistic. With observed summing to half of expected, the
+    // correct (rescaled) statistic must be 0, not the raw unscaled value.
+    @Test
+    public void testChiSquare_unequalSums_mustRescaleExpectedPerContract() throws Throwable {
+        double[] expected = {10.0, 10.0};
+        long[] observed = {5, 5};
+        double result = testStatistic.chiSquare(expected, observed);
+        assertEquals(0.0, result, 1e-9);
+    }
+
+    // chiSquareTest returns p-value; chiSquare==0 means CDF(0)=0 so p-value==1
+    @Test
+    public void testChiSquareTest_equalArrays_pValueOne() throws Throwable {
+        double[] expected = {10.0, 20.0, 30.0};
+        long[] observed = {10, 20, 30};
+        double p = testStatistic.chiSquareTest(expected, observed);
+        assertEquals(1.0, p, 1e-6);
+    }
+
+    // chiSquareTest propagates IllegalArgumentException from chiSquare precondition checks
+    @Test
+    public void testChiSquareTest_propagatesIAE_fromChiSquare() throws Throwable {
+        double[] expected = {5.0};
+        long[] observed = {5};
+        try {
+            testStatistic.chiSquareTest(expected, observed);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // alpha <= 0 branch
+    @Test
+    public void testChiSquareTestAlpha_alphaZero_throwsIAE() throws Throwable {
+        double[] expected = {10.0, 20.0, 30.0};
+        long[] observed = {10, 20, 30};
+        try {
+            testStatistic.chiSquareTest(expected, observed, 0.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // alpha > 0.5 branch
+    @Test
+    public void testChiSquareTestAlpha_alphaAboveHalf_throwsIAE() throws Throwable {
+        double[] expected = {10.0, 20.0, 30.0};
+        long[] observed = {10, 20, 30};
+        try {
+            testStatistic.chiSquareTest(expected, observed, 0.51);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // alpha == 0.5 is the boundary that must NOT throw (condition is strictly > 0.5)
+    @Test
+    public void testChiSquareTestAlpha_boundaryAlphaHalf_allowed() throws Throwable {
+        double[] expected = {10.0, 20.0, 30.0};
+        long[] observed = {10, 20, 30};
+        boolean result = testStatistic.chiSquareTest(expected, observed, 0.5);
+        assertFalse(result);
+    }
+
+    // Strongly deviating data: p-value near 0 so result < alpha => true
+    @Test
+    public void testChiSquareTestAlpha_significantData_returnsTrue() throws Throwable {
+        double[] expected = {100.0, 100.0};
+        long[] observed = {150, 50};
+        boolean result = testStatistic.chiSquareTest(expected, observed, 0.5);
+        assertTrue(result);
+    }
+
+    // 2-way table: observed matches expected exactly -> statistic 0
+    @Test
+    public void testChiSquareLongLong_equalExpected_zero() throws Throwable {
+        long[][] counts = {{10, 10}, {10, 10}};
+        double result = testStatistic.chiSquare(counts);
+        assertEquals(0.0, result, 1e-9);
+    }
+
+    // 2-way table: known hand-computed chi-square value
+    @Test
+    public void testChiSquareLongLong_knownValue() throws Throwable {
+        long[][] counts = {{10, 20}, {30, 40}};
+        double result = testStatistic.chiSquare(counts);
+        assertEquals(0.79365079, result, 1e-6);
+    }
+
+    // checkArray: fewer than two rows
+    @Test
+    public void testChiSquareLongLong_oneRow_throwsIAE() throws Throwable {
+        long[][] counts = {{1, 2, 3}};
+        try {
+            testStatistic.chiSquare(counts);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // checkArray: fewer than two columns
+    @Test
+    public void testChiSquareLongLong_oneColumn_throwsIAE() throws Throwable {
+        long[][] counts = {{1}, {2}};
+        try {
+            testStatistic.chiSquare(counts);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // checkArray: non-rectangular table
+    @Test
+    public void testChiSquareLongLong_notRectangular_throwsIAE() throws Throwable {
+        long[][] counts = {{1, 2}, {1, 2, 3}};
+        try {
+            testStatistic.chiSquare(counts);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // checkArray: negative entry
+    @Test
+    public void testChiSquareLongLong_negativeEntry_throwsIAE() throws Throwable {
+        long[][] counts = {{1, -2}, {3, 4}};
+        try {
+            testStatistic.chiSquare(counts);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // p-value for a perfectly matching table must be 1.0
+    @Test
+    public void testChiSquareTestLongLong_equalExpected_pValueOne() throws Throwable {
+        long[][] counts = {{10, 10}, {10, 10}};
+        double p = testStatistic.chiSquareTest(counts);
+        assertEquals(1.0, p, 1e-6);
+    }
+
+    // alpha precondition reused for the 2-way table overload
+    @Test
+    public void testChiSquareTestLongLongAlpha_invalidAlpha_throwsIAE() throws Throwable {
+        long[][] counts = {{10, 10}, {10, 10}};
+        try {
+            testStatistic.chiSquareTest(counts, 0.6);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // Strongly skewed table: p-value near 0, so result < alpha => true
+    @Test
+    public void testChiSquareTestLongLongAlpha_significantData_returnsTrue() throws Throwable {
+        long[][] counts = {{100, 1}, {1, 100}};
+        boolean result = testStatistic.chiSquareTest(counts, 0.5);
+        assertTrue(result);
+    }
+
+    // dataset comparison: observed1.length < 2 branch
+    @Test
+    public void testChiSquareDataSetsComparison_lengthLessThanTwo_throwsIAE() throws Throwable {
+        long[] observed1 = {1};
+        long[] observed2 = {2};
+        try {
+            testStatistic.chiSquareDataSetsComparison(observed1, observed2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // dataset comparison: length mismatch branch
+    @Test
+    public void testChiSquareDataSetsComparison_lengthMismatch_throwsIAE() throws Throwable {
+        long[] observed1 = {1, 2};
+        long[] observed2 = {1, 2, 3};
+        try {
+            testStatistic.chiSquareDataSetsComparison(observed1, observed2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // dataset comparison: negative entry branch
+    @Test
+    public void testChiSquareDataSetsComparison_negativeCount_throwsIAE() throws Throwable {
+        long[] observed1 = {-1, 2};
+        long[] observed2 = {1, 2};
+        try {
+            testStatistic.chiSquareDataSetsComparison(observed1, observed2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // dataset comparison: both sums zero branch
+    @Test
+    public void testChiSquareDataSetsComparison_bothSumsZero_throwsIAE() throws Throwable {
+        long[] observed1 = {0, 0};
+        long[] observed2 = {0, 0};
+        try {
+            testStatistic.chiSquareDataSetsComparison(observed1, observed2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // dataset comparison: both zero at the same index branch (sums non-zero)
+    @Test
+    public void testChiSquareDataSetsComparison_bothZeroAtSameIndex_throwsIAE() throws Throwable {
+        long[] observed1 = {0, 5};
+        long[] observed2 = {0, 3};
+        try {
+            testStatistic.chiSquareDataSetsComparison(observed1, observed2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // dataset comparison: equal sums branch, unweighted deviation
+    @Test
+    public void testChiSquareDataSetsComparison_equalSums_knownValue() throws Throwable {
+        long[] observed1 = {10, 10, 20};
+        long[] observed2 = {10, 10, 20};
+        double result = testStatistic.chiSquareDataSetsComparison(observed1, observed2);
+        assertEquals(0.0, result, 1e-9);
+    }
+
+    // dataset comparison: unequal sums branch, weighted deviation known value
+    @Test
+    public void testChiSquareDataSetsComparison_unequalSums_knownValue() throws Throwable {
+        long[] observed1 = {10, 10};
+        long[] observed2 = {10, 30};
+        double result = testStatistic.chiSquareDataSetsComparison(observed1, observed2);
+        assertEquals(3.75, result, 1e-6);
+    }
+
+    // chiSquareTestDataSetsComparison: identical datasets give p-value 1.0
+    @Test
+    public void testChiSquareTestDataSetsComparison_equalDatasets_pValueOne() throws Throwable {
+        long[] observed1 = {10, 10, 20};
+        long[] observed2 = {10, 10, 20};
+        double p = testStatistic.chiSquareTestDataSetsComparison(observed1, observed2);
+        assertEquals(1.0, p, 1e-6);
+    }
+
+    // alpha precondition reused for dataset comparison overload
+    @Test
+    public void testChiSquareTestDataSetsComparisonAlpha_invalidAlpha_throwsIAE() throws Throwable {
+        long[] observed1 = {10, 10, 20};
+        long[] observed2 = {10, 10, 20};
+        try {
+            testStatistic.chiSquareTestDataSetsComparison(observed1, observed2, -0.1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expectedEx) {
+            // ok
+        }
+    }
+
+    // Strongly different datasets with equal sums: p-value near 0 => true
+    @Test
+    public void testChiSquareTestDataSetsComparisonAlpha_significantData_returnsTrue() throws Throwable {
+        long[] observed1 = {1000, 1};
+        long[] observed2 = {1, 1000};
+        boolean result = testStatistic.chiSquareTestDataSetsComparison(observed1, observed2, 0.5);
+        assertTrue(result);
+    }
+
+    // protected factory accessor must return a usable, non-null instance
+    @Test
+    public void testGetDistributionFactory_returnsNonNull() throws Throwable {
+        DistributionFactory factory = testStatistic.getDistributionFactory();
+        assertNotNull(factory);
+    }
+
+    // setDistribution swaps the underlying distribution used for inference
+    @Test
+    public void testSetDistribution_allowsSwappingDistribution() throws Throwable {
+        testStatistic.setDistribution(new ChiSquaredDistributionImpl(3.0));
+        double[] expected = {10.0, 20.0, 30.0};
+        long[] observed = {10, 20, 30};
+        double p = testStatistic.chiSquareTest(expected, observed);
+        assertEquals(1.0, p, 1e-6);
+    }
+}

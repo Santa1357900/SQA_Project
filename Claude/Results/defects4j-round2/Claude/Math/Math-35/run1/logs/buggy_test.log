@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-35-uw7wmgg0/Math-35b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.apache.commons.math3.genetics.ElitisticListPopulationClaudeTest::testConstructorIntDouble_rateGreaterThanOne_throwsOutOfRangeException
+  - org.apache.commons.math3.genetics.ElitisticListPopulationClaudeTest::testConstructorListIntDouble_rateNegative_throwsOutOfRangeException
+  - org.apache.commons.math3.genetics.ElitisticListPopulationClaudeTest::testConstructorListIntDouble_rateGreaterThanOne_throwsOutOfRangeException
+  - org.apache.commons.math3.genetics.ElitisticListPopulationClaudeTest::testConstructorIntDouble_rateNegative_throwsOutOfRangeException
+[exit 0]

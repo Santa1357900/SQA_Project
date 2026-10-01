@@ -1,0 +1,360 @@
+package com.google.javascript.jscomp.type;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.javascript.jscomp.CodingConventions;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.CompilerOptions;
+import com.google.javascript.jscomp.Scope;
+import com.google.javascript.jscomp.SyntacticScopeCreator;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+
+public class SemanticReverseAbstractInterpreterClaudeTest {
+
+  private Compiler compiler;
+  private JSTypeRegistry registry;
+  private SemanticReverseAbstractInterpreter interpreter;
+  private FlowScope blindScope;
+
+  private JSType stringType;
+  private JSType numberType;
+  private JSType nullType;
+  private JSType objectType;
+  private JSType voidType;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.initOptions(options);
+    registry = compiler.getTypeRegistry();
+    interpreter = new SemanticReverseAbstractInterpreter(
+        CodingConventions.getDefault(), registry);
+
+    Node script = compiler.parseTestCode("var x; var y;");
+    Scope scope = new SyntacticScopeCreator(compiler).createScope(script, null);
+    blindScope = LinkedFlowScope.createEntryLattice(scope);
+
+    stringType = registry.getNativeType(JSTypeNative.STRING_TYPE);
+    numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    nullType = registry.getNativeType(JSTypeNative.NULL_TYPE);
+    objectType = registry.getNativeType(JSTypeNative.OBJECT_TYPE);
+    voidType = registry.getNativeType(JSTypeNative.VOID_TYPE);
+  }
+
+  private Node refinableName(String name, JSType type) {
+    Node n = IR.name(name);
+    n.setJSType(type);
+    blindScope.inferSlotType(name, type);
+    return n;
+  }
+
+  // constructor should create a usable instance without throwing
+  @Test
+  public void testConstructor_validArgs_createsInstance() throws Throwable {
+    SemanticReverseAbstractInterpreter i = new SemanticReverseAbstractInterpreter(
+        CodingConventions.getDefault(), registry);
+    assertNotNull(i);
+  }
+
+  // EQ branch: typeof x == "number", outcome true -> narrows union to number
+  @Test
+  public void testGetPreciser_typeofEqNumber_outcomeTrue_narrowsToNumber() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(stringType, numberType));
+    Node cond = new Node(Token.EQ, new Node(Token.TYPEOF, x), IR.string("number"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertEquals(numberType, result.getSlot("x").getType());
+  }
+
+  // EQ branch: typeof x == "number", outcome false -> excludes number, keeps string
+  @Test
+  public void testGetPreciser_typeofEqNumber_outcomeFalse_narrowsToString() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(stringType, numberType));
+    Node cond = new Node(Token.EQ, new Node(Token.TYPEOF, x), IR.string("number"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, false);
+    assertEquals(stringType, result.getSlot("x").getType());
+  }
+
+  // EQ branch: "string" == typeof x (reversed operand order) narrows to string
+  @Test
+  public void testGetPreciser_stringEqTypeofReversed_outcomeTrue_narrowsToString() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(stringType, numberType));
+    Node cond = new Node(Token.EQ, IR.string("string"), new Node(Token.TYPEOF, x));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertEquals(stringType, result.getSlot("x").getType());
+  }
+
+  // NE branch: typeof x != "number", outcome true -> excludes number
+  @Test
+  public void testGetPreciser_typeofNeNumber_outcomeTrue_narrowsToString() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(stringType, numberType));
+    Node cond = new Node(Token.NE, new Node(Token.TYPEOF, x), IR.string("number"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertEquals(stringType, result.getSlot("x").getType());
+  }
+
+  // SHEQ branch: typeof x === "number", outcome true -> narrows to number
+  @Test
+  public void testGetPreciser_typeofSheqNumber_outcomeTrue_narrowsToNumber() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(stringType, numberType));
+    Node cond = new Node(Token.SHEQ, new Node(Token.TYPEOF, x), IR.string("number"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertEquals(numberType, result.getSlot("x").getType());
+  }
+
+  // SHNE branch: typeof x !== "number", outcome false -> narrows to number
+  @Test
+  public void testGetPreciser_typeofShneNumber_outcomeFalse_narrowsToNumber() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(stringType, numberType));
+    Node cond = new Node(Token.SHNE, new Node(Token.TYPEOF, x), IR.string("number"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, false);
+    assertEquals(numberType, result.getSlot("x").getType());
+  }
+
+  // AND branch, outcome true (not short circuiting): left refinable narrowed to truthy (object)
+  @Test
+  public void testGetPreciser_andTrue_refinableLeft_narrowsToObject() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(nullType, objectType));
+    Node five = IR.number(5);
+    five.setJSType(numberType);
+    Node cond = new Node(Token.AND, x, five);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertNotSame(blindScope, result);
+    assertEquals(objectType, result.getSlot("x").getType());
+  }
+
+  // OR branch, outcome false (not short circuiting): both operands must be falsy -> x narrows to null
+  // This is the bug-catching test: buggy code only restricts when internal "condition" flag is true,
+  // skipping restriction for OR/outcome=false even though both operands are known to be falsy.
+  @Test
+  public void testGetPreciser_orFalse_refinableLeft_narrowsToNull() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(nullType, objectType));
+    Node five = IR.number(5);
+    five.setJSType(numberType);
+    Node cond = new Node(Token.OR, x, five);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, false);
+    assertEquals(nullType, result.getSlot("x").getType());
+  }
+
+  // OR branch, outcome true (maybe short circuiting): non-refinable literal operands -> no change
+  @Test
+  public void testGetPreciser_orTrue_nonRefinableOperands_returnsBlindScope() throws Throwable {
+    Node left = IR.number(5);
+    Node right = IR.number(6);
+    Node cond = new Node(Token.OR, left, right);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertSame(blindScope, result);
+  }
+
+  // AND branch, outcome false (maybe short circuiting): non-refinable literal operands -> no change
+  @Test
+  public void testGetPreciser_andFalse_nonRefinableOperands_returnsBlindScope() throws Throwable {
+    Node left = IR.number(5);
+    Node right = IR.number(6);
+    Node cond = new Node(Token.AND, left, right);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, false);
+    assertSame(blindScope, result);
+  }
+
+  // NAME branch, outcome true: nullable object excludes null (null is always falsy)
+  @Test
+  public void testGetPreciser_name_outcomeTrue_excludesNull() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(nullType, objectType));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(x, blindScope, true);
+    assertEquals(objectType, result.getSlot("x").getType());
+  }
+
+  // NAME branch, outcome false: nullable object narrows to null (object is always truthy)
+  @Test
+  public void testGetPreciser_name_outcomeFalse_onlyNull() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(nullType, objectType));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(x, blindScope, false);
+    assertEquals(nullType, result.getSlot("x").getType());
+  }
+
+  // GETPROP branch, outcome true: qualified name slot narrows the same way as NAME
+  @Test
+  public void testGetPreciser_getProp_outcomeTrue_excludesNull() throws Throwable {
+    JSType t = registry.createUnionType(nullType, objectType);
+    Node prop = new Node(Token.GETPROP, IR.name("x"), IR.string("p"));
+    prop.setJSType(t);
+    blindScope.inferSlotType("x.p", t);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(prop, blindScope, true);
+    assertNotSame(blindScope, result);
+  }
+
+  // ASSIGN branch: refines both the right-hand value first, then the left-hand target
+  @Test
+  public void testGetPreciser_assign_outcomeTrue_refinesBothSides() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(nullType, objectType));
+    Node y = refinableName("y", registry.createUnionType(nullType, objectType));
+    Node cond = new Node(Token.ASSIGN, x, y);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertEquals(objectType, result.getSlot("x").getType());
+    assertEquals(objectType, result.getSlot("y").getType());
+  }
+
+  // NOT branch: !x outcome true means x itself is false -> narrows to null
+  @Test
+  public void testGetPreciser_not_outcomeTrue_invertsOutcomeOnOperand() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(nullType, objectType));
+    Node cond = new Node(Token.NOT, x);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertEquals(nullType, result.getSlot("x").getType());
+  }
+
+  // LT branch, outcome true: removes undefined from the refinable operand
+  @Test
+  public void testGetPreciser_lt_outcomeTrue_removesUndefined() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(voidType, numberType));
+    Node five = IR.number(5);
+    five.setJSType(numberType);
+    Node cond = new Node(Token.LT, x, five);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertEquals(numberType, result.getSlot("x").getType());
+  }
+
+  // LE branch, outcome true: removes undefined from the refinable operand
+  @Test
+  public void testGetPreciser_le_outcomeTrue_removesUndefined() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(voidType, numberType));
+    Node five = IR.number(5);
+    five.setJSType(numberType);
+    Node cond = new Node(Token.LE, x, five);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertEquals(numberType, result.getSlot("x").getType());
+  }
+
+  // GE branch, outcome true: removes undefined from the refinable operand
+  @Test
+  public void testGetPreciser_ge_outcomeTrue_removesUndefined() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(voidType, numberType));
+    Node five = IR.number(5);
+    five.setJSType(numberType);
+    Node cond = new Node(Token.GE, x, five);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertEquals(numberType, result.getSlot("x").getType());
+  }
+
+  // GT branch, outcome false: comparisons only refine on a true outcome, false falls through unchanged
+  @Test
+  public void testGetPreciser_gt_outcomeFalse_returnsBlindScopeUnchanged() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(voidType, numberType));
+    Node five = IR.number(5);
+    five.setJSType(numberType);
+    Node cond = new Node(Token.GT, x, five);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, false);
+    assertSame(blindScope, result);
+  }
+
+  // INSTANCEOF branch: left operand not refinable (not a name/getprop) -> returns blindScope unchanged
+  @Test
+  public void testGetPreciser_instanceOf_leftNotRefinable_returnsBlindScope() throws Throwable {
+    Node left = IR.number(5);
+    Node right = IR.name("ctor");
+    Node cond = new Node(Token.INSTANCEOF, left, right);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertSame(blindScope, result);
+  }
+
+  // INSTANCEOF branch, outcome true: non-function target yields unknown target, no restriction applied
+  @Test
+  public void testGetPreciser_instanceOf_outcomeTrue_unknownTarget_unchanged() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(stringType, numberType));
+    Node right = IR.name("ctor");
+    right.setJSType(objectType);
+    Node cond = new Node(Token.INSTANCEOF, x, right);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertSame(blindScope, result);
+  }
+
+  // INSTANCEOF branch, outcome false: non-function target yields unknown target, no restriction applied
+  @Test
+  public void testGetPreciser_instanceOf_outcomeFalse_unknownTarget_unchanged() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(stringType, numberType));
+    Node right = IR.name("ctor");
+    right.setJSType(objectType);
+    Node cond = new Node(Token.INSTANCEOF, x, right);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, false);
+    assertSame(blindScope, result);
+  }
+
+  // IN branch, outcome true: property missing on object and not already known -> creates qualified slot
+  @Test
+  public void testGetPreciser_in_outcomeTrue_propertyMissing_createsSlot() throws Throwable {
+    Node x = IR.name("x");
+    x.setJSType(objectType);
+    Node cond = new Node(Token.IN, IR.string("foo"), x);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertNotSame(blindScope, result);
+    assertNotNull(result.getSlot("x.foo"));
+  }
+
+  // IN branch, outcome false: branch guarded by outcome, false short-circuits to unchanged scope
+  @Test
+  public void testGetPreciser_in_outcomeFalse_returnsBlindScopeUnchanged() throws Throwable {
+    Node y = refinableName("y", objectType);
+    Node cond = new Node(Token.IN, IR.string("foo"), y);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, false);
+    assertSame(blindScope, result);
+  }
+
+  // IN branch: left operand is not a string literal -> condition not handled, unchanged
+  @Test
+  public void testGetPreciser_in_leftNotString_returnsBlindScopeUnchanged() throws Throwable {
+    Node left = IR.name("x");
+    Node right = refinableName("y", objectType);
+    Node cond = new Node(Token.IN, left, right);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertSame(blindScope, result);
+  }
+
+  // Unhandled token (e.g. ADD): falls through both switch statements, scope unchanged
+  @Test
+  public void testGetPreciser_unhandledToken_returnsBlindScopeUnchanged() throws Throwable {
+    Node x = refinableName("x", numberType);
+    Node cond = new Node(Token.ADD, x, IR.number(1));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(cond, blindScope, true);
+    assertSame(blindScope, result);
+  }
+
+  // CASE branch with typeof: switch(typeof x) { case "number": ... } narrows x to number
+  @Test
+  public void testGetPreciser_caseTypeofInSwitch_outcomeTrue_narrowsToNumber() throws Throwable {
+    Node x = refinableName("x", registry.createUnionType(stringType, numberType));
+    Node typeofX = new Node(Token.TYPEOF, x);
+    Node switchNode = new Node(Token.SWITCH);
+    switchNode.addChildToBack(typeofX);
+    Node caseNode = new Node(Token.CASE, IR.string("number"), IR.block());
+    switchNode.addChildToBack(caseNode);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(caseNode, blindScope, true);
+    assertEquals(numberType, result.getSlot("x").getType());
+  }
+
+  // CASE branch, direct equality (no typeof): switch(y) { case 5: ... } narrows y to number
+  @Test
+  public void testGetPreciser_caseDirectEquality_outcomeTrue_narrowsToNumber() throws Throwable {
+    Node y = refinableName("y", registry.createUnionType(numberType, stringType));
+    Node switchNode = new Node(Token.SWITCH);
+    switchNode.addChildToBack(y);
+    Node caseTest = IR.number(5);
+    caseTest.setJSType(numberType);
+    Node caseNode = new Node(Token.CASE, caseTest, IR.block());
+    switchNode.addChildToBack(caseNode);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(caseNode, blindScope, true);
+    assertEquals(numberType, result.getSlot("y").getType());
+  }
+}

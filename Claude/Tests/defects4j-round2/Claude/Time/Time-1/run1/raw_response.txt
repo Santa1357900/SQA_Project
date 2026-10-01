@@ -1,0 +1,296 @@
+package org.joda.time.field;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+
+import org.joda.time.DurationField;
+import org.joda.time.DurationFieldType;
+import org.joda.time.chrono.ISOChronology;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class UnsupportedDurationFieldClaudeTest {
+
+    // getInstance: same type returns the cached singleton instance
+    @Test
+    public void testGetInstance_sameType_returnsCachedInstance() throws Throwable {
+        UnsupportedDurationField a = UnsupportedDurationField.getInstance(DurationFieldType.days());
+        UnsupportedDurationField b = UnsupportedDurationField.getInstance(DurationFieldType.days());
+        assertSame(a, b);
+    }
+
+    // getInstance: different types produce distinct, non-equal instances
+    @Test
+    public void testGetInstance_differentTypes_returnsDifferentInstances() throws Throwable {
+        UnsupportedDurationField a = UnsupportedDurationField.getInstance(DurationFieldType.months());
+        UnsupportedDurationField b = UnsupportedDurationField.getInstance(DurationFieldType.years());
+        assertNotSame(a, b);
+        assertFalse(a.equals(b));
+    }
+
+    // getType: returns exactly the type passed in
+    @Test
+    public void testGetType_returnsOriginalType() throws Throwable {
+        DurationFieldType type = DurationFieldType.seconds();
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(type);
+        assertSame(type, field.getType());
+    }
+
+    // getName: delegates to type.getName()
+    @Test
+    public void testGetName_returnsTypeName() throws Throwable {
+        DurationFieldType type = DurationFieldType.millis();
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(type);
+        assertEquals(type.getName(), field.getName());
+    }
+
+    // isSupported: always false
+    @Test
+    public void testIsSupported_alwaysFalse() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.eras());
+        assertFalse(field.isSupported());
+    }
+
+    // isPrecise: always true
+    @Test
+    public void testIsPrecise_alwaysTrue() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.centuries());
+        assertTrue(field.isPrecise());
+    }
+
+    // getValue(long): must throw UnsupportedOperationException
+    @Test
+    public void testGetValue_duration_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.days());
+        try {
+            field.getValue(100L);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+            assertTrue(expected.getMessage().contains("unsupported"));
+        }
+    }
+
+    // getValueAsLong(long): must throw UnsupportedOperationException
+    @Test
+    public void testGetValueAsLong_duration_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.days());
+        try {
+            field.getValueAsLong(100L);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getValue(long, long): must throw UnsupportedOperationException
+    @Test
+    public void testGetValue_durationInstant_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.days());
+        try {
+            field.getValue(100L, 0L);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getValueAsLong(long, long): must throw UnsupportedOperationException
+    @Test
+    public void testGetValueAsLong_durationInstant_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.days());
+        try {
+            field.getValueAsLong(100L, 0L);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getMillis(int): must throw UnsupportedOperationException
+    @Test
+    public void testGetMillis_intValue_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.weeks());
+        try {
+            field.getMillis(5);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getMillis(long): must throw UnsupportedOperationException
+    @Test
+    public void testGetMillis_longValue_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.weeks());
+        try {
+            field.getMillis(5L);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getMillis(int, long): must throw UnsupportedOperationException
+    @Test
+    public void testGetMillis_intValueInstant_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.weeks());
+        try {
+            field.getMillis(5, 0L);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getMillis(long, long): must throw UnsupportedOperationException
+    @Test
+    public void testGetMillis_longValueInstant_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.weeks());
+        try {
+            field.getMillis(5L, 0L);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // add(long, int): must throw UnsupportedOperationException
+    @Test
+    public void testAdd_instantIntValue_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.hours());
+        try {
+            field.add(0L, 1);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // add(long, long): must throw UnsupportedOperationException
+    @Test
+    public void testAdd_instantLongValue_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.hours());
+        try {
+            field.add(0L, 1L);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getDifference(long, long): must throw UnsupportedOperationException
+    @Test
+    public void testGetDifference_minuendSubtrahend_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.minutes());
+        try {
+            field.getDifference(100L, 0L);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getDifferenceAsLong(long, long): must throw UnsupportedOperationException
+    @Test
+    public void testGetDifferenceAsLong_minuendSubtrahend_throwsUnsupportedOperationException() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.minutes());
+        try {
+            field.getDifferenceAsLong(100L, 0L);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getUnitMillis: always zero
+    @Test
+    public void testGetUnitMillis_alwaysZero() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.weeks());
+        assertEquals(0L, field.getUnitMillis());
+    }
+
+    // compareTo: Javadoc says "Always returns zero" regardless of the other field's support status
+    @Test
+    public void testCompareTo_withSupportedField_returnsZeroPerJavadoc() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.weeks());
+        DurationField supportedField = ISOChronology.getInstanceUTC().millis();
+        assertTrue(supportedField.isSupported());
+        assertEquals(0, field.compareTo(supportedField));
+    }
+
+    // compareTo: with another unsupported field also returns zero
+    @Test
+    public void testCompareTo_withUnsupportedField_returnsZero() throws Throwable {
+        UnsupportedDurationField field1 = UnsupportedDurationField.getInstance(DurationFieldType.hours());
+        UnsupportedDurationField field2 = UnsupportedDurationField.getInstance(DurationFieldType.minutes());
+        assertEquals(0, field1.compareTo(field2));
+    }
+
+    // equals: identical reference is equal (this == obj branch)
+    @Test
+    public void testEquals_sameInstance_true() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.days());
+        assertTrue(field.equals(field));
+    }
+
+    // equals: null is never equal
+    @Test
+    public void testEquals_null_false() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.days());
+        assertFalse(field.equals(null));
+    }
+
+    // equals: object of a different class is never equal
+    @Test
+    public void testEquals_differentObjectType_false() throws Throwable {
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(DurationFieldType.days());
+        assertFalse(field.equals("not a duration field"));
+    }
+
+    // equals: two instances backed by different types are not equal
+    @Test
+    public void testEquals_differentType_false() throws Throwable {
+        UnsupportedDurationField a = UnsupportedDurationField.getInstance(DurationFieldType.days());
+        UnsupportedDurationField b = UnsupportedDurationField.getInstance(DurationFieldType.hours());
+        assertFalse(a.equals(b));
+    }
+
+    // equals: two instances backed by the same type are equal
+    @Test
+    public void testEquals_sameTypeCachedInstance_true() throws Throwable {
+        UnsupportedDurationField a = UnsupportedDurationField.getInstance(DurationFieldType.months());
+        UnsupportedDurationField b = UnsupportedDurationField.getInstance(DurationFieldType.months());
+        assertTrue(a.equals(b));
+    }
+
+    // hashCode: matches the name's hashCode
+    @Test
+    public void testHashCode_equalsNameHashCode() throws Throwable {
+        DurationFieldType type = DurationFieldType.minutes();
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(type);
+        assertEquals(type.getName().hashCode(), field.hashCode());
+    }
+
+    // hashCode: equal objects produce equal hash codes
+    @Test
+    public void testHashCode_consistentForEqualObjects() throws Throwable {
+        UnsupportedDurationField a = UnsupportedDurationField.getInstance(DurationFieldType.seconds());
+        UnsupportedDurationField b = UnsupportedDurationField.getInstance(DurationFieldType.seconds());
+        assertEquals(a.hashCode(), b.hashCode());
+    }
+
+    // toString: formatted as "UnsupportedDurationField[name]"
+    @Test
+    public void testToString_formatMatchesTypeName() throws Throwable {
+        DurationFieldType type = DurationFieldType.hours();
+        UnsupportedDurationField field = UnsupportedDurationField.getInstance(type);
+        assertEquals("UnsupportedDurationField[" + type.getName() + "]", field.toString());
+    }
+
+    // readResolve: deserialization resolves back to the cached singleton for the type
+    @Test
+    public void testReadResolve_viaSerialization_returnsSameCachedInstance() throws Throwable {
+        UnsupportedDurationField original = UnsupportedDurationField.getInstance(DurationFieldType.centuries());
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(original);
+        oos.close();
+        ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+        ObjectInputStream ois = new ObjectInputStream(bais);
+        Object resolved = ois.readObject();
+        ois.close();
+        assertSame(original, resolved);
+    }
+}

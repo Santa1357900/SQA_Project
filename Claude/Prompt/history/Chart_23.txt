@@ -1,0 +1,639 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Chart (Defects4J bug Chart-23)
+package: org.jfree.chart.renderer.category
+class_under_test: MinMaxCategoryRenderer
+test_class_to_write: MinMaxCategoryRendererClaudeTest
+</target>
+
+<project_notes>
+JFreeChart: สร้าง dataset ด้วย DefaultCategoryDataset / DefaultXYDataset / TimeSeries ที่มีอยู่จริง หลีกเลี่ยงการวาดจริงด้วย Graphics2D ถ้าจำเป็นให้ใช้ new BufferedImage(10,10,BufferedImage.TYPE_INT_RGB).createGraphics()
+</project_notes>
+
+<source_code>
+/* ===========================================================
+ * JFreeChart : a free chart library for the Java(tm) platform
+ * ===========================================================
+ *
+ * (C) Copyright 2000-2007, by Object Refinery Limited and Contributors.
+ *
+ * Project Info:  http://www.jfree.org/jfreechart/index.html
+ *
+ * This library is free software; you can redistribute it and/or modify it 
+ * under the terms of the GNU Lesser General Public License as published by 
+ * the Free Software Foundation; either version 2.1 of the License, or 
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful, but 
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY 
+ * or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public 
+ * License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, 
+ * USA.  
+ *
+ * [Java is a trademark or registered trademark of Sun Microsystems, Inc. 
+ * in the United States and other countries.]
+ *
+ * ---------------------------
+ * MinMaxCategoryRenderer.java
+ * ---------------------------
+ * (C) Copyright 2002-2007, by Object Refinery Limited.
+ *
+ * Original Author:  Tomer Peretz;
+ * Contributor(s):   David Gilbert (for Object Refinery Limited);
+ *                   Christian W. Zuckschwerdt;
+ *                   Nicolas Brodu (for Astrium and EADS Corporate Research 
+ *                   Center);
+ *
+ * $Id: MinMaxCategoryRenderer.java,v 1.6.2.8 2007/06/01 15:12:15 mungady Exp $
+ *
+ * Changes:
+ * --------
+ * 29-May-2002 : Version 1 (TP);
+ * 02-Oct-2002 : Fixed errors reported by Checkstyle (DG);
+ * 24-Oct-2002 : Amendments for changes in CategoryDataset interface and 
+ *               CategoryToolTipGenerator interface (DG);
+ * 05-Nov-2002 : Base dataset is now TableDataset not CategoryDataset (DG);
+ * 17-Jan-2003 : Moved plot classes to a separate package (DG);
+ * 10-Apr-2003 : Changed CategoryDataset to KeyedValues2DDataset in drawItem() 
+ *               method (DG);
+ * 30-Jul-2003 : Modified entity constructor (CZ);
+ * 08-Sep-2003 : Implemented Serializable (NB);
+ * 29-Oct-2003 : Added workaround for font alignment in PDF output (DG);
+ * 05-Nov-2004 : Modified drawItem() signature (DG);
+ * 17-Nov-2005 : Added change events and argument checks (DG);
+ * ------------- JFREECHART 1.0.x ---------------------------------------------
+ * 02-Feb-2007 : Removed author tags all over JFreeChart sources (DG);
+ * 09-Mar-2007 : Fixed problem with horizontal rendering (DG);
+ * 21-Jun-2007 : Removed JCommon dependencies (DG);
+ * 28-Sep-2007 : Added equals() method override (DG);
+ * 
+ */
+
+package org.jfree.chart.renderer.category;
+
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Paint;
+import java.awt.Shape;
+import java.awt.Stroke;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Arc2D;
+import java.awt.geom.GeneralPath;
+import java.awt.geom.Line2D;
+import java.awt.geom.Rectangle2D;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+
+import javax.swing.Icon;
+
+import org.jfree.chart.axis.CategoryAxis;
+import org.jfree.chart.axis.ValueAxis;
+import org.jfree.chart.entity.EntityCollection;
+import org.jfree.chart.event.RendererChangeEvent;
+import org.jfree.chart.plot.CategoryPlot;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.chart.util.PaintUtilities;
+import org.jfree.chart.util.SerialUtilities;
+import org.jfree.data.category.CategoryDataset;
+
+/**
+ * Renderer for drawing min max plot. This renderer draws all the series under 
+ * the same category in the same x position using <code>objectIcon</code> and 
+ * a line from the maximum value to the minimum value.
+ * <p>
+ * For use with the {@link org.jfree.chart.plot.CategoryPlot} class.
+ */
+public class MinMaxCategoryRenderer extends AbstractCategoryItemRenderer {
+
+    /** For serialization. */
+    private static final long serialVersionUID = 2935615937671064911L;
+    
+    /** A flag indicating whether or not lines are drawn between XY points. */
+    private boolean plotLines = false;
+
+    /** 
+     * The paint of the line between the minimum value and the maximum value.
+     */
+    private transient Paint groupPaint = Color.black;
+
+    /** 
+     * The stroke of the line between the minimum value and the maximum value.
+     */
+    private transient Stroke groupStroke = new BasicStroke(1.0f);
+
+    /** The icon used to indicate the minimum value.*/
+    private transient Icon minIcon = getIcon(new Arc2D.Double(-4, -4, 8, 8, 0,
+            360, Arc2D.OPEN), null, Color.black);
+
+    /** The icon used to indicate the maximum value.*/
+    private transient Icon maxIcon = getIcon(new Arc2D.Double(-4, -4, 8, 8, 0,
+            360, Arc2D.OPEN), null, Color.black);
+
+    /** The icon used to indicate the values.*/
+    private transient Icon objectIcon = getIcon(new Line2D.Double(-4, 0, 4, 0),
+            false, true);
+
+    /** The last category. */
+    private int lastCategory = -1;
+
+    /** The minimum. */
+    private double min;
+
+    /** The maximum. */
+    private double max;
+
+    /**
+     * Default constructor.
+     */
+    public MinMaxCategoryRenderer() {
+        super();
+    }
+
+    /**
+     * Gets whether or not lines are drawn between category points.
+     *
+     * @return boolean true if line will be drawn between sequenced categories,
+     *         otherwise false.
+     *         
+     * @see #setDrawLines(boolean)
+     */
+    public boolean isDrawLines() {
+        return this.plotLines;
+    }
+
+    /**
+     * Sets the flag that controls whether or not lines are drawn to connect
+     * the items within a series and sends a {@link RendererChangeEvent} to 
+     * all registered listeners.
+     *
+     * @param draw  the new value of the flag.
+     * 
+     * @see #isDrawLines()
+     */
+    public void setDrawLines(boolean draw) {
+        if (this.plotLines != draw) {
+            this.plotLines = draw;
+            this.notifyListeners(new RendererChangeEvent(this));
+        }
+        
+    }
+
+    /**
+     * Returns the paint used to draw the line between the minimum and maximum
+     * value items in each category.
+     *
+     * @return The paint (never <code>null</code>).
+     * 
+     * @see #setGroupPaint(Paint)
+     */
+    public Paint getGroupPaint() {
+        return this.groupPaint;
+    }
+
+    /**
+     * Sets the paint used to draw the line between the minimum and maximum
+     * value items in each category and sends a {@link RendererChangeEvent} to
+     * all registered listeners.
+     *
+     * @param paint  the paint (<code>null</code> not permitted).
+     * 
+     * @see #getGroupPaint()
+     */
+    public void setGroupPaint(Paint paint) {
+        if (paint == null) {
+            throw new IllegalArgumentException("Null 'paint' argument.");
+        }
+        this.groupPaint = paint;
+        notifyListeners(new RendererChangeEvent(this));
+    }
+
+    /**
+     * Returns the stroke used to draw the line between the minimum and maximum
+     * value items in each category.
+     *
+     * @return The stroke (never <code>null</code>).
+     * 
+     * @see #setGroupStroke(Stroke)
+     */
+    public Stroke getGroupStroke() {
+        return this.groupStroke;
+    }
+
+    /**
+     * Sets the stroke of the line between the minimum value and the maximum 
+     * value and sends a {@link RendererChangeEvent} to all registered 
+     * listeners.
+     *
+     * @param stroke the new stroke (<code>null</code> not permitted).
+     */
+    public void setGroupStroke(Stroke stroke) {
+        if (stroke == null) {
+            throw new IllegalArgumentException("Null 'stroke' argument.");
+        }
+        this.groupStroke = stroke;
+        notifyListeners(new RendererChangeEvent(this));        
+    }
+
+    /**
+     * Returns the icon drawn for each data item.
+     *
+     * @return The icon (never <code>null</code>).
+     * 
+     * @see #setObjectIcon(Icon)
+     */
+    public Icon getObjectIcon() {
+        return this.objectIcon;
+    }
+
+    /**
+     * Sets the icon drawn for each data item.
+     *
+     * @param icon  the icon.
+     * 
+     * @see #getObjectIcon()
+     */
+    public void setObjectIcon(Icon icon) {
+        if (icon == null) {
+            throw new IllegalArgumentException("Null 'icon' argument.");
+        }
+        this.objectIcon = icon;
+        notifyListeners(new RendererChangeEvent(this));
+    }
+
+    /**
+     * Returns the icon displayed for the maximum value data item within each
+     * category.
+     *
+     * @return The icon (never <code>null</code>).
+     * 
+     * @see #setMaxIcon(Icon)
+     */
+    public Icon getMaxIcon() {
+        return this.maxIcon;
+    }
+
+    /**
+     * Sets the icon displayed for the maximum value data item within each
+     * category and sends a {@link RendererChangeEvent} to all registered
+     * listeners.
+     *
+     * @param icon  the icon (<code>null</code> not permitted).
+     * 
+     * @see #getMaxIcon()
+     */
+    public void setMaxIcon(Icon icon) {
+        if (icon == null) {
+            throw new IllegalArgumentException("Null 'icon' argument.");
+        }
+        this.maxIcon = icon;
+        notifyListeners(new RendererChangeEvent(this));
+    }
+
+    /**
+     * Returns the icon displayed for the minimum value data item within each
+     * category.
+     *
+     * @return The icon (never <code>null</code>).
+     * 
+     * @see #setMinIcon(Icon)
+     */
+    public Icon getMinIcon() {
+        return this.minIcon;
+    }
+
+    /**
+     * Sets the icon displayed for the minimum value data item within each
+     * category and sends a {@link RendererChangeEvent} to all registered
+     * listeners.
+     *
+     * @param icon  the icon (<code>null</code> not permitted).
+     * 
+     * @see #getMinIcon()
+     */
+    public void setMinIcon(Icon icon) {
+        if (icon == null) {
+            throw new IllegalArgumentException("Null 'icon' argument.");
+        }
+        this.minIcon = icon;
+        notifyListeners(new RendererChangeEvent(this));
+    }
+
+    /**
+     * Draw a single data item.
+     *
+     * @param g2  the graphics device.
+     * @param state  the renderer state.
+     * @param dataArea  the area in which the data is drawn.
+     * @param plot  the plot.
+     * @param domainAxis  the domain axis.
+     * @param rangeAxis  the range axis.
+     * @param dataset  the dataset.
+     * @param row  the row index (zero-based).
+     * @param column  the column index (zero-based).
+     * @param pass  the pass index.
+     */
+    public void drawItem(Graphics2D g2, CategoryItemRendererState state,
+            Rectangle2D dataArea, CategoryPlot plot, CategoryAxis domainAxis,
+            ValueAxis rangeAxis, CategoryDataset dataset, int row, int column,
+            int pass) {
+
+        // first check the number we are plotting...
+        Number value = dataset.getValue(row, column);
+        if (value != null) {
+            // current data point...
+            double x1 = domainAxis.getCategoryMiddle(column, getColumnCount(), 
+                    dataArea, plot.getDomainAxisEdge());
+            double y1 = rangeAxis.valueToJava2D(value.doubleValue(), dataArea, 
+                    plot.getRangeAxisEdge());
+            g2.setPaint(getItemPaint(row, column));
+            g2.setStroke(getItemStroke(row, column));
+            Shape shape = null;
+            shape = new Rectangle2D.Double(x1 - 4, y1 - 4, 8.0, 8.0);
+            
+            PlotOrientation orient = plot.getOrientation();
+            if (orient == PlotOrientation.VERTICAL) {
+                this.objectIcon.paintIcon(null, g2, (int) x1, (int) y1);
+            }
+            else {
+                this.objectIcon.paintIcon(null, g2, (int) y1, (int) x1);                
+            }
+            
+            if (this.lastCategory == column) {
+                if (this.min > value.doubleValue()) {
+                    this.min = value.doubleValue();
+                }
+                if (this.max < value.doubleValue()) {
+                    this.max = value.doubleValue();
+                }
+                
+                // last series, so we are ready to draw the min and max
+                if (dataset.getRowCount() - 1 == row) {
+                    g2.setPaint(this.groupPaint);
+                    g2.setStroke(this.groupStroke);
+                    double minY = rangeAxis.valueToJava2D(this.min, dataArea, 
+                            plot.getRangeAxisEdge());
+                    double maxY = rangeAxis.valueToJava2D(this.max, dataArea, 
+                            plot.getRangeAxisEdge());
+                    
+                    if (orient == PlotOrientation.VERTICAL) {
+                        g2.draw(new Line2D.Double(x1, minY, x1, maxY));
+                        this.minIcon.paintIcon(null, g2, (int) x1, (int) minY);
+                        this.maxIcon.paintIcon(null, g2, (int) x1, (int) maxY);
+                    }
+                    else {
+                        g2.draw(new Line2D.Double(minY, x1, maxY, x1));
+                        this.minIcon.paintIcon(null, g2, (int) minY, (int) x1);
+                        this.maxIcon.paintIcon(null, g2, (int) maxY, (int) x1);                        
+                    }
+                }
+            }
+            else {  // reset the min and max
+                this.lastCategory = column;
+                this.min = value.doubleValue();
+                this.max = value.doubleValue();
+            }
+            
+            // connect to the previous point
+            if (this.plotLines) {
+                if (column != 0) {
+                    Number previousValue = dataset.getValue(row, column - 1);
+                    if (previousValue != null) {
+                        // previous data point...
+                        double previous = previousValue.doubleValue();
+                        double x0 = domainAxis.getCategoryMiddle(column - 1, 
+                                getColumnCount(), dataArea,
+                                plot.getDomainAxisEdge());
+                        double y0 = rangeAxis.valueToJava2D(previous, dataArea,
+                                plot.getRangeAxisEdge());
+                        g2.setPaint(getItemPaint(row, column));
+                        g2.setStroke(getItemStroke(row, column));
+                        Line2D line;
+                        if (orient == PlotOrientation.VERTICAL) {
+                            line = new Line2D.Double(x0, y0, x1, y1);
+                        }
+                        else {
+                            line = new Line2D.Double(y0, x0, y1, x1);                            
+                        }
+                        g2.draw(line);
+                    }
+                }
+            }
+
+            // add an item entity, if this information is being collected
+            EntityCollection entities = state.getEntityCollection();
+            if (entities != null && shape != null) {
+                addItemEntity(entities, dataset, row, column, shape);
+            }
+        }
+    }
+    
+    /**
+     * Tests this instance for equality with an arbitrary object.  The icon fields
+     * are NOT included in the test, so this implementation is a little weak.
+     * 
+     * @param obj  the object (<code>null</code> permitted).
+     * 
+     * @return A boolean.
+     *
+     * @since 1.0.7
+     */
+
+    /**
+     * Returns an icon.
+     *
+     * @param shape  the shape.
+     * @param fillPaint  the fill paint.
+     * @param outlinePaint  the outline paint.
+     *
+     * @return The icon.
+     */
+    private Icon getIcon(Shape shape, final Paint fillPaint, 
+                        final Paint outlinePaint) {
+
+      final int width = shape.getBounds().width;
+      final int height = shape.getBounds().height;
+      final GeneralPath path = new GeneralPath(shape);
+      return new Icon() {
+          public void paintIcon(Component c, Graphics g, int x, int y) {
+              Graphics2D g2 = (Graphics2D) g;
+              path.transform(AffineTransform.getTranslateInstance(x, y));
+              if (fillPaint != null) {
+                  g2.setPaint(fillPaint);
+                  g2.fill(path);
+              }
+              if (outlinePaint != null) {
+                  g2.setPaint(outlinePaint);
+                  g2.draw(path);
+              }
+              path.transform(AffineTransform.getTranslateInstance(-x, -y));
+        }
+
+        public int getIconWidth() {
+            return width;
+        }
+
+        public int getIconHeight() {
+            return height;
+        }
+
+      };
+    }
+
+    /**
+     * Returns an icon from a shape.
+     *
+     * @param shape  the shape.
+     * @param fill  the fill flag.
+     * @param outline  the outline flag.
+     *
+     * @return The icon.
+     */
+    private Icon getIcon(Shape shape, final boolean fill, 
+            final boolean outline) {
+        final int width = shape.getBounds().width;
+        final int height = shape.getBounds().height;
+        final GeneralPath path = new GeneralPath(shape);
+        return new Icon() {
+            public void paintIcon(Component c, Graphics g, int x, int y) {
+                Graphics2D g2 = (Graphics2D) g;
+                path.transform(AffineTransform.getTranslateInstance(x, y));
+                if (fill) {
+                    g2.fill(path);
+                }
+                if (outline) {
+                    g2.draw(path);
+                }
+                path.transform(AffineTransform.getTranslateInstance(-x, -y));
+            }
+
+            public int getIconWidth() {
+                return width;
+            }
+
+            public int getIconHeight() {
+                return height;
+            }
+        };
+    }
+    
+    /**
+     * Provides serialization support.
+     *
+     * @param stream  the output stream.
+     *
+     * @throws IOException  if there is an I/O error.
+     */
+    private void writeObject(ObjectOutputStream stream) throws IOException {
+        stream.defaultWriteObject();
+        SerialUtilities.writeStroke(this.groupStroke, stream);
+        SerialUtilities.writePaint(this.groupPaint, stream);
+    }
+    
+    /**
+     * Provides serialization support.
+     *
+     * @param stream  the input stream.
+     *
+     * @throws IOException  if there is an I/O error.
+     * @throws ClassNotFoundException  if there is a classpath problem.
+     */
+    private void readObject(ObjectInputStream stream) 
+        throws IOException, ClassNotFoundException {
+        stream.defaultReadObject();
+        this.groupStroke = SerialUtilities.readStroke(stream);
+        this.groupPaint = SerialUtilities.readPaint(stream);
+          
+        this.minIcon = getIcon(new Arc2D.Double(-4, -4, 8, 8, 0, 360, 
+                Arc2D.OPEN), null, Color.black);
+        this.maxIcon = getIcon(new Arc2D.Double(-4, -4, 8, 8, 0, 360, 
+                Arc2D.OPEN), null, Color.black);
+        this.objectIcon = getIcon(new Line2D.Double(-4, 0, 4, 0), false, true);
+    }
+    
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ MinMaxCategoryRendererClaudeTest ใน package org.jfree.chart.renderer.category เพื่อทดสอบคลาส MinMaxCategoryRenderer ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.jfree.chart.renderer.category;` เท่านั้น
+</instructions>

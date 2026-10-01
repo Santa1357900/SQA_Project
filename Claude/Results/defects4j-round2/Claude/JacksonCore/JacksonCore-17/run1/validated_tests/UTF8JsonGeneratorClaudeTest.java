@@ -1,0 +1,453 @@
+package com.fasterxml.jackson.core.json;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.core.Base64Variants;
+import com.fasterxml.jackson.core.io.SerializedString;
+
+public class UTF8JsonGeneratorClaudeTest {
+
+    private JsonFactory factory;
+    private ByteArrayOutputStream out;
+    private UTF8JsonGenerator gen;
+
+    @Before
+    public void setUp() throws Throwable {
+        factory = new JsonFactory();
+        out = new ByteArrayOutputStream();
+        gen = (UTF8JsonGenerator) factory.createGenerator(out);
+    }
+
+    // writeStartObject + writeEndObject: no pretty printer branch, empty object
+    @Test
+    public void testWriteStartObject_writeEndObject_emptyObject() throws Throwable {
+        gen.writeStartObject();
+        gen.writeEndObject();
+        gen.close();
+        assertEquals("{}", out.toString("UTF-8"));
+    }
+
+    // writeStartArray + writeEndArray: no pretty printer branch, empty array
+    @Test
+    public void testWriteStartArray_writeEndArray_emptyArray() throws Throwable {
+        gen.writeStartArray();
+        gen.writeEndArray();
+        gen.close();
+        assertEquals("[]", out.toString("UTF-8"));
+    }
+
+    // writeFieldName(String): STATUS_OK_AFTER_COMMA branch inserts comma between fields
+    @Test
+    public void testWriteFieldName_multipleFields_addsComma() throws Throwable {
+        gen.writeStartObject();
+        gen.writeFieldName("a");
+        gen.writeNumber(1);
+        gen.writeFieldName("b");
+        gen.writeNumber(2);
+        gen.writeEndObject();
+        gen.close();
+        assertEquals("{\"a\":1,\"b\":2}", out.toString("UTF-8"));
+    }
+
+    // writeFieldName(String): STATUS_EXPECT_VALUE branch throws exception
+    @Test
+    public void testWriteFieldName_whenExpectingValue_throwsException() throws Throwable {
+        gen.writeStartObject();
+        gen.writeFieldName("a");
+        try {
+            gen.writeFieldName("b");
+            fail("expected JsonGenerationException");
+        } catch (JsonGenerationException expected) {
+            assertTrue(expected.getMessage().contains("field name"));
+        }
+    }
+
+    // writeEndArray: context not array -> _reportError branch
+    @Test
+    public void testWriteEndArray_whenNotInArray_throwsException() throws Throwable {
+        try {
+            gen.writeEndArray();
+            fail("expected JsonGenerationException");
+        } catch (JsonGenerationException expected) {
+            assertTrue(expected.getMessage().contains("ARRAY"));
+        }
+    }
+
+    // writeEndObject: context not object -> _reportError branch
+    @Test
+    public void testWriteEndObject_whenNotInObject_throwsException() throws Throwable {
+        try {
+            gen.writeEndObject();
+            fail("expected JsonGenerationException");
+        } catch (JsonGenerationException expected) {
+            assertTrue(expected.getMessage().contains("object"));
+        }
+    }
+
+    // writeString(String): text == null branch -> writes null token
+    @Test
+    public void testWriteString_nullText_writesNullToken() throws Throwable {
+        gen.writeStartArray();
+        gen.writeString((String) null);
+        gen.writeEndArray();
+        gen.close();
+        assertEquals("[null]", out.toString("UTF-8"));
+    }
+
+    // writeString(String): empty string branch (len==0)
+    @Test
+    public void testWriteString_emptyText_writesEmptyQuotes() throws Throwable {
+        gen.writeString("");
+        gen.close();
+        assertEquals("\"\"", out.toString("UTF-8"));
+    }
+
+    // writeString(String): escape branch for quote, backslash, newline, tab
+    @Test
+    public void testWriteString_withSpecialChars_escapesProperly() throws Throwable {
+        gen.writeString("a\"b\\c\nd\te");
+        gen.close();
+        assertEquals("\"a\\\"b\\\\c\\nd\\te\"", out.toString("UTF-8"));
+    }
+
+    // writeString(char[], offset, len): single-segment ASCII branch
+    @Test
+    public void testWriteStringCharArray_basic() throws Throwable {
+        char[] chars = "hello".toCharArray();
+        gen.writeString(chars, 0, 5);
+        gen.close();
+        assertEquals("\"hello\"", out.toString("UTF-8"));
+    }
+
+    // writeRawUTF8String: raw bytes written unescaped, just quoted
+    @Test
+    public void testWriteRawUTF8String_writesQuotedRawBytes() throws Throwable {
+        byte[] bytes = "raw".getBytes("UTF-8");
+        gen.writeRawUTF8String(bytes, 0, bytes.length);
+        gen.close();
+        assertEquals("\"raw\"", out.toString("UTF-8"));
+    }
+
+    // writeUTF8String: escape-needed branch (_writeUTF8Segment2)
+    @Test
+    public void testWriteUTF8String_withEscapeChar_escapesProperly() throws Throwable {
+        byte[] bytes = "a\"b".getBytes("UTF-8");
+        gen.writeUTF8String(bytes, 0, bytes.length);
+        gen.close();
+        assertEquals("\"a\\\"b\"", out.toString("UTF-8"));
+    }
+
+    // writeRaw(String): delegates to writeRaw(char[],offset,len)
+    @Test
+    public void testWriteRawString_writesUnescapedContent() throws Throwable {
+        gen.writeStartArray();
+        gen.writeRaw("1,2");
+        gen.writeEndArray();
+        gen.close();
+        assertEquals("[1,2]", out.toString("UTF-8"));
+    }
+
+    // writeRaw(char): single ASCII char fast path
+    @Test
+    public void testWriteRawChar_singleChar() throws Throwable {
+        gen.writeRaw('{');
+        gen.writeRaw('}');
+        gen.close();
+        assertEquals("{}", out.toString("UTF-8"));
+    }
+
+    // writeBinary(byte[]): base64 encoding matches library's own encode()
+    @Test
+    public void testWriteBinary_byteArray_encodesBase64() throws Throwable {
+        byte[] data = new byte[] {1, 2, 3};
+        gen.writeBinary(Base64Variants.MIME_NO_LINEFEEDS, data, 0, data.length);
+        gen.close();
+        String expected = "\"" + Base64Variants.MIME_NO_LINEFEEDS.encode(data) + "\"";
+        assertEquals(expected, out.toString("UTF-8"));
+    }
+
+    // writeBinary(InputStream, knownLength): returns byte count, encodes correctly
+    @Test
+    public void testWriteBinary_inputStreamKnownLength_returnsByteCount() throws Throwable {
+        byte[] data = new byte[] {10, 20, 30, 40};
+        ByteArrayInputStream in = new ByteArrayInputStream(data);
+        int count = gen.writeBinary(Base64Variants.MIME_NO_LINEFEEDS, in, data.length);
+        gen.close();
+        assertEquals(data.length, count);
+        String expected = "\"" + Base64Variants.MIME_NO_LINEFEEDS.encode(data) + "\"";
+        assertEquals(expected, out.toString("UTF-8"));
+    }
+
+    // writeBinary(InputStream): stream shorter than requested length -> error branch
+    @Test
+    public void testWriteBinary_inputStreamTooFewBytes_throwsException() throws Throwable {
+        byte[] data = new byte[] {1, 2};
+        ByteArrayInputStream in = new ByteArrayInputStream(data);
+        try {
+            gen.writeBinary(Base64Variants.MIME_NO_LINEFEEDS, in, 5);
+            fail("expected JsonGenerationException");
+        } catch (JsonGenerationException expected) {
+            assertTrue(expected.getMessage().contains("missing"));
+        }
+    }
+
+    // writeNumber(short): unquoted branch
+    @Test
+    public void testWriteNumberShort_basic() throws Throwable {
+        gen.writeNumber((short) -123);
+        gen.close();
+        assertEquals("-123", out.toString("UTF-8"));
+    }
+
+    // writeNumber(int): boundary value Integer.MAX_VALUE
+    @Test
+    public void testWriteNumberInt_maxValue() throws Throwable {
+        gen.writeNumber(Integer.MAX_VALUE);
+        gen.close();
+        assertEquals(String.valueOf(Integer.MAX_VALUE), out.toString("UTF-8"));
+    }
+
+    // writeNumber(long): boundary value Long.MIN_VALUE
+    @Test
+    public void testWriteNumberLong_minValue() throws Throwable {
+        gen.writeNumber(Long.MIN_VALUE);
+        gen.close();
+        assertEquals(String.valueOf(Long.MIN_VALUE), out.toString("UTF-8"));
+    }
+
+    // writeNumber(BigInteger): non-null, unquoted branch
+    @Test
+    public void testWriteNumberBigInteger_basic() throws Throwable {
+        BigInteger value = new BigInteger("123456789012345678901234567890");
+        gen.writeNumber(value);
+        gen.close();
+        assertEquals(value.toString(), out.toString("UTF-8"));
+    }
+
+    // writeNumber(BigInteger): null branch -> writes JSON null
+    @Test
+    public void testWriteNumberBigInteger_null_writesNull() throws Throwable {
+        gen.writeNumber((BigInteger) null);
+        gen.close();
+        assertEquals("null", out.toString("UTF-8"));
+    }
+
+    // writeNumber(double): normal finite value
+    @Test
+    public void testWriteNumberDouble_basic() throws Throwable {
+        gen.writeNumber(3.14);
+        gen.close();
+        assertEquals("3.14", out.toString("UTF-8"));
+    }
+
+    // writeNumber(double): NaN with QUOTE_NON_NUMERIC_NUMBERS enabled (default) -> quoted string
+    @Test
+    public void testWriteNumberDouble_NaN_quotedAsString() throws Throwable {
+        gen.writeNumber(Double.NaN);
+        gen.close();
+        assertEquals("\"NaN\"", out.toString("UTF-8"));
+    }
+
+    // writeNumber(float): normal finite value
+    @Test
+    public void testWriteNumberFloat_basic() throws Throwable {
+        gen.writeNumber(2.5f);
+        gen.close();
+        assertEquals("2.5", out.toString("UTF-8"));
+    }
+
+    // writeNumber(BigDecimal): non-null, default toString() branch
+    @Test
+    public void testWriteNumberBigDecimal_basic() throws Throwable {
+        BigDecimal value = new BigDecimal("12.500");
+        gen.writeNumber(value);
+        gen.close();
+        assertEquals(value.toString(), out.toString("UTF-8"));
+    }
+
+    // writeNumber(BigDecimal): null branch -> writes JSON null
+    @Test
+    public void testWriteNumberBigDecimal_null_writesNull() throws Throwable {
+        gen.writeNumber((BigDecimal) null);
+        gen.close();
+        assertEquals("null", out.toString("UTF-8"));
+    }
+
+    // writeNumber(BigDecimal): WRITE_BIGDECIMAL_AS_PLAIN feature -> toPlainString() branch
+    @Test
+    public void testWriteNumberBigDecimal_asPlainFeature_writesPlainString() throws Throwable {
+        gen.configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, true);
+        BigDecimal value = new BigDecimal("1.23E+3");
+        gen.writeNumber(value);
+        gen.close();
+        assertEquals(value.toPlainString(), out.toString("UTF-8"));
+    }
+
+    // writeNumber(String): raw unquoted branch (default)
+    @Test
+    public void testWriteNumberString_rawEncodedValue() throws Throwable {
+        gen.writeNumber("12345678901234567890123");
+        gen.close();
+        assertEquals("12345678901234567890123", out.toString("UTF-8"));
+    }
+
+    // writeNumber(String): _cfgNumbersAsStrings branch -> quoted raw
+    @Test
+    public void testWriteNumberString_numbersAsStringsFeature_quotesRawValue() throws Throwable {
+        gen.configure(JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS, true);
+        gen.writeNumber("123");
+        gen.close();
+        assertEquals("\"123\"", out.toString("UTF-8"));
+    }
+
+    // writeNumber(int): _cfgNumbersAsStrings branch -> quoted int
+    @Test
+    public void testWriteNumberInt_numbersAsStringsFeature_quotesNumber() throws Throwable {
+        gen.configure(JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS, true);
+        gen.writeNumber(42);
+        gen.close();
+        assertEquals("\"42\"", out.toString("UTF-8"));
+    }
+
+    // writeBoolean: both true and false branches
+    @Test
+    public void testWriteBoolean_trueAndFalse() throws Throwable {
+        gen.writeStartArray();
+        gen.writeBoolean(true);
+        gen.writeBoolean(false);
+        gen.writeEndArray();
+        gen.close();
+        assertEquals("[true,false]", out.toString("UTF-8"));
+    }
+
+    // writeNull: standalone null token
+    @Test
+    public void testWriteNull_writesNullToken() throws Throwable {
+        gen.writeNull();
+        gen.close();
+        assertEquals("null", out.toString("UTF-8"));
+    }
+
+    // getOutputTarget: returns the underlying OutputStream passed at construction
+    @Test
+    public void testGetOutputTarget_returnsUnderlyingStream() throws Throwable {
+        assertSame(out, gen.getOutputTarget());
+    }
+
+    // flush(): _flushBuffer resets buffered tail to 0
+    @Test
+    public void testFlush_resetsBufferedCount() throws Throwable {
+        gen.writeNumber(123);
+        gen.flush();
+        assertEquals(0, gen.getOutputBuffered());
+    }
+
+    // close(): AUTO_CLOSE_JSON_CONTENT default enabled -> auto-closes open array
+    @Test
+    public void testClose_autoClosesOpenArray() throws Throwable {
+        gen.writeStartArray();
+        gen.writeNumber(1);
+        gen.close();
+        assertEquals("[1]", out.toString("UTF-8"));
+    }
+
+    // close(): auto-closes nested object+array structures
+    @Test
+    public void testClose_autoClosesNestedStructures() throws Throwable {
+        gen.writeStartObject();
+        gen.writeFieldName("arr");
+        gen.writeStartArray();
+        gen.writeNumber(1);
+        gen.close();
+        assertEquals("{\"arr\":[1]}", out.toString("UTF-8"));
+    }
+
+    // writeString: 2-byte UTF-8 char branch (ch <= 0x7FF)
+    @Test
+    public void testWriteString_twoByteUtf8Char_encodedCorrectly() throws Throwable {
+        gen.writeString("caf\u00e9");
+        gen.close();
+        assertEquals("\"caf\u00e9\"", out.toString("UTF-8"));
+    }
+
+    // writeString: 3-byte UTF-8 char branch (ch > 0x7FF, not surrogate)
+    @Test
+    public void testWriteString_threeByteUtf8Char_encodedCorrectly() throws Throwable {
+        gen.writeString("\u4e2d");
+        gen.close();
+        assertEquals("\"\u4e2d\"", out.toString("UTF-8"));
+    }
+
+    // writeString: surrogate pair branch -> two \\u escapes (valid JSON representation)
+    @Test
+    public void testWriteString_surrogatePairChar_encodedAsTwoUnicodeEscapes() throws Throwable {
+        String emoji = "\uD83D\uDE00";
+        gen.writeString(emoji);
+        gen.close();
+        String result = out.toString("UTF-8");
+        assertTrue(result.equalsIgnoreCase("\"\\ud83d\\ude00\""));
+    }
+
+    // writeString: control char -> generic 6-byte escape branch
+    @Test
+    public void testWriteString_controlChar_writesGenericEscape() throws Throwable {
+        gen.writeString("\u0001");
+        gen.close();
+        assertEquals("\"\\u0001\"", out.toString("UTF-8"));
+    }
+
+    // ESCAPE_NON_ASCII feature: sets _maximumNonEscapedChar -> forces escape of high char
+    @Test
+    public void testWriteString_escapeNonAsciiFeature_escapesHighChar() throws Throwable {
+        JsonFactory f2 = new JsonFactory();
+        f2.configure(JsonGenerator.Feature.ESCAPE_NON_ASCII, true);
+        ByteArrayOutputStream out2 = new ByteArrayOutputStream();
+        UTF8JsonGenerator gen2 = (UTF8JsonGenerator) f2.createGenerator(out2);
+        gen2.writeString("\u00e9");
+        gen2.close();
+        String result = out2.toString("UTF-8");
+        assertTrue(result.equalsIgnoreCase("\"\\u00e9\""));
+    }
+
+    // writeString: len > _outputMaxContiguous -> _writeStringSegments multi-segment path
+    @Test
+    public void testWriteString_longStringExceedsMaxContiguous_segmentsCorrectly() throws Throwable {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 20000; i++) {
+            sb.append('x');
+        }
+        String text = sb.toString();
+        gen.writeString(text);
+        gen.close();
+        assertEquals("\"" + text + "\"", out.toString("UTF-8"));
+    }
+
+    // writeFieldName(SerializableString): appendQuotedUTF8 fast path
+    @Test
+    public void testWriteFieldName_serializableString_basic() throws Throwable {
+        gen.writeStartObject();
+        gen.writeFieldName(new SerializedString("key"));
+        gen.writeNumber(1);
+        gen.writeEndObject();
+        gen.close();
+        assertEquals("{\"key\":1}", out.toString("UTF-8"));
+    }
+
+    // writeString(SerializableString): appendQuotedUTF8 fast path
+    @Test
+    public void testWriteString_serializableString_basic() throws Throwable {
+        gen.writeString(new SerializedString("val"));
+        gen.close();
+        assertEquals("\"val\"", out.toString("UTF-8"));
+    }
+}

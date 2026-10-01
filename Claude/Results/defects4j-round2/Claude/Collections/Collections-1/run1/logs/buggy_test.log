@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Collections-1-5s6houtp/Collections-1b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.collections.map.Flat3MapClaudeTest::testMapIterator_setValueOnMiddleEntry_onlyAffectsThatEntry
+  - org.apache.commons.collections.map.Flat3MapClaudeTest::testEntrySetIterator_setValueOnLastEntry_onlyAffectsThatEntry
+  - org.apache.commons.collections.map.Flat3MapClaudeTest::testMapIterator_setValueOnLastEntry_onlyAffectsThatEntry
+[exit 0]

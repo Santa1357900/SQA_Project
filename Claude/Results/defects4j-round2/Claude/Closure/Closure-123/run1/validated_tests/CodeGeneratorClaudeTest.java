@@ -1,0 +1,330 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import org.junit.Before;
+import static org.junit.Assert.*;
+
+public class CodeGeneratorClaudeTest {
+
+  private CompilerOptions options;
+
+  @Before
+  public void setUp() throws Throwable {
+    options = new CompilerOptions();
+  }
+
+  private String compileToSource(String js, CompilerOptions opts) {
+    Compiler compiler = new Compiler();
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("input.js", js);
+    compiler.compile(externs, input, opts);
+    return compiler.toSource();
+  }
+
+  private String compileToSource(String js) {
+    return compileToSource(js, new CompilerOptions());
+  }
+
+  // Covers Token.VAR branch: "var " + addList printing of a simple declaration.
+  @Test
+  public void testAdd_varDeclarationWithInitializer_printsVarKeyword() throws Throwable {
+    String out = compileToSource("var x=1;");
+    assertTrue(out.contains("var x=1"));
+  }
+
+  // Covers binary-operator associativity branch (last.getType()==type && isAssociative).
+  @Test
+  public void testAdd_binaryAdditionAssociative_noExtraParens() throws Throwable {
+    String out = compileToSource("var a,b,c,x; x=a+b+c;");
+    assertTrue(out.contains("a+b+c"));
+  }
+
+  // Covers assignment right-associative branch (isAssignmentOp(n) && isAssignmentOp(last)).
+  @Test
+  public void testAdd_assignmentChainRightAssociative_printsChain() throws Throwable {
+    String out = compileToSource("var a,b,c; a=b=c;");
+    assertTrue(out.contains("a=b=c"));
+  }
+
+  // Covers Token.HOOK (ternary) branch.
+  @Test
+  public void testAdd_ternaryOperator_printsHook() throws Throwable {
+    String out = compileToSource("var a,b,c,x; x=a?b:c;");
+    assertTrue(out.contains("a?b:c"));
+  }
+
+  // Covers Token.TRY with catch and finally (childCount==3 branch).
+  @Test
+  public void testAdd_tryCatchFinally_printsAllParts() throws Throwable {
+    String out = compileToSource("function f(){try{a();}catch(e){b();}finally{c();}}");
+    assertTrue(out.contains("try{"));
+    assertTrue(out.contains("catch(e)"));
+    assertTrue(out.contains("finally{"));
+  }
+
+  // Covers Token.THROW branch, including forced endStatement(true).
+  @Test
+  public void testAdd_throwStatement_printsThrowAndValue() throws Throwable {
+    String out = compileToSource("function f(){throw 1;}");
+    assertTrue(out.contains("throw 1"));
+  }
+
+  // Covers Token.RETURN branch with childCount==1 (has value).
+  @Test
+  public void testAdd_returnWithValue_printsReturnValue() throws Throwable {
+    String out = compileToSource("function f(){return 1;}");
+    assertTrue(out.contains("return 1"));
+  }
+
+  // Covers Token.RETURN branch with childCount==0 (no value).
+  @Test
+  public void testAdd_returnWithoutValue_printsBareReturn() throws Throwable {
+    String out = compileToSource("function f(){return;}");
+    assertTrue(out.contains("function f()"));
+    assertTrue(out.contains("return"));
+  }
+
+  // Covers Token.ARRAYLIT branch via addArrayList.
+  @Test
+  public void testAdd_arrayLiteral_printsBracketedList() throws Throwable {
+    String out = compileToSource("var a=[1,2,3];");
+    assertTrue(out.contains("[1,2,3]"));
+  }
+
+  // Covers OBJECTLIT branch with unquoted identifier key.
+  @Test
+  public void testAdd_objectLiteralUnquotedKey_printsBareKey() throws Throwable {
+    String out = compileToSource("var o={a:1};");
+    assertTrue(out.contains("{a:1}"));
+  }
+
+  // Covers OBJECTLIT branch with numeric string key via getSimpleNumber.
+  @Test
+  public void testAdd_objectLiteralNumericKey_printsBareNumber() throws Throwable {
+    String out = compileToSource("var o={1:2};");
+    assertTrue(out.contains("{1:2}"));
+  }
+
+  // Covers Token.NEW branch where next==null so '()' is omitted.
+  @Test
+  public void testAdd_newWithoutArgs_omitsParens() throws Throwable {
+    String out = compileToSource("function Foo(){} var f=new Foo();");
+    assertTrue(out.contains("new Foo"));
+    assertFalse(out.contains("new Foo("));
+  }
+
+  // Covers Token.NEW branch where next!=null so args are printed.
+  @Test
+  public void testAdd_newWithArgs_includesParens() throws Throwable {
+    String out = compileToSource("function Foo(x){} var f=new Foo(1);");
+    assertTrue(out.contains("new Foo(1)"));
+  }
+
+  // Covers Token.CALL normal (non-indirect) branch.
+  @Test
+  public void testAdd_callExpression_printsArgsInParens() throws Throwable {
+    String out = compileToSource("function foo(a,b){} foo(1,2);");
+    assertTrue(out.contains("foo(1,2)"));
+  }
+
+  // Covers Token.GETPROP and Token.GETELEM branches.
+  @Test
+  public void testAdd_getPropAndGetElem_printCorrectSyntax() throws Throwable {
+    String out = compileToSource("var a,b; a.b; a[b];");
+    assertTrue(out.contains("a.b"));
+    assertTrue(out.contains("a[b]"));
+  }
+
+  // Covers Token.REGEXP branch with flags (childCount==2).
+  @Test
+  public void testAdd_regexLiteralWithFlags_printsPattern() throws Throwable {
+    String out = compileToSource("var r=/abc/g;");
+    assertTrue(out.contains("/abc/g"));
+  }
+
+  // Covers preferSingleQuotes==true branch (singleq<=doubleq) in jsString.
+  @Test
+  public void testAdd_preferSingleQuotes_usesSingleQuoteChar() throws Throwable {
+    options.preferSingleQuotes = true;
+    String out = compileToSource("var s='hi';", options);
+    assertTrue(out.contains("'hi'"));
+  }
+
+  // Covers default (preferSingleQuotes==false) branch using double quotes.
+  @Test
+  public void testAdd_defaultQuotePreference_usesDoubleQuoteChar() throws Throwable {
+    String out = compileToSource("var s='hi';");
+    assertTrue(out.contains("\"hi\""));
+  }
+
+  // Covers untrusted-string branch escaping '<' and '>' to hex sequences.
+  @Test
+  public void testAdd_untrustedStrings_escapesLtAndGt() throws Throwable {
+    options.trustedStrings = false;
+    String out = compileToSource("var s='<a>';", options);
+    assertTrue(out.contains("\\x3c"));
+    assertTrue(out.contains("\\x3e"));
+  }
+
+  // Covers "</script" safety-escape branch, applied even for trusted strings.
+  @Test
+  public void testAdd_scriptCloseTagInString_isEscaped() throws Throwable {
+    options.trustedStrings = true;
+    String out = compileToSource("var s='</script>';", options);
+    assertTrue(out.contains("\\x3c/script"));
+  }
+
+
+
+  // Covers Token.SWITCH, Token.CASE and Token.DEFAULT_CASE branches.
+  @Test
+  public void testAdd_switchCaseDefault_printsAllLabels() throws Throwable {
+    String out = compileToSource("function f(a){switch(a){case 1:break;default:break;}}");
+    assertTrue(out.contains("case 1"));
+    assertTrue(out.contains("default"));
+  }
+
+  // Covers Token.FUNCTION branch with parameters and body.
+  @Test
+  public void testAdd_functionDeclaration_printsNameParamsAndBody() throws Throwable {
+    String out = compileToSource("function f(a,b){return a+b;}");
+    assertTrue(out.contains("function f(a,b)"));
+    assertTrue(out.contains("return a+b"));
+  }
+
+  // Covers Token.DELPROP branch.
+  @Test
+  public void testAdd_deleteOperator_printsDeleteWithSpace() throws Throwable {
+    String out = compileToSource("var a={b:1}; delete a.b;");
+    assertTrue(out.contains("delete a.b"));
+  }
+
+  // Covers Token.INC/Token.DEC branches, both post and pre forms.
+  @Test
+  public void testAdd_incAndDecOperators_printCorrectForm() throws Throwable {
+    String out = compileToSource("var a=1; a++; --a;");
+    assertTrue(out.contains("a++"));
+    assertTrue(out.contains("--a"));
+  }
+
+  // Covers Token.TYPEOF unary operator branch requiring separating space.
+  @Test
+  public void testAdd_typeofOperator_printsWithSeparator() throws Throwable {
+    String out = compileToSource("var a,x; x=typeof a;");
+    assertTrue(out.contains("typeof a"));
+  }
+
+  // Covers GETPROP ECMASCRIPT3 keyword-property branch forcing bracket notation.
+  @Test
+  public void testAdd_keywordPropertyUnderEs3_usesBracketNotation() throws Throwable {
+    options.setLanguageIn(CompilerOptions.LanguageMode.ECMASCRIPT5);
+    options.setLanguageOut(CompilerOptions.LanguageMode.ECMASCRIPT3);
+    String out = compileToSource("var a; var x=a.class;", options);
+    assertTrue(out.contains("[\"class\"]"));
+  }
+
+  // Covers isSimpleNumber: empty string -> false (len==0 branch).
+  @Test
+  public void testIsSimpleNumber_emptyString_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber(""));
+  }
+
+  // Covers isSimpleNumber: single "0" is allowed (len==1 branch).
+  @Test
+  public void testIsSimpleNumber_singleZero_returnsTrue() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("0"));
+  }
+
+  // Covers isSimpleNumber: leading zero with len>1 -> false.
+  @Test
+  public void testIsSimpleNumber_leadingZeroMultiDigit_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("01"));
+  }
+
+  // Covers isSimpleNumber: all-digit multi-character string -> true.
+  @Test
+  public void testIsSimpleNumber_validMultiDigit_returnsTrue() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("123"));
+  }
+
+  // Covers isSimpleNumber: non-digit character present -> false.
+  @Test
+  public void testIsSimpleNumber_nonDigitCharacter_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("12a"));
+  }
+
+  // Covers isSimpleNumber: negative sign character -> false immediately.
+  @Test
+  public void testIsSimpleNumber_negativeSign_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("-1"));
+  }
+
+  // Covers getSimpleNumber: valid small number returns its double value.
+  @Test
+  public void testGetSimpleNumber_validNumber_returnsValue() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("42");
+    assertFalse(Double.isNaN(result));
+    assertEquals(42.0, result, 0.0);
+  }
+
+  // Covers getSimpleNumber: isSimpleNumber false -> NaN.
+  @Test
+  public void testGetSimpleNumber_nonNumericString_returnsNaN() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("abc");
+    assertTrue(Double.isNaN(result));
+  }
+
+  // Covers getSimpleNumber: leading zero rejected by isSimpleNumber -> NaN.
+  @Test
+  public void testGetSimpleNumber_leadingZero_returnsNaN() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("007");
+    assertTrue(Double.isNaN(result));
+  }
+
+  // Covers getSimpleNumber: value below the exact-integer boundary returns a value.
+  @Test
+  public void testGetSimpleNumber_valueBelowBoundary_returnsValue() throws Throwable {
+    double boundary = NodeUtil.MAX_POSITIVE_INTEGER_NUMBER;
+    long below = ((long) boundary) - 1L;
+    double result = CodeGenerator.getSimpleNumber(Long.toString(below));
+    assertFalse(Double.isNaN(result));
+    assertEquals((double) below, result, 0.0);
+  }
+
+
+
+  // Covers getSimpleNumber: value above the boundary must be NaN in both versions.
+  @Test
+  public void testGetSimpleNumber_valueAboveBoundary_returnsNaN() throws Throwable {
+    double boundary = NodeUtil.MAX_POSITIVE_INTEGER_NUMBER;
+    long above = ((long) boundary) + 1L;
+    double result = CodeGenerator.getSimpleNumber(Long.toString(above));
+    assertTrue(Double.isNaN(result));
+  }
+
+  // Covers getSimpleNumber: NumberFormatException caught (overflow of long) -> NaN.
+  @Test
+  public void testGetSimpleNumber_tooLargeToParseAsLong_returnsNaN() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("999999999999999999999999999");
+    assertTrue(Double.isNaN(result));
+  }
+
+  // Covers identifierEscape fast path: pure ASCII identifier is returned unchanged.
+  @Test
+  public void testIdentifierEscape_asciiIdentifier_returnsUnchanged() throws Throwable {
+    assertEquals("validName123", CodeGenerator.identifierEscape("validName123"));
+  }
+
+  // Covers identifierEscape fast path: empty string is vacuously Latin.
+  @Test
+  public void testIdentifierEscape_emptyString_returnsEmpty() throws Throwable {
+    assertEquals("", CodeGenerator.identifierEscape(""));
+  }
+
+  // Covers identifierEscape per-character loop escaping a non-Latin character.
+  @Test
+  public void testIdentifierEscape_nonLatinChar_returnsHexEscaped() throws Throwable {
+    String result = CodeGenerator.identifierEscape("\u4e2d");
+    assertEquals("\\u4e2d", result);
+  }
+}

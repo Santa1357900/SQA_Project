@@ -1,0 +1,154 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.9666666666666667" branch-rate="0.9" lines-covered="29" lines-valid="30" branches-covered="9" branches-valid="10" complexity="3.0" version="2.0.3" timestamp="1790853376521">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="org.mockito.internal.configuration" line-rate="0.9666666666666667" branch-rate="0.9" complexity="3.0">
+			<classes>
+				<class name="org.mockito.internal.configuration.DefaultInjectionEngine" filename="org/mockito/internal/configuration/DefaultInjectionEngine.java" line-rate="1.0" branch-rate="1.0" complexity="3.0">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="26" hits="19" branch="false"/>
+								<line number="28" hits="19" branch="false"/>
+								<line number="29" hits="19" branch="false"/>
+							</lines>
+						</method>
+						<method name="injectMockCandidate" signature="(Ljava/lang/Class;Ljava/util/Set;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="92" hits="49" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="93" hits="26" branch="false"/>
+								<line number="95" hits="23" branch="false"/>
+							</lines>
+						</method>
+						<method name="injectMocksOnFields" signature="(Ljava/util/Set;Ljava/util/Set;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="73" hits="19" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="74" hits="20" branch="false"/>
+								<line number="75" hits="20" branch="false"/>
+								<line number="77" hits="20" branch="false"/>
+								<line number="78" hits="1" branch="false"/>
+								<line number="79" hits="1" branch="false"/>
+								<line number="80" hits="19" branch="false"/>
+								<line number="83" hits="19" branch="false"/>
+								<line number="84" hits="42" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="85" hits="24" branch="false"/>
+								<line number="86" hits="23" branch="false"/>
+								<line number="88" hits="18" branch="false"/>
+								<line number="89" hits="17" branch="false"/>
+							</lines>
+						</method>
+						<method name="orderedInstanceFieldsFrom" signature="(Ljava/lang/Class;)[Ljava/lang/reflect/Field;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="98" hits="24" branch="false"/>
+								<line number="99" hits="24" branch="false"/>
+								<line number="100" hits="24" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="26" hits="19" branch="false"/>
+						<line number="28" hits="19" branch="false"/>
+						<line number="29" hits="19" branch="false"/>
+						<line number="73" hits="19" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="74" hits="20" branch="false"/>
+						<line number="75" hits="20" branch="false"/>
+						<line number="77" hits="20" branch="false"/>
+						<line number="78" hits="1" branch="false"/>
+						<line number="79" hits="1" branch="false"/>
+						<line number="80" hits="19" branch="false"/>
+						<line number="83" hits="19" branch="false"/>
+						<line number="84" hits="42" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="85" hits="24" branch="false"/>
+						<line number="86" hits="23" branch="false"/>
+						<line number="88" hits="18" branch="false"/>
+						<line number="89" hits="17" branch="false"/>
+						<line number="92" hits="49" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="93" hits="26" branch="false"/>
+						<line number="95" hits="23" branch="false"/>
+						<line number="98" hits="24" branch="false"/>
+						<line number="99" hits="24" branch="false"/>
+						<line number="100" hits="24" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.configuration.DefaultInjectionEngine$1" filename="org/mockito/internal/configuration/DefaultInjectionEngine.java" line-rate="0.875" branch-rate="0.75" complexity="3.0">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/mockito/internal/configuration/DefaultInjectionEngine;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="compare" signature="(Ljava/lang/Object;Ljava/lang/Object;)I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="29" hits="22" branch="false"/>
+							</lines>
+						</method>
+						<method name="compare" signature="(Ljava/lang/reflect/Field;Ljava/lang/reflect/Field;)I" line-rate="0.8571428571428571" branch-rate="0.75">
+							<lines>
+								<line number="31" hits="3" branch="false"/>
+								<line number="32" hits="3" branch="false"/>
+								<line number="34" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="35" hits="1" branch="false"/>
+								<line number="37" hits="2" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="38" hits="2" branch="false"/>
+								<line number="40" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="29" hits="22" branch="false"/>
+						<line number="31" hits="3" branch="false"/>
+						<line number="32" hits="3" branch="false"/>
+						<line number="34" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="35" hits="1" branch="false"/>
+						<line number="37" hits="2" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="38" hits="2" branch="false"/>
+						<line number="40" hits="0" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

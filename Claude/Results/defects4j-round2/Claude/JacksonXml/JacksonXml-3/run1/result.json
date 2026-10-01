@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Claude",
+  "algorithm_version": "1.0.0",
+  "project": "JacksonXml",
+  "bug_id": 3,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 35,
+  "tests_validated": 35,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 41,
+    "total_methods": 53,
+    "ratio": 0.7736
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 175,
+    "lines_total": 295,
+    "line_ratio": 0.5932,
+    "branch_measure": "condition",
+    "branches_covered": 73,
+    "branches_total": 151,
+    "branch_ratio": 0.4834
+  },
+  "generation_seconds": 414.144,
+  "validation_seconds": 46.285,
+  "total_seconds": 460.429,
+  "configuration": {
+    "model": "claude-sonnet-5",
+    "effort": "high",
+    "thinking": "adaptive",
+    "max_tokens": 64000,
+    "prompt_system": "Claude/Prompt/system_prompt.txt",
+    "prompt_template": "Claude/Prompt/template_prompt.txt",
+    "usage": {
+      "input_tokens": 1,
+      "output_tokens": 49864,
+      "cache_creation_input_tokens": 12771,
+      "cache_read_input_tokens": 2690,
+      "total_cost_usd": 1.385746,
+      "duration_api_ms": 414144,
+      "num_turns": 1
+    }
+  },
+  "artifacts": {
+    "tests": "Tests/defects4j-round2/Claude/JacksonXml/JacksonXml-3/run1/",
+    "logs": "Results/defects4j-round2/Claude/JacksonXml/JacksonXml-3/run1/logs/",
+    "prompt": "Claude/Prompt/history/JacksonXml_3.txt"
+  },
+  "created_at": "2026-09-30T22:31:55.936156+00:00",
+  "generation_wall_seconds": 417.533
+}

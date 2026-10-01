@@ -1,0 +1,413 @@
+package org.mockito.internal.invocation;
+
+import java.lang.reflect.Method;
+import java.util.LinkedList;
+import java.util.List;
+
+import org.hamcrest.BaseMatcher;
+import org.hamcrest.Description;
+import org.hamcrest.Matcher;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.mockito.internal.matchers.CapturesArguments;
+import org.mockito.internal.reporting.PrintSettings;
+
+public class InvocationMatcherClaudeTest {
+
+    static class Sample {
+        public void noArgMethod() { }
+        public void oneArg(String s) { }
+        public void oneArg(Integer i) { }
+        public void twoArg(String a, String b) { }
+    }
+
+    interface Greeter {
+        void greet(String name);
+    }
+
+    static class GreeterImpl implements Greeter {
+        public void greet(String name) { }
+    }
+
+    static class SimpleMatcher extends BaseMatcher {
+        private final Object expected;
+        SimpleMatcher(Object expected) {
+            this.expected = expected;
+        }
+        public boolean matches(Object item) {
+            if (expected == null) {
+                return item == null;
+            }
+            return expected.equals(item);
+        }
+        public void describeTo(Description description) {
+        }
+    }
+
+    static class CapturingMatcher extends BaseMatcher implements CapturesArguments {
+        final List<Object> captured = new LinkedList<Object>();
+        public boolean matches(Object item) {
+            return true;
+        }
+        public void describeTo(Description description) {
+        }
+        public void captureFrom(Object argument) {
+            captured.add(argument);
+        }
+    }
+
+    private Invocation newInvocation(Object mock, Method method, Object[] args, int seq) throws Throwable {
+        return new Invocation(mock, method, args, seq, null);
+    }
+
+    // covers constructor: matchers.isEmpty() true branch -> uses invocation.argumentsToMatchers()
+    @Test
+    public void testConstructor_emptyMatchers_usesInvocationArgumentsToMatchers() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv = newInvocation(mock, m, new Object[] { "x" }, 1);
+        InvocationMatcher im = new InvocationMatcher(inv, new LinkedList<Matcher>());
+        assertEquals(1, im.getMatchers().size());
+        assertTrue(im.getMatchers().get(0).matches("x"));
+    }
+
+    // covers constructor: matchers.isEmpty() false branch -> uses provided list directly
+    @Test
+    public void testConstructor_nonEmptyMatchers_usesProvidedMatchersList() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv = newInvocation(mock, m, new Object[] { "x" }, 1);
+        List<Matcher> provided = new LinkedList<Matcher>();
+        provided.add(new SimpleMatcher("x"));
+        InvocationMatcher im = new InvocationMatcher(inv, provided);
+        assertSame(provided, im.getMatchers());
+    }
+
+    // covers single-arg constructor delegating to Collections.emptyList() -> 0 args means 0 matchers
+    @Test
+    public void testConstructorSingleArg_delegatesToEmptyMatchersList() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("noArgMethod");
+        Invocation inv = newInvocation(mock, m, new Object[0], 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertEquals(0, im.getMatchers().size());
+    }
+
+    // covers getMethod() delegation
+    @Test
+    public void testGetMethod_returnsUnderlyingInvocationMethod() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("noArgMethod");
+        Invocation inv = newInvocation(mock, m, new Object[0], 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertEquals(m, im.getMethod());
+    }
+
+    // covers getInvocation() delegation
+    @Test
+    public void testGetInvocation_returnsSameInvocationInstance() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("noArgMethod");
+        Invocation inv = newInvocation(mock, m, new Object[0], 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertSame(inv, im.getInvocation());
+    }
+
+    // covers toString() delegating to invocation.toString(matchers, new PrintSettings())
+    @Test
+    public void testToString_delegatesToInvocationToStringWithMatchers() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv = newInvocation(mock, m, new Object[] { "x" }, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        String expected = inv.toString(im.getMatchers(), new PrintSettings());
+        assertEquals(expected, im.toString());
+    }
+
+    // covers matches(): mock equal && hasSameMethod true && arguments match -> true
+    @Test
+    public void testMatches_sameMockMethodAndArguments_returnsTrue() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv1 = newInvocation(mock, m, new Object[] { "x" }, 1);
+        Invocation inv2 = newInvocation(mock, m, new Object[] { "x" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertTrue(im.matches(inv2));
+    }
+
+    // covers matches(): different mock short-circuits to false
+    @Test
+    public void testMatches_differentMock_returnsFalse() throws Throwable {
+        Object mock1 = new Object();
+        Object mock2 = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv1 = newInvocation(mock1, m, new Object[] { "x" }, 1);
+        Invocation inv2 = newInvocation(mock2, m, new Object[] { "x" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertFalse(im.matches(inv2));
+    }
+
+    // covers matches(): hasSameMethod() false branch
+    @Test
+    public void testMatches_differentMethod_returnsFalse() throws Throwable {
+        Object mock = new Object();
+        Method m1 = Sample.class.getMethod("oneArg", String.class);
+        Method m2 = Sample.class.getMethod("oneArg", Integer.class);
+        Invocation inv1 = newInvocation(mock, m1, new Object[] { "x" }, 1);
+        Invocation inv2 = newInvocation(mock, m2, new Object[] { Integer.valueOf(5) }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertFalse(im.matches(inv2));
+    }
+
+    // covers matches(): ArgumentsComparator mismatch branch when arguments differ
+    @Test
+    public void testMatches_sameMethodDifferentArguments_returnsFalse() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv1 = newInvocation(mock, m, new Object[] { "x" }, 1);
+        Invocation inv2 = newInvocation(mock, m, new Object[] { "y" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertFalse(im.matches(inv2));
+    }
+
+    // bug-hunting via matches(): interface method and implementing method share name+signature,
+    // per hasSameMethod's own comment they must not be distinguished via raw Method.equals()
+    @Test
+    public void testMatches_interfaceAndImplementationSameSignature_shouldMatchAccordingToContract() throws Throwable {
+        Object mock = new GreeterImpl();
+        Method ifaceMethod = Greeter.class.getMethod("greet", String.class);
+        Method implMethod = GreeterImpl.class.getMethod("greet", String.class);
+        Invocation inv1 = newInvocation(mock, ifaceMethod, new Object[] { "hi" }, 1);
+        Invocation inv2 = newInvocation(mock, implMethod, new Object[] { "hi" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertTrue(im.matches(inv2));
+    }
+
+    // covers hasSimilarMethod(): methodNameEquals false branch
+    @Test
+    public void testHasSimilarMethod_differentMethodName_returnsFalse() throws Throwable {
+        Object mock = new Object();
+        Method m1 = Sample.class.getMethod("noArgMethod");
+        Method m2 = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv1 = newInvocation(mock, m1, new Object[0], 1);
+        Invocation inv2 = newInvocation(mock, m2, new Object[] { "x" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertFalse(im.hasSimilarMethod(inv2));
+    }
+
+    // covers hasSimilarMethod(): mockIsTheSame false branch
+    @Test
+    public void testHasSimilarMethod_differentMock_returnsFalse() throws Throwable {
+        Object mock1 = new Object();
+        Object mock2 = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv1 = newInvocation(mock1, m, new Object[] { "x" }, 1);
+        Invocation inv2 = newInvocation(mock2, m, new Object[] { "x" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertFalse(im.hasSimilarMethod(inv2));
+    }
+
+    // covers hasSimilarMethod(): all guard conditions true, methodEquals true -> result true regardless of args
+    @Test
+    public void testHasSimilarMethod_sameNameMockUnverifiedSameMethod_returnsTrue() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv1 = newInvocation(mock, m, new Object[] { "x" }, 1);
+        Invocation inv2 = newInvocation(mock, m, new Object[] { "y" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertTrue(im.hasSimilarMethod(inv2));
+    }
+
+    // covers hasSimilarMethod(): overloadedButSameArgs true -> returns false
+    @Test
+    public void testHasSimilarMethod_overloadedMethodsSameArguments_returnsFalse() throws Throwable {
+        Object mock = new Object();
+        Method m1 = Sample.class.getMethod("oneArg", String.class);
+        Method m2 = Sample.class.getMethod("oneArg", Integer.class);
+        Invocation inv1 = newInvocation(mock, m1, new Object[] { "same" }, 1);
+        Invocation inv2 = newInvocation(mock, m2, new Object[] { "same" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertFalse(im.hasSimilarMethod(inv2));
+    }
+
+    // covers hasSimilarMethod(): overloadedButSameArgs false (args differ) -> returns true
+    @Test
+    public void testHasSimilarMethod_overloadedMethodsDifferentArguments_returnsTrue() throws Throwable {
+        Object mock = new Object();
+        Method m1 = Sample.class.getMethod("oneArg", String.class);
+        Method m2 = Sample.class.getMethod("oneArg", Integer.class);
+        Invocation inv1 = newInvocation(mock, m1, new Object[] { "x" }, 1);
+        Invocation inv2 = newInvocation(mock, m2, new Object[] { Integer.valueOf(42) }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertTrue(im.hasSimilarMethod(inv2));
+    }
+
+    // covers hasSameMethod(): identical Method objects -> true
+    @Test
+    public void testHasSameMethod_identicalMethodObjects_returnsTrue() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv1 = newInvocation(mock, m, new Object[] { "x" }, 1);
+        Invocation inv2 = newInvocation(mock, m, new Object[] { "y" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertTrue(im.hasSameMethod(inv2));
+    }
+
+    // covers hasSameMethod(): overloaded methods with different parameter types -> false
+    @Test
+    public void testHasSameMethod_overloadedMethodsDifferentParamTypes_returnsFalse() throws Throwable {
+        Object mock = new Object();
+        Method m1 = Sample.class.getMethod("oneArg", String.class);
+        Method m2 = Sample.class.getMethod("oneArg", Integer.class);
+        Invocation inv1 = newInvocation(mock, m1, new Object[] { "x" }, 1);
+        Invocation inv2 = newInvocation(mock, m2, new Object[] { Integer.valueOf(1) }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertFalse(im.hasSameMethod(inv2));
+    }
+
+    // covers hasSameMethod(): entirely different method names -> false
+    @Test
+    public void testHasSameMethod_differentMethodDifferentName_returnsFalse() throws Throwable {
+        Object mock = new Object();
+        Method m1 = Sample.class.getMethod("noArgMethod");
+        Method m2 = Sample.class.getMethod("twoArg", String.class, String.class);
+        Invocation inv1 = newInvocation(mock, m1, new Object[0], 1);
+        Invocation inv2 = newInvocation(mock, m2, new Object[] { "a", "b" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertFalse(im.hasSameMethod(inv2));
+    }
+
+    // bug-hunting: comment explicitly states method.equals() is avoided because java generates
+    // forwarding methods (interface vs implementation) with same name+signature but different
+    // declaring class; such methods must be considered the "same method"
+    @Test
+    public void testHasSameMethod_interfaceAndImplementationSameSignature_shouldBeConsideredSameMethod() throws Throwable {
+        Object mock = new GreeterImpl();
+        Method ifaceMethod = Greeter.class.getMethod("greet", String.class);
+        Method implMethod = GreeterImpl.class.getMethod("greet", String.class);
+        Invocation inv1 = newInvocation(mock, ifaceMethod, new Object[] { "hi" }, 1);
+        Invocation inv2 = newInvocation(mock, implMethod, new Object[] { "hi" }, 2);
+        InvocationMatcher im = new InvocationMatcher(inv1);
+        assertTrue(im.hasSameMethod(inv2));
+    }
+
+    // covers getLocation() delegation
+    @Test
+    public void testGetLocation_delegatesToInvocationLocation() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("noArgMethod");
+        Invocation inv = newInvocation(mock, m, new Object[0], 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertSame(inv.getLocation(), im.getLocation());
+    }
+
+    // covers toString(PrintSettings) delegation
+    @Test
+    public void testToStringWithPrintSettings_delegatesToInvocation() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv = newInvocation(mock, m, new Object[] { "x" }, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        PrintSettings ps = new PrintSettings();
+        assertEquals(inv.toString(im.getMatchers(), ps), im.toString(ps));
+    }
+
+    // covers captureArgumentsFrom(): for-loop executes 0 times when there are no matchers (0-arg method)
+    @Test
+    public void testCaptureArgumentsFrom_noArgumentsMethod_noMatchersNoCapture() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("noArgMethod");
+        Invocation inv = newInvocation(mock, m, new Object[0], 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertEquals(0, im.getMatchers().size());
+        im.captureArgumentsFrom(inv);
+    }
+
+    // covers captureArgumentsFrom(): instanceof CapturesArguments true && length > k true -> captures value
+    @Test
+    public void testCaptureArgumentsFrom_capturingMatcherWithSufficientArgs_capturesArgument() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv = newInvocation(mock, m, new Object[] { "x" }, 1);
+        List<Matcher> matchers = new LinkedList<Matcher>();
+        CapturingMatcher cm = new CapturingMatcher();
+        matchers.add(cm);
+        InvocationMatcher im = new InvocationMatcher(inv, matchers);
+        im.captureArgumentsFrom(inv);
+        assertEquals(1, cm.captured.size());
+        assertEquals("x", cm.captured.get(0));
+    }
+
+    // covers captureArgumentsFrom(): i.getArguments().length > k false branch -> no capture for missing arg
+    @Test
+    public void testCaptureArgumentsFrom_notEnoughArguments_doesNotCapture() throws Throwable {
+        Object mock = new Object();
+        Method twoArgMethod = Sample.class.getMethod("twoArg", String.class, String.class);
+        Invocation invForMatchers = newInvocation(mock, twoArgMethod, new Object[] { "a", "b" }, 1);
+        List<Matcher> matchers = new LinkedList<Matcher>();
+        matchers.add(new SimpleMatcher("a"));
+        CapturingMatcher cm = new CapturingMatcher();
+        matchers.add(cm);
+        InvocationMatcher im = new InvocationMatcher(invForMatchers, matchers);
+
+        Method oneArgMethod = Sample.class.getMethod("oneArg", String.class);
+        Invocation shortInvocation = newInvocation(mock, oneArgMethod, new Object[] { "only" }, 2);
+        im.captureArgumentsFrom(shortInvocation);
+        assertEquals(0, cm.captured.size());
+    }
+
+    // covers captureArgumentsFrom(): boundary where length > k holds exactly at the last matcher index
+    @Test
+    public void testCaptureArgumentsFrom_exactNumberOfArguments_capturesLastMatcher() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("twoArg", String.class, String.class);
+        Invocation inv = newInvocation(mock, m, new Object[] { "a", "b" }, 1);
+        List<Matcher> matchers = new LinkedList<Matcher>();
+        matchers.add(new SimpleMatcher("a"));
+        CapturingMatcher cm = new CapturingMatcher();
+        matchers.add(cm);
+        InvocationMatcher im = new InvocationMatcher(inv, matchers);
+        im.captureArgumentsFrom(inv);
+        assertEquals(1, cm.captured.size());
+        assertEquals("b", cm.captured.get(0));
+    }
+
+    // covers createFrom(): loop executes 0 times for empty list
+    @Test
+    public void testCreateFrom_emptyInvocationList_returnsEmptyList() throws Throwable {
+        List<Invocation> invocations = new LinkedList<Invocation>();
+        List<InvocationMatcher> result = InvocationMatcher.createFrom(invocations);
+        assertEquals(0, result.size());
+    }
+
+    // covers createFrom(): loop executes exactly once
+    @Test
+    public void testCreateFrom_singleInvocation_returnsSingleMatcher() throws Throwable {
+        Object mock = new Object();
+        Method m = Sample.class.getMethod("noArgMethod");
+        Invocation inv = newInvocation(mock, m, new Object[0], 1);
+        List<Invocation> invocations = new LinkedList<Invocation>();
+        invocations.add(inv);
+        List<InvocationMatcher> result = InvocationMatcher.createFrom(invocations);
+        assertEquals(1, result.size());
+        assertSame(inv, result.get(0).getInvocation());
+    }
+
+    // covers createFrom(): loop executes multiple times and preserves insertion order
+    @Test
+    public void testCreateFrom_multipleInvocations_preservesOrder() throws Throwable {
+        Object mock = new Object();
+        Method m1 = Sample.class.getMethod("noArgMethod");
+        Method m2 = Sample.class.getMethod("oneArg", String.class);
+        Invocation inv1 = newInvocation(mock, m1, new Object[0], 1);
+        Invocation inv2 = newInvocation(mock, m2, new Object[] { "x" }, 2);
+        List<Invocation> invocations = new LinkedList<Invocation>();
+        invocations.add(inv1);
+        invocations.add(inv2);
+        List<InvocationMatcher> result = InvocationMatcher.createFrom(invocations);
+        assertEquals(2, result.size());
+        assertSame(inv1, result.get(0).getInvocation());
+        assertSame(inv2, result.get(1).getInvocation());
+    }
+}

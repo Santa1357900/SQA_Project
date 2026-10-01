@@ -1,0 +1,381 @@
+package com.fasterxml.jackson.databind.deser;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonMappingException;
+
+public class BeanDeserializerClaudeTest
+{
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    public static class SimpleBean {
+        private String name;
+        private int age;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public int getAge() { return age; }
+        public void setAge(int age) { this.age = age; }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class IgnoreUnknownBean {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    @JsonIgnoreProperties({"secret"})
+    public static class ExplicitIgnoreBean {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class CreatorBean {
+        private final int id;
+        private final String label;
+        @JsonCreator
+        public CreatorBean(@JsonProperty("id") int id, @JsonProperty("label") String label) {
+            this.id = id; this.label = label;
+        }
+        public int getId() { return id; }
+        public String getLabel() { return label; }
+    }
+
+    public static class RequiredCreatorBean {
+        private final int id;
+        private final String label;
+        @JsonCreator
+        public RequiredCreatorBean(@JsonProperty(value = "id", required = true) int id,
+                @JsonProperty("label") String label) {
+            this.id = id; this.label = label;
+        }
+        public int getId() { return id; }
+        public String getLabel() { return label; }
+    }
+
+    @JsonIgnoreProperties({"extra"})
+    public static class CreatorIgnoreExtraBean {
+        private final int id;
+        private final String label;
+        @JsonCreator
+        public CreatorIgnoreExtraBean(@JsonProperty("id") int id, @JsonProperty("label") String label) {
+            this.id = id; this.label = label;
+        }
+        public int getId() { return id; }
+        public String getLabel() { return label; }
+    }
+
+    public static class DelegateStringBean {
+        private final String value;
+        @JsonCreator
+        public DelegateStringBean(String value) { this.value = value; }
+        public String getValue() { return value; }
+    }
+
+    public static class DelegateIntBean {
+        private final int value;
+        @JsonCreator
+        public DelegateIntBean(int value) { this.value = value; }
+        public int getValue() { return value; }
+    }
+
+    public static class NestedPart {
+        private String city;
+        private String zip;
+        public String getCity() { return city; }
+        public void setCity(String city) { this.city = city; }
+        public String getZip() { return zip; }
+        public void setZip(String zip) { this.zip = zip; }
+    }
+
+    public static class UnwrapContainer {
+        private String label;
+        private NestedPart part;
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
+        @JsonUnwrapped
+        public NestedPart getPart() { return part; }
+        public void setPart(NestedPart part) { this.part = part; }
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    public static class IdentityBean {
+        private int id;
+        private String name;
+        public int getId() { return id; }
+        public void setId(int id) { this.id = id; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    @JsonFormat(shape = JsonFormat.Shape.ARRAY)
+    @JsonPropertyOrder({"name", "age"})
+    public static class ArrayShapeBean {
+        private String name;
+        private int age;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public int getAge() { return age; }
+        public void setAge(int age) { this.age = age; }
+    }
+
+    public static class AnySetterBean {
+        private String name;
+        private Map<String, Object> extra = new HashMap<String, Object>();
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        @JsonAnySetter
+        public void addExtra(String key, Object value) { extra.put(key, value); }
+        public Map<String, Object> getExtra() { return extra; }
+    }
+
+    public static class ContainerBean {
+        private SimpleBean nested;
+        private String tag;
+        public SimpleBean getNested() { return nested; }
+        public void setNested(SimpleBean nested) { this.nested = nested; }
+        public String getTag() { return tag; }
+        public void setTag(String tag) { this.tag = tag; }
+    }
+
+    // covers deserialize(): isExpectedStartObjectToken true + _vanillaProcessing true -> vanillaDeserialize
+    @Test
+    public void testDeserialize_vanillaStartObject_setsFieldsCorrectly() throws Throwable {
+        SimpleBean bean = mapper.readValue("{\"name\":\"Alice\",\"age\":30}", SimpleBean.class);
+        assertEquals("Alice", bean.getName());
+        assertEquals(30, bean.getAge());
+    }
+
+    // covers vanillaDeserialize loop executing zero times (empty object)
+    @Test
+    public void testDeserialize_emptyObject_returnsBeanWithDefaultValues() throws Throwable {
+        SimpleBean bean = mapper.readValue("{}", SimpleBean.class);
+        assertNull(bean.getName());
+        assertEquals(0, bean.getAge());
+    }
+
+    // covers handleUnknownVanilla throwing when FAIL_ON_UNKNOWN_PROPERTIES is enabled (default)
+    @Test
+    public void testDeserialize_unknownProperty_defaultConfig_throwsJsonMappingException() throws Throwable {
+        try {
+            mapper.readValue("{\"name\":\"Bob\",\"extra\":1}", SimpleBean.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // covers ignoreAllUnknown path via @JsonIgnoreProperties(ignoreUnknown = true)
+    @Test
+    public void testDeserialize_unknownProperty_classIgnoreUnknownAnnotation_ignoresProperty() throws Throwable {
+        IgnoreUnknownBean bean = mapper.readValue("{\"name\":\"Carl\",\"extra\":1}", IgnoreUnknownBean.class);
+        assertEquals("Carl", bean.getName());
+    }
+
+    // covers FAIL_ON_UNKNOWN_PROPERTIES disabled via mapper configuration
+    @Test
+    public void testDeserialize_unknownProperty_featureDisabled_ignoresProperty() throws Throwable {
+        ObjectMapper m = new ObjectMapper();
+        m.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        SimpleBean bean = m.readValue("{\"name\":\"Dan\",\"extra\":1}", SimpleBean.class);
+        assertEquals("Dan", bean.getName());
+    }
+
+    // covers handleIgnoredProperty branch for explicitly named ignorable property
+    @Test
+    public void testDeserialize_explicitIgnorableProperty_ignoredWithoutError() throws Throwable {
+        ExplicitIgnoreBean bean = mapper.readValue("{\"name\":\"Eve\",\"secret\":\"x\"}", ExplicitIgnoreBean.class);
+        assertEquals("Eve", bean.getName());
+    }
+
+    // covers _deserializeUsingPropertyBased normal creator-property matching
+    @Test
+    public void testDeserialize_propertyBasedCreator_buildsBeanFromJsonProperties() throws Throwable {
+        CreatorBean bean = mapper.readValue("{\"id\":7,\"label\":\"L1\"}", CreatorBean.class);
+        assertEquals(7, bean.getId());
+        assertEquals("L1", bean.getLabel());
+    }
+
+    // covers buffer.assignParameter when creator properties appear out of declared order
+    @Test
+    public void testDeserialize_propertyBasedCreator_outOfOrderProperties_buildsCorrectly() throws Throwable {
+        CreatorBean bean = mapper.readValue("{\"label\":\"L2\",\"id\":9}", CreatorBean.class);
+        assertEquals(9, bean.getId());
+        assertEquals("L2", bean.getLabel());
+    }
+
+    // covers creator build with optional (non-required) property missing -> default null
+    @Test
+    public void testDeserialize_propertyBasedCreator_missingOptionalProperty_usesDefault() throws Throwable {
+        CreatorBean bean = mapper.readValue("{\"id\":3}", CreatorBean.class);
+        assertEquals(3, bean.getId());
+        assertNull(bean.getLabel());
+    }
+
+    // covers required-parameter validation failure path during creator.build
+    @Test
+    public void testDeserialize_propertyBasedCreator_requiredPropertyMissing_throwsException() throws Throwable {
+        try {
+            mapper.readValue("{\"label\":\"onlyLabel\"}", RequiredCreatorBean.class);
+            fail("expected JsonMappingException for missing required property");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // covers _ignorableProps check for a non-creator property inside _deserializeUsingPropertyBased
+    @Test
+    public void testDeserialize_propertyBasedCreator_ignorableExtraProperty_ignored() throws Throwable {
+        CreatorIgnoreExtraBean bean = mapper.readValue(
+                "{\"id\":1,\"label\":\"A\",\"extra\":\"z\"}", CreatorIgnoreExtraBean.class);
+        assertEquals(1, bean.getId());
+        assertEquals("A", bean.getLabel());
+    }
+
+    // covers unknown-property handling after creator build completes, without ignore -> throws
+    @Test
+    public void testDeserialize_propertyBasedCreator_unknownExtraPropertyNoIgnore_throwsException() throws Throwable {
+        try {
+            mapper.readValue("{\"id\":1,\"label\":\"A\",\"extra\":\"z\"}", CreatorBean.class);
+            fail("expected JsonMappingException for unknown property with creator");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // covers _deserializeOther VALUE_STRING -> deserializeFromString (delegating creator)
+    @Test
+    public void testDeserialize_delegatingCreatorFromString_setsValue() throws Throwable {
+        DelegateStringBean bean = mapper.readValue("\"hello\"", DelegateStringBean.class);
+        assertEquals("hello", bean.getValue());
+    }
+
+    // covers _deserializeOther VALUE_NUMBER_INT -> deserializeFromNumber (delegating creator)
+    @Test
+    public void testDeserialize_delegatingCreatorFromNumber_setsValue() throws Throwable {
+        DelegateIntBean bean = mapper.readValue("42", DelegateIntBean.class);
+        assertEquals(42, bean.getValue());
+    }
+
+    // covers unwrappingDeserializer creation and deserializeWithUnwrapped(p, ctxt) path
+    @Test
+    public void testDeserialize_unwrappedProperty_flattensNestedFields() throws Throwable {
+        UnwrapContainer bean = mapper.readValue(
+                "{\"label\":\"outer\",\"city\":\"NYC\",\"zip\":\"10001\"}", UnwrapContainer.class);
+        assertEquals("outer", bean.getLabel());
+        assertNotNull(bean.getPart());
+        assertEquals("NYC", bean.getPart().getCity());
+        assertEquals("10001", bean.getPart().getZip());
+    }
+
+    // covers withObjectIdReader / deserializeWithObjectId branch when _objectIdReader != null
+    @Test
+    public void testDeserialize_objectIdentity_setsFieldsCorrectly() throws Throwable {
+        IdentityBean bean = mapper.readValue("{\"id\":5,\"name\":\"Fox\"}", IdentityBean.class);
+        assertEquals(5, bean.getId());
+        assertEquals("Fox", bean.getName());
+    }
+
+    // covers asArrayDeserializer() creating BeanAsArrayDeserializer for @JsonFormat(shape=ARRAY)
+    @Test
+    public void testDeserialize_arrayShapeAnnotation_buildsBeanFromJsonArray() throws Throwable {
+        ArrayShapeBean bean = mapper.readValue("[\"Gina\",22]", ArrayShapeBean.class);
+        assertEquals("Gina", bean.getName());
+        assertEquals(22, bean.getAge());
+    }
+
+    // covers _anySetter branch inside the vanilla deserialize loop
+    @Test
+    public void testDeserialize_anySetter_capturesUnknownPropertiesIntoMap() throws Throwable {
+        AnySetterBean bean = mapper.readValue("{\"name\":\"Hank\",\"foo\":\"bar\"}", AnySetterBean.class);
+        assertEquals("Hank", bean.getName());
+        assertEquals("bar", bean.getExtra().get("foo"));
+    }
+
+    // covers deserialize(JsonParser, DeserializationContext, Object) overload merging into existing bean
+    @Test
+    public void testDeserializeForUpdating_existingBean_mergesNewValues() throws Throwable {
+        SimpleBean existing = new SimpleBean();
+        existing.setName("Old");
+        existing.setAge(1);
+        SimpleBean updated = mapper.readerForUpdating(existing).readValue("{\"age\":99}");
+        assertEquals("Old", updated.getName());
+        assertEquals(99, updated.getAge());
+    }
+
+    // covers deserialize(..., bean) branch where nextFieldName() returns null immediately (empty object)
+    @Test
+    public void testDeserializeForUpdating_emptyObject_returnsBeanUnchanged() throws Throwable {
+        SimpleBean existing = new SimpleBean();
+        existing.setName("Same");
+        existing.setAge(5);
+        SimpleBean updated = mapper.readerForUpdating(existing).readValue("{}");
+        assertEquals("Same", updated.getName());
+        assertEquals(5, updated.getAge());
+    }
+
+    // covers recursive invocation of deserialize() for a nested bean-typed property value
+    @Test
+    public void testDeserialize_nestedBeanProperty_recursiveDeserialization() throws Throwable {
+        ContainerBean bean = mapper.readValue(
+                "{\"tag\":\"t1\",\"nested\":{\"name\":\"In\",\"age\":11}}", ContainerBean.class);
+        assertEquals("t1", bean.getTag());
+        assertNotNull(bean.getNested());
+        assertEquals("In", bean.getNested().getName());
+        assertEquals(11, bean.getNested().getAge());
+    }
+
+    // covers property setter with boundary int value (Integer.MIN_VALUE)
+    @Test
+    public void testDeserialize_boundaryIntValues_setCorrectly() throws Throwable {
+        SimpleBean bean = mapper.readValue("{\"name\":\"Ike\",\"age\":" + Integer.MIN_VALUE + "}", SimpleBean.class);
+        assertEquals(Integer.MIN_VALUE, bean.getAge());
+    }
+
+    // covers loop executing multiple iterations for the same field name (last value wins)
+    @Test
+    public void testDeserialize_duplicateFieldName_lastValueWins() throws Throwable {
+        SimpleBean bean = mapper.readValue("{\"age\":1,\"age\":2}", SimpleBean.class);
+        assertEquals(2, bean.getAge());
+    }
+
+    // covers _deserializeOther START_ARRAY -> deserializeFromArray without a delegating array creator
+    @Test
+    public void testDeserialize_topLevelArrayForNonArrayBean_throwsException() throws Throwable {
+        try {
+            mapper.readValue("[1,2]", SimpleBean.class);
+            fail("expected JsonMappingException for unexpected START_ARRAY token");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // covers _deserializeOther VALUE_TRUE -> deserializeFromBoolean without a boolean creator
+    @Test
+    public void testDeserialize_topLevelBooleanForNonBooleanBean_throwsException() throws Throwable {
+        try {
+            mapper.readValue("true", SimpleBean.class);
+            fail("expected JsonMappingException for unexpected VALUE_TRUE token");
+        } catch (JsonMappingException expected) {
+        }
+    }
+}

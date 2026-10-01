@@ -1,0 +1,342 @@
+package com.fasterxml.jackson.databind.deser.std;
+
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+
+public class UntypedObjectDeserializerClaudeTest
+{
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    // Simple POJO with an Object-typed property, uses default UntypedObjectDeserializer resolution
+    public static class Wrapper {
+        private Object value;
+        public Object getValue() { return value; }
+        public void setValue(Object value) { this.value = value; }
+    }
+
+    // Custom deserializer that advances parser past START_OBJECT of an empty object to END_OBJECT,
+    // then delegates directly to UntypedObjectDeserializer.deserialize(), replicating the scenario
+    // described in the class comment referencing databind#989 (caller already advanced to first token).
+    public static class EndObjectProbeDeserializer extends JsonDeserializer<Object> {
+        @Override
+        public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            if (p.getCurrentToken() == JsonToken.START_OBJECT) {
+                p.nextToken();
+            }
+            UntypedObjectDeserializer deser = new UntypedObjectDeserializer(null, null);
+            return deser.deserialize(p, ctxt);
+        }
+    }
+
+    public static class EndObjectHolder {
+        private Object value;
+        public Object getValue() { return value; }
+        @JsonDeserialize(using = EndObjectProbeDeserializer.class)
+        public void setValue(Object value) { this.value = value; }
+    }
+
+    // Custom deserializer that advances parser past START_ARRAY of an empty array to END_ARRAY,
+    // then delegates directly; this path is explicitly documented as invalid in the source.
+    public static class EndArrayProbeDeserializer extends JsonDeserializer<Object> {
+        @Override
+        public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            if (p.getCurrentToken() == JsonToken.START_ARRAY) {
+                p.nextToken();
+            }
+            UntypedObjectDeserializer deser = new UntypedObjectDeserializer(null, null);
+            return deser.deserialize(p, ctxt);
+        }
+    }
+
+    public static class EndArrayHolder {
+        private Object value;
+        public Object getValue() { return value; }
+        @JsonDeserialize(using = EndArrayProbeDeserializer.class)
+        public void setValue(Object value) { this.value = value; }
+    }
+
+    // covers case ID_NULL
+    @Test
+    public void testDeserialize_nullToken_returnsNull() throws Throwable {
+        Object result = mapper.readValue("null", Object.class);
+        assertNull(result);
+    }
+
+    // covers case ID_TRUE
+    @Test
+    public void testDeserialize_trueToken_returnsBooleanTrue() throws Throwable {
+        Object result = mapper.readValue("true", Object.class);
+        assertEquals(Boolean.TRUE, result);
+    }
+
+    // covers case ID_FALSE
+    @Test
+    public void testDeserialize_falseToken_returnsBooleanFalse() throws Throwable {
+        Object result = mapper.readValue("false", Object.class);
+        assertEquals(Boolean.FALSE, result);
+    }
+
+    // covers case ID_STRING, no custom string deserializer
+    @Test
+    public void testDeserialize_stringToken_returnsString() throws Throwable {
+        Object result = mapper.readValue("\"hello\"", Object.class);
+        assertTrue(result instanceof String);
+        assertEquals("hello", result);
+    }
+
+    // covers case ID_STRING with empty string edge value
+    @Test
+    public void testDeserialize_emptyStringToken_returnsEmptyString() throws Throwable {
+        Object result = mapper.readValue("\"\"", Object.class);
+        assertEquals("", result);
+    }
+
+    // covers case ID_NUMBER_INT default branch (no coercion features), small int
+    @Test
+    public void testDeserialize_smallIntToken_returnsInteger() throws Throwable {
+        Object result = mapper.readValue("123", Object.class);
+        assertTrue(result instanceof Integer);
+        assertEquals(Integer.valueOf(123), result);
+    }
+
+    // covers case ID_NUMBER_INT default branch with negative value
+    @Test
+    public void testDeserialize_negativeIntToken_returnsInteger() throws Throwable {
+        Object result = mapper.readValue("-1", Object.class);
+        assertEquals(Integer.valueOf(-1), result);
+    }
+
+    // covers case ID_NUMBER_INT default branch, value exceeds int range -> Long
+    @Test
+    public void testDeserialize_longOverflowIntToken_returnsLong() throws Throwable {
+        Object result = mapper.readValue("9999999999", Object.class);
+        assertTrue(result instanceof Long);
+        assertEquals(Long.valueOf(9999999999L), result);
+    }
+
+    // covers case ID_NUMBER_INT default branch, value exceeds long range -> BigInteger
+    @Test
+    public void testDeserialize_bigIntegerOverflowToken_returnsBigInteger() throws Throwable {
+        Object result = mapper.readValue("100000000000000000000", Object.class);
+        assertTrue(result instanceof BigInteger);
+        assertEquals(new BigInteger("100000000000000000000"), result);
+    }
+
+    // covers case ID_NUMBER_FLOAT default branch (no USE_BIG_DECIMAL_FOR_FLOATS)
+    @Test
+    public void testDeserialize_floatToken_returnsDouble() throws Throwable {
+        Object result = mapper.readValue("1.5", Object.class);
+        assertTrue(result instanceof Double);
+        assertEquals(1.5, ((Double) result).doubleValue(), 1e-9);
+    }
+
+    // covers case ID_NUMBER_FLOAT branch when USE_BIG_DECIMAL_FOR_FLOATS enabled
+    @Test
+    public void testDeserialize_floatTokenWithBigDecimalFeature_returnsBigDecimal() throws Throwable {
+        mapper.configure(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS, true);
+        Object result = mapper.readValue("1.5", Object.class);
+        assertTrue(result instanceof BigDecimal);
+        assertEquals(0, ((BigDecimal) result).compareTo(new BigDecimal("1.5")));
+    }
+
+    // covers case ID_NUMBER_INT branch when USE_BIG_INTEGER_FOR_INTS enabled (F_MASK_INT_COERCIONS)
+    @Test
+    public void testDeserialize_intTokenWithBigIntegerFeature_returnsBigInteger() throws Throwable {
+        mapper.configure(DeserializationFeature.USE_BIG_INTEGER_FOR_INTS, true);
+        Object result = mapper.readValue("123", Object.class);
+        assertTrue(result instanceof BigInteger);
+        assertEquals(BigInteger.valueOf(123), result);
+    }
+
+    // covers case ID_NUMBER_INT branch when USE_LONG_FOR_INTS enabled (F_MASK_INT_COERCIONS)
+    @Test
+    public void testDeserialize_intTokenWithLongFeature_returnsLong() throws Throwable {
+        mapper.configure(DeserializationFeature.USE_LONG_FOR_INTS, true);
+        Object result = mapper.readValue("123", Object.class);
+        assertTrue(result instanceof Long);
+        assertEquals(Long.valueOf(123L), result);
+    }
+
+    // covers mapArray empty-array short-circuit branch
+    @Test
+    public void testDeserialize_emptyArray_returnsEmptyList() throws Throwable {
+        Object result = mapper.readValue("[]", Object.class);
+        assertTrue(result instanceof List);
+        assertTrue(((List<?>) result).isEmpty());
+    }
+
+    // covers mapArray single-element branch
+    @Test
+    public void testDeserialize_singleElementArray_returnsListWithOneElement() throws Throwable {
+        Object result = mapper.readValue("[1]", Object.class);
+        List<?> list = (List<?>) result;
+        assertEquals(1, list.size());
+        assertEquals(Integer.valueOf(1), list.get(0));
+    }
+
+    // covers mapArray two-element branch
+    @Test
+    public void testDeserialize_twoElementArray_returnsListWithTwoElements() throws Throwable {
+        Object result = mapper.readValue("[1,2]", Object.class);
+        List<?> list = (List<?>) result;
+        assertEquals(2, list.size());
+        assertEquals(Integer.valueOf(2), list.get(1));
+    }
+
+    // covers mapArray buffered-loop branch, entering loop with exactly three elements
+    @Test
+    public void testDeserialize_threeElementArray_returnsListWithThreeElements() throws Throwable {
+        Object result = mapper.readValue("[1,2,3]", Object.class);
+        List<?> list = (List<?>) result;
+        assertEquals(3, list.size());
+        assertEquals(Integer.valueOf(3), list.get(2));
+    }
+
+    // covers mapArray buffered-loop branch with multiple loop iterations
+    @Test
+    public void testDeserialize_fourElementArray_returnsListWithFourElements() throws Throwable {
+        Object result = mapper.readValue("[1,2,3,4]", Object.class);
+        List<?> list = (List<?>) result;
+        assertEquals(4, list.size());
+        assertEquals(Integer.valueOf(4), list.get(3));
+    }
+
+    // covers USE_JAVA_ARRAY_FOR_JSON_ARRAY branch -> mapArrayToArray
+    @Test
+    public void testDeserialize_arrayWithUseJavaArrayFeature_returnsObjectArray() throws Throwable {
+        mapper.configure(DeserializationFeature.USE_JAVA_ARRAY_FOR_JSON_ARRAY, true);
+        Object result = mapper.readValue("[1,2]", Object.class);
+        assertTrue(result instanceof Object[]);
+        Object[] arr = (Object[]) result;
+        assertEquals(2, arr.length);
+        assertEquals(Integer.valueOf(2), arr[1]);
+    }
+
+    // covers mapArrayToArray empty-array short-circuit returning NO_OBJECTS
+    @Test
+    public void testDeserialize_emptyArrayWithUseJavaArrayFeature_returnsEmptyObjectArray() throws Throwable {
+        mapper.configure(DeserializationFeature.USE_JAVA_ARRAY_FOR_JSON_ARRAY, true);
+        Object result = mapper.readValue("[]", Object.class);
+        assertTrue(result instanceof Object[]);
+        assertEquals(0, ((Object[]) result).length);
+    }
+
+    // covers mapObject key1==null branch (empty object reached via normal START_OBJECT entry)
+    @Test
+    public void testDeserialize_emptyObject_returnsEmptyMap() throws Throwable {
+        Object result = mapper.readValue("{}", Object.class);
+        assertTrue(result instanceof Map);
+        assertTrue(((Map<?, ?>) result).isEmpty());
+    }
+
+    // covers mapObject single-entry branch
+    @Test
+    public void testDeserialize_singleEntryObject_returnsMapWithOneEntry() throws Throwable {
+        Object result = mapper.readValue("{\"a\":1}", Object.class);
+        Map<?, ?> map = (Map<?, ?>) result;
+        assertEquals(1, map.size());
+        assertEquals(Integer.valueOf(1), map.get("a"));
+    }
+
+    // covers mapObject two-entry branch
+    @Test
+    public void testDeserialize_twoEntryObject_returnsMapWithTwoEntries() throws Throwable {
+        Object result = mapper.readValue("{\"a\":1,\"b\":2}", Object.class);
+        Map<?, ?> map = (Map<?, ?>) result;
+        assertEquals(2, map.size());
+        assertEquals(Integer.valueOf(2), map.get("b"));
+    }
+
+    // covers mapObject general-loop branch, entering loop with exactly three entries
+    @Test
+    public void testDeserialize_threeEntryObject_returnsMapWithThreeEntries() throws Throwable {
+        Object result = mapper.readValue("{\"a\":1,\"b\":2,\"c\":3}", Object.class);
+        Map<?, ?> map = (Map<?, ?>) result;
+        assertEquals(3, map.size());
+        assertEquals(Integer.valueOf(3), map.get("c"));
+    }
+
+    // covers mapObject general-loop branch with multiple loop iterations
+    @Test
+    public void testDeserialize_fourEntryObject_returnsMapWithFourEntries() throws Throwable {
+        Object result = mapper.readValue("{\"a\":1,\"b\":2,\"c\":3,\"d\":4}", Object.class);
+        Map<?, ?> map = (Map<?, ?>) result;
+        assertEquals(4, map.size());
+        assertEquals(Integer.valueOf(4), map.get("d"));
+    }
+
+    // covers recursive deserialize() calls for nested array/object values
+    @Test
+    public void testDeserialize_nestedArrayAndObject_mapsCorrectly() throws Throwable {
+        Object result = mapper.readValue("{\"a\":[1,2],\"b\":{\"c\":3}}", Object.class);
+        Map<?, ?> map = (Map<?, ?>) result;
+        assertTrue(map.get("a") instanceof List);
+        assertTrue(map.get("b") instanceof Map);
+        assertEquals(2, ((List<?>) map.get("a")).size());
+        assertEquals(Integer.valueOf(3), ((Map<?, ?>) map.get("b")).get("c"));
+    }
+
+    // covers UntypedObjectDeserializer used for a bean property declared as Object, scalar value
+    @Test
+    public void testDeserializeWrapperField_integerValue() throws Throwable {
+        Wrapper w = mapper.readValue("{\"value\":5}", Wrapper.class);
+        assertTrue(w.getValue() instanceof Integer);
+        assertEquals(Integer.valueOf(5), w.getValue());
+    }
+
+    // covers START_OBJECT path for an Object-typed property holding an empty nested object
+    @Test
+    public void testDeserializeWrapperField_emptyObjectValue() throws Throwable {
+        Wrapper w = mapper.readValue("{\"value\":{}}", Wrapper.class);
+        assertTrue(w.getValue() instanceof Map);
+        assertTrue(((Map<?, ?>) w.getValue()).isEmpty());
+    }
+
+    // covers START_ARRAY path for an Object-typed property holding a list
+    @Test
+    public void testDeserializeWrapperField_listValue() throws Throwable {
+        Wrapper w = mapper.readValue("{\"value\":[1,2,3]}", Wrapper.class);
+        assertTrue(w.getValue() instanceof List);
+        assertEquals(3, ((List<?>) w.getValue()).size());
+    }
+
+    // BUG HUNT: covers missing ID_END_OBJECT handling; class comment (databind#989) states caller
+    // may already be positioned at END_OBJECT for an empty Object, and this must map to an empty Map.
+    @Test
+    public void testDeserialize_endObjectTokenGivenDirectly_returnsEmptyMapPerContract() throws Throwable {
+        EndObjectHolder holder = mapper.readValue("{\"value\":{}}", EndObjectHolder.class);
+        assertTrue(holder.getValue() instanceof Map);
+        assertTrue(((Map<?, ?>) holder.getValue()).isEmpty());
+    }
+
+    // covers default: throw branch for explicitly unsupported END_ARRAY token position
+    @Test
+    public void testDeserialize_endArrayTokenGivenDirectly_throwsMappingException() throws Throwable {
+        try {
+            mapper.readValue("{\"value\":[]}", EndArrayHolder.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+}

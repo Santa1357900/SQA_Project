@@ -1,0 +1,512 @@
+package com.fasterxml.jackson.core.json;
+
+import java.io.ByteArrayOutputStream;
+import java.io.StringWriter;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonLocation;
+import com.fasterxml.jackson.core.Base64Variants;
+
+public class ReaderBasedJsonParserClaudeTest {
+
+    private JsonFactory factory;
+
+    @Before
+    public void setUp() throws Throwable {
+        factory = new JsonFactory();
+    }
+
+    // Covers nextToken() object/field-name branch, inObject value dispatch for numbers/strings/arrays
+    @Test
+    public void testNextToken_objectWithFields_returnsFieldNamesAndValues() throws Throwable {
+        JsonParser p = factory.createParser("{\"a\":1,\"c\":\"str\"}");
+        assertEquals(JsonToken.START_OBJECT, p.nextToken());
+        assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+        assertEquals("a", p.getCurrentName());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(1, p.getIntValue());
+        assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+        assertEquals("c", p.getCurrentName());
+        assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+        assertEquals("str", p.getText());
+        assertEquals(JsonToken.END_OBJECT, p.nextToken());
+    }
+
+    // Covers nextToken() array start/close and sequential numeric elements (0,1,many iterations)
+    @Test
+    public void testNextToken_arrayOfNumbers_returnsAllElementsInOrder() throws Throwable {
+        JsonParser p = factory.createParser("[1,2,3]");
+        assertEquals(JsonToken.START_ARRAY, p.nextToken());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(1, p.getIntValue());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(2, p.getIntValue());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(3, p.getIntValue());
+        assertEquals(JsonToken.END_ARRAY, p.nextToken());
+    }
+
+    // Covers _matchTrue, _matchFalse, _matchNull literal branches
+    @Test
+    public void testNextToken_booleanAndNullLiterals_returnsCorrectTokens() throws Throwable {
+        JsonParser p = factory.createParser("[true,false,null]");
+        p.nextToken();
+        assertEquals(JsonToken.VALUE_TRUE, p.nextToken());
+        assertEquals(JsonToken.VALUE_FALSE, p.nextToken());
+        assertEquals(JsonToken.VALUE_NULL, p.nextToken());
+    }
+
+    // Covers getText() VALUE_STRING branch with _finishString fast path
+    @Test
+    public void testGetText_stringValue_returnsUnescapedContent() throws Throwable {
+        JsonParser p = factory.createParser("\"hello\"");
+        assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+        assertEquals("hello", p.getText());
+    }
+
+    // Covers _decodeEscaped branches: \n \t \" \\ \/ and unicode \u
+    @Test
+    public void testGetText_escapedCharacters_returnsDecodedContent() throws Throwable {
+        JsonParser p = factory.createParser("\"a\\nb\\tc\\\"d\\\\e\\/f\\u0041\"");
+        assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+        assertEquals("a\nb\tc\"d\\e/fA", p.getText());
+    }
+
+    // Covers getTextCharacters/getTextLength/getTextOffset for VALUE_STRING token
+    @Test
+    public void testGetTextCharactersLengthOffset_stringToken_returnsConsistentValues() throws Throwable {
+        JsonParser p = factory.createParser("\"hello\"");
+        p.nextToken();
+        char[] chars = p.getTextCharacters();
+        int len = p.getTextLength();
+        int offset = p.getTextOffset();
+        assertEquals("hello", new String(chars, offset, len));
+    }
+
+    // Covers getText(Writer) VALUE_STRING branch
+    @Test
+    public void testGetTextWriter_stringToken_writesAndReturnsLength() throws Throwable {
+        JsonParser p = factory.createParser("\"hello\"");
+        p.nextToken();
+        StringWriter w = new StringWriter();
+        int count = p.getText(w);
+        assertEquals(5, count);
+        assertEquals("hello", w.toString());
+    }
+
+    // Covers _parsePosNumber fast path simple integer, and leading-zero single-digit branch
+    @Test
+    public void testParsePosNumber_simpleIntegerAndZero_returnsExpectedValues() throws Throwable {
+        JsonParser p1 = factory.createParser("123");
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p1.nextToken());
+        assertEquals(123, p1.getIntValue());
+
+        JsonParser p2 = factory.createParser("0");
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p2.nextToken());
+        assertEquals(0, p2.getIntValue());
+    }
+
+    // Covers _verifyNLZ2 leading-zero-not-allowed error branch
+    @Test
+    public void testParsePosNumber_leadingZeroDisallowed_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("01");
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _verifyNLZ2 leading-zero-allowed branch with ALLOW_NUMERIC_LEADING_ZEROS feature
+    @Test
+    public void testParsePosNumber_leadingZeroAllowed_parsesCorrectly() throws Throwable {
+        factory.enable(JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS);
+        JsonParser p = factory.createParser("01");
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(1, p.getIntValue());
+    }
+
+    // Covers _parseNegNumber simple negative integer branch
+    @Test
+    public void testParseNegNumber_simpleNegative_returnsNegativeIntValue() throws Throwable {
+        JsonParser p = factory.createParser("-123");
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(-123, p.getIntValue());
+    }
+
+    // Covers _parseNegNumber invalid-start-after-minus branch calling _handleInvalidNumberStart
+    @Test
+    public void testParseNegNumber_invalidStart_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("-a");
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _parseFloat fraction+exponent branches producing correct double value
+    @Test
+    public void testParseFloat_fractionAndExponent_returnsDoubleValue() throws Throwable {
+        JsonParser p = factory.createParser("3.14e2");
+        assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+        assertEquals(314.0, p.getDoubleValue(), 1e-9);
+    }
+
+    // Covers _parseFloat "decimal point not followed by digit" error branch
+    @Test
+    public void testParseFloat_decimalPointNotFollowedByDigit_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("[1.]");
+        p.nextToken();
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _parseFloat "exponent indicator not followed by digit" error branch
+    @Test
+    public void testParseFloat_exponentNotFollowedByDigit_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("[1e]");
+        p.nextToken();
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _verifyRootSpace missing-separator error branch at root level
+    @Test
+    public void testVerifyRootSpace_missingSeparator_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("123true");
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _verifyRootSpace legal-separator branch allowing sequential root values
+    @Test
+    public void testMultipleRootValues_separatedBySpace_parsedSequentially() throws Throwable {
+        JsonParser p = factory.createParser("123 456");
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(123, p.getIntValue());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(456, p.getIntValue());
+        assertNull(p.nextToken());
+    }
+
+    // Covers _handleOddValue '+' branch delegating to _handleInvalidNumberStart
+    @Test
+    public void testHandleOddValue_plusSign_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("+123");
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _handleOddName ALLOW_UNQUOTED_FIELD_NAMES disabled error branch
+    @Test
+    public void testHandleOddName_unquotedFieldNamesDisabled_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("{a:1}");
+        p.nextToken();
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _handleOddName ALLOW_UNQUOTED_FIELD_NAMES enabled branch
+    @Test
+    public void testHandleOddName_unquotedFieldNamesEnabled_parsesFieldName() throws Throwable {
+        factory.enable(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES);
+        JsonParser p = factory.createParser("{a:1}");
+        p.nextToken();
+        assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+        assertEquals("a", p.getCurrentName());
+    }
+
+    // Covers _handleOddName/_handleOddValue ALLOW_SINGLE_QUOTES disabled error branch
+    @Test
+    public void testHandleOddValue_singleQuotesDisabled_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("{'a':1}");
+        p.nextToken();
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers ALLOW_SINGLE_QUOTES enabled branch for both field name and string value
+    @Test
+    public void testHandleOddValue_singleQuotesEnabled_parsesFieldAndStringValue() throws Throwable {
+        factory.enable(JsonParser.Feature.ALLOW_SINGLE_QUOTES);
+        JsonParser p = factory.createParser("{'a':'b'}");
+        p.nextToken();
+        assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+        assertEquals("a", p.getCurrentName());
+        assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+        assertEquals("b", p.getText());
+    }
+
+    // Covers _skipComment ALLOW_COMMENTS disabled error branch
+    @Test
+    public void testAllowComments_disabled_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("[1,/*c*/2]");
+        p.nextToken();
+        p.nextToken();
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _skipCComment enabled branch
+    @Test
+    public void testAllowComments_slashStarEnabled_skipsComment() throws Throwable {
+        factory.enable(JsonParser.Feature.ALLOW_COMMENTS);
+        JsonParser p = factory.createParser("[1,/*c*/2]");
+        p.nextToken();
+        p.nextToken();
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(2, p.getIntValue());
+    }
+
+    // Covers _skipLine ("//" comment) enabled branch
+    @Test
+    public void testAllowComments_slashSlashEnabled_skipsComment() throws Throwable {
+        factory.enable(JsonParser.Feature.ALLOW_COMMENTS);
+        JsonParser p = factory.createParser("[1,//comment\n2]");
+        p.nextToken();
+        p.nextToken();
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(2, p.getIntValue());
+    }
+
+    // Covers _skipYAMLComment enabled branch
+    @Test
+    public void testAllowYamlComments_enabled_skipsComment() throws Throwable {
+        factory.enable(JsonParser.Feature.ALLOW_YAML_COMMENTS);
+        JsonParser p = factory.createParser("[1,#comment\n2]");
+        p.nextToken();
+        p.nextToken();
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(2, p.getIntValue());
+    }
+
+    // Covers trailing comma disallowed default branch (error at closing bracket)
+    @Test
+    public void testAllowTrailingComma_disabled_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("[1,2,]");
+        p.nextToken();
+        p.nextToken();
+        p.nextToken();
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers ALLOW_TRAILING_COMMA enabled branch closing array after trailing comma
+    @Test
+    public void testAllowTrailingComma_enabled_closesArray() throws Throwable {
+        factory.enable(JsonParser.Feature.ALLOW_TRAILING_COMMA);
+        JsonParser p = factory.createParser("[1,2,]");
+        p.nextToken();
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(JsonToken.END_ARRAY, p.nextToken());
+    }
+
+    // Covers ALLOW_MISSING_VALUES enabled branch producing VALUE_NULL for missing array element
+    @Test
+    public void testAllowMissingValues_enabled_returnsNullForMissingElement() throws Throwable {
+        factory.enable(JsonParser.Feature.ALLOW_MISSING_VALUES);
+        JsonParser p = factory.createParser("[1,,2]");
+        p.nextToken();
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(1, p.getIntValue());
+        assertEquals(JsonToken.VALUE_NULL, p.nextToken());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(2, p.getIntValue());
+        assertEquals(JsonToken.END_ARRAY, p.nextToken());
+    }
+
+    // Covers ALLOW_NON_NUMERIC_NUMBERS disabled error branch for "NaN" token
+    @Test
+    public void testAllowNonNumericNumbers_disabled_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("NaN");
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers ALLOW_NON_NUMERIC_NUMBERS enabled branch resolving "NaN" to Double.NaN
+    @Test
+    public void testAllowNonNumericNumbers_NaNEnabled_returnsNaN() throws Throwable {
+        factory.enable(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS);
+        JsonParser p = factory.createParser("NaN");
+        assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+        assertTrue(Double.isNaN(p.getDoubleValue()));
+    }
+
+    // Covers _handleInvalidNumberStart "-Infinity" branch resolving to negative infinity
+    @Test
+    public void testAllowNonNumericNumbers_negativeInfinityEnabled_returnsNegativeInfinity() throws Throwable {
+        factory.enable(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS);
+        JsonParser p = factory.createParser("-Infinity");
+        assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+        assertEquals(Double.valueOf(Double.NEGATIVE_INFINITY), p.getDoubleValue(), 0.0);
+    }
+
+    // Covers getBinaryValue() full base64 decode branch
+    @Test
+    public void testGetBinaryValue_validBase64_decodesToExpectedBytes() throws Throwable {
+        JsonParser p = factory.createParser("\"aGVsbG8=\"");
+        assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+        byte[] data = p.getBinaryValue(Base64Variants.getDefaultVariant());
+        assertArrayEquals(new byte[] {104, 101, 108, 108, 111}, data);
+    }
+
+    // Covers getBinaryValue() wrong-token-type error branch
+    @Test
+    public void testGetBinaryValue_wrongTokenType_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("123");
+        p.nextToken();
+        try {
+            p.getBinaryValue(Base64Variants.getDefaultVariant());
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers readBinaryValue() incremental _readBinary decode branch
+    @Test
+    public void testReadBinaryValue_incrementalDecode_writesToOutputStream() throws Throwable {
+        JsonParser p = factory.createParser("\"aGVsbG8=\"");
+        p.nextToken();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        int count = p.readBinaryValue(Base64Variants.getDefaultVariant(), out);
+        assertEquals(5, count);
+        assertArrayEquals(new byte[] {104, 101, 108, 108, 111}, out.toByteArray());
+    }
+
+    // Covers _closeScope mismatched-end-marker error branch (array closed with '}')
+    @Test
+    public void testMismatchedEndMarker_arrayClosedWithBrace_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("[1}");
+        p.nextToken();
+        p.nextToken();
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _skipColon2 missing-colon error branch
+    @Test
+    public void testMissingColon_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("{\"a\" 1}");
+        p.nextToken();
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _finishString2 EOF-without-closing-quote error branch
+    @Test
+    public void testUnterminatedString_throwsExceptionOnGetText() throws Throwable {
+        JsonParser p = factory.createParser("\"abc");
+        assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+        try {
+            p.getText();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers _matchToken2 invalid-literal error branch
+    @Test
+    public void testInvalidTokenLiteral_throwsException() throws Throwable {
+        JsonParser p = factory.createParser("tru");
+        try {
+            p.nextToken();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // Covers nextFieldName() iteration through object fields including closing-scope null branch
+    @Test
+    public void testNextFieldName_iteratesObjectFieldsAndValues() throws Throwable {
+        JsonParser p = factory.createParser("{\"a\":1,\"b\":2}");
+        assertEquals(JsonToken.START_OBJECT, p.nextToken());
+        assertEquals("a", p.nextFieldName());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(1, p.getIntValue());
+        assertEquals("b", p.nextFieldName());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(2, p.getIntValue());
+        assertNull(p.nextFieldName());
+        assertEquals(JsonToken.END_OBJECT, p.getCurrentToken());
+    }
+
+    // Covers nextTextValue() string-match branch and non-string-returns-null branch
+    @Test
+    public void testNextTextValue_returnsStringOrNullBasedOnToken() throws Throwable {
+        JsonParser p = factory.createParser("[\"abc\",123]");
+        p.nextToken();
+        assertEquals("abc", p.nextTextValue());
+        assertNull(p.nextTextValue());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.getCurrentToken());
+    }
+
+    // Covers nextIntValue() match branch and default-value branch
+    @Test
+    public void testNextIntValue_returnsIntOrDefault() throws Throwable {
+        JsonParser p = factory.createParser("[42,\"x\"]");
+        p.nextToken();
+        assertEquals(42, p.nextIntValue(-1));
+        assertEquals(-1, p.nextIntValue(-1));
+    }
+
+    // Covers nextLongValue() match branch and default-value branch
+    @Test
+    public void testNextLongValue_returnsLongOrDefault() throws Throwable {
+        JsonParser p = factory.createParser("[123456789012,\"x\"]");
+        p.nextToken();
+        assertEquals(123456789012L, p.nextLongValue(-1L));
+        assertEquals(-1L, p.nextLongValue(-1L));
+    }
+
+    // Covers nextBooleanValue() true/false/null branches
+    @Test
+    public void testNextBooleanValue_returnsBooleanOrNull() throws Throwable {
+        JsonParser p = factory.createParser("[true,false,null]");
+        p.nextToken();
+        assertEquals(Boolean.TRUE, p.nextBooleanValue());
+        assertEquals(Boolean.FALSE, p.nextBooleanValue());
+        assertNull(p.nextBooleanValue());
+    }
+
+    // Covers nextToken() end-of-input branch (i<0) closing the parser and returning null
+    @Test
+    public void testEmptyInput_returnsNullToken() throws Throwable {
+        JsonParser p = factory.createParser("");
+        assertNull(p.nextToken());
+    }
+
+    // Covers getCurrentLocation() line-number tracking on first token
+    @Test
+    public void testGetCurrentLocation_afterFirstToken_hasLineOne() throws Throwable {
+        JsonParser p = factory.createParser("{\"a\":1}");
+        p.nextToken();
+        JsonLocation loc = p.getCurrentLocation();
+        assertEquals(1, loc.getLineNr());
+    }
+}

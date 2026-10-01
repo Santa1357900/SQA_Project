@@ -1,0 +1,18 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-8-xnq4wfl9/JxPath-8f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 12
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testLessThanOrEqual_bothNodeSets_boundaryMatch_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testLessThanOrEqual_leftNodeSet_boundaryMatch_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testLessThan_bothNodeSets_matchExists_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testLessThan_rightNodeSet_memberGreaterExists_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testLessThan_booleanConversion_trueLessFalseIsFalse
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testGreaterThan_leftNodeSet_matchExists_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testGreaterThan_rightNodeSet_bugCheck_memberLess_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testLessThanOrEqual_rightNodeSet_boundaryMatch_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testGreaterThan_bothNodeSets_matchExists_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testGreaterThanOrEqual_rightNodeSet_singleElementBoundary_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testGreaterThanOrEqual_rightNodeSet_boundaryMatch_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testLessThan_booleanConversion_falseLessTrueIsTrue
+[exit 0]

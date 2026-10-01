@@ -1,0 +1,354 @@
+package com.google.javascript.jscomp;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.Collection;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class MaybeReachingVariableUseClaudeTest {
+
+  private Compiler compiler;
+  private Node script;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.initOptions(options);
+  }
+
+  private Node parseFunction(String js) {
+    script = compiler.parseTestCode(js);
+    assertEquals(0, compiler.getErrorCount());
+    return script.getFirstChild();
+  }
+
+  private Node getStatement(Node block, int index) {
+    Node stmt = block.getFirstChild();
+    for (int i = 0; i < index; i++) {
+      stmt = stmt.getNext();
+    }
+    return stmt;
+  }
+
+  private MaybeReachingVariableUse analyze(Node function) {
+    Scope globalScope = Scope.createGlobalScope(script);
+    SyntacticScopeCreator scopeCreator = new SyntacticScopeCreator(compiler);
+    Scope functionScope = scopeCreator.createScope(function, globalScope);
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(compiler, false, true);
+    cfa.process(null, function);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    MaybeReachingVariableUse use = new MaybeReachingVariableUse(cfg, functionScope, compiler);
+    use.analyze();
+    return use;
+  }
+
+  // NAME case: straight-line def then use, no intervening redefinition.
+  @Test
+  public void testGetUses_straightLineAssignmentThenUse_returnsUseNode() throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node use1 = getStatement(body, 2);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(1, uses.size());
+    assertTrue(uses.contains(use1));
+  }
+
+  // Assignment branch: a redefinition kills the earlier definition's reaching use.
+  @Test
+  public void testGetUses_redefinitionBeforeUse_firstDefReturnsEmpty() throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;a=2;a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertTrue(uses.isEmpty());
+  }
+
+  // Assignment branch: the later definition reaches the final use.
+  @Test
+  public void testGetUses_redefinitionBeforeUse_secondDefReturnsUse() throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;a=2;a;}");
+    Node body = function.getLastChild();
+    Node def2 = getStatement(body, 2);
+    Node use1 = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def2);
+    assertEquals(1, uses.size());
+    assertTrue(uses.contains(use1));
+  }
+
+  // default-case traversal: NAME use nested inside a CALL argument.
+  @Test
+  public void testGetUses_useInsideCallArgument_returnsCallStatement() throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;print(a);}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node callStmt = getStatement(body, 2);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(1, uses.size());
+    assertTrue(uses.contains(callStmt));
+  }
+
+  // Compound assignment op: reads the prior definition's value (gen before kill).
+  @Test
+  public void testGetUses_compoundAssignmentReadsPriorDefinition_returnsCompoundStatement()
+      throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;a+=2;a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node compoundStmt = getStatement(body, 2);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(1, uses.size());
+    assertTrue(uses.contains(compoundStmt));
+  }
+
+  // Compound assignment op: also defines a new value used by the following statement.
+  @Test
+  public void testGetUses_compoundAssignmentDefinesValue_returnsFollowingUse() throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;a+=2;a;}");
+    Node body = function.getLastChild();
+    Node compoundStmt = getStatement(body, 2);
+    Node use1 = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", compoundStmt);
+    assertEquals(1, uses.size());
+    assertTrue(uses.contains(use1));
+  }
+
+  // IF case: outer def reaches past the if-merge when the branch may not execute.
+  @Test
+  public void testGetUses_ifConditionalDefinitionMergesWithOuterDefinition_outerDefReachesAfterIf()
+      throws Throwable {
+    Node function = parseFunction("function f(x){var a;a=1;if(x){a=2;}print(a);}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node afterIf = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertTrue(uses.contains(afterIf));
+  }
+
+  // IF case: inner def inside the then-block also reaches the merge point.
+  @Test
+  public void testGetUses_ifConditionalDefinitionMergesWithOuterDefinition_innerDefAlsoReachesAfterIf()
+      throws Throwable {
+    Node function = parseFunction("function f(x){var a;a=1;if(x){a=2;}print(a);}");
+    Node body = function.getLastChild();
+    Node ifStmt = getStatement(body, 2);
+    Node thenBlock = ifStmt.getLastChild();
+    Node def2 = thenBlock.getFirstChild();
+    Node afterIf = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def2);
+    assertEquals(1, uses.size());
+    assertTrue(uses.contains(afterIf));
+  }
+
+  // FOR-IN case: plain NAME lhs kills the loop variable unconditionally.
+  @Test
+  public void testGetUses_forInPlainNameLhs_killsLoopVariable() throws Throwable {
+    Node function = parseFunction("function f(){var a;var o;a=1;for(a in o){print(a);}}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 2);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertTrue(uses.isEmpty());
+  }
+
+  // FOR-IN case: var-declared lhs (lhs.isVar() branch) also kills the loop variable.
+  @Test
+  public void testGetUses_forInVarDeclaredLhs_killsLoopVariable() throws Throwable {
+    Node function = parseFunction("function f(){var o;var a;a=1;for(var a in o){print(a);}}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 2);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertTrue(uses.isEmpty());
+  }
+
+  // AND case: right operand treated as conditional, so both the operand use and the
+  // following statement's use remain reachable from the earlier definition.
+  @Test
+  public void testGetUses_andOperatorTreatsRightOperandAsConditional_bothPathsReachable()
+      throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;print(a)&&(a=2);a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node andStmt = getStatement(body, 2);
+    Node use2 = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(2, uses.size());
+    assertTrue(uses.contains(andStmt));
+    assertTrue(uses.contains(use2));
+  }
+
+  // OR case: same conditional semantics as AND for the right operand.
+  @Test
+  public void testGetUses_orOperatorTreatsRightOperandAsConditional_bothPathsReachable()
+      throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;print(a)||(a=2);a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node orStmt = getStatement(body, 2);
+    Node use2 = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(2, uses.size());
+    assertTrue(uses.contains(orStmt));
+    assertTrue(uses.contains(use2));
+  }
+
+  // HOOK case: both then/else branches treated as conditional.
+  @Test
+  public void testGetUses_hookTernaryTreatsBothBranchesAsConditional_bothPathsReachable()
+      throws Throwable {
+    Node function = parseFunction("function f(x){var a;a=1;(x?(a=2):a);a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node hookStmt = getStatement(body, 2);
+    Node use2 = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(2, uses.size());
+    assertTrue(uses.contains(hookStmt));
+    assertTrue(uses.contains(use2));
+  }
+
+  // WHILE case: condition expression reads the variable; fixed point includes loop and exit use.
+  @Test
+  public void testGetUses_whileLoopConditionUsesVariable_convergesToLoopAndExitUse()
+      throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;while(a){}a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node whileStmt = getStatement(body, 2);
+    Node use2 = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(2, uses.size());
+    assertTrue(uses.contains(whileStmt));
+    assertTrue(uses.contains(use2));
+  }
+
+  // DO case: condition expression reads the variable, same convergence as WHILE.
+  @Test
+  public void testGetUses_doWhileLoopConditionUsesVariable_convergesToLoopAndExitUse()
+      throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;do{}while(a);a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node doStmt = getStatement(body, 2);
+    Node use2 = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(2, uses.size());
+    assertTrue(uses.contains(doStmt));
+    assertTrue(uses.contains(use2));
+  }
+
+  // FOR (non-for-in) case: only the condition expression is examined, like WHILE.
+  @Test
+  public void testGetUses_plainForLoopConditionUsesVariable_behavesLikeWhile() throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;for(;a;){}a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node forStmt = getStatement(body, 2);
+    Node use2 = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(2, uses.size());
+    assertTrue(uses.contains(forStmt));
+    assertTrue(uses.contains(use2));
+  }
+
+  // VAR case with initializer: reads the rhs variable (gen) before killing the declared name.
+  @Test
+  public void testGetUses_varDeclarationWithInitializerReadsRhsVariable() throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;var b=a;b;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    Node varBStmt = getStatement(body, 2);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(1, uses.size());
+    assertTrue(uses.contains(varBStmt));
+  }
+
+  // VAR case with initializer: also defines a new variable usable by the following statement.
+  @Test
+  public void testGetUses_varDeclarationWithInitializerDefinesNewVariable() throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;var b=a;b;}");
+    Node body = function.getLastChild();
+    Node varBStmt = getStatement(body, 2);
+    Node useB = getStatement(body, 3);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("b", varBStmt);
+    assertEquals(1, uses.size());
+    assertTrue(uses.contains(useB));
+  }
+
+  // Escaped variable (captured by inner function) must be excluded from use tracking entirely.
+  @Test
+  public void testGetUses_escapedVariableViaInnerFunction_excludedFromUses() throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;function g(){a;}a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertTrue(uses.isEmpty());
+  }
+
+  // default case: assignment to a property (non-NAME lhs) does not kill the variable,
+  // and the rhs read still contributes a use.
+  @Test
+  public void testGetUses_assignmentToPropertyDoesNotKillUnrelatedVariable() throws Throwable {
+    Node function = parseFunction("function f(){var a;var obj;a=1;obj.prop=a;a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 2);
+    Node propAssignStmt = getStatement(body, 3);
+    Node use2 = getStatement(body, 4);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("a", def1);
+    assertEquals(2, uses.size());
+    assertTrue(uses.contains(propAssignStmt));
+    assertTrue(uses.contains(use2));
+  }
+
+  // Querying a variable name that doesn't resolve to any Var returns an empty collection.
+  @Test
+  public void testGetUses_unknownVariableName_returnsEmptyCollection() throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;a;}");
+    Node body = function.getLastChild();
+    Node def1 = getStatement(body, 1);
+    MaybeReachingVariableUse mru = analyze(function);
+    Collection<Node> uses = mru.getUses("doesNotExist", def1);
+    assertTrue(uses.isEmpty());
+  }
+
+  // getUses throws when defNode is not actually a node of the analyzed control flow graph.
+  @Test
+  public void testGetUses_defNodeNotInControlFlowGraph_throwsNullPointerException()
+      throws Throwable {
+    Node function = parseFunction("function f(){var a;a=1;a;}");
+    MaybeReachingVariableUse mru = analyze(function);
+    Node detached = IR.name("notInGraph");
+    try {
+      mru.getUses("a", detached);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+}

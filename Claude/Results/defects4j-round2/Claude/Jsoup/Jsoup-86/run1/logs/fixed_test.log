@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-86-4olj94yk/Jsoup-86f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - org.jsoup.nodes.CommentClaudeTest::testToString_doubleHyphenContentNotEscaped
+  - org.jsoup.nodes.CommentClaudeTest::testPrettyPrint_commentNotFirstChildOfBlock_adjacentTextPreserved
+  - org.jsoup.nodes.CommentClaudeTest::testToString_angleBracketsNotEscaped
+  - org.jsoup.nodes.CommentClaudeTest::testToString_emptyData_producesEmptyComment
+  - org.jsoup.nodes.CommentClaudeTest::testToString_basicComment_wrappedWithCommentMarkers
+[exit 0]

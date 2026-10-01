@@ -1,0 +1,191 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.Node;
+
+public class CheckGlobalThisClaudeTest {
+
+  private Compiler compiler;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+  }
+
+  private int countWarnings(String js) throws Throwable {
+    Node root = compiler.parseTestCode(js);
+    CheckGlobalThis pass = new CheckGlobalThis(compiler, CheckLevel.WARNING);
+    NodeTraversal.traverse(compiler, root, pass);
+    return compiler.getWarnings().length;
+  }
+
+  // covers: static field GLOBAL_THIS is defined and accessible
+  @Test
+  public void testGlobalThisField_isNotNull() throws Throwable {
+    assertNotNull(CheckGlobalThis.GLOBAL_THIS);
+  }
+
+  // covers: constructor with ERROR level does not throw
+  @Test
+  public void testConstructor_withErrorLevel_doesNotThrow() throws Throwable {
+    CheckGlobalThis pass = new CheckGlobalThis(compiler, CheckLevel.ERROR);
+    assertNotNull(pass);
+  }
+
+  // covers: this on lhs of assignment via property (this.foo = 1) -> reported
+  @Test
+  public void testShouldTraverse_thisAssignedToOwnProperty_reportsWarning() throws Throwable {
+    int count = countWarnings("this.foo = 1;");
+    assertEquals(1, count);
+  }
+
+  // covers: property access (method call) on global this -> must be reported per spec
+  @Test
+  public void testShouldTraverse_thisMethodCall_reportsWarning_bugCase() throws Throwable {
+    int count = countWarnings("this.foo();");
+    assertEquals(1, count);
+  }
+
+  // covers: bare property read on global this -> must be reported per spec
+  @Test
+  public void testShouldTraverse_barePropertyAccessOnThis_reportsWarning_bugCase() throws Throwable {
+    int count = countWarnings("this.x;");
+    assertEquals(1, count);
+  }
+
+  // covers: property read on rhs of unrelated assignment -> must be reported per spec
+  @Test
+  public void testShouldTraverse_thisPropertyReadOnRhs_reportsWarning_bugCase() throws Throwable {
+    int count = countWarnings("a.x = this.y;");
+    assertEquals(1, count);
+  }
+
+  // covers: bare this reference, not property access, not assignment -> not reported
+  @Test
+  public void testShouldTraverse_bareThisReference_noWarning() throws Throwable {
+    int count = countWarnings("this;");
+    assertEquals(0, count);
+  }
+
+  // covers: documented limitation - this assigned to a variable is not tracked
+  @Test
+  public void testShouldTraverse_thisAssignedToVariable_noWarning() throws Throwable {
+    int count = countWarnings("var a = this;");
+    assertEquals(0, count);
+  }
+
+  // covers: shouldTraverse prototype-method exemption (lhs ends with "prototype.x")
+  @Test
+  public void testShouldTraverse_prototypeMethodAssignment_noWarning() throws Throwable {
+    int count = countWarnings("Foo.prototype.bar = function() { this.x = 1; };");
+    assertEquals(0, count);
+  }
+
+  // covers: shouldTraverse prototype exemption (lhs last child equals "prototype")
+  @Test
+  public void testShouldTraverse_directPrototypeAssignment_noWarning() throws Throwable {
+    int count = countWarnings("Foo.prototype = function() { this.x = 1; };");
+    assertEquals(0, count);
+  }
+
+  // covers: non-prototype function assignment is traversed and this.x=1 flagged
+  @Test
+  public void testShouldTraverse_nonPrototypeFunctionAssignment_reportsWarning() throws Throwable {
+    int count = countWarnings("a.b = function() { this.x = 1; };");
+    assertEquals(1, count);
+  }
+
+  // covers: nested assignment, assignLhsChild must not be overridden by inner assign
+  @Test
+  public void testShouldTraverse_nestedAssignLhsNotOverridden_reportsWarning() throws Throwable {
+    int count = countWarnings("(a = this).b = c;");
+    assertEquals(1, count);
+  }
+
+  // covers: FUNCTION with @constructor jsdoc directly attached -> traversal skipped
+  @Test
+  public void testShouldTraverse_constructorAnnotatedFunction_noWarning() throws Throwable {
+    int count = countWarnings("/** @constructor */ function Foo() { this.x = 1; }");
+    assertEquals(0, count);
+  }
+
+  // covers: FUNCTION with @this jsdoc directly attached -> traversal skipped
+  @Test
+  public void testShouldTraverse_thisAnnotatedFunction_noWarning() throws Throwable {
+    int count = countWarnings("/** @this {Object} */ function foo() { this.y = 2; }");
+    assertEquals(0, count);
+  }
+
+  // covers: getFunctionJsDocInfo - jsdoc found on parent ASSIGN node
+  @Test
+  public void testShouldTraverse_constructorAnnotationOnAssign_noWarning() throws Throwable {
+    int count = countWarnings("/** @constructor */ a.Foo = function() { this.x = 1; };");
+    assertEquals(0, count);
+  }
+
+  // covers: getFunctionJsDocInfo - jsdoc found on grandparent VAR node
+  @Test
+  public void testShouldTraverse_constructorAnnotationOnVar_noWarning() throws Throwable {
+    int count = countWarnings("/** @constructor */ var Foo = function() { this.x = 1; };");
+    assertEquals(0, count);
+  }
+
+  // covers: var-assigned function without jsdoc is traversed normally
+  @Test
+  public void testShouldTraverse_varAssignedFunctionNoJsDoc_reportsWarning() throws Throwable {
+    int count = countWarnings("var Foo = function() { this.x = 1; };");
+    assertEquals(1, count);
+  }
+
+  // covers: plain function declaration without jsdoc is traversed normally
+  @Test
+  public void testShouldTraverse_plainFunctionDeclarationNoJsDoc_reportsWarning() throws Throwable {
+    int count = countWarnings("function foo() { this.x = 1; }");
+    assertEquals(1, count);
+  }
+
+  // covers: nested GETPROP chain as lhs of assignment still sets assignLhsChild
+  @Test
+  public void testShouldTraverse_nestedGetPropLhs_reportsWarning() throws Throwable {
+    int count = countWarnings("this.a.b = 1;");
+    assertEquals(1, count);
+  }
+
+  // covers: rhs skipped when lhs qualified name contains ".prototype."
+  @Test
+  public void testShouldTraverse_prototypeDotPatternRhsSkipped_noWarning() throws Throwable {
+    int count = countWarnings("Foo.prototype.bar = this;");
+    assertEquals(0, count);
+  }
+
+  // covers: rhs skipped when lhs last child string equals "prototype"
+  @Test
+  public void testShouldTraverse_directPrototypeRhsSkipped_noWarning() throws Throwable {
+    int count = countWarnings("Foo.prototype = this;");
+    assertEquals(0, count);
+  }
+
+  // covers: multiple independent statements - assignLhsChild reset across iterations
+  @Test
+  public void testShouldTraverse_multipleStatements_reportsTwoWarnings() throws Throwable {
+    int count = countWarnings("this.a = 1; this.b = 2;");
+    assertEquals(2, count);
+  }
+
+  // covers: this assigned to variable inside a traversed function body -> not reported
+  @Test
+  public void testShouldTraverse_thisAssignedToVariableInsideFunction_noWarning() throws Throwable {
+    int count = countWarnings("function foo() { var a = this; }");
+    assertEquals(0, count);
+  }
+
+  // covers: empty script - zero iterations of traversal, no warnings
+  @Test
+  public void testShouldTraverse_emptyScript_noWarnings() throws Throwable {
+    int count = countWarnings("");
+    assertEquals(0, count);
+  }
+}

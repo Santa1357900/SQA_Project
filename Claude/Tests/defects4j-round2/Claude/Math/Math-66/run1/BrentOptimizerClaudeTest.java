@@ -1,0 +1,329 @@
+package org.apache.commons.math.optimization.univariate;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.FunctionEvaluationException;
+import org.apache.commons.math.MaxIterationsExceededException;
+import org.apache.commons.math.exception.NotStrictlyPositiveException;
+import org.apache.commons.math.analysis.UnivariateRealFunction;
+import org.apache.commons.math.optimization.GoalType;
+
+public class BrentOptimizerClaudeTest {
+
+    private BrentOptimizer optimizer;
+
+    private static final double GOLDEN_SECTION_TEST = 0.5 * (3 - Math.sqrt(5));
+
+    @Before
+    public void setUp() throws Throwable {
+        optimizer = new BrentOptimizer();
+    }
+
+    private UnivariateRealFunction quadratic(final double center) {
+        return new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return (x - center) * (x - center);
+            }
+        };
+    }
+
+    private UnivariateRealFunction negQuadratic(final double center) {
+        return new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return -(x - center) * (x - center);
+            }
+        };
+    }
+
+    private UnivariateRealFunction quartic(final double center) {
+        return new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                double d = x - center;
+                return d * d * d * d;
+            }
+        };
+    }
+
+    private UnivariateRealFunction negQuartic(final double center) {
+        return new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                double d = x - center;
+                return -(d * d * d * d);
+            }
+        };
+    }
+
+    private UnivariateRealFunction absValue(final double center) {
+        return new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return Math.abs(x - center);
+            }
+        };
+    }
+
+    // Constructor sets default absolute accuracy to 1E-10
+    @Test
+    public void testConstructor_default_absoluteAccuracyIs1Em10() throws Throwable {
+        assertEquals(1E-10, optimizer.getAbsoluteAccuracy(), 1e-20);
+    }
+
+    // Constructor sets default relative accuracy to 1.0e-14
+    @Test
+    public void testConstructor_default_relativeAccuracyIs1Em14() throws Throwable {
+        assertEquals(1.0e-14, optimizer.getRelativeAccuracy(), 1e-24);
+    }
+
+    // Main branch: minimize a simple quadratic, converges to true minimum
+    @Test
+    public void testOptimize_minimizeQuadratic_findsMinimum() throws Throwable {
+        double x = optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, -10.0, 10.0);
+        assertEquals(2.0, x, 1e-5);
+    }
+
+    // goalType == MAXIMIZE branch: negation of fx/fu applied, converges to true maximum
+    @Test
+    public void testOptimize_maximizeQuadratic_findsMaximum() throws Throwable {
+        double x = optimizer.optimize(negQuadratic(2.0), GoalType.MAXIMIZE, -10.0, 10.0);
+        assertEquals(2.0, x, 1e-5);
+    }
+
+    // Minimize a transcendental (sine) function with known extremum location
+    @Test
+    public void testOptimize_minimizeSine_findsMinimum() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return Math.sin(x);
+            }
+        };
+        double x = optimizer.optimize(f, GoalType.MINIMIZE, 0.0, 2 * Math.PI);
+        assertEquals(1.5 * Math.PI, x, 1e-4);
+    }
+
+    // Maximize a transcendental (sine) function with known extremum location
+    @Test
+    public void testOptimize_maximizeSine_findsMaximum() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return Math.sin(x);
+            }
+        };
+        double x = optimizer.optimize(f, GoalType.MAXIMIZE, 0.0, 2 * Math.PI);
+        assertEquals(0.5 * Math.PI, x, 1e-4);
+    }
+
+    // Minimize cosine, exercises parabolic/golden-section interpolation differently from sine
+    @Test
+    public void testOptimize_minimizeCosine_findsMinimum() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return Math.cos(x);
+            }
+        };
+        double x = optimizer.optimize(f, GoalType.MINIMIZE, 0.0, 2 * Math.PI);
+        assertEquals(Math.PI, x, 1e-4);
+    }
+
+    // 4-arg overload must delegate to 5-arg with startValue = min + GOLDEN_SECTION*(max-min)
+    @Test
+    public void testOptimizeFourArg_defaultStartValue_matchesExplicitGoldenStart() throws Throwable {
+        double min = -10.0, max = 10.0;
+        double start = min + GOLDEN_SECTION_TEST * (max - min);
+        double r1 = optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, min, max);
+        BrentOptimizer other = new BrentOptimizer();
+        double r2 = other.optimize(quadratic(2.0), GoalType.MINIMIZE, min, max, start);
+        assertEquals(r2, r1, 1e-9);
+    }
+
+    // Boundary condition: startValue equals the lower bound
+    @Test
+    public void testOptimize_startValueAtLowerBound_convergesToMinimum() throws Throwable {
+        double x = optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, 0.0, 5.0, 0.0);
+        assertEquals(2.0, x, 1e-4);
+    }
+
+    // Boundary condition: startValue equals the upper bound
+    @Test
+    public void testOptimize_startValueAtUpperBound_convergesToMinimum() throws Throwable {
+        double x = optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, 0.0, 5.0, 5.0);
+        assertEquals(2.0, x, 1e-4);
+    }
+
+    // Result must lie within the supplied [min, max] bounds, asymmetric interval
+    @Test
+    public void testOptimize_resultWithinBounds_asymmetricInterval() throws Throwable {
+        double x = optimizer.optimize(quadratic(5.0), GoalType.MINIMIZE, 0.0, 20.0);
+        assertTrue(x >= 0.0 && x <= 20.0);
+        assertEquals(5.0, x, 1e-4);
+    }
+
+    // Entirely negative domain interval
+    @Test
+    public void testOptimize_negativeDomainInterval_findsMinimum() throws Throwable {
+        double x = optimizer.optimize(quadratic(-5.0), GoalType.MINIMIZE, -10.0, -1.0);
+        assertEquals(-5.0, x, 1e-4);
+    }
+
+    // localMin validation branch: eps<=0 via zero absolute accuracy
+    @Test
+    public void testLocalMin_zeroAbsoluteAccuracy_throwsNotStrictlyPositiveException() throws Throwable {
+        optimizer.setAbsoluteAccuracy(0.0);
+        try {
+            optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, 0.0, 5.0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+            // expected
+        }
+    }
+
+    // localMin validation branch: t<=0 via negative absolute accuracy
+    @Test
+    public void testLocalMin_negativeAbsoluteAccuracy_throwsNotStrictlyPositiveException() throws Throwable {
+        optimizer.setAbsoluteAccuracy(-1.0e-5);
+        try {
+            optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, 0.0, 5.0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+            // expected
+        }
+    }
+
+    // localMin validation branch: eps<=0 via zero relative accuracy
+    @Test
+    public void testLocalMin_zeroRelativeAccuracy_throwsNotStrictlyPositiveException() throws Throwable {
+        optimizer.setRelativeAccuracy(0.0);
+        try {
+            optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, 0.0, 5.0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+            // expected
+        }
+    }
+
+    // localMin validation branch: eps<=0 via negative relative accuracy
+    @Test
+    public void testLocalMin_negativeRelativeAccuracy_throwsNotStrictlyPositiveException() throws Throwable {
+        optimizer.setRelativeAccuracy(-1.0e-10);
+        try {
+            optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, 0.0, 5.0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+            // expected
+        }
+    }
+
+    // Loop-exhaustion branch: too few iterations allowed for a wide interval
+    @Test
+    public void testOptimize_lowMaxIterationCount_throwsMaxIterationsExceededException() throws Throwable {
+        optimizer.setMaximalIterationCount(1);
+        try {
+            optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, -1000000.0, 1000000.0);
+            fail("expected MaxIterationsExceededException");
+        } catch (MaxIterationsExceededException expected) {
+            // expected
+        }
+    }
+
+    // FunctionEvaluationException thrown by the user function must propagate
+    @Test
+    public void testOptimize_functionThrows_propagatesFunctionEvaluationException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                throw new FunctionEvaluationException(x);
+            }
+        };
+        try {
+            optimizer.optimize(f, GoalType.MINIMIZE, 0.0, 1.0);
+            fail("expected FunctionEvaluationException");
+        } catch (FunctionEvaluationException expected) {
+            // expected
+        }
+    }
+
+    // setMaxEvaluations setter does not break a normal convergent optimization
+    @Test
+    public void testSetMaxEvaluations_doesNotAffectNormalConvergence() throws Throwable {
+        optimizer.setMaxEvaluations(100000);
+        double x = optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, -10.0, 10.0);
+        assertEquals(2.0, x, 1e-5);
+    }
+
+    // Each optimize() call must respect its own goalType parameter independently (MIN then MAX)
+    @Test
+    public void testOptimize_sequentialMinimizeThenMaximize_respectsEachGoalType() throws Throwable {
+        double xMin = optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, -10.0, 10.0);
+        double xMax = optimizer.optimize(negQuadratic(3.0), GoalType.MAXIMIZE, -10.0, 10.0);
+        assertEquals(2.0, xMin, 1e-5);
+        assertEquals(3.0, xMax, 1e-5);
+    }
+
+    // Each optimize() call must respect its own goalType parameter independently (MAX then MIN)
+    @Test
+    public void testOptimize_sequentialMaximizeThenMinimize_respectsEachGoalType() throws Throwable {
+        double xMax = optimizer.optimize(negQuadratic(-1.0), GoalType.MAXIMIZE, -10.0, 10.0);
+        double xMin = optimizer.optimize(quadratic(4.0), GoalType.MINIMIZE, -10.0, 10.0);
+        assertEquals(-1.0, xMax, 1e-5);
+        assertEquals(4.0, xMin, 1e-5);
+    }
+
+    // getAbsoluteAccuracy reflects value previously set via setAbsoluteAccuracy
+    @Test
+    public void testGetSetAbsoluteAccuracy_reflectsSetterValue() throws Throwable {
+        optimizer.setAbsoluteAccuracy(1.0e-6);
+        assertEquals(1.0e-6, optimizer.getAbsoluteAccuracy(), 1e-18);
+    }
+
+    // getRelativeAccuracy reflects value previously set via setRelativeAccuracy
+    @Test
+    public void testGetSetRelativeAccuracy_reflectsSetterValue() throws Throwable {
+        optimizer.setRelativeAccuracy(1.0e-8);
+        assertEquals(1.0e-8, optimizer.getRelativeAccuracy(), 1e-20);
+    }
+
+    // Narrow interval already close to the minimum, exercises small-bracket convergence
+    @Test
+    public void testOptimize_narrowIntervalAroundMinimum_converges() throws Throwable {
+        double x = optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, 1.9999, 2.0001, 2.0);
+        assertTrue(x >= 1.9999 && x <= 2.0001);
+        assertEquals(2.0, x, 1e-3);
+    }
+
+    // Flat (quartic) minimum: stopping criterion is geometric on x, not on f, so still converges
+    @Test
+    public void testOptimize_quarticFlatMinimum_converges() throws Throwable {
+        double x = optimizer.optimize(quartic(1.0), GoalType.MINIMIZE, -5.0, 5.0);
+        assertEquals(1.0, x, 1e-3);
+    }
+
+    // Flat (quartic) maximum under GoalType.MAXIMIZE
+    @Test
+    public void testOptimize_quarticFlatMaximum_converges() throws Throwable {
+        double x = optimizer.optimize(negQuartic(1.0), GoalType.MAXIMIZE, -5.0, 5.0);
+        assertEquals(1.0, x, 1e-3);
+    }
+
+    // Non-smooth (kink) unimodal function still converges via golden-section fallback
+    @Test
+    public void testOptimize_absoluteValueFunction_findsMinimum() throws Throwable {
+        double x = optimizer.optimize(absValue(3.0), GoalType.MINIMIZE, 0.0, 6.0);
+        assertEquals(3.0, x, 1e-3);
+    }
+
+    // Looser accuracy settings still converge to within a correspondingly looser tolerance
+    @Test
+    public void testOptimize_looserAccuracy_stillWithinLooserTolerance() throws Throwable {
+        optimizer.setAbsoluteAccuracy(1.0e-3);
+        optimizer.setRelativeAccuracy(1.0e-3);
+        double x = optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, -10.0, 10.0);
+        assertEquals(2.0, x, 1.0e-2);
+    }
+
+    // Explicit sufficient maximalIterationCount still converges normally
+    @Test
+    public void testSetMaximalIterationCount_sufficientCount_convergesSuccessfully() throws Throwable {
+        optimizer.setMaximalIterationCount(50);
+        double x = optimizer.optimize(quadratic(2.0), GoalType.MINIMIZE, -10.0, 10.0);
+        assertEquals(2.0, x, 1e-5);
+    }
+}

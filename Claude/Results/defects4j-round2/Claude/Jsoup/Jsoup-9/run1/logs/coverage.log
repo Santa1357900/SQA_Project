@@ -1,0 +1,54 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Jsoup-9-jk8yrz73/Jsoup-9b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... FAIL
+Executed command:  cd /tmp/claude-Jsoup-9-jk8yrz73/buggy && /home/pheerapat/defects4j/major/bin/ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-Jsoup-9-jk8yrz73/buggy  coverage.instrument 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+test-offline:
+
+get-deps:
+
+jsoup-from-maven.compile:
+    [javac] /tmp/claude-Jsoup-9-jk8yrz73/buggy/maven-build.xml:74: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+
+compile:
+
+check.classes.uptodate:
+
+reset.cobertura.ser:
+
+coverage.instrument:
+[cobertura-instrument] Cobertura 2.0.3 - GNU GPL License (NO WARRANTY) - See COPYRIGHT file
+[cobertura-instrument] Exception in thread "main" java.lang.RuntimeException: Warning detected and failOnError is true
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.CoberturaInstrumenter.instrumentClass(CoberturaInstrumenter.java:126)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.CoberturaInstrumenter.addInstrumentationToSingleClass(CoberturaInstrumenter.java:234)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.Main.addInstrumentationToSingleClass(Main.java:298)WARN   instrumentClass, Unable to instrument file /tmp/claude-Jsoup-9-jk8yrz73/buggy/target/classes/org/jsoup/nodes/Entities.class
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.Main.addInstrumentation(Main.java:307)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.Main.parseArguments(Main.java:399)
+[cobertura-instrument] 
+[cobertura-instrument] java.lang.RuntimeException: Method code too large!	at net.sourceforge.cobertura.instrument.Main.main(Main.java:421)
+[cobertura-instrument] 	at org.objectweb.asm.MethodWriter.a(Unknown Source)
+[cobertura-instrument] 
+[cobertura-instrument] Caused by: java.lang.RuntimeException: Method code too large!
+[cobertura-instrument] 	at org.objectweb.asm.MethodWriter.a(Unknown Source)
+[cobertura-instrument] 	at org.objectweb.asm.ClassWriter.toByteArray(Unknown Source)	at org.objectweb.asm.ClassWriter.toByteArray(Unknown Source)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.CoberturaInstrumenter.instrumentClass(CoberturaInstrumenter.java:208)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.CoberturaInstrumenter.instrumentClass(CoberturaInstrumenter.java:208)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.CoberturaInstrumenter.instrumentClass(CoberturaInstrumenter.java:121)
+[cobertura-instrument] 	... 5 more
+[cobertura-instrument] 
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.CoberturaInstrumenter.instrumentClass(CoberturaInstrumenter.java:121)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.CoberturaInstrumenter.addInstrumentationToSingleClass(CoberturaInstrumenter.java:234)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.Main.addInstrumentationToSingleClass(Main.java:298)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.Main.addInstrumentation(Main.java:307)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.Main.parseArguments(Main.java:399)
+[cobertura-instrument] 	at net.sourceforge.cobertura.instrument.Main.main(Main.java:421)
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:340: Error instrumenting classes. See messages above.
+
+Total time: 1 second
+Couldn't obtain coverage results! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-coverage line 153.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

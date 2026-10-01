@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Chart-18-3i1iv5sz/Chart-18f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.jfree.data.DefaultKeyedValuesClaudeTest::testRemoveValueComparable_unknownKey_doesNothing
+[exit 0]

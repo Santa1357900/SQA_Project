@@ -1,0 +1,324 @@
+package org.apache.commons.lang3.math;
+
+import java.math.BigInteger;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class NumberUtilsClaudeTest {
+
+    // ตรวจ public constructor สามารถสร้างอินสแตนซ์ได้
+    @Test
+    public void testConstructor_createsInstance() throws Throwable {
+        NumberUtils nu = new NumberUtils();
+        assertNotNull(nu);
+    }
+
+    // toInt(String): str==null -> คืน 0
+    @Test
+    public void testToInt_null_returnsZero() throws Throwable {
+        assertEquals(0, NumberUtils.toInt(null));
+    }
+
+    // toInt(String): parse ล้มเหลว -> catch NumberFormatException คืน 0
+    @Test
+    public void testToInt_invalidString_returnsZero() throws Throwable {
+        assertEquals(0, NumberUtils.toInt("abc"));
+    }
+
+    // toInt(String,int): parse สำเร็จ -> คืนค่าที่ parse ได้ ไม่ใช่ default
+    @Test
+    public void testToIntWithDefault_validString_returnsParsedValue() throws Throwable {
+        assertEquals(42, NumberUtils.toInt("42", 0));
+    }
+
+    // toLong(String): str==null -> คืน 0L
+    @Test
+    public void testToLong_null_returnsZero() throws Throwable {
+        assertEquals(0L, NumberUtils.toLong(null));
+    }
+
+    // toLong(String,long): parse ล้มเหลว -> คืน defaultValue
+    @Test
+    public void testToLongWithDefault_invalidString_returnsDefault() throws Throwable {
+        assertEquals(99L, NumberUtils.toLong("abc", 99L));
+    }
+
+    // toFloat(String): str==null -> คืน 0.0f
+    @Test
+    public void testToFloat_null_returnsZero() throws Throwable {
+        assertEquals(0.0f, NumberUtils.toFloat(null), 1e-6f);
+    }
+
+    // toFloat(String,float): parse ล้มเหลว -> คืน defaultValue
+    @Test
+    public void testToFloatWithDefault_invalidString_returnsDefault() throws Throwable {
+        assertEquals(2.5f, NumberUtils.toFloat("xyz", 2.5f), 1e-6f);
+    }
+
+    // toDouble(String): str==null -> คืน 0.0d
+    @Test
+    public void testToDouble_null_returnsZero() throws Throwable {
+        assertEquals(0.0d, NumberUtils.toDouble(null), 1e-9);
+    }
+
+    // toDouble(String,double): parse สำเร็จ -> คืนค่าที่ parse ได้
+    @Test
+    public void testToDoubleWithDefault_validString_returnsParsedValue() throws Throwable {
+        assertEquals(3.14d, NumberUtils.toDouble("3.14", 0.0d), 1e-9);
+    }
+
+    // toByte(String): str==null -> คืน 0
+    @Test
+    public void testToByte_null_returnsZero() throws Throwable {
+        assertEquals(0, NumberUtils.toByte(null));
+    }
+
+    // toShort(String): str==null -> คืน 0
+    @Test
+    public void testToShort_null_returnsZero() throws Throwable {
+        assertEquals(0, NumberUtils.toShort(null));
+    }
+
+    // createNumber(null) -> ตาม javadoc คืน null
+    @Test
+    public void testCreateNumber_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createNumber(null));
+    }
+
+    // createNumber(" "): blank string -> throw NumberFormatException
+    @Test
+    public void testCreateNumber_blankSpace_throwsNumberFormatException() throws Throwable {
+        try {
+            NumberUtils.createNumber(" ");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+            assertTrue(expected.getMessage().contains("blank"));
+        }
+    }
+
+    // createNumber("--1"): protection branch -> คืน null
+    @Test
+    public void testCreateNumber_doubleDash_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createNumber("--1"));
+    }
+
+    // createNumber("0x1A"): prefix 0x lowercase -> hex Integer
+    @Test
+    public void testCreateNumber_lowercaseHexPrefix_returnsInteger() throws Throwable {
+        Number result = NumberUtils.createNumber("0x1A");
+        assertTrue(result instanceof Integer);
+        assertEquals(26, result.intValue());
+    }
+
+    // บั๊ก: Javadoc ระบุว่า 0x หรือ -0x ทั้งพิมพ์เล็ก/ใหญ่ต้องตีความเป็น hex
+    // แต่โค้ดเช็คเฉพาะพิมพ์เล็ก ทำให้ "0XAB" หลุดไป switch สุดท้ายแล้ว throw แทนที่จะคืน Integer 171
+    @Test
+    public void testCreateNumber_uppercaseHexPrefix_parsedAsHexInteger() throws Throwable {
+        Number result = NumberUtils.createNumber("0XAB");
+        assertTrue(result instanceof Integer);
+        assertEquals(171, result.intValue());
+    }
+
+    // createNumber("123"): ไม่มี dec/exp -> createInteger สำเร็จ -> Integer
+    @Test
+    public void testCreateNumber_plainInteger_returnsInteger() throws Throwable {
+        Number result = NumberUtils.createNumber("123");
+        assertTrue(result instanceof Integer);
+        assertEquals(123, result.intValue());
+    }
+
+    // createNumber("123L"): suffix L, ตัวเลขล้วน -> createLong -> Long
+    @Test
+    public void testCreateNumber_longSuffix_returnsLong() throws Throwable {
+        Number result = NumberUtils.createNumber("123L");
+        assertTrue(result instanceof Long);
+        assertEquals(123L, result.longValue());
+    }
+
+    // createNumber("1.5f"): suffix f -> Float
+    @Test
+    public void testCreateNumber_floatSuffix_returnsFloat() throws Throwable {
+        Number result = NumberUtils.createNumber("1.5f");
+        assertTrue(result instanceof Float);
+        assertEquals(1.5f, result.floatValue(), 1e-6f);
+    }
+
+    // createNumber("1.5d"): suffix d -> Double
+    @Test
+    public void testCreateNumber_doubleSuffix_returnsDouble() throws Throwable {
+        Number result = NumberUtils.createNumber("1.5d");
+        assertTrue(result instanceof Double);
+        assertEquals(1.5d, result.doubleValue(), 1e-9);
+    }
+
+    // createNumber("1.5"): ไม่มี suffix, มีจุดทศนิยม -> ลอง Float ก่อน
+    @Test
+    public void testCreateNumber_decimalNoSuffix_returnsFloat() throws Throwable {
+        Number result = NumberUtils.createNumber("1.5");
+        assertTrue(result instanceof Float);
+        assertEquals(1.5f, result.floatValue(), 1e-6f);
+    }
+
+    // createNumber("123X"): suffix ไม่รู้จัก -> default case -> throw
+    @Test
+    public void testCreateNumber_invalidSuffix_throwsNumberFormatException() throws Throwable {
+        try {
+            NumberUtils.createNumber("123X");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+            assertTrue(expected.getMessage().contains("not a valid number"));
+        }
+    }
+
+    // createNumber(เลขใหญ่เกิน Long): fallback ไปจนถึง BigInteger
+    @Test
+    public void testCreateNumber_veryLargeInteger_returnsBigInteger() throws Throwable {
+        String big = "123456789012345678901234567890";
+        Number result = NumberUtils.createNumber(big);
+        assertTrue(result instanceof BigInteger);
+        assertEquals(new BigInteger(big), result);
+    }
+
+    // createFloat(null) -> คืน null
+    @Test
+    public void testCreateFloat_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createFloat(null));
+    }
+
+    // createFloat("2.5") -> Float ค่า 2.5
+    @Test
+    public void testCreateFloat_validString_returnsFloatValue() throws Throwable {
+        Float result = NumberUtils.createFloat("2.5");
+        assertEquals(2.5f, result.floatValue(), 1e-6f);
+    }
+
+    // createDouble(null) -> คืน null
+    @Test
+    public void testCreateDouble_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createDouble(null));
+    }
+
+    // createInteger(null) -> คืน null
+    @Test
+    public void testCreateInteger_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createInteger(null));
+    }
+
+    // createInteger("0x10") -> ใช้ Integer.decode รองรับ hex -> 16
+    @Test
+    public void testCreateInteger_hexString_returnsDecodedValue() throws Throwable {
+        Integer result = NumberUtils.createInteger("0x10");
+        assertEquals(16, result.intValue());
+    }
+
+    // createLong(null) -> คืน null
+    @Test
+    public void testCreateLong_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createLong(null));
+    }
+
+    // createBigInteger(null) -> คืน null
+    @Test
+    public void testCreateBigInteger_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createBigInteger(null));
+    }
+
+    // createBigDecimal(" "): blank -> throw NumberFormatException
+    @Test
+    public void testCreateBigDecimal_blankSpace_throwsNumberFormatException() throws Throwable {
+        try {
+            NumberUtils.createBigDecimal(" ");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+            assertTrue(expected.getMessage().contains("blank"));
+        }
+    }
+
+    // min(long[]): array==null -> throw IllegalArgumentException
+    @Test
+    public void testMinLongArray_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            NumberUtils.min((long[]) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // min(long[]): array ว่าง -> throw IllegalArgumentException
+    @Test
+    public void testMinLongArray_empty_throwsIllegalArgumentException() throws Throwable {
+        try {
+            NumberUtils.min(new long[0]);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // min(long[]): หลายค่า -> คืนค่าน้อยที่สุด
+    @Test
+    public void testMinLongArray_multipleValues_returnsMinimum() throws Throwable {
+        assertEquals(-3L, NumberUtils.min(new long[] {5L, -3L, 10L}));
+    }
+
+    // max(int[]): หลายค่า -> คืนค่ามากที่สุด
+    @Test
+    public void testMaxIntArray_multipleValues_returnsMaximum() throws Throwable {
+        assertEquals(10, NumberUtils.max(new int[] {5, -3, 10}));
+    }
+
+    // min(double[]): มี NaN -> คืน NaN ทันที
+    @Test
+    public void testMinDoubleArray_containingNaN_returnsNaN() throws Throwable {
+        double result = NumberUtils.min(new double[] {1.0d, Double.NaN, 2.0d});
+        assertTrue(Double.isNaN(result));
+    }
+
+    // max(float[]): มี NaN -> คืน NaN ทันที
+    @Test
+    public void testMaxFloatArray_containingNaN_returnsNaN() throws Throwable {
+        float result = NumberUtils.max(new float[] {1.0f, Float.NaN});
+        assertTrue(Float.isNaN(result));
+    }
+
+    // min(long,long,long): หาค่าน้อยที่สุดในสามค่า
+    @Test
+    public void testMinLongThreeParams_returnsSmallest() throws Throwable {
+        assertEquals(3L, NumberUtils.min(5L, 3L, 9L));
+    }
+
+    // max(int,int,int): หาค่ามากที่สุดในสามค่า
+    @Test
+    public void testMaxIntThreeParams_returnsLargest() throws Throwable {
+        assertEquals(9, NumberUtils.max(5, 3, 9));
+    }
+
+    // min(double,double,double): มี NaN -> Math.min กระจาย NaN ออกมา
+    @Test
+    public void testMinDoubleThreeParams_withNaN_returnsNaN() throws Throwable {
+        double result = NumberUtils.min(1.0d, Double.NaN, 2.0d);
+        assertTrue(Double.isNaN(result));
+    }
+
+    // isDigits: null และ "" ต้องคืน false
+    @Test
+    public void testIsDigits_nullOrEmpty_returnsFalse() throws Throwable {
+        assertFalse(NumberUtils.isDigits(null));
+        assertFalse(NumberUtils.isDigits(""));
+    }
+
+    // isDigits: ตัวเลขล้วน -> true
+    @Test
+    public void testIsDigits_validDigits_returnsTrue() throws Throwable {
+        assertTrue(NumberUtils.isDigits("12345"));
+    }
+
+    // isNumber("0x1A"): hex branch คืน true ทันที
+    @Test
+    public void testIsNumber_hexPrefix_returnsTrue() throws Throwable {
+        assertTrue(NumberUtils.isNumber("0x1A"));
+    }
+
+    // isNumber("3."): จุดทศนิยมท้ายสุดหลังไม่มี exponent ถือว่าถูกต้อง
+    @Test
+    public void testIsNumber_trailingDecimalPoint_returnsTrue() throws Throwable {
+        assertTrue(NumberUtils.isNumber("3."));
+    }
+}

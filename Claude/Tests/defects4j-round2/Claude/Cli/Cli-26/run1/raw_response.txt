@@ -1,0 +1,345 @@
+package org.apache.commons.cli;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class OptionBuilderClaudeTest
+{
+    // Reset OptionBuilder's static state before each test using a benign successful create() call,
+    // since create(String) always calls the private reset() at the end of a successful build.
+    @Before
+    public void setUp() throws Throwable
+    {
+        OptionBuilder.create("z");
+    }
+
+    // Covers withLongOpt(String) setting the longopt field, verified through created Option
+    @Test
+    public void testWithLongOpt_setsLongOpt_reflectedInCreatedOption() throws Throwable
+    {
+        Option opt = OptionBuilder.withLongOpt("file").create('f');
+        assertEquals("file", opt.getLongOpt());
+    }
+
+    // Covers hasArg() setting numberOfArgs to 1
+    @Test
+    public void testHasArg_setsArgsToOneAndHasArgTrue() throws Throwable
+    {
+        Option opt = OptionBuilder.hasArg().create('a');
+        assertTrue(opt.hasArg());
+        assertEquals(1, opt.getArgs());
+    }
+
+    // Covers hasArg(boolean) true branch
+    @Test
+    public void testHasArgBoolean_true_setsArgsToOne() throws Throwable
+    {
+        Option opt = OptionBuilder.hasArg(true).create('b');
+        assertEquals(1, opt.getArgs());
+        assertTrue(opt.hasArg());
+    }
+
+    // Covers hasArg(boolean) false branch (numberOfArgs = Option.UNINITIALIZED)
+    @Test
+    public void testHasArgBoolean_false_setsArgsToUninitialized() throws Throwable
+    {
+        Option opt = OptionBuilder.hasArg(false).create('c');
+        assertEquals(Option.UNINITIALIZED, opt.getArgs());
+        assertFalse(opt.hasArg());
+    }
+
+    // Covers withArgName(String) custom value
+    @Test
+    public void testWithArgName_customName_reflectedInOption() throws Throwable
+    {
+        Option opt = OptionBuilder.withArgName("value").create('n');
+        assertEquals("value", opt.getArgName());
+    }
+
+    // Covers default argName ("arg") when withArgName is not called, per reset()
+    @Test
+    public void testDefaultArgName_whenNotSet_isArg() throws Throwable
+    {
+        Option opt = OptionBuilder.create('d');
+        assertEquals("arg", opt.getArgName());
+    }
+
+    // Covers isRequired() no-arg setting required to true
+    @Test
+    public void testIsRequired_setsRequiredTrue() throws Throwable
+    {
+        Option opt = OptionBuilder.isRequired().create('r');
+        assertTrue(opt.isRequired());
+    }
+
+    // Covers isRequired(boolean) true branch
+    @Test
+    public void testIsRequiredBoolean_true_setsRequiredTrue() throws Throwable
+    {
+        Option opt = OptionBuilder.isRequired(true).create('s');
+        assertTrue(opt.isRequired());
+    }
+
+    // Covers isRequired(boolean) false branch
+    @Test
+    public void testIsRequiredBoolean_false_setsRequiredFalse() throws Throwable
+    {
+        Option opt = OptionBuilder.isRequired(false).create('t');
+        assertFalse(opt.isRequired());
+    }
+
+    // Covers withValueSeparator(char) custom separator
+    @Test
+    public void testWithValueSeparatorChar_setsCustomSeparator() throws Throwable
+    {
+        Option opt = OptionBuilder.withValueSeparator(':').create('v');
+        assertEquals(':', opt.getValueSeparator());
+    }
+
+    // Covers withValueSeparator() no-arg setting separator to '='
+    @Test
+    public void testWithValueSeparatorNoArg_setsEqualsSeparator() throws Throwable
+    {
+        Option opt = OptionBuilder.withValueSeparator().create('w');
+        assertEquals('=', opt.getValueSeparator());
+    }
+
+    // Covers default value separator (char)0 when not set, per reset()
+    @Test
+    public void testDefaultValueSeparator_whenNotSet_isZero() throws Throwable
+    {
+        Option opt = OptionBuilder.create('x');
+        assertEquals((char) 0, opt.getValueSeparator());
+    }
+
+    // Covers hasArgs() setting numberOfArgs to Option.UNLIMITED_VALUES
+    @Test
+    public void testHasArgs_setsUnlimitedValues() throws Throwable
+    {
+        Option opt = OptionBuilder.hasArgs().create('u');
+        assertEquals(Option.UNLIMITED_VALUES, opt.getArgs());
+    }
+
+    // Covers hasArgs(int) with a specific positive count
+    @Test
+    public void testHasArgsInt_setsSpecificCount() throws Throwable
+    {
+        Option opt = OptionBuilder.hasArgs(3).create('p');
+        assertEquals(3, opt.getArgs());
+    }
+
+    // Covers hasArgs(int) boundary value zero
+    @Test
+    public void testHasArgsInt_zero_setsZeroArgs() throws Throwable
+    {
+        Option opt = OptionBuilder.hasArgs(0).create('q');
+        assertEquals(0, opt.getArgs());
+    }
+
+    // Covers hasOptionalArg() setting numberOfArgs=1 and optionalArg=true
+    @Test
+    public void testHasOptionalArg_setsOneArgAndOptionalTrue() throws Throwable
+    {
+        Option opt = OptionBuilder.hasOptionalArg().create('o');
+        assertEquals(1, opt.getArgs());
+        assertTrue(opt.hasOptionalArg());
+    }
+
+    // Covers hasOptionalArgs() setting numberOfArgs=UNLIMITED_VALUES and optionalArg=true
+    @Test
+    public void testHasOptionalArgs_setsUnlimitedAndOptionalTrue() throws Throwable
+    {
+        Option opt = OptionBuilder.hasOptionalArgs().create('l');
+        assertEquals(Option.UNLIMITED_VALUES, opt.getArgs());
+        assertTrue(opt.hasOptionalArg());
+    }
+
+    // Covers hasOptionalArgs(int) setting a specific numArgs and optionalArg=true
+    @Test
+    public void testHasOptionalArgsInt_setsSpecificCountAndOptionalTrue() throws Throwable
+    {
+        Option opt = OptionBuilder.hasOptionalArgs(5).create('k');
+        assertEquals(5, opt.getArgs());
+        assertTrue(opt.hasOptionalArg());
+    }
+
+    // Covers withType(Object) setting a custom type
+    @Test
+    public void testWithType_setsCustomType() throws Throwable
+    {
+        Option opt = OptionBuilder.withType(String.class).create('y');
+        assertEquals(String.class, opt.getType());
+    }
+
+    // Covers default type null when withType is not called, per reset()
+    @Test
+    public void testDefaultType_whenNotSet_isNull() throws Throwable
+    {
+        Option opt = OptionBuilder.create('e');
+        assertNull(opt.getType());
+    }
+
+    // Covers withDescription(String) setting the description
+    @Test
+    public void testWithDescription_setsDescription() throws Throwable
+    {
+        Option opt = OptionBuilder.withDescription("desc text").create('g');
+        assertEquals("desc text", opt.getDescription());
+    }
+
+    // Covers create(char) delegating to create(String) with a valid letter
+    @Test
+    public void testCreateChar_validLetter_createsOptionWithOptChar() throws Throwable
+    {
+        Option opt = OptionBuilder.create('h');
+        assertEquals("h", opt.getOpt());
+    }
+
+    // Covers create(char) with a digit, which is a valid Java identifier character
+    @Test
+    public void testCreateChar_digitCharacter_isValid() throws Throwable
+    {
+        Option opt = OptionBuilder.create('9');
+        assertEquals("9", opt.getOpt());
+    }
+
+    // Covers create(char) throwing IllegalArgumentException for an invalid option character
+    @Test
+    public void testCreateChar_invalidCharacter_throwsIllegalArgumentException() throws Throwable
+    {
+        try
+        {
+            OptionBuilder.create('!');
+            fail("expected IllegalArgumentException for invalid option character");
+        }
+        catch (IllegalArgumentException expected)
+        {
+            // expected
+        }
+    }
+
+    // Covers create() no-arg success path with longopt set, resulting opt is null
+    @Test
+    public void testCreateNoArg_longOptSet_createsOptionWithNullOpt() throws Throwable
+    {
+        Option opt = OptionBuilder.withLongOpt("verbose").create();
+        assertNull(opt.getOpt());
+        assertEquals("verbose", opt.getLongOpt());
+    }
+
+    // Covers create() no-arg throwing IllegalArgumentException when longopt not set
+    @Test
+    public void testCreateNoArg_longOptNotSet_throwsIllegalArgumentException() throws Throwable
+    {
+        try
+        {
+            OptionBuilder.create();
+            fail("expected IllegalArgumentException for missing longopt");
+        }
+        catch (IllegalArgumentException expected)
+        {
+            assertTrue(expected.getMessage().contains("longopt"));
+        }
+    }
+
+    // Covers that create() resets state before throwing when longopt is missing (this path already resets in source)
+    @Test
+    public void testCreateNoArg_exceptionPath_resetsStateBeforeThrow() throws Throwable
+    {
+        OptionBuilder.withDescription("secret");
+        try
+        {
+            OptionBuilder.create();
+            fail("expected IllegalArgumentException for missing longopt");
+        }
+        catch (IllegalArgumentException expected)
+        {
+            // expected
+        }
+        Option opt = OptionBuilder.create("m");
+        assertNull(opt.getDescription());
+    }
+
+    // Covers create(String) with a valid multi-character option (long identifier style opt)
+    @Test
+    public void testCreateString_validMultiCharOpt_createsOption() throws Throwable
+    {
+        Option opt = OptionBuilder.create("verbose");
+        assertEquals("verbose", opt.getOpt());
+    }
+
+    // Covers create(String) allowing a null opt when longopt has been provided
+    @Test
+    public void testCreateString_nullOptWithLongOptSet_allowsNullShortOpt() throws Throwable
+    {
+        Option opt = OptionBuilder.withLongOpt("output").create((String) null);
+        assertNull(opt.getOpt());
+        assertEquals("output", opt.getLongOpt());
+    }
+
+    // Covers create(String) throwing IllegalArgumentException for a single invalid character
+    @Test
+    public void testCreateString_invalidSingleCharacter_throwsIllegalArgumentException() throws Throwable
+    {
+        try
+        {
+            OptionBuilder.create("!");
+            fail("expected IllegalArgumentException for invalid option character");
+        }
+        catch (IllegalArgumentException expected)
+        {
+            // expected
+        }
+    }
+
+    // Bug oracle: when Option construction fails inside create(String), OptionBuilder must still
+    // reset its static state so that the next successfully created Option does not leak previous settings.
+    @Test
+    public void testCreateString_invalidCharacterException_resetsBuilderStateForNextCreate() throws Throwable
+    {
+        OptionBuilder.withLongOpt("leaked").withDescription("leakedDesc").isRequired();
+        try
+        {
+            OptionBuilder.create("!");
+            fail("expected IllegalArgumentException for invalid option character");
+        }
+        catch (IllegalArgumentException expected)
+        {
+            // expected
+        }
+        Option opt = OptionBuilder.create("x");
+        assertNull(opt.getLongOpt());
+        assertNull(opt.getDescription());
+        assertFalse(opt.isRequired());
+    }
+
+    // Covers a full fluent chain applying multiple settings correctly together
+    @Test
+    public void testFluentChain_multipleSettings_allAppliedCorrectly() throws Throwable
+    {
+        Option opt = OptionBuilder.withLongOpt("count").withDescription("counter")
+                .hasArg().isRequired().withArgName("num").withValueSeparator(',').create('c');
+        assertEquals("count", opt.getLongOpt());
+        assertEquals("counter", opt.getDescription());
+        assertTrue(opt.hasArg());
+        assertTrue(opt.isRequired());
+        assertEquals("num", opt.getArgName());
+        assertEquals(',', opt.getValueSeparator());
+    }
+
+    // Covers create() with no prior builder calls, verifying all reset() defaults are applied
+    @Test
+    public void testDefaults_noBuilderCallsBeforehand_usesAllDefaultValues() throws Throwable
+    {
+        Option opt = OptionBuilder.create('j');
+        assertEquals("j", opt.getOpt());
+        assertNull(opt.getLongOpt());
+        assertNull(opt.getDescription());
+        assertFalse(opt.isRequired());
+        assertEquals(Option.UNINITIALIZED, opt.getArgs());
+        assertNull(opt.getType());
+        assertEquals((char) 0, opt.getValueSeparator());
+        assertEquals("arg", opt.getArgName());
+    }
+}

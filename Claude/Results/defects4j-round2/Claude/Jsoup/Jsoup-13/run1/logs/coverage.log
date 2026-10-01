@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Jsoup-13-0680g7g1/Jsoup-13b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 194
+     Lines covered: 173
+  Conditions total: 64
+Conditions covered: 48
+     Line coverage: 89.2%
+Condition coverage: 75.0%
+[exit 0]

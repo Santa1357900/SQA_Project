@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Closure-22-jt2anbdf/Closure-22b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 86
+     Lines covered: 84
+  Conditions total: 72
+Conditions covered: 61
+     Line coverage: 97.7%
+Condition coverage: 84.7%
+[exit 0]

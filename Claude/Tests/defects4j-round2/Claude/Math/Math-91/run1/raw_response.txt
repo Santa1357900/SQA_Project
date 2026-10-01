@@ -1,0 +1,395 @@
+package org.apache.commons.math.fraction;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class FractionClaudeTest {
+
+    // Branch: abs(a0-value) < epsilon early-return path for an exact integer value
+    @Test
+    public void testFractionDouble_integerValue_earlyReturnBranch() throws Throwable {
+        Fraction f = new Fraction(2.0);
+        assertEquals(2, f.getNumerator());
+        assertEquals(1, f.getDenominator());
+    }
+
+    // Branch: continued fraction loop converges exactly for 0.5 -> 1/2
+    @Test
+    public void testFractionDouble_oneHalf_convergesExactly() throws Throwable {
+        Fraction f = new Fraction(0.5);
+        assertEquals(1, f.getNumerator());
+        assertEquals(2, f.getDenominator());
+    }
+
+    // Branch: (double,epsilon,maxIterations) constructor converges exactly for 1/3
+    @Test
+    public void testFractionDoubleEpsilonMaxIterations_oneThird_convergesExactly() throws Throwable {
+        Fraction f = new Fraction(1.0 / 3.0, 1.0e-5, 100);
+        assertEquals(1, f.getNumerator());
+        assertEquals(3, f.getDenominator());
+    }
+
+    // Branch: n >= maxIterations throws FractionConversionException
+    @Test
+    public void testFractionDoubleEpsilonMaxIterations_tooFewIterations_throws() throws Throwable {
+        try {
+            new Fraction(Math.PI, 1.0e-20, 1);
+            fail("expected FractionConversionException: convergence not reached within 1 iteration");
+        } catch (FractionConversionException expected) {
+            // ok
+        }
+    }
+
+    // Branch: (double,maxDenominator) constructor stops once q2 reaches maxDenominator, falls back to previous convergent
+    @Test
+    public void testFractionDoubleMaxDenominator_piApproximation() throws Throwable {
+        Fraction f = new Fraction(Math.PI, 10);
+        assertEquals(22, f.getNumerator());
+        assertEquals(7, f.getDenominator());
+    }
+
+    // Bug hunt: overflow guard only checks a0 > overflow, missing symmetric negative case (a0 < -overflow);
+    // a value whose integer part cannot fit in an int must be rejected, not silently truncated.
+    @Test
+    public void testFractionDouble_largeNegativeValue_shouldThrowConversionException() throws Throwable {
+        try {
+            new Fraction(-1.0e10);
+            fail("expected FractionConversionException for a value whose integer part exceeds int range");
+        } catch (FractionConversionException expected) {
+            // ok
+        }
+    }
+
+    // Branch: den == 0 throws ArithmeticException
+    @Test
+    public void testFractionIntInt_zeroDenominator_throws() throws Throwable {
+        try {
+            new Fraction(1, 0);
+            fail("expected ArithmeticException for zero denominator");
+        } catch (ArithmeticException expected) {
+            // ok
+        }
+    }
+
+    // Branch: den < 0 and den == Integer.MIN_VALUE -> overflow on negate throws ArithmeticException
+    @Test
+    public void testFractionIntInt_denominatorOverflow_throws() throws Throwable {
+        try {
+            new Fraction(1, Integer.MIN_VALUE);
+            fail("expected ArithmeticException: cannot negate Integer.MIN_VALUE");
+        } catch (ArithmeticException expected) {
+            // ok
+        }
+    }
+
+    // Branch: den < 0 (normal case) moves sign to numerator
+    @Test
+    public void testFractionIntInt_negativeDenominatorNormalized() throws Throwable {
+        Fraction f = new Fraction(1, -2);
+        assertEquals(-1, f.getNumerator());
+        assertEquals(2, f.getDenominator());
+    }
+
+    // Branch: gcd(num,den) > 1 reduces the fraction to lowest terms
+    @Test
+    public void testFractionIntInt_reducesToLowestTerms() throws Throwable {
+        Fraction f = new Fraction(4, 8);
+        assertEquals(1, f.getNumerator());
+        assertEquals(2, f.getDenominator());
+    }
+
+    // Branch: abs() negates when numerator < 0
+    @Test
+    public void testAbs_negativeNumerator_returnsPositive() throws Throwable {
+        Fraction f = new Fraction(-1, 2);
+        Fraction r = f.abs();
+        assertEquals(1, r.getNumerator());
+        assertEquals(2, r.getDenominator());
+    }
+
+    // Branch: abs() returns an equal value when numerator >= 0
+    @Test
+    public void testAbs_positiveNumerator_returnsSame() throws Throwable {
+        Fraction f = new Fraction(1, 2);
+        Fraction r = f.abs();
+        assertEquals(1, r.getNumerator());
+        assertEquals(2, r.getDenominator());
+    }
+
+    // Branches: compareTo ternary for less-than, greater-than and equal cases
+    @Test
+    public void testCompareTo_lessGreaterEqual() throws Throwable {
+        Fraction a = new Fraction(1, 2);
+        Fraction b = new Fraction(1, 3);
+        Fraction c = new Fraction(2, 4);
+        assertTrue(a.compareTo(b) > 0);
+        assertTrue(b.compareTo(a) < 0);
+        assertEquals(0, a.compareTo(c));
+    }
+
+    // doubleValue computes numerator/denominator as a double
+    @Test
+    public void testDoubleValue() throws Throwable {
+        Fraction f = new Fraction(7, 2);
+        assertEquals(3.5, f.doubleValue(), 1e-9);
+    }
+
+    // Branches: equals() same instance, null argument, different class (ClassCastException path)
+    @Test
+    public void testEquals_sameInstanceAndNullAndDifferentClass() throws Throwable {
+        Fraction f = new Fraction(1, 2);
+        assertTrue(f.equals(f));
+        assertFalse(f.equals(null));
+        assertFalse(f.equals(Integer.valueOf(1)));
+    }
+
+    // Branch: equals() compares reduced numerator/denominator for equal and unequal values
+    @Test
+    public void testEquals_valueComparison() throws Throwable {
+        Fraction a = new Fraction(1, 2);
+        Fraction b = new Fraction(1, 3);
+        Fraction c = new Fraction(2, 4);
+        assertFalse(a.equals(b));
+        assertTrue(a.equals(c));
+    }
+
+    // floatValue delegates to doubleValue, cast to float
+    @Test
+    public void testFloatValue() throws Throwable {
+        Fraction f = new Fraction(7, 2);
+        assertEquals(3.5f, f.floatValue(), 1e-6f);
+    }
+
+    // Accessors return stored numerator and denominator
+    @Test
+    public void testGetters() throws Throwable {
+        Fraction f = new Fraction(3, 4);
+        assertEquals(3, f.getNumerator());
+        assertEquals(4, f.getDenominator());
+    }
+
+    // hashCode: equal fractions (after reduction) must have equal hash codes
+    @Test
+    public void testHashCode_consistentWithEquals() throws Throwable {
+        Fraction a = new Fraction(1, 2);
+        Fraction b = new Fraction(2, 4);
+        assertTrue(a.equals(b));
+        assertEquals(a.hashCode(), b.hashCode());
+        assertEquals(37 * (37 * 17 + 1) + 2, a.hashCode());
+    }
+
+    // intValue/longValue truncate the whole-number part of the fraction
+    @Test
+    public void testIntValueLongValue() throws Throwable {
+        Fraction f = new Fraction(7, 2);
+        assertEquals(3, f.intValue());
+        assertEquals(3L, f.longValue());
+    }
+
+    // Branch: negate() normal case
+    @Test
+    public void testNegate_normal() throws Throwable {
+        Fraction f = new Fraction(3, 4);
+        Fraction n = f.negate();
+        assertEquals(-3, n.getNumerator());
+        assertEquals(4, n.getDenominator());
+    }
+
+    // Branch: negate() throws ArithmeticException when numerator is Integer.MIN_VALUE
+    @Test
+    public void testNegate_overflow_throws() throws Throwable {
+        Fraction f = new Fraction(Integer.MIN_VALUE, 1);
+        try {
+            f.negate();
+            fail("expected ArithmeticException: cannot negate Integer.MIN_VALUE");
+        } catch (ArithmeticException expected) {
+            // ok
+        }
+    }
+
+    // reciprocal swaps numerator and denominator
+    @Test
+    public void testReciprocal_normal() throws Throwable {
+        Fraction f = new Fraction(2, 3);
+        Fraction r = f.reciprocal();
+        assertEquals(3, r.getNumerator());
+        assertEquals(2, r.getDenominator());
+    }
+
+    // reciprocal of zero creates a zero denominator -> ArithmeticException
+    @Test
+    public void testReciprocal_zeroNumerator_throws() throws Throwable {
+        try {
+            Fraction.ZERO.reciprocal();
+            fail("expected ArithmeticException for reciprocal of zero");
+        } catch (ArithmeticException expected) {
+            // ok
+        }
+    }
+
+    // Branch: add(null) throws IllegalArgumentException
+    @Test
+    public void testAdd_nullThrows() throws Throwable {
+        try {
+            new Fraction(1, 2).add(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // Branches: zero is identity for addition on either side
+    @Test
+    public void testAdd_zeroIdentity() throws Throwable {
+        Fraction half = new Fraction(1, 2);
+        assertTrue(Fraction.ZERO.add(half).equals(half));
+        assertTrue(half.add(Fraction.ZERO).equals(half));
+    }
+
+    // Branch: add() with coprime denominators (d1 == 1 path)
+    @Test
+    public void testAdd_coprimeDenominators() throws Throwable {
+        Fraction r = new Fraction(1, 2).add(new Fraction(1, 3));
+        assertEquals(5, r.getNumerator());
+        assertEquals(6, r.getDenominator());
+    }
+
+    // Branch: add() with non-coprime denominators (BigInteger path)
+    @Test
+    public void testAdd_nonCoprimeDenominators() throws Throwable {
+        Fraction r = new Fraction(1, 4).add(new Fraction(1, 6));
+        assertEquals(5, r.getNumerator());
+        assertEquals(12, r.getDenominator());
+    }
+
+    // Branches: subtract() zero-identity (negates other) and normal subtraction
+    @Test
+    public void testSubtract_zeroThisNegatesOther_andNormal() throws Throwable {
+        Fraction r1 = Fraction.ZERO.subtract(new Fraction(1, 2));
+        assertEquals(-1, r1.getNumerator());
+        assertEquals(2, r1.getDenominator());
+
+        Fraction r2 = new Fraction(1, 2).subtract(new Fraction(1, 3));
+        assertEquals(1, r2.getNumerator());
+        assertEquals(6, r2.getDenominator());
+    }
+
+    // Branches: multiply(null) throws, multiply by zero returns ZERO
+    @Test
+    public void testMultiply_nullThrows_andZero() throws Throwable {
+        try {
+            new Fraction(1, 2).multiply(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+        assertTrue(new Fraction(1, 2).multiply(Fraction.ZERO).equals(Fraction.ZERO));
+    }
+
+    // Branch: multiply() normal reduced product
+    @Test
+    public void testMultiply_normal() throws Throwable {
+        Fraction r = new Fraction(2, 3).multiply(new Fraction(3, 4));
+        assertEquals(1, r.getNumerator());
+        assertEquals(2, r.getDenominator());
+    }
+
+    // Branch: divide(null) throws IllegalArgumentException
+    @Test
+    public void testDivide_nullThrows() throws Throwable {
+        try {
+            new Fraction(1, 2).divide(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // Branch: divide() by a zero fraction throws ArithmeticException
+    @Test
+    public void testDivide_byZero_throws() throws Throwable {
+        try {
+            new Fraction(1, 2).divide(Fraction.ZERO);
+            fail("expected ArithmeticException: divide by zero fraction");
+        } catch (ArithmeticException expected) {
+            // ok
+        }
+    }
+
+    // Branch: divide() normal case delegates to multiply(reciprocal)
+    @Test
+    public void testDivide_normal() throws Throwable {
+        Fraction r = new Fraction(1, 2).divide(new Fraction(1, 4));
+        assertEquals(2, r.intValue());
+        assertEquals(2, r.getNumerator());
+        assertEquals(1, r.getDenominator());
+    }
+
+    // Branch: getReducedFraction(num, 0) throws ArithmeticException
+    @Test
+    public void testGetReducedFraction_zeroDenominator_throws() throws Throwable {
+        try {
+            Fraction.getReducedFraction(1, 0);
+            fail("expected ArithmeticException for zero denominator");
+        } catch (ArithmeticException expected) {
+            // ok
+        }
+    }
+
+    // Branch: getReducedFraction(0, den) normalizes to ZERO
+    @Test
+    public void testGetReducedFraction_zeroNumerator_returnsZero() throws Throwable {
+        Fraction f = Fraction.getReducedFraction(0, 5);
+        assertTrue(f.equals(Fraction.ZERO));
+        assertEquals(0, f.getNumerator());
+        assertEquals(1, f.getDenominator());
+    }
+
+    // Branch: denominator == Integer.MIN_VALUE with even numerator allowed (halve both)
+    @Test
+    public void testGetReducedFraction_minValueDenominatorEvenNumerator() throws Throwable {
+        Fraction f = Fraction.getReducedFraction(4, Integer.MIN_VALUE);
+        assertEquals(-1, f.getNumerator());
+        assertEquals(536870912, f.getDenominator());
+    }
+
+    // Branch: denominator == Integer.MIN_VALUE with odd numerator cannot be negated -> throws
+    @Test
+    public void testGetReducedFraction_minValueDenominatorOddNumerator_throws() throws Throwable {
+        try {
+            Fraction.getReducedFraction(3, Integer.MIN_VALUE);
+            fail("expected ArithmeticException: overflow negating Integer.MIN_VALUE denominator");
+        } catch (ArithmeticException expected) {
+            // ok
+        }
+    }
+
+    // Branch: negative (non-MIN_VALUE) denominator is normalized by moving sign to numerator
+    @Test
+    public void testGetReducedFraction_negativeDenominatorNormalized() throws Throwable {
+        Fraction f = Fraction.getReducedFraction(3, -4);
+        assertEquals(-3, f.getNumerator());
+        assertEquals(4, f.getDenominator());
+    }
+
+    // Branch: gcd reduction to lowest terms
+    @Test
+    public void testGetReducedFraction_reducesToLowestTerms() throws Throwable {
+        Fraction f = Fraction.getReducedFraction(6, 8);
+        assertEquals(3, f.getNumerator());
+        assertEquals(4, f.getDenominator());
+    }
+
+    // Static constants carry the documented numerator/denominator values
+    @Test
+    public void testConstants() throws Throwable {
+        assertEquals(2, Fraction.TWO.getNumerator());
+        assertEquals(1, Fraction.TWO.getDenominator());
+        assertEquals(1, Fraction.ONE.getNumerator());
+        assertEquals(1, Fraction.ONE.getDenominator());
+        assertEquals(0, Fraction.ZERO.getNumerator());
+        assertEquals(1, Fraction.ZERO.getDenominator());
+        assertEquals(-1, Fraction.MINUS_ONE.getNumerator());
+        assertEquals(1, Fraction.MINUS_ONE.getDenominator());
+    }
+}

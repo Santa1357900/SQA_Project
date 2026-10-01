@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Chart-21-790uxdxp/Chart-21f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.jfree.data.statistics.DefaultBoxAndWhiskerCategoryDatasetClaudeTest::testAdd_replaceCellHoldingMax_upperBoundBug
+  - org.jfree.data.statistics.DefaultBoxAndWhiskerCategoryDatasetClaudeTest::testGetMinOutlier_byIndices_equalsListMin
+  - org.jfree.data.statistics.DefaultBoxAndWhiskerCategoryDatasetClaudeTest::testGetOutliers_byIndices_emptyForTightData
+  - org.jfree.data.statistics.DefaultBoxAndWhiskerCategoryDatasetClaudeTest::testGetMaxOutlier_byIndices_equalsListMax
+[exit 0]

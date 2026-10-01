@@ -1,0 +1,22 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Time -v 17b -w /tmp/claude-Time-17-syt7d6cw/buggy
+Checking out a8913f5a to /tmp/claude-Time-17-syt7d6cw/buggy................ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Time-17-syt7d6cw/buggy/build.xml........ OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff a8913f5a:cdeacf09..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Time-17b........................................ OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Time-17-syt7d6cw/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

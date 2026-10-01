@@ -1,0 +1,397 @@
+package org.jsoup.nodes;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+public class AttributesClaudeTest {
+
+    // get(): Validate.notEmpty branch - null key must throw
+    @Test
+    public void testGet_nullKey_throwsIllegalArgumentException() throws Throwable {
+        Attributes attrs = new Attributes();
+        try {
+            attrs.get(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // get(): Validate.notEmpty branch - empty key must throw
+    @Test
+    public void testGet_emptyKey_throwsIllegalArgumentException() throws Throwable {
+        Attributes attrs = new Attributes();
+        try {
+            attrs.get("");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // get(): attributes==null branch returns ""
+    @Test
+    public void testGet_noAttributesSet_returnsEmptyString() throws Throwable {
+        Attributes attrs = new Attributes();
+        assertEquals("", attrs.get("foo"));
+    }
+
+    // get(): key exists vs key not exists branches
+    @Test
+    public void testGet_keyExistsAndNotExists_returnsCorrectValue() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("foo", "bar");
+        assertEquals("bar", attrs.get("foo"));
+        assertEquals("", attrs.get("missing"));
+    }
+
+    // getIgnoreCase(): notEmpty branch
+    @Test
+    public void testGetIgnoreCase_nullKey_throwsIllegalArgumentException() throws Throwable {
+        Attributes attrs = new Attributes();
+        try {
+            attrs.getIgnoreCase(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // getIgnoreCase(): attributes==null branch
+    @Test
+    public void testGetIgnoreCase_noAttributesSet_returnsEmptyString() throws Throwable {
+        Attributes attrs = new Attributes();
+        assertEquals("", attrs.getIgnoreCase("foo"));
+    }
+
+    // getIgnoreCase(): case-insensitive match branch
+    @Test
+    public void testGetIgnoreCase_caseInsensitiveMatch_returnsValue() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("Foo", "bar");
+        assertEquals("bar", attrs.getIgnoreCase("foo"));
+    }
+
+    // getIgnoreCase(): no match falls through loop, returns ""
+    @Test
+    public void testGetIgnoreCase_noMatch_returnsEmptyString() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("foo", "bar");
+        assertEquals("", attrs.getIgnoreCase("other"));
+    }
+
+    // put(String,String): new attribute added
+    @Test
+    public void testPutStringString_newKey_addsAttribute() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("foo", "bar");
+        assertEquals(1, attrs.size());
+        assertEquals("bar", attrs.get("foo"));
+    }
+
+    // put(String,String): existing key replaced, not duplicated
+    @Test
+    public void testPutStringString_existingKey_replacesValue() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("foo", "bar");
+        attrs.put("foo", "baz");
+        assertEquals(1, attrs.size());
+        assertEquals("baz", attrs.get("foo"));
+    }
+
+    // put(String,boolean): true branch adds attribute with key present
+    @Test
+    public void testPutStringBoolean_true_addsAttribute() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("disabled", true);
+        assertTrue(attrs.hasKey("disabled"));
+    }
+
+    // put(String,boolean): false branch removes attribute
+    @Test
+    public void testPutStringBoolean_false_removesAttribute() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("disabled", true);
+        attrs.put("disabled", false);
+        assertFalse(attrs.hasKey("disabled"));
+    }
+
+    // put(Attribute): Validate.notNull branch
+    @Test
+    public void testPutAttribute_null_throwsIllegalArgumentException() throws Throwable {
+        Attributes attrs = new Attributes();
+        try {
+            attrs.put((Attribute) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // put(Attribute): valid attribute added via key/value
+    @Test
+    public void testPutAttribute_validAttribute_addsToSet() throws Throwable {
+        Attributes attrs = new Attributes();
+        Attribute a = new Attribute("foo", "bar");
+        attrs.put(a);
+        assertEquals("bar", attrs.get("foo"));
+    }
+
+    // remove(): notEmpty branch
+    @Test
+    public void testRemove_emptyKey_throwsIllegalArgumentException() throws Throwable {
+        Attributes attrs = new Attributes();
+        try {
+            attrs.remove("");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // remove(): attributes==null branch is a no-op, no exception
+    @Test
+    public void testRemove_noAttributesSet_isNoOp() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.remove("foo");
+        assertEquals(0, attrs.size());
+    }
+
+    // remove(): existing key removed
+    @Test
+    public void testRemove_existingKey_removesAttribute() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("foo", "bar");
+        attrs.remove("foo");
+        assertFalse(attrs.hasKey("foo"));
+    }
+
+    // removeIgnoreCase(): notEmpty branch
+    @Test
+    public void testRemoveIgnoreCase_nullKey_throwsIllegalArgumentException() throws Throwable {
+        Attributes attrs = new Attributes();
+        try {
+            attrs.removeIgnoreCase(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // removeIgnoreCase(): attributes==null branch no-op
+    @Test
+    public void testRemoveIgnoreCase_noAttributesSet_isNoOp() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.removeIgnoreCase("foo");
+        assertEquals(0, attrs.size());
+    }
+
+    // removeIgnoreCase(): single element, match is last -> no exception, removed
+    @Test
+    public void testRemoveIgnoreCase_singleMatchingElement_removesWithoutException() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("Foo", "1");
+        attrs.removeIgnoreCase("foo");
+        assertEquals(0, attrs.size());
+    }
+
+    // removeIgnoreCase(): no match, remains unchanged
+    @Test
+    public void testRemoveIgnoreCase_noMatch_leavesAttributeUnchanged() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("foo", "1");
+        attrs.removeIgnoreCase("bar");
+        assertEquals(1, attrs.size());
+    }
+
+    // removeIgnoreCase(): BUG - matching element not last causes map-iterator conflict;
+    // per contract it should simply remove the matching key and keep others intact.
+    @Test
+    public void testRemoveIgnoreCase_matchNotLastOfMultiple_removesCorrectAttributeOnly() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("Foo", "1");
+        attrs.put("bar", "2");
+        attrs.removeIgnoreCase("foo");
+        assertEquals(1, attrs.size());
+        assertFalse(attrs.hasKeyIgnoreCase("foo"));
+        assertTrue(attrs.hasKeyIgnoreCase("bar"));
+    }
+
+    // hasKey(): attributes==null and key present/absent branches
+    @Test
+    public void testHasKey_variousStates_returnsCorrectBoolean() throws Throwable {
+        Attributes attrs = new Attributes();
+        assertFalse(attrs.hasKey("foo"));
+        attrs.put("foo", "bar");
+        assertTrue(attrs.hasKey("foo"));
+        assertFalse(attrs.hasKey("Foo"));
+    }
+
+    // hasKeyIgnoreCase(): attributes==null, match, no match branches
+    @Test
+    public void testHasKeyIgnoreCase_variousStates_returnsCorrectBoolean() throws Throwable {
+        Attributes attrs = new Attributes();
+        assertFalse(attrs.hasKeyIgnoreCase("foo"));
+        attrs.put("Foo", "bar");
+        assertTrue(attrs.hasKeyIgnoreCase("foo"));
+        assertFalse(attrs.hasKeyIgnoreCase("other"));
+    }
+
+    // size(): attributes==null branch and populated branch
+    @Test
+    public void testSize_nullAndPopulated_returnsCorrectCount() throws Throwable {
+        Attributes attrs = new Attributes();
+        assertEquals(0, attrs.size());
+        attrs.put("foo", "bar");
+        assertEquals(1, attrs.size());
+    }
+
+    // addAll(): incoming.size()==0 branch is no-op
+    @Test
+    public void testAddAll_emptyIncoming_isNoOp() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("foo", "bar");
+        Attributes incoming = new Attributes();
+        attrs.addAll(incoming);
+        assertEquals(1, attrs.size());
+    }
+
+    // addAll(): non-empty incoming added into this, attributes==null branch initialized
+    @Test
+    public void testAddAll_nonEmptyIncoming_mergesAttributes() throws Throwable {
+        Attributes attrs = new Attributes();
+        Attributes incoming = new Attributes();
+        incoming.put("foo", "bar");
+        attrs.addAll(incoming);
+        assertEquals(1, attrs.size());
+        assertEquals("bar", attrs.get("foo"));
+    }
+
+    // iterator(): attributes==null branch returns empty iterator
+    @Test
+    public void testIterator_noAttributesSet_returnsEmptyIterator() throws Throwable {
+        Attributes attrs = new Attributes();
+        Iterator<Attribute> it = attrs.iterator();
+        assertFalse(it.hasNext());
+    }
+
+    // iterator(): populated branch iterates values
+    @Test
+    public void testIterator_populatedAttributes_iteratesValues() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("foo", "bar");
+        Iterator<Attribute> it = attrs.iterator();
+        assertTrue(it.hasNext());
+        Attribute a = it.next();
+        assertEquals("foo", a.getKey());
+        assertEquals("bar", a.getValue());
+        assertFalse(it.hasNext());
+    }
+
+    // asList(): attributes==null branch returns empty list
+    @Test
+    public void testAsList_noAttributesSet_returnsEmptyList() throws Throwable {
+        Attributes attrs = new Attributes();
+        List<Attribute> list = attrs.asList();
+        assertTrue(list.isEmpty());
+    }
+
+    // asList(): populated branch returns list with attribute
+    @Test
+    public void testAsList_populatedAttributes_returnsCorrectList() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("foo", "bar");
+        List<Attribute> list = attrs.asList();
+        assertEquals(1, list.size());
+        assertEquals("foo", list.get(0).getKey());
+    }
+
+    // dataset(): put() adds "data-" prefixed attribute readable via get()
+    @Test
+    public void testDataset_put_addsDataPrefixedAttribute() throws Throwable {
+        Attributes attrs = new Attributes();
+        Map<String, String> dataset = attrs.dataset();
+        dataset.put("foo", "bar");
+        assertEquals("bar", attrs.get("data-foo"));
+    }
+
+    // dataset(): entrySet() filters only data attributes, size() counts correctly
+    @Test
+    public void testDataset_entrySetSize_countsOnlyDataAttributes() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("data-foo", "1");
+        attrs.put("data-bar", "2");
+        attrs.put("plain", "3");
+        Map<String, String> dataset = attrs.dataset();
+        assertEquals(2, dataset.entrySet().size());
+    }
+
+    // dataset(): iterator yields entries with prefix stripped from key
+    @Test
+    public void testDataset_iterator_stripsDataPrefixFromKey() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("data-foo", "bar");
+        Map<String, String> dataset = attrs.dataset();
+        Iterator<Map.Entry<String, String>> it = dataset.entrySet().iterator();
+        assertTrue(it.hasNext());
+        Map.Entry<String, String> entry = it.next();
+        assertEquals("foo", entry.getKey());
+        assertEquals("bar", entry.getValue());
+    }
+
+    // html(): produces attribute in "key=value" html form
+    @Test
+    public void testHtml_withAttribute_containsKeyValuePair() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("class", "test");
+        String html = attrs.html();
+        assertTrue(html.contains("class=\"test\""));
+    }
+
+    // toString(): delegates to html()
+    @Test
+    public void testToString_equalsHtml() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("id", "main");
+        assertEquals(attrs.html(), attrs.toString());
+    }
+
+    // equals(): same instance, equal content, different content, non-Attributes object
+    @Test
+    public void testEquals_variousCases_returnsCorrectBoolean() throws Throwable {
+        Attributes a = new Attributes();
+        a.put("foo", "bar");
+        Attributes b = new Attributes();
+        b.put("foo", "bar");
+        Attributes c = new Attributes();
+        c.put("foo", "other");
+
+        assertTrue(a.equals(a));
+        assertTrue(a.equals(b));
+        assertFalse(a.equals(c));
+        assertFalse(a.equals("not attributes"));
+    }
+
+    // hashCode(): equal attributes produce equal hash codes
+    @Test
+    public void testHashCode_equalAttributes_sameHashCode() throws Throwable {
+        Attributes a = new Attributes();
+        a.put("foo", "bar");
+        Attributes b = new Attributes();
+        b.put("foo", "bar");
+        assertEquals(a.hashCode(), b.hashCode());
+    }
+
+    // clone(): attributes==null branch returns new empty instance
+    @Test
+    public void testClone_noAttributesSet_returnsEmptyAttributes() throws Throwable {
+        Attributes attrs = new Attributes();
+        Attributes clone = attrs.clone();
+        assertEquals(0, clone.size());
+    }
+
+    // clone(): populated branch produces independent deep copy
+    @Test
+    public void testClone_populatedAttributes_createsIndependentCopy() throws Throwable {
+        Attributes attrs = new Attributes();
+        attrs.put("foo", "bar");
+        Attributes clone = attrs.clone();
+        assertEquals(attrs, clone);
+        assertNotSame(attrs, clone);
+        clone.put("foo", "changed");
+        assertEquals("bar", attrs.get("foo"));
+        assertEquals("changed", clone.get("foo"));
+    }
+}

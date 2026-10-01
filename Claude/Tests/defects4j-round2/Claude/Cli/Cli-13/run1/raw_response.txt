@@ -1,0 +1,256 @@
+package org.apache.commons.cli2;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.cli2.builder.DefaultOptionBuilder;
+import org.apache.commons.cli2.commandline.WriteableCommandLineImpl;
+
+public class WriteableCommandLineClaudeTest {
+
+    private WriteableCommandLine cl;
+    private Option rootOption;
+    private Option optA;
+    private Option optB;
+
+    @Before
+    public void setUp() throws Throwable {
+        DefaultOptionBuilder rootBuilder = new DefaultOptionBuilder();
+        rootOption = rootBuilder.withShortName("r").withLongName("root")
+                .withDescription("root option").create();
+
+        List args = new ArrayList();
+        cl = new WriteableCommandLineImpl(rootOption, args);
+
+        DefaultOptionBuilder builderA = new DefaultOptionBuilder();
+        optA = builderA.withShortName("a").withLongName("alpha")
+                .withDescription("option a").create();
+
+        DefaultOptionBuilder builderB = new DefaultOptionBuilder();
+        optB = builderB.withShortName("b").withLongName("beta")
+                .withDescription("option b").create();
+    }
+
+    // covers looksLikeOption: short prefix "-" matches -> true
+    @Test
+    public void testLooksLikeOption_shortPrefixArgument_returnsTrue() throws Throwable {
+        assertTrue(cl.looksLikeOption("-a"));
+    }
+
+    // covers looksLikeOption: long prefix "--" matches -> true
+    @Test
+    public void testLooksLikeOption_longPrefixArgument_returnsTrue() throws Throwable {
+        assertTrue(cl.looksLikeOption("--alpha"));
+    }
+
+    // covers looksLikeOption: no prefix match -> false
+    @Test
+    public void testLooksLikeOption_plainArgument_returnsFalse() throws Throwable {
+        assertFalse(cl.looksLikeOption("alpha"));
+    }
+
+    // covers looksLikeOption: empty string edge case -> false
+    @Test
+    public void testLooksLikeOption_emptyString_returnsFalse() throws Throwable {
+        assertFalse(cl.looksLikeOption(""));
+    }
+
+    // covers looksLikeOption: single hyphen edge case -> true (starts with prefix "-")
+    @Test
+    public void testLooksLikeOption_singleHyphen_returnsTrue() throws Throwable {
+        assertTrue(cl.looksLikeOption("-"));
+    }
+
+    // covers looksLikeOption: prefix not at start of string -> false
+    @Test
+    public void testLooksLikeOption_prefixNotAtStart_returnsFalse() throws Throwable {
+        assertFalse(cl.looksLikeOption("x-a"));
+    }
+
+    // covers addOption + hasOption: option not added -> false branch
+    @Test
+    public void testHasOption_optionNotAdded_returnsFalse() throws Throwable {
+        assertFalse(cl.hasOption(optA));
+    }
+
+    // covers addOption: single option is tracked
+    @Test
+    public void testAddOption_singleOption_isTrackedByHasOption() throws Throwable {
+        cl.addOption(optA);
+        assertTrue(cl.hasOption(optA));
+    }
+
+    // covers getOptions with zero elements (0-iteration case)
+    @Test
+    public void testGetOptions_noOptionsAdded_returnsEmptyList() throws Throwable {
+        assertTrue(cl.getOptions().isEmpty());
+    }
+
+    // covers addOption called multiple times (2-iteration case), size and content
+    @Test
+    public void testAddOption_twoDistinctOptions_getOptionsSizeIsTwoAndContainsBoth() throws Throwable {
+        cl.addOption(optA);
+        cl.addOption(optB);
+        List options = cl.getOptions();
+        assertEquals(2, options.size());
+        assertTrue(options.contains(optA));
+        assertTrue(options.contains(optB));
+    }
+
+    // covers addOption called twice with the same option (duplicate handling)
+    @Test
+    public void testAddOption_sameOptionAddedTwice_stillTrackedByHasOption() throws Throwable {
+        cl.addOption(optA);
+        cl.addOption(optA);
+        assertTrue(cl.hasOption(optA));
+    }
+
+    // covers getValues: no values added -> empty list per interface contract
+    @Test
+    public void testGetValues_noValuesAdded_returnsEmptyList() throws Throwable {
+        List values = cl.getValues(optA);
+        assertTrue(values.isEmpty());
+    }
+
+    // covers addValue: single value stored and retrievable
+    @Test
+    public void testAddValue_singleValue_returnedByGetValues() throws Throwable {
+        cl.addValue(optA, "value1");
+        List values = cl.getValues(optA);
+        assertTrue(values.contains("value1"));
+    }
+
+    // covers addValue called multiple times (loop with 2 iterations)
+    @Test
+    public void testAddValue_multipleValues_allPresentInGetValues() throws Throwable {
+        cl.addValue(optA, "v1");
+        cl.addValue(optA, "v2");
+        List values = cl.getValues(optA);
+        assertEquals(2, values.size());
+    }
+
+    // covers addValue with null value: stored without throwing, verifiable count
+    @Test
+    public void testAddValue_nullValue_storedInList() throws Throwable {
+        cl.addValue(optA, null);
+        List values = cl.getValues(optA);
+        assertEquals(1, values.size());
+    }
+
+    // covers addValue: values for different options remain independent
+    @Test
+    public void testAddValue_differentOptions_valuesAreIndependent() throws Throwable {
+        cl.addValue(optA, "va");
+        cl.addValue(optB, "vb");
+        assertFalse(cl.getValues(optA).contains("vb"));
+        assertTrue(cl.getValues(optB).contains("vb"));
+    }
+
+    // covers setDefaultValues: per javadoc, getValues doesn't return values supplied as defaults
+    @Test
+    public void testGetValues_withOnlyDefaultValuesSet_excludesDefaultsPerContract() throws Throwable {
+        List defaults = new ArrayList();
+        defaults.add("defaultVal");
+        cl.setDefaultValues(optA, defaults);
+        List values = cl.getValues(optA);
+        assertTrue(values.isEmpty());
+    }
+
+    // covers setDefaultValues with null defaults: no exception, getValues still empty
+    @Test
+    public void testSetDefaultValues_nullDefaults_getValuesStillEmpty() throws Throwable {
+        cl.setDefaultValues(optA, null);
+        List values = cl.getValues(optA);
+        assertTrue(values.isEmpty());
+    }
+
+    // covers combination: explicit added values must be returned, defaults must not be
+    @Test
+    public void testGetValues_withAddedValuesAndDefaults_returnsOnlyAddedValues() throws Throwable {
+        cl.addValue(optA, "added");
+        List defaults = new ArrayList();
+        defaults.add("defaultVal");
+        cl.setDefaultValues(optA, defaults);
+        List values = cl.getValues(optA);
+        assertTrue(values.contains("added"));
+        assertFalse(values.contains("defaultVal"));
+    }
+
+    // covers addSwitch: first call succeeds, second call with same value throws per javadoc
+    @Test
+    public void testAddSwitch_duplicateSameValue_throwsIllegalStateException() throws Throwable {
+        cl.addSwitch(optA, true);
+        try {
+            cl.addSwitch(optA, true);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // covers addSwitch: second call with a different value also throws per javadoc contract
+    @Test
+    public void testAddSwitch_duplicateDifferentValue_throwsIllegalStateException() throws Throwable {
+        cl.addSwitch(optA, true);
+        try {
+            cl.addSwitch(optA, false);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // covers addSwitch: switches for different options are tracked independently
+    @Test
+    public void testAddSwitch_differentOptions_independentTrackingStillThrowsOnDuplicate() throws Throwable {
+        cl.addSwitch(optA, true);
+        cl.addSwitch(optB, false);
+        try {
+            cl.addSwitch(optB, false);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // covers setDefaultSwitch: does not interfere with addSwitch duplicate detection
+    @Test
+    public void testSetDefaultSwitch_thenAddSwitchDuplicate_stillThrows() throws Throwable {
+        cl.setDefaultSwitch(optA, Boolean.TRUE);
+        cl.addSwitch(optA, false);
+        try {
+            cl.addSwitch(optA, false);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // covers addProperty: single value stored and retrievable via getProperty
+    @Test
+    public void testAddProperty_singleValue_returnedByGetProperty() throws Throwable {
+        cl.addProperty("key1", "value1");
+        assertEquals("value1", cl.getProperty("key1"));
+    }
+
+    // covers addProperty: replaces any existing value per javadoc
+    @Test
+    public void testAddProperty_replaceExistingValue_getPropertyReturnsNewValue() throws Throwable {
+        cl.addProperty("key1", "value1");
+        cl.addProperty("key1", "value2");
+        assertEquals("value2", cl.getProperty("key1"));
+    }
+
+    // covers getProperty: unknown key returns null
+    @Test
+    public void testGetProperty_unknownKey_returnsNull() throws Throwable {
+        assertNull(cl.getProperty("unknown"));
+    }
+
+    // covers addProperty: empty string value edge case
+    @Test
+    public void testAddProperty_emptyStringValue_returnedByGetProperty() throws Throwable {
+        cl.addProperty("key2", "");
+        assertEquals("", cl.getProperty("key2"));
+    }
+}

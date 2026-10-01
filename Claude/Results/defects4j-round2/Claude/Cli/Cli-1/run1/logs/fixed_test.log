@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-1-duckjjvw/Cli-1f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.cli.CommandLineClaudeTest::testGetOptionObjectChar_setShort_notNull
+  - org.apache.commons.cli.CommandLineClaudeTest::testGetOptionObjectString_shortOptionWithArg_notNull
+  - org.apache.commons.cli.CommandLineClaudeTest::testGetOptionObjectString_longOptionName_returnsNonNull
+[exit 0]

@@ -1,0 +1,382 @@
+package com.google.javascript.jscomp;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.jstype.EnumType;
+import com.google.javascript.rhino.jstype.FunctionType;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.ObjectType;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class TypedScopeCreatorClaudeTest {
+
+  private Compiler compiler;
+  private TypedScopeCreator scopeCreator;
+  private Node root;
+
+  private Scope parseAndCreateScope(String js) throws Throwable {
+    List<SourceFile> externs = new ArrayList<SourceFile>();
+    List<SourceFile> inputs = new ArrayList<SourceFile>();
+    inputs.add(SourceFile.fromCode("test.js", js));
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.init(externs, inputs, options);
+    root = compiler.parseInputs();
+    assertNotNull(root);
+    scopeCreator = new TypedScopeCreator(compiler);
+    return scopeCreator.createScope(root, null);
+  }
+
+  private Scope parseAndCreateScopeWithExterns(String externsJs, String js)
+      throws Throwable {
+    List<SourceFile> externs = new ArrayList<SourceFile>();
+    externs.add(SourceFile.fromCode("externs.js", externsJs));
+    List<SourceFile> inputs = new ArrayList<SourceFile>();
+    inputs.add(SourceFile.fromCode("test.js", js));
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.init(externs, inputs, options);
+    root = compiler.parseInputs();
+    assertNotNull(root);
+    scopeCreator = new TypedScopeCreator(compiler);
+    return scopeCreator.createScope(root, null);
+  }
+
+  private Node findFunctionNode(Node n) {
+    if (n.isFunction()) {
+      return n;
+    }
+    for (Node c = n.getFirstChild(); c != null; c = c.getNext()) {
+      Node result = findFunctionNode(c);
+      if (result != null) {
+        return result;
+      }
+    }
+    return null;
+  }
+
+  private Node findScriptNode(Node n) {
+    if (n.isScript()) {
+      return n;
+    }
+    for (Node c = n.getFirstChild(); c != null; c = c.getNext()) {
+      Node result = findScriptNode(c);
+      if (result != null) {
+        return result;
+      }
+    }
+    return null;
+  }
+
+  // Covers: TypedScopeCreator(AbstractCompiler) constructor reads validator/convention/registry
+  @Test
+  public void testConstructor_withInitializedCompiler_createsUsableInstance() throws Throwable {
+    List<SourceFile> externs = new ArrayList<SourceFile>();
+    List<SourceFile> inputs = new ArrayList<SourceFile>();
+    inputs.add(SourceFile.fromCode("test.js", "var x = 1;"));
+    Compiler c = new Compiler();
+    c.init(externs, inputs, new CompilerOptions());
+    c.parseInputs();
+    TypedScopeCreator sc = new TypedScopeCreator(c);
+    assertNotNull(sc);
+  }
+
+  // Covers: createScope(root,null) global VAR path, parent==null branch
+  @Test
+  public void testCreateScope_globalVarDeclaration_declaresVariableInGlobalScope() throws Throwable {
+    Scope scope = parseAndCreateScope("var x = 1;");
+    assertTrue(scope.isGlobal());
+    assertNotNull(scope.getVar("x"));
+  }
+
+  // Covers: getDeclaredType -> @type annotation branch, declared (non-inferred) var
+  @Test
+  public void testCreateScope_varWithTypeAnnotation_declaresDeclaredNumberType() throws Throwable {
+    Scope scope = parseAndCreateScope("/** @type {number} */\nvar x = 1;\n");
+    Scope.Var v = scope.getVar("x");
+    assertNotNull(v);
+    assertEquals("number", v.getType().toString());
+    assertFalse(v.isTypeInferred());
+  }
+
+  // Covers: defineName with no JSDoc and not from externs -> type stays null, inferred
+  @Test
+  public void testCreateScope_varWithoutAnnotation_typeIsInferredAndNull() throws Throwable {
+    Scope scope = parseAndCreateScope("var x = 1;");
+    Scope.Var v = scope.getVar("x");
+    assertNotNull(v);
+    assertNull(v.getType());
+    assertTrue(v.isTypeInferred());
+  }
+
+  // Covers: defineName ternary - name.isFromExterns() branch assigns UNKNOWN_TYPE, declared
+  @Test
+  public void testCreateScope_externVarWithoutAnnotation_typeIsUnknown() throws Throwable {
+    Scope scope = parseAndCreateScopeWithExterns("var extVar;", "var ignore = 1;");
+    Scope.Var v = scope.getVar("extVar");
+    assertNotNull(v);
+    assertTrue(v.getType().isUnknownType());
+    assertFalse(v.isTypeInferred());
+  }
+
+  // Covers: defineVar multi-child branch with JSDoc -> MULTIPLE_VAR_DEF warning, both still declared
+  @Test
+  public void testCreateScope_multipleVarDeclarationsWithJsDoc_reportsWarningButDeclaresBoth() throws Throwable {
+    Scope scope = parseAndCreateScope("/** @type {number} */\nvar a = 1, b = 2;\n");
+    assertTrue(compiler.getWarnings().length > 0);
+    assertNotNull(scope.getVar("a"));
+    assertNotNull(scope.getVar("b"));
+  }
+
+  // Covers: shouldUseFunctionLiteralType true for global NAME lvalue -> declared function type
+  @Test
+  public void testCreateScope_namedFunctionExpressionAssignedToGlobalVar_declaresDeclaredFunctionType() throws Throwable {
+    Scope scope = parseAndCreateScope("var f = function() {};\n");
+    Scope.Var f = scope.getVar("f");
+    assertNotNull(f);
+    assertTrue(f.getType().isFunctionType());
+    assertFalse(f.isTypeInferred());
+  }
+
+  // Covers: NodeUtil.isFunctionDeclaration branch -> function declared, not a constructor
+  @Test
+  public void testCreateScope_functionDeclaration_declaresFunctionType() throws Throwable {
+    Scope scope = parseAndCreateScope("function f() {}\n");
+    Scope.Var f = scope.getVar("f");
+    assertNotNull(f);
+    assertTrue(f.getType().isFunctionType());
+    assertFalse(f.getType().isConstructor());
+  }
+
+  // Covers: @constructor branch in createFunctionTypeFromNodes, implicit .prototype declaration
+  @Test
+  public void testCreateScope_constructorFunction_declaresConstructorAndPrototype() throws Throwable {
+    Scope scope = parseAndCreateScope("/** @constructor */\nfunction Foo() {}\n");
+    JSType fooType = scope.getVar("Foo").getType();
+    assertTrue(fooType.isConstructor());
+    assertNotNull(scope.getVar("Foo.prototype"));
+  }
+
+  // Covers: @interface branch in createFunctionTypeFromNodes
+  @Test
+  public void testCreateScope_interfaceFunction_declaresInterfaceType() throws Throwable {
+    Scope scope = parseAndCreateScope("/** @interface */\nfunction Bar() {}\n");
+    FunctionType barType = scope.getVar("Bar").getType().toMaybeFunctionType();
+    assertNotNull(barType);
+    assertTrue(barType.isInterface());
+  }
+
+  // Covers: CTOR_INITIALIZER warning when constructor var has no initial function value
+  @Test
+  public void testCreateScope_constructorWithoutInitializer_reportsCtorInitializerWarning() throws Throwable {
+    parseAndCreateScope("/** @constructor */\nvar Foo;\n");
+    assertTrue(compiler.getWarnings().length > 0);
+  }
+
+  // Covers: IFACE_INITIALIZER warning when interface var has no initial function value
+  @Test
+  public void testCreateScope_interfaceWithoutInitializer_reportsIfaceInitializerWarning() throws Throwable {
+    parseAndCreateScope("/** @interface */\nvar Bar;\n");
+    assertTrue(compiler.getWarnings().length > 0);
+  }
+
+  // Covers: global ctor alias branch in createFunctionTypeFromNodes (rValue is qualified name)
+  @Test
+  public void testCreateScope_globalCtorAlias_declaresAliasedConstructorType() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\n"
+        + "/** @constructor */\nvar Bar = Foo;\n";
+    Scope scope = parseAndCreateScope(js);
+    Scope.Var bar = scope.getVar("Bar");
+    assertNotNull(bar);
+    assertTrue(bar.getType().isFunctionType());
+    assertTrue(bar.getType().isConstructor());
+    assertNotNull(compiler.getTypeRegistry().getType("Bar"));
+  }
+
+  // Covers: @enum branch in getDeclaredType/createEnumTypeFromNodes, element declared
+  @Test
+  public void testCreateScope_enumObjectLiteral_declaresEnumTypeAndElement() throws Throwable {
+    String js = "/** @enum {number} */\nvar Color = { RED: 1, GREEN: 2 };\n";
+    Scope scope = parseAndCreateScope(js);
+    JSType colorType = scope.getVar("Color").getType();
+    assertTrue(colorType instanceof EnumType);
+    assertNotNull(scope.getVar("Color.RED"));
+  }
+
+  // Covers: defineCatch -> defineSlot(name, parent, null) inferred branch
+  @Test
+  public void testCreateScope_catchParameter_declaresInferredVariable() throws Throwable {
+    String js = "function f() {}\ntry { f(); } catch (e) { var y = 1; }\n";
+    Scope scope = parseAndCreateScope(js);
+    Scope.Var e = scope.getVar("e");
+    assertNotNull(e);
+    assertTrue(e.isTypeInferred());
+  }
+
+  // Covers: Token.GETPROP stub declaration path -> resolveStubDeclarations declares UNKNOWN_TYPE
+  @Test
+  public void testCreateScope_stubPropertyDeclaration_declaresUnknownInferredProperty() throws Throwable {
+    Scope scope = parseAndCreateScope("var Foo = {};\nFoo.bar;\n");
+    Scope.Var bar = scope.getVar("Foo.bar");
+    assertNotNull(bar);
+    assertTrue(bar.getType().isUnknownType());
+    assertTrue(bar.isTypeInferred());
+  }
+
+  // Covers: processObjectLitProperties, shouldUseFunctionLiteralType false for object-lit key
+  @Test
+  public void testCreateScope_objectLiteralPropertyFunctionWithoutJsDoc_isInferred() throws Throwable {
+    Scope scope = parseAndCreateScope("var obj = { f: function() {} };\n");
+    Scope.Var f = scope.getVar("obj.f");
+    assertNotNull(f);
+    assertTrue(f.isTypeInferred());
+  }
+
+  // Covers: @lends on an undeclared name -> UNKNOWN_LENDS warning branch
+  @Test
+  public void testCreateScope_lendsOnUndeclaredName_reportsUnknownLendsWarning() throws Throwable {
+    String js = "var ignore = /** @lends {NotDeclared} */ ({ bar: 1 });\n";
+    parseAndCreateScope(js);
+    assertTrue(compiler.getWarnings().length > 0);
+  }
+
+  // Covers: @lends on a non-object type -> LENDS_ON_NON_OBJECT warning branch
+  @Test
+  public void testCreateScope_lendsOnNonObjectType_reportsLendsOnNonObjectWarning() throws Throwable {
+    String js = "/** @type {number} */\nvar num = 1;\n"
+        + "var ignore = /** @lends {num} */ ({ bar: 1 });\n";
+    parseAndCreateScope(js);
+    assertTrue(compiler.getWarnings().length > 0);
+  }
+
+  // Covers: @lends on a valid object type -> property defined on the lent object's type
+  @Test
+  public void testCreateScope_lendsOnObjectType_definesPropertyOnLentObject() throws Throwable {
+    String js = "var Foo = {};\nvar ignore = /** @lends {Foo} */ ({ bar: 1 });\n";
+    Scope scope = parseAndCreateScope(js);
+    ObjectType fooType = ObjectType.cast(scope.getVar("Foo").getType());
+    assertNotNull(fooType);
+    assertTrue(fooType.hasOwnProperty("bar"));
+  }
+
+  // Covers: GlobalScopeBuilder.checkForTypedef -> registers resolved type in registry
+  @Test
+  public void testCreateScope_typedefAnnotation_registersTypeInRegistry() throws Throwable {
+    String js = "/** @typedef {number} */\nvar MyNum;\n";
+    parseAndCreateScope(js);
+    JSType t = compiler.getTypeRegistry().getType("MyNum");
+    assertNotNull(t);
+    assertEquals("number", t.toString());
+  }
+
+  // Covers: CollectProperties.maybeCollectMember -> this.prop with JSDoc declared on instance type
+  @Test
+  public void testCreateScope_thisPropertyWithJsDoc_definesPropertyOnInstanceType() throws Throwable {
+    String js = "/** @constructor */\n"
+        + "function Foo() {}\n"
+        + "Foo.prototype.setX = function() {\n"
+        + "  /** @type {number} */\n"
+        + "  this.x = 1;\n"
+        + "};\n";
+    Scope scope = parseAndCreateScope(js);
+    FunctionType fooType = scope.getVar("Foo").getType().toMaybeFunctionType();
+    ObjectType fooInstance = fooType.getInstanceType();
+    assertTrue(fooInstance.hasOwnProperty("x"));
+  }
+
+  // Covers: createScope(root,parent!=null) -> LocalScopeBuilder.declareArguments assigns param types
+  @Test
+  public void testCreateScope_functionParameterNode_returnsLocalScopeWithParameterTypes() throws Throwable {
+    String js = "/**\n * @param {number} a\n * @param {string} b\n */\nfunction f(a, b) {}\n";
+    Scope globalScope = parseAndCreateScope(js);
+    Node fnNode = findFunctionNode(root);
+    Scope localScope = scopeCreator.createScope(fnNode, globalScope);
+    assertEquals("number", localScope.getVar("a").getType().toString());
+    assertEquals("string", localScope.getVar("b").getType().toString());
+  }
+
+  // Covers: LocalScopeBuilder.handleFunctionInputs -> bleeding function name declared in own scope
+  @Test
+  public void testCreateScope_bleedingFunctionName_declaresNameInOwnScope() throws Throwable {
+    String js = "var f = function g() { return g; };\n";
+    Scope globalScope = parseAndCreateScope(js);
+    Node fnNode = findFunctionNode(root);
+    Scope localScope = scopeCreator.createScope(fnNode, globalScope);
+    Scope.Var g = localScope.getVar("g");
+    assertNotNull(g);
+    assertTrue(g.getType().isFunctionType());
+    assertFalse(g.isTypeInferred());
+  }
+
+  // Covers: createInitialScope declares native constructor types and their prototypes
+  @Test
+  public void testCreateInitialScope_returnsGlobalScopeWithNativeTypesDeclared() throws Throwable {
+    parseAndCreateScope("var x = 1;");
+    Scope s = scopeCreator.createInitialScope(root);
+    assertTrue(s.isGlobal());
+    Scope.Var obj = s.getVar("Object");
+    assertNotNull(obj);
+    assertTrue(obj.getType().isConstructor());
+    assertNotNull(s.getVar("Object.prototype"));
+  }
+
+  // Covers: createInitialScope declares ActiveXObject as a declared (non-inferred) native value
+  @Test
+  public void testCreateInitialScope_activeXObjectDeclared_notInferred() throws Throwable {
+    parseAndCreateScope("var x = 1;");
+    Scope s = scopeCreator.createInitialScope(root);
+    Scope.Var activeX = s.getVar("ActiveXObject");
+    assertNotNull(activeX);
+    assertFalse(activeX.isTypeInferred());
+  }
+
+  // Covers: patchGlobalScope Preconditions.checkNotNull(globalScope) branch
+  @Test
+  public void testPatchGlobalScope_nullGlobalScope_throwsNullPointerException() throws Throwable {
+    parseAndCreateScope("var x = 1;");
+    Node scriptNode = findScriptNode(root);
+    try {
+      scopeCreator.patchGlobalScope(null, scriptNode);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // Covers: patchGlobalScope Preconditions.checkState(scriptRoot.isScript()) branch
+  @Test
+  public void testPatchGlobalScope_scriptRootNotScript_throwsIllegalStateException() throws Throwable {
+    Scope globalScope = parseAndCreateScope("var x = 1;");
+    try {
+      scopeCreator.patchGlobalScope(globalScope, root);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Covers: patchGlobalScope Preconditions.checkState(globalScope.isGlobal()) branch
+  @Test
+  public void testPatchGlobalScope_nonGlobalScope_throwsIllegalStateException() throws Throwable {
+    Scope globalScope = parseAndCreateScope("function f() {}\nvar x = 1;\n");
+    Node fnNode = findFunctionNode(root);
+    Scope localScope = scopeCreator.createScope(fnNode, globalScope);
+    Node scriptNode = findScriptNode(root);
+    try {
+      scopeCreator.patchGlobalScope(localScope, scriptNode);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Covers: patchGlobalScope success path -> var removal/re-traversal keeps declaration consistent
+  @Test
+  public void testPatchGlobalScope_reTraverseSameScript_variableStillDeclared() throws Throwable {
+    Scope globalScope = parseAndCreateScope("var x = 1;");
+    Node scriptNode = findScriptNode(root);
+    scopeCreator.patchGlobalScope(globalScope, scriptNode);
+    assertNotNull(globalScope.getVar("x"));
+  }
+}

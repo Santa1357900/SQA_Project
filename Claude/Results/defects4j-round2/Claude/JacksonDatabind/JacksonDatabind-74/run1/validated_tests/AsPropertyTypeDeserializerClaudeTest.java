@@ -1,0 +1,311 @@
+package com.fasterxml.jackson.databind.jsontype.impl;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.List;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+
+public class AsPropertyTypeDeserializerClaudeTest {
+
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = Dog.class, name = "dog"),
+        @JsonSubTypes.Type(value = Cat.class, name = "cat")
+    })
+    public static class Animal {
+        private String name;
+        public Animal() {}
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class Dog extends Animal {
+        public Dog() {}
+    }
+
+    public static class Cat extends Animal {
+        private int lives;
+        public Cat() {}
+        public int getLives() { return lives; }
+        public void setLives(int lives) { this.lives = lives; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY,
+            property = "type", visible = true)
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = VisibleDog.class, name = "dog")
+    })
+    public static class VisibleAnimal {
+        private String type;
+        private String name;
+        public VisibleAnimal() {}
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class VisibleDog extends VisibleAnimal {
+        public VisibleDog() {}
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY,
+            property = "type", defaultImpl = DefaultAnimal.class)
+    public static class DefaultableAnimal {
+        private String name;
+        public DefaultableAnimal() {}
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class DefaultAnimal extends DefaultableAnimal {
+        public DefaultAnimal() {}
+    }
+
+    public static class ObjectWrapper {
+        @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
+        private Object value;
+        public ObjectWrapper() {}
+        public Object getValue() { return value; }
+        public void setValue(Object value) { this.value = value; }
+    }
+
+    public static class Zoo {
+        private List<Animal> animals;
+        public Zoo() {}
+        public List<Animal> getAnimals() { return animals; }
+        public void setAnimals(List<Animal> animals) { this.animals = animals; }
+    }
+
+    public static class Owner {
+        private Animal pet;
+        public Owner() {}
+        public Animal getPet() { return pet; }
+        public void setPet(Animal pet) { this.pet = pet; }
+    }
+
+    // Covers START_OBJECT branch: type property as first field, resolves "dog" subtype
+    @Test
+    public void testDeserializeTypedFromObject_typeFirst_dogSubtype() throws Throwable {
+        String json = "{\"type\":\"dog\",\"name\":\"Rex\"}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertTrue(result instanceof Dog);
+        assertEquals("Rex", result.getName());
+    }
+
+    // Covers type-first branch resolving "cat" subtype with extra numeric field
+    @Test
+    public void testDeserializeTypedFromObject_typeFirst_catSubtypeWithExtraField() throws Throwable {
+        String json = "{\"type\":\"cat\",\"name\":\"Tom\",\"lives\":9}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertTrue(result instanceof Cat);
+        assertEquals("Tom", result.getName());
+        assertEquals(9, ((Cat) result).getLives());
+    }
+
+    // Covers TokenBuffer path: one field buffered before type property, then restored
+    @Test
+    public void testDeserializeTypedFromObject_typeInMiddle_bufferedFieldsRestored() throws Throwable {
+        String json = "{\"name\":\"Tom\",\"type\":\"cat\",\"lives\":9}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertTrue(result instanceof Cat);
+        assertEquals("Tom", result.getName());
+        assertEquals(9, ((Cat) result).getLives());
+    }
+
+    // Covers type property as last field, multiple fields buffered before it
+    @Test
+    public void testDeserializeTypedFromObject_typeLast_multipleFieldsBuffered() throws Throwable {
+        String json = "{\"name\":\"Tom\",\"lives\":3,\"type\":\"cat\"}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertTrue(result instanceof Cat);
+        assertEquals("Tom", result.getName());
+        assertEquals(3, ((Cat) result).getLives());
+    }
+
+    // Covers loop with zero iterations (empty object) -> missing type id -> exception
+    @Test
+    public void testDeserializeTypedFromObject_emptyObject_throwsJsonMappingException() throws Throwable {
+        try {
+            mapper.readValue("{}", Animal.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            // missing property that contains type id
+        }
+    }
+
+    // Covers buffered fields present but type property missing entirely -> exception
+    @Test
+    public void testDeserializeTypedFromObject_missingTypeProperty_withFields_throwsJsonMappingException() throws Throwable {
+        try {
+            mapper.readValue("{\"name\":\"Rex\"}", Animal.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // Covers unresolved/unknown type id value -> deserializer lookup failure
+    @Test
+    public void testDeserializeTypedFromObject_unknownTypeId_throwsJsonMappingException() throws Throwable {
+        try {
+            mapper.readValue("{\"type\":\"bird\",\"name\":\"Tweety\"}", Animal.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // Covers empty-string type id edge case, not matching any registered subtype
+    @Test
+    public void testDeserializeTypedFromObject_emptyStringTypeId_throwsJsonMappingException() throws Throwable {
+        try {
+            mapper.readValue("{\"type\":\"\",\"name\":\"Rex\"}", Animal.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // Covers type id value with surrounding whitespace not matching registered id exactly
+    @Test
+    public void testDeserializeTypedFromObject_typeIdWithWhitespace_throwsJsonMappingException() throws Throwable {
+        try {
+            mapper.readValue("{\"type\":\" dog \",\"name\":\"Rex\"}", Animal.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // Covers _deserializeTypedUsingDefaultImpl: defaultImpl used when type property missing
+    @Test
+    public void testDeserializeTypedUsingDefaultImpl_missingTypeProperty_usesDefaultImpl() throws Throwable {
+        DefaultableAnimal result = mapper.readValue("{\"name\":\"Whiskers\"}", DefaultableAnimal.class);
+        assertTrue(result instanceof DefaultAnimal);
+        assertEquals("Whiskers", result.getName());
+    }
+
+    // Covers typeIdVisible=true, type first: type id merged back into resulting POJO (tb==null path)
+    @Test
+    public void testDeserializeTypedFromObject_typeIdVisible_typeFirst_includesTypeField() throws Throwable {
+        String json = "{\"type\":\"dog\",\"name\":\"Rex\"}";
+        VisibleAnimal result = mapper.readValue(json, VisibleAnimal.class);
+        assertTrue(result instanceof VisibleDog);
+        assertEquals("dog", result.getType());
+        assertEquals("Rex", result.getName());
+    }
+
+    // Covers typeIdVisible=true with buffered fields before type id (tb!=null merge-back path)
+    @Test
+    public void testDeserializeTypedFromObject_typeIdVisible_typeNotFirst_mergesTypeBack() throws Throwable {
+        String json = "{\"name\":\"Rex\",\"type\":\"dog\"}";
+        VisibleAnimal result = mapper.readValue(json, VisibleAnimal.class);
+        assertTrue(result instanceof VisibleDog);
+        assertEquals("dog", result.getType());
+        assertEquals("Rex", result.getName());
+    }
+
+    // Covers deserializeTypedFromAny wrapper-array fallback when JSON root is a raw array [typeId, value]
+    @Test
+    public void testDeserializeTypedFromAny_wrapperArrayFallback_parsesDog() throws Throwable {
+        String json = "[\"dog\",{\"name\":\"Rex\"}]";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertTrue(result instanceof Dog);
+        assertEquals("Rex", result.getName());
+    }
+
+    // Covers natural-value fallback: integer scalar used directly when no object/type id present
+    @Test
+    public void testDeserializeTypedUsingDefaultImpl_naturalValueFallback_returnsInteger() throws Throwable {
+        ObjectWrapper result = mapper.readValue("{\"value\":123}", ObjectWrapper.class);
+        assertEquals(Integer.valueOf(123), result.getValue());
+    }
+
+    // Covers natural-value fallback with a String scalar value
+    @Test
+    public void testDeserializeTypedUsingDefaultImpl_naturalValueFallback_returnsString() throws Throwable {
+        ObjectWrapper result = mapper.readValue("{\"value\":\"hello\"}", ObjectWrapper.class);
+        assertEquals("hello", result.getValue());
+    }
+
+    // Covers collection of polymorphic elements, each carrying its own type property
+    @Test
+    public void testDeserializeTypedFromObject_listOfPolymorphicAnimals_parsesEachSubtype() throws Throwable {
+        String json = "{\"animals\":[{\"type\":\"dog\",\"name\":\"Rex\"},"
+                + "{\"type\":\"cat\",\"name\":\"Tom\",\"lives\":9}]}";
+        Zoo zoo = mapper.readValue(json, Zoo.class);
+        assertEquals(2, zoo.getAnimals().size());
+        assertTrue(zoo.getAnimals().get(0) instanceof Dog);
+        assertTrue(zoo.getAnimals().get(1) instanceof Cat);
+    }
+
+    // Covers empty array of polymorphic elements -> zero-element collection, no error
+    @Test
+    public void testDeserializeTypedFromObject_emptyAnimalsList_returnsEmptyList() throws Throwable {
+        Zoo zoo = mapper.readValue("{\"animals\":[]}", Zoo.class);
+        assertNotNull(zoo.getAnimals());
+        assertTrue(zoo.getAnimals().isEmpty());
+    }
+
+    // Covers nested polymorphic field resolved recursively via the same mechanism
+    @Test
+    public void testDeserializeTypedFromObject_nestedPolymorphicField_parsesCorrectly() throws Throwable {
+        String json = "{\"pet\":{\"type\":\"cat\",\"name\":\"Mimi\",\"lives\":7}}";
+        Owner owner = mapper.readValue(json, Owner.class);
+        assertTrue(owner.getPet() instanceof Cat);
+        assertEquals("Mimi", owner.getPet().getName());
+        assertEquals(7, ((Cat) owner.getPet()).getLives());
+    }
+
+    // Covers unicode escape decoding within a buffered property value
+    @Test
+    public void testDeserializeTypedFromObject_unicodeNameField_decodedCorrectly() throws Throwable {
+        String json = "{\"type\":\"dog\",\"name\":\"R\\u00e9x\"}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertEquals("R\u00e9x", result.getName());
+    }
+
+    // Covers explicit null value for a buffered property preceding the type id
+    @Test
+    public void testDeserializeTypedFromObject_nullNameField_setsNullNotThrow() throws Throwable {
+        String json = "{\"name\":null,\"type\":\"dog\"}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertTrue(result instanceof Dog);
+        assertNull(result.getName());
+    }
+
+    // Covers negative numeric edge value carried through a buffered field
+    @Test
+    public void testDeserializeTypedFromObject_negativeLivesValue_parsedCorrectly() throws Throwable {
+        String json = "{\"type\":\"cat\",\"name\":\"Tom\",\"lives\":-1}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertEquals(-1, ((Cat) result).getLives());
+    }
+
+    // Covers zero boundary numeric value for a buffered field
+    @Test
+    public void testDeserializeTypedFromObject_zeroLivesValue_parsedCorrectly() throws Throwable {
+        String json = "{\"type\":\"cat\",\"name\":\"Tom\",\"lives\":0}";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertEquals(0, ((Cat) result).getLives());
+    }
+
+    // Covers whitespace tolerance around tokens, type property still correctly located
+    @Test
+    public void testDeserializeTypedFromObject_whitespaceBetweenTokens_stillParses() throws Throwable {
+        String json = "  {  \"type\" : \"dog\" ,  \"name\" : \"Rex\"  }  ";
+        Animal result = mapper.readValue(json, Animal.class);
+        assertTrue(result instanceof Dog);
+        assertEquals("Rex", result.getName());
+    }
+}

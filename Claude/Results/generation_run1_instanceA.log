@@ -1,0 +1,413 @@
+﻿Backend cli (config dir: C:\claude-pipeline) | shard all | model claude-sonnet-5 | effort high | run 1 | selected 854 | pending 408 | workers 14
+[Closure_151] OK tests=38 in=4 cached=21882 out=21594 192.6s
+[Closure_155] SKIP (claimed by another instance)
+[Closure_157] SKIP (claimed by another instance)
+[Closure_158] SKIP (claimed by another instance)
+[Closure_159] SKIP (claimed by another instance)
+[Closure_160] SKIP (claimed by another instance)
+[Closure_161] SKIP (claimed by another instance)
+[Closure_137] OK tests=28 in=4 cached=19312 out=35623 316.7s
+[Closure_145] OK tests=29 in=2 cached=5278 out=32759 322.3s
+[Closure_136] OK tests=25 in=6 cached=67118 out=43975 392.1s
+[Closure_152] OK tests=45 in=2 cached=5278 out=48707 409.6s
+[Closure_166] SKIP (claimed by another instance)
+[Closure_133] OK tests=34 in=2 cached=5278 out=51040 458.1s
+[Closure_138] OK tests=31 in=2 cached=5278 out=55392 517.2s
+[Closure_169] SKIP (claimed by another instance)
+[Closure_170] SKIP (claimed by another instance)
+[Closure_171] SKIP (claimed by another instance)
+[Closure_154] OK tests=41 in=2 cached=5278 out=63672 556.5s
+[Closure_150] OK tests=28 in=4 cached=34956 out=59227 585.5s
+[Closure_134] OK tests=23 in=2 cached=5278 out=62416 611.9s
+[Closure_142] OK tests=22 in=6 cached=90064 out=59230 628.1s
+[Closure_164] OK tests=31 in=2 cached=5278 out=37255 357.1s
+[Closure_162] OK tests=42 in=6 cached=87220 out=60182 546.3s
+[Closure_163] OK tests=30 in=6 cached=98689 out=67937 583.6s
+[Codec_3] SKIP (claimed by another instance)
+[Codec_4] SKIP (claimed by another instance)
+[Closure_174] OK tests=23 in=4 cached=14869 out=35692 358.7s
+[Codec_1] OK tests=33 in=2 cached=5278 out=34560 288.5s
+[Codec_7] SKIP (claimed by another instance)
+[Closure_165] OK tests=45 in=6 cached=135846 out=71955 575.8s
+[Closure_167] OK tests=29 in=6 cached=95519 out=65588 603.1s
+[Closure_172] OK tests=27 in=2 cached=5278 out=55853 500.4s
+[Closure_132] OK tests=28 in=6 cached=40980 out=108462 1020.6s
+[Closure_176] OK tests=27 in=4 cached=36791 out=41675 413.7s
+[Closure_168] OK tests=30 in=4 cached=42624 out=69054 629.8s
+[Codec_14] SKIP (claimed by another instance)
+[Codec_13] OK tests=32 in=4 cached=19574 out=8444 64.5s
+[Codec_16] SKIP (claimed by another instance)
+[Codec_17] SKIP (claimed by another instance)
+[Codec_18] OK tests=42 in=4 cached=20307 out=13381 108.4s
+[Collections_1] SKIP (claimed by another instance)
+[Closure_175] OK tests=32 in=4 cached=26187 out=71365 611.0s
+[Closure_120] OK tests=40 in=6 cached=26841 out=129753 1248.7s
+[Collections_4] SKIP (claimed by another instance)
+[Codec_5] OK tests=45 in=4 cached=29041 out=45258 389.2s
+[Collections_6] SKIP (claimed by another instance)
+[Codec_6] OK tests=25 in=6 cached=59489 out=38435 346.6s
+[Codec_2] OK tests=43 in=4 cached=26671 out=65140 574.9s
+[Closure_173] OK tests=26 in=6 cached=34375 out=81427 760.8s
+[Codec_12] OK tests=28 in=4 cached=15405 out=34722 309.2s
+[Codec_9] OK tests=41 in=4 cached=29057 out=41160 367.1s
+[Codec_8] OK tests=42 in=8 cached=155485 out=46160 421.4s
+[Collections_13] SKIP (claimed by another instance)
+[Collections_5] OK tests=32 in=4 cached=17207 out=17942 151.6s
+[Collections_15] SKIP (claimed by another instance)
+[Collections_11] OK tests=32 in=2 cached=5278 out=9208 74.2s
+[Collections_3] OK tests=45 in=4 cached=30012 out=24490 197.4s
+[Collections_18] SKIP (claimed by another instance)
+[Codec_15] OK tests=31 in=4 cached=17090 out=40843 384.0s
+[Collections_20] SKIP (claimed by another instance)
+[Collections_14] OK tests=29 in=2 cached=5278 out=14990 122.7s
+[Collections_22] SKIP (claimed by another instance)
+[Collections_8] OK tests=28 in=6 cached=48208 out=24775 227.4s
+[Collections_24] SKIP (claimed by another instance)
+[Codec_10] OK tests=29 in=2 cached=5278 out=51602 508.6s
+[Collections_16] OK tests=32 in=2 cached=5278 out=18834 142.1s
+[Collections_27] SKIP (claimed by another instance)
+[Collections_19] OK tests=32 in=8 cached=67477 out=19133 154.5s
+[Collections_10] OK tests=40 in=4 cached=18831 out=32054 271.4s
+[Collections_2] OK tests=45 in=6 cached=97100 out=45408 418.4s
+[Compress_3] SKIP (claimed by another instance)
+[Collections_17] OK tests=30 in=4 cached=14798 out=28451 268.9s
+[Collections_9] OK tests=45 in=6 cached=98746 out=45616 365.9s
+[Collections_12] OK tests=43 in=4 cached=33168 out=42571 355.4s
+[Collections_21] OK tests=36 in=4 cached=18096 out=26065 220.4s
+[Collections_23] OK tests=44 in=4 cached=15556 out=32206 264.5s
+[Compress_9] SKIP (claimed by another instance)
+[Collections_7] OK tests=45 in=2 cached=5278 out=62002 505.5s
+[Compress_11] SKIP (claimed by another instance)
+[Collections_26] OK tests=34 in=4 cached=16620 out=33206 283.6s
+[Compress_13] SKIP (claimed by another instance)
+[Compress_2] OK tests=31 in=2 cached=0 out=33232 281.1s
+[Collections_25] OK tests=58 in=4 cached=34634 out=43691 360.5s
+[Compress_6] OK tests=38 in=6 cached=53723 out=27381 230.3s
+[Compress_4] OK tests=36 in=6 cached=61587 out=38314 310.4s
+[Compress_18] SKIP (claimed by another instance)
+[Compress_8] OK tests=30 in=6 cached=52154 out=28788 261.8s
+[Compress_20] SKIP (claimed by another instance)
+[Collections_28] OK tests=42 in=2 cached=5278 out=54163 463.3s
+[Compress_22] SKIP (claimed by another instance)
+[Compress_14] OK tests=35 in=2 cached=5278 out=26399 233.0s
+[Compress_7] OK tests=32 in=6 cached=64584 out=41708 386.2s
+[Compress_25] SKIP (claimed by another instance)
+[Compress_26] SKIP (claimed by another instance)
+[Compress_1] OK tests=32 in=6 cached=87939 out=62511 542.4s
+[Compress_19] OK tests=38 in=4 cached=18316 out=29672 218.4s
+[Compress_29] SKIP (claimed by another instance)
+[Compress_15] OK tests=45 in=4 cached=21465 out=34963 292.9s
+[Compress_16] OK tests=29 in=4 cached=17379 out=20160 298.8s
+[Compress_12] OK tests=28 in=6 cached=74337 out=45752 417.0s
+[Compress_33] SKIP (claimed by another instance)
+[Compress_5] OK tests=27 in=6 cached=82846 out=62102 569.7s
+[Compress_35] SKIP (claimed by another instance)
+[Compress_10] OK tests=28 in=6 cached=101839 out=65177 540.3s
+[Compress_37] SKIP (claimed by another instance)
+[Compress_21] OK tests=25 in=2 cached=5278 out=51234 444.5s
+[Compress_30] OK tests=26 in=4 cached=25990 out=28029 271.3s
+[Compress_40] SKIP (claimed by another instance)
+[Compress_23] OK tests=22 in=4 cached=17471 out=50210 465.4s
+[Compress_34] OK tests=37 in=4 cached=18115 out=28993 271.3s
+[Compress_17] OK tests=37 in=4 cached=21758 out=66937 593.4s
+[Codec_11] OK tests=43 in=4 cached=19014 out=42879 1486.8s
+[Compress_39] OK tests=36 in=6 cached=36678 out=12971 105.8s
+[!] [Closure_124] CLI error (attempt 1/5): API Error: Claude's response exceeded the 64000 output token maximum. To configure this behavior, set the CLAUDE_CODE_MAX_OUTPUT_TOKENS environment variable.; retry in 10s
+[Compress_31] OK tests=36 in=4 cached=21828 out=45868 407.5s
+[Compress_47] SKIP (claimed by another instance)
+[Compress_28] OK tests=29 in=6 cached=80988 out=50595 460.1s
+[Compress_42] OK tests=28 in=4 cached=14245 out=12552 116.2s
+[Compress_44] OK tests=26 in=4 cached=14557 out=12559 104.3s
+[Csv_2] OK tests=32 in=2 cached=5278 out=9132 69.9s
+[Csv_1] OK tests=27 in=4 cached=15140 out=15094 127.3s
+[Compress_38] OK tests=45 in=4 cached=28185 out=60381 482.9s
+[Compress_46] OK tests=38 in=4 cached=21627 out=36106 308.5s
+[Compress_36] OK tests=28 in=4 cached=28171 out=67546 586.3s
+[Jsoup_45] SKIP (claimed by another instance)
+[Csv_6] OK tests=36 in=2 cached=5278 out=19062 135.7s
+[Jsoup_67] SKIP (claimed by another instance)
+[Compress_43] OK tests=34 in=4 cached=38580 out=42796 357.2s
+[Csv_4] OK tests=38 in=6 cached=55473 out=29632 238.5s
+[Csv_3] OK tests=38 in=6 cached=50415 out=29424 264.2s
+[Compress_45] OK tests=35 in=4 cached=21682 out=41988 369.8s
+[Csv_5] OK tests=34 in=6 cached=65300 out=42002 355.7s
+[Jsoup_81] SKIP (claimed by another instance)
+[Jsoup_77] OK tests=26 in=4 cached=15431 out=27769 265.1s
+[Compress_32] OK tests=37 in=4 cached=10556 out=109981 954.6s
+[Compress_24] OK tests=41 in=6 cached=27267 out=114355 1111.2s
+[Csv_8] OK tests=45 in=2 cached=5278 out=41936 344.1s
+[Jsoup_86] SKIP (claimed by another instance)
+[Jsoup_79] OK tests=32 in=6 cached=50449 out=32433 306.0s
+[Csv_7] OK tests=32 in=2 cached=5278 out=48230 445.7s
+[Jsoup_89] SKIP (claimed by another instance)
+[Jsoup_78] OK tests=29 in=2 cached=5278 out=46294 408.4s
+[Jsoup_85] OK tests=39 in=2 cached=5278 out=18313 166.9s
+[Jsoup_92] SKIP (claimed by another instance)
+[Jsoup_80] OK tests=27 in=2 cached=5278 out=46490 442.4s
+[Jsoup_91] OK tests=25 in=4 cached=13606 out=8327 71.6s
+[Jsoup_84] OK tests=24 in=2 cached=5278 out=28148 241.7s
+[JxPath_3] SKIP (claimed by another instance)
+[Jsoup_88] OK tests=44 in=4 cached=15951 out=28072 226.4s
+[Jsoup_76] OK tests=38 in=6 cached=121113 out=61552 559.1s
+[Jsoup_63] OK tests=45 in=4 cached=22573 out=70903 622.1s
+[Jsoup_82] OK tests=29 in=6 cached=73225 out=49413 462.8s
+[Jsoup_93] OK tests=25 in=6 cached=44879 out=25218 238.1s
+[JxPath_9] SKIP (claimed by another instance)
+[Jsoup_83] OK tests=39 in=4 cached=18758 out=54835 459.8s
+[JxPath_2] OK tests=22 in=4 cached=15135 out=31425 297.0s
+[JxPath_12] SKIP (claimed by another instance)
+[JxPath_13] SKIP (claimed by another instance)
+[JxPath_7] OK tests=30 in=6 cached=39651 out=21326 198.5s
+[JxPath_8] OK tests=34 in=6 cached=40111 out=21269 190.5s
+[JxPath_6] OK tests=31 in=6 cached=50561 out=28846 295.2s
+[Jsoup_90] OK tests=45 in=6 cached=95643 out=52167 442.9s
+[Jsoup_87] OK tests=44 in=4 cached=31997 out=52940 553.5s
+[Compress_27] OK tests=36 in=10 cached=119359 out=129262 1698.2s
+[JxPath_1] OK tests=45 in=2 cached=5278 out=61781 493.4s
+[JxPath_21] SKIP (claimed by another instance)
+[JxPath_22] SKIP (claimed by another instance)
+[JxPath_4] OK tests=40 in=4 cached=22099 out=55354 454.5s
+[JxPath_5] OK tests=40 in=2 cached=5278 out=53032 453.1s
+[JxPath_10] OK tests=35 in=4 cached=14934 out=34365 306.7s
+[Lang_7] SKIP (claimed by another instance)
+[JxPath_15] OK tests=22 in=2 cached=5278 out=29808 278.5s
+[Lang_9] SKIP (claimed by another instance)
+[JxPath_11] OK tests=24 in=4 cached=15340 out=44574 386.9s
+[JxPath_17] OK tests=24 in=4 cached=15341 out=30540 273.4s
+[Lang_4] OK tests=24 in=4 cached=14565 out=25515 213.7s
+[JxPath_18] OK tests=24 in=6 cached=53108 out=34468 339.2s
+[JxPath_14] OK tests=43 in=6 cached=81430 out=47089 434.6s
+[JxPath_20] OK tests=37 in=4 cached=15321 out=32086 296.3s
+[Lang_5] OK tests=34 in=6 cached=59058 out=33728 297.6s
+[Lang_17] SKIP (claimed by another instance)
+[Lang_12] OK tests=30 in=4 cached=17581 out=21959 194.3s
+[Lang_20] SKIP (claimed by another instance)
+[Lang_21] SKIP (claimed by another instance)
+[JxPath_16] OK tests=41 in=4 cached=23810 out=66762 527.9s
+[Lang_13] OK tests=24 in=4 cached=17114 out=22394 196.6s
+[JxPath_19] OK tests=45 in=2 cached=5278 out=63475 529.8s
+[Lang_14] OK tests=43 in=6 cached=248155 out=26135 236.2s
+[Lang_11] OK tests=35 in=4 cached=17654 out=40118 346.8s
+[Lang_6] OK tests=26 in=4 cached=15166 out=41556 469.9s
+[Lang_19] OK tests=21 in=4 cached=14533 out=21986 190.1s
+[Lang_16] OK tests=45 in=6 cached=80135 out=29783 257.6s
+[Lang_31] SKIP (claimed by another instance)
+[Lang_8] OK tests=41 in=2 cached=5278 out=52009 471.2s
+[Lang_10] OK tests=35 in=6 cached=81665 out=44637 405.0s
+[Lang_29] OK tests=34 in=2 cached=5278 out=17268 133.8s
+[Lang_35] SKIP (claimed by another instance)
+[Lang_28] OK tests=22 in=6 cached=36849 out=17210 155.5s
+[Lang_37] SKIP (claimed by another instance)
+[Lang_15] OK tests=45 in=4 cached=28569 out=49955 405.2s
+[Lang_27] OK tests=45 in=6 cached=80973 out=32978 265.5s
+[Lang_24] OK tests=42 in=6 cached=88366 out=39132 328.8s
+[Lang_33] OK tests=44 in=4 cached=28546 out=33356 249.7s
+[Lang_42] SKIP (claimed by another instance)
+[Lang_32] OK tests=45 in=4 cached=25156 out=37026 302.9s
+[Lang_44] SKIP (claimed by another instance)
+[Lang_45] SKIP (claimed by another instance)
+[Lang_22] OK tests=42 in=6 cached=100197 out=60116 489.7s
+[Lang_36] OK tests=45 in=4 cached=30384 out=25232 211.9s
+[Lang_23] OK tests=29 in=6 cached=81720 out=52690 500.7s
+[Compress_41] OK tests=29 in=8 cached=21112 out=251584 2298.6s
+[Lang_51] SKIP (claimed by another instance)
+[Lang_26] OK tests=45 in=6 cached=115462 out=61969 532.4s
+[Lang_38] OK tests=39 in=4 cached=34031 out=40616 340.6s
+[Lang_30] OK tests=56 in=2 cached=5278 out=59938 484.7s
+[Lang_46] OK tests=44 in=4 cached=25425 out=27616 226.7s
+[Lang_56] SKIP (claimed by another instance)
+[Lang_57] SKIP (claimed by another instance)
+[Lang_34] OK tests=45 in=4 cached=40382 out=64973 540.6s
+[Lang_55] OK tests=33 in=2 cached=5278 out=11132 87.3s
+[Lang_40] OK tests=58 in=2 cached=5278 out=46391 371.0s
+[Lang_47] OK tests=45 in=4 cached=44256 out=33855 263.4s
+[Lang_41] OK tests=45 in=4 cached=27944 out=34617 389.2s
+[Lang_63] SKIP (claimed by another instance)
+[Lang_49] OK tests=43 in=4 cached=26249 out=38442 307.0s
+[Lang_39] OK tests=45 in=2 cached=5278 out=61027 526.7s
+[Lang_53] OK tests=41 in=4 cached=27937 out=29559 271.5s
+[Lang_50] OK tests=44 in=4 cached=33918 out=43573 365.3s
+[Lang_54] OK tests=37 in=4 cached=17550 out=28871 258.8s
+[Lang_43] OK tests=26 in=4 cached=19508 out=52672 506.2s
+[Lang_60] OK tests=88 in=4 cached=40481 out=28369 226.8s
+[Lang_52] OK tests=45 in=6 cached=77900 out=43071 396.2s
+[Lang_62] OK tests=42 in=4 cached=29662 out=29292 251.4s
+[!] [Closure_124] CLI error (attempt 2/5): API Error: Claude's response exceeded the 64000 output token maximum. To configure this behavior, set the CLAUDE_CODE_MAX_OUTPUT_TOKENS environment variable.; retry in 21s
+[Lang_64] OK tests=27 in=6 cached=47778 out=24665 238.9s
+[Math_3] OK tests=47 in=2 cached=5278 out=18260 134.4s
+[Lang_59] OK tests=45 in=2 cached=5278 out=42485 325.8s
+[Lang_58] OK tests=45 in=2 cached=5278 out=43261 346.5s
+[Math_2] OK tests=32 in=6 cached=46214 out=21064 177.7s
+[Lang_61] OK tests=45 in=4 cached=40482 out=50418 405.2s
+[Math_4] OK tests=23 in=4 cached=15741 out=32251 279.8s
+[Math_6] OK tests=28 in=4 cached=16242 out=24878 219.3s
+[Lang_65] OK tests=45 in=2 cached=5278 out=44595 383.7s
+[Math_7] OK tests=27 in=6 cached=55331 out=27206 216.0s
+[Math_11] OK tests=22 in=8 cached=65112 out=17841 155.5s
+[Math_1] OK tests=65 in=6 cached=84695 out=43159 374.2s
+[Math_5] OK tests=42 in=6 cached=83965 out=34950 286.7s
+[Math_8] OK tests=26 in=4 cached=16123 out=38683 318.8s
+[Math_9] OK tests=32 in=4 cached=16586 out=32584 305.9s
+[Math_10] OK tests=45 in=6 cached=103935 out=37882 315.9s
+[Math_12] OK tests=26 in=4 cached=15679 out=34938 332.2s
+[Math_22] OK tests=33 in=4 cached=17638 out=13084 112.6s
+[Math_17] OK tests=45 in=4 cached=41849 out=34842 312.2s
+[Math_19] OK tests=24 in=4 cached=33685 out=40769 335.3s
+[Math_13] OK tests=23 in=6 cached=88977 out=55833 511.6s
+[Math_15] OK tests=45 in=2 cached=5278 out=49484 410.8s
+[Math_16] OK tests=50 in=2 cached=5278 out=48213 417.9s
+[Closure_124] OK tests=27 in=2 cached=5278 out=63855 5776.0s
+[Math_24] OK tests=24 in=2 cached=5278 out=33822 299.9s
+[Math_20] OK tests=28 in=2 cached=5278 out=52748 453.3s
+[Math_21] OK tests=24 in=4 cached=16011 out=50238 477.1s
+[Math_14] OK tests=23 in=4 cached=17560 out=59801 553.0s
+[Math_23] OK tests=25 in=2 cached=5278 out=44015 386.0s
+[Math_25] OK tests=20 in=4 cached=19749 out=37305 332.0s
+[Math_34] OK tests=34 in=4 cached=16605 out=11111 83.1s
+[Math_26] OK tests=45 in=8 cached=122537 out=39571 319.8s
+[Math_27] OK tests=42 in=2 cached=5278 out=31291 266.2s
+[Math_18] OK tests=23 in=6 cached=90731 out=35998 653.9s
+[Math_31] OK tests=22 in=6 cached=53325 out=30364 268.2s
+[Math_35] OK tests=28 in=4 cached=15169 out=22416 173.3s
+[Math_30] OK tests=25 in=4 cached=16978 out=31548 291.1s
+[Math_32] OK tests=28 in=6 cached=69433 out=38856 344.2s
+[Math_41] OK tests=41 in=4 cached=22296 out=26216 215.2s
+[Math_38] OK tests=26 in=2 cached=5278 out=32848 279.1s
+[Math_36] OK tests=45 in=2 cached=0 out=39859 303.4s
+[Math_28] OK tests=22 in=6 cached=77011 out=56908 515.2s
+[Math_40] OK tests=30 in=2 cached=5278 out=35136 347.7s
+[Math_46] OK tests=45 in=6 cached=70885 out=22161 173.3s
+[Math_43] OK tests=40 in=4 cached=23089 out=32413 294.5s
+[Math_39] OK tests=21 in=4 cached=18584 out=44854 430.4s
+[Math_37] OK tests=45 in=6 cached=104869 out=56738 483.9s
+[Math_45] OK tests=34 in=6 cached=64407 out=42961 346.3s
+[Math_47] OK tests=45 in=4 cached=29783 out=40787 318.7s
+[Math_44] OK tests=29 in=4 cached=18781 out=38595 442.9s
+[Math_48] OK tests=26 in=6 cached=58924 out=36798 329.8s
+[!] [Math_59] CLI error (attempt 1/5): API Error: Output blocked by content filtering policy; retry in 13s
+[Math_42] OK tests=34 in=6 cached=90496 out=62497 568.5s
+[Math_55] OK tests=48 in=6 cached=54989 out=25460 218.0s
+[Math_50] OK tests=26 in=4 cached=17131 out=43019 375.5s
+[Math_51] OK tests=30 in=4 cached=17036 out=38302 334.3s
+[Math_56] OK tests=32 in=4 cached=16722 out=39226 370.5s
+[Math_60] OK tests=34 in=6 cached=45058 out=21930 192.3s
+[Math_33] OK tests=34 in=6 cached=27394 out=106793 966.3s
+[Math_57] OK tests=20 in=2 cached=5278 out=38721 325.1s
+[Math_52] OK tests=42 in=2 cached=5278 out=58972 498.5s
+[Math_58] OK tests=19 in=2 cached=5278 out=35600 324.4s
+[Math_61] OK tests=30 in=6 cached=48945 out=25812 225.2s
+[Math_53] OK tests=45 in=2 cached=5278 out=63159 512.1s
+[Math_59] OK tests=61 in=4 cached=56196 out=36660 349.1s
+[Math_54] OK tests=45 in=4 cached=40601 out=66036 555.8s
+[Math_49] OK tests=45 in=6 cached=73965 out=39050 730.5s
+[Math_63] OK tests=54 in=4 cached=40326 out=39165 338.5s
+[Math_62] OK tests=21 in=2 cached=5278 out=44881 406.5s
+[Math_65] OK tests=24 in=2 cached=5278 out=36490 291.9s
+[Math_75] OK tests=48 in=4 cached=20293 out=19190 157.4s
+[Math_70] OK tests=22 in=4 cached=14935 out=32349 300.4s
+[Math_66] OK tests=29 in=2 cached=5278 out=39181 348.9s
+[Math_69] OK tests=31 in=4 cached=17905 out=36558 323.6s
+[Math_68] OK tests=24 in=4 cached=26542 out=39753 372.2s
+[Math_64] OK tests=23 in=4 cached=26981 out=48491 419.8s
+[Math_71] OK tests=24 in=6 cached=69647 out=42711 385.7s
+[Math_67] OK tests=28 in=6 cached=77290 out=51940 498.1s
+[Math_79] OK tests=61 in=4 cached=34971 out=34254 293.5s
+[Math_77] OK tests=45 in=4 cached=27219 out=44423 341.6s
+[Math_74] OK tests=26 in=4 cached=18886 out=54195 535.8s
+[Math_80] OK tests=33 in=6 cached=104542 out=38328 330.5s
+[Math_78] OK tests=24 in=6 cached=63974 out=37459 357.8s
+[Math_82] OK tests=23 in=4 cached=16206 out=36674 322.0s
+[Math_76] OK tests=33 in=2 cached=5278 out=60616 526.9s
+[Math_81] OK tests=34 in=8 cached=185207 out=47615 418.6s
+[Math_29] OK tests=47 in=4 cached=35972 out=30678 1862.1s
+[Math_86] OK tests=30 in=4 cached=18349 out=25863 215.7s
+[Math_73] OK tests=23 in=4 cached=17727 out=27181 775.1s
+[Math_89] OK tests=44 in=2 cached=5278 out=23927 217.5s
+[Math_84] OK tests=22 in=4 cached=15321 out=50455 477.0s
+[Math_91] OK tests=41 in=4 cached=20898 out=25483 210.1s
+[Math_83] OK tests=32 in=6 cached=86389 out=60021 528.1s
+[Math_95] OK tests=28 in=8 cached=64215 out=17907 173.7s
+[Math_93] OK tests=41 in=6 cached=74038 out=29948 251.9s
+[Math_87] OK tests=33 in=6 cached=71440 out=46706 399.3s
+[Math_94] OK tests=45 in=6 cached=69356 out=24612 208.8s
+[Math_90] OK tests=40 in=4 cached=19055 out=43189 393.3s
+[Math_92] OK tests=45 in=4 cached=28296 out=46045 374.6s
+[Math_103] OK tests=30 in=4 cached=15930 out=11367 97.4s
+[Math_104] OK tests=39 in=2 cached=5278 out=15072 131.8s
+[Math_99] OK tests=45 in=4 cached=29720 out=30924 253.8s
+[Math_102] OK tests=36 in=6 cached=47258 out=20773 168.6s
+[Math_105] OK tests=34 in=6 cached=46215 out=16621 139.6s
+[Math_100] OK tests=23 in=2 cached=5278 out=33230 291.6s
+[Math_101] OK tests=42 in=4 cached=20386 out=28727 225.8s
+[Math_88] OK tests=39 in=8 cached=171989 out=72105 629.2s
+[Mockito_2] OK tests=20 in=4 cached=13719 out=13290 138.0s
+[Math_96] OK tests=44 in=4 cached=26462 out=52371 440.8s
+[Math_98] OK tests=45 in=8 cached=178882 out=54118 451.7s
+[Math_106] OK tests=26 in=2 cached=5278 out=33273 293.2s
+[Math_85] OK tests=24 in=4 cached=24156 out=23497 912.1s
+[Mockito_5] OK tests=24 in=6 cached=44080 out=23792 219.5s
+[Math_72] OK tests=28 in=4 cached=17802 out=22373 1373.6s
+[Mockito_11] OK tests=22 in=4 cached=14097 out=7363 61.6s
+[Mockito_6] OK tests=30 in=4 cached=24564 out=27371 253.0s
+[Mockito_1] OK tests=25 in=4 cached=15913 out=47534 426.6s
+[Mockito_12] OK tests=21 in=4 cached=13827 out=17411 154.6s
+[Mockito_9] OK tests=23 in=6 cached=49923 out=30988 296.1s
+[Mockito_3] OK tests=27 in=2 cached=5278 out=47185 448.9s
+[Mockito_7] OK tests=34 in=4 cached=22671 out=53470 403.2s
+[Mockito_14] OK tests=26 in=2 cached=5278 out=29025 239.3s
+[Mockito_13] OK tests=27 in=2 cached=5278 out=31339 274.8s
+[Mockito_15] OK tests=22 in=4 cached=14063 out=32601 277.5s
+[Mockito_22] OK tests=32 in=2 cached=5278 out=10399 85.0s
+[Mockito_18] OK tests=35 in=2 cached=5278 out=23352 186.2s
+[Mockito_10] OK tests=22 in=4 cached=16167 out=42798 411.5s
+[Mockito_19] OK tests=24 in=6 cached=38824 out=21337 191.3s
+[Mockito_8] OK tests=36 in=4 cached=22662 out=61770 485.5s
+[Mockito_4] OK tests=45 in=4 cached=26573 out=72360 603.3s
+[Mockito_26] OK tests=40 in=4 cached=14632 out=9124 70.1s
+[Mockito_21] OK tests=18 in=6 cached=40148 out=21003 191.5s
+[Mockito_20] OK tests=23 in=2 cached=5278 out=25474 233.2s
+[Math_97] OK tests=22 in=2 cached=5278 out=35562 1007.0s
+[Mockito_29] OK tests=24 in=2 cached=5278 out=16051 150.3s
+[Mockito_23] OK tests=24 in=6 cached=48620 out=26867 247.1s
+[Mockito_17] OK tests=29 in=6 cached=65475 out=45924 450.5s
+[Mockito_27] OK tests=30 in=6 cached=46367 out=25333 215.5s
+[Mockito_24] OK tests=31 in=2 cached=5278 out=31352 266.6s
+[Mockito_32] OK tests=21 in=2 cached=5278 out=26763 225.4s
+[Mockito_30] OK tests=38 in=4 cached=21912 out=33206 275.4s
+[Time_1] OK tests=30 in=4 cached=16010 out=14342 108.2s
+[Mockito_28] OK tests=19 in=6 cached=53048 out=34625 314.8s
+[Mockito_25] OK tests=30 in=2 cached=5278 out=43749 376.2s
+[Mockito_35] OK tests=41 in=4 cached=21435 out=23042 191.4s
+[Mockito_31] OK tests=20 in=2 cached=5278 out=34711 336.8s
+[Mockito_16] OK tests=29 in=4 cached=15514 out=46166 708.5s
+[Time_2] OK tests=32 in=4 cached=15984 out=22337 191.7s
+[Mockito_38] OK tests=22 in=4 cached=14189 out=27623 242.5s
+[Mockito_37] OK tests=23 in=2 cached=5278 out=42272 372.3s
+[Mockito_34] OK tests=31 in=2 cached=5278 out=52157 465.3s
+[Mockito_33] OK tests=29 in=4 cached=15142 out=57354 484.0s
+[Mockito_36] OK tests=43 in=2 cached=5278 out=49512 399.6s
+[Time_8] OK tests=44 in=4 cached=31972 out=34035 288.9s
+[Time_10] OK tests=45 in=4 cached=17792 out=31887 284.7s
+[Time_15] OK tests=45 in=2 cached=5278 out=20557 138.9s
+[Time_4] OK tests=45 in=4 cached=26501 out=51295 418.4s
+[Time_6] OK tests=39 in=6 cached=99838 out=54200 451.5s
+[Time_5] OK tests=44 in=4 cached=37944 out=60597 509.5s
+[Time_17] OK tests=43 in=4 cached=31434 out=27358 217.5s
+[Time_14] OK tests=34 in=4 cached=18501 out=34350 305.8s
+[Time_16] OK tests=53 in=4 cached=26797 out=36722 314.1s
+[Time_18] OK tests=37 in=4 cached=28584 out=33774 287.9s
+[Time_11] OK tests=43 in=4 cached=23892 out=68642 588.6s
+[Time_20] OK tests=45 in=4 cached=49005 out=51855 420.0s
+[Time_19] OK tests=44 in=2 cached=5278 out=52052 469.7s
+[Time_22] OK tests=51 in=2 cached=5278 out=50354 446.9s
+[Time_3] OK tests=45 in=8 cached=99689 out=111527 950.7s
+[Time_26] OK tests=42 in=6 cached=79389 out=48682 416.4s
+[Time_24] OK tests=29 in=4 cached=19906 out=47467 443.9s
+[Time_9] OK tests=47 in=6 cached=36872 out=105778 932.1s
+[Time_12] OK tests=45 in=8 cached=117772 out=107181 892.9s
+[Time_7] OK tests=45 in=6 cached=32248 out=117212 985.9s
+[Time_25] OK tests=45 in=6 cached=110882 out=61131 554.2s
+[Time_27] OK tests=43 in=4 cached=36764 out=60608 491.9s
+[Time_23] OK tests=43 in=4 cached=31236 out=70172 668.8s
+[Time_13] OK tests=39 in=10 cached=186097 out=113546 980.3s
+Done: 408 ok, 0 failed

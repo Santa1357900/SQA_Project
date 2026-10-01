@@ -1,0 +1,388 @@
+package org.apache.commons.math.stat.descriptive;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.exception.MathIllegalStateException;
+import org.apache.commons.math.exception.NullArgumentException;
+import org.apache.commons.math.stat.descriptive.summary.Sum;
+import org.apache.commons.math.stat.descriptive.summary.SumOfSquares;
+import org.apache.commons.math.stat.descriptive.summary.SumOfLogs;
+
+public class SummaryStatisticsClaudeTest {
+
+    private SummaryStatistics stats;
+
+    @Before
+    public void setUp() throws Throwable {
+        stats = new SummaryStatistics();
+    }
+
+    // new instance: n must be zero before any addValue call
+    @Test
+    public void testDefaultConstructor_noValuesAdded_countIsZero() throws Throwable {
+        assertEquals(0L, stats.getN());
+    }
+
+    // addValue three times increments n by one each call
+    @Test
+    public void testGetN_afterAddingThreeValues_returnsThree() throws Throwable {
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        assertEquals(3L, stats.getN());
+    }
+
+    // getSum() must equal arithmetic sum of added values
+    @Test
+    public void testAddValue_threeValues_sumIsCorrect() throws Throwable {
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        assertEquals(6.0, stats.getSum(), 1e-9);
+    }
+
+    // getMean() must equal arithmetic mean of added values
+    @Test
+    public void testAddValue_threeValues_meanIsCorrect() throws Throwable {
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        assertEquals(2.0, stats.getMean(), 1e-9);
+    }
+
+    // getMin() and getMax() must track extremes among added values
+    @Test
+    public void testAddValue_threeValues_minAndMaxCorrect() throws Throwable {
+        stats.addValue(3.0);
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        assertEquals(1.0, stats.getMin(), 1e-9);
+        assertEquals(3.0, stats.getMax(), 1e-9);
+    }
+
+    // getSumsq() must equal sum of squares of added values
+    @Test
+    public void testAddValue_threeValues_sumsqCorrect() throws Throwable {
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        assertEquals(14.0, stats.getSumsq(), 1e-9);
+    }
+
+    // sample (bias-corrected, n-1 denominator) variance per javadoc contract
+    @Test
+    public void testGetVariance_threeValues_sampleVarianceCorrect() throws Throwable {
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        assertEquals(1.0, stats.getVariance(), 1e-9);
+    }
+
+    // population variance uses n denominator, no bias correction
+    @Test
+    public void testGetPopulationVariance_threeValues_correct() throws Throwable {
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        assertEquals(2.0 / 3.0, stats.getPopulationVariance(), 1e-9);
+    }
+
+    // n==0 branch: getStandardDeviation must return NaN per own explicit logic
+    @Test
+    public void testGetStandardDeviation_noValues_isNaN() throws Throwable {
+        assertTrue(Double.isNaN(stats.getStandardDeviation()));
+    }
+
+    // n==1 branch: getStandardDeviation must return exactly 0.0
+    @Test
+    public void testGetStandardDeviation_oneValue_isZero() throws Throwable {
+        stats.addValue(7.0);
+        assertEquals(0.0, stats.getStandardDeviation(), 1e-12);
+    }
+
+    // n>1 branch: getStandardDeviation must equal sqrt(sample variance)
+    @Test
+    public void testGetStandardDeviation_twoValues_equalsSqrtVariance() throws Throwable {
+        stats.addValue(2.0);
+        stats.addValue(4.0);
+        double expectedVariance = ((2.0 - 3.0) * (2.0 - 3.0) + (4.0 - 3.0) * (4.0 - 3.0)) / 1.0;
+        assertEquals(Math.sqrt(expectedVariance), stats.getStandardDeviation(), 1e-9);
+    }
+
+    // sum of natural logs of added values
+    @Test
+    public void testGetSumOfLogs_threeValues_correct() throws Throwable {
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        double expected = Math.log(1.0) + Math.log(2.0) + Math.log(3.0);
+        assertEquals(expected, stats.getSumOfLogs(), 1e-9);
+    }
+
+    // geometric mean equals exp(sumOfLogs / n)
+    @Test
+    public void testGetGeometricMean_threeValues_correct() throws Throwable {
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        double expectedSumLogs = Math.log(1.0) + Math.log(2.0) + Math.log(3.0);
+        double expected = Math.exp(expectedSumLogs / 3.0);
+        assertEquals(expected, stats.getGeometricMean(), 1e-9);
+    }
+
+    // javadoc guarantees second moment is exactly 0 for a single value, by definition
+    @Test
+    public void testGetSecondMoment_oneValue_isZero() throws Throwable {
+        stats.addValue(42.0);
+        assertEquals(0.0, stats.getSecondMoment(), 1e-12);
+    }
+
+    // javadoc guarantees second moment is NaN when no data has been added
+    @Test
+    public void testGetSecondMoment_noValues_isNaN() throws Throwable {
+        assertTrue(Double.isNaN(stats.getSecondMoment()));
+    }
+
+    // getSummary() must reflect the same six values used to build it
+    @Test
+    public void testGetSummary_matchesIndividualGetters() throws Throwable {
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        StatisticalSummary summary = stats.getSummary();
+        assertEquals(stats.getMean(), summary.getMean(), 1e-9);
+        assertEquals(stats.getN(), summary.getN());
+        assertEquals(stats.getMax(), summary.getMax(), 1e-9);
+        assertEquals(stats.getMin(), summary.getMin(), 1e-9);
+        assertEquals(stats.getSum(), summary.getSum(), 1e-9);
+        assertEquals(stats.getVariance(), summary.getVariance(), 1e-9);
+    }
+
+    // toString() report must contain the documented section labels
+    @Test
+    public void testToString_containsExpectedLabels() throws Throwable {
+        stats.addValue(1.0);
+        String report = stats.toString();
+        assertTrue(report.contains("mean:"));
+        assertTrue(report.contains("variance:"));
+        assertTrue(report.contains("n:"));
+    }
+
+    // clear() must reset count to zero and NaN-document statistics back to NaN
+    @Test
+    public void testClear_resetsCountAndStatisticsToNaN() throws Throwable {
+        stats.addValue(1.0);
+        stats.addValue(2.0);
+        stats.clear();
+        assertEquals(0L, stats.getN());
+        assertTrue(Double.isNaN(stats.getMean()));
+        assertTrue(Double.isNaN(stats.getStandardDeviation()));
+    }
+
+    // clear() resets n so setter checkEmpty() must allow reconfiguration afterwards
+    @Test
+    public void testClear_thenAddValue_allowsReconfiguration() throws Throwable {
+        stats.addValue(1.0);
+        stats.clear();
+        stats.setSumImpl(new Sum());
+        stats.addValue(5.0);
+        assertEquals(5.0, stats.getSum(), 1e-9);
+    }
+
+    // equals(): identical object reference short-circuit branch
+    @Test
+    public void testEquals_sameReference_returnsTrue() throws Throwable {
+        assertTrue(stats.equals(stats));
+    }
+
+    // equals(): two freshly constructed (all-NaN) instances must be equal
+    @Test
+    public void testEquals_twoFreshInstances_returnsTrue() throws Throwable {
+        SummaryStatistics other = new SummaryStatistics();
+        assertTrue(stats.equals(other));
+    }
+
+    // equals(): differing n must make instances unequal
+    @Test
+    public void testEquals_differentCounts_returnsFalse() throws Throwable {
+        SummaryStatistics other = new SummaryStatistics();
+        other.addValue(1.0);
+        assertFalse(stats.equals(other));
+    }
+
+    // equals(): null argument must return false, not throw
+    @Test
+    public void testEquals_nullArgument_returnsFalse() throws Throwable {
+        assertFalse(stats.equals(null));
+    }
+
+    // equals(): instanceof check branch for an unrelated type
+    @Test
+    public void testEquals_differentType_returnsFalse() throws Throwable {
+        assertFalse(stats.equals("not a SummaryStatistics"));
+    }
+
+    // hashCode() contract: equal objects must produce equal hash codes
+    @Test
+    public void testHashCode_equalObjects_haveSameHashCode() throws Throwable {
+        SummaryStatistics other = new SummaryStatistics();
+        assertEquals(stats.hashCode(), other.hashCode());
+    }
+
+    // default sum implementation must be a usable Sum-compatible statistic
+    @Test
+    public void testGetSumImpl_default_returnsNonNullInstance() throws Throwable {
+        assertNotNull(stats.getSumImpl());
+    }
+
+    // setSumImpl before any data is added must be accepted and used
+    @Test
+    public void testSetSumImpl_beforeAddValue_changesImplementation() throws Throwable {
+        Sum customSum = new Sum();
+        stats.setSumImpl(customSum);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        assertSame(customSum, stats.getSumImpl());
+        assertEquals(5.0, stats.getSum(), 1e-9);
+    }
+
+    // setSumImpl after data has been added must throw per javadoc contract
+    @Test
+    public void testSetSumImpl_afterAddValue_throwsMathIllegalStateException() throws Throwable {
+        stats.addValue(1.0);
+        try {
+            stats.setSumImpl(new Sum());
+            fail("expected MathIllegalStateException");
+        } catch (MathIllegalStateException expected) {
+        }
+    }
+
+    // setMinImpl after data has been added must throw per javadoc contract
+    @Test
+    public void testSetMinImpl_afterAddValue_throwsMathIllegalStateException() throws Throwable {
+        stats.addValue(1.0);
+        try {
+            stats.setMinImpl(stats.getMinImpl());
+            fail("expected MathIllegalStateException");
+        } catch (MathIllegalStateException expected) {
+        }
+    }
+
+    // setMaxImpl after data has been added must throw per javadoc contract
+    @Test
+    public void testSetMaxImpl_afterAddValue_throwsMathIllegalStateException() throws Throwable {
+        stats.addValue(1.0);
+        try {
+            stats.setMaxImpl(stats.getMaxImpl());
+            fail("expected MathIllegalStateException");
+        } catch (MathIllegalStateException expected) {
+        }
+    }
+
+    // setVarianceImpl after data has been added must throw per javadoc contract
+    @Test
+    public void testSetVarianceImpl_afterAddValue_throwsMathIllegalStateException() throws Throwable {
+        stats.addValue(1.0);
+        try {
+            stats.setVarianceImpl(new SumOfSquares());
+            fail("expected MathIllegalStateException");
+        } catch (MathIllegalStateException expected) {
+        }
+    }
+
+    // addValue must explicitly increment a non-Variance varianceImpl, per method contract
+    @Test
+    public void testAddValue_withNonVarianceVarianceImpl_incrementsCustomImpl() throws Throwable {
+        SumOfSquares custom = new SumOfSquares();
+        stats.setVarianceImpl(custom);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        assertSame(custom, stats.getVarianceImpl());
+        assertEquals(13.0, stats.getVariance(), 1e-9);
+    }
+
+    // addValue must explicitly increment a non-Mean meanImpl, per method contract
+    @Test
+    public void testAddValue_withNonMeanMeanImpl_incrementsCustomImpl() throws Throwable {
+        Sum custom = new Sum();
+        stats.setMeanImpl(custom);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        assertEquals(5.0, stats.getMean(), 1e-9);
+    }
+
+    // addValue must explicitly increment a non-GeometricMean geoMeanImpl, per method contract
+    @Test
+    public void testAddValue_withNonGeometricMeanGeoMeanImpl_incrementsCustomImpl() throws Throwable {
+        Sum custom = new Sum();
+        stats.setGeoMeanImpl(custom);
+        stats.addValue(2.0);
+        stats.addValue(3.0);
+        assertEquals(5.0, stats.getGeometricMean(), 1e-9);
+    }
+
+    // setSumLogImpl before data added must be accepted and retrievable
+    @Test
+    public void testSetSumLogImpl_beforeAddValue_getterReturnsConfiguredInstance() throws Throwable {
+        SumOfLogs custom = new SumOfLogs();
+        stats.setSumLogImpl(custom);
+        assertSame(custom, stats.getSumLogImpl());
+    }
+
+    // copy constructor must produce an instance equal to the original
+    @Test
+    public void testCopyConstructor_producesEqualStatistics() throws Throwable {
+        stats.addValue(5.0);
+        stats.addValue(10.0);
+        SummaryStatistics copy = new SummaryStatistics(stats);
+        assertTrue(stats.equals(copy));
+        assertEquals(stats.getN(), copy.getN());
+    }
+
+    // instance copy() must be equal but independent of further mutation of the original
+    @Test
+    public void testCopyInstanceMethod_producesIndependentEqualCopy() throws Throwable {
+        stats.addValue(1.0);
+        SummaryStatistics copy = stats.copy();
+        assertTrue(stats.equals(copy));
+        stats.addValue(100.0);
+        assertEquals(1L, copy.getN());
+        assertEquals(2L, stats.getN());
+    }
+
+    // static copy() must reject a null source per javadoc
+    @Test
+    public void testStaticCopy_nullSource_throwsNullArgumentException() throws Throwable {
+        try {
+            SummaryStatistics.copy(null, new SummaryStatistics());
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // static copy() must reject a null destination per javadoc
+    @Test
+    public void testStaticCopy_nullDest_throwsNullArgumentException() throws Throwable {
+        try {
+            SummaryStatistics.copy(new SummaryStatistics(), null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // static copy() must transfer all statistics from source into dest
+    @Test
+    public void testStaticCopy_validSourceAndDest_copiesValues() throws Throwable {
+        SummaryStatistics source = new SummaryStatistics();
+        source.addValue(1.0);
+        source.addValue(2.0);
+        source.addValue(3.0);
+        SummaryStatistics dest = new SummaryStatistics();
+        SummaryStatistics.copy(source, dest);
+        assertEquals(source.getN(), dest.getN());
+        assertEquals(source.getMean(), dest.getMean(), 1e-9);
+        assertTrue(source.equals(dest));
+    }
+}

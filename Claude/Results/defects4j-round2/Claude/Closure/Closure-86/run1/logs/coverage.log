@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Closure-86-u12v6z3f/Closure-86b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 756
+     Lines covered: 284
+  Conditions total: 722
+Conditions covered: 202
+     Line coverage: 37.6%
+Condition coverage: 28.0%
+[exit 0]

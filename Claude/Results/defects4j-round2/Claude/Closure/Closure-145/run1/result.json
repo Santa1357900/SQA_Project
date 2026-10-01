@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Claude",
+  "algorithm_version": "1.0.0",
+  "project": "Closure",
+  "bug_id": 145,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 29,
+  "tests_validated": 27,
+  "fixed_failing_tests": 2,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 10,
+    "total_methods": 30,
+    "ratio": 0.3333
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 75,
+    "lines_total": 513,
+    "line_ratio": 0.1462,
+    "branch_measure": "condition",
+    "branches_covered": 46,
+    "branches_total": 376,
+    "branch_ratio": 0.1223
+  },
+  "generation_seconds": 318.043,
+  "validation_seconds": 136.567,
+  "total_seconds": 454.61,
+  "configuration": {
+    "model": "claude-sonnet-5",
+    "effort": "high",
+    "thinking": "adaptive",
+    "max_tokens": 64000,
+    "prompt_system": "Claude/Prompt/system_prompt.txt",
+    "prompt_template": "Claude/Prompt/template_prompt.txt",
+    "usage": {
+      "input_tokens": 2,
+      "output_tokens": 32759,
+      "cache_creation_input_tokens": 15660,
+      "cache_read_input_tokens": 5278,
+      "total_cost_usd": 0.4035186,
+      "duration_api_ms": 318043,
+      "num_turns": 1
+    }
+  },
+  "artifacts": {
+    "tests": "Tests/defects4j-round2/Claude/Closure/Closure-145/run1/",
+    "logs": "Results/defects4j-round2/Claude/Closure/Closure-145/run1/logs/",
+    "prompt": "Claude/Prompt/history/Closure_145.txt"
+  },
+  "created_at": "2026-10-01T09:07:23.058126+00:00",
+  "generation_wall_seconds": 322.265
+}

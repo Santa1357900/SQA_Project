@@ -1,0 +1,275 @@
+package org.jsoup.parser;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.Comment;
+import org.jsoup.select.Elements;
+
+public class TokeniserStateClaudeTest {
+
+    // Data state: default branch, plain text with no special chars
+    @Test
+    public void testData_plainText_noSpecialChars() throws Throwable {
+        Document doc = Jsoup.parse("hello world");
+        assertEquals("hello world", doc.body().text());
+    }
+
+    // Data state: '&' branch routes through CharacterReferenceInData and decodes entity
+    @Test
+    public void testData_ampersand_decodesNamedEntity() throws Throwable {
+        Document doc = Jsoup.parse("&amp;");
+        assertEquals("&", doc.body().text());
+    }
+
+    // Data state: '<' branch creates a real element via TagOpen/TagName
+    @Test
+    public void testData_lessThan_createsElement() throws Throwable {
+        Document doc = Jsoup.parse("<p>hi</p>");
+        Element p = doc.body().child(0);
+        assertEquals("p", p.tagName());
+        assertEquals("hi", p.text());
+    }
+
+    // Data state: nullChar branch emits the literal null char (NOT replacement char, per comment)
+    @Test
+    public void testData_nullChar_emittedLiterallyNotReplacement() throws Throwable {
+        Document doc = Jsoup.parse("a\u0000b");
+        String text = doc.body().text();
+        assertTrue(text.indexOf('\u0000') >= 0);
+    }
+
+    // Data state: eof branch on empty input produces empty body text
+    @Test
+    public void testData_emptyInput_noText() throws Throwable {
+        Document doc = Jsoup.parse("");
+        assertEquals("", doc.body().text());
+    }
+
+    // CharacterReferenceInData: invalid/unknown reference emits '&' literally and keeps rest as text
+    @Test
+    public void testCharacterReferenceInData_invalidEntity_emitsAmpersandLiterally() throws Throwable {
+        Document doc = Jsoup.parse("&notanentity;");
+        assertEquals("&notanentity;", doc.body().text());
+    }
+
+    // Rcdata (title): character references decoded inside RCDATA content
+    @Test
+    public void testRcdata_title_decodesEntities() throws Throwable {
+        Document doc = Jsoup.parse("<title>Hello &amp; World</title>");
+        assertEquals("Hello & World", doc.title());
+    }
+
+    // Rcdata (textarea): character references decoded, same RCDATA path as title
+    @Test
+    public void testRcdata_textarea_decodesEntities() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<textarea>&lt;b&gt;</textarea>");
+        Element ta = doc.body().child(0);
+        assertEquals("textarea", ta.tagName());
+        assertEquals("<b>", ta.text());
+    }
+
+    // Rawtext (style): '<' not followed by '/' is emitted literally and rawtext continues
+    @Test
+    public void testRawtext_style_keepsLessThanLiteral() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<style>body{color:<red}</style>");
+        Element style = doc.body().child(0);
+        assertEquals("body{color:<red}", style.data());
+    }
+
+    // ScriptData: raw script content preserved verbatim, end tag closes correctly
+    @Test
+    public void testScriptData_basicScript_preservesRawContent() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<script>var x=1;</script><p>after</p>");
+        Element script = doc.body().child(0);
+        assertEquals("var x=1;", script.data());
+        assertEquals("after", doc.body().child(1).text());
+    }
+
+    // handleDataEndTag: case-insensitive end tag name still closes the script
+    @Test
+    public void testScriptData_caseInsensitiveEndTag_closesScript() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<script>a</SCRIPT><p>b</p>");
+        Element script = doc.body().child(0);
+        assertEquals("a", script.data());
+        assertEquals("b", doc.body().child(1).text());
+    }
+
+    // ScriptDataEscapeStart/Dash/DashDash chain: comment markers inside script preserved literally
+    @Test
+    public void testScriptDataEscape_commentMarkersInsideScript_preserved() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<script><!--alert(1)--></script>");
+        Element script = doc.body().child(0);
+        assertEquals("<!--alert(1)-->", script.data());
+    }
+
+    // PLAINTEXT state: everything after is literal text, no further tags parsed
+    @Test
+    public void testPLAINTEXT_allSubsequentCharsAreLiteralText() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<plaintext>a<b>c");
+        Element pt = doc.body().child(0);
+        assertEquals("plaintext", pt.tagName());
+        assertTrue(pt.text().indexOf("<b>") >= 0);
+        Elements kids = pt.children();
+        assertEquals(0, kids.size());
+    }
+
+    // TagOpen default branch: '<' followed by non-letter/non-special emits '<' literally
+    @Test
+    public void testTagOpen_invalidChar_emitsLessThanLiteral() throws Throwable {
+        Document doc = Jsoup.parse("<1 2>");
+        assertEquals("<1 2>", doc.body().text());
+    }
+
+
+
+    // EndTagOpen letter branch: normal closing tag works as expected
+    @Test
+    public void testEndTagOpen_letter_normalCloseTag() throws Throwable {
+        Document doc = Jsoup.parse("<div>content</div>");
+        Element div = doc.body().child(0);
+        assertEquals("div", div.tagName());
+        assertEquals("content", div.text());
+    }
+
+    // EndTagOpen eof branch: "</" at end of input emits literal "</" text
+    @Test
+    public void testEndTagOpen_eof_emitsClosingSlashText() throws Throwable {
+        Document doc = Jsoup.parse("<div></");
+        Element div = doc.body().child(0);
+        assertEquals("</", div.text());
+    }
+
+    // EndTagOpen matches('>') branch: "</>" is silently consumed, no text emitted
+    @Test
+    public void testEndTagOpen_matchesGreaterThan_consumesSilently() throws Throwable {
+        Document doc = Jsoup.parse("<div></>text</div>");
+        Element div = doc.body().child(0);
+        assertEquals("text", div.text());
+    }
+
+    // EndTagOpen else branch: invalid char after "</" routes to BogusComment
+    @Test
+    public void testEndTagOpen_invalidChar_createsBogusComment() throws Throwable {
+        Document doc = Jsoup.parse("<div></1></div>");
+        Element div = doc.body().child(0);
+        Node first = div.childNode(0);
+        assertTrue(first instanceof Comment);
+        assertEquals("1", ((Comment) first).getData());
+    }
+
+    // SelfClosingStartTag default branch: unexpected char recovers via BeforeAttributeName
+    @Test
+    public void testSelfClosingStartTag_unexpectedChar_recoversViaBeforeAttributeName() throws Throwable {
+        Document doc = Jsoup.parse("<hr/ ><p>after</p>");
+        Element hr = doc.body().child(0);
+        assertEquals("hr", hr.tagName());
+        assertEquals("after", doc.body().child(1).text());
+    }
+
+
+
+    // MarkupDeclarationOpen "[CDATA[" branch emits raw data as text
+    @Test
+    public void testMarkupDeclarationOpen_cdataSection_emitsRawText() throws Throwable {
+        Document doc = Jsoup.parse("<![CDATA[hello]]>");
+        assertEquals("hello", doc.body().text());
+    }
+
+
+
+
+
+
+
+
+
+    // BeforeAttributeName/AttributeName/AfterAttributeName: consecutive boolean attributes
+    @Test
+    public void testAttributeName_booleanAttributes_bothPresentWithEmptyValue() throws Throwable {
+        Document doc = Jsoup.parse("<p a b>hi</p>");
+        Element p = doc.body().child(0);
+        assertTrue(p.hasAttr("a"));
+        assertTrue(p.hasAttr("b"));
+        assertEquals("", p.attr("a"));
+        assertEquals("", p.attr("b"));
+    }
+
+    // AttributeValue_unquoted: literal quote char inside unquoted value is appended on error
+    @Test
+    public void testAttributeValueUnquoted_quoteCharacter_appendedLiterallyOnError() throws Throwable {
+        Document doc = Jsoup.parse("<p class=a\"b>hi</p>");
+        Element p = doc.body().child(0);
+        assertEquals("a\"b", p.attr("class"));
+    }
+
+    // AttributeValue_doubleQuoted: named entity decoded inside double-quoted attribute value
+    @Test
+    public void testAttributeValueDoubleQuoted_entityReference_decoded() throws Throwable {
+        Document doc = Jsoup.parse("<p class=\"a&amp;b\">hi</p>");
+        Element p = doc.body().child(0);
+        assertEquals("a&b", p.attr("class"));
+    }
+
+    // AttributeValue_singleQuoted: plain single-quoted value parsed correctly
+    @Test
+    public void testAttributeValueSingleQuoted_plainValue() throws Throwable {
+        Document doc = Jsoup.parse("<p class='foo'>hi</p>");
+        Element p = doc.body().child(0);
+        assertEquals("foo", p.attr("class"));
+    }
+
+    // AfterAttributeValue_quoted default branch: missing space recovers via BeforeAttributeName
+    @Test
+    public void testAfterAttributeValueQuoted_missingSpace_recoversNextAttribute() throws Throwable {
+        Document doc = Jsoup.parse("<p class=\"a\"b=\"c\">hi</p>");
+        Element p = doc.body().child(0);
+        assertEquals("a", p.attr("class"));
+        assertEquals("c", p.attr("b"));
+    }
+
+    // AfterAttributeValue_quoted '/' branch: self-closing void element with quoted attribute
+    @Test
+    public void testAfterAttributeValueQuoted_selfClosingSlash_parsesVoidElementAttr() throws Throwable {
+        Document doc = Jsoup.parse("<img src=\"a.png\"/>");
+        Element img = doc.body().child(0);
+        assertEquals("img", img.tagName());
+        assertEquals("a.png", img.attr("src"));
+    }
+
+    // Doctype simple: basic "<!DOCTYPE html>" is captured as a doctype declaration
+    @Test
+    public void testDoctype_simple_containsDoctypeDeclaration() throws Throwable {
+        Document doc = Jsoup.parse("<!DOCTYPE html><p>hi</p>");
+        String html = doc.outerHtml().toLowerCase();
+        assertTrue(html.indexOf("<!doctype html") >= 0);
+    }
+
+    // AfterDoctypePublicKeyword + DoctypePublicIdentifier_doubleQuoted: public id text preserved
+    @Test
+    public void testDoctype_publicIdentifierDoubleQuoted_preservesText() throws Throwable {
+        Document doc = Jsoup.parse("<!DOCTYPE html PUBLIC \"-//TEST//\" \"http://example.com\">");
+        String html = doc.outerHtml();
+        assertTrue(html.indexOf("-//TEST//") >= 0);
+    }
+
+    // AfterDoctypeSystemKeyword + DoctypeSystemIdentifier_singleQuoted: system id text preserved
+    @Test
+    public void testDoctype_systemIdentifierSingleQuoted_preservesText() throws Throwable {
+        Document doc = Jsoup.parse("<!DOCTYPE html SYSTEM 'http://example.com/dtd'>");
+        String html = doc.outerHtml();
+        assertTrue(html.indexOf("http://example.com/dtd") >= 0);
+    }
+
+    // BogusDoctype: malformed doctype recovers and parsing continues normally afterwards
+    @Test
+    public void testBogusDoctype_malformedPublicKeyword_recoversAndContinuesParsing() throws Throwable {
+        Document doc = Jsoup.parse("<!DOCTYPE html PUBLIC bogus><p>hi</p>");
+        Element p = doc.body().child(0);
+        assertEquals("hi", p.text());
+    }
+}

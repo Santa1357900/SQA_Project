@@ -1,0 +1,14 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-37-0zg81sy6/Closure-37f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 8
+  - com.google.javascript.jscomp.NodeTraversalClaudeTest::testHasScope_duringTraversalTrue_andFalseAfterCompletion
+  - com.google.javascript.jscomp.NodeTraversalClaudeTest::testGetScopeDepth_atRootScope_returnsOne
+  - com.google.javascript.jscomp.NodeTraversalClaudeTest::testTraverse_shouldTraverseFalseOnRoot_skipsChildrenButStillVisitsRoot
+  - com.google.javascript.jscomp.NodeTraversalClaudeTest::testGetEnclosingFunction_withoutFunctionScope_returnsNull
+  - com.google.javascript.jscomp.NodeTraversalClaudeTest::testTraverse_bugShouldTraverseFalseOnChild_stillVisitsChildInPostOrder
+  - com.google.javascript.jscomp.NodeTraversalClaudeTest::testGetScope_duringTraversal_isConsistentAcrossNodes
+  - com.google.javascript.jscomp.NodeTraversalClaudeTest::testGetScopeRoot_duringTraversal_returnsTraversalRoot
+  - com.google.javascript.jscomp.NodeTraversalClaudeTest::testInGlobalScope_atRootScopeDepth_returnsTrue
+[exit 0]

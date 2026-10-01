@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Lang-9-0ir3xb47/Lang-9f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - org.apache.commons.lang3.time.FastDateParserClaudeTest::testParse_timeZoneStrategy_positiveNumericOffset
+  - org.apache.commons.lang3.time.FastDateParserClaudeTest::testParse_lowercaseAmPm_parsesCaseInsensitively
+  - org.apache.commons.lang3.time.FastDateParserClaudeTest::testParse_timeZoneStrategy_negativeNumericOffset
+  - org.apache.commons.lang3.time.FastDateParserClaudeTest::testParse_lowercaseMonthName_parsesCaseInsensitively
+  - org.apache.commons.lang3.time.FastDateParserClaudeTest::testParse_lowercaseDayOfWeek_parsesCaseInsensitively
+[exit 0]

@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-97-h_hwy6v5/Math-97f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.apache.commons.math.analysis.BrentSolverClaudeTest::testSolveTwoArgs_zeroAtMin_throwsIllegalArgumentException
+  - org.apache.commons.math.analysis.BrentSolverClaudeTest::testSolveWithInitial_minIsExactRoot_returnsMin_bugCheck
+  - org.apache.commons.math.analysis.BrentSolverClaudeTest::testSolveTwoArgs_zeroAtMax_throwsIllegalArgumentException
+  - org.apache.commons.math.analysis.BrentSolverClaudeTest::testSolveWithInitial_maxIsExactRoot_returnsMax_bugCheck
+[exit 0]

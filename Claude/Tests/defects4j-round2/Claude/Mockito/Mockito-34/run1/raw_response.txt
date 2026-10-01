@@ -1,0 +1,385 @@
+package org.mockito.internal.invocation;
+
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import org.hamcrest.BaseMatcher;
+import org.hamcrest.Description;
+import org.hamcrest.Matcher;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.mockito.internal.matchers.CapturesArguments;
+import org.mockito.internal.reporting.PrintSettings;
+
+public class InvocationMatcherClaudeTest {
+
+    private Object mockA;
+    private Object mockB;
+
+    private Method singleArgMethod;
+    private Method noArgMethod;
+    private Method twoArgMethod;
+    private Method varargsMethod;
+    private Method processString;
+    private Method processObject;
+
+    private static class Foo {
+        public void singleArgMethod(String s) { }
+        public void noArgMethod() { }
+        public void twoArgMethod(String a, String b) { }
+        public void varargsMethod(String... args) { }
+        public void process(String s) { }
+        public void process(Object o) { }
+    }
+
+    private static class CapturingStub extends BaseMatcher implements CapturesArguments {
+        final List<Object> captured = new ArrayList<Object>();
+        public boolean matches(Object item) { return true; }
+        public void describeTo(Description description) { }
+        public void captureFrom(Object argument) { captured.add(argument); }
+    }
+
+    private static class PlainStub extends BaseMatcher {
+        public boolean matches(Object item) { return true; }
+        public void describeTo(Description description) { }
+    }
+
+    private RealMethod noOpRealMethod() {
+        return new RealMethod() {
+            public Object invoke(Object target, Object[] arguments) throws Throwable {
+                return null;
+            }
+        };
+    }
+
+    private Invocation buildInvocation(Object mock, Method method, Object[] args, int seq) {
+        return new Invocation(mock, new SerializableMethod(method), args, seq, noOpRealMethod());
+    }
+
+    @Before
+    public void setUp() throws Throwable {
+        mockA = new Object();
+        mockB = new Object();
+        singleArgMethod = Foo.class.getMethod("singleArgMethod", new Class[]{String.class});
+        noArgMethod = Foo.class.getMethod("noArgMethod", new Class[]{});
+        twoArgMethod = Foo.class.getMethod("twoArgMethod", new Class[]{String.class, String.class});
+        varargsMethod = Foo.class.getMethod("varargsMethod", new Class[]{String[].class});
+        processString = Foo.class.getMethod("process", new Class[]{String.class});
+        processObject = Foo.class.getMethod("process", new Class[]{Object.class});
+    }
+
+    // Branch: matchers.isEmpty() true -> uses invocation.argumentsToMatchers()
+    @Test
+    public void testConstructor_emptyMatchers_usesArgumentsToMatchers() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"hello"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv, Collections.<Matcher>emptyList());
+        assertEquals(1, im.getMatchers().size());
+        assertTrue(im.getMatchers().get(0).matches("hello"));
+    }
+
+    // Branch: matchers non-empty -> uses given list as-is (identity preserved)
+    @Test
+    public void testConstructor_nonEmptyMatchers_usesGivenList() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"hello"}, 1);
+        List<Matcher> given = new ArrayList<Matcher>();
+        given.add(new PlainStub());
+        InvocationMatcher im = new InvocationMatcher(inv, given);
+        assertSame(given, im.getMatchers());
+    }
+
+    // Edge: null matchers list -> NPE on matchers.isEmpty()
+    @Test
+    public void testConstructor_nullMatchers_throwsNPE() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"hello"}, 1);
+        try {
+            new InvocationMatcher(inv, null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) { }
+    }
+
+    // Single-arg constructor delegates to argumentsToMatchers() for zero-arg method
+    @Test
+    public void testSingleArgConstructor_delegatesToArgumentsToMatchers() throws Throwable {
+        Invocation inv = buildInvocation(mockA, noArgMethod, new Object[]{}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertEquals(0, im.getMatchers().size());
+    }
+
+    // getMethod returns exactly the wrapped java.lang.reflect.Method
+    @Test
+    public void testGetMethod_returnsUnderlyingMethod() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertEquals(singleArgMethod, im.getMethod());
+    }
+
+    // getMethod on null invocation -> NPE
+    @Test
+    public void testGetMethod_nullInvocation_throwsNPE() throws Throwable {
+        List<Matcher> given = new ArrayList<Matcher>();
+        given.add(new PlainStub());
+        InvocationMatcher im = new InvocationMatcher(null, given);
+        try {
+            im.getMethod();
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) { }
+    }
+
+    // getInvocation returns same reference passed to constructor
+    @Test
+    public void testGetInvocation_returnsSameReference() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertSame(inv, im.getInvocation());
+    }
+
+    // zero-arg method -> argumentsToMatchers() yields empty list
+    @Test
+    public void testGetMatchers_zeroArgMethod_emptyList() throws Throwable {
+        Invocation inv = buildInvocation(mockA, noArgMethod, new Object[]{}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertTrue(im.getMatchers().isEmpty());
+    }
+
+    // toString() produces a non-empty description
+    @Test
+    public void testToString_returnsNonEmptyString() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        String s = im.toString();
+        assertNotNull(s);
+        assertTrue(s.length() > 0);
+    }
+
+    // matches(): mock differs -> false (first && operand)
+    @Test
+    public void testMatches_differentMock_returnsFalse() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        Invocation actual = buildInvocation(mockB, singleArgMethod, new Object[]{"a"}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertFalse(im.matches(actual));
+    }
+
+    // matches(): same mock, different method -> false
+    @Test
+    public void testMatches_sameMockDifferentMethod_returnsFalse() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        Invocation actual = buildInvocation(mockA, noArgMethod, new Object[]{}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertFalse(im.matches(actual));
+    }
+
+    // matches(): same mock & method, different argument value -> false
+    @Test
+    public void testMatches_sameMockSameMethodDifferentArgs_returnsFalse() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        Invocation actual = buildInvocation(mockA, singleArgMethod, new Object[]{"b"}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertFalse(im.matches(actual));
+    }
+
+    // matches(): mock, method and arguments all equal -> true
+    @Test
+    public void testMatches_allSame_returnsTrue() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        Invocation actual = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertTrue(im.matches(actual));
+    }
+
+    // matches(null) dereferences actual.getMock() -> NPE
+    @Test
+    public void testMatches_nullActual_throwsNPE() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        try {
+            im.matches(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) { }
+    }
+
+    // hasSimilarMethod: different method name -> false
+    @Test
+    public void testHasSimilarMethod_differentMethodName_returnsFalse() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        Invocation candidate = buildInvocation(mockA, noArgMethod, new Object[]{}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertFalse(im.hasSimilarMethod(candidate));
+    }
+
+    // hasSimilarMethod: candidate already verified -> false
+    @Test
+    public void testHasSimilarMethod_candidateVerified_returnsFalse() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        Invocation candidate = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 2);
+        candidate.markVerified();
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertFalse(im.hasSimilarMethod(candidate));
+    }
+
+    // hasSimilarMethod: different mock -> false
+    @Test
+    public void testHasSimilarMethod_differentMock_returnsFalse() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        Invocation candidate = buildInvocation(mockB, singleArgMethod, new Object[]{"a"}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertFalse(im.hasSimilarMethod(candidate));
+    }
+
+    // hasSimilarMethod: same method, same mock, unverified -> true
+    @Test
+    public void testHasSimilarMethod_sameMethodUnverifiedSameMock_returnsTrue() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        Invocation candidate = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertTrue(im.hasSimilarMethod(candidate));
+    }
+
+    // Javadoc contract: "if arguments are the same cannot be overloaded" -> false
+    @Test
+    public void testHasSimilarMethod_overloadedSameArgs_returnsFalse() throws Throwable {
+        Invocation inv = buildInvocation(mockA, processString, new Object[]{"x"}, 1);
+        Invocation candidate = buildInvocation(mockA, processObject, new Object[]{"x"}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertFalse(im.hasSimilarMethod(candidate));
+    }
+
+    // overloaded but different args -> still similar -> true
+    @Test
+    public void testHasSimilarMethod_overloadedDifferentArgs_returnsTrue() throws Throwable {
+        Invocation inv = buildInvocation(mockA, processString, new Object[]{"x"}, 1);
+        Invocation candidate = buildInvocation(mockA, processObject, new Object[]{"y"}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertTrue(im.hasSimilarMethod(candidate));
+    }
+
+    // hasSimilarMethod(null) dereferences candidate.getMethod() -> NPE
+    @Test
+    public void testHasSimilarMethod_nullCandidate_throwsNPE() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        try {
+            im.hasSimilarMethod(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) { }
+    }
+
+    // hasSameMethod: identical method -> true
+    @Test
+    public void testHasSameMethod_sameMethod_returnsTrue() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        Invocation candidate = buildInvocation(mockB, singleArgMethod, new Object[]{"z"}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertTrue(im.hasSameMethod(candidate));
+    }
+
+    // hasSameMethod: different method -> false
+    @Test
+    public void testHasSameMethod_differentMethod_returnsFalse() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        Invocation candidate = buildInvocation(mockA, noArgMethod, new Object[]{}, 2);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertFalse(im.hasSameMethod(candidate));
+    }
+
+    // hasSameMethod(null) dereferences candidate.getMethod() -> NPE
+    @Test
+    public void testHasSameMethod_nullCandidate_throwsNPE() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        try {
+            im.hasSameMethod(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) { }
+    }
+
+    // getLocation() returns a non-null Location delegated from invocation
+    @Test
+    public void testGetLocation_returnsNonNullLocation() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        assertNotNull(im.getLocation());
+    }
+
+    // toString(PrintSettings) returns a non-empty description
+    @Test
+    public void testToStringWithPrintSettings_returnsNonEmptyString() throws Throwable {
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        String s = im.toString(new PrintSettings());
+        assertNotNull(s);
+        assertTrue(s.length() > 0);
+    }
+
+    // captureArgumentsFrom: zero matchers -> loop body never runs, no state change
+    @Test
+    public void testCaptureArgumentsFrom_zeroMatchers_stateUnchanged() throws Throwable {
+        Invocation inv = buildInvocation(mockA, noArgMethod, new Object[]{}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv);
+        Invocation actual = buildInvocation(mockA, noArgMethod, new Object[]{}, 2);
+        im.captureArgumentsFrom(actual);
+        assertEquals(0, im.getMatchers().size());
+    }
+
+    // mixed matchers: non-CapturesArguments entry skipped, CapturesArguments entry captures its own index
+    @Test
+    public void testCaptureArgumentsFrom_mixedMatchers_capturesOnlyFromCapturesArguments() throws Throwable {
+        List<Matcher> given = new ArrayList<Matcher>();
+        given.add(new PlainStub());
+        CapturingStub stub = new CapturingStub();
+        given.add(stub);
+        Invocation inv = buildInvocation(mockA, twoArgMethod, new Object[]{"ignored", "ignored"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv, given);
+        Invocation actual = buildInvocation(mockA, twoArgMethod, new Object[]{"v1", "v2"}, 2);
+        im.captureArgumentsFrom(actual);
+        assertEquals(1, stub.captured.size());
+        assertEquals("v2", stub.captured.get(0));
+    }
+
+    // multiple CapturesArguments matchers: each captures its own corresponding argument
+    @Test
+    public void testCaptureArgumentsFrom_multipleCapturesArguments_capturesEachInOrder() throws Throwable {
+        List<Matcher> given = new ArrayList<Matcher>();
+        CapturingStub s1 = new CapturingStub();
+        CapturingStub s2 = new CapturingStub();
+        given.add(s1);
+        given.add(s2);
+        Invocation inv = buildInvocation(mockA, twoArgMethod, new Object[]{"ignored", "ignored"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv, given);
+        Invocation actual = buildInvocation(mockA, twoArgMethod, new Object[]{"v1", "v2"}, 2);
+        im.captureArgumentsFrom(actual);
+        assertEquals("v1", s1.captured.get(0));
+        assertEquals("v2", s2.captured.get(0));
+    }
+
+    // BUG target: for a varargs method, every actual vararg element passed in a single
+    // call must be captured through the lone vararg matcher, not just the first one.
+    @Test
+    public void testCaptureArgumentsFrom_varargsMethod_capturesAllActualVarargValues() throws Throwable {
+        List<Matcher> given = new ArrayList<Matcher>();
+        CapturingStub stub = new CapturingStub();
+        given.add(stub);
+        Invocation inv = buildInvocation(mockA, varargsMethod, new Object[]{new String[]{"ignored"}}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv, given);
+        Invocation actual = buildInvocation(mockA, varargsMethod, new Object[]{new String[]{"a", "b", "c"}}, 2);
+        im.captureArgumentsFrom(actual);
+        assertEquals(3, stub.captured.size());
+    }
+
+    // captureArgumentsFrom(null) with a CapturesArguments matcher dereferences i.getArguments() -> NPE
+    @Test
+    public void testCaptureArgumentsFrom_nullInvocation_throwsNPE() throws Throwable {
+        List<Matcher> given = new ArrayList<Matcher>();
+        given.add(new CapturingStub());
+        Invocation inv = buildInvocation(mockA, singleArgMethod, new Object[]{"a"}, 1);
+        InvocationMatcher im = new InvocationMatcher(inv, given);
+        try {
+            im.captureArgumentsFrom(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) { }
+    }
+}

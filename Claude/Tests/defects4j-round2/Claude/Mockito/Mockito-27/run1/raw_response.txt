@@ -1,0 +1,280 @@
+package org.mockito.internal.util;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.mockito.Mockito;
+import org.mockito.exceptions.misusing.NotAMockException;
+import org.mockito.internal.MockHandlerInterface;
+import org.mockito.internal.creation.MockSettingsImpl;
+
+public class MockUtilClaudeTest {
+
+    public static class Foo {
+        public Foo() {
+        }
+    }
+
+    private MockUtil mockUtil;
+
+    @Before
+    public void setUp() throws Throwable {
+        mockUtil = new MockUtil();
+    }
+
+    private Foo createFooMock() {
+        MockSettingsImpl settings = (MockSettingsImpl) Mockito.withSettings().defaultAnswer(Mockito.RETURNS_DEFAULTS);
+        return mockUtil.createMock(Foo.class, settings);
+    }
+
+    // Covers public MockUtil() delegating to MockUtil(new MockCreationValidator())
+    @Test
+    public void testConstructor_default_createsInstance() throws Throwable {
+        MockUtil util = new MockUtil();
+        assertNotNull(util);
+    }
+
+    // Covers public MockUtil(MockCreationValidator) constructor
+    @Test
+    public void testConstructor_withValidator_createsInstance() throws Throwable {
+        MockCreationValidator validator = new MockCreationValidator();
+        MockUtil util = new MockUtil(validator);
+        assertNotNull(util);
+    }
+
+    // Covers createMock happy path: imposterise without spied instance, no extra interfaces
+    @Test
+    public void testCreateMock_validClass_returnsInstanceOfRequestedType() throws Throwable {
+        Foo mock = createFooMock();
+        assertTrue(mock instanceof Foo);
+    }
+
+    // Covers createMock producing a Factory-backed object recognized by isMock
+    @Test
+    public void testCreateMock_validClass_resultRecognizedAsMock() throws Throwable {
+        Foo mock = createFooMock();
+        assertTrue(mockUtil.isMock(mock));
+    }
+
+    // Covers createMock with null settings -> NullPointerException at settings.getExtraInterfaces()
+    @Test
+    public void testCreateMock_nullSettings_throwsNullPointerException() throws Throwable {
+        try {
+            mockUtil.createMock(Foo.class, null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // Covers resetMock -> getMockHandler(null) branch (throw on null argument)
+    @Test
+    public void testResetMock_nullMock_throwsNotAMockException() throws Throwable {
+        try {
+            mockUtil.resetMock(null);
+            fail("expected NotAMockException");
+        } catch (NotAMockException expected) {
+        }
+    }
+
+    // Covers resetMock -> getMockHandler(non-mock) branch (throw on non-mock argument)
+    @Test
+    public void testResetMock_nonMockObject_throwsNotAMockException() throws Throwable {
+        try {
+            mockUtil.resetMock("not a mock");
+            fail("expected NotAMockException");
+        } catch (NotAMockException expected) {
+        }
+    }
+
+    // Covers resetMock replacing callback(0) with a new MethodInterceptorFilter, mock stays a mock
+    @Test
+    public void testResetMock_validMock_stillRecognizedAsMockAfterReset() throws Throwable {
+        Foo mock = createFooMock();
+        mockUtil.resetMock(mock);
+        assertTrue(mockUtil.isMock(mock));
+    }
+
+    // Covers resetMock -> new MockHandler wraps old handler, mock still retrievable via getMockHandler
+    @Test
+    public void testResetMock_validMock_handlerStillRetrievableAfterReset() throws Throwable {
+        Foo mock = createFooMock();
+        mockUtil.resetMock(mock);
+        MockHandlerInterface handler = mockUtil.getMockHandler(mock);
+        assertNotNull(handler);
+    }
+
+    // Bug hunt: resetMock must preserve the original mock's settings (its name), not replace them with fresh defaults
+    @Test
+    public void testResetMock_afterReset_mockNamePreserved() throws Throwable {
+        Foo mock = createFooMock();
+        MockName nameBefore = mockUtil.getMockName(mock);
+        mockUtil.resetMock(mock);
+        MockName nameAfter = mockUtil.getMockName(mock);
+        assertEquals(nameBefore.toString(), nameAfter.toString());
+    }
+
+    // Covers getMockHandler: mock == null branch
+    @Test
+    public void testGetMockHandler_nullMock_throwsNotAMockException() throws Throwable {
+        try {
+            mockUtil.getMockHandler(null);
+            fail("expected NotAMockException");
+        } catch (NotAMockException expected) {
+        }
+    }
+
+    // Covers getMockHandler null-branch exception message content
+    @Test
+    public void testGetMockHandler_nullMock_messageIndicatesNull() throws Throwable {
+        try {
+            mockUtil.getMockHandler(null);
+            fail("expected NotAMockException");
+        } catch (NotAMockException expected) {
+            assertTrue(expected.getMessage().contains("null"));
+        }
+    }
+
+    // Covers getMockHandler: non-null but not Mockito mock -> else branch, message contains class name
+    @Test
+    public void testGetMockHandler_plainString_throwsNotAMockException() throws Throwable {
+        try {
+            mockUtil.getMockHandler("hello");
+            fail("expected NotAMockException");
+        } catch (NotAMockException expected) {
+            assertTrue(expected.getMessage().contains("String"));
+        }
+    }
+
+    // Covers getMockHandler with another non-mock type to vary mock.getClass() in message
+    @Test
+    public void testGetMockHandler_plainInteger_throwsNotAMockException() throws Throwable {
+        try {
+            mockUtil.getMockHandler(Integer.valueOf(5));
+            fail("expected NotAMockException");
+        } catch (NotAMockException expected) {
+            assertTrue(expected.getMessage().contains("Integer"));
+        }
+    }
+
+    // Covers getInterceptor's "!(mock instanceof Factory)" branch for array arguments
+    @Test
+    public void testGetMockHandler_arrayArgument_throwsNotAMockException() throws Throwable {
+        try {
+            mockUtil.getMockHandler(new int[] {1, 2, 3});
+            fail("expected NotAMockException");
+        } catch (NotAMockException expected) {
+        }
+    }
+
+    // Covers getMockHandler with a plain (unmocked) instance of a mockable-looking class
+    @Test
+    public void testGetMockHandler_plainCustomObject_throwsNotAMockException() throws Throwable {
+        try {
+            mockUtil.getMockHandler(new Foo());
+            fail("expected NotAMockException");
+        } catch (NotAMockException expected) {
+        }
+    }
+
+    // Covers getMockHandler valid-mock branch: isMockitoMock true, returns interceptor's handler
+    @Test
+    public void testGetMockHandler_validMock_returnsNonNullHandler() throws Throwable {
+        Foo mock = createFooMock();
+        MockHandlerInterface handler = mockUtil.getMockHandler(mock);
+        assertNotNull(handler);
+    }
+
+    // Covers that a valid mock's handler exposes a non-null MockSettings (used by getMockName)
+    @Test
+    public void testGetMockHandler_validMock_mockSettingsAccessible() throws Throwable {
+        Foo mock = createFooMock();
+        MockHandlerInterface handler = mockUtil.getMockHandler(mock);
+        assertNotNull(handler.getMockSettings());
+    }
+
+    // Covers isMock: mock == null short-circuit of "&&"
+    @Test
+    public void testIsMock_null_returnsFalse() throws Throwable {
+        assertFalse(mockUtil.isMock(null));
+    }
+
+    // Covers isMock: non-null plain Object, not a Factory
+    @Test
+    public void testIsMock_plainObject_returnsFalse() throws Throwable {
+        assertFalse(mockUtil.isMock(new Object()));
+    }
+
+    // Covers isMock with a String argument
+    @Test
+    public void testIsMock_string_returnsFalse() throws Throwable {
+        assertFalse(mockUtil.isMock("not a mock"));
+    }
+
+    // Covers isMock edge-case: empty string (non-null, still not a mock)
+    @Test
+    public void testIsMock_emptyString_returnsFalse() throws Throwable {
+        assertFalse(mockUtil.isMock(""));
+    }
+
+    // Covers isMock with boxed primitive
+    @Test
+    public void testIsMock_integerBoxed_returnsFalse() throws Throwable {
+        assertFalse(mockUtil.isMock(Integer.valueOf(0)));
+    }
+
+    // Covers isMock -> getInterceptor's instanceof Factory check for arrays
+    @Test
+    public void testIsMock_arrayArgument_returnsFalse() throws Throwable {
+        assertFalse(mockUtil.isMock(new Object[0]));
+    }
+
+    // Covers isMock true branch: a real Mockito-created mock is recognized
+    @Test
+    public void testIsMock_validMock_returnsTrue() throws Throwable {
+        Foo mock = createFooMock();
+        assertTrue(mockUtil.isMock(mock));
+    }
+
+    // Covers isMock with a plain (unmocked) instance of a mockable class -> still false
+    @Test
+    public void testIsMock_customFooInstance_returnsFalse() throws Throwable {
+        assertFalse(mockUtil.isMock(new Foo()));
+    }
+
+    // Covers getMockName delegating to getMockHandler(null) -> throws
+    @Test
+    public void testGetMockName_nullMock_throwsNotAMockException() throws Throwable {
+        try {
+            mockUtil.getMockName(null);
+            fail("expected NotAMockException");
+        } catch (NotAMockException expected) {
+        }
+    }
+
+    // Covers getMockName delegating to getMockHandler(non-mock) -> throws
+    @Test
+    public void testGetMockName_nonMockObject_throwsNotAMockException() throws Throwable {
+        try {
+            mockUtil.getMockName("not a mock");
+            fail("expected NotAMockException");
+        } catch (NotAMockException expected) {
+        }
+    }
+
+    // Covers getMockName happy path: returns a non-null MockName for a real mock
+    @Test
+    public void testGetMockName_validMock_returnsNonNullMockName() throws Throwable {
+        Foo mock = createFooMock();
+        MockName name = mockUtil.getMockName(mock);
+        assertNotNull(name);
+    }
+
+    // Covers that a valid mock's name has meaningful (non-empty) textual representation
+    @Test
+    public void testGetMockName_validMock_toStringNotEmpty() throws Throwable {
+        Foo mock = createFooMock();
+        MockName name = mockUtil.getMockName(mock);
+        assertTrue(name.toString().length() > 0);
+    }
+}

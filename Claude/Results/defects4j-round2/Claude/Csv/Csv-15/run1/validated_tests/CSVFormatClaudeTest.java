@@ -1,0 +1,411 @@
+package org.apache.commons.csv;
+
+import static org.junit.Assert.*;
+
+import java.io.StringReader;
+import java.io.StringWriter;
+
+import org.junit.Test;
+
+public class CSVFormatClaudeTest {
+
+    private enum SampleHeader {
+        Name, Email
+    }
+
+    // covers newFormat(char) success path and delimiter line-break validation branch
+    @Test
+    public void testNewFormat_validAndLineBreakDelimiter() throws Throwable {
+        CSVFormat format = CSVFormat.newFormat(';');
+        assertEquals(';', format.getDelimiter());
+        assertNull(format.getQuoteCharacter());
+        assertFalse(format.getIgnoreEmptyLines());
+        try {
+            CSVFormat.newFormat('\n');
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers valueOf(String) success and the Enum.valueOf failure branch
+    @Test
+    public void testValueOf_validAndInvalidName() throws Throwable {
+        assertEquals(CSVFormat.DEFAULT, CSVFormat.valueOf("Default"));
+        try {
+            CSVFormat.valueOf("NotARealFormat");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers Predefined enum getFormat() accessor
+    @Test
+    public void testPredefinedExcel_getFormat_returnsExcelFormat() throws Throwable {
+        assertEquals(CSVFormat.EXCEL, CSVFormat.Predefined.Excel.getFormat());
+    }
+
+    // covers the DEFAULT predefined format field values documented in the Javadoc
+    @Test
+    public void testDEFAULT_settings() throws Throwable {
+        assertEquals(',', CSVFormat.DEFAULT.getDelimiter());
+        assertEquals(Character.valueOf('"'), CSVFormat.DEFAULT.getQuoteCharacter());
+        assertEquals("\r\n", CSVFormat.DEFAULT.getRecordSeparator());
+        assertTrue(CSVFormat.DEFAULT.getIgnoreEmptyLines());
+    }
+
+    // covers the EXCEL predefined format field values documented in the Javadoc
+    @Test
+    public void testEXCEL_settings() throws Throwable {
+        assertFalse(CSVFormat.EXCEL.getIgnoreEmptyLines());
+        assertTrue(CSVFormat.EXCEL.getAllowMissingColumnNames());
+    }
+
+    // covers the MYSQL predefined format field values documented in the Javadoc
+    @Test
+    public void testMYSQL_settings() throws Throwable {
+        assertEquals('\t', CSVFormat.MYSQL.getDelimiter());
+        assertNull(CSVFormat.MYSQL.getQuoteCharacter());
+        assertEquals("\n", CSVFormat.MYSQL.getRecordSeparator());
+        assertEquals("\\N", CSVFormat.MYSQL.getNullString());
+        assertEquals(QuoteMode.ALL_NON_NULL, CSVFormat.MYSQL.getQuoteMode());
+        assertEquals(Character.valueOf('\\'), CSVFormat.MYSQL.getEscapeCharacter());
+    }
+
+    // covers RFC4180 (ignoreEmptyLines false) and TDF (tab delimiter, surrounding spaces ignored)
+    @Test
+    public void testRFC4180_and_TDF_settings() throws Throwable {
+        assertFalse(CSVFormat.RFC4180.getIgnoreEmptyLines());
+        assertEquals('\t', CSVFormat.TDF.getDelimiter());
+        assertTrue(CSVFormat.TDF.getIgnoreSurroundingSpaces());
+    }
+
+    // covers withDelimiter(char) isLineBreak validation throw
+    @Test
+    public void testWithDelimiter_lineBreak_throwsException() throws Throwable {
+        try {
+            CSVFormat.DEFAULT.withDelimiter('\n');
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers withCommentMarker(char) success path and line-break validation throw
+    @Test
+    public void testWithCommentMarker_charAndLineBreak() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withCommentMarker('#');
+        assertTrue(format.isCommentMarkerSet());
+        assertEquals(Character.valueOf('#'), format.getCommentMarker());
+        try {
+            CSVFormat.DEFAULT.withCommentMarker('\n');
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers withEscape(char) success path and line-break validation throw
+    @Test
+    public void testWithEscape_charAndLineBreak() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withEscape('\\');
+        assertTrue(format.isEscapeCharacterSet());
+        assertEquals(Character.valueOf('\\'), format.getEscapeCharacter());
+        try {
+            CSVFormat.DEFAULT.withEscape('\r');
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers withQuote(char) success path and line-break validation throw
+    @Test
+    public void testWithQuote_charAndLineBreak() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withQuote('\'');
+        assertTrue(format.isQuoteCharacterSet());
+        assertEquals(Character.valueOf('\''), format.getQuoteCharacter());
+        try {
+            CSVFormat.DEFAULT.withQuote('\n');
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers validate() branches: quoteChar/escapeChar/commentMarker each equal to delimiter
+    @Test
+    public void testValidate_charConflictsWithDelimiter_throwsException() throws Throwable {
+        try {
+            CSVFormat.DEFAULT.withQuote(',');
+            fail("quote==delimiter");
+        } catch (IllegalArgumentException expected) {
+        }
+        try {
+            CSVFormat.DEFAULT.withEscape(',');
+            fail("escape==delimiter");
+        } catch (IllegalArgumentException expected) {
+        }
+        try {
+            CSVFormat.DEFAULT.withCommentMarker(',');
+            fail("comment==delimiter");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers validate() branches: quoteChar equals commentMarker, escapeChar equals commentMarker
+    @Test
+    public void testValidate_quoteOrEscapeEqualsComment_throwsException() throws Throwable {
+        try {
+            CSVFormat.DEFAULT.withCommentMarker('#').withQuote('#');
+            fail("quote==comment");
+        } catch (IllegalArgumentException expected) {
+        }
+        try {
+            CSVFormat.DEFAULT.withCommentMarker('#').withEscape('#');
+            fail("escape==comment");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers validate() branch: quoteMode NONE with no escape character set
+    @Test
+    public void testValidate_noneModeWithoutEscape_throwsException() throws Throwable {
+        try {
+            CSVFormat.DEFAULT.withQuoteMode(QuoteMode.NONE);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers validate() success when escape character is set together with quoteMode NONE
+    @Test
+    public void testValidate_noneModeWithEscape_succeeds() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withEscape('\\').withQuoteMode(QuoteMode.NONE);
+        assertEquals(QuoteMode.NONE, format.getQuoteMode());
+    }
+
+
+
+    // covers validate() header duplicate-name branch for genuinely duplicate non-empty names
+    @Test
+    public void testWithHeader_duplicateNonEmptyNames_throwsException() throws Throwable {
+        try {
+            CSVFormat.DEFAULT.withHeader("A", "A");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers withHeader() with zero args (empty array, auto-detect) vs explicit null (disabled)
+    @Test
+    public void testWithHeader_noArgsAndNullArray_headerHandling() throws Throwable {
+        CSVFormat autoHeader = CSVFormat.DEFAULT.withHeader();
+        assertNotNull(autoHeader.getHeader());
+        assertEquals(0, autoHeader.getHeader().length);
+        CSVFormat noHeader = CSVFormat.DEFAULT.withHeader((String[]) null);
+        assertNull(noHeader.getHeader());
+    }
+
+    // covers getHeader() returning a defensive copy, not the internal array reference
+    @Test
+    public void testGetHeader_returnsCopyNotReference() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withHeader("A", "B");
+        String[] header = format.getHeader();
+        header[0] = "CHANGED";
+        assertEquals("A", format.getHeader()[0]);
+    }
+
+    // covers withHeader(Class<Enum>) building names from enum constants and null-enum branch
+    @Test
+    public void testWithHeaderClass_enumHeaderAndNullEnum() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withHeader(SampleHeader.class);
+        assertArrayEquals(new String[] { "Name", "Email" }, format.getHeader());
+        CSVFormat nullFormat = CSVFormat.DEFAULT.withHeader((Class<? extends Enum<?>>) null);
+        assertNull(nullFormat.getHeader());
+    }
+
+    // covers withHeaderComments setting and getHeaderComments returning the values, plus default null
+    @Test
+    public void testWithHeaderComments_setsAndGetsComments() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withHeaderComments("Generated", "by test");
+        assertArrayEquals(new String[] { "Generated", "by test" }, format.getHeaderComments());
+        assertNull(CSVFormat.DEFAULT.getHeaderComments());
+    }
+
+    // covers withIgnoreEmptyLines(boolean), withIgnoreHeaderCase(), withIgnoreSurroundingSpaces()
+    @Test
+    public void testWithBooleanFlags_group1() throws Throwable {
+        assertTrue(CSVFormat.DEFAULT.getIgnoreEmptyLines());
+        assertFalse(CSVFormat.DEFAULT.withIgnoreEmptyLines(false).getIgnoreEmptyLines());
+        assertTrue(CSVFormat.DEFAULT.withIgnoreHeaderCase().getIgnoreHeaderCase());
+        assertTrue(CSVFormat.DEFAULT.withIgnoreSurroundingSpaces().getIgnoreSurroundingSpaces());
+    }
+
+    // covers withSkipHeaderRecord(), withTrailingDelimiter(), withTrim(), withAutoFlush(), withAllowMissingColumnNames()
+    @Test
+    public void testWithBooleanFlags_group2() throws Throwable {
+        assertTrue(CSVFormat.DEFAULT.withSkipHeaderRecord().getSkipHeaderRecord());
+        assertTrue(CSVFormat.DEFAULT.withTrailingDelimiter().getTrailingDelimiter());
+        assertTrue(CSVFormat.DEFAULT.withTrim().getTrim());
+        assertTrue(CSVFormat.DEFAULT.withAutoFlush(true).getAutoFlush());
+        assertTrue(CSVFormat.DEFAULT.withAllowMissingColumnNames().getAllowMissingColumnNames());
+    }
+
+    // covers withNullString, withQuoteMode, withRecordSeparator(char)
+    @Test
+    public void testWithNullStringAndQuoteModeAndRecordSeparator() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withNullString("NULL").withQuoteMode(QuoteMode.ALL).withRecordSeparator('\n');
+        assertTrue(format.isNullStringSet());
+        assertEquals("NULL", format.getNullString());
+        assertEquals(QuoteMode.ALL, format.getQuoteMode());
+        assertEquals("\n", format.getRecordSeparator());
+    }
+
+    // covers withFirstRecordAsHeader() delegation to withHeader() + withSkipHeaderRecord()
+    @Test
+    public void testWithFirstRecordAsHeader_setsHeaderAndSkip() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withFirstRecordAsHeader();
+        assertNotNull(format.getHeader());
+        assertEquals(0, format.getHeader().length);
+        assertTrue(format.getSkipHeaderRecord());
+    }
+
+    // covers format() with zero values (empty record, trimmed record separator)
+    @Test
+    public void testFormat_emptyValues_returnsEmptyString() throws Throwable {
+        assertEquals("", CSVFormat.DEFAULT.format());
+    }
+
+    // covers printAndQuote MINIMAL branch: value containing the delimiter gets quoted
+    @Test
+    public void testFormat_valueWithComma_quoted() throws Throwable {
+        assertEquals("\"a,b\"", CSVFormat.DEFAULT.format("a,b"));
+    }
+
+    // covers print(Object,...) null-value branch with no nullString configured
+    @Test
+    public void testFormat_nullValueNoNullString_empty() throws Throwable {
+        assertEquals("", CSVFormat.DEFAULT.format(new Object[] { null }));
+    }
+
+    // covers printAndQuote MINIMAL branch: empty value as first record is quoted
+    @Test
+    public void testFormat_emptyStringFirstValue_quotedEmpty() throws Throwable {
+        assertEquals("\"\"", CSVFormat.DEFAULT.format(""));
+    }
+
+    // covers printAndQuote MINIMAL branch: control char (<0x20) at start of new record forces quoting
+    @Test
+    public void testFormat_controlCharFirstValue_quoted() throws Throwable {
+        assertEquals("\"\tX\"", CSVFormat.DEFAULT.format("\tX"));
+    }
+
+
+
+    // covers printAndQuote MINIMAL branch: trailing whitespace (<=SP) at end of value forces quoting
+    @Test
+    public void testFormat_trailingSpaceValue_quoted() throws Throwable {
+        assertEquals("x,\"a \"", CSVFormat.DEFAULT.format("x", "a "));
+    }
+
+    // covers printAndQuote ALL_NON_NULL (always quote) and NON_NUMERIC (Number not quoted) branches
+    @Test
+    public void testFormat_quoteModeAllNonNullAndNonNumeric() throws Throwable {
+        CSVFormat allNonNull = CSVFormat.DEFAULT.withQuoteMode(QuoteMode.ALL_NON_NULL);
+        assertEquals("\"x\"", allNonNull.format("x"));
+        CSVFormat nonNumeric = CSVFormat.DEFAULT.withQuoteMode(QuoteMode.NON_NUMERIC);
+        assertEquals("\"x\"", nonNumeric.format("x"));
+        assertEquals("5", nonNumeric.format(Integer.valueOf(5)));
+    }
+
+    // covers printAndQuote NONE branch delegating to printAndEscape
+    @Test
+    public void testFormat_quoteModeNone_withEscape_escapesValue() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withEscape('\\').withQuoteMode(QuoteMode.NONE);
+        assertEquals("a\\,b", format.format("a,b"));
+    }
+
+    // covers printAndEscape branch: escaping the delimiter and escaping LF as 'n'
+    @Test
+    public void testPrint_withoutQuoteWithEscape_escapesDelimiterAndNewline() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withQuote(null).withEscape('\\');
+        StringBuilder sb1 = new StringBuilder();
+        format.print("a,b", sb1, true);
+        assertEquals("a\\,b", sb1.toString());
+        StringBuilder sb2 = new StringBuilder();
+        format.print("a\nb", sb2, true);
+        assertEquals("a\\nb", sb2.toString());
+    }
+
+    // covers print(Object, Appendable, boolean) newRecord=false branch prepending the delimiter
+    @Test
+    public void testPrint_notNewRecord_prependsDelimiter() throws Throwable {
+        StringBuilder sb = new StringBuilder();
+        CSVFormat.DEFAULT.print("x", sb, false);
+        assertEquals(",x", sb.toString());
+    }
+
+    // covers println(Appendable) with and without the trailing delimiter flag
+    @Test
+    public void testPrintln_trailingDelimiterVariants() throws Throwable {
+        StringBuilder sb1 = new StringBuilder();
+        CSVFormat.DEFAULT.withTrailingDelimiter(true).println(sb1);
+        assertEquals(",\r\n", sb1.toString());
+        StringBuilder sb2 = new StringBuilder();
+        CSVFormat.DEFAULT.println(sb2);
+        assertEquals("\r\n", sb2.toString());
+    }
+
+    // covers printRecord(Appendable, Object...) joining values with delimiter and record separator
+    @Test
+    public void testPrintRecord_multipleValues_joinsWithDelimiterAndSeparator() throws Throwable {
+        StringBuilder sb = new StringBuilder();
+        CSVFormat.DEFAULT.printRecord(sb, "a", "b");
+        assertEquals("a,b\r\n", sb.toString());
+    }
+
+    // covers equals(): same instance, null, different class, different delimiter, equivalent formats
+    @Test
+    public void testEquals_basicContract() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT;
+        assertTrue(format.equals(format));
+        assertFalse(format.equals(null));
+        assertFalse(format.equals("not a format"));
+        assertFalse(format.equals(format.withDelimiter(';')));
+        assertTrue(format.equals(CSVFormat.DEFAULT.withDelimiter(',')));
+    }
+
+    // covers hashCode() consistency for equivalent formats
+    @Test
+    public void testHashCode_equivalentFormats_sameHashCode() throws Throwable {
+        assertEquals(CSVFormat.DEFAULT.hashCode(), CSVFormat.DEFAULT.withDelimiter(',').hashCode());
+    }
+
+    // covers toString() including delimiter and skip-header-record information
+    @Test
+    public void testToString_containsDelimiterAndSkipHeaderInfo() throws Throwable {
+        String s = CSVFormat.DEFAULT.toString();
+        assertTrue(s.contains("Delimiter=<,>"));
+        assertTrue(s.contains("SkipHeaderRecord:false"));
+    }
+
+    // covers parse(Reader) returning a usable CSVParser
+    @Test
+    public void testParse_returnsNonNullParser() throws Throwable {
+        CSVParser parser = CSVFormat.DEFAULT.parse(new StringReader("a,b\r\n"));
+        assertNotNull(parser);
+    }
+
+    // covers print(Appendable) returning a usable CSVPrinter
+    @Test
+    public void testPrint_returnsNonNullPrinter() throws Throwable {
+        StringWriter sw = new StringWriter();
+        CSVPrinter printer = CSVFormat.DEFAULT.print(sw);
+        assertNotNull(printer);
+    }
+
+    // covers isCommentMarkerSet/isEscapeCharacterSet/isNullStringSet/isQuoteCharacterSet defaults
+    @Test
+    public void testIsSetFlags_defaults() throws Throwable {
+        assertFalse(CSVFormat.DEFAULT.isCommentMarkerSet());
+        assertFalse(CSVFormat.DEFAULT.isEscapeCharacterSet());
+        assertFalse(CSVFormat.DEFAULT.isNullStringSet());
+        assertTrue(CSVFormat.DEFAULT.isQuoteCharacterSet());
+    }
+}

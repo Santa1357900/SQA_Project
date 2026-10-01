@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-3-wsh7o25s/JacksonDatabind-3b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - com.fasterxml.jackson.databind.deser.std.StringArrayDeserializerClaudeTest::testDeserialize_pojoWithNullElementInArrayField_returnsNullElement
+  - com.fasterxml.jackson.databind.deser.std.StringArrayDeserializerClaudeTest::testDeserialize_arrayWithOnlyNullElement_returnsArrayWithNull
+  - com.fasterxml.jackson.databind.deser.std.StringArrayDeserializerClaudeTest::testDeserialize_nullElementInArray_defaultDeserializer_returnsNullElement
+  - com.fasterxml.jackson.databind.deser.std.StringArrayDeserializerClaudeTest::testDeserialize_consecutiveNullElements_allReturnNull
+[exit 0]

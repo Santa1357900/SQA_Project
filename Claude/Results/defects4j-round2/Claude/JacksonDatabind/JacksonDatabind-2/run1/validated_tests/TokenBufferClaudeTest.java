@@ -1,0 +1,483 @@
+package com.fasterxml.jackson.databind.util;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
+import com.fasterxml.jackson.core.Base64Variants;
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonLocation;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.ObjectCodec;
+import com.fasterxml.jackson.core.io.SerializedString;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.NullNode;
+
+public class TokenBufferClaudeTest
+{
+    // covers: TokenBuffer(ObjectCodec) deprecated ctor defaults hasNativeIds=false
+    @Test
+    public void testConstructor_defaultNoNativeIds() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null);
+        assertFalse(buf.canWriteTypeId());
+        assertFalse(buf.canWriteObjectId());
+    }
+
+    // covers: TokenBuffer(ObjectCodec, boolean) with hasNativeIds=true
+    @Test
+    public void testConstructor_withNativeIdsTrue() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, true);
+        assertTrue(buf.canWriteTypeId());
+        assertTrue(buf.canWriteObjectId());
+    }
+
+    // covers: TokenBuffer(JsonParser) inherits native id read capability from source parser
+    @Test
+    public void testConstructorFromParser_inheritsNativeIdCapability() throws Throwable {
+        TokenBuffer src = new TokenBuffer((ObjectCodec) null, false);
+        src.writeString("x");
+        JsonParser srcParser = src.asParser();
+        srcParser.nextToken();
+        TokenBuffer buf = new TokenBuffer(srcParser);
+        assertFalse(buf.canWriteTypeId());
+        assertFalse(buf.canWriteObjectId());
+    }
+
+    // covers: version() returns a non-null Version instance
+    @Test
+    public void testVersion_notNull() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        assertNotNull(buf.version());
+    }
+
+    // covers: firstToken() returns null when no tokens have been appended
+    @Test
+    public void testFirstToken_emptyBuffer_isNull() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        assertNull(buf.firstToken());
+    }
+
+    // covers: firstToken() returns type of first appended token
+    @Test
+    public void testFirstToken_afterWrite_returnsFirstType() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeStartArray();
+        buf.writeEndArray();
+        assertEquals(JsonToken.START_ARRAY, buf.firstToken());
+    }
+
+    // covers: asParser(ObjectCodec) uses the explicitly supplied codec
+    @Test
+    public void testAsParser_usesGivenCodec() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        ObjectMapper mapper = new ObjectMapper();
+        JsonParser p = buf.asParser(mapper);
+        assertSame(mapper, p.getCodec());
+    }
+
+    // covers: asParser(JsonParser src) propagates src's token location
+    @Test
+    public void testAsParserFromSrcParser_propagatesLocation() throws Throwable {
+        TokenBuffer src = new TokenBuffer((ObjectCodec) null, false);
+        src.writeString("v");
+        JsonParser srcParser = src.asParser();
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeString("v");
+        JsonParser p = buf.asParser(srcParser);
+        assertSame(JsonLocation.NA, p.getTokenLocation());
+    }
+
+    // covers: append(TokenBuffer) concatenates other buffer's tokens onto this one
+    @Test
+    public void testAppend_concatenatesTokensFromOtherBuffer() throws Throwable {
+        TokenBuffer a = new TokenBuffer((ObjectCodec) null, false);
+        a.writeString("a");
+        TokenBuffer b = new TokenBuffer((ObjectCodec) null, false);
+        b.writeString("b");
+        a.append(b);
+        JsonParser p = a.asParser();
+        assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+        assertEquals("a", p.getText());
+        assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+        assertEquals("b", p.getText());
+    }
+
+    // covers: serialize() round trips structural/field/number tokens through target generator
+    @Test
+    public void testSerialize_roundTripsBasicTokens() throws Throwable {
+        TokenBuffer src = new TokenBuffer((ObjectCodec) null, false);
+        src.writeStartObject();
+        src.writeFieldName("k");
+        src.writeNumber(5);
+        src.writeEndObject();
+        TokenBuffer dest = new TokenBuffer((ObjectCodec) null, false);
+        src.serialize(dest);
+        JsonParser p = dest.asParser();
+        assertEquals(JsonToken.START_OBJECT, p.nextToken());
+        assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+        assertEquals("k", p.getCurrentName());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.nextToken());
+        assertEquals(5, p.getIntValue());
+    }
+
+    // covers: serialize() VALUE_NUMBER_FLOAT branch where stored value is null -> writes null
+    @Test
+    public void testSerialize_nullFloatValue_writesNullToken() throws Throwable {
+        TokenBuffer src = new TokenBuffer((ObjectCodec) null, false);
+        src._append(JsonToken.VALUE_NUMBER_FLOAT, null);
+        TokenBuffer dest = new TokenBuffer((ObjectCodec) null, false);
+        src.serialize(dest);
+        JsonParser p = dest.asParser();
+        assertEquals(JsonToken.VALUE_NULL, p.nextToken());
+    }
+
+    // covers: serialize() throws JsonGenerationException for unrecognized VALUE_NUMBER_FLOAT value
+    @Test
+    public void testSerialize_unrecognizedFloatValue_throwsJsonGenerationException() throws Throwable {
+        TokenBuffer src = new TokenBuffer((ObjectCodec) null, false);
+        src._append(JsonToken.VALUE_NUMBER_FLOAT, Integer.valueOf(1));
+        TokenBuffer dest = new TokenBuffer((ObjectCodec) null, false);
+        try {
+            src.serialize(dest);
+            fail("expected JsonGenerationException");
+        } catch (JsonGenerationException expected) { }
+    }
+
+    // covers: toString() reports names of buffered token types
+    @Test
+    public void testToString_containsTokenTypeNames() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeStartArray();
+        buf.writeEndArray();
+        String s = buf.toString();
+        assertTrue(s.contains("START_ARRAY"));
+        assertTrue(s.contains("END_ARRAY"));
+    }
+
+    // covers: enable/disable/isEnabled and getFeatureMask/setFeatureMask
+    @Test
+    public void testEnableDisableAndFeatureMask() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.disable(JsonGenerator.Feature.QUOTE_FIELD_NAMES);
+        assertFalse(buf.isEnabled(JsonGenerator.Feature.QUOTE_FIELD_NAMES));
+        buf.enable(JsonGenerator.Feature.QUOTE_FIELD_NAMES);
+        assertTrue(buf.isEnabled(JsonGenerator.Feature.QUOTE_FIELD_NAMES));
+        buf.setFeatureMask(0);
+        assertEquals(0, buf.getFeatureMask());
+    }
+
+    // covers: useDefaultPrettyPrinter() is a no-op that returns the same generator instance
+    @Test
+    public void testUseDefaultPrettyPrinter_returnsSameInstance() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        JsonGenerator ret = buf.useDefaultPrettyPrinter();
+        assertSame(buf, ret);
+    }
+
+    // covers: setCodec/getCodec accessor pair
+    @Test
+    public void testSetCodecGetCodec() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        ObjectMapper mapper = new ObjectMapper();
+        buf.setCodec(mapper);
+        assertSame(mapper, buf.getCodec());
+    }
+
+    // covers: getOutputContext() starts in root context
+    @Test
+    public void testGetOutputContext_initialRoot() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        assertTrue(buf.getOutputContext().inRoot());
+    }
+
+    // covers: flush() no-op; close()/isClosed() toggle closed state
+    @Test
+    public void testFlushAndClose_isClosedState() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.flush();
+        assertFalse(buf.isClosed());
+        buf.close();
+        assertTrue(buf.isClosed());
+    }
+
+    // covers: writeEndArray() with no matching start keeps context at root (unbalanced allowed)
+    @Test
+    public void testWriteEndArray_unbalanced_staysInRoot() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeEndArray();
+        assertTrue(buf.getOutputContext().inRoot());
+    }
+
+    // covers: writeStartObject/writeEndObject transition write context object -> root
+    @Test
+    public void testWriteStartObjectEndObject_contextTransitions() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeStartObject();
+        assertTrue(buf.getOutputContext().inObject());
+        buf.writeEndObject();
+        assertTrue(buf.getOutputContext().inRoot());
+    }
+
+    // covers: writeFieldName(String) and writeFieldName(SerializableString) both produce FIELD_NAME
+    @Test
+    public void testWriteFieldName_stringAndSerializable() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeFieldName("a");
+        buf.writeFieldName(new SerializedString("b"));
+        JsonParser p = buf.asParser();
+        assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+        assertEquals("a", p.getCurrentName());
+        assertEquals(JsonToken.FIELD_NAME, p.nextToken());
+        assertEquals("b", p.getCurrentName());
+    }
+
+    // covers: writeString(null) delegates to writeNull() producing VALUE_NULL
+    @Test
+    public void testWriteString_nullWritesNullToken() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeString((String) null);
+        assertEquals(JsonToken.VALUE_NULL, buf.firstToken());
+    }
+
+    // covers: writeString(char[], offset, len) extracts exact substring
+    @Test
+    public void testWriteString_charArraySegment() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        char[] chars = "hello world".toCharArray();
+        buf.writeString(chars, 6, 5);
+        JsonParser p = buf.asParser();
+        p.nextToken();
+        assertEquals("world", p.getText());
+    }
+
+    // covers: writeRaw(String) and writeRawValue(String) are unsupported operations
+    @Test
+    public void testWriteRawAndRawValue_throwUnsupportedOperation() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        try {
+            buf.writeRaw("x");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) { }
+        try {
+            buf.writeRawValue("y");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) { }
+    }
+
+    // covers: writeNumber(int/long/double/float) round trip through parser accessors
+    @Test
+    public void testWriteNumber_intLongDoubleFloatRoundTrip() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeNumber(7);
+        buf.writeNumber(8L);
+        buf.writeNumber(1.5d);
+        buf.writeNumber(2.5f);
+        JsonParser p = buf.asParser();
+        p.nextToken(); assertEquals(7, p.getIntValue());
+        p.nextToken(); assertEquals(8L, p.getLongValue());
+        p.nextToken(); assertEquals(1.5, p.getDoubleValue(), 1e-9);
+        p.nextToken(); assertEquals(2.5f, p.getFloatValue(), 1e-6f);
+    }
+
+    // covers: writeNumber(BigDecimal null) delegates to writeNull()
+    @Test
+    public void testWriteNumber_bigDecimalNullWritesNull() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeNumber((BigDecimal) null);
+        assertEquals(JsonToken.VALUE_NULL, buf.firstToken());
+    }
+
+    // covers: writeNumber(BigInteger) stores and returns exact value
+    @Test
+    public void testWriteNumber_bigIntegerValueRoundTrip() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        BigInteger v = BigInteger.valueOf(123456789L);
+        buf.writeNumber(v);
+        JsonParser p = buf.asParser();
+        p.nextToken();
+        assertEquals(v, p.getBigIntegerValue());
+    }
+
+    // covers: writeNumber(String) with '.' parses as Double; without '.' parses as Long
+    @Test
+    public void testWriteNumber_encodedString_dotVsNoDot() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeNumber("12.5");
+        buf.writeNumber("42");
+        JsonParser p = buf.asParser();
+        p.nextToken();
+        assertEquals(12.5, p.getNumberValue().doubleValue(), 1e-9);
+        p.nextToken();
+        assertEquals(42L, p.getNumberValue().longValue());
+    }
+
+    // covers: writeBoolean(true/false) and writeNull() produce the respective tokens
+    @Test
+    public void testWriteBooleanAndNull() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeBoolean(true);
+        buf.writeBoolean(false);
+        buf.writeNull();
+        JsonParser p = buf.asParser();
+        assertEquals(JsonToken.VALUE_TRUE, p.nextToken());
+        assertEquals(JsonToken.VALUE_FALSE, p.nextToken());
+        assertEquals(JsonToken.VALUE_NULL, p.nextToken());
+    }
+
+    // covers: writeObject(value) embeds it as VALUE_EMBEDDED_OBJECT retrievable via getEmbeddedObject
+    @Test
+    public void testWriteObject_embedsValue() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeObject("payload");
+        JsonParser p = buf.asParser();
+        assertEquals(JsonToken.VALUE_EMBEDDED_OBJECT, p.nextToken());
+        assertEquals("payload", p.getEmbeddedObject());
+    }
+
+    // covers: writeTree(node) embeds TreeNode as VALUE_EMBEDDED_OBJECT
+    @Test
+    public void testWriteTree_embedsTreeNode() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        NullNode node = NullNode.getInstance();
+        buf.writeTree(node);
+        JsonParser p = buf.asParser();
+        assertEquals(JsonToken.VALUE_EMBEDDED_OBJECT, p.nextToken());
+        assertSame(node, p.getEmbeddedObject());
+    }
+
+    // covers: writeBinary copies exact byte range; stream-based writeBinary is unsupported
+    @Test
+    public void testWriteBinary_copiesExactRangeAndThrowsForStream() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        byte[] data = new byte[] {1, 2, 3, 4, 5};
+        buf.writeBinary(Base64Variants.getDefaultVariant(), data, 1, 3);
+        JsonParser p = buf.asParser();
+        p.nextToken();
+        byte[] out = p.getBinaryValue(Base64Variants.getDefaultVariant());
+        assertArrayEquals(new byte[] {2, 3, 4}, out);
+        try {
+            buf.writeBinary(Base64Variants.getDefaultVariant(), new ByteArrayInputStream(new byte[0]), 0);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) { }
+    }
+
+    // covers: canWriteTypeId/canWriteObjectId default false without native id support
+    @Test
+    public void testCanWriteTypeIdObjectId_defaultFalse() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        assertFalse(buf.canWriteTypeId());
+        assertFalse(buf.canWriteObjectId());
+    }
+
+
+
+    // covers: copyCurrentEvent copies a single VALUE_STRING token including its text
+    @Test
+    public void testCopyCurrentEvent_copiesStringToken() throws Throwable {
+        TokenBuffer src = new TokenBuffer((ObjectCodec) null, false);
+        src.writeString("hi");
+        JsonParser sp = src.asParser();
+        sp.nextToken();
+        TokenBuffer dest = new TokenBuffer((ObjectCodec) null, false);
+        dest.copyCurrentEvent(sp);
+        JsonParser dp = dest.asParser();
+        assertEquals(JsonToken.VALUE_STRING, dp.nextToken());
+        assertEquals("hi", dp.getText());
+    }
+
+    // covers: copyCurrentStructure recursively copies a nested array structure
+    @Test
+    public void testCopyCurrentStructure_copiesNestedArray() throws Throwable {
+        TokenBuffer src = new TokenBuffer((ObjectCodec) null, false);
+        src.writeStartArray();
+        src.writeNumber(1);
+        src.writeNumber(2);
+        src.writeEndArray();
+        JsonParser sp = src.asParser();
+        sp.nextToken();
+        TokenBuffer dest = new TokenBuffer((ObjectCodec) null, false);
+        dest.copyCurrentStructure(sp);
+        JsonParser dp = dest.asParser();
+        assertEquals(JsonToken.START_ARRAY, dp.nextToken());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, dp.nextToken());
+        assertEquals(1, dp.getIntValue());
+    }
+
+    // covers: Parser.peekNextToken() reports upcoming token without advancing current position
+    @Test
+    public void testParserPeekNextToken_doesNotAdvance() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeNumber(1);
+        buf.writeNumber(2);
+        TokenBuffer.Parser p = (TokenBuffer.Parser) buf.asParser();
+        assertEquals(JsonToken.VALUE_NUMBER_INT, p.peekNextToken());
+        assertNull(p.getCurrentToken());
+        p.nextToken();
+        assertEquals(1, p.getIntValue());
+    }
+
+    // covers: getCurrentLocation() defaults to JsonLocation.NA when no location was explicitly set
+    @Test
+    public void testParserGetCurrentLocation_defaultsToNA() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeNumber(1);
+        JsonParser p = buf.asParser();
+        assertSame(JsonLocation.NA, p.getCurrentLocation());
+    }
+
+    // covers: overrideCurrentName() updates the name reported for the current field
+    @Test
+    public void testParserOverrideCurrentName_updatesFieldName() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeFieldName("orig");
+        JsonParser p = buf.asParser();
+        p.nextToken();
+        p.overrideCurrentName("changed");
+        assertEquals("changed", p.getCurrentName());
+    }
+
+    // covers: getNumberType() distinguishes INT vs DOUBLE per stored Number subtype
+    @Test
+    public void testParserGetNumberType_forIntAndDouble() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeNumber(3);
+        buf.writeNumber(3.0d);
+        JsonParser p = buf.asParser();
+        p.nextToken();
+        assertEquals(JsonParser.NumberType.INT, p.getNumberType());
+        p.nextToken();
+        assertEquals(JsonParser.NumberType.DOUBLE, p.getNumberType());
+    }
+
+    // covers: getIntValue() on non-numeric token throws JsonParseException
+    @Test
+    public void testParserGetIntValue_nonNumericThrowsJsonParseException() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeString("not a number");
+        JsonParser p = buf.asParser();
+        p.nextToken();
+        try {
+            p.getIntValue();
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+
+    // covers: getBinaryValue() throws JsonParseException when token is neither VALUE_STRING nor embedded byte[]
+    @Test
+    public void testParserGetBinaryValue_wrongTokenThrowsJsonParseException() throws Throwable {
+        TokenBuffer buf = new TokenBuffer((ObjectCodec) null, false);
+        buf.writeNumber(5);
+        JsonParser p = buf.asParser();
+        p.nextToken();
+        try {
+            p.getBinaryValue(Base64Variants.getDefaultVariant());
+            fail("expected JsonParseException");
+        } catch (JsonParseException expected) { }
+    }
+}

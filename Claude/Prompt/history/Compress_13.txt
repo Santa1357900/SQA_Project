@@ -1,0 +1,776 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Compress (Defects4J bug Compress-13)
+package: org.apache.commons.compress.archivers.zip
+class_under_test: ZipArchiveEntry
+test_class_to_write: ZipArchiveEntryClaudeTest
+</target>
+
+<project_notes>
+Commons Compress: ใช้ ByteArrayInputStream/ByteArrayOutputStream แทนไฟล์จริง ปิด stream ด้วย try/finally
+</project_notes>
+
+<source_code>
+/*
+ *  Licensed to the Apache Software Foundation (ASF) under one or more
+ *  contributor license agreements.  See the NOTICE file distributed with
+ *  this work for additional information regarding copyright ownership.
+ *  The ASF licenses this file to You under the Apache License, Version 2.0
+ *  (the "License"); you may not use this file except in compliance with
+ *  the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ */
+package org.apache.commons.compress.archivers.zip;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.zip.ZipException;
+import org.apache.commons.compress.archivers.ArchiveEntry;
+
+/**
+ * Extension that adds better handling of extra fields and provides
+ * access to the internal and external file attributes.
+ *
+ * <p>The extra data is expected to follow the recommendation of
+ * {@link <a href="http://www.pkware.com/documents/casestudies/APPNOTE.TXT">
+ * APPNOTE.txt</a>}:</p>
+ * <ul>
+ *   <li>the extra byte array consists of a sequence of extra fields</li>
+ *   <li>each extra fields starts by a two byte header id followed by
+ *   a two byte sequence holding the length of the remainder of
+ *   data.</li>
+ * </ul>
+ *
+ * <p>Any extra data that cannot be parsed by the rules above will be
+ * consumed as "unparseable" extra data and treated differently by the
+ * methods of this class.  Versions prior to Apache Commons Compress
+ * 1.1 would have thrown an exception if any attempt was made to read
+ * or write extra data not conforming to the recommendation.</p>
+ *
+ * @NotThreadSafe
+ */
+public class ZipArchiveEntry extends java.util.zip.ZipEntry
+    implements ArchiveEntry, Cloneable {
+
+    public static final int PLATFORM_UNIX = 3;
+    public static final int PLATFORM_FAT  = 0;
+    private static final int SHORT_MASK = 0xFFFF;
+    private static final int SHORT_SHIFT = 16;
+
+    /**
+     * The {@link java.util.zip.ZipEntry} base class only supports
+     * the compression methods STORED and DEFLATED. We override the
+     * field so that any compression methods can be used.
+     * <p>
+     * The default value -1 means that the method has not been specified.
+     *
+     * @see <a href="https://issues.apache.org/jira/browse/COMPRESS-93"
+     *        >COMPRESS-93</a>
+     */
+    private int method = -1;
+
+    /**
+     * The {@link java.util.zip.ZipEntry#setSize} method in the base
+     * class throws an IllegalArgumentException if the size is bigger
+     * than 2GB for Java versions < 7.  Need to keep our own size
+     * information for Zip64 support.
+     */
+    private long size = SIZE_UNKNOWN;
+
+    private int internalAttributes = 0;
+    private int platform = PLATFORM_FAT;
+    private long externalAttributes = 0;
+    private LinkedHashMap<ZipShort, ZipExtraField> extraFields = null;
+    private UnparseableExtraFieldData unparseableExtra = null;
+    private String name = null;
+    private byte[] rawName = null;
+    private GeneralPurposeBit gpb = new GeneralPurposeBit();
+
+    /**
+     * Creates a new zip entry with the specified name.
+     *
+     * <p>Assumes the entry represents a directory if and only if the
+     * name ends with a forward slash "/".</p>
+     *
+     * @param name the name of the entry
+     */
+    public ZipArchiveEntry(String name) {
+        super(name);
+        setName(name);
+    }
+
+    /**
+     * Creates a new zip entry with fields taken from the specified zip entry.
+     *
+     * <p>Assumes the entry represents a directory if and only if the
+     * name ends with a forward slash "/".</p>
+     *
+     * @param entry the entry to get fields from
+     * @throws ZipException on error
+     */
+    public ZipArchiveEntry(java.util.zip.ZipEntry entry) throws ZipException {
+        super(entry);
+        setName(entry.getName());
+        byte[] extra = entry.getExtra();
+        if (extra != null) {
+            setExtraFields(ExtraFieldUtils.parse(extra, true,
+                                                 ExtraFieldUtils
+                                                 .UnparseableExtraField.READ));
+        } else {
+            // initializes extra data to an empty byte array
+            setExtra();
+        }
+        setMethod(entry.getMethod());
+        this.size = entry.getSize();
+    }
+
+    /**
+     * Creates a new zip entry with fields taken from the specified zip entry.
+     *
+     * <p>Assumes the entry represents a directory if and only if the
+     * name ends with a forward slash "/".</p>
+     *
+     * @param entry the entry to get fields from
+     * @throws ZipException on error
+     */
+    public ZipArchiveEntry(ZipArchiveEntry entry) throws ZipException {
+        this((java.util.zip.ZipEntry) entry);
+        setInternalAttributes(entry.getInternalAttributes());
+        setExternalAttributes(entry.getExternalAttributes());
+        setExtraFields(entry.getExtraFields(true));
+    }
+
+    /**
+     */
+    protected ZipArchiveEntry() {
+        this("");
+    }
+
+    /**
+     * Creates a new zip entry taking some information from the given
+     * file and using the provided name.
+     *
+     * <p>The name will be adjusted to end with a forward slash "/" if
+     * the file is a directory.  If the file is not a directory a
+     * potential trailing forward slash will be stripped from the
+     * entry name.</p>
+     */
+    public ZipArchiveEntry(File inputFile, String entryName) {
+        this(inputFile.isDirectory() && !entryName.endsWith("/") ? 
+             entryName + "/" : entryName);
+        if (inputFile.isFile()){
+            setSize(inputFile.length());
+        }
+        setTime(inputFile.lastModified());
+        // TODO are there any other fields we can set here?
+    }
+
+    /**
+     * Overwrite clone.
+     * @return a cloned copy of this ZipArchiveEntry
+     */
+    @Override
+    public Object clone() {
+        ZipArchiveEntry e = (ZipArchiveEntry) super.clone();
+
+        e.setInternalAttributes(getInternalAttributes());
+        e.setExternalAttributes(getExternalAttributes());
+        e.setExtraFields(getExtraFields(true));
+        return e;
+    }
+
+    /**
+     * Returns the compression method of this entry, or -1 if the
+     * compression method has not been specified.
+     *
+     * @return compression method
+     *
+     * @since Apache Commons Compress 1.1
+     */
+    @Override
+    public int getMethod() {
+        return method;
+    }
+
+    /**
+     * Sets the compression method of this entry.
+     *
+     * @param method compression method
+     *
+     * @since Apache Commons Compress 1.1
+     */
+    @Override
+    public void setMethod(int method) {
+        if (method < 0) {
+            throw new IllegalArgumentException(
+                    "ZIP compression method can not be negative: " + method);
+        }
+        this.method = method;
+    }
+
+    /**
+     * Retrieves the internal file attributes.
+     *
+     * @return the internal file attributes
+     */
+    public int getInternalAttributes() {
+        return internalAttributes;
+    }
+
+    /**
+     * Sets the internal file attributes.
+     * @param value an <code>int</code> value
+     */
+    public void setInternalAttributes(int value) {
+        internalAttributes = value;
+    }
+
+    /**
+     * Retrieves the external file attributes.
+     * @return the external file attributes
+     */
+    public long getExternalAttributes() {
+        return externalAttributes;
+    }
+
+    /**
+     * Sets the external file attributes.
+     * @param value an <code>long</code> value
+     */
+    public void setExternalAttributes(long value) {
+        externalAttributes = value;
+    }
+
+    /**
+     * Sets Unix permissions in a way that is understood by Info-Zip's
+     * unzip command.
+     * @param mode an <code>int</code> value
+     */
+    public void setUnixMode(int mode) {
+        // CheckStyle:MagicNumberCheck OFF - no point
+        setExternalAttributes((mode << SHORT_SHIFT)
+                              // MS-DOS read-only attribute
+                              | ((mode & 0200) == 0 ? 1 : 0)
+                              // MS-DOS directory flag
+                              | (isDirectory() ? 0x10 : 0));
+        // CheckStyle:MagicNumberCheck ON
+        platform = PLATFORM_UNIX;
+    }
+
+    /**
+     * Unix permission.
+     * @return the unix permissions
+     */
+    public int getUnixMode() {
+        return platform != PLATFORM_UNIX ? 0 :
+            (int) ((getExternalAttributes() >> SHORT_SHIFT) & SHORT_MASK);
+    }
+
+    /**
+     * Platform specification to put into the &quot;version made
+     * by&quot; part of the central file header.
+     *
+     * @return PLATFORM_FAT unless {@link #setUnixMode setUnixMode}
+     * has been called, in which case PLATORM_UNIX will be returned.
+     */
+    public int getPlatform() {
+        return platform;
+    }
+
+    /**
+     * Set the platform (UNIX or FAT).
+     * @param platform an <code>int</code> value - 0 is FAT, 3 is UNIX
+     */
+    protected void setPlatform(int platform) {
+        this.platform = platform;
+    }
+
+    /**
+     * Replaces all currently attached extra fields with the new array.
+     * @param fields an array of extra fields
+     */
+    public void setExtraFields(ZipExtraField[] fields) {
+        extraFields = new LinkedHashMap<ZipShort, ZipExtraField>();
+        for (int i = 0; i < fields.length; i++) {
+            if (fields[i] instanceof UnparseableExtraFieldData) {
+                unparseableExtra = (UnparseableExtraFieldData) fields[i];
+            } else {
+                extraFields.put(fields[i].getHeaderId(), fields[i]);
+            }
+        }
+        setExtra();
+    }
+
+    /**
+     * Retrieves all extra fields that have been parsed successfully.
+     * @return an array of the extra fields
+     */
+    public ZipExtraField[] getExtraFields() {
+        return getExtraFields(false);
+    }
+
+    /**
+     * Retrieves extra fields.
+     * @param includeUnparseable whether to also return unparseable
+     * extra fields as {@link UnparseableExtraFieldData} if such data
+     * exists.
+     * @return an array of the extra fields
+     *
+     * @since Apache Commons Compress 1.1
+     */
+    public ZipExtraField[] getExtraFields(boolean includeUnparseable) {
+        if (extraFields == null) {
+            return !includeUnparseable || unparseableExtra == null
+                ? new ZipExtraField[0]
+                : new ZipExtraField[] { unparseableExtra };
+        }
+        List<ZipExtraField> result =
+            new ArrayList<ZipExtraField>(extraFields.values());
+        if (includeUnparseable && unparseableExtra != null) {
+            result.add(unparseableExtra);
+        }
+        return result.toArray(new ZipExtraField[0]);
+    }
+
+    /**
+     * Adds an extra field - replacing an already present extra field
+     * of the same type.
+     *
+     * <p>If no extra field of the same type exists, the field will be
+     * added as last field.</p>
+     * @param ze an extra field
+     */
+    public void addExtraField(ZipExtraField ze) {
+        if (ze instanceof UnparseableExtraFieldData) {
+            unparseableExtra = (UnparseableExtraFieldData) ze;
+        } else {
+            if (extraFields == null) {
+                extraFields = new LinkedHashMap<ZipShort, ZipExtraField>();
+            }
+            extraFields.put(ze.getHeaderId(), ze);
+        }
+        setExtra();
+    }
+
+    /**
+     * Adds an extra field - replacing an already present extra field
+     * of the same type.
+     *
+     * <p>The new extra field will be the first one.</p>
+     * @param ze an extra field
+     */
+    public void addAsFirstExtraField(ZipExtraField ze) {
+        if (ze instanceof UnparseableExtraFieldData) {
+            unparseableExtra = (UnparseableExtraFieldData) ze;
+        } else {
+            LinkedHashMap<ZipShort, ZipExtraField> copy = extraFields;
+            extraFields = new LinkedHashMap<ZipShort, ZipExtraField>();
+            extraFields.put(ze.getHeaderId(), ze);
+            if (copy != null) {
+                copy.remove(ze.getHeaderId());
+                extraFields.putAll(copy);
+            }
+        }
+        setExtra();
+    }
+
+    /**
+     * Remove an extra field.
+     * @param type the type of extra field to remove
+     */
+    public void removeExtraField(ZipShort type) {
+        if (extraFields == null) {
+            throw new java.util.NoSuchElementException();
+        }
+        if (extraFields.remove(type) == null) {
+            throw new java.util.NoSuchElementException();
+        }
+        setExtra();
+    }
+
+    /**
+     * Removes unparseable extra field data.
+     *
+     * @since Apache Commons Compress 1.1
+     */
+    public void removeUnparseableExtraFieldData() {
+        if (unparseableExtra == null) {
+            throw new java.util.NoSuchElementException();
+        }
+        unparseableExtra = null;
+        setExtra();
+    }
+
+    /**
+     * Looks up an extra field by its header id.
+     *
+     * @return null if no such field exists.
+     */
+    public ZipExtraField getExtraField(ZipShort type) {
+        if (extraFields != null) {
+            return extraFields.get(type);
+        }
+        return null;
+    }
+
+    /**
+     * Looks up extra field data that couldn't be parsed correctly.
+     *
+     * @return null if no such field exists.
+     *
+     * @since Apache Commons Compress 1.1
+     */
+    public UnparseableExtraFieldData getUnparseableExtraFieldData() {
+        return unparseableExtra;
+    }
+
+    /**
+     * Parses the given bytes as extra field data and consumes any
+     * unparseable data as an {@link UnparseableExtraFieldData}
+     * instance.
+     * @param extra an array of bytes to be parsed into extra fields
+     * @throws RuntimeException if the bytes cannot be parsed
+     * @throws RuntimeException on error
+     */
+    @Override
+    public void setExtra(byte[] extra) throws RuntimeException {
+        try {
+            ZipExtraField[] local =
+                ExtraFieldUtils.parse(extra, true,
+                                      ExtraFieldUtils.UnparseableExtraField.READ);
+            mergeExtraFields(local, true);
+        } catch (ZipException e) {
+            // actually this is not possible as of Commons Compress 1.1
+            throw new RuntimeException("Error parsing extra fields for entry: "
+                                       + getName() + " - " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Unfortunately {@link java.util.zip.ZipOutputStream
+     * java.util.zip.ZipOutputStream} seems to access the extra data
+     * directly, so overriding getExtra doesn't help - we need to
+     * modify super's data directly.
+     */
+    protected void setExtra() {
+        super.setExtra(ExtraFieldUtils.mergeLocalFileDataData(getExtraFields(true)));
+    }
+
+    /**
+     * Sets the central directory part of extra fields.
+     */
+    public void setCentralDirectoryExtra(byte[] b) {
+        try {
+            ZipExtraField[] central =
+                ExtraFieldUtils.parse(b, false,
+                                      ExtraFieldUtils.UnparseableExtraField.READ);
+            mergeExtraFields(central, false);
+        } catch (ZipException e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Retrieves the extra data for the local file data.
+     * @return the extra data for local file
+     */
+    public byte[] getLocalFileDataExtra() {
+        byte[] extra = getExtra();
+        return extra != null ? extra : new byte[0];
+    }
+
+    /**
+     * Retrieves the extra data for the central directory.
+     * @return the central directory extra data
+     */
+    public byte[] getCentralDirectoryExtra() {
+        return ExtraFieldUtils.mergeCentralDirectoryData(getExtraFields(true));
+    }
+
+    /**
+     * Get the name of the entry.
+     * @return the entry name
+     */
+    @Override
+    public String getName() {
+        return name == null ? super.getName() : name;
+    }
+
+    /**
+     * Is this entry a directory?
+     * @return true if the entry is a directory
+     */
+    @Override
+    public boolean isDirectory() {
+        return getName().endsWith("/");
+    }
+
+    /**
+     * Set the name of the entry.
+     * @param name the name to use
+     */
+    protected void setName(String name) {
+        this.name = name;
+    }
+
+    /**
+     * Gets the uncompressed size of the entry data.
+     * @return the entry size
+     */
+    @Override
+    public long getSize() {
+        return size;
+    }
+
+    /**
+     * Sets the uncompressed size of the entry data.
+     * @param size the uncompressed size in bytes
+     * @exception IllegalArgumentException if the specified size is less
+     *            than 0
+     */
+    @Override
+    public void setSize(long size) {
+        if (size < 0) {
+            throw new IllegalArgumentException("invalid entry size");
+        }
+        this.size = size;
+    }
+
+    /**
+     * Sets the name using the raw bytes and the string created from
+     * it by guessing or using the configured encoding.
+     * @param name the name to use created from the raw bytes using
+     * the guessed or configured encoding
+     * @param rawName the bytes originally read as name from the
+     * archive
+     * @since Apache Commons Compress 1.2
+     */
+    protected void setName(String name, byte[] rawName) {
+        setName(name);
+        this.rawName = rawName;
+    }
+
+    /**
+     * Returns the raw bytes that made up the name before it has been
+     * converted using the configured or guessed encoding.
+     *
+     * <p>This method will return null if this instance has not been
+     * read from an archive.</p>
+     *
+     * @since Apache Commons Compress 1.2
+     */
+    public byte[] getRawName() {
+        if (rawName != null) {
+            byte[] b = new byte[rawName.length];
+            System.arraycopy(rawName, 0, b, 0, rawName.length);
+            return b;
+        }
+        return null;
+    }
+
+    /**
+     * Get the hashCode of the entry.
+     * This uses the name as the hashcode.
+     * @return a hashcode.
+     */
+    @Override
+    public int hashCode() {
+        // this method has severe consequences on performance. We cannot rely
+        // on the super.hashCode() method since super.getName() always return
+        // the empty string in the current implemention (there's no setter)
+        // so it is basically draining the performance of a hashmap lookup
+        return getName().hashCode();
+    }
+
+    /**
+     * The "general purpose bit" field.
+     * @since Apache Commons Compress 1.1
+     */
+    public GeneralPurposeBit getGeneralPurposeBit() {
+        return gpb;
+    }
+
+    /**
+     * The "general purpose bit" field.
+     * @since Apache Commons Compress 1.1
+     */
+    public void setGeneralPurposeBit(GeneralPurposeBit b) {
+        gpb = b;
+    }
+
+    /**
+     * If there are no extra fields, use the given fields as new extra
+     * data - otherwise merge the fields assuming the existing fields
+     * and the new fields stem from different locations inside the
+     * archive.
+     * @param f the extra fields to merge
+     * @param local whether the new fields originate from local data
+     */
+    private void mergeExtraFields(ZipExtraField[] f, boolean local)
+        throws ZipException {
+        if (extraFields == null) {
+            setExtraFields(f);
+        } else {
+            for (int i = 0; i < f.length; i++) {
+                ZipExtraField existing;
+                if (f[i] instanceof UnparseableExtraFieldData) {
+                    existing = unparseableExtra;
+                } else {
+                    existing = getExtraField(f[i].getHeaderId());
+                }
+                if (existing == null) {
+                    addExtraField(f[i]);
+                } else {
+                    if (local) {
+                        byte[] b = f[i].getLocalFileDataData();
+                        existing.parseFromLocalFileData(b, 0, b.length);
+                    } else {
+                        byte[] b = f[i].getCentralDirectoryData();
+                        existing.parseFromCentralDirectoryData(b, 0, b.length);
+                    }
+                }
+            }
+            setExtra();
+        }
+    }
+
+    /** {@inheritDoc} */
+    public Date getLastModifiedDate() {
+        return new Date(getTime());
+    }
+
+    /* (non-Javadoc)
+     * @see java.lang.Object#equals(java.lang.Object)
+     */
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        ZipArchiveEntry other = (ZipArchiveEntry) obj;
+        String myName = getName();
+        String otherName = other.getName();
+        if (myName == null) {
+            if (otherName != null) {
+                return false;
+            }
+        } else if (!myName.equals(otherName)) {
+            return false;
+        }
+        String myComment = getComment();
+        String otherComment = other.getComment();
+        if (myComment == null) {
+            if (otherComment != null) {
+                return false;
+            }
+        } else if (!myComment.equals(otherComment)) {
+            return false;
+        }
+        return getTime() == other.getTime()
+            && getInternalAttributes() == other.getInternalAttributes()
+            && getPlatform() == other.getPlatform()
+            && getExternalAttributes() == other.getExternalAttributes()
+            && getMethod() == other.getMethod()
+            && getSize() == other.getSize()
+            && getCrc() == other.getCrc()
+            && getCompressedSize() == other.getCompressedSize()
+            && Arrays.equals(getCentralDirectoryExtra(),
+                             other.getCentralDirectoryExtra())
+            && Arrays.equals(getLocalFileDataExtra(),
+                             other.getLocalFileDataExtra())
+            && gpb.equals(other.gpb);
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ ZipArchiveEntryClaudeTest ใน package org.apache.commons.compress.archivers.zip เพื่อทดสอบคลาส ZipArchiveEntry ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.compress.archivers.zip;` เท่านั้น
+</instructions>

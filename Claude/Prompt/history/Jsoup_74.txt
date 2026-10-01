@@ -1,0 +1,343 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Jsoup (Defects4J bug Jsoup-74)
+package: org.jsoup.helper
+class_under_test: StringUtil
+test_class_to_write: StringUtilClaudeTest
+</target>
+
+<project_notes>
+Jsoup: ใช้ Jsoup.parse(String) และ Jsoup.parseBodyFragment(String) เป็นทางเข้า import org.jsoup.nodes.* และ org.jsoup.parser.* ให้ครบ
+</project_notes>
+
+<source_code>
+package org.jsoup.helper;
+
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Iterator;
+
+/**
+ * A minimal String utility class. Designed for internal jsoup use only.
+ */
+public final class StringUtil {
+    // memoised padding up to 21
+    static final String[] padding = {"", " ", "  ", "   ", "    ", "     ", "      ", "       ", "        ",
+        "         ", "          ", "           ", "            ", "             ", "              ", "               ",
+        "                ", "                 ", "                  ", "                   ", "                    "};
+
+    /**
+     * Join a collection of strings by a separator
+     * @param strings collection of string objects
+     * @param sep string to place between strings
+     * @return joined string
+     */
+    public static String join(Collection strings, String sep) {
+        return join(strings.iterator(), sep);
+    }
+
+    /**
+     * Join a collection of strings by a separator
+     * @param strings iterator of string objects
+     * @param sep string to place between strings
+     * @return joined string
+     */
+    public static String join(Iterator strings, String sep) {
+        if (!strings.hasNext())
+            return "";
+
+        String start = strings.next().toString();
+        if (!strings.hasNext()) // only one, avoid builder
+            return start;
+
+        StringBuilder sb = new StringBuilder(64).append(start);
+        while (strings.hasNext()) {
+            sb.append(sep);
+            sb.append(strings.next());
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Join an array of strings by a separator
+     * @param strings collection of string objects
+     * @param sep string to place between strings
+     * @return joined string
+     */
+    public static String join(String[] strings, String sep) {
+        return join(Arrays.asList(strings), sep);
+    }
+
+    /**
+     * Returns space padding
+     * @param width amount of padding desired
+     * @return string of spaces * width
+     */
+    public static String padding(int width) {
+        if (width < 0)
+            throw new IllegalArgumentException("width must be > 0");
+
+        if (width < padding.length)
+            return padding[width];
+        char[] out = new char[width];
+        for (int i = 0; i < width; i++)
+            out[i] = ' ';
+        return String.valueOf(out);
+    }
+
+    /**
+     * Tests if a string is blank: null, empty, or only whitespace (" ", \r\n, \t, etc)
+     * @param string string to test
+     * @return if string is blank
+     */
+    public static boolean isBlank(String string) {
+        if (string == null || string.length() == 0)
+            return true;
+
+        int l = string.length();
+        for (int i = 0; i < l; i++) {
+            if (!StringUtil.isWhitespace(string.codePointAt(i)))
+                return false;
+        }
+        return true;
+    }
+
+    /**
+     * Tests if a string is numeric, i.e. contains only digit characters
+     * @param string string to test
+     * @return true if only digit chars, false if empty or null or contains non-digit chars
+     */
+    public static boolean isNumeric(String string) {
+        if (string == null || string.length() == 0)
+            return false;
+
+        int l = string.length();
+        for (int i = 0; i < l; i++) {
+            if (!Character.isDigit(string.codePointAt(i)))
+                return false;
+        }
+        return true;
+    }
+
+    /**
+     * Tests if a code point is "whitespace" as defined in the HTML spec. Used for output HTML.
+     * @param c code point to test
+     * @return true if code point is whitespace, false otherwise
+     * @see #isActuallyWhitespace(int)
+     */
+    public static boolean isWhitespace(int c){
+        return c == ' ' || c == '\t' || c == '\n' || c == '\f' || c == '\r';
+    }
+
+    /**
+     * Tests if a code point is "whitespace" as defined by what it looks like. Used for Element.text etc.
+     * @param c code point to test
+     * @return true if code point is whitespace, false otherwise
+     */
+    public static boolean isActuallyWhitespace(int c){
+        return c == ' ' || c == '\t' || c == '\n' || c == '\f' || c == '\r' || c == 160;
+        // 160 is &nbsp; (non-breaking space). Not in the spec but expected.
+    }
+
+        // zero width sp, zw non join, zw join, soft hyphen
+
+    /**
+     * Normalise the whitespace within this string; multiple spaces collapse to a single, and all whitespace characters
+     * (e.g. newline, tab) convert to a simple space
+     * @param string content to normalise
+     * @return normalised string
+     */
+    public static String normaliseWhitespace(String string) {
+        StringBuilder sb = StringUtil.stringBuilder();
+        appendNormalisedWhitespace(sb, string, false);
+        return sb.toString();
+    }
+
+    /**
+     * After normalizing the whitespace within a string, appends it to a string builder.
+     * @param accum builder to append to
+     * @param string string to normalize whitespace within
+     * @param stripLeading set to true if you wish to remove any leading whitespace
+     */
+    public static void appendNormalisedWhitespace(StringBuilder accum, String string, boolean stripLeading) {
+        boolean lastWasWhite = false;
+        boolean reachedNonWhite = false;
+
+        int len = string.length();
+        int c;
+        for (int i = 0; i < len; i+= Character.charCount(c)) {
+            c = string.codePointAt(i);
+            if (isActuallyWhitespace(c)) {
+                if ((stripLeading && !reachedNonWhite) || lastWasWhite)
+                    continue;
+                accum.append(' ');
+                lastWasWhite = true;
+            }
+            else {
+                accum.appendCodePoint(c);
+                lastWasWhite = false;
+                reachedNonWhite = true;
+            }
+        }
+    }
+
+    public static boolean in(final String needle, final String... haystack) {
+        final int len = haystack.length;
+        for (int i = 0; i < len; i++) {
+            if (haystack[i].equals(needle))
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean inSorted(String needle, String[] haystack) {
+        return Arrays.binarySearch(haystack, needle) >= 0;
+    }
+
+    /**
+     * Create a new absolute URL, from a provided existing absolute URL and a relative URL component.
+     * @param base the existing absolute base URL
+     * @param relUrl the relative URL to resolve. (If it's already absolute, it will be returned)
+     * @return the resolved absolute URL
+     * @throws MalformedURLException if an error occurred generating the URL
+     */
+    public static URL resolve(URL base, String relUrl) throws MalformedURLException {
+        // workaround: java resolves '//path/file + ?foo' to '//path/?foo', not '//path/file?foo' as desired
+        if (relUrl.startsWith("?"))
+            relUrl = base.getPath() + relUrl;
+        // workaround: //example.com + ./foo = //example.com/./foo, not //example.com/foo
+        if (relUrl.indexOf('.') == 0 && base.getFile().indexOf('/') != 0) {
+            base = new URL(base.getProtocol(), base.getHost(), base.getPort(), "/" + base.getFile());
+        }
+        return new URL(base, relUrl);
+    }
+
+    /**
+     * Create a new absolute URL, from a provided existing absolute URL and a relative URL component.
+     * @param baseUrl the existing absolute base URL
+     * @param relUrl the relative URL to resolve. (If it's already absolute, it will be returned)
+     * @return an absolute URL if one was able to be generated, or the empty string if not
+     */
+    public static String resolve(final String baseUrl, final String relUrl) {
+        URL base;
+        try {
+            try {
+                base = new URL(baseUrl);
+            } catch (MalformedURLException e) {
+                // the base is unsuitable, but the attribute/rel may be abs on its own, so try that
+                URL abs = new URL(relUrl);
+                return abs.toExternalForm();
+            }
+            return resolve(base, relUrl).toExternalForm();
+        } catch (MalformedURLException e) {
+            return "";
+        }
+    }
+
+    /**
+     * Maintains a cached StringBuilder, to minimize new StringBuilder GCs. Prevents it from growing to big per thread.
+     * Care must be taken to not grab more than one in the same stack (not locked or mutexed or anything).
+     * @return an empty StringBuilder
+     */
+    public static StringBuilder stringBuilder() {
+        StringBuilder sb = stringLocal.get();
+        if (sb.length() > MaxCachedBuilderSize) {
+            sb = new StringBuilder(MaxCachedBuilderSize);
+            stringLocal.set(sb);
+        } else {
+            sb.delete(0, sb.length());
+        }
+        return sb;
+
+    }
+
+    private static final int MaxCachedBuilderSize = 8 * 1024;
+    private static final ThreadLocal<StringBuilder> stringLocal = new ThreadLocal<StringBuilder>(){
+        @Override
+        protected StringBuilder initialValue() {
+            return new StringBuilder(MaxCachedBuilderSize);
+        }
+    };
+
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ StringUtilClaudeTest ใน package org.jsoup.helper เพื่อทดสอบคลาส StringUtil ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.jsoup.helper;` เท่านั้น
+</instructions>

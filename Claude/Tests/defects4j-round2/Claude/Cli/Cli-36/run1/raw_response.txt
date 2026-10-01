@@ -1,0 +1,239 @@
+package org.apache.commons.cli;
+
+import java.util.Collection;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class OptionGroupClaudeTest
+{
+    // addOption: return value should be the same OptionGroup instance (chaining)
+    @Test
+    public void testAddOption_returnsThisInstance() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        Option option = new Option("a", false, "alpha description");
+        OptionGroup result = group.addOption(option);
+        assertSame(group, result);
+    }
+
+    // addOption: single option should appear in getOptions()
+    @Test
+    public void testAddOption_singleOption_appearsInGetOptions() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        Option option = new Option("a", false, "alpha description");
+        group.addOption(option);
+        Collection<Option> options = group.getOptions();
+        assertEquals(1, options.size());
+        assertTrue(options.contains(option));
+    }
+
+    // addOption: adding two options with the same key should overwrite the map entry
+    @Test
+    public void testAddOption_duplicateKey_overwritesPreviousValue() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        Option first = new Option("a", false, "first");
+        Option second = new Option("a", false, "second");
+        group.addOption(first);
+        group.addOption(second);
+        Collection<Option> options = group.getOptions();
+        assertEquals(1, options.size());
+        assertSame(second, options.iterator().next());
+    }
+
+    // addOption: adding multiple distinct options populates getNames() with all keys
+    @Test
+    public void testAddOption_multipleOptions_allPresentInGetNames() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        group.addOption(new Option("a", false, "a desc"));
+        group.addOption(new Option("b", false, "b desc"));
+        group.addOption(new Option("c", false, "c desc"));
+        Collection<String> names = group.getNames();
+        assertEquals(3, names.size());
+        assertTrue(names.contains("a"));
+        assertTrue(names.contains("b"));
+        assertTrue(names.contains("c"));
+    }
+
+    // getNames: on an empty group, should return an empty collection
+    @Test
+    public void testGetNames_emptyGroup_returnsEmptyCollection() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        assertTrue(group.getNames().isEmpty());
+    }
+
+    // getOptions: on an empty group, should return an empty collection
+    @Test
+    public void testGetOptions_emptyGroup_returnsEmptyCollection() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        assertTrue(group.getOptions().isEmpty());
+    }
+
+    // setSelected(null) on a fresh group should not throw and selected stays null
+    @Test
+    public void testSetSelected_nullOnFreshGroup_noExceptionAndSelectedRemainsNull() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        group.setSelected(null);
+        assertNull(group.getSelected());
+    }
+
+    // setSelected: first selection should set selected to the option's key
+    @Test
+    public void testSetSelected_firstSelection_setsSelectedToOptionKey() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        Option option = new Option("a", false, "alpha");
+        group.addOption(option);
+        group.setSelected(option);
+        assertEquals("a", group.getSelected());
+    }
+
+    // setSelected: reselecting the exact same instance should not throw
+    @Test
+    public void testSetSelected_reselectSameInstance_doesNotThrow() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        Option option = new Option("a", false, "alpha");
+        group.addOption(option);
+        group.setSelected(option);
+        group.setSelected(option);
+        assertEquals("a", group.getSelected());
+    }
+
+    // setSelected: reselecting a different instance with the same key should not throw
+    @Test
+    public void testSetSelected_reselectDifferentInstanceSameKey_doesNotThrow() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        Option first = new Option("a", false, "first");
+        Option second = new Option("a", false, "second");
+        group.setSelected(first);
+        group.setSelected(second);
+        assertEquals("a", group.getSelected());
+    }
+
+    // setSelected: selecting a different key while one is already selected throws AlreadySelectedException
+    @Test
+    public void testSetSelected_differentOption_throwsAlreadySelectedException() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        Option first = new Option("a", false, "first");
+        Option second = new Option("b", false, "second");
+        group.setSelected(first);
+        try
+        {
+            group.setSelected(second);
+            fail("expected AlreadySelectedException");
+        }
+        catch (AlreadySelectedException expected)
+        {
+            // expected
+        }
+        assertEquals("a", group.getSelected());
+    }
+
+    // setSelected: after setSelected(null) resets, a different option can be selected without exception
+    @Test
+    public void testSetSelected_resetThenSelectDifferent_succeeds() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        Option first = new Option("a", false, "first");
+        Option second = new Option("b", false, "second");
+        group.setSelected(first);
+        group.setSelected(null);
+        assertNull(group.getSelected());
+        group.setSelected(second);
+        assertEquals("b", group.getSelected());
+    }
+
+    // getSelected: on a fresh group, should be null initially
+    @Test
+    public void testGetSelected_initiallyNull() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        assertNull(group.getSelected());
+    }
+
+    // setRequired(true) should make isRequired() return true
+    @Test
+    public void testSetRequired_trueMakesIsRequiredTrue() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        group.setRequired(true);
+        assertTrue(group.isRequired());
+    }
+
+    // setRequired(false) should make isRequired() return false
+    @Test
+    public void testSetRequired_falseMakesIsRequiredFalse() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        group.setRequired(true);
+        group.setRequired(false);
+        assertFalse(group.isRequired());
+    }
+
+    // isRequired: default value on a fresh group should be false
+    @Test
+    public void testIsRequired_defaultIsFalse() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        assertFalse(group.isRequired());
+    }
+
+    // toString: an empty group should render as "[]"
+    @Test
+    public void testToString_emptyGroup_returnsEmptyBrackets() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        assertEquals("[]", group.toString());
+    }
+
+    // toString: single option with a short opt and a description
+    @Test
+    public void testToString_singleOptionWithDescription_formatsCorrectly() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        group.addOption(new Option("a", false, "alpha description"));
+        assertEquals("[-a alpha description]", group.toString());
+    }
+
+    // toString: single option with a null description should not append description text
+    @Test
+    public void testToString_singleOptionWithoutDescription_noDescriptionAppended() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        group.addOption(new Option("b", false, null));
+        assertEquals("[-b]", group.toString());
+    }
+
+    // toString: an empty-string description (non-null) should still trigger the append branch
+    @Test
+    public void testToString_emptyStringDescription_appendsSpaceOnly() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        group.addOption(new Option("a", false, ""));
+        assertEquals("[-a ]", group.toString());
+    }
+
+    // toString: multiple options should be comma-separated and wrapped in brackets, regardless of map order
+    @Test
+    public void testToString_multipleOptions_containsAllEntriesAndSeparator() throws Throwable
+    {
+        OptionGroup group = new OptionGroup();
+        group.addOption(new Option("a", false, "alpha"));
+        group.addOption(new Option("b", false, "beta"));
+        String str = group.toString();
+        assertTrue(str.startsWith("["));
+        assertTrue(str.endsWith("]"));
+        assertTrue(str.contains("-a alpha"));
+        assertTrue(str.contains("-b beta"));
+        assertTrue(str.contains(", "));
+    }
+}

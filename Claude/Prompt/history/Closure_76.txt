@@ -1,0 +1,492 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Closure (Defects4J bug Closure-76)
+package: com.google.javascript.jscomp
+class_under_test: DeadAssignmentsElimination
+test_class_to_write: DeadAssignmentsEliminationClaudeTest
+</target>
+
+<project_notes>
+Closure Compiler: สร้าง Node ผ่าน IR.name(String), IR.string(String), IR.number(double), IR.block() หรือ Node.newString(Token.NAME, ...) เท่านั้น ห้ามเดาเมธอดบน Node เช่น setQualifiedName ห้าม implement ErrorReporter/AbstractCompiler ใช้ new Compiler() และ CompilerOptions() จริงถ้าต้องการคอมไพล์ โดยส่ง SourceFile.fromCode("test.js", "...")
+</project_notes>
+
+<source_code>
+/*
+ * Copyright 2008 The Closure Compiler Authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.javascript.jscomp;
+
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
+import com.google.javascript.jscomp.ControlFlowGraph.Branch;
+import com.google.javascript.jscomp.DataFlowAnalysis.FlowState;
+import com.google.javascript.jscomp.LiveVariablesAnalysis.LiveVariableLattice;
+import com.google.javascript.jscomp.NodeTraversal.AbstractPostOrderCallback;
+import com.google.javascript.jscomp.NodeTraversal.ScopedCallback;
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.jscomp.graph.DiGraph.DiGraphNode;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+
+/**
+ * Removes local variable assignments that are useless based on information from
+ * {@link LiveVariablesAnalysis}. If there is an assignment to variable
+ * {@code x} and {@code x} is dead after this assignment, we know that the
+ * current content of {@code x} will not be read and this assignment is useless.
+ *
+ */
+class DeadAssignmentsElimination extends AbstractPostOrderCallback implements
+    CompilerPass, ScopedCallback {
+
+  private final AbstractCompiler compiler;
+  private LiveVariablesAnalysis liveness;
+
+  // Matches all assignment operators and increment/decrement operators.
+  // Does *not* match VAR initialization, since RemoveUnusedVariables
+  // will already remove variables that are initialized but unused.
+  private static final Predicate<Node> matchRemovableAssigns =
+      new Predicate<Node>() {
+    @Override
+    public boolean apply(Node n) {
+      return (NodeUtil.isAssignmentOp(n) &&
+              n.getFirstChild().getType() == Token.NAME) ||
+          n.getType() == Token.INC || n.getType() == Token.DEC;
+    }
+  };
+
+  public DeadAssignmentsElimination(AbstractCompiler compiler) {
+    this.compiler = compiler;
+  }
+
+  @Override
+  public void process(Node externs, Node root) {
+    Preconditions.checkNotNull(externs);
+    Preconditions.checkNotNull(root);
+    NodeTraversal.traverse(compiler, root, this);
+  }
+
+  @Override
+  public void enterScope(NodeTraversal t) {
+    Scope scope = t.getScope();
+    // Global scope _SHOULD_ work, however, liveness won't finish without
+    // -Xmx1024 in closure. We might have to look at coding conventions for
+    // exported variables as well.
+    if (scope.isGlobal()) {
+      return;
+    }
+
+    // We are not going to do any dead assignment elimination in when there is
+    // at least one inner function because in most browsers, when there is a
+    // closure, ALL the variables are saved (escaped).
+    Node fnBlock = t.getScopeRoot().getLastChild();
+    if (NodeUtil.containsFunction(fnBlock)) {
+      return;
+    }
+
+    // We don't do any dead assignment elimination if there are no assigns
+    // to eliminate. :)
+    if (!NodeUtil.has(fnBlock, matchRemovableAssigns,
+            Predicates.<Node>alwaysTrue())) {
+      return;
+    }
+
+    // Computes liveness information first.
+    ControlFlowGraph<Node> cfg = t.getControlFlowGraph();
+    liveness = new LiveVariablesAnalysis(cfg, scope, compiler);
+    liveness.analyze();
+    tryRemoveDeadAssignments(t, cfg);
+  }
+
+  @Override
+  public void exitScope(NodeTraversal t) {
+  }
+
+  @Override
+  public void visit(NodeTraversal t, Node n, Node parent) {
+  }
+
+  /**
+   * Try to remove useless assignments from a control flow graph that has been
+   * annotated with liveness information.
+   *
+   * @param t The node traversal.
+   * @param cfg The control flow graph of the program annotated with liveness
+   *        information.
+   */
+  private void tryRemoveDeadAssignments(NodeTraversal t,
+      ControlFlowGraph<Node> cfg) {
+    Iterable<DiGraphNode<Node, Branch>> nodes = cfg.getDirectedGraphNodes();
+
+    for (DiGraphNode<Node, Branch> cfgNode : nodes) {
+      FlowState<LiveVariableLattice> state =
+          cfgNode.getAnnotation();
+      Node n = cfgNode.getValue();
+      if (n == null) {
+        continue;
+      }
+      switch (n.getType()) {
+        case Token.IF:
+        case Token.WHILE:
+        case Token.DO:
+          tryRemoveAssignment(t, NodeUtil.getConditionExpression(n), state);
+          continue;
+        case Token.FOR:
+          if (!NodeUtil.isForIn(n)) {
+            tryRemoveAssignment(
+                t, NodeUtil.getConditionExpression(n), state);
+          }
+          continue;
+        case Token.SWITCH:
+        case Token.CASE:
+        case Token.RETURN:
+          if (n.hasChildren()) {
+            tryRemoveAssignment(t, n.getFirstChild(), state);
+          }
+          continue;
+        // TODO(user): case Token.VAR: Remove var a=1;a=2;.....
+      }
+
+      tryRemoveAssignment(t, n, state);
+    }
+  }
+
+  private void tryRemoveAssignment(NodeTraversal t, Node n,
+      FlowState<LiveVariableLattice> state) {
+    tryRemoveAssignment(t, n, n, state);
+  }
+
+  /**
+   * Determines if any local variables are dead after the instruction {@code n}
+   * and are assigned within the subtree of {@code n}. Removes those assignments
+   * if there are any.
+   *
+   * @param n Target instruction.
+   * @param exprRoot The CFG node where the liveness information in state is
+   *     still correct.
+   * @param state The liveness information at {@code n}.
+   */
+  private void tryRemoveAssignment(NodeTraversal t, Node n, Node exprRoot,
+      FlowState<LiveVariableLattice> state) {
+
+    Node parent = n.getParent();
+
+    if (NodeUtil.isAssignmentOp(n) ||
+        n.getType() == Token.INC || n.getType() == Token.DEC) {
+
+      Node lhs = n.getFirstChild();
+      Node rhs = lhs.getNext();
+
+      // Recurse first. Example: dead_x = dead_y = 1; We try to clean up dead_y
+      // first.
+      if (rhs != null) {
+        tryRemoveAssignment(t, rhs, exprRoot, state);
+        rhs = lhs.getNext();
+      }
+
+      Scope scope = t.getScope();
+      if (!NodeUtil.isName(lhs)) {
+        return; // Not a local variable assignment.
+      }
+      String name = lhs.getString();
+      if (!scope.isDeclared(name, false)) {
+        return;
+      }
+      Var var = scope.getVar(name);
+
+      if (liveness.getEscapedLocals().contains(var)) {
+        return; // Local variable that might be escaped due to closures.
+      }
+
+      // If we have an identity assignment such as a=a, always remove it
+      // regardless of what the liveness results because it
+      // does not change the result afterward.
+      if (rhs != null &&
+          NodeUtil.isName(rhs) &&
+          rhs.getString().equals(var.name) &&
+          NodeUtil.isAssign(n)) {
+        n.removeChild(rhs);
+        n.getParent().replaceChild(n, rhs);
+        compiler.reportCodeChange();
+        return;
+      }
+
+      if (state.getOut().isLive(var)) {
+        return; // Variable not dead.
+      }
+
+      if (state.getIn().isLive(var) &&
+          isVariableStillLiveWithinExpression(n, exprRoot, var.name)) {
+        // The variable is killed here but it is also live before it.
+        // This is possible if we have say:
+        //    if (X = a && a = C) {..} ; .......; a = S;
+        // In this case we are safe to remove "a = C" because it is dead.
+        // However if we have:
+        //    if (a = C && X = a) {..} ; .......; a = S;
+        // removing "a = C" is NOT correct, although the live set at the node
+        // is exactly the same.
+        // TODO(user): We need more fine grain CFA or we need to keep track
+        // of GEN sets when we recurse here.
+        return;
+      }
+
+      if (NodeUtil.isAssign(n)) {
+        n.removeChild(rhs);
+        n.getParent().replaceChild(n, rhs);
+      } else if (NodeUtil.isAssignmentOp(n)) {
+        n.removeChild(rhs);
+        n.removeChild(lhs);
+        Node op = new Node(NodeUtil.getOpFromAssignmentOp(n), lhs, rhs);
+        parent.replaceChild(n, op);
+      } else if (n.getType() == Token.INC || n.getType() == Token.DEC) {
+        if (NodeUtil.isExpressionNode(parent)) {
+          parent.replaceChild(n,
+              new Node(Token.VOID, Node.newNumber(0).copyInformationFrom(n)));
+        } else if(n.getType() == Token.COMMA && n != parent.getLastChild()) {
+          parent.removeChild(n);
+        } else if (parent.getType() == Token.FOR && !NodeUtil.isForIn(parent) &&
+            NodeUtil.getConditionExpression(parent) != n) {
+          parent.replaceChild(n, new Node(Token.EMPTY));
+        } else {
+          // Cannot replace x = a++ with x = a because that's not valid
+          // when a is not a number.
+          return;
+        }
+      } else {
+        // Not reachable.
+        Preconditions.checkState(false, "Unknown statement");
+      }
+
+      compiler.reportCodeChange();
+      return;
+
+    } else {
+      for (Node c = n.getFirstChild(); c != null;) {
+        Node next = c.getNext();
+        if (!ControlFlowGraph.isEnteringNewCfgNode(c)) {
+          tryRemoveAssignment(t, c, exprRoot, state);
+        }
+        c = next;
+      }
+      return;
+    }
+  }
+
+  /**
+   * Given a variable, node n in the tree and a sub-tree denoted by exprRoot as
+   * the root, this function returns true if there exists a read of that
+   * variable before a write to that variable that is on the right side of n.
+   *
+   * For example, suppose the node is x = 1:
+   *
+   * y = 1, x = 1; // false, there is no reads at all.
+   * y = 1, x = 1, print(x) // true, there is a read right of n.
+   * y = 1, x = 1, x = 2, print(x) // false, there is a read right of n but
+   *                               // it is after a write.
+   *
+   * @param n The current node we should look at.
+   * @param exprRoot The node
+   */
+  private boolean isVariableStillLiveWithinExpression(
+      Node n, Node exprRoot, String variable) {
+    while (n != exprRoot) {
+      VariableLiveness state = VariableLiveness.MAYBE_LIVE;
+      switch (n.getParent().getType()) {
+        case Token.OR:
+        case Token.AND:
+          // If the currently node is the first child of
+          // AND/OR, be conservative only consider the READs
+          // of the second operand.
+
+        case Token.HOOK:
+          // If current node is the condition, check each following
+          // branch, otherwise it is a conditional branch and the
+          // other branch can be ignored.
+
+        default:
+          for(Node sibling = n.getNext(); sibling != null;
+              sibling = sibling.getNext()) {
+            if (!ControlFlowGraph.isEnteringNewCfgNode(sibling)) {
+            state = isVariableReadBeforeKill(sibling, variable);
+
+      // If we see a READ or KILL there is no need to continue.
+      if (state == VariableLiveness.READ) {
+        return true;
+      } else if (state == VariableLiveness.KILL) {
+        return false;
+            }
+          }
+      }
+      }
+      n = n.getParent();
+    }
+    return false;
+  }
+
+  // The current liveness of the variable
+  private enum VariableLiveness {
+    MAYBE_LIVE, // May be still live in the current expression tree.
+    READ, // Known there is a read left of it.
+    KILL, // Known there is a write before any read.
+  }
+
+  /**
+   * Give an expression and a variable. It returns READ, if the first
+   * reference of that variable is a read. It returns KILL, if the first
+   * reference of that variable is an assignment. It returns MAY_LIVE otherwise.
+   */
+  private VariableLiveness isVariableReadBeforeKill(
+      Node n, String variable) {
+
+    if (NodeUtil.isName(n) && variable.equals(n.getString())) {
+      if (NodeUtil.isLhs(n, n.getParent())) {
+        Preconditions.checkState(n.getParent().getType() == Token.ASSIGN);
+        // The expression to which the assignment is made is evaluated before
+        // the RHS is evaluated (normal left to right evaluation) but the KILL
+        // occurs after the RHS is evaluated.
+        Node rhs = n.getNext();
+        VariableLiveness state = isVariableReadBeforeKill(rhs, variable);
+        if (state == VariableLiveness.READ) {
+          return state;
+        }
+        return VariableLiveness.KILL;
+      } else {
+        return VariableLiveness.READ;
+      }
+    }
+
+    switch (n.getType()) {
+      // Conditionals
+      case Token.OR:
+      case Token.AND:
+        // With a AND/OR the first branch always runs, but the second is
+        // may not.
+      case Token.HOOK:
+        return checkHookBranchReadBeforeKill(
+            n.getFirstChild().getNext(), n.getLastChild(), variable);
+
+      default:
+        // Expressions are evaluated left-right, depth first.
+        for (Node child = n.getFirstChild();
+            child != null; child = child.getNext()) {
+          if (!ControlFlowGraph.isEnteringNewCfgNode(child)) { // Not a FUNCTION
+          VariableLiveness state = isVariableReadBeforeKill(child, variable);
+          if (state != VariableLiveness.MAYBE_LIVE) {
+            return state;
+          }
+        }
+      }
+    }
+
+    return VariableLiveness.MAYBE_LIVE;
+  }
+
+  private VariableLiveness checkHookBranchReadBeforeKill(
+      Node trueCase, Node falseCase, String variable) {
+    VariableLiveness v1 = isVariableReadBeforeKill(
+      trueCase, variable);
+    VariableLiveness v2 = isVariableReadBeforeKill(
+      falseCase, variable);
+    // With a hook it is unknown which branch will run, so
+    // we must be conservative.  A read by either is a READ, and
+    // a KILL is only considered if both KILL.
+    if (v1 == VariableLiveness.READ || v2 == VariableLiveness.READ) {
+      return VariableLiveness.READ;
+    } else if (v1 == VariableLiveness.KILL && v2 == VariableLiveness.KILL) {
+      return VariableLiveness.KILL;
+    } else {
+      return VariableLiveness.MAYBE_LIVE;
+    }
+  }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ DeadAssignmentsEliminationClaudeTest ใน package com.google.javascript.jscomp เพื่อทดสอบคลาส DeadAssignmentsElimination ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package com.google.javascript.jscomp;` เท่านั้น
+</instructions>

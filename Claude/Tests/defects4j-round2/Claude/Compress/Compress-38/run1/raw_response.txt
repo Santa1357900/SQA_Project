@@ -1,0 +1,420 @@
+package org.apache.commons.compress.archivers.tar;
+
+import java.io.File;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TarArchiveEntryClaudeTest {
+
+    // String ctor: plain file name -> file defaults (mode, not a directory)
+    @Test
+    public void testConstructorName_fileName_defaultsSetCorrectly() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("foo.txt");
+        assertEquals("foo.txt", entry.getName());
+        assertFalse(entry.isDirectory());
+        assertEquals(TarArchiveEntry.DEFAULT_FILE_MODE, entry.getMode());
+    }
+
+    // String ctor: name ending with "/" -> directory defaults
+    @Test
+    public void testConstructorName_directoryName_defaultsSetCorrectly() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("mydir/");
+        assertEquals("mydir/", entry.getName());
+        assertTrue(entry.isDirectory());
+        assertEquals(TarArchiveEntry.DEFAULT_DIR_MODE, entry.getMode());
+    }
+
+    // normalizeFileName: leading slash stripped when preserveLeadingSlashes is false (default)
+    @Test
+    public void testConstructorName_leadingSlashStrippedByDefault() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("/abs/path.txt");
+        assertEquals("abs/path.txt", entry.getName());
+    }
+
+    // normalizeFileName: leading slash preserved when preserveLeadingSlashes is true
+    @Test
+    public void testConstructorName_preserveLeadingSlashesTrue_keepsSlash() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("/abs/path.txt", true);
+        assertEquals("/abs/path.txt", entry.getName());
+    }
+
+    // (name, linkFlag) ctor: explicit LF_SYMLINK flag drives isSymbolicLink()
+    @Test
+    public void testConstructorNameLinkFlag_setsLinkFlagAndIsSymbolicLink() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("link", TarConstants.LF_SYMLINK);
+        assertTrue(entry.isSymbolicLink());
+        assertEquals("link", entry.getName());
+    }
+
+    // (name, linkFlag) ctor: LF_GNUTYPE_LONGNAME branch sets GNU magic/version and the flag
+    @Test
+    public void testConstructorNameLinkFlag_longName_isGNULongNameEntry() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("longname", TarConstants.LF_GNUTYPE_LONGNAME);
+        assertTrue(entry.isGNULongNameEntry());
+    }
+
+    // File ctor: non-existent File -> isDirectory() false branch, size 0, file reference kept
+    @Test
+    public void testConstructorFile_nonexistentFile_treatedAsFileWithZeroSize() throws Throwable {
+        File f = new File("nonexistent_file_xyz_12345.tmp");
+        TarArchiveEntry entry = new TarArchiveEntry(f);
+        assertFalse(entry.isDirectory());
+        assertEquals(0L, entry.getSize());
+        assertEquals(f, entry.getFile());
+    }
+
+    // equals(Object): same name -> true
+    @Test
+    public void testEqualsObject_sameName_true() throws Throwable {
+        TarArchiveEntry a = new TarArchiveEntry("same.txt");
+        TarArchiveEntry b = new TarArchiveEntry("same.txt");
+        assertTrue(a.equals(b));
+    }
+
+    // equals(Object): different name -> false
+    @Test
+    public void testEqualsObject_differentName_false() throws Throwable {
+        TarArchiveEntry a = new TarArchiveEntry("one.txt");
+        TarArchiveEntry b = new TarArchiveEntry("two.txt");
+        assertFalse(a.equals(b));
+    }
+
+    // equals(Object): null argument branch -> false
+    @Test
+    public void testEqualsObject_null_false() throws Throwable {
+        TarArchiveEntry a = new TarArchiveEntry("one.txt");
+        assertFalse(a.equals((Object) null));
+    }
+
+    // equals(Object): different class branch -> false
+    @Test
+    public void testEqualsObject_differentClass_false() throws Throwable {
+        TarArchiveEntry a = new TarArchiveEntry("one.txt");
+        assertFalse(a.equals("one.txt"));
+    }
+
+    // hashCode: based on name's hashCode
+    @Test
+    public void testHashCode_matchesNameHashCode() throws Throwable {
+        TarArchiveEntry a = new TarArchiveEntry("hashme.txt");
+        assertEquals("hashme.txt".hashCode(), a.hashCode());
+    }
+
+    // isDescendent: child name starts with parent name -> true
+    @Test
+    public void testIsDescendent_trueWhenNameStartsWithParent() throws Throwable {
+        TarArchiveEntry parent = new TarArchiveEntry("dir/");
+        TarArchiveEntry child = new TarArchiveEntry("dir/file.txt");
+        assertTrue(parent.isDescendent(child));
+    }
+
+    // isDescendent: unrelated name -> false
+    @Test
+    public void testIsDescendent_falseWhenNameDoesNotStartWithParent() throws Throwable {
+        TarArchiveEntry parent = new TarArchiveEntry("dir/");
+        TarArchiveEntry other = new TarArchiveEntry("other/file.txt");
+        assertFalse(parent.isDescendent(other));
+    }
+
+    // setName: re-normalizes according to preserveLeadingSlashes stored at construction
+    @Test
+    public void testSetName_normalizesLeadingSlash() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        entry.setName("/new/name.txt");
+        assertEquals("new/name.txt", entry.getName());
+    }
+
+    // setMode/getMode: simple round trip
+    @Test
+    public void testSetMode_getMode() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        entry.setMode(0755);
+        assertEquals(0755, entry.getMode());
+    }
+
+    // getLinkName default "" then setLinkName round trip
+    @Test
+    public void testGetSetLinkName() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        assertEquals("", entry.getLinkName());
+        entry.setLinkName("target.txt");
+        assertEquals("target.txt", entry.getLinkName());
+    }
+
+    // setUserId(long)/getLongUserId/getUserId round trip for a value within int range
+    @Test
+    public void testUserId_setAndGetLong() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        entry.setUserId(42L);
+        assertEquals(42L, entry.getLongUserId());
+        assertEquals(42, entry.getUserId());
+    }
+
+    // setGroupId(long)/getLongGroupId/getGroupId round trip
+    @Test
+    public void testGroupId_setAndGetLong() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        entry.setGroupId(99L);
+        assertEquals(99L, entry.getLongGroupId());
+        assertEquals(99, entry.getGroupId());
+    }
+
+    // getUserId(): deprecated int accessor truncates a long id per documented contract
+    @Test
+    public void testGetUserId_largeValue_truncatesToIntPerDeprecatedContract() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        long big = 5000000000L;
+        entry.setUserId(big);
+        assertEquals(big, entry.getLongUserId());
+        assertEquals((int) big, entry.getUserId());
+    }
+
+    // userName/groupName setters and getters
+    @Test
+    public void testUserNameGroupNameSettersGetters() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        entry.setUserName("bob");
+        entry.setGroupName("staff");
+        assertEquals("bob", entry.getUserName());
+        assertEquals("staff", entry.getGroupName());
+    }
+
+    // setIds: convenience method sets both user and group ids
+    @Test
+    public void testSetIds_setsUserAndGroupId() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        entry.setIds(11, 22);
+        assertEquals(11L, entry.getLongUserId());
+        assertEquals(22L, entry.getLongGroupId());
+    }
+
+    // setNames: convenience method sets both user and group names
+    @Test
+    public void testSetNames_setsUserAndGroupName() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        entry.setNames("carol", "devs");
+        assertEquals("carol", entry.getUserName());
+        assertEquals("devs", entry.getGroupName());
+    }
+
+    // setModTime(long): Java millis truncated to whole seconds
+    @Test
+    public void testSetModTime_long_truncatesToSeconds() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        entry.setModTime(1234567000L);
+        assertEquals(1234567000L, entry.getModTime().getTime());
+    }
+
+    // setModTime(Date): Date overload stores same seconds value
+    @Test
+    public void testSetModTime_date_matchesGetModTime() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        Date d = new Date(2000000000L);
+        entry.setModTime(d);
+        assertEquals(2000000000L, entry.getModTime().getTime());
+    }
+
+    // getLastModifiedDate delegates to getModTime
+    @Test
+    public void testGetLastModifiedDate_matchesGetModTime() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        entry.setModTime(5000000000L);
+        assertEquals(entry.getModTime().getTime(), entry.getLastModifiedDate().getTime());
+    }
+
+    // getFile(): null when entry built from a name only
+    @Test
+    public void testGetFile_nullForNameConstructor() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        assertNull(entry.getFile());
+    }
+
+    // setSize: negative value -> IllegalArgumentException
+    @Test
+    public void testSetSize_negative_throwsIllegalArgumentException() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        try {
+            entry.setSize(-1L);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // setSize: zero is the valid boundary, no exception
+    @Test
+    public void testSetSize_zero_validNoException() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        entry.setSize(0L);
+        assertEquals(0L, entry.getSize());
+    }
+
+    // setDevMajor: negative value -> IllegalArgumentException
+    @Test
+    public void testSetDevMajor_negative_throws() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        try {
+            entry.setDevMajor(-1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // setDevMinor: negative value -> IllegalArgumentException
+    @Test
+    public void testSetDevMinor_negative_throws() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        try {
+            entry.setDevMinor(-5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // isOldGNUSparse/isGNUSparse: driven purely by LF_GNUTYPE_SPARSE link flag
+    @Test
+    public void testIsOldGNUSparse_trueForGnuSparseLinkFlag() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("x.txt", TarConstants.LF_GNUTYPE_SPARSE);
+        assertTrue(entry.isOldGNUSparse());
+        assertTrue(entry.isGNUSparse());
+    }
+
+    // isGNULongLinkEntry: driven by LF_GNUTYPE_LONGLINK link flag
+    @Test
+    public void testIsGNULongLinkEntry_trueForLongLinkFlag() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("x", TarConstants.LF_GNUTYPE_LONGLINK);
+        assertTrue(entry.isGNULongLinkEntry());
+    }
+
+    // isPaxHeader: lower-case pax extended header flag branch
+    @Test
+    public void testIsPaxHeader_trueForLowerCaseFlag() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("x", TarConstants.LF_PAX_EXTENDED_HEADER_LC);
+        assertTrue(entry.isPaxHeader());
+    }
+
+    // isDirectory: linkFlag == LF_DIR branch even without a trailing slash in the name
+    @Test
+    public void testIsDirectory_linkFlagDirWithoutTrailingSlash_true() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("noslash", TarConstants.LF_DIR, false);
+        assertTrue(entry.isDirectory());
+    }
+
+    // isLink: driven by LF_LINK link flag
+    @Test
+    public void testIsLink_trueForLinkFlag() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("x", TarConstants.LF_LINK);
+        assertTrue(entry.isLink());
+    }
+
+    // getDirectoryEntries: file == null branch returns an empty array
+    @Test
+    public void testGetDirectoryEntries_nameConstructedEntry_returnsEmptyArray() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("a.txt");
+        TarArchiveEntry[] children = entry.getDirectoryEntries();
+        assertEquals(0, children.length);
+    }
+
+    // writeEntryHeader + byte[] ctor (parseTarHeader): basic fields survive a round trip
+    @Test
+    public void testWriteAndParseHeader_roundTripPreservesBasicFields() throws Throwable {
+        TarArchiveEntry original = new TarArchiveEntry("simple.txt");
+        original.setSize(12345L);
+        original.setUserId(1000L);
+        original.setGroupId(2000L);
+        original.setUserName("alice");
+        original.setGroupName("users");
+        byte[] buf = new byte[512];
+        original.writeEntryHeader(buf);
+        TarArchiveEntry parsed = new TarArchiveEntry(buf);
+        assertEquals("simple.txt", parsed.getName());
+        assertEquals(12345L, parsed.getSize());
+        assertEquals(1000L, parsed.getLongUserId());
+        assertEquals(2000L, parsed.getLongGroupId());
+        assertEquals("alice", parsed.getUserName());
+        assertEquals("users", parsed.getGroupName());
+    }
+
+    // round trip: directory name (trailing slash) is preserved and isDirectory() stays true
+    @Test
+    public void testWriteAndParseHeader_directoryNamePreserved() throws Throwable {
+        TarArchiveEntry original = new TarArchiveEntry("mydir/");
+        byte[] buf = new byte[512];
+        original.writeEntryHeader(buf);
+        TarArchiveEntry parsed = new TarArchiveEntry(buf);
+        assertEquals("mydir/", parsed.getName());
+        assertTrue(parsed.isDirectory());
+    }
+
+    // isCheckSumOK: true when header bytes match the computed checksum
+    @Test
+    public void testCheckSumOK_trueForValidHeader() throws Throwable {
+        TarArchiveEntry original = new TarArchiveEntry("ok.txt");
+        byte[] buf = new byte[512];
+        original.writeEntryHeader(buf);
+        TarArchiveEntry parsed = new TarArchiveEntry(buf);
+        assertTrue(parsed.isCheckSumOK());
+    }
+
+    // isCheckSumOK: false when a header byte is corrupted after checksum was computed
+    @Test
+    public void testCheckSumOK_falseForCorruptedHeader() throws Throwable {
+        TarArchiveEntry original = new TarArchiveEntry("ok.txt");
+        byte[] buf = new byte[512];
+        original.writeEntryHeader(buf);
+        buf[0] = (byte) (buf[0] + 1);
+        TarArchiveEntry parsed = new TarArchiveEntry(buf);
+        assertFalse(parsed.isCheckSumOK());
+    }
+
+    // fillGNUSparse0xData: name updated when "GNU.sparse.name" key is present
+    @Test
+    public void testFillGNUSparse0xData_withNameKey_updatesNameAndRealSize() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("orig.txt");
+        Map<String, String> headers = new HashMap<String, String>();
+        headers.put("GNU.sparse.size", "100");
+        headers.put("GNU.sparse.name", "sparsename.txt");
+        entry.fillGNUSparse0xData(headers);
+        assertTrue(entry.isPaxGNUSparse());
+        assertEquals(100L, entry.getRealSize());
+        assertEquals("sparsename.txt", entry.getName());
+    }
+
+    // fillGNUSparse0xData: name unchanged when "GNU.sparse.name" key is absent
+    @Test
+    public void testFillGNUSparse0xData_withoutNameKey_keepsOriginalName() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("orig.txt");
+        Map<String, String> headers = new HashMap<String, String>();
+        headers.put("GNU.sparse.size", "50");
+        entry.fillGNUSparse0xData(headers);
+        assertEquals("orig.txt", entry.getName());
+        assertEquals(50L, entry.getRealSize());
+    }
+
+    // fillGNUSparse1xData: name and realSize always updated from headers
+    @Test
+    public void testFillGNUSparse1xData_updatesNameAndRealSize() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("orig.txt");
+        Map<String, String> headers = new HashMap<String, String>();
+        headers.put("GNU.sparse.realsize", "200");
+        headers.put("GNU.sparse.name", "sparse1x.txt");
+        entry.fillGNUSparse1xData(headers);
+        assertTrue(entry.isPaxGNUSparse());
+        assertEquals(200L, entry.getRealSize());
+        assertEquals("sparse1x.txt", entry.getName());
+    }
+
+    // fillStarSparseData: realSize updated when "SCHILY.realsize" key is present
+    @Test
+    public void testFillStarSparseData_withRealSizeKey_updatesRealSize() throws Throwable {
+        TarArchiveEntry entry = new TarArchiveEntry("orig.txt");
+        Map<String, String> headers = new HashMap<String, String>();
+        headers.put("SCHILY.realsize", "300");
+        entry.fillStarSparseData(headers);
+        assertTrue(entry.isStarSparse());
+        assertEquals(300L, entry.getRealSize());
+    }
+}

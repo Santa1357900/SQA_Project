@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-31-_jyll0c3/Cli-31f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.cli.HelpFormatterClaudeTest::testPrintWrapped_noWhitespaceLongerThanWidth_doesNotThrow
+  - org.apache.commons.cli.HelpFormatterClaudeTest::testFindWrapPos_noWhitespaceAtAll_returnsMinusOne
+  - org.apache.commons.cli.HelpFormatterClaudeTest::testRenderWrappedText_tabStopExceedsWidth_terminates
+[exit 0]

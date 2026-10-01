@@ -1,0 +1,553 @@
+package com.fasterxml.jackson.databind.introspect;
+
+import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import java.beans.ConstructorProperties;
+import java.lang.annotation.Annotation;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TimeZone;
+
+import com.fasterxml.jackson.annotation.JacksonAnnotationsInside;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonGetter;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIgnoreType;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonRootName;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.core.Version;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.PropertyName;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
+
+public class JacksonAnnotationIntrospectorClaudeTest
+{
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    @Retention(RetentionPolicy.RUNTIME)
+    @JacksonAnnotationsInside
+    public static @interface BundleAnno { }
+
+    @Retention(RetentionPolicy.RUNTIME)
+    public static @interface PlainAnno { }
+
+    @BundleAnno
+    public static class BundleAnnotated { }
+
+    @PlainAnno
+    public static class PlainAnnotated { }
+
+    public static enum SampleEnum {
+        A,
+        @JsonProperty("b_value") B,
+        C
+    }
+
+    @JsonRootName("root")
+    public static class RootBean {
+        public int value = 5;
+    }
+
+    @JsonIgnoreProperties({"secret"})
+    public static class IgnorePropsBean {
+        public String secret = "s";
+        public String visible = "v";
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class IgnoreUnknownBean {
+        public String name;
+    }
+
+    @JsonIgnoreType
+    public static class IgnoredTypeInner {
+        public String x = "x";
+    }
+
+    public static class HasIgnoredType {
+        public IgnoredTypeInner ignored = new IgnoredTypeInner();
+        public String keep = "keep";
+    }
+
+    @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
+    public static class AutoDetectBean {
+        private String hidden = "shown";
+    }
+
+    public static class IgnoreFieldBean {
+        @JsonIgnore
+        public String secret = "s";
+        public String visible = "v";
+    }
+
+    public static class AccessBean {
+        @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+        public String secret = "hidden";
+        public String normal = "visible";
+    }
+
+    public static class IndexBean {
+        @JsonProperty(index = 2)
+        public String second = "b";
+        @JsonProperty(index = 1)
+        public String first = "a";
+    }
+
+    public static class DateBean {
+        @JsonFormat(pattern = "yyyy", timezone = "UTC")
+        public Date when;
+    }
+
+    public static class ParentRef {
+        public String name = "parent";
+        @JsonManagedReference
+        public ChildRef child;
+    }
+
+    public static class ChildRef {
+        public String name = "child";
+        @JsonBackReference
+        public ParentRef parent;
+    }
+
+    public static class UnwrapAddress {
+        public String city = "NYC";
+    }
+
+    public static class UnwrapPerson {
+        public String name = "John";
+        @JsonUnwrapped
+        public UnwrapAddress address = new UnwrapAddress();
+    }
+
+    public static class ViewMarkerA { }
+
+    public static class ViewBean {
+        public String always = "a";
+        @JsonView(ViewMarkerA.class)
+        public String viewOnly = "b";
+    }
+
+    public static class NameGetterSetterBean {
+        private String value;
+        @JsonGetter("customGet")
+        public String getValue() { return value; }
+        @JsonSetter("customSet")
+        public void setValue(String v) { this.value = v; }
+    }
+
+    public static class RenameBean {
+        @JsonProperty("renamed")
+        public String original = "val";
+    }
+
+    public static class ValueBean {
+        private final int code;
+        public ValueBean(int code) { this.code = code; }
+        @JsonValue
+        public int getCode() { return code; }
+    }
+
+    public static class AnyBean {
+        private Map<String, Object> extra = new HashMap<String, Object>();
+        @JsonAnySetter
+        public void set(String key, Object value) { extra.put(key, value); }
+        @JsonAnyGetter
+        public Map<String, Object> getExtra() { return extra; }
+    }
+
+    public static class CreatorBean {
+        public final String name;
+        @JsonCreator
+        public CreatorBean(@JsonProperty("name") String name) { this.name = name; }
+    }
+
+    public static class CtorPropsBean {
+        public final String name;
+        @ConstructorProperties({"name"})
+        public CtorPropsBean(String name) { this.name = name; }
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "id")
+    public static class IdBeanWithGenerator {
+        public String name = "x";
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.None.class, property = "id")
+    public static class IdBeanNoGenerator {
+        public String name = "x";
+    }
+
+    public static class InclBean {
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public String a;
+        public String b = "kept";
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+    @JsonSubTypes({ @JsonSubTypes.Type(value = Dog.class, name = "dog") })
+    public abstract static class Animal {
+        public String name = "a";
+    }
+
+    public static class Dog extends Animal {
+        public String breed = "lab";
+    }
+
+    // version(): should return a non-null, known Version instance
+    @Test
+    public void testVersion_returnsKnownNonNullVersion() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        Version v = introspector.version();
+        assertNotNull(v);
+        assertFalse(v.isUnknownVersion());
+    }
+
+    // findEnumValue(): @JsonProperty on enum constant overrides default name
+    @Test
+    public void testFindEnumValue_withJsonPropertyAnnotation_returnsAnnotatedName() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        assertEquals("b_value", introspector.findEnumValue(SampleEnum.B));
+    }
+
+    // findEnumValue(): no annotation -> falls back to value.name()
+    @Test
+    public void testFindEnumValue_withoutAnnotation_returnsEnumConstantName() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        assertEquals("A", introspector.findEnumValue(SampleEnum.A));
+    }
+
+    // findEnumValues(): explicit @JsonProperty name overrides only the annotated constant
+    @Test
+    public void testFindEnumValues_explicitNameOverridesOnlyAnnotatedConstant() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        String[] names = new String[] { "A", "B", "C" };
+        String[] result = introspector.findEnumValues(SampleEnum.class, SampleEnum.values(), names);
+        assertEquals("A", result[0]);
+        assertEquals("b_value", result[1]);
+        assertEquals("C", result[2]);
+    }
+
+    // isAnnotationBundle(): meta-annotated with @JacksonAnnotationsInside -> true
+    @Test
+    public void testIsAnnotationBundle_metaAnnotatedWithJacksonAnnotationsInside_returnsTrue() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        Annotation ann = BundleAnnotated.class.getAnnotation(BundleAnno.class);
+        assertTrue(introspector.isAnnotationBundle(ann));
+    }
+
+    // isAnnotationBundle(): plain annotation without meta marker -> false
+    @Test
+    public void testIsAnnotationBundle_plainAnnotation_returnsFalse() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        Annotation ann = PlainAnnotated.class.getAnnotation(PlainAnno.class);
+        assertFalse(introspector.isAnnotationBundle(ann));
+    }
+
+    // setConstructorPropertiesImpliesCreator(): fluent setter returns same instance
+    @Test
+    public void testSetConstructorPropertiesImpliesCreator_returnsSameInstanceForChaining() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        JacksonAnnotationIntrospector result = introspector.setConstructorPropertiesImpliesCreator(false);
+        assertSame(introspector, result);
+    }
+
+    // readResolve(): null cache is reinitialized, same instance returned
+    @Test
+    public void testReadResolve_reinitializesNullAnnotationsCache() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        introspector._annotationsInside = null;
+        Object resolved = introspector.readResolve();
+        assertSame(introspector, resolved);
+        assertNotNull(introspector._annotationsInside);
+    }
+
+    // _classIfExplicit(cls): null input -> null
+    @Test
+    public void testClassIfExplicit_nullClass_returnsNull() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        assertNull(introspector._classIfExplicit(null));
+    }
+
+    // _classIfExplicit(cls): concrete class -> same class returned
+    @Test
+    public void testClassIfExplicit_concreteClass_returnsSameClass() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        assertEquals(String.class, introspector._classIfExplicit(String.class));
+    }
+
+    // _classIfExplicit(cls, implicit): cls equals implicit -> null
+    @Test
+    public void testClassIfExplicitWithImplicit_equalsImplicit_returnsNull() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        assertNull(introspector._classIfExplicit(String.class, String.class));
+    }
+
+    // _classIfExplicit(cls, implicit): cls differs from implicit -> cls returned
+    @Test
+    public void testClassIfExplicitWithImplicit_differsFromImplicit_returnsClass() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        assertEquals(Integer.class, introspector._classIfExplicit(Integer.class, String.class));
+    }
+
+    // _constructStdTypeResolverBuilder(): returns usable non-null instance
+    @Test
+    public void testConstructStdTypeResolverBuilder_returnsNonNullInstance() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        StdTypeResolverBuilder b = introspector._constructStdTypeResolverBuilder();
+        assertNotNull(b);
+    }
+
+    // _constructNoTypeResolverBuilder(): returns usable non-null instance
+    @Test
+    public void testConstructNoTypeResolverBuilder_returnsNonNullInstance() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        StdTypeResolverBuilder b = introspector._constructNoTypeResolverBuilder();
+        assertNotNull(b);
+    }
+
+    // _propertyName(): empty localName -> USE_DEFAULT regardless of namespace
+    @Test
+    public void testPropertyName_emptyLocalName_returnsUseDefaultRegardlessOfNamespace() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        PropertyName pn = introspector._propertyName("", "ns");
+        assertEquals(PropertyName.USE_DEFAULT, pn);
+    }
+
+    // _propertyName(): non-empty localName, null namespace -> simple name only
+    @Test
+    public void testPropertyName_noNamespace_constructsSimpleName() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        PropertyName pn = introspector._propertyName("name", null);
+        assertEquals(PropertyName.construct("name"), pn);
+    }
+
+    // _propertyName(): non-empty localName and namespace -> both used
+    @Test
+    public void testPropertyName_withNamespace_constructsNameAndNamespace() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector();
+        PropertyName pn = introspector._propertyName("name", "ns");
+        assertEquals(PropertyName.construct("name", "ns"), pn);
+    }
+
+    // findRootName(): WRAP_ROOT_VALUE uses @JsonRootName value as wrapper key
+    @Test
+    public void testFindRootName_wrapRootValueUsesAnnotatedRootName() throws Throwable {
+        mapper.enable(SerializationFeature.WRAP_ROOT_VALUE);
+        String json = mapper.writeValueAsString(new RootBean());
+        assertTrue(json.contains("\"root\":"));
+    }
+
+    // findPropertiesToIgnore(): @JsonIgnoreProperties excludes listed property
+    @Test
+    public void testFindPropertiesToIgnore_jsonIgnorePropertiesExcludesListedField() throws Throwable {
+        String json = mapper.writeValueAsString(new IgnorePropsBean());
+        assertFalse(json.contains("secret"));
+        assertTrue(json.contains("\"visible\":\"v\""));
+    }
+
+    // findIgnoreUnknownProperties(): ignoreUnknown=true allows unmapped JSON fields
+    @Test
+    public void testFindIgnoreUnknownProperties_allowsUnknownFieldsWithoutError() throws Throwable {
+        IgnoreUnknownBean bean = mapper.readValue("{\"name\":\"x\",\"extra\":1}", IgnoreUnknownBean.class);
+        assertEquals("x", bean.name);
+    }
+
+    // isIgnorableType(): @JsonIgnoreType makes containing property disappear
+    @Test
+    public void testIsIgnorableType_jsonIgnoreTypeOmitsPropertyOfThatType() throws Throwable {
+        String json = mapper.writeValueAsString(new HasIgnoredType());
+        assertFalse(json.contains("ignored"));
+        assertTrue(json.contains("\"keep\":\"keep\""));
+    }
+
+    // findAutoDetectVisibility(): fieldVisibility=ANY exposes private field
+    @Test
+    public void testFindAutoDetectVisibility_anyFieldVisibilityExposesPrivateField() throws Throwable {
+        String json = mapper.writeValueAsString(new AutoDetectBean());
+        assertTrue(json.contains("\"hidden\":\"shown\""));
+    }
+
+    // hasIgnoreMarker(): @JsonIgnore excludes annotated field, keeps others
+    @Test
+    public void testHasIgnoreMarker_jsonIgnoreExcludesField() throws Throwable {
+        String json = mapper.writeValueAsString(new IgnoreFieldBean());
+        assertFalse(json.contains("secret"));
+        assertTrue(json.contains("\"visible\":\"v\""));
+    }
+
+    // findPropertyAccess(): WRITE_ONLY hides from serialization but settable on read
+    @Test
+    public void testFindPropertyAccess_writeOnlyExcludedFromSerializationButSettable() throws Throwable {
+        String json = mapper.writeValueAsString(new AccessBean());
+        assertFalse(json.contains("secret"));
+        AccessBean read = mapper.readValue("{\"secret\":\"in\",\"normal\":\"n2\"}", AccessBean.class);
+        assertEquals("in", read.secret);
+    }
+
+
+
+    // findFormat(): @JsonFormat pattern applied to Date serialization
+    @Test
+    public void testFindFormat_appliesCustomPatternFromJsonFormat() throws Throwable {
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        cal.set(2020, Calendar.JULY, 1, 0, 0, 0);
+        DateBean bean = new DateBean();
+        bean.when = cal.getTime();
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("2020"));
+    }
+
+    // findReferenceType(): managed/back reference pair avoids recursion, omits back ref
+    @Test
+    public void testFindReferenceType_managedAndBackReferenceOmitsBackRef() throws Throwable {
+        ParentRef p = new ParentRef();
+        ChildRef c = new ChildRef();
+        p.child = c;
+        c.parent = p;
+        String json = mapper.writeValueAsString(p);
+        assertTrue(json.contains("\"child\""));
+        assertFalse(json.contains("\"parent\":"));
+    }
+
+    // findUnwrappingNameTransformer(): @JsonUnwrapped flattens nested object
+    @Test
+    public void testFindUnwrappingNameTransformer_flattensNestedProperties() throws Throwable {
+        String json = mapper.writeValueAsString(new UnwrapPerson());
+        assertTrue(json.contains("\"city\":\"NYC\""));
+        assertFalse(json.contains("\"address\""));
+    }
+
+
+
+    // findNameForSerialization(): @JsonGetter name used for output key
+    @Test
+    public void testFindNameForSerialization_jsonGetterTakesPrecedence() throws Throwable {
+        NameGetterSetterBean bean = new NameGetterSetterBean();
+        bean.setValue("abc");
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"customGet\":\"abc\""));
+    }
+
+    // findNameForDeserialization(): @JsonSetter name used to bind input
+    @Test
+    public void testFindNameForDeserialization_jsonSetterTakesPrecedence() throws Throwable {
+        NameGetterSetterBean bean = mapper.readValue("{\"customSet\":\"xyz\"}", NameGetterSetterBean.class);
+        assertEquals("xyz", bean.getValue());
+    }
+
+    // findNameForSerialization/Deserialization(): @JsonProperty renames both directions
+    @Test
+    public void testFindNameForSerializationAndDeserialization_jsonPropertyRenames() throws Throwable {
+        String json = mapper.writeValueAsString(new RenameBean());
+        assertTrue(json.contains("\"renamed\":\"val\""));
+        RenameBean read = mapper.readValue("{\"renamed\":\"in\"}", RenameBean.class);
+        assertEquals("in", read.original);
+    }
+
+    // hasAsValueAnnotation(): @JsonValue serializes bean as the raw value
+    @Test
+    public void testHasAsValueAnnotation_usesJsonValueForSerialization() throws Throwable {
+        String json = mapper.writeValueAsString(new ValueBean(42));
+        assertEquals("42", json);
+    }
+
+    // hasAnySetterAnnotation()/hasAnyGetterAnnotation(): dynamic properties round-trip
+    @Test
+    public void testHasAnySetterAndAnyGetterAnnotation_handleDynamicProperties() throws Throwable {
+        AnyBean bean = mapper.readValue("{\"foo\":\"bar\"}", AnyBean.class);
+        assertEquals("bar", bean.getExtra().get("foo"));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"foo\":\"bar\""));
+        assertFalse(json.contains("\"extra\""));
+    }
+
+    // hasCreatorAnnotation(): explicit @JsonCreator constructor used for binding
+    @Test
+    public void testHasCreatorAnnotation_withJsonCreator_usesAnnotatedConstructor() throws Throwable {
+        CreatorBean bean = mapper.readValue("{\"name\":\"abc\"}", CreatorBean.class);
+        assertEquals("abc", bean.name);
+    }
+
+    // hasCreatorAnnotation(): by default @ConstructorProperties implies creator
+    @Test
+    public void testHasCreatorAnnotation_constructorPropertiesImpliesCreatorByDefault() throws Throwable {
+        CtorPropsBean bean = mapper.readValue("{\"name\":\"abc\"}", CtorPropsBean.class);
+        assertEquals("abc", bean.name);
+    }
+
+    // hasCreatorAnnotation(): disabling the flag removes implicit creator recognition
+    @Test
+    public void testHasCreatorAnnotation_constructorPropertiesImpliesCreatorDisabled_throws() throws Throwable {
+        JacksonAnnotationIntrospector introspector = new JacksonAnnotationIntrospector()
+                .setConstructorPropertiesImpliesCreator(false);
+        ObjectMapper m = new ObjectMapper();
+        m.setAnnotationIntrospector(introspector);
+        try {
+            m.readValue("{\"name\":\"abc\"}", CtorPropsBean.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) { }
+    }
+
+    // findObjectIdInfo(): explicit generator adds identity property
+    @Test
+    public void testFindObjectIdInfo_withExplicitGenerator_addsIdProperty() throws Throwable {
+        String json = mapper.writeValueAsString(new IdBeanWithGenerator());
+        assertTrue(json.contains("\"id\""));
+    }
+
+    // findObjectIdInfo(): ObjectIdGenerators.None.class disables identity handling
+    @Test
+    public void testFindObjectIdInfo_noneGenerator_addsNoIdProperty() throws Throwable {
+        String json = mapper.writeValueAsString(new IdBeanNoGenerator());
+        assertFalse(json.contains("\"id\""));
+    }
+
+    // findSerializationInclusion()/findPropertyInclusion(): NON_NULL excludes null field
+    @Test
+    public void testFindSerializationInclusion_nonNullExcludesNullProperty() throws Throwable {
+        String json = mapper.writeValueAsString(new InclBean());
+        assertFalse(json.contains("\"a\""));
+        assertTrue(json.contains("\"b\":\"kept\""));
+    }
+
+    // findTypeResolver()/findSubtypes(): polymorphic type info added with mapped subtype name
+    @Test
+    public void testFindTypeResolverAndSubtypes_polymorphicSerializationIncludesTypeProperty() throws Throwable {
+        Animal animal = new Dog();
+        String json = mapper.writeValueAsString(animal);
+        assertTrue(json.contains("\"type\":\"dog\""));
+        assertTrue(json.contains("\"breed\":\"lab\""));
+    }
+}

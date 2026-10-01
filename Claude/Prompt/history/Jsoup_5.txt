@@ -1,0 +1,407 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Jsoup (Defects4J bug Jsoup-5)
+package: org.jsoup.parser
+class_under_test: Parser
+test_class_to_write: ParserClaudeTest
+</target>
+
+<project_notes>
+Jsoup: ใช้ Jsoup.parse(String) และ Jsoup.parseBodyFragment(String) เป็นทางเข้า import org.jsoup.nodes.* และ org.jsoup.parser.* ให้ครบ
+</project_notes>
+
+<source_code>
+package org.jsoup.parser;
+
+
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.*;
+
+import java.util.LinkedList;
+
+/**
+ Parses HTML into a {@link Document}. Generally best to use one of the  more convenient parse methods in {@link org.jsoup.Jsoup}.
+
+ @author Jonathan Hedley, jonathan@hedley.net */
+public class Parser {
+    private static final String SQ = "'";
+    private static final String DQ = "\"";
+
+    private static final Tag htmlTag = Tag.valueOf("html");
+    private static final Tag headTag = Tag.valueOf("head");
+    private static final Tag bodyTag = Tag.valueOf("body");
+    private static final Tag titleTag = Tag.valueOf("title");
+    private static final Tag textareaTag = Tag.valueOf("textarea");
+
+    private final LinkedList<Element> stack;
+    private final TokenQueue tq;
+    private final Document doc;
+    private String baseUri;
+    private boolean relaxed = false;
+
+    private Parser(String html, String baseUri, boolean isBodyFragment) {
+        Validate.notNull(html);
+        Validate.notNull(baseUri);
+
+        stack = new LinkedList<Element>();
+        tq = new TokenQueue(html);
+        this.baseUri = baseUri;
+
+        if (isBodyFragment) {
+            doc = Document.createShell(baseUri);
+            stack.add(doc.body());
+        } else {
+            doc = new Document(baseUri);
+            stack.add(doc);
+        }
+    }
+
+    /**
+     Parse HTML into a Document.
+     @param html HTML to parse
+     @param baseUri base URI of document (i.e. original fetch location), for resolving relative URLs.
+     @return parsed Document
+     */
+    public static Document parse(String html, String baseUri) {
+        Parser parser = new Parser(html, baseUri, false);
+        return parser.parse();
+    }
+
+    /**
+     Parse a fragment of HTML into the {@code body} of a Document.
+     @param bodyHtml fragment of HTML
+     @param baseUri base URI of document (i.e. original fetch location), for resolving relative URLs.
+     @return Document, with empty head, and HTML parsed into body
+     */
+    public static Document parseBodyFragment(String bodyHtml, String baseUri) {
+        Parser parser = new Parser(bodyHtml, baseUri, true);
+        return parser.parse();
+    }
+
+    /**
+     Parse a fragment of HTML into the {@code body} of a Document, with relaxed parsing enabled. Relaxed, in this
+     context, means that implicit tags are not automatically created when missing.
+     @param bodyHtml fragment of HTML
+     @param baseUri base URI of document (i.e. original fetch location), for resolving relative URLs.
+     @return Document, with empty head, and HTML parsed into body
+     */
+    public static Document parseBodyFragmentRelaxed(String bodyHtml, String baseUri) {
+        Parser parser = new Parser(bodyHtml, baseUri, true);
+        parser.relaxed = true;
+        return parser.parse();
+    }
+
+    private Document parse() {
+        while (!tq.isEmpty()) {
+            if (tq.matchesStartTag()) {
+                parseStartTag();
+            } else if (tq.matchesCS("</")) {
+                parseEndTag();
+            } else if (tq.matchesCS("<!--")) {
+                parseComment();
+            } else if (tq.matches("<![CDATA[")) {
+                parseCdata();
+            } else if (tq.matchesCS("<?") || tq.matchesCS("<!")) {
+                parseXmlDecl();
+            } else {
+                parseTextNode();
+            }
+        }
+        return doc.normalise();
+    }
+
+    private void parseComment() {
+        tq.consume("<!--");
+        String data = tq.chompTo("->");
+
+        if (data.endsWith("-")) // i.e. was -->
+            data = data.substring(0, data.length()-1);
+        Comment comment = new Comment(data, baseUri);
+        last().appendChild(comment);
+    }
+
+    private void parseXmlDecl() {
+        tq.consume("<");
+        Character firstChar = tq.consume(); // <? or <!, from initial match.
+        boolean procInstr = firstChar.toString().equals("!");
+        String data = tq.chompTo(">");
+
+        XmlDeclaration decl = new XmlDeclaration(data, baseUri, procInstr);
+        last().appendChild(decl);
+    }
+
+    private void parseEndTag() {
+        tq.consume("</");
+        String tagName = tq.consumeTagName();
+        tq.chompTo(">");
+
+        if (tagName.length() != 0) {
+            Tag tag = Tag.valueOf(tagName);
+            popStackToClose(tag);
+        }
+    }
+
+    private void parseStartTag() {
+        tq.consume("<");
+        String tagName = tq.consumeTagName();
+        Validate.notEmpty(tagName, "Unexpectedly empty tagname. (This should not occur, please report!)");
+        
+        tq.consumeWhitespace();
+        Attributes attributes = new Attributes();
+        while (!tq.matchesAny("<", "/>", ">") && !tq.isEmpty()) {
+            Attribute attribute = parseAttribute();
+            if (attribute != null)
+                attributes.put(attribute);
+        }
+
+        Tag tag = Tag.valueOf(tagName);
+        Element child = new Element(tag, baseUri, attributes);
+
+        boolean isEmptyElement = tag.isEmpty(); // empty element if empty tag (e.g. img) or self-closed el (<div/>
+        if (tq.matchChomp("/>")) { // close empty element or tag
+            isEmptyElement = true;
+            if (!tag.isKnownTag()) // if unknown and a self closed, allow it to be self closed on output. this doesn't force all instances to be empty
+                tag.setSelfClosing();
+        } else {
+            tq.matchChomp(">");
+        }
+        addChildToParent(child, isEmptyElement);
+
+        // pc data only tags (textarea, script): chomp to end tag, add content as text node
+        if (tag.isData()) {
+            String data = tq.chompToIgnoreCase("</" + tagName);
+            tq.chompTo(">");
+            popStackToClose(tag);
+            
+            Node dataNode;
+            if (tag.equals(titleTag) || tag.equals(textareaTag)) // want to show as text, but not contain inside tags (so not a data tag?)
+                dataNode = TextNode.createFromEncoded(data, baseUri);
+            else
+                dataNode = new DataNode(data, baseUri); // data not encoded but raw (for " in script)
+            child.appendChild(dataNode);   
+        }
+
+        // <base href>: update the base uri
+        if (child.tagName().equals("base")) {
+            String href = child.absUrl("href");
+            if (href.length() != 0) { // ignore <base target> etc
+                baseUri = href;
+                doc.setBaseUri(href); // set on the doc so doc.createElement(Tag) will get updated base
+            }
+        }
+    }
+
+    private Attribute parseAttribute() {
+        tq.consumeWhitespace();
+        String key = tq.consumeAttributeKey();
+        String value = "";
+        tq.consumeWhitespace();
+        if (tq.matchChomp("=")) {
+            tq.consumeWhitespace();
+
+            if (tq.matchChomp(SQ)) {
+                value = tq.chompTo(SQ);
+            } else if (tq.matchChomp(DQ)) {
+                value = tq.chompTo(DQ);
+            } else {
+                StringBuilder valueAccum = new StringBuilder();
+                // no ' or " to look for, so scan to end tag or space (or end of stream)
+                while (!tq.matchesAny("<", "/>", ">") && !tq.matchesWhitespace() && !tq.isEmpty()) {
+                    valueAccum.append(tq.consume());
+                }
+                value = valueAccum.toString();
+            }
+            tq.consumeWhitespace();
+        }
+        if (key.length() != 0)
+            return Attribute.createFromEncoded(key, value);
+        else {
+            tq.consume();
+                
+            return null;
+        }
+    }
+
+    private void parseTextNode() {
+        TextNode textNode;
+        // special case: handle string like "hello < there". first char will be "<", because of matchStartTag
+        if (tq.peek().equals('<')) {
+            tq.advance();
+            textNode = new TextNode("<", baseUri);
+        } else {
+            String text = tq.consumeTo("<");
+            textNode = TextNode.createFromEncoded(text, baseUri);
+        }
+        last().appendChild(textNode);
+    }
+
+    private void parseCdata() {
+        tq.consume("<![CDATA[");
+        String rawText = tq.chompTo("]]>");
+        TextNode textNode = new TextNode(rawText, baseUri); // constructor does not escape
+        last().appendChild(textNode);
+    }
+
+    private Element addChildToParent(Element child, boolean isEmptyElement) {
+        Element parent = popStackToSuitableContainer(child.tag());
+        Tag childTag = child.tag();
+        boolean validAncestor = stackHasValidParent(childTag);
+
+        if (!validAncestor && !relaxed) {
+            // create implicit parent around this child
+            Tag parentTag = childTag.getImplicitParent();
+            Element implicit = new Element(parentTag, baseUri);
+            // special case: make sure there's a head before putting in body
+            if (child.tag().equals(bodyTag)) {
+                Element head = new Element(headTag, baseUri);
+                implicit.appendChild(head);
+            }
+            implicit.appendChild(child);
+
+            // recurse to ensure somewhere to put parent
+            Element root = addChildToParent(implicit, false);
+            if (!isEmptyElement)
+                stack.addLast(child);
+            return root;
+        }
+
+        parent.appendChild(child);
+
+        if (!isEmptyElement)
+            stack.addLast(child);
+        return parent;
+    }
+
+    private boolean stackHasValidParent(Tag childTag) {
+        if (stack.size() == 1 && childTag.equals(htmlTag))
+            return true; // root is valid for html node
+
+        if (childTag.requiresSpecificParent())
+            return stack.getLast().tag().isValidParent(childTag);
+
+        // otherwise, look up the stack for valid ancestors
+        for (int i = stack.size() -1; i >= 0; i--) {
+            Element el = stack.get(i);
+            Tag parent2 = el.tag();
+            if (parent2.isValidAncestor(childTag)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Element popStackToSuitableContainer(Tag tag) {
+        while (!stack.isEmpty()) {
+            if (last().tag().canContain(tag))
+                return last();
+            else
+                stack.removeLast();
+        }
+        return null;
+    }
+
+    private Element popStackToClose(Tag tag) {
+        // first check to see if stack contains this tag; if so pop to there, otherwise ignore
+        int counter = 0;
+        Element elToClose = null;
+        for (int i = stack.size() -1; i > 0; i--) {
+            counter++;
+            Element el = stack.get(i);
+            Tag elTag = el.tag();
+            if (elTag.equals(bodyTag) || elTag.equals(htmlTag)) { // once in body, don't close past body
+                break;
+            } else if (elTag.equals(tag)) {
+                elToClose = el;
+                break;
+            }
+        }
+        if (elToClose != null) {
+            for (int i = 0; i < counter; i++) {
+                stack.removeLast();
+            }
+        }
+        return elToClose;
+    }
+
+    private Element last() {
+        return stack.getLast();
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ ParserClaudeTest ใน package org.jsoup.parser เพื่อทดสอบคลาส Parser ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.jsoup.parser;` เท่านั้น
+</instructions>

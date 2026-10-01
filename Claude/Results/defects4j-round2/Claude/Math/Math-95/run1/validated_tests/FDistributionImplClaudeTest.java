@@ -1,0 +1,247 @@
+package org.apache.commons.math.distribution;
+
+import org.apache.commons.math.MathException;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class FDistributionImplClaudeTest {
+
+    private FDistributionImpl defaultDist;
+
+    @Before
+    public void setUp() throws Throwable {
+        defaultDist = new FDistributionImpl(5.0, 6.0);
+    }
+
+    // constructor delegates to setters; getters must reflect constructor args
+    @Test
+    public void testConstructor_validDegreesOfFreedom_getsReturnCorrectValues() throws Throwable {
+        FDistributionImpl d = new FDistributionImpl(3.0, 4.0);
+        assertEquals(3.0, d.getNumeratorDegreesOfFreedom(), 1e-9);
+        assertEquals(4.0, d.getDenominatorDegreesOfFreedom(), 1e-9);
+    }
+
+    // constructor -> setNumeratorDegreesOfFreedom branch: degreesOfFreedom <= 0.0 (zero)
+    @Test
+    public void testConstructor_zeroNumeratorDegreesOfFreedom_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new FDistributionImpl(0.0, 4.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor -> setNumeratorDegreesOfFreedom branch: negative value
+    @Test
+    public void testConstructor_negativeNumeratorDegreesOfFreedom_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new FDistributionImpl(-1.0, 4.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor -> setDenominatorDegreesOfFreedom branch: zero value
+    @Test
+    public void testConstructor_zeroDenominatorDegreesOfFreedom_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new FDistributionImpl(3.0, 0.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor -> setDenominatorDegreesOfFreedom branch: negative value
+    @Test
+    public void testConstructor_negativeDenominatorDegreesOfFreedom_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new FDistributionImpl(3.0, -2.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // setNumeratorDegreesOfFreedom valid-value branch updates internal state visible via getter
+    @Test
+    public void testSetNumeratorDegreesOfFreedom_positiveValue_updatesValue() throws Throwable {
+        defaultDist.setNumeratorDegreesOfFreedom(10.0);
+        assertEquals(10.0, defaultDist.getNumeratorDegreesOfFreedom(), 1e-9);
+    }
+
+    // setNumeratorDegreesOfFreedom boundary: exactly zero is invalid (<=0.0)
+    @Test
+    public void testSetNumeratorDegreesOfFreedom_zeroValue_throwsIllegalArgumentException() throws Throwable {
+        try {
+            defaultDist.setNumeratorDegreesOfFreedom(0.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // setNumeratorDegreesOfFreedom negative branch
+    @Test
+    public void testSetNumeratorDegreesOfFreedom_negativeValue_throwsIllegalArgumentException() throws Throwable {
+        try {
+            defaultDist.setNumeratorDegreesOfFreedom(-5.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // setDenominatorDegreesOfFreedom valid-value branch
+    @Test
+    public void testSetDenominatorDegreesOfFreedom_positiveValue_updatesValue() throws Throwable {
+        defaultDist.setDenominatorDegreesOfFreedom(20.0);
+        assertEquals(20.0, defaultDist.getDenominatorDegreesOfFreedom(), 1e-9);
+    }
+
+    // setDenominatorDegreesOfFreedom boundary: exactly zero is invalid
+    @Test
+    public void testSetDenominatorDegreesOfFreedom_zeroValue_throwsIllegalArgumentException() throws Throwable {
+        try {
+            defaultDist.setDenominatorDegreesOfFreedom(0.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // setDenominatorDegreesOfFreedom negative branch
+    @Test
+    public void testSetDenominatorDegreesOfFreedom_negativeValue_throwsIllegalArgumentException() throws Throwable {
+        try {
+            defaultDist.setDenominatorDegreesOfFreedom(-7.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // cumulativeProbability branch: x <= 0.0 (strictly negative) returns 0
+    @Test
+    public void testCumulativeProbability_xNegative_returnsZero() throws Throwable {
+        assertEquals(0.0, defaultDist.cumulativeProbability(-1.0), 1e-9);
+    }
+
+    // cumulativeProbability branch: x == 0.0 (boundary of <=) returns 0, F-distribution has no mass at/below 0
+    @Test
+    public void testCumulativeProbability_xZero_returnsZero() throws Throwable {
+        assertEquals(0.0, defaultDist.cumulativeProbability(0.0), 1e-9);
+    }
+
+    // For n=2,m=2 the regularized incomplete beta reduces to I_t(1,1)=t, i.e. CDF(x;2,2)=x/(1+x); independent closed form check
+    @Test
+    public void testCumulativeProbability_n2m2_matchesClosedForm() throws Throwable {
+        FDistributionImpl d = new FDistributionImpl(2.0, 2.0);
+        double expected = 1.0 / (1.0 + 1.0);
+        assertEquals(expected, d.cumulativeProbability(1.0), 1e-9);
+    }
+
+    // Same closed form at another point: CDF(3;2,2)=3/4
+    @Test
+    public void testCumulativeProbability_n2m2_atXThree_matchesClosedForm() throws Throwable {
+        FDistributionImpl d = new FDistributionImpl(2.0, 2.0);
+        double expected = 3.0 / (3.0 + 1.0);
+        assertEquals(expected, d.cumulativeProbability(3.0), 1e-9);
+    }
+
+    // For n=2, general m: I_t(1,b)=1-(1-t)^b gives closed form CDF(x;2,m)=1-(m/(m+2x))^(m/2); here m=4
+    @Test
+    public void testCumulativeProbability_n2m4_matchesClosedForm() throws Throwable {
+        FDistributionImpl d = new FDistributionImpl(2.0, 4.0);
+        double expected = 1.0 - Math.pow(4.0 / (4.0 + 2.0 * 2.0), 2.0);
+        assertEquals(expected, d.cumulativeProbability(2.0), 1e-9);
+    }
+
+    // Same closed form family with m=6, exercising a different shape parameter value
+    @Test
+    public void testCumulativeProbability_n2m6_matchesClosedForm() throws Throwable {
+        FDistributionImpl d = new FDistributionImpl(2.0, 6.0);
+        double expected = 1.0 - Math.pow(6.0 / (6.0 + 2.0 * 3.0), 3.0);
+        assertEquals(expected, d.cumulativeProbability(3.0), 1e-9);
+    }
+
+    // CDF must be monotonically increasing in x for a continuous distribution
+    @Test
+    public void testCumulativeProbability_isMonotonicIncreasing() throws Throwable {
+        double p1 = defaultDist.cumulativeProbability(1.0);
+        double p2 = defaultDist.cumulativeProbability(5.0);
+        assertTrue(p1 < p2);
+    }
+
+    // As x -> infinity the CDF must approach 1
+    @Test
+    public void testCumulativeProbability_largeX_approachesOne() throws Throwable {
+        double p = defaultDist.cumulativeProbability(1.0e10);
+        assertEquals(1.0, p, 1e-6);
+    }
+
+    // inverseCumulativeProbability explicit branch: p==0 returns 0 per javadoc
+    @Test
+    public void testInverseCumulativeProbability_pZero_returnsZero() throws Throwable {
+        assertEquals(0.0, defaultDist.inverseCumulativeProbability(0.0), 0.0);
+    }
+
+    // inverseCumulativeProbability explicit branch: p==1 returns POSITIVE_INFINITY per javadoc
+    @Test
+    public void testInverseCumulativeProbability_pOne_returnsPositiveInfinity() throws Throwable {
+        double x = defaultDist.inverseCumulativeProbability(1.0);
+        assertEquals(Double.valueOf(Double.POSITIVE_INFINITY), x, 0.0);
+    }
+
+    // else-branch delegating to super; use closed form inverse of CDF(x;2,2)=x/(1+x) => x=p/(1-p)
+    @Test
+    public void testInverseCumulativeProbability_n2m2_matchesClosedFormInverse() throws Throwable {
+        FDistributionImpl d = new FDistributionImpl(2.0, 2.0);
+        double p = 0.5;
+        double expected = p / (1.0 - p);
+        assertEquals(expected, d.inverseCumulativeProbability(p), 1e-4);
+    }
+
+    // else-branch with n=2,m=4: closed form inverse of CDF(x;2,4)=1-(4/(4+2x))^2 => x=2*(1/sqrt(1-p)-1)
+    @Test
+    public void testInverseCumulativeProbability_n2m4_matchesClosedFormInverse() throws Throwable {
+        FDistributionImpl d = new FDistributionImpl(2.0, 4.0);
+        double p = 0.75;
+        double expected = 2.0 * (1.0 / Math.sqrt(1.0 - p) - 1.0);
+        assertEquals(expected, d.inverseCumulativeProbability(p), 1e-4);
+    }
+
+    // Round-trip consistency: cumulativeProbability(inverseCumulativeProbability(p)) must reproduce p
+    @Test
+    public void testInverseCumulativeProbability_roundTripConsistentWithCDF() throws Throwable {
+        double p = 0.3;
+        double x = defaultDist.inverseCumulativeProbability(p);
+        double back = defaultDist.cumulativeProbability(x);
+        assertEquals(p, back, 1e-4);
+    }
+
+    // getDomainLowerBound always returns 0.0 regardless of p argument (no branching on p)
+    @Test
+    public void testGetDomainLowerBound_anyP_returnsZero() throws Throwable {
+        assertEquals(0.0, defaultDist.getDomainLowerBound(0.1), 0.0);
+        assertEquals(0.0, defaultDist.getDomainLowerBound(0.9), 0.0);
+    }
+
+    // getDomainUpperBound always returns Double.MAX_VALUE regardless of p argument
+    @Test
+    public void testGetDomainUpperBound_anyP_returnsMaxValue() throws Throwable {
+        assertEquals(Double.MAX_VALUE, defaultDist.getDomainUpperBound(0.2), 0.0);
+        assertEquals(Double.MAX_VALUE, defaultDist.getDomainUpperBound(0.8), 0.0);
+    }
+
+    // getInitialDomain uses mean formula d/(d-2.0) based on denominator degrees of freedom
+    @Test
+    public void testGetInitialDomain_denominatorFour_returnsMeanFormula() throws Throwable {
+        FDistributionImpl d = new FDistributionImpl(3.0, 4.0);
+        double expected = 4.0 / (4.0 - 2.0);
+        assertEquals(expected, d.getInitialDomain(0.5), 1e-9);
+    }
+
+    // getInitialDomain with a different denominator value, same formula, independent of p argument
+    @Test
+    public void testGetInitialDomain_denominatorTen_returnsMeanFormula() throws Throwable {
+        FDistributionImpl d = new FDistributionImpl(3.0, 10.0);
+        double expected = 10.0 / (10.0 - 2.0);
+        assertEquals(expected, d.getInitialDomain(0.9), 1e-9);
+    }
+}

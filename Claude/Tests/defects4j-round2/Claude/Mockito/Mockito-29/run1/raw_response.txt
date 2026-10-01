@@ -1,0 +1,216 @@
+package org.mockito.internal.matchers;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.hamcrest.StringDescription;
+import org.mockito.ArgumentMatcher;
+import java.io.Serializable;
+
+public class SameClaudeTest {
+
+    // matches(): wanted == actual, same reference -> true
+    @Test
+    public void testMatches_sameReference_returnsTrue() throws Throwable {
+        Object wanted = new Object();
+        Same same = new Same(wanted);
+        assertTrue(same.matches(wanted));
+    }
+
+    // matches(): different objects with equal value but different reference -> false
+    @Test
+    public void testMatches_differentObjectsEqualValue_returnsFalse() throws Throwable {
+        Integer a = new Integer(1000);
+        Integer b = new Integer(1000);
+        Same same = new Same(a);
+        assertFalse(same.matches(b));
+    }
+
+    // matches(): null == null -> true
+    @Test
+    public void testMatches_bothNull_returnsTrue() throws Throwable {
+        Same same = new Same(null);
+        assertTrue(same.matches(null));
+    }
+
+    // matches(): wanted null, actual non-null -> false
+    @Test
+    public void testMatches_wantedNullActualNonNull_returnsFalse() throws Throwable {
+        Same same = new Same(null);
+        assertFalse(same.matches("x"));
+    }
+
+    // matches(): wanted non-null, actual null -> false
+    @Test
+    public void testMatches_wantedNonNullActualNull_returnsFalse() throws Throwable {
+        Same same = new Same("x");
+        assertFalse(same.matches(null));
+    }
+
+    // matches(): interned string literals share the same reference -> true
+    @Test
+    public void testMatches_sameStringLiteral_returnsTrue() throws Throwable {
+        Same same = new Same("hello");
+        assertTrue(same.matches("hello"));
+    }
+
+    // matches(): distinct String instances with equal content are not the same reference -> false
+    @Test
+    public void testMatches_differentStringInstancesEqualContent_returnsFalse() throws Throwable {
+        String a = new String("abc");
+        String b = new String("abc");
+        Same same = new Same(a);
+        assertFalse(same.matches(b));
+    }
+
+    // matches(): same Integer object reference reused -> true
+    @Test
+    public void testMatches_sameIntegerReference_returnsTrue() throws Throwable {
+        Integer wanted = new Integer(42);
+        Same same = new Same(wanted);
+        assertTrue(same.matches(wanted));
+    }
+
+    // matches(): different Integer instances, same value -> false
+    @Test
+    public void testMatches_differentIntegerObjectsSameValue_returnsFalse() throws Throwable {
+        Integer a = new Integer(7);
+        Integer b = new Integer(7);
+        Same same = new Same(a);
+        assertFalse(same.matches(b));
+    }
+
+    // matches(): same Character object reference reused -> true
+    @Test
+    public void testMatches_sameCharacterReference_returnsTrue() throws Throwable {
+        Character wanted = new Character('a');
+        Same same = new Same(wanted);
+        assertTrue(same.matches(wanted));
+    }
+
+    // matches(): different Character instances, same value -> false
+    @Test
+    public void testMatches_differentCharacterObjectsSameValue_returnsFalse() throws Throwable {
+        Character a = new Character('a');
+        Character b = new Character('a');
+        Same same = new Same(a);
+        assertFalse(same.matches(b));
+    }
+
+    // matches(): cached Boolean singleton reused -> true
+    @Test
+    public void testMatches_sameBooleanSingletonReference_returnsTrue() throws Throwable {
+        Boolean wanted = Boolean.TRUE;
+        Same same = new Same(wanted);
+        assertTrue(same.matches(Boolean.TRUE));
+    }
+
+    // matches(): wanted and actual of unrelated types/instances -> false
+    @Test
+    public void testMatches_actualDifferentTypeObject_returnsFalse() throws Throwable {
+        Same same = new Same("abc");
+        assertFalse(same.matches(new Integer(1)));
+    }
+
+    // describeTo(): String wanted is quoted with double quotes
+    @Test
+    public void testDescribeTo_stringWanted_quotesWithDoubleQuote() throws Throwable {
+        Same same = new Same("hello");
+        StringDescription description = new StringDescription();
+        same.describeTo(description);
+        assertEquals("same(\"hello\")", description.toString());
+    }
+
+    // describeTo(): empty String wanted still gets quoted
+    @Test
+    public void testDescribeTo_emptyStringWanted_quotesEmptyString() throws Throwable {
+        Same same = new Same("");
+        StringDescription description = new StringDescription();
+        same.describeTo(description);
+        assertEquals("same(\"\")", description.toString());
+    }
+
+    // describeTo(): Character wanted is quoted with single quotes
+    @Test
+    public void testDescribeTo_characterWanted_quotesWithSingleQuote() throws Throwable {
+        Same same = new Same(new Character('a'));
+        StringDescription description = new StringDescription();
+        same.describeTo(description);
+        assertEquals("same('a')", description.toString());
+    }
+
+    // describeTo(): non String/Character (Integer) wanted gets no quotes, uses toString()
+    @Test
+    public void testDescribeTo_integerWanted_noQuotesUsesToString() throws Throwable {
+        Same same = new Same(new Integer(5));
+        StringDescription description = new StringDescription();
+        same.describeTo(description);
+        assertEquals("same(5)", description.toString());
+    }
+
+    // describeTo(): Boolean wanted gets no quotes
+    @Test
+    public void testDescribeTo_booleanWanted_noQuotes() throws Throwable {
+        Same same = new Same(Boolean.TRUE);
+        StringDescription description = new StringDescription();
+        same.describeTo(description);
+        assertEquals("same(true)", description.toString());
+    }
+
+    // describeTo(): arbitrary object uses its own toString(), no quoting
+    @Test
+    public void testDescribeTo_customObjectWanted_usesToStringNoQuotes() throws Throwable {
+        Object custom = new Object() {
+            public String toString() {
+                return "CUSTOM";
+            }
+        };
+        Same same = new Same(custom);
+        StringDescription description = new StringDescription();
+        same.describeTo(description);
+        assertEquals("same(CUSTOM)", description.toString());
+    }
+
+    // describeTo(): overall structure always starts with "same("
+    @Test
+    public void testDescribeTo_outputStartsWithSameOpenParen() throws Throwable {
+        Same same = new Same(new Integer(42));
+        StringDescription description = new StringDescription();
+        same.describeTo(description);
+        assertTrue(description.toString().startsWith("same("));
+    }
+
+    // describeTo(): overall structure always ends with ")"
+    @Test
+    public void testDescribeTo_outputEndsWithCloseParen() throws Throwable {
+        Same same = new Same(new Integer(42));
+        StringDescription description = new StringDescription();
+        same.describeTo(description);
+        assertTrue(description.toString().endsWith(")"));
+    }
+
+    // Bug hunt: matches() contract allows a null "wanted" (null == null is valid),
+    // so describeTo() must be able to describe a null wanted without blowing up.
+    // On the buggy version this throws NullPointerException from wanted.toString();
+    // on the fixed version it should produce a description instead.
+    @Test
+    public void testDescribeTo_nullWanted_doesNotThrowAndDescribesNull() throws Throwable {
+        Same same = new Same(null);
+        StringDescription description = new StringDescription();
+        same.describeTo(description);
+        assertTrue(description.toString().contains("null"));
+    }
+
+    // Same implements Serializable as declared on the class
+    @Test
+    public void testSame_implementsSerializable() throws Throwable {
+        Same same = new Same("x");
+        assertTrue(same instanceof Serializable);
+    }
+
+    // Same extends ArgumentMatcher as declared on the class
+    @Test
+    public void testSame_isInstanceOfArgumentMatcher() throws Throwable {
+        Same same = new Same("x");
+        assertTrue(same instanceof ArgumentMatcher);
+    }
+}

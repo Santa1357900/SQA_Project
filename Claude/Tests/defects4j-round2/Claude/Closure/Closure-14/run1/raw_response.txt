@@ -1,0 +1,367 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.jscomp.graph.DiGraphNode;
+import com.google.javascript.jscomp.ControlFlowGraph.Branch;
+
+import java.util.List;
+
+public class ControlFlowAnalysisClaudeTest {
+
+  // getCfg() before process() has been called must be null (field not yet initialized).
+  @Test
+  public void testGetCfg_beforeProcess_returnsNull() throws Throwable {
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    assertNull(cfa.getCfg());
+  }
+
+  // process(): BLOCK/SCRIPT with no children (handleStmtList, else branch) -> single edge to implicit return.
+  @Test
+  public void testProcess_emptyBlockRoot_entryHasSingleEdgeToImplicitReturn() throws Throwable {
+    Node root = IR.block();
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    cfa.process(null, root);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    assertSame(root, cfg.getEntry().getValue());
+    List<DiGraphNode<Node, Branch>> succs = cfg.getDirectedSuccNodes(cfg.getEntry());
+    assertEquals(1, succs.size());
+    assertNull(succs.get(0).getValue());
+  }
+
+  // process(): SCRIPT with no children exercises the Token.SCRIPT case of handleStmtList.
+  @Test
+  public void testProcess_emptyScriptRoot_entryHasSingleEdgeToImplicitReturn() throws Throwable {
+    Node root = Node.newString(Token.SCRIPT, "s");
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    cfa.process(null, root);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    assertSame(root, cfg.getEntry().getValue());
+    List<DiGraphNode<Node, Branch>> succs = cfg.getDirectedSuccNodes(cfg.getEntry());
+    assertEquals(1, succs.size());
+    assertNull(succs.get(0).getValue());
+  }
+
+  // process(): bare TRY with no children -> handleTry creates edge to its (null) first child.
+  @Test
+  public void testProcess_tryRootWithoutChildren_edgeToImplicitReturn() throws Throwable {
+    Node root = Node.newString(Token.TRY, "try");
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    cfa.process(null, root);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    assertSame(root, cfg.getEntry().getValue());
+    List<DiGraphNode<Node, Branch>> succs = cfg.getDirectedSuccNodes(cfg.getEntry());
+    assertEquals(1, succs.size());
+    assertNull(succs.get(0).getValue());
+  }
+
+  // process(): bare CATCH with no children -> handleCatch creates edge to its (null) last child.
+  @Test
+  public void testProcess_catchRootWithoutChildren_edgeToImplicitReturn() throws Throwable {
+    Node root = Node.newString(Token.CATCH, "catch");
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    cfa.process(null, root);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    assertSame(root, cfg.getEntry().getValue());
+    List<DiGraphNode<Node, Branch>> succs = cfg.getDirectedSuccNodes(cfg.getEntry());
+    assertEquals(1, succs.size());
+    assertNull(succs.get(0).getValue());
+  }
+
+  // process(): FUNCTION root missing required 3 children triggers the Preconditions.checkState in handleFunction.
+  @Test
+  public void testProcess_functionRootMissingChildren_throwsIllegalStateException() throws Throwable {
+    Node root = Node.newString(Token.FUNCTION, "f");
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    try {
+      cfa.process(null, root);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      // expected
+    }
+  }
+
+  // process(): bare BREAK with no enclosing break target must throw per handleBreak's documented error path.
+  @Test
+  public void testProcess_bareBreakRoot_throwsIllegalStateException() throws Throwable {
+    Node root = Node.newString(Token.BREAK, "b");
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    try {
+      cfa.process(null, root);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      assertTrue(expected.getMessage().contains("break"));
+    }
+  }
+
+  // process(): bare CONTINUE with no enclosing continue target must throw per handleContinue's checkState.
+  @Test
+  public void testProcess_bareContinueRoot_throwsIllegalStateException() throws Throwable {
+    Node root = Node.newString(Token.CONTINUE, "c");
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    try {
+      cfa.process(null, root);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      assertTrue(expected.getMessage().contains("continue"));
+    }
+  }
+
+  // process(): bare RETURN at top level transfers control to the implicit (null) return node.
+  @Test
+  public void testProcess_bareReturnRoot_createsEdgeToImplicitReturn() throws Throwable {
+    Node root = Node.newString(Token.RETURN, "r");
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    cfa.process(null, root);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    List<DiGraphNode<Node, Branch>> succs = cfg.getDirectedSuccNodes(cfg.getEntry());
+    assertEquals(1, succs.size());
+    assertNull(succs.get(0).getValue());
+  }
+
+  // process(): bare THROW has no normal-flow successor since there is no enclosing handler.
+  @Test
+  public void testProcess_bareThrowRoot_hasNoOutgoingEdge() throws Throwable {
+    Node root = Node.newString(Token.THROW, "t");
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    cfa.process(null, root);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    List<DiGraphNode<Node, Branch>> succs = cfg.getDirectedSuccNodes(cfg.getEntry());
+    assertEquals(0, succs.size());
+  }
+
+  // process(): bare EXPR_RESULT at top level transfers control to the implicit return node.
+  @Test
+  public void testProcess_bareExprResultRoot_createsEdgeToImplicitReturn() throws Throwable {
+    Node root = Node.newString(Token.EXPR_RESULT, "e");
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    cfa.process(null, root);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    List<DiGraphNode<Node, Branch>> succs = cfg.getDirectedSuccNodes(cfg.getEntry());
+    assertEquals(1, succs.size());
+    assertNull(succs.get(0).getValue());
+  }
+
+  // process(): node type hitting the default branch of visit() (handleStmt) also flows to implicit return.
+  @Test
+  public void testProcess_bareNameRoot_defaultHandlerCreatesEdgeToImplicitReturn() throws Throwable {
+    Node root = Node.newString(Token.NAME, "x");
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    cfa.process(null, root);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    List<DiGraphNode<Node, Branch>> succs = cfg.getDirectedSuccNodes(cfg.getEntry());
+    assertEquals(1, succs.size());
+    assertNull(succs.get(0).getValue());
+  }
+
+  // process(): the implicit return node's wrapped value must be null, per the symbolic-return contract.
+  @Test
+  public void testProcess_implicitReturnNodeValueIsNull() throws Throwable {
+    Node root = IR.block();
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), true, false);
+    cfa.process(null, root);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    assertNull(cfg.getImplicitReturn().getValue());
+  }
+
+  // process(): shouldTraverseFunctions=false still produces a correct entry for a plain block (exercises the
+  // false branch of "if (shouldTraverseFunctions)" in process()).
+  @Test
+  public void testProcess_shouldTraverseFunctionsFalse_emptyBlockStillProcessed() throws Throwable {
+    Node root = IR.block();
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(new Compiler(), false, true);
+    cfa.process(null, root);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    assertSame(root, cfg.getEntry().getValue());
+  }
+
+  // computeFallThrough(): default branch (not DO/FOR/LABEL) returns the node itself unchanged.
+  @Test
+  public void testComputeFallThrough_nonLoopNode_returnsSameNode() throws Throwable {
+    Node node = Node.newString(Token.NAME, "x");
+    assertSame(node, ControlFlowAnalysis.computeFallThrough(node));
+  }
+
+  // isBreakTarget(): unlabeled break target check on a FOR loop (a valid break structure) returns true.
+  @Test
+  public void testIsBreakTarget_forLoopNoLabel_returnsTrue() throws Throwable {
+    Node forNode = Node.newString(Token.FOR, "f");
+    assertTrue(ControlFlowAnalysis.isBreakTarget(forNode, null));
+  }
+
+  // isBreakTarget(): unlabeled break target check on an unlabeled BLOCK (not a valid break structure) is false.
+  @Test
+  public void testIsBreakTarget_blockNoLabel_returnsFalse() throws Throwable {
+    Node block = Node.newString(Token.BLOCK, "b");
+    assertFalse(ControlFlowAnalysis.isBreakTarget(block, null));
+  }
+
+  // mayThrowException(): CALL expressions may throw.
+  @Test
+  public void testMayThrowException_call_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.mayThrowException(Node.newString(Token.CALL, "f")));
+  }
+
+  // mayThrowException(): GETPROP may throw (e.g. property access on null/undefined).
+  @Test
+  public void testMayThrowException_getProp_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.mayThrowException(Node.newString(Token.GETPROP, "p")));
+  }
+
+  // mayThrowException(): GETELEM may throw.
+  @Test
+  public void testMayThrowException_getElem_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.mayThrowException(Node.newString(Token.GETELEM, "e")));
+  }
+
+  // mayThrowException(): THROW statement always may throw.
+  @Test
+  public void testMayThrowException_throw_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.mayThrowException(Node.newString(Token.THROW, "t")));
+  }
+
+  // mayThrowException(): NEW (constructor call) may throw.
+  @Test
+  public void testMayThrowException_new_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.mayThrowException(Node.newString(Token.NEW, "n")));
+  }
+
+  // mayThrowException(): ASSIGN may throw (e.g. assigning a property on null).
+  @Test
+  public void testMayThrowException_assign_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.mayThrowException(Node.newString(Token.ASSIGN, "a")));
+  }
+
+  // mayThrowException(): INC may throw.
+  @Test
+  public void testMayThrowException_inc_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.mayThrowException(Node.newString(Token.INC, "i")));
+  }
+
+  // mayThrowException(): DEC may throw.
+  @Test
+  public void testMayThrowException_dec_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.mayThrowException(Node.newString(Token.DEC, "d")));
+  }
+
+  // mayThrowException(): INSTANCEOF may throw.
+  @Test
+  public void testMayThrowException_instanceOf_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.mayThrowException(Node.newString(Token.INSTANCEOF, "io")));
+  }
+
+  // mayThrowException(): FUNCTION (a declaration) never throws by itself.
+  @Test
+  public void testMayThrowException_function_returnsFalse() throws Throwable {
+    assertFalse(ControlFlowAnalysis.mayThrowException(Node.newString(Token.FUNCTION, "f")));
+  }
+
+  // mayThrowException(): a leaf node of an unlisted type (no children to recurse into) never throws.
+  @Test
+  public void testMayThrowException_nameLeaf_returnsFalse() throws Throwable {
+    assertFalse(ControlFlowAnalysis.mayThrowException(Node.newString(Token.NAME, "x")));
+  }
+
+  // isBreakStructure(): FOR is always a valid break target regardless of the labeled flag.
+  @Test
+  public void testIsBreakStructure_forLoopUnlabeled_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.isBreakStructure(Node.newString(Token.FOR, "f"), false));
+  }
+
+  // isBreakStructure(): DO is always a valid break target.
+  @Test
+  public void testIsBreakStructure_doLoopLabeled_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.isBreakStructure(Node.newString(Token.DO, "d"), true));
+  }
+
+  // isBreakStructure(): WHILE is always a valid break target.
+  @Test
+  public void testIsBreakStructure_whileLoopUnlabeled_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.isBreakStructure(Node.newString(Token.WHILE, "w"), false));
+  }
+
+  // isBreakStructure(): SWITCH is always a valid break target.
+  @Test
+  public void testIsBreakStructure_switchUnlabeled_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.isBreakStructure(Node.newString(Token.SWITCH, "s"), false));
+  }
+
+  // isBreakStructure(): BLOCK is a valid break target only when labeled.
+  @Test
+  public void testIsBreakStructure_blockLabeled_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.isBreakStructure(Node.newString(Token.BLOCK, "b"), true));
+  }
+
+  // isBreakStructure(): BLOCK is not a valid break target when unlabeled.
+  @Test
+  public void testIsBreakStructure_blockUnlabeled_returnsFalse() throws Throwable {
+    assertFalse(ControlFlowAnalysis.isBreakStructure(Node.newString(Token.BLOCK, "b"), false));
+  }
+
+  // isBreakStructure(): IF is a valid break target only when labeled.
+  @Test
+  public void testIsBreakStructure_ifLabeled_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.isBreakStructure(Node.newString(Token.IF, "i"), true));
+  }
+
+  // isBreakStructure(): TRY is not a valid break target when unlabeled.
+  @Test
+  public void testIsBreakStructure_tryUnlabeled_returnsFalse() throws Throwable {
+    assertFalse(ControlFlowAnalysis.isBreakStructure(Node.newString(Token.TRY, "t"), false));
+  }
+
+  // isBreakStructure(): default branch (e.g. NAME) is never a valid break target.
+  @Test
+  public void testIsBreakStructure_defaultNameLabeled_returnsFalse() throws Throwable {
+    assertFalse(ControlFlowAnalysis.isBreakStructure(Node.newString(Token.NAME, "x"), true));
+  }
+
+  // isContinueStructure(): FOR supports continue.
+  @Test
+  public void testIsContinueStructure_for_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.isContinueStructure(Node.newString(Token.FOR, "f")));
+  }
+
+  // isContinueStructure(): DO supports continue.
+  @Test
+  public void testIsContinueStructure_do_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.isContinueStructure(Node.newString(Token.DO, "d")));
+  }
+
+  // isContinueStructure(): WHILE supports continue.
+  @Test
+  public void testIsContinueStructure_while_returnsTrue() throws Throwable {
+    assertTrue(ControlFlowAnalysis.isContinueStructure(Node.newString(Token.WHILE, "w")));
+  }
+
+  // isContinueStructure(): default branch (e.g. BLOCK) does not support continue.
+  @Test
+  public void testIsContinueStructure_defaultBlock_returnsFalse() throws Throwable {
+    assertFalse(ControlFlowAnalysis.isContinueStructure(Node.newString(Token.BLOCK, "b")));
+  }
+
+  // getExceptionHandler(): starting at a SCRIPT node terminates the search loop immediately -> null.
+  @Test
+  public void testGetExceptionHandler_scriptNode_returnsNull() throws Throwable {
+    Node script = Node.newString(Token.SCRIPT, "s");
+    assertNull(ControlFlowAnalysis.getExceptionHandler(script));
+  }
+
+  // getExceptionHandler(): starting at a FUNCTION node terminates the search loop immediately -> null.
+  @Test
+  public void testGetExceptionHandler_functionNode_returnsNull() throws Throwable {
+    Node function = Node.newString(Token.FUNCTION, "f");
+    assertNull(ControlFlowAnalysis.getExceptionHandler(function));
+  }
+
+  // getCatchHandlerForBlock(): a non-BLOCK node short-circuits to null.
+  @Test
+  public void testGetCatchHandlerForBlock_nonBlockNode_returnsNull() throws Throwable {
+    Node node = Node.newString(Token.NAME, "x");
+    assertNull(ControlFlowAnalysis.getCatchHandlerForBlock(node));
+  }
+}

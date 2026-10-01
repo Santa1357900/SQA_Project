@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Codec-18-vya98nov/Codec-18b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.codec.binary.StringUtilsClaudeTest::testEquals_nonStringCharSequencesDifferentLengthCs1Shorter_returnsFalse
+  - org.apache.commons.codec.binary.StringUtilsClaudeTest::testEquals_nonStringCharSequencesDifferentLengthCs2Shorter_returnsFalse
+[exit 0]

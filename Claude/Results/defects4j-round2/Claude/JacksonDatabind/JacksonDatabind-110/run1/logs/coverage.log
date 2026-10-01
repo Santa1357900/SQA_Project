@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-JacksonDatabind-110-trd6rr1d/JacksonDatabind-110b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 58
+     Lines covered: 55
+  Conditions total: 25
+Conditions covered: 24
+     Line coverage: 94.8%
+Condition coverage: 96.0%
+[exit 0]

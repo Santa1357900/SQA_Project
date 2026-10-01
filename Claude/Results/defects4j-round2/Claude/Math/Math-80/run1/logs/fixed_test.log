@@ -1,0 +1,15 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-80-grbazwxq/Math-80f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 9
+  - org.apache.commons.math.linear.EigenDecompositionImplClaudeTest::testGetSolver_solveRealMatrix_diagonalMatrix
+  - org.apache.commons.math.linear.EigenDecompositionImplClaudeTest::testGetEigenvector_unitNorm
+  - org.apache.commons.math.linear.EigenDecompositionImplClaudeTest::testReconstruction_VDVt_equalsOriginal_denseMatrixCtor
+  - org.apache.commons.math.linear.EigenDecompositionImplClaudeTest::testGetSolver_solveDoubleArray_diagonalMatrix
+  - org.apache.commons.math.linear.EigenDecompositionImplClaudeTest::testConstructor_denseSymmetric3x3_eigenvaluesMatchClosedForm
+  - org.apache.commons.math.linear.EigenDecompositionImplClaudeTest::testGetSolver_solveRealVector_diagonalMatrix
+  - org.apache.commons.math.linear.EigenDecompositionImplClaudeTest::testGetDeterminant_denseMatrix
+  - org.apache.commons.math.linear.EigenDecompositionImplClaudeTest::testGetSolver_getInverse_diagonalMatrix
+  - org.apache.commons.math.linear.EigenDecompositionImplClaudeTest::testGetImagEigenvalues_allZero
+[exit 0]

@@ -1,0 +1,417 @@
+package org.apache.commons.compress.archivers;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream;
+import org.apache.commons.compress.archivers.ar.ArArchiveOutputStream;
+import org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream;
+import org.apache.commons.compress.archivers.cpio.CpioArchiveOutputStream;
+import org.apache.commons.compress.archivers.jar.JarArchiveInputStream;
+import org.apache.commons.compress.archivers.jar.JarArchiveOutputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
+
+public class ArchiveStreamFactoryClaudeTest {
+
+    // constructor without args must leave entryEncoding null (platform default)
+    @Test
+    public void testConstructor_default_entryEncodingIsNull() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        assertNull(factory.getEntryEncoding());
+    }
+
+    // constructor with encoding must expose it via getEntryEncoding
+    @Test
+    public void testConstructor_withEncoding_entryEncodingMatches() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory("UTF-8");
+        assertEquals("UTF-8", factory.getEntryEncoding());
+    }
+
+    // setEntryEncoding allowed when constructor used null encoding
+    @Test
+    public void testSetEntryEncoding_whenConstructorEncodingNull_updatesEntryEncoding() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        factory.setEntryEncoding("ISO-8859-1");
+        assertEquals("ISO-8859-1", factory.getEntryEncoding());
+    }
+
+    // setEntryEncoding(null) when constructor encoding null must reset to default (null)
+    @Test
+    public void testSetEntryEncoding_withNull_whenConstructorEncodingNull_resetsToNull() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        factory.setEntryEncoding("UTF-8");
+        factory.setEntryEncoding(null);
+        assertNull(factory.getEntryEncoding());
+    }
+
+    // setEntryEncoding must throw IllegalStateException when constructor fixed the encoding
+    @Test
+    public void testSetEntryEncoding_whenConstructorEncodingSet_throwsIllegalStateException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory("UTF-8");
+        try {
+            factory.setEntryEncoding("ASCII");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // getEntryEncoding after the IllegalStateException must remain unchanged
+    @Test
+    public void testSetEntryEncoding_afterThrow_encodingUnchanged() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory("UTF-8");
+        try {
+            factory.setEntryEncoding("ASCII");
+        } catch (IllegalStateException expected) {
+        }
+        assertEquals("UTF-8", factory.getEntryEncoding());
+    }
+
+    // createArchiveInputStream(name, in): null archiverName -> IllegalArgumentException
+    @Test
+    public void testCreateArchiveInputStreamByName_nullName_throwsIllegalArgumentException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        try {
+            factory.createArchiveInputStream((String) null, in);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().toLowerCase().contains("null"));
+        }
+    }
+
+    // createArchiveInputStream(name, in): null stream -> IllegalArgumentException
+    @Test
+    public void testCreateArchiveInputStreamByName_nullStream_throwsIllegalArgumentException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        try {
+            factory.createArchiveInputStream(ArchiveStreamFactory.AR, null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().toLowerCase().contains("null"));
+        }
+    }
+
+    // AR branch returns ArArchiveInputStream
+    @Test
+    public void testCreateArchiveInputStreamByName_AR_returnsArArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.AR, in);
+        assertTrue(result instanceof ArArchiveInputStream);
+    }
+
+    // ZIP branch (no entryEncoding) returns ZipArchiveInputStream
+    @Test
+    public void testCreateArchiveInputStreamByName_ZIP_returnsZipArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.ZIP, in);
+        assertTrue(result instanceof ZipArchiveInputStream);
+    }
+
+    // TAR branch (no entryEncoding) returns TarArchiveInputStream
+    @Test
+    public void testCreateArchiveInputStreamByName_TAR_returnsTarArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.TAR, in);
+        assertTrue(result instanceof TarArchiveInputStream);
+    }
+
+    // JAR branch (no entryEncoding) returns JarArchiveInputStream
+    @Test
+    public void testCreateArchiveInputStreamByName_JAR_returnsJarArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.JAR, in);
+        assertTrue(result instanceof JarArchiveInputStream);
+    }
+
+    // CPIO branch (no entryEncoding) returns CpioArchiveInputStream
+    @Test
+    public void testCreateArchiveInputStreamByName_CPIO_returnsCpioArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.CPIO, in);
+        assertTrue(result instanceof CpioArchiveInputStream);
+    }
+
+    // SEVEN_Z branch must throw StreamingNotSupportedException per Javadoc
+    @Test
+    public void testCreateArchiveInputStreamByName_SEVEN_Z_throwsStreamingNotSupportedException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        try {
+            factory.createArchiveInputStream(ArchiveStreamFactory.SEVEN_Z, in);
+            fail("expected StreamingNotSupportedException");
+        } catch (StreamingNotSupportedException expected) {
+        }
+    }
+
+    // unknown archiver name must throw ArchiveException
+    @Test
+    public void testCreateArchiveInputStreamByName_unknown_throwsArchiveException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        try {
+            factory.createArchiveInputStream("notARealFormat", in);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+        }
+    }
+
+    // archiverName comparison must be case-insensitive (equalsIgnoreCase)
+    @Test
+    public void testCreateArchiveInputStreamByName_caseInsensitive_returnsZipArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        ArchiveInputStream result = factory.createArchiveInputStream("ZIP", in);
+        assertTrue(result instanceof ZipArchiveInputStream);
+    }
+
+    // ZIP branch with entryEncoding set must still return ZipArchiveInputStream
+    @Test
+    public void testCreateArchiveInputStreamByName_withEntryEncoding_ZIP_returnsZipArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory("UTF-8");
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.ZIP, in);
+        assertTrue(result instanceof ZipArchiveInputStream);
+    }
+
+    // TAR branch with entryEncoding set must still return TarArchiveInputStream
+    @Test
+    public void testCreateArchiveInputStreamByName_withEntryEncoding_TAR_returnsTarArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory("UTF-8");
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        ArchiveInputStream result = factory.createArchiveInputStream(ArchiveStreamFactory.TAR, in);
+        assertTrue(result instanceof TarArchiveInputStream);
+    }
+
+    // createArchiveOutputStream(name, out): null archiverName -> IllegalArgumentException
+    @Test
+    public void testCreateArchiveOutputStreamByName_nullName_throwsIllegalArgumentException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        OutputStream out = new ByteArrayOutputStream();
+        try {
+            factory.createArchiveOutputStream(null, out);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().toLowerCase().contains("null"));
+        }
+    }
+
+    // createArchiveOutputStream(name, out): null stream -> IllegalArgumentException
+    @Test
+    public void testCreateArchiveOutputStreamByName_nullStream_throwsIllegalArgumentException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        try {
+            factory.createArchiveOutputStream(ArchiveStreamFactory.AR, null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().toLowerCase().contains("null"));
+        }
+    }
+
+    // AR branch returns ArArchiveOutputStream
+    @Test
+    public void testCreateArchiveOutputStreamByName_AR_returnsArArchiveOutputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        OutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.AR, out);
+        assertTrue(result instanceof ArArchiveOutputStream);
+    }
+
+    // ZIP branch (no entryEncoding) returns ZipArchiveOutputStream
+    @Test
+    public void testCreateArchiveOutputStreamByName_ZIP_returnsZipArchiveOutputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        OutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.ZIP, out);
+        assertTrue(result instanceof ZipArchiveOutputStream);
+    }
+
+    // TAR branch (no entryEncoding) returns TarArchiveOutputStream
+    @Test
+    public void testCreateArchiveOutputStreamByName_TAR_returnsTarArchiveOutputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        OutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.TAR, out);
+        assertTrue(result instanceof TarArchiveOutputStream);
+    }
+
+    // JAR branch returns JarArchiveOutputStream (encoding not applied for JAR output)
+    @Test
+    public void testCreateArchiveOutputStreamByName_JAR_returnsJarArchiveOutputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        OutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.JAR, out);
+        assertTrue(result instanceof JarArchiveOutputStream);
+    }
+
+    // CPIO branch (no entryEncoding) returns CpioArchiveOutputStream
+    @Test
+    public void testCreateArchiveOutputStreamByName_CPIO_returnsCpioArchiveOutputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        OutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.CPIO, out);
+        assertTrue(result instanceof CpioArchiveOutputStream);
+    }
+
+    // SEVEN_Z branch must throw StreamingNotSupportedException per Javadoc
+    @Test
+    public void testCreateArchiveOutputStreamByName_SEVEN_Z_throwsStreamingNotSupportedException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        OutputStream out = new ByteArrayOutputStream();
+        try {
+            factory.createArchiveOutputStream(ArchiveStreamFactory.SEVEN_Z, out);
+            fail("expected StreamingNotSupportedException");
+        } catch (StreamingNotSupportedException expected) {
+        }
+    }
+
+    // ARJ is documented as not supported as an output stream type -> ArchiveException
+    @Test
+    public void testCreateArchiveOutputStreamByName_ARJ_throwsArchiveException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        OutputStream out = new ByteArrayOutputStream();
+        try {
+            factory.createArchiveOutputStream(ArchiveStreamFactory.ARJ, out);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+        }
+    }
+
+    // DUMP is documented as not supported as an output stream type -> ArchiveException
+    @Test
+    public void testCreateArchiveOutputStreamByName_DUMP_throwsArchiveException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        OutputStream out = new ByteArrayOutputStream();
+        try {
+            factory.createArchiveOutputStream(ArchiveStreamFactory.DUMP, out);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+        }
+    }
+
+    // unknown archiver name must throw ArchiveException
+    @Test
+    public void testCreateArchiveOutputStreamByName_unknown_throwsArchiveException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        OutputStream out = new ByteArrayOutputStream();
+        try {
+            factory.createArchiveOutputStream("notARealFormat", out);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+        }
+    }
+
+    // ZIP branch with entryEncoding set must still return ZipArchiveOutputStream
+    @Test
+    public void testCreateArchiveOutputStreamByName_withEntryEncoding_ZIP_returnsZipArchiveOutputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory("UTF-8");
+        OutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.ZIP, out);
+        assertTrue(result instanceof ZipArchiveOutputStream);
+    }
+
+    // CPIO branch with entryEncoding set must still return CpioArchiveOutputStream
+    @Test
+    public void testCreateArchiveOutputStreamByName_withEntryEncoding_CPIO_returnsCpioArchiveOutputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory("UTF-8");
+        OutputStream out = new ByteArrayOutputStream();
+        ArchiveOutputStream result = factory.createArchiveOutputStream(ArchiveStreamFactory.CPIO, out);
+        assertTrue(result instanceof CpioArchiveOutputStream);
+    }
+
+    // autodetect: null stream -> IllegalArgumentException
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_nullStream_throwsIllegalArgumentException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        try {
+            factory.createArchiveInputStream((InputStream) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().toLowerCase().contains("null"));
+        }
+    }
+
+    // autodetect: stream without mark support -> IllegalArgumentException
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_markNotSupported_throwsIllegalArgumentException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream noMark = new InputStream() {
+            public int read() {
+                return -1;
+            }
+        };
+        try {
+            factory.createArchiveInputStream(noMark);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().toLowerCase().contains("mark"));
+        }
+    }
+
+    // autodetect: ZIP local file header signature must yield ZipArchiveInputStream
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_zipSignature_returnsZipArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        byte[] sig = new byte[] {0x50, 0x4B, 0x03, 0x04, 0, 0, 0, 0, 0, 0, 0, 0};
+        InputStream in = new ByteArrayInputStream(sig);
+        ArchiveInputStream result = factory.createArchiveInputStream(in);
+        assertTrue(result instanceof ZipArchiveInputStream);
+    }
+
+    // autodetect: AR magic "!<arch>\n" must yield ArArchiveInputStream
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_arSignature_returnsArArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        byte[] sig = new byte[] {0x21, 0x3C, 0x61, 0x72, 0x63, 0x68, 0x3E, 0x0A, 0, 0, 0, 0};
+        InputStream in = new ByteArrayInputStream(sig);
+        ArchiveInputStream result = factory.createArchiveInputStream(in);
+        assertTrue(result instanceof ArArchiveInputStream);
+    }
+
+    // autodetect: 7z signature must throw StreamingNotSupportedException per Javadoc/@since 1.8
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_sevenZSignature_throwsStreamingNotSupportedException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        byte[] sig = new byte[] {0x37, 0x7A, (byte) 0xBC, (byte) 0xAF, 0x27, 0x1C, 0, 0, 0, 0, 0, 0};
+        InputStream in = new ByteArrayInputStream(sig);
+        try {
+            factory.createArchiveInputStream(in);
+            fail("expected StreamingNotSupportedException");
+        } catch (StreamingNotSupportedException expected) {
+        }
+    }
+
+    // autodetect: no signature matches any known format -> ArchiveException
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_noMatchingSignature_throwsArchiveException() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory();
+        InputStream in = new ByteArrayInputStream(new byte[0]);
+        try {
+            factory.createArchiveInputStream(in);
+            fail("expected ArchiveException");
+        } catch (ArchiveException expected) {
+        }
+    }
+
+    // autodetect with entryEncoding set: ZIP signature must still yield ZipArchiveInputStream
+    @Test
+    public void testCreateArchiveInputStreamAutodetect_withEntryEncoding_zipSignature_returnsZipArchiveInputStream() throws Throwable {
+        ArchiveStreamFactory factory = new ArchiveStreamFactory("UTF-8");
+        byte[] sig = new byte[] {0x50, 0x4B, 0x03, 0x04, 0, 0, 0, 0, 0, 0, 0, 0};
+        InputStream in = new ByteArrayInputStream(sig);
+        ArchiveInputStream result = factory.createArchiveInputStream(in);
+        assertTrue(result instanceof ZipArchiveInputStream);
+    }
+}

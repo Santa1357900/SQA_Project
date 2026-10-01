@@ -1,0 +1,361 @@
+package org.apache.commons.lang3.math;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class NumberUtilsClaudeTest {
+
+    // ทดสอบ constructor public (JavaBean style)
+    @Test
+    public void testConstructor_createsInstance() throws Throwable {
+        NumberUtils nu = new NumberUtils();
+        assertNotNull(nu);
+    }
+
+    // toInt(String): null -> 0, "" -> 0 (NFE catch), valid -> parsed
+    @Test
+    public void testToInt_variousInputs() throws Throwable {
+        assertEquals(0, NumberUtils.toInt(null));
+        assertEquals(0, NumberUtils.toInt(""));
+        assertEquals(123, NumberUtils.toInt("123"));
+    }
+
+    // toInt(String,int): null->default, invalid->default(NFE), valid->parsed
+    @Test
+    public void testToIntWithDefault_variousInputs() throws Throwable {
+        assertEquals(1, NumberUtils.toInt(null, 1));
+        assertEquals(1, NumberUtils.toInt("abc", 1));
+        assertEquals(5, NumberUtils.toInt("5", 1));
+    }
+
+    // toLong(String): null -> 0L, "" -> 0L, valid -> parsed
+    @Test
+    public void testToLong_variousInputs() throws Throwable {
+        assertEquals(0L, NumberUtils.toLong(null));
+        assertEquals(0L, NumberUtils.toLong(""));
+        assertEquals(123L, NumberUtils.toLong("123"));
+    }
+
+    // toLong(String,long): null->default, invalid->default, valid->parsed
+    @Test
+    public void testToLongWithDefault_variousInputs() throws Throwable {
+        assertEquals(1L, NumberUtils.toLong(null, 1L));
+        assertEquals(1L, NumberUtils.toLong("abc", 1L));
+        assertEquals(5L, NumberUtils.toLong("5", 1L));
+    }
+
+    // toFloat(String): null -> 0.0f, "" -> 0.0f, valid -> parsed
+    @Test
+    public void testToFloat_variousInputs() throws Throwable {
+        assertEquals(0.0f, NumberUtils.toFloat(null), 0.0f);
+        assertEquals(0.0f, NumberUtils.toFloat(""), 0.0f);
+        assertEquals(1.5f, NumberUtils.toFloat("1.5"), 1e-6f);
+    }
+
+    // toFloat(String,float): null->default, invalid->default, valid->parsed
+    @Test
+    public void testToFloatWithDefault_variousInputs() throws Throwable {
+        assertEquals(1.1f, NumberUtils.toFloat(null, 1.1f), 1e-6f);
+        assertEquals(1.1f, NumberUtils.toFloat("abc", 1.1f), 1e-6f);
+        assertEquals(1.5f, NumberUtils.toFloat("1.5", 0.0f), 1e-6f);
+    }
+
+    // toDouble(String): null -> 0.0d, "" -> 0.0d, valid -> parsed
+    @Test
+    public void testToDouble_variousInputs() throws Throwable {
+        assertEquals(0.0d, NumberUtils.toDouble(null), 0.0d);
+        assertEquals(0.0d, NumberUtils.toDouble(""), 0.0d);
+        assertEquals(1.5d, NumberUtils.toDouble("1.5"), 1e-9);
+    }
+
+    // toDouble(String,double): null->default, invalid->default, valid->parsed
+    @Test
+    public void testToDoubleWithDefault_variousInputs() throws Throwable {
+        assertEquals(1.1d, NumberUtils.toDouble(null, 1.1d), 1e-9);
+        assertEquals(1.1d, NumberUtils.toDouble("abc", 1.1d), 1e-9);
+        assertEquals(1.5d, NumberUtils.toDouble("1.5", 0.0d), 1e-9);
+    }
+
+    // toByte(String): null -> 0, "" -> 0, valid -> parsed
+    @Test
+    public void testToByte_variousInputs() throws Throwable {
+        assertEquals((byte) 0, NumberUtils.toByte(null));
+        assertEquals((byte) 0, NumberUtils.toByte(""));
+        assertEquals((byte) 5, NumberUtils.toByte("5"));
+    }
+
+    // toByte(String,byte): null->default, invalid->default, valid->parsed
+    @Test
+    public void testToByteWithDefault_variousInputs() throws Throwable {
+        assertEquals((byte) 1, NumberUtils.toByte(null, (byte) 1));
+        assertEquals((byte) 1, NumberUtils.toByte("abc", (byte) 1));
+        assertEquals((byte) 5, NumberUtils.toByte("5", (byte) 1));
+    }
+
+    // toShort(String): null -> 0, "" -> 0, valid -> parsed
+    @Test
+    public void testToShort_variousInputs() throws Throwable {
+        assertEquals((short) 0, NumberUtils.toShort(null));
+        assertEquals((short) 0, NumberUtils.toShort(""));
+        assertEquals((short) 5, NumberUtils.toShort("5"));
+    }
+
+    // toShort(String,short): null->default, invalid->default, valid->parsed
+    @Test
+    public void testToShortWithDefault_variousInputs() throws Throwable {
+        assertEquals((short) 1, NumberUtils.toShort(null, (short) 1));
+        assertEquals((short) 1, NumberUtils.toShort("abc", (short) 1));
+        assertEquals((short) 5, NumberUtils.toShort("5", (short) 1));
+    }
+
+    // createNumber: str == null -> return null
+    @Test
+    public void testCreateNumber_null_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createNumber(null));
+    }
+
+    // createNumber: blank string -> NumberFormatException
+    @Test
+    public void testCreateNumber_blankString_throwsNumberFormatException() throws Throwable {
+        try {
+            NumberUtils.createNumber("");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+        }
+    }
+
+    // createNumber: "--" prefix is protection against bad BigDecimal parsing -> returns null
+    @Test
+    public void testCreateNumber_doubleMinusPrefix_returnsNull() throws Throwable {
+        assertNull(NumberUtils.createNumber("--1"));
+    }
+
+    // createNumber: 0x / -0x prefix branch -> hexadecimal Integer
+    @Test
+    public void testCreateNumber_hexNumbers_returnInteger() throws Throwable {
+        Number pos = NumberUtils.createNumber("0x1A");
+        assertTrue(pos instanceof Integer);
+        assertEquals(26, pos.intValue());
+        Number neg = NumberUtils.createNumber("-0x1A");
+        assertTrue(neg instanceof Integer);
+        assertEquals(-26, neg.intValue());
+    }
+
+    // createNumber: no qualifier, no dec/exp -> tries Integer then falls back to Long on overflow
+    @Test
+    public void testCreateNumber_plainIntegerAndOverflow_returnsIntegerThenLong() throws Throwable {
+        Number n1 = NumberUtils.createNumber("123");
+        assertTrue(n1 instanceof Integer);
+        assertEquals(123, n1.intValue());
+        Number n2 = NumberUtils.createNumber("2147483648");
+        assertTrue(n2 instanceof Long);
+        assertEquals(2147483648L, n2.longValue());
+    }
+
+    // createNumber: value too big even for Long -> falls back to BigInteger
+    @Test
+    public void testCreateNumber_veryLargeInteger_returnsBigInteger() throws Throwable {
+        Number n = NumberUtils.createNumber("123456789012345678901234567890");
+        assertTrue(n instanceof BigInteger);
+        assertEquals(new BigInteger("123456789012345678901234567890"), n);
+    }
+
+    // createNumber: 'L' qualifier with plain digits -> Long
+    @Test
+    public void testCreateNumber_longQualifier_returnsLong() throws Throwable {
+        Number n = NumberUtils.createNumber("123L");
+        assertTrue(n instanceof Long);
+        assertEquals(123L, n.longValue());
+    }
+
+    // createNumber: 'L' qualifier combined with decimal point is invalid -> NumberFormatException
+    @Test
+    public void testCreateNumber_decimalWithLongQualifier_throwsNumberFormatException() throws Throwable {
+        try {
+            NumberUtils.createNumber("1.1L");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+        }
+    }
+
+    // createNumber: 'F'/'D' qualifiers on non-zero decimal values -> Float/Double respectively
+    @Test
+    public void testCreateNumber_floatAndDoubleQualifier_returnCorrectTypes() throws Throwable {
+        Number f = NumberUtils.createNumber("1.5F");
+        assertTrue(f instanceof Float);
+        assertEquals(1.5f, f.floatValue(), 1e-6f);
+        Number d = NumberUtils.createNumber("1.5D");
+        assertTrue(d instanceof Double);
+        assertEquals(1.5d, d.doubleValue(), 1e-9);
+    }
+
+    // บั๊ก: "0F" ไม่มีจุดทศนิยม -> mant กลายเป็นสตริงทั้งก้อนรวมตัวอักษร 'F' ทำให้ isAllZeros คืนผลผิดเป็น false
+    // จึงถูกตัดสินว่า float "สูญเสียความแม่นยำ" แล้ว fallback ไป BigDecimal ทั้งที่ 0.0f แทนค่า 0 ได้พอดีตาม contract ของ qualifier F
+    @Test
+    public void testCreateNumber_zeroWithFloatQualifierNoDecimal_returnsFloat() throws Throwable {
+        Number n = NumberUtils.createNumber("0F");
+        assertTrue("expected Float for qualifier F on value 0", n instanceof Float);
+        assertEquals(0.0f, n.floatValue(), 0.0f);
+    }
+
+    // บั๊กเดียวกันกับด้านบนแต่สำหรับ qualifier 'D' -> ควรได้ Double(0.0) ไม่ใช่ BigDecimal
+    @Test
+    public void testCreateNumber_zeroWithDoubleQualifierNoDecimal_returnsDouble() throws Throwable {
+        Number n = NumberUtils.createNumber("0D");
+        assertTrue("expected Double for qualifier D on value 0", n instanceof Double);
+        assertEquals(0.0d, n.doubleValue(), 0.0d);
+    }
+
+    // ชุดควบคุม: เมื่อมีจุดทศนิยม mant จะถูกตัดจาก substring(0,decPos) อย่างถูกต้อง จึงได้ Float ตามปกติ
+    @Test
+    public void testCreateNumber_zeroWithFloatQualifierAndDecimal_returnsFloat() throws Throwable {
+        Number n = NumberUtils.createNumber("0.0F");
+        assertTrue(n instanceof Float);
+        assertEquals(0.0f, n.floatValue(), 0.0f);
+    }
+
+    // createFloat/createDouble: null -> null, valid string -> parsed value
+    @Test
+    public void testCreateFloatCreateDouble_nullAndValid() throws Throwable {
+        assertNull(NumberUtils.createFloat(null));
+        assertEquals(1.5f, NumberUtils.createFloat("1.5").floatValue(), 1e-6f);
+        assertNull(NumberUtils.createDouble(null));
+        assertEquals(1.5d, NumberUtils.createDouble("1.5").doubleValue(), 1e-9);
+    }
+
+    // createInteger: null -> null, hex string decoded via Integer.decode
+    @Test
+    public void testCreateInteger_nullAndHex() throws Throwable {
+        assertNull(NumberUtils.createInteger(null));
+        assertEquals(26, NumberUtils.createInteger("0x1A").intValue());
+    }
+
+    // createLong: null -> null, valid string -> parsed value
+    @Test
+    public void testCreateLong_nullAndValid() throws Throwable {
+        assertNull(NumberUtils.createLong(null));
+        assertEquals(10L, NumberUtils.createLong("10").longValue());
+    }
+
+    // createBigInteger: null -> null, valid string -> parsed BigInteger
+    @Test
+    public void testCreateBigInteger_nullAndValid() throws Throwable {
+        assertNull(NumberUtils.createBigInteger(null));
+        assertEquals(new BigInteger("123"), NumberUtils.createBigInteger("123"));
+    }
+
+    // createBigDecimal: null -> null, blank -> NumberFormatException, valid -> parsed BigDecimal
+    @Test
+    public void testCreateBigDecimal_nullBlankAndValid() throws Throwable {
+        assertNull(NumberUtils.createBigDecimal(null));
+        try {
+            NumberUtils.createBigDecimal("");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+        }
+        assertEquals(new BigDecimal("1.5"), NumberUtils.createBigDecimal("1.5"));
+    }
+
+    // min(long[]): null array and empty array both throw IllegalArgumentException
+    @Test
+    public void testMinLongArray_nullAndEmpty_throwExceptions() throws Throwable {
+        try {
+            NumberUtils.min((long[]) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+        try {
+            NumberUtils.min(new long[0]);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // min(long[]) / max(long[]): normal array with multiple elements
+    @Test
+    public void testMinMaxLongArray_normal() throws Throwable {
+        long[] arr = {5L, 1L, 3L};
+        assertEquals(1L, NumberUtils.min(arr));
+        assertEquals(5L, NumberUtils.max(arr));
+    }
+
+    // min(double[]): any NaN in the array makes the whole result NaN
+    @Test
+    public void testMinDoubleArray_withNaN_returnsNaN() throws Throwable {
+        double[] arr = {1.0, Double.NaN, 2.0};
+        double result = NumberUtils.min(arr);
+        assertTrue(Double.isNaN(result));
+    }
+
+    // max(double[]): any NaN in the array makes the whole result NaN
+    @Test
+    public void testMaxDoubleArray_withNaN_returnsNaN() throws Throwable {
+        double[] arr = {1.0, Double.NaN, 2.0};
+        double result = NumberUtils.max(arr);
+        assertTrue(Double.isNaN(result));
+    }
+
+    // min(int[]) / max(int[]): normal array with multiple elements
+    @Test
+    public void testMinMaxIntArray_normal() throws Throwable {
+        int[] arr = {5, 3, 9, 1};
+        assertEquals(1, NumberUtils.min(arr));
+        assertEquals(9, NumberUtils.max(arr));
+    }
+
+    // min(int,int,int) / max(int,int,int): three-value comparisons
+    @Test
+    public void testMinMaxThreeInts() throws Throwable {
+        assertEquals(3, NumberUtils.min(5, 3, 9));
+        assertEquals(9, NumberUtils.max(5, 3, 9));
+    }
+
+    // min(long,long,long) / max(long,long,long): three-value comparisons
+    @Test
+    public void testMinMaxThreeLongs() throws Throwable {
+        assertEquals(3L, NumberUtils.min(5L, 9L, 3L));
+        assertEquals(9L, NumberUtils.max(5L, 9L, 3L));
+    }
+
+    // min(double,double,double) / max(double,double,double): NaN propagation via Math.min/Math.max
+    @Test
+    public void testMinMaxThreeDoubles_withNaN_returnsNaN() throws Throwable {
+        double resultMin = NumberUtils.min(1.0, Double.NaN, 2.0);
+        assertTrue(Double.isNaN(resultMin));
+        double resultMax = NumberUtils.max(1.0, Double.NaN, 2.0);
+        assertTrue(Double.isNaN(resultMax));
+    }
+
+    // isDigits: null/empty -> false, all digits -> true, mixed -> false
+    @Test
+    public void testIsDigits_variousInputs() throws Throwable {
+        assertFalse(NumberUtils.isDigits(null));
+        assertFalse(NumberUtils.isDigits(""));
+        assertTrue(NumberUtils.isDigits("123"));
+        assertFalse(NumberUtils.isDigits("12a"));
+    }
+
+    // isNumber: hex branch - complete hex is valid, "0x" alone (no digits after) is invalid
+    @Test
+    public void testIsNumber_hexAndIncompleteHex() throws Throwable {
+        assertTrue(NumberUtils.isNumber("0x1A"));
+        assertFalse(NumberUtils.isNumber("0x"));
+    }
+
+    // isNumber: exponent branch - trailing 'e' with no digit after is invalid, full exponent is valid
+    @Test
+    public void testIsNumber_exponentEdgeCases() throws Throwable {
+        assertFalse(NumberUtils.isNumber("1e"));
+        assertTrue(NumberUtils.isNumber("1e10"));
+    }
+
+    // isNumber: leading sign, 'L' qualifier branch, and null/empty guard
+    @Test
+    public void testIsNumber_signAndQualifier() throws Throwable {
+        assertTrue(NumberUtils.isNumber("-1"));
+        assertTrue(NumberUtils.isNumber("1L"));
+        assertFalse(NumberUtils.isNumber(null));
+    }
+}

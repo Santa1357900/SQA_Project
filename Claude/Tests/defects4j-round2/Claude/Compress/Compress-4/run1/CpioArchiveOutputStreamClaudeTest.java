@@ -1,0 +1,487 @@
+package org.apache.commons.compress.archivers.cpio;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CpioArchiveOutputStreamClaudeTest {
+
+    // Covers switch-case branch for FORMAT_NEW in constructor
+    @Test
+    public void testConstructor_formatNew_noException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_NEW);
+        assertNotNull(cos);
+    }
+
+    // Covers switch-case branch for FORMAT_NEW_CRC in constructor
+    @Test
+    public void testConstructor_formatNewCrc_noException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_NEW_CRC);
+        assertNotNull(cos);
+    }
+
+    // Covers switch-case branch for FORMAT_OLD_ASCII in constructor
+    @Test
+    public void testConstructor_formatOldAscii_noException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_OLD_ASCII);
+        assertNotNull(cos);
+    }
+
+    // Covers switch-case branch for FORMAT_OLD_BINARY in constructor
+    @Test
+    public void testConstructor_formatOldBinary_noException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_OLD_BINARY);
+        assertNotNull(cos);
+    }
+
+    // Covers default branch of switch -> IllegalArgumentException for unknown format
+    @Test
+    public void testConstructor_invalidFormat_throwsIllegalArgumentException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            new CpioArchiveOutputStream(baos, (short) 999);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Covers single-arg constructor delegating to FORMAT_NEW
+    @Test
+    public void testConstructor_defaultFormat_isFormatNew() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_OLD_BINARY);
+        entry.setName("x");
+        try {
+            cos.putArchiveEntry(entry);
+            fail("expected IOException for format mismatch");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("does not match"));
+        }
+    }
+
+    // Covers ensureOpen() throw in putArchiveEntry when stream already closed
+    @Test
+    public void testPutArchiveEntry_onClosedStream_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        cos.close();
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("a");
+        try {
+            cos.putArchiveEntry(entry);
+            fail("expected IOException");
+        } catch (IOException expected) {
+        }
+    }
+
+    // Covers format != entryFormat branch -> IOException
+    @Test
+    public void testPutArchiveEntry_formatMismatch_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_NEW_CRC);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_OLD_BINARY);
+        entry.setName("a");
+        try {
+            cos.putArchiveEntry(entry);
+            fail("expected IOException");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("does not match"));
+        }
+    }
+
+    // Covers names.put(...) != null branch -> duplicate entry IOException
+    @Test
+    public void testPutArchiveEntry_duplicateName_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry e1 = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        e1.setName("dup");
+        e1.setFileSize(0);
+        cos.putArchiveEntry(e1);
+        CpioArchiveEntry e2 = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        e2.setName("dup");
+        e2.setFileSize(0);
+        try {
+            cos.putArchiveEntry(e2);
+            fail("expected IOException for duplicate entry");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("duplicate"));
+        }
+    }
+
+    // Covers implicit closeArchiveEntry() of previous entry when putting a new one
+    @Test
+    public void testPutArchiveEntry_closesPreviousEntryImplicitly() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry e1 = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        e1.setName("first");
+        e1.setFileSize(0);
+        cos.putArchiveEntry(e1);
+        int sizeAfterFirst = baos.size();
+        CpioArchiveEntry e2 = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        e2.setName("second");
+        e2.setFileSize(0);
+        cos.putArchiveEntry(e2);
+        assertTrue(baos.size() > sizeAfterFirst);
+    }
+
+    // Covers implicit closeArchiveEntry() failing because previous entry size does not match written
+    @Test
+    public void testPutArchiveEntry_previousEntryIncomplete_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry e1 = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        e1.setName("first");
+        e1.setFileSize(5);
+        cos.putArchiveEntry(e1);
+        CpioArchiveEntry e2 = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        e2.setName("second");
+        e2.setFileSize(0);
+        try {
+            cos.putArchiveEntry(e2);
+            fail("expected IOException due to incomplete previous entry");
+        } catch (IOException expected) {
+        }
+    }
+
+    // Covers e.getTime() == -1 branch which substitutes current time
+    @Test
+    public void testPutArchiveEntry_noTimeSet_resultsInValidTime() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("t");
+        entry.setFileSize(0);
+        cos.putArchiveEntry(entry);
+        assertTrue(entry.getTime() != -1L);
+    }
+
+    // Covers writeHeader/writeNewEntry path for FORMAT_NEW
+    @Test
+    public void testPutArchiveEntry_formatNew_writesHeaderBytes() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_NEW);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("f");
+        entry.setFileSize(0);
+        cos.putArchiveEntry(entry);
+        assertTrue(baos.size() > 0);
+    }
+
+    // Covers writeHeader/writeNewEntry path for FORMAT_NEW_CRC
+    @Test
+    public void testPutArchiveEntry_formatNewCrc_writesHeaderBytes() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_NEW_CRC);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW_CRC);
+        entry.setName("f");
+        entry.setFileSize(0);
+        cos.putArchiveEntry(entry);
+        assertTrue(baos.size() > 0);
+    }
+
+    // Covers writeHeader/writeOldAsciiEntry path for FORMAT_OLD_ASCII
+    @Test
+    public void testPutArchiveEntry_formatOldAscii_writesHeaderBytes() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_OLD_ASCII);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_OLD_ASCII);
+        entry.setName("f");
+        entry.setFileSize(0);
+        cos.putArchiveEntry(entry);
+        assertTrue(baos.size() > 0);
+    }
+
+    // Covers writeHeader/writeOldBinaryEntry path for FORMAT_OLD_BINARY
+    @Test
+    public void testPutArchiveEntry_formatOldBinary_writesHeaderBytes() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_OLD_BINARY);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_OLD_BINARY);
+        entry.setName("f");
+        entry.setFileSize(0);
+        cos.putArchiveEntry(entry);
+        assertTrue(baos.size() > 0);
+    }
+
+    // Covers closeArchiveEntry() size mismatch -> IOException
+    @Test
+    public void testCloseArchiveEntry_sizeMismatch_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("a");
+        entry.setFileSize(3);
+        cos.putArchiveEntry(entry);
+        try {
+            cos.closeArchiveEntry();
+            fail("expected IOException for size mismatch");
+        } catch (IOException expected) {
+        }
+    }
+
+    // Covers closeArchiveEntry() happy path when size matches written bytes
+    @Test
+    public void testCloseArchiveEntry_sizeMatches_succeeds() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("a");
+        entry.setFileSize(3);
+        cos.putArchiveEntry(entry);
+        cos.write(new byte[] {1, 2, 3}, 0, 3);
+        cos.closeArchiveEntry();
+        cos.finish();
+        assertTrue(baos.size() > 0);
+    }
+
+    // Covers ensureOpen() throw in closeArchiveEntry when stream already closed
+    @Test
+    public void testCloseArchiveEntry_onClosedStream_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        cos.close();
+        try {
+            cos.closeArchiveEntry();
+            fail("expected IOException");
+        } catch (IOException expected) {
+        }
+    }
+
+    // Covers FORMAT_NEW_CRC branch where computed crc (0) matches default chksum (0)
+    @Test
+    public void testCloseArchiveEntry_newCrcZeroBytes_matchesDefaultChecksum() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_NEW_CRC);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW_CRC);
+        entry.setName("c");
+        entry.setFileSize(2);
+        cos.putArchiveEntry(entry);
+        cos.write(new byte[] {0, 0}, 0, 2);
+        cos.closeArchiveEntry();
+        assertTrue(baos.size() > 0);
+    }
+
+    // Covers FORMAT_NEW_CRC branch where computed crc differs from default chksum -> CRC Error
+    @Test
+    public void testCloseArchiveEntry_newCrcNonZeroBytes_throwsCrcError() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos, CpioConstants.FORMAT_NEW_CRC);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW_CRC);
+        entry.setName("c");
+        entry.setFileSize(1);
+        cos.putArchiveEntry(entry);
+        cos.write(new byte[] {5}, 0, 1);
+        try {
+            cos.closeArchiveEntry();
+            fail("expected IOException CRC Error");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("CRC"));
+        }
+    }
+
+    // Covers off < 0 branch in write() bounds check
+    @Test
+    public void testWrite_negativeOffset_throwsIndexOutOfBoundsException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("a");
+        entry.setFileSize(5);
+        cos.putArchiveEntry(entry);
+        try {
+            cos.write(new byte[] {1, 2, 3}, -1, 2);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // Covers len < 0 branch in write() bounds check
+    @Test
+    public void testWrite_negativeLength_throwsIndexOutOfBoundsException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("a");
+        entry.setFileSize(5);
+        cos.putArchiveEntry(entry);
+        try {
+            cos.write(new byte[] {1, 2, 3}, 0, -1);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // Covers off > b.length - len branch in write() bounds check
+    @Test
+    public void testWrite_offsetPlusLengthExceedsArray_throwsIndexOutOfBoundsException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("a");
+        entry.setFileSize(5);
+        cos.putArchiveEntry(entry);
+        try {
+            cos.write(new byte[] {1, 2, 3}, 2, 2);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // Covers len == 0 branch returning silently even with no current entry
+    @Test
+    public void testWrite_zeroLength_noEntry_returnsSilently() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        cos.write(new byte[0], 0, 0);
+        assertEquals(0, baos.size());
+    }
+
+    // Covers this.entry == null branch in write() -> IOException
+    @Test
+    public void testWrite_noCurrentEntry_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        try {
+            cos.write(new byte[] {1}, 0, 1);
+            fail("expected IOException");
+        } catch (IOException expected) {
+        }
+    }
+
+    // Covers written + len > entry.getSize() branch -> IOException
+    @Test
+    public void testWrite_exceedsEntrySize_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("a");
+        entry.setFileSize(1);
+        cos.putArchiveEntry(entry);
+        try {
+            cos.write(new byte[] {1, 2}, 0, 2);
+            fail("expected IOException attempt to write past end");
+        } catch (IOException expected) {
+        }
+    }
+
+    // Covers successful multi-call write accumulation within entry size, then close
+    @Test
+    public void testWrite_withinEntrySize_succeedsAndClosesProperly() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("a");
+        entry.setFileSize(4);
+        cos.putArchiveEntry(entry);
+        cos.write(new byte[] {1, 2}, 0, 2);
+        cos.write(new byte[] {3, 4}, 0, 2);
+        cos.closeArchiveEntry();
+        assertTrue(baos.size() > 0);
+    }
+
+    // Covers ensureOpen() throw in write() when stream already closed
+    @Test
+    public void testWrite_onClosedStream_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        cos.close();
+        try {
+            cos.write(new byte[] {1}, 0, 1);
+            fail("expected IOException");
+        } catch (IOException expected) {
+        }
+    }
+
+    // Covers this.entry != null branch in finish() -> IOException for unclosed entries
+    @Test
+    public void testFinish_withUnclosedEntry_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        CpioArchiveEntry entry = new CpioArchiveEntry(CpioConstants.FORMAT_NEW);
+        entry.setName("a");
+        entry.setFileSize(0);
+        cos.putArchiveEntry(entry);
+        try {
+            cos.finish();
+            fail("expected IOException for unclosed entries");
+        } catch (IOException expected) {
+        }
+    }
+
+    // Covers finish() writing a trailer entry when no user entries exist
+    @Test
+    public void testFinish_noEntries_writesTrailer() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        cos.finish();
+        assertTrue(baos.size() > 0);
+    }
+
+    // Covers this.finished guard: calling finish() twice must be a no-op the second time
+    @Test
+    public void testFinish_calledTwice_secondCallIsNoOp() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        cos.finish();
+        int sizeAfterFirst = baos.size();
+        cos.finish();
+        assertEquals(sizeAfterFirst, baos.size());
+    }
+
+    // Covers ensureOpen() throw in finish() when stream already closed
+    @Test
+    public void testFinish_onClosedStream_throwsIOException() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        cos.close();
+        try {
+            cos.finish();
+            fail("expected IOException");
+        } catch (IOException expected) {
+        }
+    }
+
+    // Covers close() writing trailer via finish() and closing underlying stream
+    @Test
+    public void testClose_writesTrailerAndClosesUnderlyingStream() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        cos.close();
+        assertTrue(baos.size() > 0);
+    }
+
+    // Covers !this.closed guard making close() idempotent when called twice
+    @Test
+    public void testClose_calledTwice_doesNotThrow() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        cos.close();
+        int sizeAfterFirstClose = baos.size();
+        cos.close();
+        assertEquals(sizeAfterFirstClose, baos.size());
+    }
+
+    // Covers createArchiveEntry() returning a CpioArchiveEntry with the given entry name
+    @Test
+    public void testCreateArchiveEntry_returnsEntryWithGivenName() throws Throwable {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        CpioArchiveOutputStream cos = new CpioArchiveOutputStream(baos);
+        File f = new File("nonexistent-claude-test-file.tmp");
+        ArchiveEntry result = cos.createArchiveEntry(f, "myentry");
+        assertTrue(result instanceof CpioArchiveEntry);
+        CpioArchiveEntry entry = (CpioArchiveEntry) result;
+        assertEquals("myentry", entry.getName());
+    }
+}

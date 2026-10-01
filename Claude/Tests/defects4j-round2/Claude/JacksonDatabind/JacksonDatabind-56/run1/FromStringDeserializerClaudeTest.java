@@ -1,0 +1,436 @@
+package com.fasterxml.jackson.databind.deser.std;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+import java.nio.charset.Charset;
+import java.util.Currency;
+import java.util.Locale;
+import java.util.TimeZone;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class FromStringDeserializerClaudeTest
+{
+    // covers types(): the fixed array of 12 supported classes, in declared order
+    @Test
+    public void testTypes_returnsAllTwelveSupportedTypesInOrder() throws Throwable {
+        Class<?>[] types = FromStringDeserializer.types();
+        assertEquals(12, types.length);
+        assertEquals(File.class, types[0]);
+        assertEquals(URL.class, types[1]);
+        assertEquals(URI.class, types[2]);
+        assertEquals(Class.class, types[3]);
+        assertEquals(InetSocketAddress.class, types[11]);
+    }
+
+    // covers findDeserializer branch: rawType == File.class -> STD_FILE
+    @Test
+    public void testFindDeserializer_File() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(File.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_FILE, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == URL.class -> STD_URL
+    @Test
+    public void testFindDeserializer_URL() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(URL.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_URL, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == URI.class -> STD_URI
+    @Test
+    public void testFindDeserializer_URI() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(URI.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_URI, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == Class.class -> STD_CLASS
+    @Test
+    public void testFindDeserializer_Class() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(Class.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_CLASS, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == JavaType.class -> STD_JAVA_TYPE
+    @Test
+    public void testFindDeserializer_JavaType() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(JavaType.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_JAVA_TYPE, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == Currency.class -> STD_CURRENCY
+    @Test
+    public void testFindDeserializer_Currency() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(Currency.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_CURRENCY, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == Pattern.class -> STD_PATTERN
+    @Test
+    public void testFindDeserializer_Pattern() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(Pattern.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_PATTERN, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == Locale.class -> STD_LOCALE
+    @Test
+    public void testFindDeserializer_Locale() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(Locale.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_LOCALE, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == Charset.class -> STD_CHARSET
+    @Test
+    public void testFindDeserializer_Charset() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(Charset.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_CHARSET, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == TimeZone.class -> STD_TIME_ZONE
+    @Test
+    public void testFindDeserializer_TimeZone() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(TimeZone.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_TIME_ZONE, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == InetAddress.class -> STD_INET_ADDRESS
+    @Test
+    public void testFindDeserializer_InetAddress() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(InetAddress.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_INET_ADDRESS, d._kind);
+    }
+
+    // covers findDeserializer branch: rawType == InetSocketAddress.class -> STD_INET_SOCKET_ADDRESS
+    @Test
+    public void testFindDeserializer_InetSocketAddress() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(InetSocketAddress.class);
+        assertNotNull(d);
+        assertEquals(FromStringDeserializer.Std.STD_INET_SOCKET_ADDRESS, d._kind);
+    }
+
+    // covers findDeserializer else branch: unsupported type returns null
+    @Test
+    public void testFindDeserializer_UnsupportedType_returnsNull() throws Throwable {
+        FromStringDeserializer.Std d = FromStringDeserializer.findDeserializer(String.class);
+        assertNull(d);
+    }
+
+    // covers Std._deserialize STD_FILE case
+    @Test
+    public void test_deserialize_File_returnsFileWithGivenPath() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(File.class, FromStringDeserializer.Std.STD_FILE);
+        Object result = deser._deserialize("/tmp/testfile.txt", null);
+        assertEquals("/tmp/testfile.txt", ((File) result).getPath());
+    }
+
+    // covers Std._deserialize STD_URL case, successful parse
+    @Test
+    public void test_deserialize_URL_returnsUrlWithGivenSpec() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(URL.class, FromStringDeserializer.Std.STD_URL);
+        Object result = deser._deserialize("http://example.com/path", null);
+        URL url = (URL) result;
+        assertEquals("example.com", url.getHost());
+        assertEquals("http", url.getProtocol());
+    }
+
+    // covers Std._deserialize STD_URL case, new URL() throws MalformedURLException
+    @Test
+    public void test_deserialize_URL_malformed_throwsMalformedURLException() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(URL.class, FromStringDeserializer.Std.STD_URL);
+        try {
+            deser._deserialize("not a valid url", null);
+            fail("expected MalformedURLException");
+        } catch (MalformedURLException expected) {
+            assertNotNull(expected);
+        }
+    }
+
+    // covers Std._deserialize STD_URI case
+    @Test
+    public void test_deserialize_URI_returnsUriFromString() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(URI.class, FromStringDeserializer.Std.STD_URI);
+        Object result = deser._deserialize("http://example.com/path?q=1", null);
+        assertEquals("http://example.com/path?q=1", result.toString());
+    }
+
+    // covers Std._deserialize STD_CURRENCY case, valid ISO 4217 code
+    @Test
+    public void test_deserialize_Currency_validCode_returnsCurrency() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(Currency.class, FromStringDeserializer.Std.STD_CURRENCY);
+        Object result = deser._deserialize("USD", null);
+        assertEquals("USD", ((Currency) result).getCurrencyCode());
+    }
+
+    // covers Std._deserialize STD_CURRENCY case, invalid code throws IllegalArgumentException
+    @Test
+    public void test_deserialize_Currency_invalidCode_throwsIllegalArgumentException() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(Currency.class, FromStringDeserializer.Std.STD_CURRENCY);
+        try {
+            deser._deserialize("INVALIDCURRENCY", null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertNotNull(expected);
+        }
+    }
+
+    // covers Std._deserialize STD_PATTERN case, valid regex
+    @Test
+    public void test_deserialize_Pattern_validRegex_returnsCompiledPattern() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(Pattern.class, FromStringDeserializer.Std.STD_PATTERN);
+        Object result = deser._deserialize("a.*b", null);
+        assertEquals("a.*b", ((Pattern) result).pattern());
+    }
+
+    // covers Std._deserialize STD_PATTERN case, malformed regex throws PatternSyntaxException
+    @Test
+    public void test_deserialize_Pattern_invalidRegex_throwsPatternSyntaxException() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(Pattern.class, FromStringDeserializer.Std.STD_PATTERN);
+        try {
+            deser._deserialize("[", null);
+            fail("expected PatternSyntaxException");
+        } catch (PatternSyntaxException expected) {
+            assertNotNull(expected);
+        }
+    }
+
+    // covers Std._deserialize STD_LOCALE case, single argument (ix < 0)
+    @Test
+    public void test_deserialize_Locale_singleArgument() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(Locale.class, FromStringDeserializer.Std.STD_LOCALE);
+        Object result = deser._deserialize("en", null);
+        Locale loc = (Locale) result;
+        assertEquals("en", loc.getLanguage());
+    }
+
+    // covers Std._deserialize STD_LOCALE case, two pieces (second ix < 0)
+    @Test
+    public void test_deserialize_Locale_twoArguments() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(Locale.class, FromStringDeserializer.Std.STD_LOCALE);
+        Object result = deser._deserialize("en_US", null);
+        Locale loc = (Locale) result;
+        assertEquals("en", loc.getLanguage());
+        assertEquals("US", loc.getCountry());
+    }
+
+    // covers Std._deserialize STD_LOCALE case, three pieces (variant present)
+    @Test
+    public void test_deserialize_Locale_threeArguments() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(Locale.class, FromStringDeserializer.Std.STD_LOCALE);
+        Object result = deser._deserialize("no_NO_NY", null);
+        Locale loc = (Locale) result;
+        assertEquals("no", loc.getLanguage());
+        assertEquals("NO", loc.getCountry());
+        assertEquals("NY", loc.getVariant());
+    }
+
+    // covers Std._deserialize STD_CHARSET case
+    @Test
+    public void test_deserialize_Charset_validName() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(Charset.class, FromStringDeserializer.Std.STD_CHARSET);
+        Object result = deser._deserialize("UTF-8", null);
+        assertEquals("UTF-8", ((Charset) result).name());
+    }
+
+    // covers Std._deserialize STD_TIME_ZONE case
+    @Test
+    public void test_deserialize_TimeZone_validId() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(TimeZone.class, FromStringDeserializer.Std.STD_TIME_ZONE);
+        Object result = deser._deserialize("UTC", null);
+        assertEquals("UTC", ((TimeZone) result).getID());
+    }
+
+    // covers Std._deserialize STD_INET_ADDRESS case with literal loopback IP
+    @Test
+    public void test_deserialize_InetAddress_loopback() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(InetAddress.class, FromStringDeserializer.Std.STD_INET_ADDRESS);
+        Object result = deser._deserialize("127.0.0.1", null);
+        InetAddress addr = (InetAddress) result;
+        assertTrue(addr.isLoopbackAddress());
+        assertEquals("127.0.0.1", addr.getHostAddress());
+    }
+
+    // covers Std._deserialize STD_INET_SOCKET_ADDRESS case: unbracketed host:port (single colon)
+    @Test
+    public void test_deserialize_InetSocketAddress_hostPort() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(InetSocketAddress.class, FromStringDeserializer.Std.STD_INET_SOCKET_ADDRESS);
+        Object result = deser._deserialize("localhost:8080", null);
+        InetSocketAddress addr = (InetSocketAddress) result;
+        assertEquals(8080, addr.getPort());
+        assertEquals("localhost", addr.getHostString());
+    }
+
+    // covers Std._deserialize STD_INET_SOCKET_ADDRESS case: host only, no colon -> port 0
+    @Test
+    public void test_deserialize_InetSocketAddress_hostOnly_portZero() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(InetSocketAddress.class, FromStringDeserializer.Std.STD_INET_SOCKET_ADDRESS);
+        Object result = deser._deserialize("localhost", null);
+        InetSocketAddress addr = (InetSocketAddress) result;
+        assertEquals(0, addr.getPort());
+    }
+
+    // covers Std._deserialize STD_INET_SOCKET_ADDRESS bracketed IPv6 case with port suffix
+    @Test
+    public void test_deserialize_InetSocketAddress_bracketedIPv6WithPort() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(InetSocketAddress.class, FromStringDeserializer.Std.STD_INET_SOCKET_ADDRESS);
+        Object result = deser._deserialize("[::1]:9090", null);
+        InetSocketAddress addr = (InetSocketAddress) result;
+        assertEquals(9090, addr.getPort());
+    }
+
+    // covers Std._deserialize STD_INET_SOCKET_ADDRESS bracketed IPv6 case without port (j == -1 -> port 0)
+    @Test
+    public void test_deserialize_InetSocketAddress_bracketedIPv6WithoutPort_portZero() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(InetSocketAddress.class, FromStringDeserializer.Std.STD_INET_SOCKET_ADDRESS);
+        Object result = deser._deserialize("[::1]", null);
+        InetSocketAddress addr = (InetSocketAddress) result;
+        assertEquals(0, addr.getPort());
+    }
+
+    // covers base _deserializeFromEmptyString default: returns null for non-URI/non-Locale kinds
+    @Test
+    public void test_deserializeFromEmptyString_default_returnsNull() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(File.class, FromStringDeserializer.Std.STD_FILE);
+        Object result = deser._deserializeFromEmptyString();
+        assertNull(result);
+    }
+
+    // covers Std._deserializeFromEmptyString STD_URI branch -> URI.create("")
+    @Test
+    public void test_deserializeFromEmptyString_URI_returnsEmptyURI() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(URI.class, FromStringDeserializer.Std.STD_URI);
+        Object result = deser._deserializeFromEmptyString();
+        assertEquals(URI.create(""), result);
+    }
+
+    // covers Std._deserializeFromEmptyString STD_LOCALE branch -> Locale.ROOT
+    @Test
+    public void test_deserializeFromEmptyString_Locale_returnsRootLocale() throws Throwable {
+        FromStringDeserializer.Std deser = new FromStringDeserializer.Std(Locale.class, FromStringDeserializer.Std.STD_LOCALE);
+        Object result = deser._deserializeFromEmptyString();
+        assertEquals(Locale.ROOT, result);
+    }
+
+    // covers full deserialize(): normal text branch success path via ObjectMapper
+    @Test
+    public void test_deserializeViaMapper_File_success() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        File f = mapper.readValue("\"/tmp/x.txt\"", File.class);
+        assertEquals("/tmp/x.txt", f.getPath());
+    }
+
+    // covers full deserialize(): text.length()==0 branch -> _deserializeFromEmptyString default null
+    @Test
+    public void test_deserializeViaMapper_emptyString_File_returnsNull() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        File f = mapper.readValue("\"\"", File.class);
+        assertNull(f);
+    }
+
+    // covers full deserialize(): empty-string branch dispatched to STD_URI override
+    @Test
+    public void test_deserializeViaMapper_emptyString_URI_returnsEmptyURI() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        URI u = mapper.readValue("\"\"", URI.class);
+        assertEquals("", u.toString());
+    }
+
+    // covers full deserialize(): empty-string branch dispatched to STD_LOCALE override
+    @Test
+    public void test_deserializeViaMapper_emptyString_Locale_returnsRootLocale() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        Locale loc = mapper.readValue("\"\"", Locale.class);
+        assertEquals(Locale.ROOT, loc);
+    }
+
+    // covers full deserialize(): catch(IllegalArgumentException) -> weirdStringException wrapping cause
+    @Test
+    public void test_deserializeViaMapper_invalidCurrency_throwsJsonMappingException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            mapper.readValue("\"NOT_A_CURRENCY\"", Currency.class);
+            fail("expected JsonMappingException for invalid currency code");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("not a valid textual representation"));
+        }
+    }
+
+    // covers deserialize(): START_ARRAY + UNWRAP_SINGLE_VALUE_ARRAYS enabled, single element unwrapped
+    @Test
+    public void test_deserializeViaMapper_arrayWithUnwrapEnabled_singleElement_returnsValue() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(DeserializationFeature.UNWRAP_SINGLE_VALUE_ARRAYS);
+        File f = mapper.readValue("[\"/tmp/a\"]", File.class);
+        assertEquals("/tmp/a", f.getPath());
+    }
+
+    // covers deserialize(): array unwrap enabled but more than one value -> wrongTokenException
+    @Test
+    public void test_deserializeViaMapper_arrayWithUnwrapEnabled_multipleElements_throwsException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(DeserializationFeature.UNWRAP_SINGLE_VALUE_ARRAYS);
+        try {
+            mapper.readValue("[\"/tmp/a\", \"/tmp/b\"]", File.class);
+            fail("expected JsonMappingException for multi-value array");
+        } catch (JsonMappingException expected) {
+            assertNotNull(expected);
+        }
+    }
+
+    // covers Std._deserialize STD_CLASS branch success via ctxt.findClass
+    @Test
+    public void test_deserializeViaMapper_Class_validClassName_returnsClass() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        Class<?> c = mapper.readValue("\"java.lang.String\"", Class.class);
+        assertEquals(String.class, c);
+    }
+
+    // covers Std._deserialize STD_CLASS branch failure -> ctxt.instantiationException
+    @Test
+    public void test_deserializeViaMapper_Class_invalidClassName_throwsException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            mapper.readValue("\"no.such.Klass\"", Class.class);
+            fail("expected exception for unknown class name");
+        } catch (JsonMappingException expected) {
+            assertNotNull(expected);
+        } catch (IOException expected) {
+            assertNotNull(expected);
+        }
+    }
+
+    // covers Std._deserialize STD_INET_SOCKET_ADDRESS branch: missing closing bracket -> InvalidFormatException
+    @Test
+    public void test_deserializeViaMapper_InetSocketAddress_missingClosingBracket_throwsException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            mapper.readValue("\"[::1\"", InetSocketAddress.class);
+            fail("expected exception for missing closing bracket");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("bracket"));
+        }
+    }
+}

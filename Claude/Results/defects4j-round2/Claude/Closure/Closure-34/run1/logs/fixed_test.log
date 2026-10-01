@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-34-wk_anuh_/Closure-34f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - com.google.javascript.jscomp.CodeGeneratorClaudeTest::testIsSimpleNumber_singleZero_returnsTrue
+  - com.google.javascript.jscomp.CodeGeneratorClaudeTest::testGetSimpleNumber_zero_returnsZero
+[exit 0]

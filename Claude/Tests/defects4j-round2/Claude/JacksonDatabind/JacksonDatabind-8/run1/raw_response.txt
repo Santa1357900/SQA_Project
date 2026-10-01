@@ -1,0 +1,375 @@
+package com.fasterxml.jackson.databind.deser.impl;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.deser.CreatorProperty;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Collection;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.HashMap;
+
+public class CreatorCollectorClaudeTest {
+
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    // ---------------- POJOs ----------------
+
+    public static class DefaultBean {
+        private String name;
+        public DefaultBean() { }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class StringCreatorBean {
+        private final String value;
+        @JsonCreator
+        public StringCreatorBean(String value) { this.value = value; }
+        public String getValue() { return value; }
+    }
+
+    public static class IntCreatorBean {
+        private final int value;
+        @JsonCreator
+        public IntCreatorBean(int value) { this.value = value; }
+        public int getValue() { return value; }
+    }
+
+    public static class LongCreatorBean {
+        private final long value;
+        @JsonCreator
+        public LongCreatorBean(long value) { this.value = value; }
+        public long getValue() { return value; }
+    }
+
+    public static class DoubleCreatorBean {
+        private final double value;
+        @JsonCreator
+        public DoubleCreatorBean(double value) { this.value = value; }
+        public double getValue() { return value; }
+    }
+
+    public static class BooleanCreatorBean {
+        private final boolean value;
+        @JsonCreator
+        public BooleanCreatorBean(boolean value) { this.value = value; }
+        public boolean getValue() { return value; }
+    }
+
+    public static class PropertyCreatorBean {
+        private final String first;
+        private final int second;
+        @JsonCreator
+        public PropertyCreatorBean(@JsonProperty("first") String first,
+                @JsonProperty("second") int second) {
+            this.first = first;
+            this.second = second;
+        }
+        public String getFirst() { return first; }
+        public int getSecond() { return second; }
+    }
+
+    public static class SinglePropertyCreatorBean {
+        private final String name;
+        @JsonCreator
+        public SinglePropertyCreatorBean(@JsonProperty("name") String name) { this.name = name; }
+        public String getName() { return name; }
+    }
+
+    public static class DelegatingCreatorBean {
+        private final Map data;
+        @JsonCreator
+        public DelegatingCreatorBean(Map data) { this.data = data; }
+        public Map getData() { return data; }
+    }
+
+    public static class DuplicatePropertyBean {
+        private final String first;
+        private final String second;
+        @JsonCreator
+        public DuplicatePropertyBean(@JsonProperty("dup") String first,
+                @JsonProperty("dup") String second) {
+            this.first = first;
+            this.second = second;
+        }
+        public String getFirst() { return first; }
+        public String getSecond() { return second; }
+    }
+
+    public static class ConflictingFactoryBean {
+        private final String value;
+        private ConflictingFactoryBean(String v) { this.value = v; }
+        @JsonCreator
+        public static ConflictingFactoryBean fromA(String value) {
+            return new ConflictingFactoryBean(value);
+        }
+        @JsonCreator
+        public static ConflictingFactoryBean fromB(String value) {
+            return new ConflictingFactoryBean(value);
+        }
+        public String getValue() { return value; }
+    }
+
+    // ---------------- White-box tests on CreatorCollector ----------------
+
+    // Covers constructor + hasDefaultCreator() on a freshly created instance
+    @Test
+    public void testConstructor_initialState_allFieldsEmpty() throws Throwable {
+        CreatorCollector cc = new CreatorCollector(null, false);
+        assertFalse(cc.hasDefaultCreator());
+        assertEquals(8, cc._creators.length);
+        assertNull(cc._creators[CreatorCollector.C_DEFAULT]);
+        assertFalse(cc._hasNonDefaultCreator);
+        assertEquals(0, cc._explicitCreators);
+        assertNull(cc._delegateArgs);
+        assertNull(cc._propertyBasedArgs);
+        assertNull(cc._incompleteParameter);
+    }
+
+    // Covers setDefaultCreator branch where _fixAccess safely handles a null creator
+    @Test
+    public void testSetDefaultCreator_withNull_hasDefaultCreatorFalse() throws Throwable {
+        CreatorCollector cc = new CreatorCollector(null, false);
+        cc.setDefaultCreator(null);
+        assertFalse(cc.hasDefaultCreator());
+        assertNull(cc._creators[CreatorCollector.C_DEFAULT]);
+    }
+
+    // Covers addStringCreator -> verifyNonDup first-registration branch (oldOne == null)
+    @Test
+    public void testAddStringCreator_withNullCreator_slotRemainsNullOtherSlotsUnaffected() throws Throwable {
+        CreatorCollector cc = new CreatorCollector(null, false);
+        cc.addStringCreator(null, false);
+        assertNull(cc._creators[CreatorCollector.C_STRING]);
+        assertTrue(cc._hasNonDefaultCreator);
+        assertFalse(cc.hasDefaultCreator());
+    }
+
+    // Covers addDelegatingCreator setting _delegateArgs field
+    @Test
+    public void testAddDelegatingCreator_withNulls_hasNonDefaultCreatorTrueDelegateArgsNull() throws Throwable {
+        CreatorCollector cc = new CreatorCollector(null, false);
+        cc.addDelegatingCreator(null, false, null);
+        assertTrue(cc._hasNonDefaultCreator);
+        assertNull(cc._delegateArgs);
+    }
+
+    // Covers addPropertyCreator with properties.length == 0 (duplicate-check loop skipped)
+    @Test
+    public void testAddPropertyCreator_emptyArray_setsPropertyBasedArgsSkipsDuplicateCheck() throws Throwable {
+        CreatorCollector cc = new CreatorCollector(null, false);
+        CreatorProperty[] props = new CreatorProperty[0];
+        cc.addPropertyCreator(null, false, props);
+        assertNotNull(cc._propertyBasedArgs);
+        assertEquals(0, cc._propertyBasedArgs.length);
+    }
+
+    // Covers addPropertyCreator boundary properties.length == 1 (loop still skipped)
+    @Test
+    public void testAddPropertyCreator_singleElementArray_skipsDuplicateCheck() throws Throwable {
+        CreatorCollector cc = new CreatorCollector(null, false);
+        CreatorProperty[] props = new CreatorProperty[] { null };
+        cc.addPropertyCreator(null, false, props);
+        assertEquals(1, cc._propertyBasedArgs.length);
+    }
+
+    // Covers deprecated protected verifyNonDup(newOne, typeIndex) 2-arg overload
+    @Test
+    public void testVerifyNonDupDeprecatedTwoArg_returnsStoredNullCreatorAndSetsFlag() throws Throwable {
+        CreatorCollector cc = new CreatorCollector(null, false);
+        assertNull(cc.verifyNonDup(null, CreatorCollector.C_INT));
+        assertTrue(cc._hasNonDefaultCreator);
+    }
+
+    // Covers addIncompeteParameter first-assignment branch
+    @Test
+    public void testAddIncompeteParameter_withNull_fieldStaysNull() throws Throwable {
+        CreatorCollector cc = new CreatorCollector(null, false);
+        cc.addIncompeteParameter(null);
+        assertNull(cc._incompleteParameter);
+    }
+
+    // ---------------- Black-box tests via ObjectMapper ----------------
+
+    // Covers setDefaultCreator path used for real no-arg-constructor deserialization
+    @Test
+    public void testDefaultCreator_noArgConstructor_populatesBeanFromJson() throws Throwable {
+        DefaultBean bean = (DefaultBean) mapper.readValue("{\"name\":\"hello\"}", DefaultBean.class);
+        assertEquals("hello", bean.getName());
+    }
+
+    // Covers addStringCreator explicit path (C_STRING)
+    @Test
+    public void testStringCreator_explicit_populatesValue() throws Throwable {
+        StringCreatorBean bean = (StringCreatorBean) mapper.readValue("\"abc\"", StringCreatorBean.class);
+        assertEquals("abc", bean.getValue());
+    }
+
+    // Covers addStringCreator with empty-string edge case
+    @Test
+    public void testStringCreator_explicit_emptyStringValue() throws Throwable {
+        StringCreatorBean bean = (StringCreatorBean) mapper.readValue("\"\"", StringCreatorBean.class);
+        assertEquals("", bean.getValue());
+    }
+
+    // Covers addIntCreator explicit path with zero boundary value
+    @Test
+    public void testIntCreator_explicit_zeroValue() throws Throwable {
+        IntCreatorBean bean = (IntCreatorBean) mapper.readValue("0", IntCreatorBean.class);
+        assertEquals(0, bean.getValue());
+    }
+
+    // Covers addIntCreator explicit path with negative value
+    @Test
+    public void testIntCreator_explicit_negativeValue() throws Throwable {
+        IntCreatorBean bean = (IntCreatorBean) mapper.readValue("-1", IntCreatorBean.class);
+        assertEquals(-1, bean.getValue());
+    }
+
+    // Covers addIntCreator explicit path with Integer.MAX_VALUE boundary
+    @Test
+    public void testIntCreator_explicit_maxValue() throws Throwable {
+        IntCreatorBean bean = (IntCreatorBean) mapper.readValue("2147483647", IntCreatorBean.class);
+        assertEquals(Integer.MAX_VALUE, bean.getValue());
+    }
+
+    // Covers addLongCreator explicit path with Long.MAX_VALUE boundary
+    @Test
+    public void testLongCreator_explicit_maxValue() throws Throwable {
+        LongCreatorBean bean = (LongCreatorBean) mapper.readValue("9223372036854775807", LongCreatorBean.class);
+        assertEquals(Long.MAX_VALUE, bean.getValue());
+    }
+
+    // Covers addDoubleCreator explicit path with positive fractional value
+    @Test
+    public void testDoubleCreator_explicit_positiveValue() throws Throwable {
+        DoubleCreatorBean bean = (DoubleCreatorBean) mapper.readValue("3.14", DoubleCreatorBean.class);
+        assertEquals(3.14, bean.getValue(), 1e-9);
+    }
+
+    // Covers addDoubleCreator explicit path with negative value
+    @Test
+    public void testDoubleCreator_explicit_negativeValue() throws Throwable {
+        DoubleCreatorBean bean = (DoubleCreatorBean) mapper.readValue("-2.5", DoubleCreatorBean.class);
+        assertEquals(-2.5, bean.getValue(), 1e-9);
+    }
+
+    // Covers addBooleanCreator explicit path with true value
+    @Test
+    public void testBooleanCreator_explicit_trueValue() throws Throwable {
+        BooleanCreatorBean bean = (BooleanCreatorBean) mapper.readValue("true", BooleanCreatorBean.class);
+        assertTrue(bean.getValue());
+    }
+
+    // Covers addBooleanCreator explicit path with false value
+    @Test
+    public void testBooleanCreator_explicit_falseValue() throws Throwable {
+        BooleanCreatorBean bean = (BooleanCreatorBean) mapper.readValue("false", BooleanCreatorBean.class);
+        assertFalse(bean.getValue());
+    }
+
+    // Covers addPropertyCreator with two distinct property names (loop executes, no duplicate)
+    @Test
+    public void testPropertyCreator_twoDistinctProperties_bound() throws Throwable {
+        PropertyCreatorBean bean = (PropertyCreatorBean) mapper.readValue(
+                "{\"first\":\"x\",\"second\":7}", PropertyCreatorBean.class);
+        assertEquals("x", bean.getFirst());
+        assertEquals(7, bean.getSecond());
+    }
+
+    // Covers addPropertyCreator with a single named property (properties.length == 1)
+    @Test
+    public void testPropertyCreator_singleProperty_bound() throws Throwable {
+        SinglePropertyCreatorBean bean = (SinglePropertyCreatorBean) mapper.readValue(
+                "{\"name\":\"hi\"}", SinglePropertyCreatorBean.class);
+        assertEquals("hi", bean.getName());
+    }
+
+    // Covers addDelegatingCreator path, delegate type resolution for a Map parameter
+    @Test
+    public void testDelegatingCreator_mapParameter_delegatesValues() throws Throwable {
+        DelegatingCreatorBean bean = (DelegatingCreatorBean) mapper.readValue(
+                "{\"a\":1,\"b\":2}", DelegatingCreatorBean.class);
+        assertEquals(Integer.valueOf(1), bean.getData().get("a"));
+        assertEquals(Integer.valueOf(2), bean.getData().get("b"));
+    }
+
+    // Covers addPropertyCreator duplicate-name detection throwing IllegalArgumentException
+    @Test
+    public void testAddPropertyCreator_duplicateName_throwsIllegalArgumentException() throws Throwable {
+        try {
+            mapper.readValue("{\"dup\":\"x\"}", DuplicatePropertyBean.class);
+            fail("expected exception for duplicate creator property name");
+        } catch (Exception e) {
+            assertTrue(containsInChain(e, "Duplicate creator property"));
+        }
+    }
+
+    // Covers verifyNonDup conflict branch: two explicit creators of same type/class
+    @Test
+    public void testConflictingExplicitStringCreators_throwsIllegalArgumentException() throws Throwable {
+        try {
+            mapper.readValue("\"test\"", ConflictingFactoryBean.class);
+            fail("expected exception for conflicting explicit creators");
+        } catch (Exception e) {
+            assertTrue(containsInChain(e, "Conflicting"));
+        }
+    }
+
+    // Covers Vanilla TYPE_COLLECTION path for List interface
+    @Test
+    public void testVanillaInstantiator_listInterface_usesArrayList() throws Throwable {
+        List result = (List) mapper.readValue("[1,2,3]", List.class);
+        assertTrue(result instanceof ArrayList);
+        assertEquals(3, result.size());
+    }
+
+    // Covers Vanilla TYPE_COLLECTION path for Collection interface
+    @Test
+    public void testVanillaInstantiator_collectionInterface_usesArrayList() throws Throwable {
+        Collection result = (Collection) mapper.readValue("[1,2]", Collection.class);
+        assertTrue(result instanceof ArrayList);
+        assertEquals(2, result.size());
+    }
+
+    // Covers Vanilla TYPE_MAP path for Map interface
+    @Test
+    public void testVanillaInstantiator_mapInterface_usesLinkedHashMap() throws Throwable {
+        Map result = (Map) mapper.readValue("{\"a\":1}", Map.class);
+        assertTrue(result instanceof LinkedHashMap);
+        assertEquals(Integer.valueOf(1), result.get("a"));
+    }
+
+    // Covers Vanilla TYPE_HASH_MAP path, must produce exact HashMap (not LinkedHashMap)
+    @Test
+    public void testVanillaInstantiator_hashMapClass_usesExactHashMapType() throws Throwable {
+        Object result = mapper.readValue("{\"a\":1}", HashMap.class);
+        assertEquals(HashMap.class, result.getClass());
+    }
+
+    // ---------------- helper ----------------
+
+    private boolean containsInChain(Throwable t, String keyword) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur.getMessage() != null && cur.getMessage().contains(keyword)) {
+                return true;
+            }
+            cur = cur.getCause();
+        }
+        return false;
+    }
+}

@@ -1,0 +1,12 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-5-ojh7go04/Cli-5f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 6
+  - org.apache.commons.cli.UtilClaudeTest::testStripLeadingAndTrailingQuotes_InternalQuote_ReturnsUnchanged
+  - org.apache.commons.cli.UtilClaudeTest::testStripLeadingAndTrailingQuotes_TrailingQuoteMultiCharNoLeading_ReturnsUnchanged
+  - org.apache.commons.cli.UtilClaudeTest::testStripLeadingAndTrailingQuotes_OnlyLeadingQuote_ReturnsUnchanged
+  - org.apache.commons.cli.UtilClaudeTest::testStripLeadingHyphens_NullInput_ThrowsNPE
+  - org.apache.commons.cli.UtilClaudeTest::testStripLeadingAndTrailingQuotes_LeadingQuoteMultiCharNoTrailing_ReturnsUnchanged
+  - org.apache.commons.cli.UtilClaudeTest::testStripLeadingAndTrailingQuotes_SingleQuoteChar_ReturnsUnchanged
+[exit 0]

@@ -1,0 +1,239 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+
+public class TypedScopeCreatorClaudeTest {
+
+  private Compiler compiler;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+  }
+
+  // รันคอมไพล์แบบเปิด checkTypes แล้วคืนค่าจำนวนปัญหา (error+warning) ทั้งหมด
+  private int totalProblems(String js) throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions opts = new CompilerOptions();
+    opts.setCheckTypes(true);
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    c.compile(externs, input, opts);
+    return c.getErrorCount() + c.getWarningCount();
+  }
+
+  // constructor 1 อาร์กิวเมนต์ ต้องสร้างอินสแตนซ์ได้โดยไม่ throw
+  @Test
+  public void testConstructor_withAbstractCompiler_createsNonNullInstance() throws Throwable {
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    assertNotNull(creator);
+  }
+
+  // constructor 2 อาร์กิวเมนต์ (ใส่ CodingConvention เอง) ต้องสร้างอินสแตนซ์ได้
+  @Test
+  public void testConstructor_withExplicitCodingConvention_createsNonNullInstance() throws Throwable {
+    CodingConvention cc = compiler.getCodingConvention();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler, cc);
+    assertNotNull(creator);
+  }
+
+  // ตรวจค่าคงที่ DELEGATE_PROXY_SUFFIX ตามที่ประกาศไว้ในคลาส
+  @Test
+  public void testDelegateProxySuffix_hasExpectedValue() throws Throwable {
+    assertEquals("(Proxy)", TypedScopeCreator.DELEGATE_PROXY_SUFFIX);
+  }
+
+  // createInitialScope ต้องประกาศ native function type พื้นฐานไว้ในสโคป เช่น Object, Date
+  @Test
+  public void testCreateInitialScope_declaresNativeFunctionTypesAndPrototypes() throws Throwable {
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Node root = IR.block();
+    Scope scope = creator.createInitialScope(root);
+    assertNotNull(scope.getVar("Object"));
+    assertNotNull(scope.getVar("Date"));
+    assertNotNull(scope.getVar("Object.prototype"));
+  }
+
+  // createInitialScope ต้องประกาศ undefined, goog.typedef, ActiveXObject ด้วย declareNativeValueType
+  @Test
+  public void testCreateInitialScope_declaresUndefinedAndTypedefAndActiveXObject() throws Throwable {
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Node root = IR.block();
+    Scope scope = creator.createInitialScope(root);
+    assertNotNull(scope.getVar("undefined"));
+    assertNotNull(scope.getVar("goog.typedef"));
+    assertNotNull(scope.getVar("ActiveXObject"));
+  }
+
+  // defineCatch: ประกาศตัวแปร catch parameter ต้องไม่เกิด error
+  @Test
+  public void testCreateScope_catchParameter_declaredWithoutError() throws Throwable {
+    String js = "try { throw new Error('e'); } catch (e) { var z = e; }";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // defineVar: หลายชื่อในบรรทัดเดียวโดยไม่มี JSDoc ต้องไม่มีคำเตือน
+  @Test
+  public void testCreateScope_varMultipleNamesNoJsDoc_noWarning() throws Throwable {
+    String js = "var a, b;";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // defineVar: หลายชื่อพร้อม JSDoc บนตัว VAR ต้องรายงาน MULTIPLE_VAR_DEF 1 ครั้ง
+  @Test
+  public void testCreateScope_varMultipleNamesWithJsDoc_reportsMultipleVarDefWarning() throws Throwable {
+    String js = "/** @type {number} */\nvar a, b;";
+    assertEquals(1, totalProblems(js));
+  }
+
+  // defineName + @type: ตัวแปรที่ประกาศชนิดชัดเจนแล้วใส่ค่าผิดชนิดต้องมีปัญหา
+  @Test
+  public void testCreateScope_declaredVarTypeMismatchOnReassignment_reportsWarning() throws Throwable {
+    String js = "/** @type {number} */\nvar x = 1;\nx = 'hello';";
+    assertTrue(totalProblems(js) >= 1);
+  }
+
+  // defineName + @type: ใส่ค่าชนิดตรงกันต้องไม่มีปัญหา
+  @Test
+  public void testCreateScope_declaredVarTypeConsistentReassignment_noWarning() throws Throwable {
+    String js = "/** @type {number} */\nvar x = 1;\nx = 2;";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // defineSlot: ประกาศตัวแปรชื่อเดียวกันซ้ำด้วยชนิดที่ขัดแย้งกันต้องมีปัญหา
+  @Test
+  public void testCreateScope_redeclareVarWithConflictingDeclaredType_reportsProblem() throws Throwable {
+    String js = "/** @type {number} */\nvar x = 1;\n/** @type {string} */\nvar x = 'hi';";
+    assertTrue(totalProblems(js) >= 1);
+  }
+
+  // defineDeclaredFunction + @param: เรียกฟังก์ชันด้วยอาร์กิวเมนต์ผิดชนิดต้องมีปัญหา
+  @Test
+  public void testCreateScope_functionDeclarationParamTypeMismatch_reportsWarning() throws Throwable {
+    String js = "/**\n * @param {number} a\n * @return {number}\n */\nfunction add(a) { return a; }\nadd('str');";
+    assertTrue(totalProblems(js) >= 1);
+  }
+
+  // defineDeclaredFunction + @param: เรียกถูกชนิดต้องไม่มีปัญหา
+  @Test
+  public void testCreateScope_functionDeclarationCorrectUsage_noWarning() throws Throwable {
+    String js = "/**\n * @param {number} a\n * @return {number}\n */\nfunction add(a) { return a; }\nadd(5);";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // defineName + @constructor บนตัวแปร: สร้างอินสแตนซ์ได้ปกติ
+  @Test
+  public void testCreateScope_constructorViaVarAssignment_correctUsage_noWarning() throws Throwable {
+    String js = "/** @constructor */\nvar Foo = function() {};\nvar f = new Foo();";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // defineNamedTypeAssign: ประกาศ constructor ผ่าน qualified name แล้วใช้ new ให้ถูกต้อง
+  @Test
+  public void testCreateScope_namedTypeAssignConstructor_correctUsage_noWarning() throws Throwable {
+    String js = "var ns = {};\n/** @constructor */\nns.Foo = function() {};\nvar f = new ns.Foo();";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // defineNamedTypeAssign: เรียก constructor โดยไม่ใช้ new ควรถูกรายงานเป็นปัญหา
+  @Test
+  public void testCreateScope_namedTypeAssignConstructor_calledWithoutNew_reportsProblem() throws Throwable {
+    String js = "var ns = {};\n/** @constructor */\nns.Foo = function() {};\nvar x = ns.Foo();";
+    assertTrue(totalProblems(js) >= 1);
+  }
+
+  // maybeDeclareQualifiedName: เมธอดบน prototype รับพารามิเตอร์ผิดชนิดต้องมีปัญหา
+  @Test
+  public void testCreateScope_prototypeMethodParamMismatch_reportsWarning() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\n/** @param {number} a */\n"
+        + "Foo.prototype.bar = function(a) {};\nvar f = new Foo();\nf.bar('str');";
+    assertTrue(totalProblems(js) >= 1);
+  }
+
+  // maybeDeclareQualifiedName: เมธอดบน prototype เรียกถูกชนิดต้องไม่มีปัญหา
+  @Test
+  public void testCreateScope_prototypeMethodCorrectUsage_noWarning() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\n/** @param {number} a */\n"
+        + "Foo.prototype.bar = function(a) {};\nvar f = new Foo();\nf.bar(5);";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // getEnumType: enum object literal ปกติต้องไม่มีปัญหา
+  @Test
+  public void testCreateScope_enumObjectLiteral_validUsage_noWarning() throws Throwable {
+    String js = "/** @enum {number} */\nvar Color = {RED: 1, GREEN: 2};\nvar c = Color.RED;";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // getEnumType: ค่าตั้งต้นของ enum ไม่ใช่ object literal หรือ enum อื่น ต้องรายงาน ENUM_INITIALIZER
+  @Test
+  public void testCreateScope_enumInitializerNonObjectValue_reportsEnumInitializerWarning() throws Throwable {
+    String js = "/** @enum {number} */\nvar Color = 5;";
+    assertEquals(1, totalProblems(js));
+  }
+
+  // getEnumType: กำหนด enum ใหม่จาก enum ที่มีอยู่แล้ว (qualified name) ต้องไม่มีปัญหา
+  @Test
+  public void testCreateScope_enumInitializerFromExistingEnum_noWarning() throws Throwable {
+    String js = "/** @enum {number} */\nvar Color = {RED: 1, GREEN: 2};\n"
+        + "/** @enum {number} */\nvar Hue = Color;\nvar h = Hue.RED;";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // getEnumType: คีย์ซ้ำกันใน enum ต้องรายงาน ENUM_DUP
+  @Test
+  public void testCreateScope_enumDuplicateKey_reportsProblem() throws Throwable {
+    String js = "/** @enum {number} */\nvar Color = {RED: 1, RED: 2};";
+    assertTrue(totalProblems(js) >= 1);
+  }
+
+  // resolveStubDeclarations: stub property ไม่มี @type ต้องกลายเป็น unknown และรับค่าใดก็ได้
+  @Test
+  public void testCreateScope_prototypeStubWithoutType_allowsAnyAssignment_noWarning() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\nFoo.prototype.bar;\n"
+        + "var f = new Foo();\nf.bar = 'anything';";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // maybeDeclareQualifiedName: stub property มี @type ชัดเจน ใส่ค่าผิดชนิดต้องมีปัญหา
+  @Test
+  public void testCreateScope_prototypeStubWithDeclaredType_mismatchAssignment_reportsWarning() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\n/** @type {number} */\nFoo.prototype.bar;\n"
+        + "var f = new Foo();\nf.bar = 'str';";
+    assertTrue(totalProblems(js) >= 1);
+  }
+
+  // checkForTypedef: ประกาศ @typedef แล้วใช้ค่าผิดชนิดในที่ที่อ้าง typedef นั้นต้องมีปัญหา
+  @Test
+  public void testCreateScope_typedefDeclaration_mismatchAssignment_reportsProblem() throws Throwable {
+    String js = "/** @typedef {number} */\nvar NumAlias;\n/** @type {NumAlias} */\nvar x = 'hello';";
+    assertTrue(totalProblems(js) >= 1);
+  }
+
+  // LocalScopeBuilder.declareArguments: ฟังก์ชันซ้อนในฟังก์ชันอื่น เรียกด้วยพารามิเตอร์ผิดชนิดต้องมีปัญหา
+  @Test
+  public void testCreateScope_localFunctionParamTypeMismatch_reportsProblem() throws Throwable {
+    String js = "function outer() {\n/** @param {number} n */\nfunction inner(n) {}\ninner('str');\n}";
+    assertTrue(totalProblems(js) >= 1);
+  }
+
+  // LocalScopeBuilder.declareArguments: ฟังก์ชันซ้อนเรียกถูกชนิดต้องไม่มีปัญหา
+  @Test
+  public void testCreateScope_localFunctionParamCorrectUsage_noWarning() throws Throwable {
+    String js = "function outer() {\n/** @param {number} n */\nfunction inner(n) {}\ninner(5);\n}";
+    assertEquals(0, totalProblems(js));
+  }
+
+  // getDeclaredTypeInAnnotation: stub property ที่มี @param/@return (ไม่มี function literal) ต้องสร้าง function type ให้
+  @Test
+  public void testCreateScope_getpropFunctionTypeAnnotationWithoutAssignment_declaresFunctionType() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\n/**\n * @param {number} a\n"
+        + " * @return {number}\n */\nFoo.prototype.compute;\nvar f = new Foo();\nf.compute('str');";
+    assertTrue(totalProblems(js) >= 1);
+  }
+}

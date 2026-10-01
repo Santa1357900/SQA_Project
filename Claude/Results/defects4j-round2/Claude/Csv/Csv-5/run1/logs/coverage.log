@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Csv-5-klgxjez2/Csv-5b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 158
+     Lines covered: 120
+  Conditions total: 115
+Conditions covered: 75
+     Line coverage: 75.9%
+Condition coverage: 65.2%
+[exit 0]

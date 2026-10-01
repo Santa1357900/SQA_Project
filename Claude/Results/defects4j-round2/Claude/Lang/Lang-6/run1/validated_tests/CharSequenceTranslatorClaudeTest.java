@@ -1,0 +1,274 @@
+package org.apache.commons.lang3.text.translate;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.io.Writer;
+
+public class CharSequenceTranslatorClaudeTest {
+
+    // Helper: never consumes anything; dispatcher must passthrough raw codepoint(s) unchanged.
+    private static class NoOpTranslator extends CharSequenceTranslator {
+        public int translate(CharSequence input, int index, Writer out) throws IOException {
+            return 0;
+        }
+    }
+
+    // Helper: consumes exactly 1 codepoint and writes "X" whenever the char is 'a'; else passthrough.
+    private static class ReplaceATranslator extends CharSequenceTranslator {
+        public int translate(CharSequence input, int index, Writer out) throws IOException {
+            if (input.charAt(index) == 'a') {
+                out.write('X');
+                return 1;
+            }
+            return 0;
+        }
+    }
+
+    // Helper: at index 0 claims to consume exactly 1 codepoint (possibly a surrogate pair) and writes a marker.
+    private static class SurrogateAwareTranslator extends CharSequenceTranslator {
+        public int translate(CharSequence input, int index, Writer out) throws IOException {
+            if (index == 0) {
+                out.write("MARK");
+                return 1;
+            }
+            return 0;
+        }
+    }
+
+    // Helper: at index 0 claims to consume exactly 2 codepoints and writes a marker.
+    private static class TwoCodepointTranslator extends CharSequenceTranslator {
+        public int translate(CharSequence input, int index, Writer out) throws IOException {
+            if (index == 0) {
+                out.write("Z");
+                return 2;
+            }
+            return 0;
+        }
+    }
+
+    // Helper: always throws IOException, to test exception propagation/wrapping.
+    private static class ThrowingTranslator extends CharSequenceTranslator {
+        public int translate(CharSequence input, int index, Writer out) throws IOException {
+            throw new IOException("boom");
+        }
+    }
+
+    // translate(CharSequence): javadoc-documented null input must return null.
+    @Test
+    public void testTranslateString_nullInput_returnsNull() throws Throwable {
+        NoOpTranslator t = new NoOpTranslator();
+        assertNull(t.translate((CharSequence) null));
+    }
+
+    // translate(CharSequence): empty input means zero while-loop iterations, result is empty string.
+    @Test
+    public void testTranslateString_emptyInput_returnsEmptyString() throws Throwable {
+        NoOpTranslator t = new NoOpTranslator();
+        assertEquals("", t.translate(""));
+    }
+
+    // consumed==0 branch: plain multi-char ascii passthrough across multiple loop iterations.
+    @Test
+    public void testTranslateString_noOpTranslator_passthroughUnchanged() throws Throwable {
+        NoOpTranslator t = new NoOpTranslator();
+        assertEquals("abc", t.translate("abc"));
+    }
+
+    // consumed==0 branch: a bare supplementary (surrogate pair) codepoint must be preserved intact.
+    @Test
+    public void testTranslateString_noOpTranslator_surrogatePairPreserved() throws Throwable {
+        String suppl = new String(Character.toChars(0x1D11E));
+        NoOpTranslator t = new NoOpTranslator();
+        assertEquals(suppl, t.translate(suppl));
+    }
+
+    // consumed==0 branch: surrogate pair followed by trailing char, must preserve both without duplication.
+    @Test
+    public void testTranslateString_noOpTranslator_surrogatePairWithTrailingCharPreserved() throws Throwable {
+        String input = new String(Character.toChars(0x1D11E)) + "Z";
+        NoOpTranslator t = new NoOpTranslator();
+        assertEquals(input, t.translate(input));
+    }
+
+    // Mixes consumed!=0 (on 'a') and consumed==0 (passthrough) branches across several loop iterations.
+    @Test
+    public void testTranslateString_replaceATranslator_mixedBranches() throws Throwable {
+        ReplaceATranslator t = new ReplaceATranslator();
+        assertEquals("cXt", t.translate("cat"));
+    }
+
+    // consumed==0 branch exclusively, across multiple iterations, when no char matches the trigger.
+    @Test
+    public void testTranslateString_replaceATranslator_noMatchAllPassthrough() throws Throwable {
+        ReplaceATranslator t = new ReplaceATranslator();
+        assertEquals("xyz", t.translate("xyz"));
+    }
+
+    // consumed!=0 branch, single char, single loop iteration ending exactly when pos==len.
+    @Test
+    public void testTranslateString_replaceATranslator_singleMatchOnly() throws Throwable {
+        ReplaceATranslator t = new ReplaceATranslator();
+        assertEquals("X", t.translate("a"));
+    }
+
+    // translate(CharSequence): IOException from the translator must be wrapped into a RuntimeException.
+    @Test
+    public void testTranslateString_throwingTranslator_wrapsIOException() throws Throwable {
+        ThrowingTranslator t = new ThrowingTranslator();
+        try {
+            t.translate("a");
+            fail("expected RuntimeException");
+        } catch (RuntimeException expected) {
+            assertTrue(expected.getCause() instanceof IOException);
+        }
+    }
+
+    // translate(CharSequence,Writer): null writer must throw IllegalArgumentException.
+    @Test
+    public void testTranslateWriter_nullWriter_throwsIllegalArgumentException() throws Throwable {
+        NoOpTranslator t = new NoOpTranslator();
+        try {
+            t.translate("abc", (Writer) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Writer"));
+        }
+    }
+
+    // translate(CharSequence,Writer): out==null check must happen before the input==null check.
+    @Test
+    public void testTranslateWriter_nullWriterAndNullInput_stillThrowsIllegalArgumentException() throws Throwable {
+        NoOpTranslator t = new NoOpTranslator();
+        try {
+            t.translate((CharSequence) null, (Writer) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // translate(CharSequence,Writer): null input with valid writer must simply return, writing nothing.
+    @Test
+    public void testTranslateWriter_nullInput_writerUntouched() throws Throwable {
+        NoOpTranslator t = new NoOpTranslator();
+        StringWriter out = new StringWriter();
+        t.translate((CharSequence) null, out);
+        assertEquals("", out.toString());
+    }
+
+    // translate(CharSequence,Writer): empty input means zero while-loop iterations, writer stays empty.
+    @Test
+    public void testTranslateWriter_emptyInput_writerEmpty() throws Throwable {
+        NoOpTranslator t = new NoOpTranslator();
+        StringWriter out = new StringWriter();
+        t.translate("", out);
+        assertEquals("", out.toString());
+    }
+
+    // translate(CharSequence,Writer): multiple passthrough iterations via the Writer overload directly.
+    @Test
+    public void testTranslateWriter_noOpTranslator_multiCharPassthrough() throws Throwable {
+        NoOpTranslator t = new NoOpTranslator();
+        StringWriter out = new StringWriter();
+        t.translate("abc", out);
+        assertEquals("abc", out.toString());
+    }
+
+    // consumed!=0 for-loop branch: a single claimed codepoint that is a surrogate pair must advance pos by 2 chars.
+    @Test
+    public void testTranslateWriter_consumedOneCodepoint_surrogatePairAdvancesByTwoChars() throws Throwable {
+        SurrogateAwareTranslator t = new SurrogateAwareTranslator();
+        String input = new String(Character.toChars(0x1D11E)) + "Z";
+        StringWriter out = new StringWriter();
+        t.translate(input, out);
+        assertEquals("MARKZ", out.toString());
+    }
+
+    // consumed!=0 for-loop branch: claiming 2 consumed codepoints must iterate the loop twice and land past both.
+    @Test
+    public void testTranslateWriter_consumedTwoCodepoints_forLoopAdvancesPastBoth() throws Throwable {
+        TwoCodepointTranslator t = new TwoCodepointTranslator();
+        StringWriter out = new StringWriter();
+        t.translate("abc", out);
+        assertEquals("Zc", out.toString());
+    }
+
+    // translate(CharSequence,Writer): IOException from the translator propagates unwrapped.
+    @Test
+    public void testTranslateWriter_throwingTranslator_propagatesIOException() throws Throwable {
+        ThrowingTranslator t = new ThrowingTranslator();
+        StringWriter out = new StringWriter();
+        try {
+            t.translate("a", out);
+            fail("expected IOException");
+        } catch (IOException expected) {
+            // ok
+        }
+    }
+
+    // with(): merging with zero extra translators must still return a usable non-null AggregateTranslator.
+    @Test
+    public void testWith_noExtraTranslators_returnsNonNullTranslator() throws Throwable {
+        NoOpTranslator t = new NoOpTranslator();
+        CharSequenceTranslator merged = t.with();
+        assertNotNull(merged);
+        assertTrue(merged instanceof AggregateTranslator);
+    }
+
+    // with(): merging this translator with one extra translator also returns a non-null merged translator.
+    @Test
+    public void testWith_oneExtraTranslator_returnsNonNullTranslator() throws Throwable {
+        NoOpTranslator t = new NoOpTranslator();
+        ReplaceATranslator extra = new ReplaceATranslator();
+        CharSequenceTranslator merged = t.with(extra);
+        assertNotNull(merged);
+        assertTrue(merged instanceof AggregateTranslator);
+    }
+
+    // hex(): codepoint zero must render as hex "0".
+    @Test
+    public void testHex_zero_returnsZero() throws Throwable {
+        assertEquals("0", CharSequenceTranslator.hex(0));
+    }
+
+    // hex(): codepoint 1 must render as hex "1".
+    @Test
+    public void testHex_one_returnsOne() throws Throwable {
+        assertEquals("1", CharSequenceTranslator.hex(1));
+    }
+
+    // hex(): value 10 must render as uppercase single hex digit "A".
+    @Test
+    public void testHex_ten_returnsUppercaseA() throws Throwable {
+        assertEquals("A", CharSequenceTranslator.hex(10));
+    }
+
+    // hex(): byte-boundary value 255 must render as uppercase "FF".
+    @Test
+    public void testHex_255_returnsFF() throws Throwable {
+        assertEquals("FF", CharSequenceTranslator.hex(255));
+    }
+
+    // hex(): char-boundary value 65535 (0xFFFF) must render as uppercase "FFFF".
+    @Test
+    public void testHex_65535_returnsFFFF() throws Throwable {
+        assertEquals("FFFF", CharSequenceTranslator.hex(65535));
+    }
+
+    // hex(): supplementary codepoint 0x1D11E must render as uppercase multi-digit hex "1D11E".
+    @Test
+    public void testHex_supplementaryCodepoint_returnsUppercaseHex() throws Throwable {
+        assertEquals("1D11E", CharSequenceTranslator.hex(0x1D11E));
+    }
+
+    // translate(CharSequence) and translate(CharSequence,Writer) must agree on the same output for the same input.
+    @Test
+    public void testTranslateString_consistentWithWriterOverload() throws Throwable {
+        ReplaceATranslator t = new ReplaceATranslator();
+        StringWriter out = new StringWriter();
+        t.translate("banana", out);
+        assertEquals(t.translate("banana"), out.toString());
+    }
+}

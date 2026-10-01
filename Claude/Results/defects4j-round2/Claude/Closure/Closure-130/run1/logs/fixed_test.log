@@ -1,0 +1,12 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-130-plhkmq7k/Closure-130f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 6
+  - com.google.javascript.jscomp.CollapsePropertiesClaudeTest::testDeclareVarsForObjLitValues_getterKeySkipped_siblingAndOuterPropertiesStillCollapse
+  - com.google.javascript.jscomp.CollapsePropertiesClaudeTest::testProcess_bracketPropertyAccess_declarationStillCollapsed
+  - com.google.javascript.jscomp.CollapsePropertiesClaudeTest::testProcess_aliasedNamespaceFromJavadocExample_producesUnsafeNamespaceWarning
+  - com.google.javascript.jscomp.CollapsePropertiesClaudeTest::testCheckNamespaces_deletePropertyOnInitializedNamespace_producesRedefinitionWarning
+  - com.google.javascript.jscomp.CollapsePropertiesClaudeTest::testCheckNamespaces_namespaceReassignedAfterPropertySet_producesRedefinitionWarning
+  - com.google.javascript.jscomp.CollapsePropertiesClaudeTest::testCheckNamespaces_namespaceReassignedTwiceWithDifferentLiterals_producesRedefinitionWarning
+[exit 0]

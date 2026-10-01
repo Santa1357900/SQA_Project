@@ -1,0 +1,322 @@
+package com.google.javascript.jscomp;
+
+import com.google.javascript.rhino.SourcePosition;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ScopedAliasesClaudeTest {
+
+  private Compiler compiler;
+  private CompilerOptions options;
+  private List<SourcePosition<CompilerOptions.AliasTransformation>> captured;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    options = new CompilerOptions();
+    options.closurePass = true;
+  }
+
+  private Result compileJs(String js) {
+    List<SourceFile> externs = new ArrayList<SourceFile>();
+    List<SourceFile> inputs = new ArrayList<SourceFile>();
+    inputs.add(SourceFile.fromCode("test.js", js));
+    return compiler.compile(externs, inputs, options);
+  }
+
+  private CompilerOptions.AliasTransformationHandler newCapturingHandler() {
+    captured = new ArrayList<SourcePosition<CompilerOptions.AliasTransformation>>();
+    return new CompilerOptions.AliasTransformationHandler() {
+      @Override
+      public CompilerOptions.AliasTransformation logAliasTransformation(
+          String sourceFile, SourcePosition<CompilerOptions.AliasTransformation> position) {
+        captured.add(position);
+        return new CompilerOptions.AliasTransformation() {
+          @Override
+          public void addAlias(String alias, String definition) {}
+        };
+      }
+    };
+  }
+
+  // Covers AliasedNode.applyAlias and goog.scope block collapsing (success path).
+  @Test
+  public void testProcess_simpleAlias_inlinesQualifiedNameAndRemovesScope() throws Throwable {
+    Result result = compileJs(
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "  dom.createElement(1);\n" +
+        "});\n");
+    assertTrue(result.success);
+    String src = compiler.toSource();
+    assertTrue(src.contains("goog.dom.createElement"));
+    assertFalse(src.contains("goog.scope("));
+  }
+
+  // Covers transitive alias chain resolution (var g = goog; var dom = g.dom;).
+  @Test
+  public void testProcess_transitiveAlias_inlinesFullChain() throws Throwable {
+    Result result = compileJs(
+        "goog.scope(function() {\n" +
+        "  var g = goog;\n" +
+        "  var dom = g.dom;\n" +
+        "  dom.createElement(1);\n" +
+        "});\n");
+    assertTrue(result.success);
+    assertTrue(compiler.toSource().contains("goog.dom.createElement"));
+  }
+
+  // Covers multiple usages of the same alias all being replaced.
+  @Test
+  public void testProcess_multipleAliasUsages_allInlined() throws Throwable {
+    Result result = compileJs(
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "  dom.createElement(1);\n" +
+        "  dom.createElement(2);\n" +
+        "});\n");
+    assertTrue(result.success);
+    String src = compiler.toSource();
+    int first = src.indexOf("goog.dom.createElement");
+    int second = src.indexOf("goog.dom.createElement", first + 1);
+    assertTrue(first >= 0);
+    assertTrue(second > first);
+  }
+
+  // Covers validateScopeCall: parent not ExprResult -> GOOG_SCOPE_USED_IMPROPERLY.
+  @Test
+  public void testProcess_scopeCallAssignedToVar_reportsUsedImproperly() throws Throwable {
+    Result result = compileJs("var x = goog.scope(function() {});\n");
+    assertFalse(result.success);
+    JSError[] errors = compiler.getErrors();
+    assertEquals(1, errors.length);
+    assertEquals(ScopedAliases.GOOG_SCOPE_USED_IMPROPERLY, errors[0].getType());
+  }
+
+  // Covers childCount != 2 branch with zero arguments -> BAD_PARAMETERS.
+  @Test
+  public void testProcess_scopeCallWithZeroArgs_reportsBadParameters() throws Throwable {
+    Result result = compileJs("goog.scope();\n");
+    assertFalse(result.success);
+    assertEquals(ScopedAliases.GOOG_SCOPE_HAS_BAD_PARAMETERS, compiler.getErrors()[0].getType());
+  }
+
+  // Covers childCount != 2 branch with an extra argument -> BAD_PARAMETERS.
+  @Test
+  public void testProcess_scopeCallWithExtraArg_reportsBadParameters() throws Throwable {
+    Result result = compileJs("goog.scope(function() {}, 1);\n");
+    assertFalse(result.success);
+    assertEquals(ScopedAliases.GOOG_SCOPE_HAS_BAD_PARAMETERS, compiler.getErrors()[0].getType());
+  }
+
+  // Covers "anonymousFnNode is not a function" branch -> BAD_PARAMETERS.
+  @Test
+  public void testProcess_scopeArgNotFunction_reportsBadParameters() throws Throwable {
+    Result result = compileJs("goog.scope(1);\n");
+    assertFalse(result.success);
+    assertEquals(ScopedAliases.GOOG_SCOPE_HAS_BAD_PARAMETERS, compiler.getErrors()[0].getType());
+  }
+
+  // Covers "function has a name" branch -> BAD_PARAMETERS.
+  @Test
+  public void testProcess_scopeFunctionNamed_reportsBadParameters() throws Throwable {
+    Result result = compileJs("goog.scope(function foo() {});\n");
+    assertFalse(result.success);
+    assertEquals(ScopedAliases.GOOG_SCOPE_HAS_BAD_PARAMETERS, compiler.getErrors()[0].getType());
+  }
+
+  // Covers "function has parameters" branch and Token.LP skip (no extra NON_ALIAS_LOCAL error).
+  @Test
+  public void testProcess_scopeFunctionHasParameters_reportsOnlyBadParameters() throws Throwable {
+    Result result = compileJs("goog.scope(function(a) {});\n");
+    assertFalse(result.success);
+    JSError[] errors = compiler.getErrors();
+    assertEquals(1, errors.length);
+    assertEquals(ScopedAliases.GOOG_SCOPE_HAS_BAD_PARAMETERS, errors[0].getType());
+  }
+
+  // Covers both USED_IMPROPERLY and BAD_PARAMETERS firing together (independent ifs).
+  @Test
+  public void testProcess_scopeCallImproperAndBadParams_reportsBothErrors() throws Throwable {
+    Result result = compileJs("var x = goog.scope(function(a) {});\n");
+    assertFalse(result.success);
+    assertEquals(2, compiler.getErrorCount());
+  }
+
+  // Covers Token.THIS check at scope depth 2 -> GOOG_SCOPE_REFERENCES_THIS.
+  @Test
+  public void testProcess_referencesThis_reportsError() throws Throwable {
+    Result result = compileJs(
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "  this.foo();\n" +
+        "});\n");
+    assertFalse(result.success);
+    assertEquals(ScopedAliases.GOOG_SCOPE_REFERENCES_THIS, compiler.getErrors()[0].getType());
+  }
+
+  // Covers Token.RETURN check -> GOOG_SCOPE_USES_RETURN.
+  @Test
+  public void testProcess_usesReturn_reportsError() throws Throwable {
+    Result result = compileJs(
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "  return;\n" +
+        "});\n");
+    assertFalse(result.success);
+    assertEquals(ScopedAliases.GOOG_SCOPE_USES_RETURN, compiler.getErrors()[0].getType());
+  }
+
+  // Covers Token.THROW check -> GOOG_SCOPE_USES_THROW.
+  @Test
+  public void testProcess_usesThrow_reportsError() throws Throwable {
+    Result result = compileJs(
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "  throw 1;\n" +
+        "});\n");
+    assertFalse(result.success);
+    assertEquals(ScopedAliases.GOOG_SCOPE_USES_THROW, compiler.getErrors()[0].getType());
+  }
+
+  // Covers alias reassignment: aliasVar.getNode() != n -> GOOG_SCOPE_ALIAS_REDEFINED.
+  @Test
+  public void testProcess_aliasRedefined_reportsError() throws Throwable {
+    Result result = compileJs(
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "  dom = goog.events;\n" +
+        "});\n");
+    assertFalse(result.success);
+    assertEquals(ScopedAliases.GOOG_SCOPE_ALIAS_REDEFINED, compiler.getErrors()[0].getType());
+  }
+
+  // Covers findAliases' final else branch -> GOOG_SCOPE_NON_ALIAS_LOCAL.
+  @Test
+  public void testProcess_nonAliasLocalNumber_reportsError() throws Throwable {
+    Result result = compileJs(
+        "goog.scope(function() {\n" +
+        "  var x = 5;\n" +
+        "});\n");
+    assertFalse(result.success);
+    assertEquals(ScopedAliases.GOOG_SCOPE_NON_ALIAS_LOCAL, compiler.getErrors()[0].getType());
+  }
+
+  // Covers hotSwapScript guard: when there are errors, nothing is reported as success.
+  @Test
+  public void testProcess_errorPresentAlongsideValidAlias_onlyOneErrorReported() throws Throwable {
+    Result result = compileJs(
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "  var bad = 5;\n" +
+        "  dom.createElement(1);\n" +
+        "});\n");
+    assertFalse(result.success);
+    JSError[] errors = compiler.getErrors();
+    assertEquals(1, errors.length);
+    assertEquals(ScopedAliases.GOOG_SCOPE_NON_ALIAS_LOCAL, errors[0].getType());
+  }
+
+  // Covers shouldTraverse: functions outside goog.scope in global scope are not descended into.
+  @Test
+  public void testProcess_functionOutsideScopeNotTraversed_noErrorsForThisOrReturn() throws Throwable {
+    Result result = compileJs(
+        "function outside() { return this; }\n" +
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "  dom.createElement(1);\n" +
+        "});\n");
+    assertTrue(result.success);
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+
+
+  // Covers no-op path: no goog.scope calls at all.
+  @Test
+  public void testProcess_noScopeCalls_noOpSuccess() throws Throwable {
+    Result result = compileJs("var a = 1; a = a + 1;\n");
+    assertTrue(result.success);
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers exitScope clearing aliases map between independent goog.scope blocks.
+  @Test
+  public void testProcess_multipleScopeBlocks_eachAliasedIndependently() throws Throwable {
+    Result result = compileJs(
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "  dom.createElement(1);\n" +
+        "});\n" +
+        "goog.scope(function() {\n" +
+        "  var events = goog.events;\n" +
+        "  events.listen(1);\n" +
+        "});\n");
+    assertTrue(result.success);
+    String src = compiler.toSource();
+    assertTrue(src.contains("goog.dom.createElement"));
+    assertTrue(src.contains("goog.events.listen"));
+  }
+
+
+
+
+
+  // Control case: when goog.scope is the last statement, end position legitimately stays MAX_VALUE.
+  @Test
+  public void testGetSourceRegion_noFollowingStatement_endLineIsMaxValue() throws Throwable {
+    options.setAliasTransformationHandler(newCapturingHandler());
+    compileJs(
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "});\n");
+    assertEquals(1, captured.size());
+    assertEquals(Integer.MAX_VALUE, captured.get(0).getEndLine());
+  }
+
+  // Sanity: start position of the alias region matches the line of the goog.scope call itself.
+  @Test
+  public void testGetSourceRegion_startLineMatchesScopeCallLine() throws Throwable {
+    options.setAliasTransformationHandler(newCapturingHandler());
+    compileJs(
+        "\n" +
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "});\n");
+    assertEquals(1, captured.size());
+    assertEquals(2, captured.get(0).getStartLine());
+  }
+
+  // Covers findAliases' transformation.addAlias(name, qualifiedName) invocation.
+  @Test
+  public void testFindAliases_addAliasCalledWithNameAndQualifiedName() throws Throwable {
+    final List<String> names = new ArrayList<String>();
+    final List<String> defs = new ArrayList<String>();
+    options.setAliasTransformationHandler(new CompilerOptions.AliasTransformationHandler() {
+      @Override
+      public CompilerOptions.AliasTransformation logAliasTransformation(
+          String sourceFile, SourcePosition<CompilerOptions.AliasTransformation> position) {
+        return new CompilerOptions.AliasTransformation() {
+          @Override
+          public void addAlias(String alias, String definition) {
+            names.add(alias);
+            defs.add(definition);
+          }
+        };
+      }
+    });
+    compileJs(
+        "goog.scope(function() {\n" +
+        "  var dom = goog.dom;\n" +
+        "  dom.createElement(1);\n" +
+        "});\n");
+    assertEquals(1, names.size());
+    assertEquals("dom", names.get(0));
+    assertEquals("goog.dom", defs.get(0));
+  }
+}

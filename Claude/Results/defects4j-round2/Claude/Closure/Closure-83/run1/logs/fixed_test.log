@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-83-pa81exie/Closure-83f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - com.google.javascript.jscomp.CommandLineRunnerClaudeTest::testGetDefaultExterns_returnsMutableList
+  - com.google.javascript.jscomp.CommandLineRunnerClaudeTest::testGetDefaultExterns_returnsAllDefaultExterns
+  - com.google.javascript.jscomp.CommandLineRunnerClaudeTest::testCreateOptions_thirdPartyTrue_usesDefaultCodingConvention
+[exit 0]

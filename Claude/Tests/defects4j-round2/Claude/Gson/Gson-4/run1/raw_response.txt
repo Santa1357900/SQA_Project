@@ -1,0 +1,491 @@
+package com.google.gson.stream;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.io.StringReader;
+import java.io.EOFException;
+
+public class JsonReaderClaudeTest {
+
+  // Constructor contract: null Reader must throw NullPointerException
+  @Test
+  public void testConstructor_nullReader_throwsNPE() throws Throwable {
+    try {
+      new JsonReader(null);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // setLenient/isLenient default value and toggle
+  @Test
+  public void testSetLenient_defaultFalse_thenTrue() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[]"));
+    assertFalse(reader.isLenient());
+    reader.setLenient(true);
+    assertTrue(reader.isLenient());
+  }
+
+  // beginArray/endArray: empty array, hasNext false with 0 elements
+  @Test
+  public void testBeginEndArray_emptyArray() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[]"));
+    reader.beginArray();
+    assertFalse(reader.hasNext());
+    reader.endArray();
+  }
+
+  // beginArray: wrong token throws IllegalStateException
+  @Test
+  public void testBeginArray_wrongToken_throwsISE() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("{}"));
+    try {
+      reader.beginArray();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // endArray: wrong token (unconsumed element) throws IllegalStateException
+  @Test
+  public void testEndArray_wrongToken_throwsISE() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[1]"));
+    reader.beginArray();
+    try {
+      reader.endArray();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // beginObject/endObject: empty object, hasNext false with 0 members
+  @Test
+  public void testBeginEndObject_emptyObject() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("{}"));
+    reader.beginObject();
+    assertFalse(reader.hasNext());
+    reader.endObject();
+  }
+
+  // beginObject: wrong token throws IllegalStateException
+  @Test
+  public void testBeginObject_wrongToken_throwsISE() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[]"));
+    try {
+      reader.beginObject();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // hasNext: true with remaining elements, false after last element consumed
+  @Test
+  public void testHasNext_arrayWithElements() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[1,2]"));
+    reader.beginArray();
+    assertTrue(reader.hasNext());
+    reader.nextInt();
+    assertTrue(reader.hasNext());
+    reader.nextInt();
+    assertFalse(reader.hasNext());
+    reader.endArray();
+  }
+
+  // peek(): covers BEGIN_ARRAY, BEGIN_OBJECT, END_OBJECT, END_ARRAY branches
+  @Test
+  public void testPeek_beginEndArrayObject() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[{}]"));
+    assertEquals(JsonToken.BEGIN_ARRAY, reader.peek());
+    reader.beginArray();
+    assertEquals(JsonToken.BEGIN_OBJECT, reader.peek());
+    reader.beginObject();
+    assertEquals(JsonToken.END_OBJECT, reader.peek());
+    reader.endObject();
+    assertEquals(JsonToken.END_ARRAY, reader.peek());
+    reader.endArray();
+  }
+
+  // peek(): NAME branch for double-quoted name
+  @Test
+  public void testPeek_name() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("{\"key\":1}"));
+    reader.beginObject();
+    assertEquals(JsonToken.NAME, reader.peek());
+    assertEquals("key", reader.nextName());
+  }
+
+  // peek(): BOOLEAN branch for both true and false
+  @Test
+  public void testPeek_booleanTrueFalse() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[true,false]"));
+    reader.beginArray();
+    assertEquals(JsonToken.BOOLEAN, reader.peek());
+    assertTrue(reader.nextBoolean());
+    assertEquals(JsonToken.BOOLEAN, reader.peek());
+    assertFalse(reader.nextBoolean());
+    reader.endArray();
+  }
+
+  // peek(): NULL branch
+  @Test
+  public void testPeek_null() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[null]"));
+    reader.beginArray();
+    assertEquals(JsonToken.NULL, reader.peek());
+    reader.nextNull();
+    reader.endArray();
+  }
+
+  // peek(): NUMBER branch for long literal
+  @Test
+  public void testPeek_number() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[42]"));
+    reader.beginArray();
+    assertEquals(JsonToken.NUMBER, reader.peek());
+    assertEquals(42, reader.nextInt());
+    reader.endArray();
+  }
+
+  // nextName(): PEEKED_DOUBLE_QUOTED_NAME branch
+  @Test
+  public void testNextName_doubleQuoted() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("{\"abc\":1}"));
+    reader.beginObject();
+    assertEquals("abc", reader.nextName());
+  }
+
+  // nextName(): PEEKED_SINGLE_QUOTED_NAME branch, lenient mode required
+  @Test
+  public void testNextName_singleQuotedLenient() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("{'abc':1}"));
+    reader.setLenient(true);
+    reader.beginObject();
+    assertEquals("abc", reader.nextName());
+  }
+
+  // nextName(): PEEKED_UNQUOTED_NAME branch, lenient mode required
+  @Test
+  public void testNextName_unquotedLenient() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("{abc:1}"));
+    reader.setLenient(true);
+    reader.beginObject();
+    assertEquals("abc", reader.nextName());
+  }
+
+  // nextName(): wrong token throws IllegalStateException
+  @Test
+  public void testNextName_wrongToken_throwsISE() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("{\"abc\":1}"));
+    reader.beginObject();
+    reader.nextName();
+    try {
+      reader.nextName();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // nextString(): quoted string with unicode escape sequence
+  @Test
+  public void testNextString_unicodeEscape() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[\"\\u0041\"]"));
+    reader.beginArray();
+    assertEquals("A", reader.nextString());
+    reader.endArray();
+  }
+
+  // nextString(): wrong token throws IllegalStateException
+  @Test
+  public void testNextString_wrongToken_throwsISE() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[true]"));
+    reader.beginArray();
+    try {
+      reader.nextString();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // nextBoolean(): wrong token throws IllegalStateException
+  @Test
+  public void testNextBoolean_wrongToken_throwsISE() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[1]"));
+    reader.beginArray();
+    try {
+      reader.nextBoolean();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // nextDouble(): basic literal number
+  @Test
+  public void testNextDouble_basic() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[1.5]"));
+    reader.beginArray();
+    assertEquals(1.5, reader.nextDouble(), 1e-9);
+    reader.endArray();
+  }
+
+  // nextDouble(): strict mode rejects NaN per RFC, throws MalformedJsonException
+  @Test
+  public void testNextDouble_nanStrict_throwsMalformedJsonException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[\"NaN\"]"));
+    reader.beginArray();
+    try {
+      reader.nextDouble();
+      fail("expected MalformedJsonException");
+    } catch (MalformedJsonException expected) {
+    }
+  }
+
+  // nextDouble(): lenient mode permits Infinity literal
+  @Test
+  public void testNextDouble_infinityLenient_ok() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[Infinity]"));
+    reader.setLenient(true);
+    reader.beginArray();
+    double result = reader.nextDouble();
+    assertTrue(Double.isInfinite(result));
+    reader.endArray();
+  }
+
+  // nextDouble(): wrong token throws IllegalStateException
+  @Test
+  public void testNextDouble_wrongToken_throwsISE() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[null]"));
+    reader.beginArray();
+    try {
+      reader.nextDouble();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // nextLong(): basic literal long
+  @Test
+  public void testNextLong_basic() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[123456789012]"));
+    reader.beginArray();
+    assertEquals(123456789012L, reader.nextLong());
+    reader.endArray();
+  }
+
+  // nextLong(): exact Long.MAX_VALUE boundary
+  @Test
+  public void testNextLong_maxValue() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[9223372036854775807]"));
+    reader.beginArray();
+    assertEquals(Long.MAX_VALUE, reader.nextLong());
+    reader.endArray();
+  }
+
+  // nextLong(): exact Long.MIN_VALUE boundary (negative overflow trick)
+  @Test
+  public void testNextLong_minValue() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[-9223372036854775808]"));
+    reader.beginArray();
+    assertEquals(Long.MIN_VALUE, reader.nextLong());
+    reader.endArray();
+  }
+
+  // nextLong(): number too large for long falls back to double parse and must detect precision loss
+  @Test
+  public void testNextLong_hugeNumberOverflow_throwsNumberFormatException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[99999999999999999999]"));
+    reader.beginArray();
+    try {
+      reader.nextLong();
+      fail("expected NumberFormatException");
+    } catch (NumberFormatException expected) {
+    }
+  }
+
+  // nextInt(): basic literal int
+  @Test
+  public void testNextInt_basic() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[42]"));
+    reader.beginArray();
+    assertEquals(42, reader.nextInt());
+    reader.endArray();
+  }
+
+  // nextInt(): value fits in long but not int must throw NumberFormatException
+  @Test
+  public void testNextInt_overflow_throwsNumberFormatException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[9999999999]"));
+    reader.beginArray();
+    try {
+      reader.nextInt();
+      fail("expected NumberFormatException");
+    } catch (NumberFormatException expected) {
+    }
+  }
+
+  // nextInt(): quoted string parsed via Integer.parseInt fallback
+  @Test
+  public void testNextInt_fromQuotedString() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[\"7\"]"));
+    reader.beginArray();
+    assertEquals(7, reader.nextInt());
+    reader.endArray();
+  }
+
+  // nextInt(): wrong token throws IllegalStateException
+  @Test
+  public void testNextInt_wrongToken_throwsISE() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[null]"));
+    reader.beginArray();
+    try {
+      reader.nextInt();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // close(): subsequent operations must fail because scope becomes CLOSED
+  @Test
+  public void testClose_thenPeek_throwsISE() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[]"));
+    reader.close();
+    try {
+      reader.peek();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // skipValue(): recursively skips nested object/array, leaving the sibling readable
+  @Test
+  public void testSkipValue_skipsNestedObject() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[{\"a\":[1,2,{\"b\":3}]},2]"));
+    reader.beginArray();
+    reader.skipValue();
+    assertEquals(2, reader.nextInt());
+    reader.endArray();
+  }
+
+  // getPath(): path index advances after consuming an array element
+  @Test
+  public void testGetPath_array() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[1,2]"));
+    reader.beginArray();
+    reader.nextInt();
+    assertEquals("$[1]", reader.getPath());
+  }
+
+  // strict mode: multiple top-level values not permitted
+  @Test
+  public void testStrict_multipleTopLevelValues_throwsMalformedJsonException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[][]"));
+    reader.beginArray();
+    reader.endArray();
+    try {
+      reader.peek();
+      fail("expected MalformedJsonException");
+    } catch (MalformedJsonException expected) {
+    }
+  }
+
+  // strict mode: top-level value must be object or array
+  @Test
+  public void testStrict_topLevelString_throwsMalformedJsonException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"hello\""));
+    try {
+      reader.nextString();
+      fail("expected MalformedJsonException");
+    } catch (MalformedJsonException expected) {
+    }
+  }
+
+  // lenient mode: top-level scalar value is permitted
+  @Test
+  public void testLenient_topLevelString_ok() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"hello\""));
+    reader.setLenient(true);
+    assertEquals("hello", reader.nextString());
+  }
+
+  // lenient mode: C-style comments are skipped as whitespace
+  @Test
+  public void testLenient_cStyleComment_skipped() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[1 /* comment */, 2]"));
+    reader.setLenient(true);
+    reader.beginArray();
+    assertEquals(1, reader.nextInt());
+    assertEquals(2, reader.nextInt());
+    reader.endArray();
+  }
+
+  // strict mode: comments are not permitted, throws MalformedJsonException
+  @Test
+  public void testStrict_comment_throwsMalformedJsonException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[// comment\n1]"));
+    reader.beginArray();
+    try {
+      reader.nextInt();
+      fail("expected MalformedJsonException");
+    } catch (MalformedJsonException expected) {
+    }
+  }
+
+  // incomplete stream at start of value throws EOFException
+  @Test
+  public void testBeginArray_incompleteStream_throwsEOFException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader(""));
+    try {
+      reader.beginArray();
+      fail("expected EOFException");
+    } catch (EOFException expected) {
+    }
+  }
+
+  // unterminated array (missing comma/bracket) throws MalformedJsonException
+  @Test
+  public void testHasNext_unterminatedArray_throwsMalformedJsonException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[1 2]"));
+    reader.beginArray();
+    reader.nextInt();
+    try {
+      reader.hasNext();
+      fail("expected MalformedJsonException");
+    } catch (MalformedJsonException expected) {
+    }
+  }
+
+  // unterminated object (missing comma) throws MalformedJsonException
+  @Test
+  public void testNextName_unterminatedObject_throwsMalformedJsonException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("{\"a\":1 \"b\":2}"));
+    reader.beginObject();
+    reader.nextName();
+    reader.nextInt();
+    try {
+      reader.nextName();
+      fail("expected MalformedJsonException");
+    } catch (MalformedJsonException expected) {
+    }
+  }
+
+  // lenient mode: a number with a disallowed leading zero is read as an unquoted string
+  @Test
+  public void testLenient_leadingZeroNumber_readAsUnquotedString() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[01]"));
+    reader.setLenient(true);
+    reader.beginArray();
+    assertEquals(JsonToken.STRING, reader.peek());
+    assertEquals("01", reader.nextString());
+    reader.endArray();
+  }
+
+  // "0" by itself is a valid JSON number (no leading-zero violation)
+  @Test
+  public void testPeek_zeroIsValidNumber() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[0]"));
+    reader.beginArray();
+    assertEquals(JsonToken.NUMBER, reader.peek());
+    assertEquals(0, reader.nextInt());
+    reader.endArray();
+  }
+}
