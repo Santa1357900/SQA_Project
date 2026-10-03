@@ -1,0 +1,210 @@
+$ java -Xmx768m -Xss4m -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/build/classes:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/ant_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/args4j_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/google_common_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/hamcrest-core-1.1.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/junit.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/libtrunk_rhino_parser_jarjared.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/protobuf_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/build/test AcoOracle /home/pheerapat/aco-work/jobs/Closure-140-r1/specs.tsv /home/pheerapat/aco-work/jobs/Closure-140-r1/expected1.txt 5000
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.jscomp.mozilla.rhino.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.jscomp.mozilla.rhino.TokenStream.<init>(TokenStream.java:85)
+	at com.google.javascript.jscomp.mozilla.rhino.Parser.parse(Parser.java:504)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:105)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:89)
+	at com.google.javascript.jscomp.JsAst.createAst(JsAst.java:78)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:51)
+	at com.google.javascript.jscomp.CompilerInput.getAstRoot(CompilerInput.java:86)
+	at com.google.javascript.jscomp.Compiler.parseTestCode(Compiler.java:1088)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:57:58 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:59 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing #: Compilation produced 1 syntax errors. (##1)
+Oct 03, 2026 11:57:59 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:59 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:57:59 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:59 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:59 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:59 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:59 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:59 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 	: Compilation produced 1 syntax errors. (	#1)
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing false: Compilation produced 1 syntax errors. (false#1)
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.LoggerErrorManager println
+WARNING: -0.0:1: WARNING - accessing name abc in externs has no effect
+
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 0 error(s), 1 warning(s)
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing foo.bar: Compilation produced 1 syntax errors. (foo.bar#1)
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: foo.bar:1: ERROR - Parse error. illegal character
+AB
+ ^
+
+Oct 03, 2026 11:58:00 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+[exit 0]
+$ java -Xmx768m -Xss4m -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/build/classes:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/ant_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/args4j_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/google_common_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/hamcrest-core-1.1.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/junit.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/libtrunk_rhino_parser_jarjared.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/lib/protobuf_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/f/build/test AcoOracle /home/pheerapat/aco-work/jobs/Closure-140-r1/specs.tsv /home/pheerapat/aco-work/jobs/Closure-140-r1/expected2.txt 5000
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.jscomp.mozilla.rhino.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.jscomp.mozilla.rhino.TokenStream.<init>(TokenStream.java:85)
+	at com.google.javascript.jscomp.mozilla.rhino.Parser.parse(Parser.java:504)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:105)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:89)
+	at com.google.javascript.jscomp.JsAst.createAst(JsAst.java:78)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:51)
+	at com.google.javascript.jscomp.CompilerInput.getAstRoot(CompilerInput.java:86)
+	at com.google.javascript.jscomp.Compiler.parseTestCode(Compiler.java:1088)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:58:02 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:58:02 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing #: Compilation produced 1 syntax errors. (##1)
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 	: Compilation produced 1 syntax errors. (	#1)
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing false: Compilation produced 1 syntax errors. (false#1)
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:58:03 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.LoggerErrorManager println
+WARNING: -0.0:1: WARNING - accessing name abc in externs has no effect
+
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 0 error(s), 1 warning(s)
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing foo.bar: Compilation produced 1 syntax errors. (foo.bar#1)
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: foo.bar:1: ERROR - Parse error. illegal character
+AB
+ ^
+
+Oct 03, 2026 11:58:04 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+[exit 0]

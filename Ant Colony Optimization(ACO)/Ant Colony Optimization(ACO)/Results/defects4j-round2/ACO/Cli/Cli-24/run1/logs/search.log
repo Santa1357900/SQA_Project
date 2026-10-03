@@ -1,0 +1,482 @@
+$ java -Xmx768m -Xss4m -javaagent:/home/pheerapat/aco-work/tool/jacocoagent.jar=output=none,includes=org.apache.commons.cli.HelpFormatter:org.apache.commons.cli.HelpFormatter$* -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/tool/jacococore.jar:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit/junit/3.8.1/junit-3.8.1.jar:/home/pheerapat/aco-work/jobs/Cli-24-r1/b/target/classes:/home/pheerapat/aco-work/jobs/Cli-24-r1/b/target/test-classes AcoSearch /home/pheerapat/aco-work/jobs/Cli-24-r1/aco.properties
+usage:
+       
+
+/a/b
+usage:  |
+
+usage: a=b
+
+--
+usage: 2020-01-01
+1.5
+
+12:30:00
+usage:
+       
+<a>b</a>
+
+12:30:00
+usage:
+       
+%s
+
+/a/b
+usage:  |
+
+/a/b
+usage: a"b
+[
+
+false
+usage:
+       
+
+1e5
+usage: 2020-01-01
+
+usage: a,b
+ |
+
+abc
+usage: usage:
+
+usage: 2020-01-01
+
+usage: 2020-01-01
+
+usage: 2020-01-01
+
+usage: 2020-01-01
+
+usage: 2020-01-01
+
+usage: 2020-01-01
+
+usage: 0
+
+usage: 2020-01-01
+
+usage: [
+abc
+
+ <
+usage: abc
+
+usage: true
+
+usage: -
+
+usage: 0
+
+usage:
+
+usage: cmdLineSyntax not provided
+
+usage: >
+
+usage: cmdLineSyntax not provided
+
+usage:
+
+usage: --
+
+usage:
+
+usage: 1
+
+usage:
+
+usage:
+
+usage:
+
+usage:
+
+usage:
+
+usage:
+
+usage:
+
+usage: <a>b</a>
+
+usage:
+
+usage: 1e5
+
+usage: a,b
+
+usage:
+
+usage:
+
+usage:
+
+usage:
+
+usage: 0x1F
+0
+
+a b c
+usage:
+
+usage:
+
+usage:
+
+usage:
+
+usage:
+
+usage:
+
+usage: a
+
+usage:
+       
+
+usage:
+
+usage: a"b
+
+usage: abc
+
+usage:
+       
+
+usage:
+
+usage:
+
+usage:
+
+usage: [
+
+usage: 12:30:00
+a
+
+a=b
+usage: 12:30:00
+
+a=b
+usage: 12:30:00
+
+usage:
+a
+
+usage:
+/a/b
+
+a=b
+usage: 12:30:00
+a
+
+a,b
+usage: 12:30:00
+a
+
+a=b
+usage: 12:30:00
+a"b
+
+usage: -1
+1e5
+
+a=b
+usage: 12:30:00
+%s
+
+a=b
+usage:
+a
+
+a=b
+usage: 12:30:00
+usage:
+
+a
+usage: 1
+
+a=b
+usage: false
+a
+
+-0.0
+usage:
+1
+
+>
+usage: abc
+a
+
+a=b
+usage: a"b
+a
+
+-0.0
+usage: 12:30:00
+a
+
+[
+usage: 12:30:00
+
+usage: 12:30:00
+
+foo.bar
+usage: 2020-01-01
+[1,2]
+
+ |
+usage: false
+null
+
+{"a":1}
+usage: a=b
+
+usage: >
+[1,2]
+
+/a/b
+usage: %s
+arg
+
+2020-01-01
+usage: a
+ <
+
+%s
+usage:
+       
+a=b
+
+-0.0
+usage:
+]
+
+foo.bar
+usage: é
+>
+
+12:30:00
+usage: usage:
+<a>b</a>
+
+é
+usage: [1,2]
+
+[1,2]
+usage:
+
+usage: 1e5
+1.5
+
+null
+usage: -0.0
+%s
+
+-1
+usage: true
+
+usage: 2020-01-01
+
+usage: cmdLineSyntax not provided
+
+#
+usage: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+usage: arg
+
+usage: arg
+%s
+
+line.separator
+usage: >
+
+usage: arg
+
+usage:
+       
+
+true
+usage: ABC
+foo.bar
+
+usage: a b c
+
+usage: a"b
+0x1F
+
+12:30:00
+usage: 123
+
+a
+usage:  |
+
+usage: line.separator
+
+>
+usage: null
+1
+
+usage: 1.5
+
+usage: a,b
+-1
+
+{"a":1}
+usage: a b c
+-0.0
+
+arg
+usage:  <
+[1,2]
+
+foo.bar
+usage: false
+
+<a>b</a>
+usage:
+       
+
+usage: a"b
+
+usage: >
+
+usage: #
+
+usage: {"a":1}
+ABC
+
+[1,2]
+usage: é
+2020-01-01
+
+a,b
+usage: 0
+]
+
+-
+usage:  |
+/a/b
+
+usage:
+       
+
+usage: foo.bar
+
+usage:
+a
+
+-0.0
+usage: cmdLineSyntax not provided
+
+usage: a
+2020-01-01
+
+arg
+usage: -
+
+0x1F
+usage: a"b
+
+usage:
+       
+#
+
+usage: <a>b</a>
+1.5
+
+foo.bar
+usage: <a>b</a>
+
+usage: #
+[1,2]
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+usage: {"a":1}
+a,b
+
+abc
+usage:
+       
+[
+
+2020-01-01
+usage: 12:30:00
+
+usage: é
+{"a":1}
+
+-0.0
+usage:
+
+usage: <a>b</a>
+
+usage: -1
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+é
+usage:
+
+usage: arg
+
+usage:
+       
+
+usage: 0x1F
+foo.bar
+
+usage: ABC
+abc
+
+[
+usage: {"a":1}
+a
+
+false
+usage: %s
+
+usage: 0
+-
+
+-1
+usage:
+       
+
+usage:
+       
+
+usage: >
+
+true
+usage:
+
+usage: 1e5
+>
+
+0x1F
+usage: %s
+
+usage:
+       
+
+usage: a,b
+
+[1,2]
+usage: 1
+true
+
+a=b
+usage: a=b
+1
+
+<a>b</a>
+usage:
+arg
+
+usage:  |
+a b c
+
+a=b
+[exit 0]

@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Mockito-13-r1/Mockito-13b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 40
+     Lines covered: 20
+  Conditions total: 10
+Conditions covered: 1
+     Line coverage: 50.0%
+Condition coverage: 10.0%
+[exit 0]

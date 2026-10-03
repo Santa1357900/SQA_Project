@@ -1,0 +1,6 @@
+test0001_setCostRelativeTolerance(acogen.AcoGeneratedTest)
+test0002_setOrthoTolerance(acogen.AcoGeneratedTest)
+test0003_setParRelativeTolerance(acogen.AcoGeneratedTest)
+test0004_doOptimize(acogen.AcoGeneratedTest)
+test0005_setInitialStepBoundFactor(acogen.AcoGeneratedTest)
+test0006_init(acogen.AcoGeneratedTest)

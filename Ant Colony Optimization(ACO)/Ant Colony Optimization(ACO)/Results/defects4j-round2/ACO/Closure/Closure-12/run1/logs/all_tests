@@ -1,0 +1,8 @@
+test0001_getUses(acogen.AcoGeneratedTest)
+test0002_init(acogen.AcoGeneratedTest)
+test0003_init(acogen.AcoGeneratedTest)
+test0004_createInitialEstimateLattice(acogen.AcoGeneratedTest)
+test0005_createEntryLattice(acogen.AcoGeneratedTest)
+test0006_flowThrough(acogen.AcoGeneratedTest)
+test0007_isForward(acogen.AcoGeneratedTest)
+test0008_init(acogen.AcoGeneratedTest)

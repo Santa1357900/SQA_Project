@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Jsoup-66-r1/Jsoup-66b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 390
+     Lines covered: 280
+  Conditions total: 204
+Conditions covered: 84
+     Line coverage: 71.8%
+Condition coverage: 41.2%
+[exit 0]

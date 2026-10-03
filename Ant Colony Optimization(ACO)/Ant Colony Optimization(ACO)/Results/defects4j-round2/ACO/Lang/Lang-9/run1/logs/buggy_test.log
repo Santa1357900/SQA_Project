@@ -1,0 +1,21 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Lang-9-r1/Lang-9b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 15
+  - acogen.AcoGeneratedTest::test0029_adjustYear
+  - acogen.AcoGeneratedTest::test0031_isNextNumber
+  - acogen.AcoGeneratedTest::test0035_init
+  - acogen.AcoGeneratedTest::test0036_getTimeZone
+  - acogen.AcoGeneratedTest::test0037_adjustYear
+  - acogen.AcoGeneratedTest::test0039_toString
+  - acogen.AcoGeneratedTest::test0045_toString
+  - acogen.AcoGeneratedTest::test0048_adjustYear
+  - acogen.AcoGeneratedTest::test0049_parseObject
+  - acogen.AcoGeneratedTest::test0053_getPattern
+  - acogen.AcoGeneratedTest::test0056_getPattern
+  - acogen.AcoGeneratedTest::test0061_getTimeZone
+  - acogen.AcoGeneratedTest::test0062_getLocale
+  - acogen.AcoGeneratedTest::test0067_hashCode
+  - acogen.AcoGeneratedTest::test0072_init
+[exit 0]

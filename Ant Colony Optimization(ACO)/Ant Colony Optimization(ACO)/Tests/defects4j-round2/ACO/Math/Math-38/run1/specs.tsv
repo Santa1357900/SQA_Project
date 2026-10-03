@@ -1,0 +1,3 @@
+org.apache.commons.math.optimization.direct.BOBYQAOptimizer.doOptimize()	m(org.apache.commons.math.optimization.direct.BOBYQAOptimizer,doOptimize,,n(org.apache.commons.math.optimization.direct.BOBYQAOptimizer,int,i:507))	E:java.lang.NullPointerException	2
+org.apache.commons.math.optimization.direct.BOBYQAOptimizer.<init>(int)	n(org.apache.commons.math.optimization.direct.BOBYQAOptimizer,int,i:-106)	R:org.apache.commons.math.optimization.direct.BOBYQAOptimizer	0
+org.apache.commons.math.optimization.direct.BOBYQAOptimizer.<init>(int,double,double)	n(org.apache.commons.math.optimization.direct.BOBYQAOptimizer,int|double|double,i:1,d:4591870180066957722,d:4643000109586448384)	R:org.apache.commons.math.optimization.direct.BOBYQAOptimizer	0

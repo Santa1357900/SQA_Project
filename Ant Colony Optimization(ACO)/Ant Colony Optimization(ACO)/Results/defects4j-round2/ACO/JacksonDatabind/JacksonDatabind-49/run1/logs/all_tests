@@ -1,0 +1,4 @@
+test0001_writeAsField(acogen.AcoGeneratedTest)
+test0002_generateId(acogen.AcoGeneratedTest)
+test0003_writeAsId(acogen.AcoGeneratedTest)
+test0004_init(acogen.AcoGeneratedTest)

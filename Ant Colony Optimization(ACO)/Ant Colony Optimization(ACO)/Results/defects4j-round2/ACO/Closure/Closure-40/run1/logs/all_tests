@@ -1,0 +1,8 @@
+test0001_removeUnreferenced(acogen.AcoGeneratedTest)
+test0002_getHtmlReport(acogen.AcoGeneratedTest)
+test0003_process(acogen.AcoGeneratedTest)
+test0004_init(acogen.AcoGeneratedTest)
+test0005_process(acogen.AcoGeneratedTest)
+test0006_init(acogen.AcoGeneratedTest)
+test0007_process(acogen.AcoGeneratedTest)
+test0008_process(acogen.AcoGeneratedTest)

@@ -1,0 +1,15 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Gson-4-r1/Gson-4b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 9
+  - acogen.AcoGeneratedTest::test0024_value
+  - acogen.AcoGeneratedTest::test0033_jsonValue
+  - acogen.AcoGeneratedTest::test0034_value
+  - acogen.AcoGeneratedTest::test0066_nullValue
+  - acogen.AcoGeneratedTest::test0090_value
+  - acogen.AcoGeneratedTest::test0097_value
+  - acogen.AcoGeneratedTest::test0103_value
+  - acogen.AcoGeneratedTest::test0104_value
+  - acogen.AcoGeneratedTest::test0113_value
+[exit 0]

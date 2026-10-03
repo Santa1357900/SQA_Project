@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Cli-3-r1/Cli-3b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - acogen.AcoGeneratedTest::test0015_createNumber
+  - acogen.AcoGeneratedTest::test0025_createNumber
+  - acogen.AcoGeneratedTest::test0028_createNumber
+  - acogen.AcoGeneratedTest::test0029_createNumber
+[exit 0]

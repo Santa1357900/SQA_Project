@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Closure-77-r1/Closure-77b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 568
+     Lines covered: 106
+  Conditions total: 434
+Conditions covered: 51
+     Line coverage: 18.7%
+Condition coverage: 11.8%
+[exit 0]

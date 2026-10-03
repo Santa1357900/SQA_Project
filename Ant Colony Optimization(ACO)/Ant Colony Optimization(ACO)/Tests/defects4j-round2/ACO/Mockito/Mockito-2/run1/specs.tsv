@@ -1,0 +1,4 @@
+org.mockito.internal.util.Timer.isCounting()	m(org.mockito.internal.util.Timer,isCounting,,n(org.mockito.internal.util.Timer,long,j:1))	R:Boolean:false|S:org.mockito.internal.util.Timer	6
+org.mockito.internal.util.Timer.<init>(long)	n(org.mockito.internal.util.Timer,long,j:-9223372036854775808)	R:org.mockito.internal.util.Timer	0
+org.mockito.internal.util.Timer.start()	m(org.mockito.internal.util.Timer,start,,n(org.mockito.internal.util.Timer,long,j:-1))	R:null|S:org.mockito.internal.util.Timer	1
+org.mockito.internal.util.Timer.isCounting()	m(org.mockito.internal.util.Timer,isCounting,,n(org.mockito.internal.util.Timer,long,j:9223372036854775807))	R:Boolean:true|S:org.mockito.internal.util.Timer	1

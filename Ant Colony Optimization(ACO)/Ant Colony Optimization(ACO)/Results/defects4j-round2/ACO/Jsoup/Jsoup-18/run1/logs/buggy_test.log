@@ -1,0 +1,18 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Jsoup-18-r1/Jsoup-18b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 12
+  - acogen.AcoGeneratedTest::test0019_consumeTo
+  - acogen.AcoGeneratedTest::test0021_consumeTo
+  - acogen.AcoGeneratedTest::test0039_consumeToEnd
+  - acogen.AcoGeneratedTest::test0041_consumeTo
+  - acogen.AcoGeneratedTest::test0051_consumeTo
+  - acogen.AcoGeneratedTest::test0076_consumeTo
+  - acogen.AcoGeneratedTest::test0102_consumeToEnd
+  - acogen.AcoGeneratedTest::test0129_consumeTo
+  - acogen.AcoGeneratedTest::test0131_consumeTo
+  - acogen.AcoGeneratedTest::test0132_consumeTo
+  - acogen.AcoGeneratedTest::test0144_consumeToEnd
+  - acogen.AcoGeneratedTest::test0146_consumeToEnd
+[exit 0]

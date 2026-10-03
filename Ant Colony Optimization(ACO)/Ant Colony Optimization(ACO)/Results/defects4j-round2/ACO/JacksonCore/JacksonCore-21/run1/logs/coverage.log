@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/JacksonCore-21-r1/JacksonCore-21b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 385
+     Lines covered: 71
+  Conditions total: 269
+Conditions covered: 20
+     Line coverage: 18.4%
+Condition coverage: 7.4%
+[exit 0]

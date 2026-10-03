@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Lang-30-r1/Lang-30b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - acogen.AcoGeneratedTest::test0101_containsAny
+  - acogen.AcoGeneratedTest::test0127_containsAny
+  - acogen.AcoGeneratedTest::test0219_containsAny
+  - acogen.AcoGeneratedTest::test0287_containsAny
+  - acogen.AcoGeneratedTest::test0291_containsAny
+[exit 0]

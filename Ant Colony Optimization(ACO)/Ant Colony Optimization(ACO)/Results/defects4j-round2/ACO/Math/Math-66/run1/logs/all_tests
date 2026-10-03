@@ -1,0 +1,4 @@
+test0001_optimize(acogen.AcoGeneratedTest)
+test0002_doOptimize(acogen.AcoGeneratedTest)
+test0003_optimize(acogen.AcoGeneratedTest)
+test0004_init(acogen.AcoGeneratedTest)

@@ -1,0 +1,16 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/JacksonDatabind-75-r1/JacksonDatabind-75b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 10
+  - acogen.AcoGeneratedTest::test0006_isShapeWrittenUsingIndex
+  - acogen.AcoGeneratedTest::test0010_isShapeWrittenUsingIndex
+  - acogen.AcoGeneratedTest::test0014_isShapeWrittenUsingIndex
+  - acogen.AcoGeneratedTest::test0015_isShapeWrittenUsingIndex
+  - acogen.AcoGeneratedTest::test0017_isShapeWrittenUsingIndex
+  - acogen.AcoGeneratedTest::test0018_isShapeWrittenUsingIndex
+  - acogen.AcoGeneratedTest::test0020_isShapeWrittenUsingIndex
+  - acogen.AcoGeneratedTest::test0021_isShapeWrittenUsingIndex
+  - acogen.AcoGeneratedTest::test0023_isShapeWrittenUsingIndex
+  - acogen.AcoGeneratedTest::test0028_isShapeWrittenUsingIndex
+[exit 0]

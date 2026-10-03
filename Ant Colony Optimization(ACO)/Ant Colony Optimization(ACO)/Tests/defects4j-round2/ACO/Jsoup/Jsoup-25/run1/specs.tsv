@@ -1,0 +1,81 @@
+org.jsoup.parser.Tag.isData()	m(org.jsoup.parser.Tag,isData,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:003100320033))	R:Boolean:false|S:org.jsoup.parser.Tag{123}	35
+org.jsoup.parser.Tag.isEmpty()	m(org.jsoup.parser.Tag,isEmpty,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,_))	E:java.lang.IllegalArgumentException:Object must not be null	0
+org.jsoup.parser.Tag.isInline()	m(org.jsoup.parser.Tag,isInline,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00680033))	R:Boolean:false|S:org.jsoup.parser.Tag{h3}	3
+org.jsoup.parser.Tag.isKnownTag(java.lang.String)	m(org.jsoup.parser.Tag,isKnownTag,java.lang.String,_,t:0009)	R:Boolean:false	1
+org.jsoup.parser.Tag.isEmpty()	m(org.jsoup.parser.Tag,isEmpty,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0061003d0062))	R:Boolean:false|S:org.jsoup.parser.Tag{a=b}	1
+org.jsoup.parser.Tag.toString()	m(org.jsoup.parser.Tag,toString,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0062006f00640079))	R:"body"|S:org.jsoup.parser.Tag{body}	0
+org.jsoup.parser.Tag.hashCode()	m(org.jsoup.parser.Tag,hashCode,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:004100420043))	R:Integer:2145262045|S:org.jsoup.parser.Tag{abc}	8
+org.jsoup.parser.Tag.isData()	m(org.jsoup.parser.Tag,isData,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,_))	E:java.lang.IllegalArgumentException:Object must not be null	0
+org.jsoup.parser.Tag.canContainBlock()	m(org.jsoup.parser.Tag,canContainBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:004100420043))	R:Boolean:true|S:org.jsoup.parser.Tag{abc}	1
+org.jsoup.parser.Tag.formatAsBlock()	m(org.jsoup.parser.Tag,formatAsBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006100220062))	R:Boolean:true|S:org.jsoup.parser.Tag{a"b}	1
+org.jsoup.parser.Tag.valueOf(java.lang.String)	m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00680074006d006c)	R:org.jsoup.parser.Tag{html}	0
+org.jsoup.parser.Tag.hashCode()	m(org.jsoup.parser.Tag,hashCode,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0030))	R:Integer:2080099919|S:org.jsoup.parser.Tag{0}	0
+org.jsoup.parser.Tag.hashCode()	m(org.jsoup.parser.Tag,hashCode,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00680035))	R:Integer:-228578892|S:org.jsoup.parser.Tag{h5}	2
+org.jsoup.parser.Tag.valueOf(java.lang.String)	m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0009)	E:java.lang.IllegalArgumentException:String must not be empty	0
+org.jsoup.parser.Tag.valueOf(java.lang.String)	m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:003c0061003e0062003c002f0061003e)	R:org.jsoup.parser.Tag{<a>b</a>}	0
+org.jsoup.parser.Tag.valueOf(java.lang.String)	m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0066006f006f007400650072)	R:org.jsoup.parser.Tag{footer}	0
+org.jsoup.parser.Tag.equals(java.lang.Object)	m(org.jsoup.parser.Tag,equals,java.lang.Object,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0062006f00640079),_)	R:Boolean:false|S:org.jsoup.parser.Tag{body}	1
+org.jsoup.parser.Tag.setSelfClosing()	m(org.jsoup.parser.Tag,setSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:003100320033))	R:org.jsoup.parser.Tag{123}|S:org.jsoup.parser.Tag{123}	1
+org.jsoup.parser.Tag.isEmpty()	m(org.jsoup.parser.Tag,isEmpty,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00610020006200200063))	R:Boolean:false|S:org.jsoup.parser.Tag{a b c}	0
+org.jsoup.parser.Tag.formatAsBlock()	m(org.jsoup.parser.Tag,formatAsBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00680036))	R:Boolean:false|S:org.jsoup.parser.Tag{h6}	0
+org.jsoup.parser.Tag.setSelfClosing()	m(org.jsoup.parser.Tag,setSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00250073))	R:org.jsoup.parser.Tag{%s}|S:org.jsoup.parser.Tag{%s}	0
+org.jsoup.parser.Tag.canContainBlock()	m(org.jsoup.parser.Tag,canContainBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:002d0030002e0030))	R:Boolean:true|S:org.jsoup.parser.Tag{-0.0}	0
+org.jsoup.parser.Tag.isData()	m(org.jsoup.parser.Tag,isData,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:002d0031))	R:Boolean:false|S:org.jsoup.parser.Tag{-1}	0
+org.jsoup.parser.Tag.hashCode()	m(org.jsoup.parser.Tag,hashCode,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0032003000320030002d00300031002d00300031))	R:Integer:1924108227|S:org.jsoup.parser.Tag{2020-01-01}	0
+org.jsoup.parser.Tag.preserveWhitespace()	m(org.jsoup.parser.Tag,preserveWhitespace,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0062006f00640079))	R:Boolean:false|S:org.jsoup.parser.Tag{body}	1
+org.jsoup.parser.Tag.getName()	m(org.jsoup.parser.Tag,getName,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:007400690074006c0065))	R:"title"|S:org.jsoup.parser.Tag{title}	1
+org.jsoup.parser.Tag.getName()	m(org.jsoup.parser.Tag,getName,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006e006f006600720061006d00650073))	R:"noframes"|S:org.jsoup.parser.Tag{noframes}	0
+org.jsoup.parser.Tag.isKnownTag()	m(org.jsoup.parser.Tag,isKnownTag,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078))	R:Boolean:false|S:org.jsoup.parser.Tag{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}	1
+org.jsoup.parser.Tag.equals(java.lang.Object)	m(org.jsoup.parser.Tag,equals,java.lang.Object,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:002d0031),p(list0))	R:Boolean:false|S:org.jsoup.parser.Tag{-1}	0
+org.jsoup.parser.Tag.isData()	m(org.jsoup.parser.Tag,isData,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00250073))	R:Boolean:false|S:org.jsoup.parser.Tag{%s}	0
+org.jsoup.parser.Tag.isInline()	m(org.jsoup.parser.Tag,isInline,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006600720061006d0065007300650074))	R:Boolean:false|S:org.jsoup.parser.Tag{frameset}	0
+org.jsoup.parser.Tag.isKnownTag()	m(org.jsoup.parser.Tag,isKnownTag,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006100220062))	R:Boolean:false|S:org.jsoup.parser.Tag{a"b}	0
+org.jsoup.parser.Tag.canContainBlock()	m(org.jsoup.parser.Tag,canContainBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006100220062))	R:Boolean:true|S:org.jsoup.parser.Tag{a"b}	0
+org.jsoup.parser.Tag.equals(java.lang.Object)	m(org.jsoup.parser.Tag,equals,java.lang.Object,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:),_)	E:java.lang.IllegalArgumentException:String must not be empty	0
+org.jsoup.parser.Tag.isData()	m(org.jsoup.parser.Tag,isData,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006100220062))	R:Boolean:false|S:org.jsoup.parser.Tag{a"b}	0
+org.jsoup.parser.Tag.isEmpty()	m(org.jsoup.parser.Tag,isEmpty,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:007300740079006c0065))	R:Boolean:false|S:org.jsoup.parser.Tag{style}	0
+org.jsoup.parser.Tag.formatAsBlock()	m(org.jsoup.parser.Tag,formatAsBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:003100320033))	R:Boolean:true|S:org.jsoup.parser.Tag{123}	0
+org.jsoup.parser.Tag.formatAsBlock()	m(org.jsoup.parser.Tag,formatAsBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00680032))	R:Boolean:false|S:org.jsoup.parser.Tag{h2}	0
+org.jsoup.parser.Tag.toString()	m(org.jsoup.parser.Tag,toString,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00250073))	R:"%s"|S:org.jsoup.parser.Tag{%s}	0
+org.jsoup.parser.Tag.isInline()	m(org.jsoup.parser.Tag,isInline,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078))	R:Boolean:true|S:org.jsoup.parser.Tag{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}	1
+org.jsoup.parser.Tag.preserveWhitespace()	m(org.jsoup.parser.Tag,preserveWhitespace,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0070))	R:Boolean:false|S:org.jsoup.parser.Tag{p}	0
+org.jsoup.parser.Tag.getName()	m(org.jsoup.parser.Tag,getName,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006600720061006d0065007300650074))	R:"frameset"|S:org.jsoup.parser.Tag{frameset}	0
+org.jsoup.parser.Tag.isBlock()	m(org.jsoup.parser.Tag,isBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006e0075006c006c))	R:Boolean:false|S:org.jsoup.parser.Tag{null}	1
+org.jsoup.parser.Tag.getName()	m(org.jsoup.parser.Tag,getName,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:007300630072006900700074))	R:"script"|S:org.jsoup.parser.Tag{script}	0
+org.jsoup.parser.Tag.isSelfClosing()	m(org.jsoup.parser.Tag,isSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078))	R:Boolean:false|S:org.jsoup.parser.Tag{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}	2
+org.jsoup.parser.Tag.setSelfClosing()	m(org.jsoup.parser.Tag,setSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:007400690074006c0065))	R:org.jsoup.parser.Tag{title}|S:org.jsoup.parser.Tag{title}	0
+org.jsoup.parser.Tag.isEmpty()	m(org.jsoup.parser.Tag,isEmpty,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0062006f00640079))	R:Boolean:false|S:org.jsoup.parser.Tag{body}	0
+org.jsoup.parser.Tag.isSelfClosing()	m(org.jsoup.parser.Tag,isSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:))	E:java.lang.IllegalArgumentException:String must not be empty	0
+org.jsoup.parser.Tag.isBlock()	m(org.jsoup.parser.Tag,isBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006600720061006d0065007300650074))	R:Boolean:true|S:org.jsoup.parser.Tag{frameset}	0
+org.jsoup.parser.Tag.hashCode()	m(org.jsoup.parser.Tag,hashCode,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,_))	E:java.lang.IllegalArgumentException:Object must not be null	0
+org.jsoup.parser.Tag.isBlock()	m(org.jsoup.parser.Tag,isBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0009))	E:java.lang.IllegalArgumentException:String must not be empty	0
+org.jsoup.parser.Tag.isSelfClosing()	m(org.jsoup.parser.Tag,isSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006100220062))	R:Boolean:false|S:org.jsoup.parser.Tag{a"b}	0
+org.jsoup.parser.Tag.canContainBlock()	m(org.jsoup.parser.Tag,canContainBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,_))	E:java.lang.IllegalArgumentException:Object must not be null	0
+org.jsoup.parser.Tag.formatAsBlock()	m(org.jsoup.parser.Tag,formatAsBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:007300630072006900700074))	R:Boolean:false|S:org.jsoup.parser.Tag{script}	0
+org.jsoup.parser.Tag.isSelfClosing()	m(org.jsoup.parser.Tag,isSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:007400690074006c0065))	R:Boolean:true|S:org.jsoup.parser.Tag{title}	2
+org.jsoup.parser.Tag.isInline()	m(org.jsoup.parser.Tag,isInline,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0030007800310046))	R:Boolean:true|S:org.jsoup.parser.Tag{0x1f}	0
+org.jsoup.parser.Tag.preserveWhitespace()	m(org.jsoup.parser.Tag,preserveWhitespace,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:002d0030002e0030))	R:Boolean:false|S:org.jsoup.parser.Tag{-0.0}	0
+org.jsoup.parser.Tag.isBlock()	m(org.jsoup.parser.Tag,isBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:007300630072006900700074))	R:Boolean:true|S:org.jsoup.parser.Tag{script}	0
+org.jsoup.parser.Tag.isSelfClosing()	m(org.jsoup.parser.Tag,isSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:003100320033))	R:Boolean:false|S:org.jsoup.parser.Tag{123}	0
+org.jsoup.parser.Tag.preserveWhitespace()	m(org.jsoup.parser.Tag,preserveWhitespace,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078))	R:Boolean:false|S:org.jsoup.parser.Tag{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}	0
+org.jsoup.parser.Tag.isInline()	m(org.jsoup.parser.Tag,isInline,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:002d0030002e0030))	R:Boolean:true|S:org.jsoup.parser.Tag{-0.0}	0
+org.jsoup.parser.Tag.isKnownTag()	m(org.jsoup.parser.Tag,isKnownTag,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006e0075006c006c))	R:Boolean:false|S:org.jsoup.parser.Tag{null}	0
+org.jsoup.parser.Tag.toString()	m(org.jsoup.parser.Tag,toString,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:))	E:java.lang.IllegalArgumentException:String must not be empty	0
+org.jsoup.parser.Tag.toString()	m(org.jsoup.parser.Tag,toString,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00610020006200200063))	R:"a b c"|S:org.jsoup.parser.Tag{a b c}	0
+org.jsoup.parser.Tag.isKnownTag()	m(org.jsoup.parser.Tag,isKnownTag,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00250073))	R:Boolean:false|S:org.jsoup.parser.Tag{%s}	0
+org.jsoup.parser.Tag.isBlock()	m(org.jsoup.parser.Tag,isBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006100220062))	R:Boolean:false|S:org.jsoup.parser.Tag{a"b}	0
+org.jsoup.parser.Tag.getName()	m(org.jsoup.parser.Tag,getName,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,_))	E:java.lang.IllegalArgumentException:Object must not be null	0
+org.jsoup.parser.Tag.hashCode()	m(org.jsoup.parser.Tag,hashCode,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:007400690074006c0065))	R:Integer:-46280215|S:org.jsoup.parser.Tag{title}	2
+org.jsoup.parser.Tag.toString()	m(org.jsoup.parser.Tag,toString,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:003100320033))	R:"123"|S:org.jsoup.parser.Tag{123}	0
+org.jsoup.parser.Tag.isKnownTag()	m(org.jsoup.parser.Tag,isKnownTag,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006600720061006d0065))	R:Boolean:true|S:org.jsoup.parser.Tag{frame}	0
+org.jsoup.parser.Tag.equals(java.lang.Object)	m(org.jsoup.parser.Tag,equals,java.lang.Object,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:003100650035),_)	R:Boolean:false|S:org.jsoup.parser.Tag{1e5}	0
+org.jsoup.parser.Tag.preserveWhitespace()	m(org.jsoup.parser.Tag,preserveWhitespace,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,_))	E:java.lang.IllegalArgumentException:Object must not be null	0
+org.jsoup.parser.Tag.canContainBlock()	m(org.jsoup.parser.Tag,canContainBlock,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078))	R:Boolean:true|S:org.jsoup.parser.Tag{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}	0
+org.jsoup.parser.Tag.isKnownTag(java.lang.String)	m(org.jsoup.parser.Tag,isKnownTag,java.lang.String,_,t:00680033)	R:Boolean:true	0
+org.jsoup.parser.Tag.setSelfClosing()	m(org.jsoup.parser.Tag,setSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:0078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078))	R:org.jsoup.parser.Tag{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}|S:org.jsoup.parser.Tag{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}	0
+org.jsoup.parser.Tag.equals(java.lang.Object)	m(org.jsoup.parser.Tag,equals,java.lang.Object,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,_),_)	E:java.lang.IllegalArgumentException:Object must not be null	0
+org.jsoup.parser.Tag.setSelfClosing()	m(org.jsoup.parser.Tag,setSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:))	E:java.lang.IllegalArgumentException:String must not be empty	0
+org.jsoup.parser.Tag.valueOf(java.lang.String)	m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:00610073006900640065)	R:org.jsoup.parser.Tag{aside}	0
+org.jsoup.parser.Tag.isData()	m(org.jsoup.parser.Tag,isData,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006600720061006d0065))	R:Boolean:false|S:org.jsoup.parser.Tag{frame}	1
+org.jsoup.parser.Tag.hashCode()	m(org.jsoup.parser.Tag,hashCode,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006600720061006d0065))	R:Integer:1107847603|S:org.jsoup.parser.Tag{frame}	3
+org.jsoup.parser.Tag.isSelfClosing()	m(org.jsoup.parser.Tag,isSelfClosing,,m(org.jsoup.parser.Tag,valueOf,java.lang.String,_,t:006600720061006d0065))	R:Boolean:true|S:org.jsoup.parser.Tag{frame}	1

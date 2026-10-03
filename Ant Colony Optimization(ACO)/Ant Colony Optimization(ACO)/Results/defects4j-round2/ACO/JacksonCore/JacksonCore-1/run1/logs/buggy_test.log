@@ -1,0 +1,16 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/JacksonCore-1-r1/JacksonCore-1b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 10
+  - acogen.AcoGeneratedTest::test0006_parseBigDecimal
+  - acogen.AcoGeneratedTest::test0009_contentsAsDecimal
+  - acogen.AcoGeneratedTest::test0012_parseBigDecimal
+  - acogen.AcoGeneratedTest::test0070_parseBigDecimal
+  - acogen.AcoGeneratedTest::test0079_parseBigDecimal
+  - acogen.AcoGeneratedTest::test0083_parseBigDecimal
+  - acogen.AcoGeneratedTest::test0091_parseBigDecimal
+  - acogen.AcoGeneratedTest::test0092_parseBigDecimal
+  - acogen.AcoGeneratedTest::test0093_parseBigDecimal
+  - acogen.AcoGeneratedTest::test0098_parseBigDecimal
+[exit 0]

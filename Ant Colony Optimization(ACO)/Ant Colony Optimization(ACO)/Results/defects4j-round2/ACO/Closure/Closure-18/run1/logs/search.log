@@ -1,0 +1,396 @@
+$ java -Xmx768m -Xss4m -javaagent:/home/pheerapat/aco-work/tool/jacocoagent.jar=output=none,includes=com.google.javascript.jscomp.Compiler:com.google.javascript.jscomp.Compiler$* -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/tool/jacococore.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/build/classes:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/lib/args4j.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/lib/guava.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/lib/json.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/lib/jsr305.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/lib/protobuf-java.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/build/lib/rhino.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/lib/ant.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/lib/ant-launcher.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/lib/caja-r4314.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/lib/jarjar.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/lib/junit.jar:/home/pheerapat/aco-work/jobs/Closure-18-r1/b/build/test AcoSearch /home/pheerapat/aco-work/jobs/Closure-18-r1/aco.properties
+Oct 03, 2026 11:10:44 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:44 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:46 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:46 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:46 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing [testcode]: Compilation produced 1 syntax errors. ([testcode]#1)
+Oct 03, 2026 11:10:46 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing [testcode]: Compilation produced 1 syntax errors. ([testcode]#1)
+Oct 03, 2026 11:10:46 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing [testcode]: Compilation produced 1 syntax errors. ([testcode]#1)
+Oct 03, 2026 11:10:47 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing [testcode]: Compilation produced 1 syntax errors. ([testcode]#1)
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.rhino.head.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.rhino.head.TokenStream.<init>(TokenStream.java:83)
+	at com.google.javascript.rhino.head.Parser.parse(Parser.java:517)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:133)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:86)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:52)
+	at com.google.javascript.jscomp.Compiler.parse(Compiler.java:1503)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.rhino.head.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.rhino.head.TokenStream.<init>(TokenStream.java:83)
+	at com.google.javascript.rhino.head.Parser.parse(Parser.java:517)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:133)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:86)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:52)
+	at com.google.javascript.jscomp.Compiler.parse(Compiler.java:1503)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:54 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:55 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing [testcode]: Compilation produced 1 syntax errors. ([testcode]#1)
+Oct 03, 2026 11:10:57 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing [testcode]: Compilation produced 1 syntax errors. ([testcode]#1)
+Oct 03, 2026 11:10:57 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing [testcode]: Compilation produced 1 syntax errors. ([testcode]#1)
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.rhino.head.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.rhino.head.TokenStream.<init>(TokenStream.java:83)
+	at com.google.javascript.rhino.head.Parser.parse(Parser.java:517)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:133)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:86)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:52)
+	at com.google.javascript.jscomp.Compiler.parse(Compiler.java:1503)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:10:58 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing Parsing: : Compilation produced 1 syntax errors. (Parsing: #1)
+Oct 03, 2026 11:10:58 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: Parsing: :1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:10:58 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:58 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 	: Compilation produced 1 syntax errors. (	#1)
+Oct 03, 2026 11:10:58 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: 	:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:10:58 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:58 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing null: Compilation produced 1 syntax errors. (null#1)
+Oct 03, 2026 11:10:58 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: null:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:10:58 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing a b c: Compilation produced 1 syntax errors. (a b c#1)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: a b c:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: 
+
+
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing false: Compilation produced 1 syntax errors. (false#1)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: false:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: 2020-01-01
+
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 0: Compilation produced 1 syntax errors. (0#1)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: 0:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  : Compilation produced 1 syntax errors. ( #1)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE:  :1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.rhino.head.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.rhino.head.TokenStream.<init>(TokenStream.java:83)
+	at com.google.javascript.rhino.head.Parser.parse(Parser.java:517)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:133)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:86)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:52)
+	at com.google.javascript.jscomp.Compiler.parse(Compiler.java:1503)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: #
+
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -1: Compilation produced 1 syntax errors. (-1#1)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -1:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing Conflicting externs name: : Compilation produced 1 syntax errors. (Conflicting externs name: #1)
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: Conflicting externs name: :1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:10:59 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  : Compilation produced 1 syntax errors. ( #1)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE:  :1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing false: Compilation produced 1 syntax errors. (false#1)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: false:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 1: Compilation produced 1 syntax errors. (1#1)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: 1:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing a: Compilation produced 1 syntax errors. (a#1)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: a:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 
+: Compilation produced 1 syntax errors. (
+#1)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: 
+:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 1: Compilation produced 1 syntax errors. (1#1)
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: 1:1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:11:00 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:11:01 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: Not an extern input: %s
+
+Oct 03, 2026 11:11:01 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:11:01 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: Not an extern input: %s
+
+Oct 03, 2026 11:11:01 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:11:01 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing Parsing: : Compilation produced 1 syntax errors. (Parsing: #1)
+Oct 03, 2026 11:11:01 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: Parsing: :1: ERROR - Parse error. illegal character
+AB
+^
+
+Oct 03, 2026 11:11:01 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:11:01 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+Oct 03, 2026 11:11:01 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.rhino.head.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.rhino.head.TokenStream.<init>(TokenStream.java:83)
+	at com.google.javascript.rhino.head.Parser.parse(Parser.java:517)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:133)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:86)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:52)
+	at com.google.javascript.jscomp.Compiler.parse(Compiler.java:1503)
+	at com.google.javascript.jscomp.Compiler.parseSyntheticCode(Compiler.java:1534)
+	at jdk.internal.reflect.GeneratedMethodAccessor13.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:11:05 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing [testcode]: Compilation produced 1 syntax errors. ([testcode]#1)
+[exit 0]

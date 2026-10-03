@@ -1,0 +1,59 @@
+org.jsoup.helper.StringUtil.isActuallyWhitespace(int)	m(org.jsoup.helper.StringUtil,isActuallyWhitespace,int,_,i:10)	R:Boolean:true	6
+org.jsoup.helper.StringUtil.stringBuilder()	m(org.jsoup.helper.StringUtil,stringBuilder,,_)	R:java.lang.StringBuilder{}	5
+org.jsoup.helper.StringUtil.<init>()	n(org.jsoup.helper.StringUtil,)	R:org.jsoup.helper.StringUtil	1
+org.jsoup.helper.StringUtil.inSorted(java.lang.String,[Ljava.lang.String;)	m(org.jsoup.helper.StringUtil,inSorted,java.lang.String|[Ljava.lang.String;,_,t:002f0061002f0062,a(java.lang.String))	R:Boolean:false	2
+org.jsoup.helper.StringUtil.join([Ljava.lang.String;,java.lang.String)	m(org.jsoup.helper.StringUtil,join,[Ljava.lang.String;|java.lang.String,_,a(java.lang.String),t:0030)	R:""	3
+org.jsoup.helper.StringUtil.normaliseWhitespace(java.lang.String)	m(org.jsoup.helper.StringUtil,normaliseWhitespace,java.lang.String,_,t:00200020002000200020002000200020)	R:" "	13
+org.jsoup.helper.StringUtil.join(java.util.Iterator,java.lang.String)	m(org.jsoup.helper.StringUtil,join,java.util.Iterator|java.lang.String,_,_,t:002d0031)	E:java.lang.NullPointerException	0
+org.jsoup.helper.StringUtil.isActuallyWhitespace(int)	m(org.jsoup.helper.StringUtil,isActuallyWhitespace,int,_,i:8191)	R:Boolean:false	1
+org.jsoup.helper.StringUtil.in(java.lang.String,[Ljava.lang.String;)	m(org.jsoup.helper.StringUtil,in,java.lang.String|[Ljava.lang.String;,_,t:00200020002000200020002000200020002000200020,_)	E:java.lang.NullPointerException	0
+org.jsoup.helper.StringUtil.resolve(java.net.URL,java.lang.String)	m(org.jsoup.helper.StringUtil,resolve,java.net.URL|java.lang.String,_,_,t:0020002000200020)	E:java.net.MalformedURLException:no protocol:     	2
+org.jsoup.helper.StringUtil.join(java.util.Collection,java.lang.String)	m(org.jsoup.helper.StringUtil,join,java.util.Collection|java.lang.String,_,p(linked),t:0030007800310046)	R:"x0x1Fy"	6
+org.jsoup.helper.StringUtil.join(java.util.Collection,java.lang.String)	m(org.jsoup.helper.StringUtil,join,java.util.Collection|java.lang.String,_,p(list0),t:0074007200750065)	R:""	0
+org.jsoup.helper.StringUtil.resolve(java.lang.String,java.lang.String)	m(org.jsoup.helper.StringUtil,resolve,java.lang.String|java.lang.String,_,t:006e0075006c006c,t:0020002000200020002000200020002000200020002000200020002000200020)	R:""	2
+org.jsoup.helper.StringUtil.isWhitespace(int)	m(org.jsoup.helper.StringUtil,isWhitespace,int,_,i:1)	R:Boolean:false	2
+org.jsoup.helper.StringUtil.isBlank(java.lang.String)	m(org.jsoup.helper.StringUtil,isBlank,java.lang.String,_,t:006100220062)	R:Boolean:false	3
+org.jsoup.helper.StringUtil.isNumeric(java.lang.String)	m(org.jsoup.helper.StringUtil,isNumeric,java.lang.String,_,t:00200020002000200020002000200020002000200020002000200020002000200020002000200020)	R:Boolean:false	3
+org.jsoup.helper.StringUtil.resolve(java.net.URL,java.lang.String)	m(org.jsoup.helper.StringUtil,resolve,java.net.URL|java.lang.String,_,_,t:002000200020002000200020002000200020)	E:java.net.MalformedURLException:no protocol:          	0
+org.jsoup.helper.StringUtil.inSorted(java.lang.String,[Ljava.lang.String;)	m(org.jsoup.helper.StringUtil,inSorted,java.lang.String|[Ljava.lang.String;,_,t:0074007200750065,_)	E:java.lang.NullPointerException	0
+org.jsoup.helper.StringUtil.padding(int)	m(org.jsoup.helper.StringUtil,padding,int,_,i:-1)	E:java.lang.IllegalArgumentException:width must be > 0	2
+org.jsoup.helper.StringUtil.isBlank(java.lang.String)	m(org.jsoup.helper.StringUtil,isBlank,java.lang.String,_,t:002000200020002000200020002000200020002000200020)	R:Boolean:true	4
+org.jsoup.helper.StringUtil.join([Ljava.lang.String;,java.lang.String)	m(org.jsoup.helper.StringUtil,join,[Ljava.lang.String;|java.lang.String,_,a(java.lang.String,t:0020002000200020002000200020002000200020002000200020,t:00200020002000200020002000200020002000200020002000200020,t:0031002e0035),t:002000200020002000200020)	R:"                                       1.5"	0
+org.jsoup.helper.StringUtil.appendNormalisedWhitespace(java.lang.StringBuilder,java.lang.String,boolean)	m(org.jsoup.helper.StringUtil,appendNormalisedWhitespace,java.lang.StringBuilder|java.lang.String|boolean,_,p(sb),t:0020002000200020002000200020002000200020,z:1)	R:null	1
+org.jsoup.helper.StringUtil.join(java.util.Collection,java.lang.String)	m(org.jsoup.helper.StringUtil,join,java.util.Collection|java.lang.String,_,p(linked),t:00200020002000200020002000200020002000200020002000200020)	R:"x              y"	0
+org.jsoup.helper.StringUtil.isBlank(java.lang.String)	m(org.jsoup.helper.StringUtil,isBlank,java.lang.String,_,t:0009)	R:Boolean:true	1
+org.jsoup.helper.StringUtil.isBlank(java.lang.String)	m(org.jsoup.helper.StringUtil,isBlank,java.lang.String,_,t:000a)	R:Boolean:true	1
+org.jsoup.helper.StringUtil.join(java.util.Collection,java.lang.String)	m(org.jsoup.helper.StringUtil,join,java.util.Collection|java.lang.String,_,p(linked),t:)	R:"xy"	0
+org.jsoup.helper.StringUtil.padding(int)	m(org.jsoup.helper.StringUtil,padding,int,_,i:2)	R:"  "	1
+org.jsoup.helper.StringUtil.join([Ljava.lang.String;,java.lang.String)	m(org.jsoup.helper.StringUtil,join,[Ljava.lang.String;|java.lang.String,_,_,t:006100220062)	E:java.lang.NullPointerException	0
+org.jsoup.helper.StringUtil.padding(int)	m(org.jsoup.helper.StringUtil,padding,int,_,i:10)	R:"          "	0
+org.jsoup.helper.StringUtil.in(java.lang.String,[Ljava.lang.String;)	m(org.jsoup.helper.StringUtil,in,java.lang.String|[Ljava.lang.String;,_,t:00200020002000200020002000200020002000200020002000200020,a(java.lang.String))	R:Boolean:false	2
+org.jsoup.helper.StringUtil.join(java.util.Iterator,java.lang.String)	m(org.jsoup.helper.StringUtil,join,java.util.Iterator|java.lang.String,_,p(iter),t:00610020006200200063)	R:"aa b cb"	0
+org.jsoup.helper.StringUtil.padding(int)	m(org.jsoup.helper.StringUtil,padding,int,_,i:1)	R:" "	0
+org.jsoup.helper.StringUtil.padding(int)	m(org.jsoup.helper.StringUtil,padding,int,_,i:16)	R:"                "	0
+org.jsoup.helper.StringUtil.normaliseWhitespace(java.lang.String)	m(org.jsoup.helper.StringUtil,normaliseWhitespace,java.lang.String,_,t:002d0030002e0030)	R:"-0.0"	1
+org.jsoup.helper.StringUtil.join(java.util.Collection,java.lang.String)	m(org.jsoup.helper.StringUtil,join,java.util.Collection|java.lang.String,_,p(tree),t:0030)	R:"a0b"	0
+org.jsoup.helper.StringUtil.normaliseWhitespace(java.lang.String)	m(org.jsoup.helper.StringUtil,normaliseWhitespace,java.lang.String,_,t:004100420043)	R:"ABC"	0
+org.jsoup.helper.StringUtil.normaliseWhitespace(java.lang.String)	m(org.jsoup.helper.StringUtil,normaliseWhitespace,java.lang.String,_,t:002f0061002f0062)	R:"/a/b"	0
+org.jsoup.helper.StringUtil.resolve(java.net.URL,java.lang.String)	m(org.jsoup.helper.StringUtil,resolve,java.net.URL|java.lang.String,_,_,t:00610020006200200063)	E:java.net.MalformedURLException:no protocol: a b c	0
+org.jsoup.helper.StringUtil.normaliseWhitespace(java.lang.String)	m(org.jsoup.helper.StringUtil,normaliseWhitespace,java.lang.String,_,t:0061002c0062)	R:"a,b"	0
+org.jsoup.helper.StringUtil.padding(int)	m(org.jsoup.helper.StringUtil,padding,int,_,i:53)	R:"                                                     "	3
+org.jsoup.helper.StringUtil.resolve(java.net.URL,java.lang.String)	m(org.jsoup.helper.StringUtil,resolve,java.net.URL|java.lang.String,_,_,t:00200020002000200020002000200020002000200020002000200020002000200020)	E:java.net.MalformedURLException:no protocol:                  	0
+org.jsoup.helper.StringUtil.join(java.util.Iterator,java.lang.String)	m(org.jsoup.helper.StringUtil,join,java.util.Iterator|java.lang.String,_,p(iter),t:0020002000200020)	R:"a    b"	0
+org.jsoup.helper.StringUtil.resolve(java.net.URL,java.lang.String)	m(org.jsoup.helper.StringUtil,resolve,java.net.URL|java.lang.String,_,_,t:00e9)	E:java.net.MalformedURLException:no protocol: \u00e9	0
+org.jsoup.helper.StringUtil.join([Ljava.lang.String;,java.lang.String)	m(org.jsoup.helper.StringUtil,join,[Ljava.lang.String;|java.lang.String,_,a(java.lang.String,t:002000200020002000200020,t:0020002000200020002000200020002000200020002000200020),t:0061002c0062)	R:"      a,b             "	0
+org.jsoup.helper.StringUtil.join(java.util.Iterator,java.lang.String)	m(org.jsoup.helper.StringUtil,join,java.util.Iterator|java.lang.String,_,p(iter),t:002f)	R:"a/b"	0
+org.jsoup.helper.StringUtil.join(java.util.Iterator,java.lang.String)	m(org.jsoup.helper.StringUtil,join,java.util.Iterator|java.lang.String,_,p(iter),t:00200020002000200020002000200020002000200020002000200020002000200020002000200020)	R:"a                    b"	0
+org.jsoup.helper.StringUtil.join([Ljava.lang.String;,java.lang.String)	m(org.jsoup.helper.StringUtil,join,[Ljava.lang.String;|java.lang.String,_,a(java.lang.String,t:0074007200750065,t:0032003000320030002d00300031002d00300031),t:002000200020002000200020)	R:"true      2020-01-01"	0
+org.jsoup.helper.StringUtil.isNumeric(java.lang.String)	m(org.jsoup.helper.StringUtil,isNumeric,java.lang.String,_,t:0031)	R:Boolean:true	2
+org.jsoup.helper.StringUtil.normaliseWhitespace(java.lang.String)	m(org.jsoup.helper.StringUtil,normaliseWhitespace,java.lang.String,_,t:0009)	R:" "	1
+org.jsoup.helper.StringUtil.appendNormalisedWhitespace(java.lang.StringBuilder,java.lang.String,boolean)	m(org.jsoup.helper.StringUtil,appendNormalisedWhitespace,java.lang.StringBuilder|java.lang.String|boolean,_,_,t:00200020002000200020002000200020,z:0)	E:java.lang.NullPointerException	0
+org.jsoup.helper.StringUtil.isNumeric(java.lang.String)	m(org.jsoup.helper.StringUtil,isNumeric,java.lang.String,_,_)	R:Boolean:false	2
+org.jsoup.helper.StringUtil.join([Ljava.lang.String;,java.lang.String)	m(org.jsoup.helper.StringUtil,join,[Ljava.lang.String;|java.lang.String,_,a(java.lang.String,t:004100420043),t:0078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078)	R:"ABC"	1
+org.jsoup.helper.StringUtil.resolve(java.net.URL,java.lang.String)	m(org.jsoup.helper.StringUtil,resolve,java.net.URL|java.lang.String,_,_,t:003f)	E:java.lang.NullPointerException	1
+org.jsoup.helper.StringUtil.in(java.lang.String,[Ljava.lang.String;)	m(org.jsoup.helper.StringUtil,in,java.lang.String|[Ljava.lang.String;,_,t:002000200020,a(java.lang.String,t:,t:00e9))	R:Boolean:false	2
+org.jsoup.helper.StringUtil.in(java.lang.String,[Ljava.lang.String;)	m(org.jsoup.helper.StringUtil,in,java.lang.String|[Ljava.lang.String;,_,t:002000200020002000200020,a(java.lang.String,t:0020002000200020002000200020,t:002000200020002000200020))	R:Boolean:true	1
+org.jsoup.helper.StringUtil.isWhitespace(int)	m(org.jsoup.helper.StringUtil,isWhitespace,int,_,i:10)	R:Boolean:true	0
+org.jsoup.helper.StringUtil.isBlank(java.lang.String)	m(org.jsoup.helper.StringUtil,isBlank,java.lang.String,_,_)	R:Boolean:true	2
+org.jsoup.helper.StringUtil.isBlank(java.lang.String)	m(org.jsoup.helper.StringUtil,isBlank,java.lang.String,_,t:)	R:Boolean:true	1
+org.jsoup.helper.StringUtil.isNumeric(java.lang.String)	m(org.jsoup.helper.StringUtil,isNumeric,java.lang.String,_,t:)	R:Boolean:false	1

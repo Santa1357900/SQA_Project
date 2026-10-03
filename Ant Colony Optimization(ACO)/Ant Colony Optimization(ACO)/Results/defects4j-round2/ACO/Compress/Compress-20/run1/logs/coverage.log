@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Compress-20-r1/Compress-20b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 214
+     Lines covered: 73
+  Conditions total: 114
+Conditions covered: 35
+     Line coverage: 34.1%
+Condition coverage: 30.7%
+[exit 0]

@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/JacksonDatabind-10-r1/JacksonDatabind-10b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - acogen.AcoGeneratedTest::test0021_resolve
+  - acogen.AcoGeneratedTest::test0022_getAndSerialize
+  - acogen.AcoGeneratedTest::test0025_getAndFilter
+  - acogen.AcoGeneratedTest::test0033_init
+[exit 0]

@@ -1,0 +1,2 @@
+org.mockito.internal.stubbing.answers.CallsRealMethods.answer(org.mockito.invocation.InvocationOnMock)	m(org.mockito.internal.stubbing.answers.CallsRealMethods,answer,org.mockito.invocation.InvocationOnMock,n(org.mockito.internal.stubbing.answers.CallsRealMethods,),_)	E:java.lang.NullPointerException	1
+org.mockito.internal.stubbing.answers.CallsRealMethods.<init>()	n(org.mockito.internal.stubbing.answers.CallsRealMethods,)	R:org.mockito.internal.stubbing.answers.CallsRealMethods	0

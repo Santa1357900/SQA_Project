@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Lang-41-r1/Lang-41b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - acogen.AcoGeneratedTest::test0038_getShortCanonicalName
+  - acogen.AcoGeneratedTest::test0098_getShortClassName
+  - acogen.AcoGeneratedTest::test0104_getShortCanonicalName
+  - acogen.AcoGeneratedTest::test0139_getShortClassName
+[exit 0]

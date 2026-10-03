@@ -1,0 +1,36 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Cli-32-r1/Cli-32b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 30
+  - acogen.AcoGeneratedTest::test0035_printHelp
+  - acogen.AcoGeneratedTest::test0040_printHelp
+  - acogen.AcoGeneratedTest::test0051_printHelp
+  - acogen.AcoGeneratedTest::test0055_renderWrappedText
+  - acogen.AcoGeneratedTest::test0057_renderWrappedText
+  - acogen.AcoGeneratedTest::test0062_printUsage
+  - acogen.AcoGeneratedTest::test0067_findWrapPos
+  - acogen.AcoGeneratedTest::test0068_printWrapped
+  - acogen.AcoGeneratedTest::test0070_printHelp
+  - acogen.AcoGeneratedTest::test0072_printHelp
+  - acogen.AcoGeneratedTest::test0074_printHelp
+  - acogen.AcoGeneratedTest::test0075_printWrapped
+  - acogen.AcoGeneratedTest::test0076_findWrapPos
+  - acogen.AcoGeneratedTest::test0077_printHelp
+  - acogen.AcoGeneratedTest::test0078_printHelp
+  - acogen.AcoGeneratedTest::test0080_findWrapPos
+  - acogen.AcoGeneratedTest::test0081_findWrapPos
+  - acogen.AcoGeneratedTest::test0084_printWrapped
+  - acogen.AcoGeneratedTest::test0086_printHelp
+  - acogen.AcoGeneratedTest::test0087_printWrapped
+  - acogen.AcoGeneratedTest::test0088_printWrapped
+  - acogen.AcoGeneratedTest::test0089_printUsage
+  - acogen.AcoGeneratedTest::test0091_printHelp
+  - acogen.AcoGeneratedTest::test0092_printWrapped
+  - acogen.AcoGeneratedTest::test0093_printWrapped
+  - acogen.AcoGeneratedTest::test0094_printUsage
+  - acogen.AcoGeneratedTest::test0095_printUsage
+  - acogen.AcoGeneratedTest::test0097_printUsage
+  - acogen.AcoGeneratedTest::test0099_printUsage
+  - acogen.AcoGeneratedTest::test0100_printUsage
+[exit 0]

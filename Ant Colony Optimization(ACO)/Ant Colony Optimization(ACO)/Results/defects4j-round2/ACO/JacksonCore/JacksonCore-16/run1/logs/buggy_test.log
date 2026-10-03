@@ -1,0 +1,14 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/JacksonCore-16-r1/JacksonCore-16b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 8
+  - acogen.AcoGeneratedTest::test0001_createFlattened
+  - acogen.AcoGeneratedTest::test0003_containedParsersCount
+  - acogen.AcoGeneratedTest::test0005_init
+  - acogen.AcoGeneratedTest::test0007_switchToNext
+  - acogen.AcoGeneratedTest::test0010_addFlattenedActiveParsers
+  - acogen.AcoGeneratedTest::test0012_containedParsersCount
+  - acogen.AcoGeneratedTest::test0014_switchToNext
+  - acogen.AcoGeneratedTest::test0015_containedParsersCount
+[exit 0]

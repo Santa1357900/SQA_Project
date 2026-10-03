@@ -1,0 +1,12 @@
+$ java -Xmx768m -Xss4m -javaagent:/home/pheerapat/aco-work/tool/jacocoagent.jar=output=none,includes=org.apache.commons.collections.ExtendedProperties:org.apache.commons.collections.ExtendedProperties$* -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/tool/jacococore.jar:/home/pheerapat/aco-work/jobs/Collections-2-r1/b/build/classes:/home/pheerapat/aco-work/jobs/Collections-2-r1/b/build/tests:/home/pheerapat/defects4j/framework/projects/lib/junit-4.12-hamcrest-1.3.jar:/home/pheerapat/defects4j/framework/projects/Collections/lib/easymock-2.0.jar AcoSearch /home/pheerapat/aco-work/jobs/Collections-2-r1/aco.properties
+key => value
+key => value
+key => value
+key => value
+key => value
+key => value
+key => value
+key => value
+key => value
+key => value
+[exit 0]

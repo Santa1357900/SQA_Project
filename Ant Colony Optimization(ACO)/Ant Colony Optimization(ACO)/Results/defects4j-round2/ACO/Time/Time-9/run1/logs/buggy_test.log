@@ -1,0 +1,22 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Time-9-r1/Time-9b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 16
+  - acogen.AcoGeneratedTest::test0001_adjustOffset
+  - acogen.AcoGeneratedTest::test0016_forOffsetHours
+  - acogen.AcoGeneratedTest::test0024_isLocalDateTimeGap
+  - acogen.AcoGeneratedTest::test0043_getID
+  - acogen.AcoGeneratedTest::test0057_hashCode
+  - acogen.AcoGeneratedTest::test0069_getName
+  - acogen.AcoGeneratedTest::test0073_forOffsetHours
+  - acogen.AcoGeneratedTest::test0076_getMillisKeepLocal
+  - acogen.AcoGeneratedTest::test0081_getShortName
+  - acogen.AcoGeneratedTest::test0083_getStandardOffset
+  - acogen.AcoGeneratedTest::test0084_getMillisKeepLocal
+  - acogen.AcoGeneratedTest::test0087_getShortName
+  - acogen.AcoGeneratedTest::test0108_forOffsetHoursMinutes
+  - acogen.AcoGeneratedTest::test0115_getOffset
+  - acogen.AcoGeneratedTest::test0122_getOffsetFromLocal
+  - acogen.AcoGeneratedTest::test0134_isFixed
+[exit 0]

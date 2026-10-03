@@ -1,0 +1,31 @@
+org.apache.commons.cli.OptionBuilder.hasArg(boolean)	m(org.apache.commons.cli.OptionBuilder,hasArg,boolean,_,z:0)	R:org.apache.commons.cli.OptionBuilder	5
+org.apache.commons.cli.OptionBuilder.hasArgs()	m(org.apache.commons.cli.OptionBuilder,hasArgs,,_)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.withLongOpt(java.lang.String)	m(org.apache.commons.cli.OptionBuilder,withLongOpt,java.lang.String,_,t:006100720067)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.create(char)	m(org.apache.commons.cli.OptionBuilder,create,char,_,c:65535)	E:java.lang.IllegalArgumentException:illegal option value '\uffff'	0
+org.apache.commons.cli.OptionBuilder.withValueSeparator()	m(org.apache.commons.cli.OptionBuilder,withValueSeparator,,_)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.withValueSeparator(char)	m(org.apache.commons.cli.OptionBuilder,withValueSeparator,char,_,c:233)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.hasOptionalArgs(int)	m(org.apache.commons.cli.OptionBuilder,hasOptionalArgs,int,_,i:255)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.create(java.lang.String)	m(org.apache.commons.cli.OptionBuilder,create,java.lang.String,_,t:0061003d0062)	E:java.lang.IllegalArgumentException:opt contains illegal character value '='	0
+org.apache.commons.cli.OptionBuilder.isRequired()	m(org.apache.commons.cli.OptionBuilder,isRequired,,_)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.create(java.lang.String)	m(org.apache.commons.cli.OptionBuilder,create,java.lang.String,_,t:0030007800310046)	R:org.apache.commons.cli.Option{[ option: 0x1F arg [ARG...] :: null ]}	10
+org.apache.commons.cli.OptionBuilder.create(java.lang.String)	m(org.apache.commons.cli.OptionBuilder,create,java.lang.String,_,t:005b0031002c0032005d)	E:java.lang.IllegalArgumentException:opt contains illegal character value '['	0
+org.apache.commons.cli.OptionBuilder.hasArg()	m(org.apache.commons.cli.OptionBuilder,hasArg,,_)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.create(char)	m(org.apache.commons.cli.OptionBuilder,create,char,_,c:9)	E:java.lang.IllegalArgumentException:illegal option value '\u0009'	0
+org.apache.commons.cli.OptionBuilder.hasOptionalArgs()	m(org.apache.commons.cli.OptionBuilder,hasOptionalArgs,,_)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.withDescription(java.lang.String)	m(org.apache.commons.cli.OptionBuilder,withDescription,java.lang.String,_,t:000a)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.create(char)	m(org.apache.commons.cli.OptionBuilder,create,char,_,c:32)	R:org.apache.commons.cli.Option{[ option:   [ARG...] :: \u000a ]}	1
+org.apache.commons.cli.OptionBuilder.create(java.lang.String)	m(org.apache.commons.cli.OptionBuilder,create,java.lang.String,_,t:0061002c0062)	E:java.lang.IllegalArgumentException:opt contains illegal character value ','	0
+org.apache.commons.cli.OptionBuilder.withArgName(java.lang.String)	m(org.apache.commons.cli.OptionBuilder,withArgName,java.lang.String,_,t:004100420043)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.hasOptionalArg()	m(org.apache.commons.cli.OptionBuilder,hasOptionalArg,,_)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.create(char)	m(org.apache.commons.cli.OptionBuilder,create,char,_,c:61)	E:java.lang.IllegalArgumentException:illegal option value '='	0
+org.apache.commons.cli.OptionBuilder.create()	m(org.apache.commons.cli.OptionBuilder,create,,_)	E:java.lang.IllegalArgumentException:must specify longopt	3
+org.apache.commons.cli.OptionBuilder.withType(java.lang.Object)	m(org.apache.commons.cli.OptionBuilder,withType,java.lang.Object,_,p(listN))	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.create(java.lang.String)	m(org.apache.commons.cli.OptionBuilder,create,java.lang.String,_,t:006100620063)	R:org.apache.commons.cli.Option{[ option: abc false [ARG...] :: null :: [a, null] ]}	0
+org.apache.commons.cli.OptionBuilder.isRequired(boolean)	m(org.apache.commons.cli.OptionBuilder,isRequired,boolean,_,z:1)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.hasArgs(int)	m(org.apache.commons.cli.OptionBuilder,hasArgs,int,_,i:5)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.create(char)	m(org.apache.commons.cli.OptionBuilder,create,char,_,c:92)	E:java.lang.IllegalArgumentException:illegal option value '\u005c'	0
+org.apache.commons.cli.OptionBuilder.create()	m(org.apache.commons.cli.OptionBuilder,create,,_)	R:org.apache.commons.cli.Option{[ option: null -1 [ARG...] :: \u0009 :: true ]}	1
+org.apache.commons.cli.OptionBuilder.create()	m(org.apache.commons.cli.OptionBuilder,create,,_)	R:org.apache.commons.cli.Option{[ option: null <a>b</a>  :: null ]}	0
+org.apache.commons.cli.OptionBuilder.create()	m(org.apache.commons.cli.OptionBuilder,create,,_)	R:org.apache.commons.cli.Option{[ option: null 1.5 [ARG...] :: null ]}	0
+org.apache.commons.cli.OptionBuilder.hasArg(boolean)	m(org.apache.commons.cli.OptionBuilder,hasArg,boolean,_,z:1)	R:org.apache.commons.cli.OptionBuilder	1
+org.apache.commons.cli.OptionBuilder.create()	m(org.apache.commons.cli.OptionBuilder,create,,_)	R:org.apache.commons.cli.Option{[ option: null foo.bar [ARG...] :: null ]}	0

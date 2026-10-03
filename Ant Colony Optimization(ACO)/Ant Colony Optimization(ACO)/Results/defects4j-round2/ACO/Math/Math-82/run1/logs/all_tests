@@ -1,0 +1,7 @@
+test0001_doOptimize(acogen.AcoGeneratedTest)
+test0002_init(acogen.AcoGeneratedTest)
+test0003_doIteration(acogen.AcoGeneratedTest)
+test0004_init(acogen.AcoGeneratedTest)
+test0005_isOptimal(acogen.AcoGeneratedTest)
+test0006_solvePhase1(acogen.AcoGeneratedTest)
+test0007_doIteration(acogen.AcoGeneratedTest)

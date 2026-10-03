@@ -1,0 +1,862 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.6631016042780749" branch-rate="0.6" lines-covered="124" lines-valid="187" branches-covered="36" branches-valid="60" complexity="2.436619718309859" version="2.0.3" timestamp="1791051774875">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="com.google.javascript.rhino" line-rate="0.6631016042780749" branch-rate="0.6" complexity="2.436619718309859">
+			<classes>
+				<class name="com.google.javascript.rhino.IR" filename="com/google/javascript/rhino/IR.java" line-rate="0.6631016042780749" branch-rate="0.6" complexity="2.436619718309859">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="51" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="add" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="364" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="and" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="326" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="arraylit" signature="([Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.8" branch-rate="1.0">
+							<lines>
+								<line number="397" hits="3" branch="false"/>
+								<line number="398" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="399" hits="1" branch="false"/>
+								<line number="400" hits="0" branch="false"/>
+								<line number="402" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="assign" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.3333333333333333" branch-rate="1.0">
+							<lines>
+								<line number="309" hits="1" branch="false"/>
+								<line number="310" hits="0" branch="false"/>
+								<line number="311" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="binaryOp" signature="(ILcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="447" hits="12" branch="false"/>
+								<line number="448" hits="9" branch="false"/>
+								<line number="449" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="block" signature="()Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="92" hits="1" branch="false"/>
+								<line number="93" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="block" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.3333333333333333" branch-rate="1.0">
+							<lines>
+								<line number="97" hits="1" branch="false"/>
+								<line number="98" hits="0" branch="false"/>
+								<line number="99" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="block" signature="([Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.8" branch-rate="1.0">
+							<lines>
+								<line number="103" hits="2" branch="false"/>
+								<line number="104" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="105" hits="1" branch="false"/>
+								<line number="106" hits="0" branch="false"/>
+								<line number="108" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="breakNode" signature="()Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="252" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="breakNode" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.5" branch-rate="1.0">
+							<lines>
+								<line number="257" hits="1" branch="false"/>
+								<line number="258" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="call" signature="(Lcom/google/javascript/rhino/Node;[Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.8" branch-rate="1.0">
+							<lines>
+								<line number="275" hits="2" branch="false"/>
+								<line number="276" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="277" hits="1" branch="false"/>
+								<line number="278" hits="0" branch="false"/>
+								<line number="280" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="caseNode" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.5" branch-rate="1.0">
+							<lines>
+								<line number="198" hits="1" branch="false"/>
+								<line number="199" hits="1" branch="false"/>
+								<line number="200" hits="0" branch="false"/>
+								<line number="201" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="catchNode" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.3333333333333333" branch-rate="1.0">
+							<lines>
+								<line number="246" hits="1" branch="false"/>
+								<line number="247" hits="0" branch="false"/>
+								<line number="248" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="comma" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="322" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="continueNode" signature="()Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="262" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="continueNode" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.5" branch-rate="1.0">
+							<lines>
+								<line number="267" hits="2" branch="false"/>
+								<line number="268" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="defaultCase" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.3333333333333333" branch-rate="1.0">
+							<lines>
+								<line number="205" hits="2" branch="false"/>
+								<line number="206" hits="0" branch="false"/>
+								<line number="207" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="doNode" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="167" hits="0" branch="false"/>
+								<line number="168" hits="0" branch="false"/>
+								<line number="169" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="empty" signature="()Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="54" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="eq" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="341" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="exprResult" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="149" hits="3" branch="false"/>
+								<line number="150" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="falseNode" signature="()Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="437" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="forIn" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.75" branch-rate="0.75">
+							<lines>
+								<line number="173" hits="3" branch="true" condition-coverage="75% (3/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="174" hits="2" branch="false"/>
+								<line number="175" hits="1" branch="false"/>
+								<line number="176" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="forNode" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.8" branch-rate="0.75">
+							<lines>
+								<line number="180" hits="3" branch="true" condition-coverage="75% (3/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="181" hits="2" branch="false"/>
+								<line number="182" hits="2" branch="false"/>
+								<line number="183" hits="1" branch="false"/>
+								<line number="184" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="function" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="58" hits="0" branch="false"/>
+								<line number="59" hits="0" branch="false"/>
+								<line number="60" hits="0" branch="false"/>
+								<line number="61" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getelem" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="303" hits="3" branch="false"/>
+								<line number="304" hits="2" branch="false"/>
+								<line number="305" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="getprop" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="297" hits="2" branch="false"/>
+								<line number="298" hits="2" branch="false"/>
+								<line number="299" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="hook" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="315" hits="2" branch="false"/>
+								<line number="316" hits="2" branch="false"/>
+								<line number="317" hits="1" branch="false"/>
+								<line number="318" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="ifNode" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.6666666666666666" branch-rate="1.0">
+							<lines>
+								<line number="154" hits="2" branch="false"/>
+								<line number="155" hits="2" branch="false"/>
+								<line number="156" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="ifNode" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.5" branch-rate="1.0">
+							<lines>
+								<line number="160" hits="3" branch="false"/>
+								<line number="161" hits="1" branch="false"/>
+								<line number="162" hits="0" branch="false"/>
+								<line number="163" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="isAssignmentTarget" signature="(Lcom/google/javascript/rhino/Node;)Z" line-rate="1.0" branch-rate="0.5">
+							<lines>
+								<line number="462" hits="1" branch="true" condition-coverage="50% (3/6)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="50%"/>
+										<condition number="2" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="label" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.25" branch-rate="1.0">
+							<lines>
+								<line number="212" hits="2" branch="false"/>
+								<line number="213" hits="0" branch="false"/>
+								<line number="214" hits="0" branch="false"/>
+								<line number="215" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="labelName" signature="(Ljava/lang/String;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="219" hits="6" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="220" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="mayBeExpression" signature="(Lcom/google/javascript/rhino/Node;)Z" line-rate="0.75" branch-rate="0.6666666666666666">
+							<lines>
+								<line number="510" hits="74" branch="true" condition-coverage="66% (2/3)">
+									<conditions>
+										<condition number="0" type="switch" coverage="66%"/>
+									</conditions>
+								</line>
+								<line number="514" hits="0" branch="false"/>
+								<line number="576" hits="46" branch="false"/>
+								<line number="579" hits="19" branch="false"/>
+							</lines>
+						</method>
+						<method name="mayBeExpressionOrEmpty" signature="(Lcom/google/javascript/rhino/Node;)Z" line-rate="1.0" branch-rate="0.75">
+							<lines>
+								<line number="458" hits="8" branch="true" condition-coverage="75% (3/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="mayBeStatement" signature="(Lcom/google/javascript/rhino/Node;)Z" line-rate="0.5" branch-rate="0.3333333333333333">
+							<lines>
+								<line number="474" hits="3" branch="true" condition-coverage="33% (1/3)">
+									<conditions>
+										<condition number="0" type="switch" coverage="33%"/>
+									</conditions>
+								</line>
+								<line number="479" hits="0" branch="false"/>
+								<line number="498" hits="0" branch="false"/>
+								<line number="501" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="name" signature="(Ljava/lang/String;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="293" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="neg" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="356" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="newNode" signature="(Lcom/google/javascript/rhino/Node;[Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.8" branch-rate="1.0">
+							<lines>
+								<line number="284" hits="2" branch="false"/>
+								<line number="285" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="286" hits="1" branch="false"/>
+								<line number="287" hits="0" branch="false"/>
+								<line number="289" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="not" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="334" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="nullNode" signature="()Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="441" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="number" signature="(D)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="425" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="objectlit" signature="([Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.625" branch-rate="0.25">
+							<lines>
+								<line number="375" hits="2" branch="false"/>
+								<line number="376" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="377" hits="1" branch="false"/>
+								<line number="378" hits="1" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="379" hits="0" branch="true" condition-coverage="0% (0/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="380" hits="0" branch="false"/>
+								<line number="381" hits="0" branch="false"/>
+								<line number="383" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="or" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="330" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="paramList" signature="()Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="65" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="paramList" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.5" branch-rate="1.0">
+							<lines>
+								<line number="69" hits="2" branch="false"/>
+								<line number="70" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="paramList" signature="(Ljava/util/List;)Lcom/google/javascript/rhino/Node;" line-rate="0.5" branch-rate="1.0">
+							<lines>
+								<line number="83" hits="3" branch="false"/>
+								<line number="84" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="85" hits="0" branch="false"/>
+								<line number="86" hits="0" branch="false"/>
+								<line number="87" hits="0" branch="false"/>
+								<line number="88" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="paramList" signature="([Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.8" branch-rate="1.0">
+							<lines>
+								<line number="74" hits="2" branch="false"/>
+								<line number="75" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="76" hits="1" branch="false"/>
+								<line number="77" hits="0" branch="false"/>
+								<line number="79" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="pos" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="360" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="propdef" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.2" branch-rate="0.0">
+							<lines>
+								<line number="389" hits="1" branch="false"/>
+								<line number="390" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="391" hits="0" branch="false"/>
+								<line number="392" hits="0" branch="false"/>
+								<line number="393" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="regexp" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="406" hits="1" branch="false"/>
+								<line number="407" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="regexp" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="411" hits="3" branch="false"/>
+								<line number="412" hits="2" branch="false"/>
+								<line number="413" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="returnNode" signature="()Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="135" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="returnNode" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="139" hits="2" branch="false"/>
+								<line number="140" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="script" signature="([Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.8" branch-rate="1.0">
+							<lines>
+								<line number="114" hits="2" branch="false"/>
+								<line number="115" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="116" hits="1" branch="false"/>
+								<line number="117" hits="0" branch="false"/>
+								<line number="119" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="sheq" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="348" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="string" signature="(Ljava/lang/String;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="417" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="stringKey" signature="(Ljava/lang/String;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="421" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="sub" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="368" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="switchNode" signature="(Lcom/google/javascript/rhino/Node;[Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.8333333333333334" branch-rate="0.3333333333333333">
+							<lines>
+								<line number="188" hits="4" branch="false"/>
+								<line number="189" hits="2" branch="false"/>
+								<line number="190" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="191" hits="1" branch="true" condition-coverage="0% (0/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="192" hits="0" branch="false"/>
+								<line number="194" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="thisNode" signature="()Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="429" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="throwNode" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="144" hits="3" branch="false"/>
+								<line number="145" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="trueNode" signature="()Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="433" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="tryCatch" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.25" branch-rate="1.0">
+							<lines>
+								<line number="231" hits="1" branch="false"/>
+								<line number="232" hits="0" branch="false"/>
+								<line number="233" hits="0" branch="false"/>
+								<line number="234" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="tryCatchFinally" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.25" branch-rate="1.0">
+							<lines>
+								<line number="239" hits="1" branch="false"/>
+								<line number="240" hits="0" branch="false"/>
+								<line number="241" hits="0" branch="false"/>
+								<line number="242" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="tryFinally" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="224" hits="0" branch="false"/>
+								<line number="225" hits="0" branch="false"/>
+								<line number="226" hits="0" branch="false"/>
+								<line number="227" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="unaryOp" signature="(ILcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="453" hits="10" branch="false"/>
+								<line number="454" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="var" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.5" branch-rate="1.0">
+							<lines>
+								<line number="130" hits="1" branch="false"/>
+								<line number="131" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="var" signature="(Lcom/google/javascript/rhino/Node;Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="0.25" branch-rate="0.25">
+							<lines>
+								<line number="123" hits="1" branch="true" condition-coverage="25% (1/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="124" hits="0" branch="false"/>
+								<line number="125" hits="0" branch="false"/>
+								<line number="126" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="voidNode" signature="(Lcom/google/javascript/rhino/Node;)Lcom/google/javascript/rhino/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="352" hits="2" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="51" hits="0" branch="false"/>
+						<line number="54" hits="1" branch="false"/>
+						<line number="58" hits="0" branch="false"/>
+						<line number="59" hits="0" branch="false"/>
+						<line number="60" hits="0" branch="false"/>
+						<line number="61" hits="0" branch="false"/>
+						<line number="65" hits="6" branch="false"/>
+						<line number="69" hits="2" branch="false"/>
+						<line number="70" hits="0" branch="false"/>
+						<line number="74" hits="2" branch="false"/>
+						<line number="75" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="76" hits="1" branch="false"/>
+						<line number="77" hits="0" branch="false"/>
+						<line number="79" hits="1" branch="false"/>
+						<line number="83" hits="3" branch="false"/>
+						<line number="84" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="85" hits="0" branch="false"/>
+						<line number="86" hits="0" branch="false"/>
+						<line number="87" hits="0" branch="false"/>
+						<line number="88" hits="1" branch="false"/>
+						<line number="92" hits="1" branch="false"/>
+						<line number="93" hits="1" branch="false"/>
+						<line number="97" hits="1" branch="false"/>
+						<line number="98" hits="0" branch="false"/>
+						<line number="99" hits="0" branch="false"/>
+						<line number="103" hits="2" branch="false"/>
+						<line number="104" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="105" hits="1" branch="false"/>
+						<line number="106" hits="0" branch="false"/>
+						<line number="108" hits="1" branch="false"/>
+						<line number="114" hits="2" branch="false"/>
+						<line number="115" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="116" hits="1" branch="false"/>
+						<line number="117" hits="0" branch="false"/>
+						<line number="119" hits="1" branch="false"/>
+						<line number="123" hits="1" branch="true" condition-coverage="25% (1/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="124" hits="0" branch="false"/>
+						<line number="125" hits="0" branch="false"/>
+						<line number="126" hits="0" branch="false"/>
+						<line number="130" hits="1" branch="false"/>
+						<line number="131" hits="0" branch="false"/>
+						<line number="135" hits="1" branch="false"/>
+						<line number="139" hits="2" branch="false"/>
+						<line number="140" hits="1" branch="false"/>
+						<line number="144" hits="3" branch="false"/>
+						<line number="145" hits="1" branch="false"/>
+						<line number="149" hits="3" branch="false"/>
+						<line number="150" hits="1" branch="false"/>
+						<line number="154" hits="2" branch="false"/>
+						<line number="155" hits="2" branch="false"/>
+						<line number="156" hits="0" branch="false"/>
+						<line number="160" hits="3" branch="false"/>
+						<line number="161" hits="1" branch="false"/>
+						<line number="162" hits="0" branch="false"/>
+						<line number="163" hits="0" branch="false"/>
+						<line number="167" hits="0" branch="false"/>
+						<line number="168" hits="0" branch="false"/>
+						<line number="169" hits="0" branch="false"/>
+						<line number="173" hits="3" branch="true" condition-coverage="75% (3/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="174" hits="2" branch="false"/>
+						<line number="175" hits="1" branch="false"/>
+						<line number="176" hits="0" branch="false"/>
+						<line number="180" hits="3" branch="true" condition-coverage="75% (3/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="181" hits="2" branch="false"/>
+						<line number="182" hits="2" branch="false"/>
+						<line number="183" hits="1" branch="false"/>
+						<line number="184" hits="0" branch="false"/>
+						<line number="188" hits="4" branch="false"/>
+						<line number="189" hits="2" branch="false"/>
+						<line number="190" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="191" hits="1" branch="true" condition-coverage="0% (0/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="192" hits="0" branch="false"/>
+						<line number="194" hits="1" branch="false"/>
+						<line number="198" hits="1" branch="false"/>
+						<line number="199" hits="1" branch="false"/>
+						<line number="200" hits="0" branch="false"/>
+						<line number="201" hits="0" branch="false"/>
+						<line number="205" hits="2" branch="false"/>
+						<line number="206" hits="0" branch="false"/>
+						<line number="207" hits="0" branch="false"/>
+						<line number="212" hits="2" branch="false"/>
+						<line number="213" hits="0" branch="false"/>
+						<line number="214" hits="0" branch="false"/>
+						<line number="215" hits="0" branch="false"/>
+						<line number="219" hits="6" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="220" hits="5" branch="false"/>
+						<line number="224" hits="0" branch="false"/>
+						<line number="225" hits="0" branch="false"/>
+						<line number="226" hits="0" branch="false"/>
+						<line number="227" hits="0" branch="false"/>
+						<line number="231" hits="1" branch="false"/>
+						<line number="232" hits="0" branch="false"/>
+						<line number="233" hits="0" branch="false"/>
+						<line number="234" hits="0" branch="false"/>
+						<line number="239" hits="1" branch="false"/>
+						<line number="240" hits="0" branch="false"/>
+						<line number="241" hits="0" branch="false"/>
+						<line number="242" hits="0" branch="false"/>
+						<line number="246" hits="1" branch="false"/>
+						<line number="247" hits="0" branch="false"/>
+						<line number="248" hits="0" branch="false"/>
+						<line number="252" hits="1" branch="false"/>
+						<line number="257" hits="1" branch="false"/>
+						<line number="258" hits="0" branch="false"/>
+						<line number="262" hits="1" branch="false"/>
+						<line number="267" hits="2" branch="false"/>
+						<line number="268" hits="0" branch="false"/>
+						<line number="275" hits="2" branch="false"/>
+						<line number="276" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="277" hits="1" branch="false"/>
+						<line number="278" hits="0" branch="false"/>
+						<line number="280" hits="1" branch="false"/>
+						<line number="284" hits="2" branch="false"/>
+						<line number="285" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="286" hits="1" branch="false"/>
+						<line number="287" hits="0" branch="false"/>
+						<line number="289" hits="1" branch="false"/>
+						<line number="293" hits="5" branch="false"/>
+						<line number="297" hits="2" branch="false"/>
+						<line number="298" hits="2" branch="false"/>
+						<line number="299" hits="1" branch="false"/>
+						<line number="303" hits="3" branch="false"/>
+						<line number="304" hits="2" branch="false"/>
+						<line number="305" hits="1" branch="false"/>
+						<line number="309" hits="1" branch="false"/>
+						<line number="310" hits="0" branch="false"/>
+						<line number="311" hits="0" branch="false"/>
+						<line number="315" hits="2" branch="false"/>
+						<line number="316" hits="2" branch="false"/>
+						<line number="317" hits="1" branch="false"/>
+						<line number="318" hits="1" branch="false"/>
+						<line number="322" hits="2" branch="false"/>
+						<line number="326" hits="1" branch="false"/>
+						<line number="330" hits="2" branch="false"/>
+						<line number="334" hits="3" branch="false"/>
+						<line number="341" hits="2" branch="false"/>
+						<line number="348" hits="2" branch="false"/>
+						<line number="352" hits="2" branch="false"/>
+						<line number="356" hits="2" branch="false"/>
+						<line number="360" hits="3" branch="false"/>
+						<line number="364" hits="1" branch="false"/>
+						<line number="368" hits="2" branch="false"/>
+						<line number="375" hits="2" branch="false"/>
+						<line number="376" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="377" hits="1" branch="false"/>
+						<line number="378" hits="1" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="379" hits="0" branch="true" condition-coverage="0% (0/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="380" hits="0" branch="false"/>
+						<line number="381" hits="0" branch="false"/>
+						<line number="383" hits="1" branch="false"/>
+						<line number="389" hits="1" branch="false"/>
+						<line number="390" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="391" hits="0" branch="false"/>
+						<line number="392" hits="0" branch="false"/>
+						<line number="393" hits="0" branch="false"/>
+						<line number="397" hits="3" branch="false"/>
+						<line number="398" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="399" hits="1" branch="false"/>
+						<line number="400" hits="0" branch="false"/>
+						<line number="402" hits="1" branch="false"/>
+						<line number="406" hits="1" branch="false"/>
+						<line number="407" hits="1" branch="false"/>
+						<line number="411" hits="3" branch="false"/>
+						<line number="412" hits="2" branch="false"/>
+						<line number="413" hits="1" branch="false"/>
+						<line number="417" hits="5" branch="false"/>
+						<line number="421" hits="5" branch="false"/>
+						<line number="425" hits="5" branch="false"/>
+						<line number="429" hits="1" branch="false"/>
+						<line number="433" hits="1" branch="false"/>
+						<line number="437" hits="1" branch="false"/>
+						<line number="441" hits="1" branch="false"/>
+						<line number="447" hits="12" branch="false"/>
+						<line number="448" hits="9" branch="false"/>
+						<line number="449" hits="7" branch="false"/>
+						<line number="453" hits="10" branch="false"/>
+						<line number="454" hits="4" branch="false"/>
+						<line number="458" hits="8" branch="true" condition-coverage="75% (3/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="462" hits="1" branch="true" condition-coverage="50% (3/6)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="50%"/>
+								<condition number="2" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="474" hits="3" branch="true" condition-coverage="33% (1/3)">
+							<conditions>
+								<condition number="0" type="switch" coverage="33%"/>
+							</conditions>
+						</line>
+						<line number="479" hits="0" branch="false"/>
+						<line number="498" hits="0" branch="false"/>
+						<line number="501" hits="1" branch="false"/>
+						<line number="510" hits="74" branch="true" condition-coverage="66% (2/3)">
+							<conditions>
+								<condition number="0" type="switch" coverage="66%"/>
+							</conditions>
+						</line>
+						<line number="514" hits="0" branch="false"/>
+						<line number="576" hits="46" branch="false"/>
+						<line number="579" hits="19" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

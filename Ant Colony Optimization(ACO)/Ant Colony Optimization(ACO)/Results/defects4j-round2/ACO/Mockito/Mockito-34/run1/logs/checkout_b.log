@@ -1,0 +1,26 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Mockito -v 34b -w /home/pheerapat/aco-work/jobs/Mockito-34-r1/b
+Checking out e8cebe01 to /home/pheerapat/aco-work/jobs/Mockito-34-r1/b..... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+sed: -e expression #1, char 84: unterminated `s' command
+sed: can't read /home/pheerapat/aco-work/jobs/Mockito-34-r1/b/gradle/wrapper/gradle-wrapper.properties: No such file or directory
+sed: can't read /home/pheerapat/aco-work/jobs/Mockito-34-r1/b/gradle/wrapper/gradle-wrapper.properties: No such file or directory
+sed: can't read /home/pheerapat/aco-work/jobs/Mockito-34-r1/b/buildSrc/build.gradle: No such file or directory
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /home/pheerapat/aco-work/jobs/Mockito-34-r1/b/build. OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff e8cebe01:0ebc2ea0..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Mockito-34b..................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /home/pheerapat/aco-work/jobs/Mockito-34-r1/b
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

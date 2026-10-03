@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Closure-132-r1/Closure-132b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 757
+     Lines covered: 33
+  Conditions total: 530
+Conditions covered: 17
+     Line coverage: 4.4%
+Condition coverage: 3.2%
+[exit 0]

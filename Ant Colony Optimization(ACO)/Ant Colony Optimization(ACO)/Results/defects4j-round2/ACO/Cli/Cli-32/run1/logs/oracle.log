@@ -1,0 +1,80 @@
+$ java -Xmx768m -Xss4m -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit/junit/3.8.2/junit-3.8.2.jar:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit-addons/junit-addons/1.4/junit-addons-1.4.jar:/home/pheerapat/aco-work/jobs/Cli-32-r1/f/target/classes:/home/pheerapat/aco-work/jobs/Cli-32-r1/f/target/test-classes AcoOracle /home/pheerapat/aco-work/jobs/Cli-32-r1/specs.tsv /home/pheerapat/aco-work/jobs/Cli-32-r1/expected1.txt 5000
+usage: --
+
+usage: a
+true
+
+usage:
+       
+
+cmdLineSyntax not provided
+usage:
+       
+
+usage: a
+line.separ
+ator
+
+foo.bar
+usage: -0.0
+
+usage:
+
+<
+usa
+ ge
+ :
+ [
+cmd
+Lin
+eSy
+nta
+x
+not
+pro
+vid
+ed
+
+tru
+e
+[exit 0]
+$ java -Xmx768m -Xss4m -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit/junit/3.8.2/junit-3.8.2.jar:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit-addons/junit-addons/1.4/junit-addons-1.4.jar:/home/pheerapat/aco-work/jobs/Cli-32-r1/f/target/classes:/home/pheerapat/aco-work/jobs/Cli-32-r1/f/target/test-classes AcoOracle /home/pheerapat/aco-work/jobs/Cli-32-r1/specs.tsv /home/pheerapat/aco-work/jobs/Cli-32-r1/expected2.txt 5000
+usage: --
+
+usage: a
+true
+
+usage:
+       
+
+cmdLineSyntax not provided
+usage:
+       
+
+usage: a
+line.separ
+ator
+
+foo.bar
+usage: -0.0
+
+usage:
+
+<
+usa
+ ge
+ :
+ [
+cmd
+Lin
+eSy
+nta
+x
+not
+pro
+vid
+ed
+
+tru
+e
+[exit 0]

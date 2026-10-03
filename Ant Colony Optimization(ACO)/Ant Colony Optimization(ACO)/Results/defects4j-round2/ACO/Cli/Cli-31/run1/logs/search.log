@@ -1,0 +1,279 @@
+$ java -Xmx768m -Xss4m -javaagent:/home/pheerapat/aco-work/tool/jacocoagent.jar=output=none,includes=org.apache.commons.cli.HelpFormatter:org.apache.commons.cli.HelpFormatter$*:org.apache.commons.cli.Option:org.apache.commons.cli.Option$*:org.apache.commons.cli.OptionBuilder:org.apache.commons.cli.OptionBuilder$* -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/tool/jacococore.jar:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit/junit/3.8.2/junit-3.8.2.jar:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit-addons/junit-addons/1.4/junit-addons-1.4.jar:/home/pheerapat/aco-work/jobs/Cli-31-r1/b/target/classes:/home/pheerapat/aco-work/jobs/Cli-31-r1/b/target/test-classes AcoSearch /home/pheerapat/aco-work/jobs/Cli-31-r1/aco.properties
+usage:
+
+usage:  [ARG]
+ |
+
+usage:  |
+
+usage: [1,2]
+
+usage:
+
+usage:
+
+usage:
+
+usage: false
+null
+
+-
+usage: abc
+
+-
+usage: false
+null
+
+null
+usage:  ]
+null
+
+-0.0
+usage:
+       
+
+-
+usage: false
+null
+
+a b c
+usage: [
+null
+
+a=b
+usage: --
+
+-
+usage: 0x1F
+null
+
+-
+usage: 1e5
+[ARG...]
+
+-
+usage: must specify longopt
+ ]
+
+usage: -0.0
+
+usage: -0.0
+
+usage: -1
+
+usage: -0.0
+
+usage: true
+
+usage: null
+
+usage: 12:30:00
+
+usage: -0.0
+
+usage: -0.0
+
+usage:  [ARG]
+
+usage:
+
+usage: -0.0
+
+usage: [ option:
+
+usage: a=b
+
+usage:
+       
+
+usage: 123
+é
+
+/a/b
+usage: 123
+é
+
+a=b
+usage: 123
+cmdLineSyntax not provided
+
+{"a":1}
+usage: -0.0
+é
+
+/a/b
+usage: 2020-01-01
+-1
+
+é
+usage:
+       
+é
+
+>
+usage: 123
+-
+
+a,b
+usage: arg
+2020-01-01
+
+a b c
+usage:
+       
+1e5
+
+<
+usage: 123
+é
+
+/a/b
+usage: 123
+
+foo.bar
+usage: 123
+%s
+
+/a/b
+usage: abc
+é
+
+ ]
+usage: 123
+>
+
+usage: 123
+é
+
+false
+usage: 123
+é
+
+/a/b
+usage: 123
+
+a"b
+usage: {"a":1}
+
+/a/b
+usage:
+       
+é
+
+cmdLineSyntax not provided
+usage: --
+false
+
+0x1F
+usage: 123
+true
+
+]
+usage: Cannot add value, list full.
+
+[
+usage: arg
+
+usage: [ option:
+]
+
+usage: true
+[1,2]
+
+a
+usage:
+
+cmdLineSyntax not provided
+usage: [ARG...]
+
+cmdLineSyntax not provided
+usage:
+abc
+
+a"b
+usage:
+
+cmdLineSyntax not provided
+usage:
+<a>b</a>
+
+usage: Cannot add value, list full.
+
+Cannot add value, list full.
+usage: null
+
+usage:
+[1,2]
+
+0
+usage:
+
+usage:
+
+cmdLineSyntax not provided
+usage:
+ 
+
+a b
+c
+usage:
+
+<
+usage: a b c
+
+/a/b
+usage:
+
+1.5
+usage: a b c
+
+ |
+usage:
+1e5
+
+cmdLineSyntax not provided
+usage: NO_ARGS_ALLOWED
+
+cmdLineSyntax not provided
+usage: 1e5
+
+cmdLineSyntax not provided
+usage: must specify longopt
+
+cmdLineSyntax not provided
+usage:
+
+cmdLineSyntax not provided
+usage:
+
+ [ARG]
+usage:
+
+#
+usage: false
+
+ |
+usage:
+
+cmdLineSyntax not provided
+usage: -
+cmdLineSyntax not provided
+
+a=b
+usage: line.separator
+
+usage: [ARG...]
+
+Cannot add value, list full.
+usage: [ option:
+abc
+
+arg
+usage: a"b
+
+ [ARG]
+usage: null
+ABC
+
+#
+[exit 0]

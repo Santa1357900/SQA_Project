@@ -1,0 +1,12 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Closure-158-r1/Closure-158b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 6
+  - acogen.AcoGeneratedTest::test0009_setWarningLevels
+  - acogen.AcoGeneratedTest::test0024_setWarningLevels
+  - acogen.AcoGeneratedTest::test0051_setWarningLevels
+  - acogen.AcoGeneratedTest::test0083_setWarningLevels
+  - acogen.AcoGeneratedTest::test0089_setWarningLevels
+  - acogen.AcoGeneratedTest::test0116_setWarningLevels
+[exit 0]

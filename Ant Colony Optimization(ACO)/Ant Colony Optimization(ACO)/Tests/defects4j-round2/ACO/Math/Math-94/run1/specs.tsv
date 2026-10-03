@@ -1,0 +1,99 @@
+org.apache.commons.math.util.MathUtils.indicator(long)	m(org.apache.commons.math.util.MathUtils,indicator,long,_,j:2147483648)	R:Long:1	2
+org.apache.commons.math.util.MathUtils.round(float,int)	m(org.apache.commons.math.util.MathUtils,round,float|int,_,f:1056964608,i:-444)	R:Float:NaN	11
+org.apache.commons.math.util.MathUtils.normalizeAngle(double,double)	m(org.apache.commons.math.util.MathUtils,normalizeAngle,double|double,_,d:4368491638549381120,d:4368491638549381120)	R:Double:1.1102230246251565E-16	1
+org.apache.commons.math.util.MathUtils.sign(byte)	m(org.apache.commons.math.util.MathUtils,sign,byte,_,b:-1)	R:Byte:-1	2
+org.apache.commons.math.util.MathUtils.cosh(double)	m(org.apache.commons.math.util.MathUtils,cosh,double,_,d:9221120237041090560)	R:Double:NaN	1
+org.apache.commons.math.util.MathUtils.hash([D)	m(org.apache.commons.math.util.MathUtils,hash,[D,_,a(double,d:9218868437227405312,d:4602678819172646912))	R:Integer:-1108343871	1
+org.apache.commons.math.util.MathUtils.sign(byte)	m(org.apache.commons.math.util.MathUtils,sign,byte,_,b:0)	R:Byte:0	1
+org.apache.commons.math.util.MathUtils.factorialLog(int)	m(org.apache.commons.math.util.MathUtils,factorialLog,int,_,i:-100)	E:java.lang.IllegalArgumentException:must have n > 0 for n!	2
+org.apache.commons.math.util.MathUtils.gcd(int,int)	m(org.apache.commons.math.util.MathUtils,gcd,int|int,_,i:-1,i:0)	R:Integer:1	2
+org.apache.commons.math.util.MathUtils.round(float,int,int)	m(org.apache.commons.math.util.MathUtils,round,float|int|int,_,f:1065353216,i:2,i:16)	E:java.lang.IllegalArgumentException:Invalid rounding method.	1
+org.apache.commons.math.util.MathUtils.round(double,int,int)	m(org.apache.commons.math.util.MathUtils,round,double|int|int,_,d:4614256656552045848,i:2147483647,i:661)	E:java.lang.IllegalArgumentException:Invalid rounding mode	2
+org.apache.commons.math.util.MathUtils.round(float,int)	m(org.apache.commons.math.util.MathUtils,round,float|int,_,f:1056964608,i:100)	R:Float:NaN	2
+org.apache.commons.math.util.MathUtils.sign(int)	m(org.apache.commons.math.util.MathUtils,sign,int,_,i:-429)	R:Integer:-1	2
+org.apache.commons.math.util.MathUtils.factorial(int)	m(org.apache.commons.math.util.MathUtils,factorial,int,_,i:255)	E:java.lang.ArithmeticException:result too large to represent in a long integer	7
+org.apache.commons.math.util.MathUtils.sign(float)	m(org.apache.commons.math.util.MathUtils,sign,float,_,f:-1082130432)	R:Float:-1.0	2
+org.apache.commons.math.util.MathUtils.indicator(short)	m(org.apache.commons.math.util.MathUtils,indicator,short,_,s:-32768)	R:Short:-1	2
+org.apache.commons.math.util.MathUtils.binomialCoefficient(int,int)	m(org.apache.commons.math.util.MathUtils,binomialCoefficient,int|int,_,i:-2147483648,i:-2147483648)	E:java.lang.IllegalArgumentException:must have n >= 0 for binomial coefficient (n,k)	2
+org.apache.commons.math.util.MathUtils.round(float,int,int)	m(org.apache.commons.math.util.MathUtils,round,float|int|int,_,f:2143289344,i:0,i:2147483647)	E:java.lang.IllegalArgumentException:Invalid rounding method.	1
+org.apache.commons.math.util.MathUtils.round(float,int)	m(org.apache.commons.math.util.MathUtils,round,float|int,_,f:2139095040,i:-2)	R:Float:Infinity	0
+org.apache.commons.math.util.MathUtils.subAndCheck(long,long)	m(org.apache.commons.math.util.MathUtils,subAndCheck,long|long,_,j:1,j:-2147483648)	R:Long:2147483649	4
+org.apache.commons.math.util.MathUtils.indicator(byte)	m(org.apache.commons.math.util.MathUtils,indicator,byte,_,b:0)	R:Byte:1	2
+org.apache.commons.math.util.MathUtils.binomialCoefficientLog(int,int)	m(org.apache.commons.math.util.MathUtils,binomialCoefficientLog,int|int,_,i:2147483647,i:0)	R:Double:0.0	2
+org.apache.commons.math.util.MathUtils.log(double,double)	m(org.apache.commons.math.util.MathUtils,log,double|double,_,d:-4503599627370496,d:4621819117588971520)	R:Double:NaN	1
+org.apache.commons.math.util.MathUtils.binomialCoefficientLog(int,int)	m(org.apache.commons.math.util.MathUtils,binomialCoefficientLog,int|int,_,i:-609,i:5)	E:java.lang.IllegalArgumentException:must have n >= k for binomial coefficient (n,k)	2
+org.apache.commons.math.util.MathUtils.binomialCoefficientLog(int,int)	m(org.apache.commons.math.util.MathUtils,binomialCoefficientLog,int|int,_,i:3,i:-767)	R:Double:NaN	7
+org.apache.commons.math.util.MathUtils.indicator(int)	m(org.apache.commons.math.util.MathUtils,indicator,int,_,i:3)	R:Integer:1	2
+org.apache.commons.math.util.MathUtils.equals([D,[D)	m(org.apache.commons.math.util.MathUtils,equals,[D|[D,_,a(double),a(double,d:4614256656552045848,d:0))	R:Boolean:false	1
+org.apache.commons.math.util.MathUtils.indicator(float)	m(org.apache.commons.math.util.MathUtils,indicator,float,_,f:1073741824)	R:Float:1.0	0
+org.apache.commons.math.util.MathUtils.subAndCheck(long,long)	m(org.apache.commons.math.util.MathUtils,subAndCheck,long|long,_,j:0,j:-9223372036854775808)	E:java.lang.ArithmeticException:overflow: subtract	1
+org.apache.commons.math.util.MathUtils.binomialCoefficient(int,int)	m(org.apache.commons.math.util.MathUtils,binomialCoefficient,int|int,_,i:-2147483648,i:-570)	E:java.lang.IllegalArgumentException:must have n >= k for binomial coefficient (n,k)	2
+org.apache.commons.math.util.MathUtils.nextAfter(double,double)	m(org.apache.commons.math.util.MathUtils,nextAfter,double|double,_,d:4457293557087583675,d:-9223372036854775808)	R:Double:9.999999999999999E-11	1
+org.apache.commons.math.util.MathUtils.round(double,int)	m(org.apache.commons.math.util.MathUtils,round,double|int,_,d:-4503599627370496,i:-682)	R:Double:-Infinity	3
+org.apache.commons.math.util.MathUtils.binomialCoefficientDouble(int,int)	m(org.apache.commons.math.util.MathUtils,binomialCoefficientDouble,int|int,_,i:-2147483648,i:2147483647)	E:java.lang.IllegalArgumentException:must have n >= k for binomial coefficient (n,k)	0
+org.apache.commons.math.util.MathUtils.subAndCheck(int,int)	m(org.apache.commons.math.util.MathUtils,subAndCheck,int|int,_,i:-1,i:-2147483648)	R:Integer:2147483647	1
+org.apache.commons.math.util.MathUtils.factorialLog(int)	m(org.apache.commons.math.util.MathUtils,factorialLog,int,_,i:1)	R:Double:0.0	0
+org.apache.commons.math.util.MathUtils.sign(long)	m(org.apache.commons.math.util.MathUtils,sign,long,_,j:-9223372036854775808)	R:Long:-1	2
+org.apache.commons.math.util.MathUtils.sign(float)	m(org.apache.commons.math.util.MathUtils,sign,float,_,f:1056964608)	R:Float:1.0	1
+org.apache.commons.math.util.MathUtils.addAndCheck(long,long)	m(org.apache.commons.math.util.MathUtils,addAndCheck,long|long,_,j:9223372036854775807,j:1)	E:java.lang.ArithmeticException:overflow: add	2
+org.apache.commons.math.util.MathUtils.cosh(double)	m(org.apache.commons.math.util.MathUtils,cosh,double,_,d:9218868437227405311)	R:Double:Infinity	0
+org.apache.commons.math.util.MathUtils.subAndCheck(long,long)	m(org.apache.commons.math.util.MathUtils,subAndCheck,long|long,_,j:-9218868437227405313,j:10)	R:Long:-9218868437227405323	1
+org.apache.commons.math.util.MathUtils.nextAfter(double,double)	m(org.apache.commons.math.util.MathUtils,nextAfter,double|double,_,d:-4616189618054758400,d:4621819117588971520)	R:Double:-0.9999999999999999	2
+org.apache.commons.math.util.MathUtils.binomialCoefficient(int,int)	m(org.apache.commons.math.util.MathUtils,binomialCoefficient,int|int,_,i:10,i:-570)	R:Long:0	2
+org.apache.commons.math.util.MathUtils.log(double,double)	m(org.apache.commons.math.util.MathUtils,log,double|double,_,d:4368491638549381120,d:4621819117588971520)	R:Double:-0.06267788858278042	0
+org.apache.commons.math.util.MathUtils.mulAndCheck(int,int)	m(org.apache.commons.math.util.MathUtils,mulAndCheck,int|int,_,i:2,i:0)	R:Integer:0	1
+org.apache.commons.math.util.MathUtils.binomialCoefficient(int,int)	m(org.apache.commons.math.util.MathUtils,binomialCoefficient,int|int,_,i:3,i:0)	R:Long:1	2
+org.apache.commons.math.util.MathUtils.sign(double)	m(org.apache.commons.math.util.MathUtils,sign,double,_,d:-4620693217682128896)	R:Double:-1.0	2
+org.apache.commons.math.util.MathUtils.addAndCheck(long,long)	m(org.apache.commons.math.util.MathUtils,addAndCheck,long|long,_,j:9223372036854775807,j:0)	R:Long:9223372036854775807	2
+org.apache.commons.math.util.MathUtils.factorial(int)	m(org.apache.commons.math.util.MathUtils,factorial,int,_,i:2)	R:Long:2	1
+org.apache.commons.math.util.MathUtils.nextAfter(double,double)	m(org.apache.commons.math.util.MathUtils,nextAfter,double|double,_,d:9218868437227405312,d:0)	R:Double:Infinity	0
+org.apache.commons.math.util.MathUtils.round(double,int)	m(org.apache.commons.math.util.MathUtils,round,double|int,_,d:9221120237041090560,i:5)	R:Double:NaN	1
+org.apache.commons.math.util.MathUtils.factorialDouble(int)	m(org.apache.commons.math.util.MathUtils,factorialDouble,int,_,i:1)	R:Double:1.0	0
+org.apache.commons.math.util.MathUtils.subAndCheck(long,long)	m(org.apache.commons.math.util.MathUtils,subAndCheck,long|long,_,j:0,j:0)	R:Long:0	0
+org.apache.commons.math.util.MathUtils.hash([D)	m(org.apache.commons.math.util.MathUtils,hash,[D,_,_)	R:Integer:0	0
+org.apache.commons.math.util.MathUtils.gcd(int,int)	m(org.apache.commons.math.util.MathUtils,gcd,int|int,_,i:-2147483648,i:290)	R:Integer:-2147483358	0
+org.apache.commons.math.util.MathUtils.sign(double)	m(org.apache.commons.math.util.MathUtils,sign,double,_,d:4621819117588971520)	R:Double:1.0	1
+org.apache.commons.math.util.MathUtils.equals(double,double)	m(org.apache.commons.math.util.MathUtils,equals,double|double,_,d:1,d:4607182418800017408)	R:Boolean:false	3
+org.apache.commons.math.util.MathUtils.lcm(int,int)	m(org.apache.commons.math.util.MathUtils,lcm,int|int,_,i:1,i:54)	R:Integer:54	11
+org.apache.commons.math.util.MathUtils.sinh(double)	m(org.apache.commons.math.util.MathUtils,sinh,double,_,d:-9223372036854775807)	R:Double:0.0	1
+org.apache.commons.math.util.MathUtils.cosh(double)	m(org.apache.commons.math.util.MathUtils,cosh,double,_,d:4611686018427387904)	R:Double:3.7621956910836314	0
+org.apache.commons.math.util.MathUtils.sign(double)	m(org.apache.commons.math.util.MathUtils,sign,double,_,d:0)	R:Double:0.0	1
+org.apache.commons.math.util.MathUtils.factorialDouble(int)	m(org.apache.commons.math.util.MathUtils,factorialDouble,int,_,i:100)	R:Double:9.332621544395286E157	0
+org.apache.commons.math.util.MathUtils.lcm(int,int)	m(org.apache.commons.math.util.MathUtils,lcm,int|int,_,i:1,i:-100)	R:Integer:100	1
+org.apache.commons.math.util.MathUtils.subAndCheck(long,long)	m(org.apache.commons.math.util.MathUtils,subAndCheck,long|long,_,j:0,j:9223372036854775807)	R:Long:-9223372036854775807	1
+org.apache.commons.math.util.MathUtils.addAndCheck(int,int)	m(org.apache.commons.math.util.MathUtils,addAndCheck,int|int,_,i:-14,i:5)	R:Integer:-9	1
+org.apache.commons.math.util.MathUtils.addAndCheck(long,long)	m(org.apache.commons.math.util.MathUtils,addAndCheck,long|long,_,j:4503599627370495,j:1)	R:Long:4503599627370496	0
+org.apache.commons.math.util.MathUtils.round(double,int)	m(org.apache.commons.math.util.MathUtils,round,double|int,_,d:4602678819172646912,i:100)	R:Double:0.5	2
+org.apache.commons.math.util.MathUtils.normalizeAngle(double,double)	m(org.apache.commons.math.util.MathUtils,normalizeAngle,double|double,_,d:-9223372036854775808,d:9221120237041090560)	R:Double:NaN	0
+org.apache.commons.math.util.MathUtils.binomialCoefficientLog(int,int)	m(org.apache.commons.math.util.MathUtils,binomialCoefficientLog,int|int,_,i:2,i:-1)	R:Double:-Infinity	0
+org.apache.commons.math.util.MathUtils.equals([D,[D)	m(org.apache.commons.math.util.MathUtils,equals,[D|[D,_,a(double),a(double))	R:Boolean:true	2
+org.apache.commons.math.util.MathUtils.scalb(double,int)	m(org.apache.commons.math.util.MathUtils,scalb,double|int,_,d:9218868437227405311,i:10)	R:Double:-5.696189077778435E-306	2
+org.apache.commons.math.util.MathUtils.round(double,int)	m(org.apache.commons.math.util.MathUtils,round,double|int,_,d:4618760256179416344,i:-780)	R:Double:0.0	0
+org.apache.commons.math.util.MathUtils.subAndCheck(int,int)	m(org.apache.commons.math.util.MathUtils,subAndCheck,int|int,_,i:2147483647,i:-2147483648)	E:java.lang.ArithmeticException:overflow: subtract	2
+org.apache.commons.math.util.MathUtils.addAndCheck(int,int)	m(org.apache.commons.math.util.MathUtils,addAndCheck,int|int,_,i:179,i:-2147483648)	R:Integer:-2147483469	0
+org.apache.commons.math.util.MathUtils.addAndCheck(int,int)	m(org.apache.commons.math.util.MathUtils,addAndCheck,int|int,_,i:3,i:-2147483648)	R:Integer:-2147483645	0
+org.apache.commons.math.util.MathUtils.indicator(short)	m(org.apache.commons.math.util.MathUtils,indicator,short,_,s:0)	R:Short:1	1
+org.apache.commons.math.util.MathUtils.addAndCheck(int,int)	m(org.apache.commons.math.util.MathUtils,addAndCheck,int|int,_,i:-14,i:100)	R:Integer:86	0
+org.apache.commons.math.util.MathUtils.indicator(double)	m(org.apache.commons.math.util.MathUtils,indicator,double,_,d:9221120237041090560)	R:Double:NaN	1
+org.apache.commons.math.util.MathUtils.sign(short)	m(org.apache.commons.math.util.MathUtils,sign,short,_,s:-32768)	R:Short:-1	2
+org.apache.commons.math.util.MathUtils.sinh(double)	m(org.apache.commons.math.util.MathUtils,sinh,double,_,d:9221120237041090560)	R:Double:NaN	0
+org.apache.commons.math.util.MathUtils.log(double,double)	m(org.apache.commons.math.util.MathUtils,log,double|double,_,d:-9223372036854775808,d:4618760256179416344)	R:Double:-0.0	0
+org.apache.commons.math.util.MathUtils.lcm(int,int)	m(org.apache.commons.math.util.MathUtils,lcm,int|int,_,i:5,i:16)	R:Integer:80	1
+org.apache.commons.math.util.MathUtils.scalb(double,int)	m(org.apache.commons.math.util.MathUtils,scalb,double|int,_,d:4457293557087583675,i:-100)	R:Double:7.888609052210118E-41	0
+org.apache.commons.math.util.MathUtils.addAndCheck(long,long)	m(org.apache.commons.math.util.MathUtils,addAndCheck,long|long,_,j:-2147483648,j:2147483647)	R:Long:-1	0
+org.apache.commons.math.util.MathUtils.nextAfter(double,double)	m(org.apache.commons.math.util.MathUtils,nextAfter,double|double,_,d:4614256656552045848,d:4756540486875873280)	R:Double:3.1415926535897936	1
+org.apache.commons.math.util.MathUtils.scalb(double,int)	m(org.apache.commons.math.util.MathUtils,scalb,double|int,_,d:9221120237041090560,i:0)	R:Double:NaN	2
+org.apache.commons.math.util.MathUtils.lcm(int,int)	m(org.apache.commons.math.util.MathUtils,lcm,int|int,_,i:1,i:255)	R:Integer:255	0
+org.apache.commons.math.util.MathUtils.nextAfter(double,double)	m(org.apache.commons.math.util.MathUtils,nextAfter,double|double,_,d:4621819117588971520,d:0)	R:Double:9.999999999999998	0
+org.apache.commons.math.util.MathUtils.hash([D)	m(org.apache.commons.math.util.MathUtils,hash,[D,_,a(double))	R:Integer:1	0
+org.apache.commons.math.util.MathUtils.scalb(double,int)	m(org.apache.commons.math.util.MathUtils,scalb,double|int,_,d:9218868437227405311,i:0)	R:Double:1.7976931348623157E308	0
+org.apache.commons.math.util.MathUtils.indicator(float)	m(org.apache.commons.math.util.MathUtils,indicator,float,_,f:2143289344)	R:Float:NaN	0
+org.apache.commons.math.util.MathUtils.subAndCheck(int,int)	m(org.apache.commons.math.util.MathUtils,subAndCheck,int|int,_,i:1,i:10)	R:Integer:-9	0
+org.apache.commons.math.util.MathUtils.scalb(double,int)	m(org.apache.commons.math.util.MathUtils,scalb,double|int,_,d:-4503599627370496,i:0)	R:Double:-Infinity	1
+org.apache.commons.math.util.MathUtils.sign(int)	m(org.apache.commons.math.util.MathUtils,sign,int,_,i:329)	R:Integer:1	1
+org.apache.commons.math.util.MathUtils.binomialCoefficient(int,int)	m(org.apache.commons.math.util.MathUtils,binomialCoefficient,int|int,_,i:10,i:10)	R:Long:1	1
+org.apache.commons.math.util.MathUtils.mulAndCheck(long,long)	m(org.apache.commons.math.util.MathUtils,mulAndCheck,long|long,_,j:-9223372036854775808,j:9218868437227405312)	E:java.lang.ArithmeticException:overflow: multiply	1
+org.apache.commons.math.util.MathUtils.lcm(int,int)	m(org.apache.commons.math.util.MathUtils,lcm,int|int,_,i:2147483647,i:-2)	E:java.lang.ArithmeticException:overflow: mul	2
+org.apache.commons.math.util.MathUtils.indicator(int)	m(org.apache.commons.math.util.MathUtils,indicator,int,_,i:-365)	R:Integer:-1	1
+org.apache.commons.math.util.MathUtils.lcm(int,int)	m(org.apache.commons.math.util.MathUtils,lcm,int|int,_,i:2147483647,i:5)	E:java.lang.ArithmeticException:overflow: mul	1
+org.apache.commons.math.util.MathUtils.indicator(double)	m(org.apache.commons.math.util.MathUtils,indicator,double,_,d:4602678819172646912)	R:Double:1.0	2

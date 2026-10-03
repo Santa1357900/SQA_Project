@@ -1,0 +1,16 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/JxPath-9-r1/JxPath-9b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 10
+  - acogen.AcoGeneratedTest::test0004_computeValue
+  - acogen.AcoGeneratedTest::test0006_equal
+  - acogen.AcoGeneratedTest::test0009_equal
+  - acogen.AcoGeneratedTest::test0014_equal
+  - acogen.AcoGeneratedTest::test0015_computeValue
+  - acogen.AcoGeneratedTest::test0017_equal
+  - acogen.AcoGeneratedTest::test0024_equal
+  - acogen.AcoGeneratedTest::test0025_equal
+  - acogen.AcoGeneratedTest::test0026_equal
+  - acogen.AcoGeneratedTest::test0027_equal
+[exit 0]

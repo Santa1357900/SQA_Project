@@ -1,0 +1,178 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.18181818181818182" branch-rate="0.0" lines-covered="6" lines-valid="33" branches-covered="0" branches-valid="8" complexity="1.6666666666666667" version="2.0.3" timestamp="1791061124113">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="org.mockito.internal.stubbing.defaultanswers" line-rate="0.18181818181818182" branch-rate="0.0" complexity="1.6666666666666667">
+			<classes>
+				<class name="org.mockito.internal.stubbing.defaultanswers.ReturnsDeepStubs" filename="org/mockito/internal/stubbing/defaultanswers/ReturnsDeepStubs.java" line-rate="0.20689655172413793" branch-rate="0.0" complexity="1.6666666666666667">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="40" hits="7" branch="false"/>
+								<line number="44" hits="7" branch="false"/>
+								<line number="45" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="actualParameterizedType" signature="(Ljava/lang/Object;)Lorg/mockito/internal/util/reflection/GenericMetadataSupport;" line-rate="0.5" branch-rate="1.0">
+							<lines>
+								<line number="127" hits="5" branch="false"/>
+								<line number="128" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="answer" signature="(Lorg/mockito/invocation/InvocationOnMock;)Ljava/lang/Object;" line-rate="0.3333333333333333" branch-rate="0.0">
+							<lines>
+								<line number="48" hits="1" branch="false"/>
+								<line number="49" hits="1" branch="false"/>
+								<line number="51" hits="0" branch="false"/>
+								<line number="52" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="53" hits="0" branch="false"/>
+								<line number="56" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="createNewDeepStubMock" signature="(Lorg/mockito/internal/util/reflection/GenericMetadataSupport;)Ljava/lang/Object;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="87" hits="0" branch="false"/>
+								<line number="88" hits="0" branch="false"/>
+								<line number="89" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getMock" signature="(Lorg/mockito/invocation/InvocationOnMock;Lorg/mockito/internal/util/reflection/GenericMetadataSupport;)Ljava/lang/Object;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="62" hits="0" branch="false"/>
+								<line number="63" hits="0" branch="false"/>
+								<line number="66" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="67" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="68" hits="0" branch="false"/>
+								<line number="70" hits="0" branch="false"/>
+								<line number="73" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="recordDeepStubMock" signature="(Ljava/lang/Object;Lorg/mockito/internal/stubbing/InvocationContainerImpl;)Ljava/lang/Object;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="114" hits="0" branch="false"/>
+								<line number="120" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="returnsDeepStubsAnswerUsing" signature="(Lorg/mockito/internal/util/reflection/GenericMetadataSupport;)Lorg/mockito/internal/stubbing/defaultanswers/ReturnsDeepStubs;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="104" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="withSettingsUsing" signature="(Lorg/mockito/internal/util/reflection/GenericMetadataSupport;)Lorg/mockito/MockSettings;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="95" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="96" hits="0" branch="false"/>
+								<line number="97" hits="0" branch="false"/>
+								<line number="99" hits="0" branch="false"/>
+								<line number="100" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="40" hits="7" branch="false"/>
+						<line number="44" hits="7" branch="false"/>
+						<line number="45" hits="7" branch="false"/>
+						<line number="48" hits="1" branch="false"/>
+						<line number="49" hits="1" branch="false"/>
+						<line number="51" hits="0" branch="false"/>
+						<line number="52" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="53" hits="0" branch="false"/>
+						<line number="56" hits="0" branch="false"/>
+						<line number="62" hits="0" branch="false"/>
+						<line number="63" hits="0" branch="false"/>
+						<line number="66" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="67" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="68" hits="0" branch="false"/>
+						<line number="70" hits="0" branch="false"/>
+						<line number="73" hits="0" branch="false"/>
+						<line number="87" hits="0" branch="false"/>
+						<line number="88" hits="0" branch="false"/>
+						<line number="89" hits="0" branch="false"/>
+						<line number="95" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="96" hits="0" branch="false"/>
+						<line number="97" hits="0" branch="false"/>
+						<line number="99" hits="0" branch="false"/>
+						<line number="100" hits="0" branch="false"/>
+						<line number="104" hits="0" branch="false"/>
+						<line number="114" hits="0" branch="false"/>
+						<line number="120" hits="0" branch="false"/>
+						<line number="127" hits="5" branch="false"/>
+						<line number="128" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.stubbing.defaultanswers.ReturnsDeepStubs$1" filename="org/mockito/internal/stubbing/defaultanswers/ReturnsDeepStubs.java" line-rate="0.0" branch-rate="1.0" complexity="1.6666666666666667">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/mockito/internal/stubbing/defaultanswers/ReturnsDeepStubs;Lorg/mockito/internal/util/reflection/GenericMetadataSupport;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="104" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="actualParameterizedType" signature="(Ljava/lang/Object;)Lorg/mockito/internal/util/reflection/GenericMetadataSupport;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="107" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="104" hits="0" branch="false"/>
+						<line number="107" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.stubbing.defaultanswers.ReturnsDeepStubs$2" filename="org/mockito/internal/stubbing/defaultanswers/ReturnsDeepStubs.java" line-rate="0.0" branch-rate="1.0" complexity="1.6666666666666667">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/mockito/internal/stubbing/defaultanswers/ReturnsDeepStubs;Ljava/lang/Object;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="114" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="answer" signature="(Lorg/mockito/invocation/InvocationOnMock;)Ljava/lang/Object;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="116" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="114" hits="0" branch="false"/>
+						<line number="116" hits="0" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

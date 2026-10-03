@@ -1,0 +1,8 @@
+test0001_setShape(acogen.AcoGeneratedTest)
+test0002_getShape(acogen.AcoGeneratedTest)
+test0003_hashCode(acogen.AcoGeneratedTest)
+test0004_clone(acogen.AcoGeneratedTest)
+test0005_setShape(acogen.AcoGeneratedTest)
+test0006_init(acogen.AcoGeneratedTest)
+test0007_equals(acogen.AcoGeneratedTest)
+test0008_setShape(acogen.AcoGeneratedTest)

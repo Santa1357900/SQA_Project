@@ -1,0 +1,144 @@
+$ java -Xmx768m -Xss4m -javaagent:/home/pheerapat/aco-work/tool/jacocoagent.jar=output=none,includes=org.apache.commons.cli.HelpFormatter:org.apache.commons.cli.HelpFormatter$* -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/tool/jacococore.jar:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit/junit/3.8.2/junit-3.8.2.jar:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit-addons/junit-addons/1.4/junit-addons-1.4.jar:/home/pheerapat/aco-work/jobs/Cli-33-r1/b/target/classes:/home/pheerapat/aco-work/jobs/Cli-33-r1/b/target/test-classes AcoSearch /home/pheerapat/aco-work/jobs/Cli-33-r1/aco.properties
+usage: 123
+
+usage: abc
+a"b
+
+usage: ABC
+
+%s
+usage: -1
+
+usage: 1e5
+
+12:30:00
+usage: true
+a
+
+usage:
+       
+
+usage: arg
+
+usage:
+       
+a"b
+
+0x1F
+usage: a"b
+1.5
+
+usage:
+       
+a"b
+
+usage:  |
+{"a":1}
+
+-
+usage:
+       
+-
+
+usage:
+       
+line.separator
+
+>
+usage: <a>b</a>
+<
+
+0x1F
+usage: 1
+[1,2]
+
+usage: 1
+]
+
+usage: -
+false
+
+usage: {"a":1}
+>
+
+foo.bar
+usage:
+       
+a"b
+
+usage: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+usage: 1.5
+
+usage: 1.5
+/a/b
+
+usage:
+       
+
+usage: [1,2]
+
+usage: {"a":1}
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+usage: %s
+
+usage: <
+/a/b
+
+é
+usage: {"a":1}
+
+usage: #
+ABC
+
+1
+usage: [
+a
+
+0
+usage: /a/b
+
+2020-01-01
+usage:
+
+2020-01-01
+usage: 2020-01-01
+]
+
+true
+usage: /a/b
+
+usage: /a/b
+
+2020-01-01
+usage: /a/b
+
+2020-01-01
+usage: é
+
+line.separator
+usage: 1.5
+
+2020-01-01
+usage: a=b
+
+2020-01-01
+usage: /a/b
+
+2020-01-01
+usage: /a/b
+
+1e5
+usage: /a/b
+
+2020-01-01
+usage:  |
+
+2020-01-01
+usage: 1
+<a>b</a>
+
+a"b
+[exit 0]

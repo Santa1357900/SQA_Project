@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Codec-15-r1/Codec-15b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 51
+     Lines covered: 51
+  Conditions total: 34
+Conditions covered: 30
+     Line coverage: 100.0%
+Condition coverage: 88.2%
+[exit 0]

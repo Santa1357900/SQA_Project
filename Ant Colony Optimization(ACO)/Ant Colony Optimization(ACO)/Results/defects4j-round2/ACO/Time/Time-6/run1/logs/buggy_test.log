@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Time-6-r1/Time-6b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - acogen.AcoGeneratedTest::test0054_hashCode
+  - acogen.AcoGeneratedTest::test0071_getInstance
+  - acogen.AcoGeneratedTest::test0100_getDateTimeMillis
+[exit 0]

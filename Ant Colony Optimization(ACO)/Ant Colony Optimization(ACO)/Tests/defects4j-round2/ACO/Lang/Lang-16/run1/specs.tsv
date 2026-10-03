@@ -1,0 +1,202 @@
+org.apache.commons.lang3.math.NumberUtils.toDouble(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toDouble,java.lang.String,_,t:00660061006c00730065)	R:Double:0.0	21
+org.apache.commons.lang3.math.NumberUtils.min(byte,byte,byte)	m(org.apache.commons.lang3.math.NumberUtils,min,byte|byte|byte,_,b:-1,b:-128,b:0)	R:Byte:-128	3
+org.apache.commons.lang3.math.NumberUtils.isDigits(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isDigits,java.lang.String,_,t:0020006900730020006e006f007400200061002000760061006c006900640020006e0075006d006200650072002e)	R:Boolean:false	3
+org.apache.commons.lang3.math.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigDecimal,java.lang.String,_,t:0020006900730020006e006f007400200061002000760061006c006900640020006e0075006d006200650072002e)	E:java.lang.NumberFormatException:Character array is missing "e" notation exponential mark.	0
+org.apache.commons.lang3.math.NumberUtils.max([I)	m(org.apache.commons.lang3.math.NumberUtils,max,[I,_,a(int))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.max([B)	m(org.apache.commons.lang3.math.NumberUtils,max,[B,_,a(byte))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.min([I)	m(org.apache.commons.lang3.math.NumberUtils,min,[I,_,a(int,i:10,i:1))	R:Integer:1	4
+org.apache.commons.lang3.math.NumberUtils.toFloat(java.lang.String,float)	m(org.apache.commons.lang3.math.NumberUtils,toFloat,java.lang.String|float,_,t:006100220062,f:0)	R:Float:0.0	2
+org.apache.commons.lang3.math.NumberUtils.max(short,short,short)	m(org.apache.commons.lang3.math.NumberUtils,max,short|short|short,_,s:32767,s:0,s:10)	R:Short:32767	3
+org.apache.commons.lang3.math.NumberUtils.createLong(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createLong,java.lang.String,_,t:003c0061003e0062003c002f0061003e)	E:java.lang.NumberFormatException:For input string: "<a>b</a>"	0
+org.apache.commons.lang3.math.NumberUtils.min(byte,byte,byte)	m(org.apache.commons.lang3.math.NumberUtils,min,byte|byte|byte,_,b:127,b:0,b:0)	R:Byte:0	0
+org.apache.commons.lang3.math.NumberUtils.min(float,float,float)	m(org.apache.commons.lang3.math.NumberUtils,min,float|float|float,_,f:1065353216,f:2143289344,f:1)	R:Float:NaN	1
+org.apache.commons.lang3.math.NumberUtils.min(int,int,int)	m(org.apache.commons.lang3.math.NumberUtils,min,int|int|int,_,i:16,i:0,i:1)	R:Integer:0	3
+org.apache.commons.lang3.math.NumberUtils.toFloat(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toFloat,java.lang.String,_,t:00410072007200610079002000630061006e006e006f007400200062006500200065006d007000740079002e)	R:Float:0.0	1
+org.apache.commons.lang3.math.NumberUtils.min(byte,byte,byte)	m(org.apache.commons.lang3.math.NumberUtils,min,byte|byte|byte,_,b:-1,b:10,b:-1)	R:Byte:-1	1
+org.apache.commons.lang3.math.NumberUtils.max(byte,byte,byte)	m(org.apache.commons.lang3.math.NumberUtils,max,byte|byte|byte,_,b:65,b:-128,b:127)	R:Byte:127	3
+org.apache.commons.lang3.math.NumberUtils.createInteger(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createInteger,java.lang.String,_,t:000a)	E:java.lang.NumberFormatException:For input string: "\u000a"	0
+org.apache.commons.lang3.math.NumberUtils.max(float,float,float)	m(org.apache.commons.lang3.math.NumberUtils,max,float|float|float,_,f:1073741824,f:-1082130432,f:2139095040)	R:Float:Infinity	1
+org.apache.commons.lang3.math.NumberUtils.isDigits(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isDigits,java.lang.String,_,t:0030)	R:Boolean:true	2
+org.apache.commons.lang3.math.NumberUtils.toShort(java.lang.String,short)	m(org.apache.commons.lang3.math.NumberUtils,toShort,java.lang.String|short,_,t:0061003d0062,s:0)	R:Short:0	2
+org.apache.commons.lang3.math.NumberUtils.min(int,int,int)	m(org.apache.commons.lang3.math.NumberUtils,min,int|int|int,_,i:-2147483648,i:0,i:-25)	R:Integer:-2147483648	1
+org.apache.commons.lang3.math.NumberUtils.toLong(java.lang.String,long)	m(org.apache.commons.lang3.math.NumberUtils,toLong,java.lang.String|long,_,_,j:2147483648)	R:Long:2147483648	1
+org.apache.commons.lang3.math.NumberUtils.max([D)	m(org.apache.commons.lang3.math.NumberUtils,max,[D,_,a(double,d:-4616189618054758400,d:9218868437227405312,d:-4503599627370496))	R:Double:Infinity	6
+org.apache.commons.lang3.math.NumberUtils.toLong(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toLong,java.lang.String,_,_)	R:Long:0	1
+org.apache.commons.lang3.math.NumberUtils.toInt(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toInt,java.lang.String,_,t:)	R:Integer:0	3
+org.apache.commons.lang3.math.NumberUtils.min([F)	m(org.apache.commons.lang3.math.NumberUtils,min,[F,_,a(float,f:-1082130432))	R:Float:-1.0	2
+org.apache.commons.lang3.math.NumberUtils.toLong(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toLong,java.lang.String,_,t:0078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078)	R:Long:0	2
+org.apache.commons.lang3.math.NumberUtils.max(long,long,long)	m(org.apache.commons.lang3.math.NumberUtils,max,long|long|long,_,j:2147483648,j:-1,j:-9223372036854775808)	R:Long:2147483648	3
+org.apache.commons.lang3.math.NumberUtils.toByte(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toByte,java.lang.String,_,t:006e0075006c006c)	R:Byte:0	3
+org.apache.commons.lang3.math.NumberUtils.max(int,int,int)	m(org.apache.commons.lang3.math.NumberUtils,max,int|int|int,_,i:520,i:930,i:-2147483648)	R:Integer:930	3
+org.apache.commons.lang3.math.NumberUtils.max([J)	m(org.apache.commons.lang3.math.NumberUtils,max,[J,_,a(long,j:0,j:2147483648,j:1000))	R:Long:2147483648	5
+org.apache.commons.lang3.math.NumberUtils.min(short,short,short)	m(org.apache.commons.lang3.math.NumberUtils,min,short|short|short,_,s:1,s:32767,s:-1)	R:Short:-1	3
+org.apache.commons.lang3.math.NumberUtils.<init>()	n(org.apache.commons.lang3.math.NumberUtils,)	R:org.apache.commons.lang3.math.NumberUtils	1
+org.apache.commons.lang3.math.NumberUtils.max(byte,byte,byte)	m(org.apache.commons.lang3.math.NumberUtils,max,byte|byte|byte,_,b:10,b:127,b:1)	R:Byte:127	2
+org.apache.commons.lang3.math.NumberUtils.toInt(java.lang.String,int)	m(org.apache.commons.lang3.math.NumberUtils,toInt,java.lang.String|int,_,t:00e9,i:3)	R:Integer:3	0
+org.apache.commons.lang3.math.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createFloat,java.lang.String,_,t:005b0031002c0032005d)	E:java.lang.NumberFormatException:For input string: "[1,2]"	0
+org.apache.commons.lang3.math.NumberUtils.createBigInteger(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigInteger,java.lang.String,_,t:004100420043)	E:java.lang.NumberFormatException:For input string: "ABC"	0
+org.apache.commons.lang3.math.NumberUtils.min([D)	m(org.apache.commons.lang3.math.NumberUtils,min,[D,_,a(double))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.toByte(java.lang.String,byte)	m(org.apache.commons.lang3.math.NumberUtils,toByte,java.lang.String|byte,_,t:002f0061002f0062,b:0)	R:Byte:0	0
+org.apache.commons.lang3.math.NumberUtils.toByte(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toByte,java.lang.String,_,_)	R:Byte:0	1
+org.apache.commons.lang3.math.NumberUtils.max([F)	m(org.apache.commons.lang3.math.NumberUtils,max,[F,_,a(float,f:1073741824))	R:Float:2.0	2
+org.apache.commons.lang3.math.NumberUtils.max([I)	m(org.apache.commons.lang3.math.NumberUtils,max,[I,_,a(int,i:3))	R:Integer:3	2
+org.apache.commons.lang3.math.NumberUtils.max(float,float,float)	m(org.apache.commons.lang3.math.NumberUtils,max,float|float|float,_,f:1073741824,f:0,f:0)	R:Float:2.0	0
+org.apache.commons.lang3.math.NumberUtils.toByte(java.lang.String,byte)	m(org.apache.commons.lang3.math.NumberUtils,toByte,java.lang.String|byte,_,t:0054006800650020004100720072006100790020006d0075007300740020006e006f00740020006200650020006e0075006c006c,b:-128)	R:Byte:-128	0
+org.apache.commons.lang3.math.NumberUtils.min(int,int,int)	m(org.apache.commons.lang3.math.NumberUtils,min,int|int|int,_,i:255,i:0,i:-1)	R:Integer:-1	1
+org.apache.commons.lang3.math.NumberUtils.min(int,int,int)	m(org.apache.commons.lang3.math.NumberUtils,min,int|int|int,_,i:-831,i:1000,i:15)	R:Integer:-831	0
+org.apache.commons.lang3.math.NumberUtils.max([F)	m(org.apache.commons.lang3.math.NumberUtils,max,[F,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.createInteger(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createInteger,java.lang.String,_,t:003100320033)	R:Integer:123	1
+org.apache.commons.lang3.math.NumberUtils.min(short,short,short)	m(org.apache.commons.lang3.math.NumberUtils,min,short|short|short,_,s:1,s:255,s:-32768)	R:Short:-32768	0
+org.apache.commons.lang3.math.NumberUtils.max([D)	m(org.apache.commons.lang3.math.NumberUtils,max,[D,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.min(long,long,long)	m(org.apache.commons.lang3.math.NumberUtils,min,long|long|long,_,j:0,j:9223372036854775807,j:2)	R:Long:0	3
+org.apache.commons.lang3.math.NumberUtils.min(short,short,short)	m(org.apache.commons.lang3.math.NumberUtils,min,short|short|short,_,s:0,s:32767,s:32767)	R:Short:0	1
+org.apache.commons.lang3.math.NumberUtils.max([J)	m(org.apache.commons.lang3.math.NumberUtils,max,[J,_,a(long))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.max([F)	m(org.apache.commons.lang3.math.NumberUtils,max,[F,_,a(float,f:2143289344,f:1065353216))	R:Float:NaN	3
+org.apache.commons.lang3.math.NumberUtils.max([S)	m(org.apache.commons.lang3.math.NumberUtils,max,[S,_,a(short,s:0))	R:Short:0	2
+org.apache.commons.lang3.math.NumberUtils.toInt(java.lang.String,int)	m(org.apache.commons.lang3.math.NumberUtils,toInt,java.lang.String|int,_,t:002d0030002e0030,i:-2147483648)	R:Integer:-2147483648	0
+org.apache.commons.lang3.math.NumberUtils.min([J)	m(org.apache.commons.lang3.math.NumberUtils,min,[J,_,a(long))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.max([F)	m(org.apache.commons.lang3.math.NumberUtils,max,[F,_,a(float))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.min([D)	m(org.apache.commons.lang3.math.NumberUtils,min,[D,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.toFloat(java.lang.String,float)	m(org.apache.commons.lang3.math.NumberUtils,toFloat,java.lang.String|float,_,t:0020,f:2139095040)	R:Float:Infinity	0
+org.apache.commons.lang3.math.NumberUtils.createInteger(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createInteger,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang3.math.NumberUtils.createInteger(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createInteger,java.lang.String,_,t:0020)	E:java.lang.NumberFormatException:For input string: " "	0
+org.apache.commons.lang3.math.NumberUtils.createInteger(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createInteger,java.lang.String,_,t:006100220062)	E:java.lang.NumberFormatException:For input string: "a"b"	0
+org.apache.commons.lang3.math.NumberUtils.min(short,short,short)	m(org.apache.commons.lang3.math.NumberUtils,min,short|short|short,_,s:32767,s:255,s:32767)	R:Short:255	1
+org.apache.commons.lang3.math.NumberUtils.toShort(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toShort,java.lang.String,_,t:002d002d)	R:Short:0	1
+org.apache.commons.lang3.math.NumberUtils.min(short,short,short)	m(org.apache.commons.lang3.math.NumberUtils,min,short|short|short,_,s:32767,s:32767,s:32767)	R:Short:32767	0
+org.apache.commons.lang3.math.NumberUtils.toByte(java.lang.String,byte)	m(org.apache.commons.lang3.math.NumberUtils,toByte,java.lang.String|byte,_,t:,b:10)	R:Byte:10	0
+org.apache.commons.lang3.math.NumberUtils.createBigInteger(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigInteger,java.lang.String,_,t:0031)	R:BigInteger:1	1
+org.apache.commons.lang3.math.NumberUtils.max(int,int,int)	m(org.apache.commons.lang3.math.NumberUtils,max,int|int|int,_,i:255,i:0,i:1)	R:Integer:255	1
+org.apache.commons.lang3.math.NumberUtils.createDouble(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createDouble,java.lang.String,_,t:004100200062006c0061006e006b00200073007400720069006e00670020006900730020006e006f007400200061002000760061006c006900640020006e0075006d006200650072)	E:java.lang.NumberFormatException:For input string: "A blank string is not a valid number"	0
+org.apache.commons.lang3.math.NumberUtils.toByte(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toByte,java.lang.String,_,t:002d0031)	R:Byte:-1	1
+org.apache.commons.lang3.math.NumberUtils.min([J)	m(org.apache.commons.lang3.math.NumberUtils,min,[J,_,a(long,j:10,j:0))	R:Long:0	4
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:00660061006c00730065)	E:java.lang.NumberFormatException:false is not a valid number.	16
+org.apache.commons.lang3.math.NumberUtils.max([I)	m(org.apache.commons.lang3.math.NumberUtils,max,[I,_,a(int,i:-1))	R:Integer:-1	0
+org.apache.commons.lang3.math.NumberUtils.max(double,double,double)	m(org.apache.commons.lang3.math.NumberUtils,max,double|double|double,_,d:4621819117588971520,d:9221120237041090560,d:-4503599627370496)	R:Double:NaN	1
+org.apache.commons.lang3.math.NumberUtils.max([D)	m(org.apache.commons.lang3.math.NumberUtils,max,[D,_,a(double))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.min([B)	m(org.apache.commons.lang3.math.NumberUtils,min,[B,_,a(byte,b:65))	R:Byte:65	2
+org.apache.commons.lang3.math.NumberUtils.max([I)	m(org.apache.commons.lang3.math.NumberUtils,max,[I,_,a(int,i:-1,i:-1))	R:Integer:-1	2
+org.apache.commons.lang3.math.NumberUtils.max([I)	m(org.apache.commons.lang3.math.NumberUtils,max,[I,_,a(int,i:-100))	R:Integer:-100	0
+org.apache.commons.lang3.math.NumberUtils.max([F)	m(org.apache.commons.lang3.math.NumberUtils,max,[F,_,a(float,f:2143289344,f:2143289344))	R:Float:NaN	1
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:000a)	E:java.lang.NumberFormatException:A blank string is not a valid number	2
+org.apache.commons.lang3.math.NumberUtils.max([B)	m(org.apache.commons.lang3.math.NumberUtils,max,[B,_,a(byte,b:127))	R:Byte:127	2
+org.apache.commons.lang3.math.NumberUtils.min([F)	m(org.apache.commons.lang3.math.NumberUtils,min,[F,_,a(float,f:2139095040))	R:Float:Infinity	0
+org.apache.commons.lang3.math.NumberUtils.max([S)	m(org.apache.commons.lang3.math.NumberUtils,max,[S,_,a(short,s:-1,s:255,s:-32768))	R:Short:255	3
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:00310032003a00330030003a00300030)	E:java.lang.NumberFormatException:For input string: "12:30:00"	7
+org.apache.commons.lang3.math.NumberUtils.max([S)	m(org.apache.commons.lang3.math.NumberUtils,max,[S,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.max([J)	m(org.apache.commons.lang3.math.NumberUtils,max,[J,_,a(long,j:-9223372036854775808,j:0))	R:Long:0	0
+org.apache.commons.lang3.math.NumberUtils.max(double,double,double)	m(org.apache.commons.lang3.math.NumberUtils,max,double|double|double,_,d:9218868437227405311,d:4611686018427387904,d:4636737291354636288)	R:Double:1.7976931348623157E308	0
+org.apache.commons.lang3.math.NumberUtils.max([I)	m(org.apache.commons.lang3.math.NumberUtils,max,[I,_,a(int,i:5,i:1000))	R:Integer:1000	1
+org.apache.commons.lang3.math.NumberUtils.min([B)	m(org.apache.commons.lang3.math.NumberUtils,min,[B,_,a(byte))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:002d0031)	R:Integer:-1	1
+org.apache.commons.lang3.math.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createFloat,java.lang.String,_,t:00610020006200200063)	E:java.lang.NumberFormatException:For input string: "a b c"	0
+org.apache.commons.lang3.math.NumberUtils.createBigInteger(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigInteger,java.lang.String,_,t:)	E:java.lang.NumberFormatException:Zero length BigInteger	0
+org.apache.commons.lang3.math.NumberUtils.min(double,double,double)	m(org.apache.commons.lang3.math.NumberUtils,min,double|double|double,_,d:-4503599627370496,d:9221120237041090560,d:4756540486875873280)	R:Double:NaN	1
+org.apache.commons.lang3.math.NumberUtils.min([F)	m(org.apache.commons.lang3.math.NumberUtils,min,[F,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.max([S)	m(org.apache.commons.lang3.math.NumberUtils,max,[S,_,a(short))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang3.math.NumberUtils.toShort(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toShort,java.lang.String,_,t:0030)	R:Short:0	1
+org.apache.commons.lang3.math.NumberUtils.min([D)	m(org.apache.commons.lang3.math.NumberUtils,min,[D,_,a(double,d:0))	R:Double:0.0	2
+org.apache.commons.lang3.math.NumberUtils.min([F)	m(org.apache.commons.lang3.math.NumberUtils,min,[F,_,a(float,f:0,f:0))	R:Float:0.0	3
+org.apache.commons.lang3.math.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createFloat,java.lang.String,_,t:004100200062006c0061006e006b00200073007400720069006e00670020006900730020006e006f007400200061002000760061006c006900640020006e0075006d006200650072)	E:java.lang.NumberFormatException:For input string: "A blank string is not a valid number"	0
+org.apache.commons.lang3.math.NumberUtils.max(byte,byte,byte)	m(org.apache.commons.lang3.math.NumberUtils,max,byte|byte|byte,_,b:-128,b:-128,b:0)	R:Byte:0	0
+org.apache.commons.lang3.math.NumberUtils.max(long,long,long)	m(org.apache.commons.lang3.math.NumberUtils,max,long|long|long,_,j:0,j:-1,j:-9223372036854775808)	R:Long:0	0
+org.apache.commons.lang3.math.NumberUtils.min(long,long,long)	m(org.apache.commons.lang3.math.NumberUtils,min,long|long|long,_,j:0,j:-1,j:-1)	R:Long:-1	1
+org.apache.commons.lang3.math.NumberUtils.max(double,double,double)	m(org.apache.commons.lang3.math.NumberUtils,max,double|double|double,_,d:4621819117588971520,d:4621819117588971520,d:9218868437227405312)	R:Double:Infinity	0
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:00300078)	E:java.lang.NumberFormatException:For input string: ""	1
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,t:005b0031002c0032005d)	R:Boolean:false	6
+org.apache.commons.lang3.math.NumberUtils.max(double,double,double)	m(org.apache.commons.lang3.math.NumberUtils,max,double|double|double,_,d:4602678819172646912,d:4457293557087583675,d:0)	R:Double:0.5	0
+org.apache.commons.lang3.math.NumberUtils.max(int,int,int)	m(org.apache.commons.lang3.math.NumberUtils,max,int|int|int,_,i:0,i:0,i:0)	R:Integer:0	0
+org.apache.commons.lang3.math.NumberUtils.min(float,float,float)	m(org.apache.commons.lang3.math.NumberUtils,min,float|float|float,_,f:2139095040,f:0,f:1056964608)	R:Float:0.0	0
+org.apache.commons.lang3.math.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createFloat,java.lang.String,_,t:00e9)	E:java.lang.NumberFormatException:For input string: "\u00e9"	0
+org.apache.commons.lang3.math.NumberUtils.max([S)	m(org.apache.commons.lang3.math.NumberUtils,max,[S,_,a(short,s:255,s:-1,s:32767))	R:Short:32767	0
+org.apache.commons.lang3.math.NumberUtils.toDouble(java.lang.String,double)	m(org.apache.commons.lang3.math.NumberUtils,toDouble,java.lang.String|double,_,t:0032003000320030002d00300031002d00300031,d:4607182418800017408)	R:Double:1.0	0
+org.apache.commons.lang3.math.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigDecimal,java.lang.String,_,t:00660061006c00730065)	E:java.lang.NumberFormatException:Character f is neither a decimal digit number, decimal point, nor "e" notation exponential mark.	0
+org.apache.commons.lang3.math.NumberUtils.min([D)	m(org.apache.commons.lang3.math.NumberUtils,min,[D,_,a(double,d:9218868437227405312))	R:Double:Infinity	0
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:002f0061002f0062)	E:java.lang.NumberFormatException:/a/b is not a valid number.	1
+org.apache.commons.lang3.math.NumberUtils.min([S)	m(org.apache.commons.lang3.math.NumberUtils,min,[S,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createFloat,java.lang.String,_,t:006100220062)	E:java.lang.NumberFormatException:For input string: "a"b"	0
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,t:002d0031)	R:Boolean:true	4
+org.apache.commons.lang3.math.NumberUtils.min(double,double,double)	m(org.apache.commons.lang3.math.NumberUtils,min,double|double|double,_,d:4457293557087583675,d:-4616189618054758400,d:9218868437227405311)	R:Double:-1.0	0
+org.apache.commons.lang3.math.NumberUtils.min([D)	m(org.apache.commons.lang3.math.NumberUtils,min,[D,_,a(double,d:-9223372036854775808))	R:Double:-0.0	0
+org.apache.commons.lang3.math.NumberUtils.min([F)	m(org.apache.commons.lang3.math.NumberUtils,min,[F,_,a(float,f:2139095039,f:0))	R:Float:0.0	1
+org.apache.commons.lang3.math.NumberUtils.min(double,double,double)	m(org.apache.commons.lang3.math.NumberUtils,min,double|double|double,_,d:-9223372036854775808,d:-9223372036854775808,d:4457293557087583675)	R:Double:-0.0	0
+org.apache.commons.lang3.math.NumberUtils.createBigInteger(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigInteger,java.lang.String,_,t:006100620063)	E:java.lang.NumberFormatException:For input string: "abc"	0
+org.apache.commons.lang3.math.NumberUtils.max(byte,byte,byte)	m(org.apache.commons.lang3.math.NumberUtils,max,byte|byte|byte,_,b:-128,b:-128,b:65)	R:Byte:65	0
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,_)	R:Boolean:false	1
+org.apache.commons.lang3.math.NumberUtils.min(double,double,double)	m(org.apache.commons.lang3.math.NumberUtils,min,double|double|double,_,d:-4503599627370496,d:0,d:9218868437227405311)	R:Double:-Infinity	0
+org.apache.commons.lang3.math.NumberUtils.min(long,long,long)	m(org.apache.commons.lang3.math.NumberUtils,min,long|long|long,_,j:0,j:0,j:-1)	R:Long:-1	1
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,t:0061)	R:Boolean:false	3
+org.apache.commons.lang3.math.NumberUtils.min(long,long,long)	m(org.apache.commons.lang3.math.NumberUtils,min,long|long|long,_,j:0,j:0,j:-9223372036854775808)	R:Long:-9223372036854775808	0
+org.apache.commons.lang3.math.NumberUtils.toShort(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toShort,java.lang.String,_,t:002d0031)	R:Short:-1	0
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:006e0075006c006c)	E:java.lang.NumberFormatException:null is not a valid number.	4
+org.apache.commons.lang3.math.NumberUtils.createBigInteger(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigInteger,java.lang.String,_,t:003c0061003e0062003c002f0061003e)	E:java.lang.NumberFormatException:For input string: "<a>b</a>"	0
+org.apache.commons.lang3.math.NumberUtils.min([F)	m(org.apache.commons.lang3.math.NumberUtils,min,[F,_,a(float,f:0,f:2143289344,f:0))	R:Float:NaN	1
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,t:0009)	R:Boolean:false	1
+org.apache.commons.lang3.math.NumberUtils.min([S)	m(org.apache.commons.lang3.math.NumberUtils,min,[S,_,a(short,s:32767,s:-1))	R:Short:-1	4
+org.apache.commons.lang3.math.NumberUtils.min([S)	m(org.apache.commons.lang3.math.NumberUtils,min,[S,_,a(short,s:32767,s:32767))	R:Short:32767	1
+org.apache.commons.lang3.math.NumberUtils.min([S)	m(org.apache.commons.lang3.math.NumberUtils,min,[S,_,a(short,s:32767,s:1))	R:Short:1	0
+org.apache.commons.lang3.math.NumberUtils.min([S)	m(org.apache.commons.lang3.math.NumberUtils,min,[S,_,a(short))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigDecimal,java.lang.String,_,t:007b002200610022003a0031007d)	E:java.lang.NumberFormatException:Character { is neither a decimal digit number, decimal point, nor "e" notation exponential mark.	0
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,t:0031002e0035)	R:Boolean:true	4
+org.apache.commons.lang3.math.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigDecimal,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:002d002d)	R:null	1
+org.apache.commons.lang3.math.NumberUtils.max(int,int,int)	m(org.apache.commons.lang3.math.NumberUtils,max,int|int|int,_,i:2147483647,i:-2147483648,i:-3)	R:Integer:2147483647	0
+org.apache.commons.lang3.math.NumberUtils.toInt(java.lang.String,int)	m(org.apache.commons.lang3.math.NumberUtils,toInt,java.lang.String|int,_,t:002f0061002f0062,i:-76)	R:Integer:-76	0
+org.apache.commons.lang3.math.NumberUtils.toDouble(java.lang.String,double)	m(org.apache.commons.lang3.math.NumberUtils,toDouble,java.lang.String|double,_,t:0061,d:4636737291354636288)	R:Double:100.0	0
+org.apache.commons.lang3.math.NumberUtils.createDouble(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createDouble,java.lang.String,_,t:00310032003a00330030003a00300030)	E:java.lang.NumberFormatException:For input string: "12:30:00"	0
+org.apache.commons.lang3.math.NumberUtils.toShort(java.lang.String,short)	m(org.apache.commons.lang3.math.NumberUtils,toShort,java.lang.String|short,_,t:006100220062,s:-32768)	R:Short:-32768	0
+org.apache.commons.lang3.math.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigDecimal,java.lang.String,_,t:006100220062)	E:java.lang.NumberFormatException:Character a is neither a decimal digit number, decimal point, nor "e" notation exponential mark.	0
+org.apache.commons.lang3.math.NumberUtils.toFloat(java.lang.String,float)	m(org.apache.commons.lang3.math.NumberUtils,toFloat,java.lang.String|float,_,t:0023,f:2139095039)	R:Float:3.4028235E38	0
+org.apache.commons.lang3.math.NumberUtils.min([D)	m(org.apache.commons.lang3.math.NumberUtils,min,[D,_,a(double,d:-4503599627370496,d:0,d:9218868437227405311))	R:Double:-Infinity	3
+org.apache.commons.lang3.math.NumberUtils.min([D)	m(org.apache.commons.lang3.math.NumberUtils,min,[D,_,a(double,d:0,d:9218868437227405312,d:-4503599627370496))	R:Double:-Infinity	1
+org.apache.commons.lang3.math.NumberUtils.toInt(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,toInt,java.lang.String,_,t:002d0031)	R:Integer:-1	1
+org.apache.commons.lang3.math.NumberUtils.max(int,int,int)	m(org.apache.commons.lang3.math.NumberUtils,max,int|int|int,_,i:-1,i:-1,i:1)	R:Integer:1	1
+org.apache.commons.lang3.math.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createBigDecimal,java.lang.String,_,t:0009)	E:java.lang.NumberFormatException:A blank string is not a valid number	2
+org.apache.commons.lang3.math.NumberUtils.createLong(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createLong,java.lang.String,_,t:002d0031)	R:Long:-1	1
+org.apache.commons.lang3.math.NumberUtils.max([B)	m(org.apache.commons.lang3.math.NumberUtils,max,[B,_,a(byte,b:-128,b:65))	R:Byte:65	2
+org.apache.commons.lang3.math.NumberUtils.max(long,long,long)	m(org.apache.commons.lang3.math.NumberUtils,max,long|long|long,_,j:0,j:9223372036854775807,j:2)	R:Long:9223372036854775807	1
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:0030007800310046)	R:Integer:31	1
+org.apache.commons.lang3.math.NumberUtils.createDouble(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createDouble,java.lang.String,_,t:002d0030002e0030)	R:Double:-0.0	1
+org.apache.commons.lang3.math.NumberUtils.max([B)	m(org.apache.commons.lang3.math.NumberUtils,max,[B,_,a(byte,b:-1,b:-128))	R:Byte:-1	1
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:002d0030002e0030)	R:BigDecimal:0.0	16
+org.apache.commons.lang3.math.NumberUtils.min([B)	m(org.apache.commons.lang3.math.NumberUtils,min,[B,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.min([I)	m(org.apache.commons.lang3.math.NumberUtils,min,[I,_,a(int,i:1,i:0,i:1))	R:Integer:0	1
+org.apache.commons.lang3.math.NumberUtils.max(short,short,short)	m(org.apache.commons.lang3.math.NumberUtils,max,short|short|short,_,s:0,s:255,s:-32768)	R:Short:255	1
+org.apache.commons.lang3.math.NumberUtils.toShort(java.lang.String,short)	m(org.apache.commons.lang3.math.NumberUtils,toShort,java.lang.String|short,_,_,s:0)	R:Short:0	1
+org.apache.commons.lang3.math.NumberUtils.min([I)	m(org.apache.commons.lang3.math.NumberUtils,min,[I,_,a(int))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.toDouble(java.lang.String,double)	m(org.apache.commons.lang3.math.NumberUtils,toDouble,java.lang.String|double,_,t:002d0031,d:-9223372036854775808)	R:Double:-1.0	1
+org.apache.commons.lang3.math.NumberUtils.toDouble(java.lang.String,double)	m(org.apache.commons.lang3.math.NumberUtils,toDouble,java.lang.String|double,_,_,d:-9223372036854775808)	R:Double:-0.0	1
+org.apache.commons.lang3.math.NumberUtils.min([B)	m(org.apache.commons.lang3.math.NumberUtils,min,[B,_,a(byte,b:127,b:10))	R:Byte:10	2
+org.apache.commons.lang3.math.NumberUtils.min([B)	m(org.apache.commons.lang3.math.NumberUtils,min,[B,_,a(byte,b:127,b:127))	R:Byte:127	1
+org.apache.commons.lang3.math.NumberUtils.max(short,short,short)	m(org.apache.commons.lang3.math.NumberUtils,max,short|short|short,_,s:1,s:255,s:32767)	R:Short:32767	1
+org.apache.commons.lang3.math.NumberUtils.min(byte,byte,byte)	m(org.apache.commons.lang3.math.NumberUtils,min,byte|byte|byte,_,b:65,b:10,b:0)	R:Byte:0	1
+org.apache.commons.lang3.math.NumberUtils.createDouble(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createDouble,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang3.math.NumberUtils.toLong(java.lang.String,long)	m(org.apache.commons.lang3.math.NumberUtils,toLong,java.lang.String|long,_,t:0031,j:0)	R:Long:1	1
+org.apache.commons.lang3.math.NumberUtils.toInt(java.lang.String,int)	m(org.apache.commons.lang3.math.NumberUtils,toInt,java.lang.String|int,_,_,i:255)	R:Integer:255	1
+org.apache.commons.lang3.math.NumberUtils.toFloat(java.lang.String,float)	m(org.apache.commons.lang3.math.NumberUtils,toFloat,java.lang.String|float,_,_,f:-1082130432)	R:Float:-1.0	1
+org.apache.commons.lang3.math.NumberUtils.toFloat(java.lang.String,float)	m(org.apache.commons.lang3.math.NumberUtils,toFloat,java.lang.String|float,_,t:0030,f:1120403456)	R:Float:0.0	1
+org.apache.commons.lang3.math.NumberUtils.max([J)	m(org.apache.commons.lang3.math.NumberUtils,max,[J,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.max(long,long,long)	m(org.apache.commons.lang3.math.NumberUtils,max,long|long|long,_,j:2,j:1,j:9223372036854775807)	R:Long:9223372036854775807	1
+org.apache.commons.lang3.math.NumberUtils.min([I)	m(org.apache.commons.lang3.math.NumberUtils,min,[I,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.max([I)	m(org.apache.commons.lang3.math.NumberUtils,max,[I,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.isDigits(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isDigits,java.lang.String,_,_)	R:Boolean:false	1
+org.apache.commons.lang3.math.NumberUtils.min([F)	m(org.apache.commons.lang3.math.NumberUtils,min,[F,_,a(float))	E:java.lang.IllegalArgumentException:Array cannot be empty.	2
+org.apache.commons.lang3.math.NumberUtils.max([B)	m(org.apache.commons.lang3.math.NumberUtils,max,[B,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.min([J)	m(org.apache.commons.lang3.math.NumberUtils,min,[J,_,a(long,j:0,j:0))	R:Long:0	1
+org.apache.commons.lang3.math.NumberUtils.min([J)	m(org.apache.commons.lang3.math.NumberUtils,min,[J,_,_)	E:java.lang.IllegalArgumentException:The Array must not be null	2
+org.apache.commons.lang3.math.NumberUtils.max([D)	m(org.apache.commons.lang3.math.NumberUtils,max,[D,_,a(double,d:1,d:4611686018427387904,d:9221120237041090560))	R:Double:NaN	1
+org.apache.commons.lang3.math.NumberUtils.max([F)	m(org.apache.commons.lang3.math.NumberUtils,max,[F,_,a(float,f:-1082130432,f:2139095040,f:2143289344))	R:Float:NaN	1
+org.apache.commons.lang3.math.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createFloat,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,t:002d0030002e0030)	R:Boolean:true	1
+org.apache.commons.lang3.math.NumberUtils.createLong(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createLong,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,t:003100650035)	R:Boolean:true	3
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,t:002d00300078)	R:Boolean:false	1
+org.apache.commons.lang3.math.NumberUtils.min([D)	m(org.apache.commons.lang3.math.NumberUtils,min,[D,_,a(double,d:-9223372036854775808,d:9221120237041090560))	R:Double:NaN	1
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,t:0032003000320030002d00300031002d00300031)	R:Boolean:false	2
+org.apache.commons.lang3.math.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,isNumber,java.lang.String,_,t:0030007800310046)	R:Boolean:true	7
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:004100200062006c0061006e006b00200073007400720069006e00670020006900730020006e006f007400200061002000760061006c006900640020006e0075006d006200650072)	E:java.lang.NumberFormatException:A blank string is not a valid number is not a valid number.	2
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:0054006800650020004100720072006100790020006d0075007300740020006e006f00740020006200650020006e0075006c006c)	E:java.lang.NumberFormatException:The Array must not be null is not a valid number.	1
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:002d00300078)	E:java.lang.NumberFormatException:For input string: "-"	1
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:00410072007200610079002000630061006e006e006f007400200062006500200065006d007000740079002e)	E:java.lang.NumberFormatException:Array cannot be empty. is not a valid number.	3
+org.apache.commons.lang3.math.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang3.math.NumberUtils,createNumber,java.lang.String,_,t:0031002e0035)	R:Float:1.5	2

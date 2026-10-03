@@ -1,0 +1,95 @@
+org.apache.commons.lang.StringEscapeUtils.unescapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeCsv,java.lang.String,_,t:006e0075006c006c)	R:"null"	7
+org.apache.commons.lang.StringEscapeUtils.escapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJava,java.lang.String,_,t:0030007800310046)	R:"0x1F"	10
+org.apache.commons.lang.StringEscapeUtils.unescapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJava,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.unescapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJava,java.lang.String,_,t:00540068006500200057007200690074006500720020006d0075007300740020006e006f00740020006200650020006e0075006c006c002e)	R:"The Writer must not be null."	11
+org.apache.commons.lang.StringEscapeUtils.unescapeJava(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJava,java.io.Writer|java.lang.String,_,p(writer),t:00660061006c00730065)	R:null	0
+org.apache.commons.lang.StringEscapeUtils.escapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeHtml,java.lang.String,_,t:0031002e0035)	R:"1.5"	5
+org.apache.commons.lang.StringEscapeUtils.unescapeXml(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeXml,java.io.Writer|java.lang.String,_,_,t:006100220062)	E:java.lang.IllegalArgumentException:The Writer must not be null.	2
+org.apache.commons.lang.StringEscapeUtils.escapeCsv(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeCsv,java.io.Writer|java.lang.String,_,_,t:0074007200750065)	E:java.lang.NullPointerException	1
+org.apache.commons.lang.StringEscapeUtils.escapeJava(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJava,java.io.Writer|java.lang.String,_,p(writer),t:0078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.<init>()	n(org.apache.commons.lang.StringEscapeUtils,)	R:org.apache.commons.lang.StringEscapeUtils	1
+org.apache.commons.lang.StringEscapeUtils.unescapeXml(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeXml,java.io.Writer|java.lang.String,_,p(writer),t:0061)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeXml,java.lang.String,_,t:0009)	R:"\u0009"	1
+org.apache.commons.lang.StringEscapeUtils.unescapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeXml,java.lang.String,_,t:0030)	R:"0"	1
+org.apache.commons.lang.StringEscapeUtils.escapeSql(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeSql,java.lang.String,_,t:004100420043)	R:"ABC"	1
+org.apache.commons.lang.StringEscapeUtils.escapeJava(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJava,java.io.Writer|java.lang.String,_,_,t:0009)	E:java.lang.IllegalArgumentException:The Writer must not be null	2
+org.apache.commons.lang.StringEscapeUtils.unescapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJava,java.lang.String,_,t:002d0031)	R:"-1"	0
+org.apache.commons.lang.StringEscapeUtils.escapeHtml(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeHtml,java.io.Writer|java.lang.String,_,_,t:0061002c0062)	E:java.lang.IllegalArgumentException:The Writer must not be null.	2
+org.apache.commons.lang.StringEscapeUtils.unescapeJavaScript(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJavaScript,java.io.Writer|java.lang.String,_,p(writer),_)	R:null	2
+org.apache.commons.lang.StringEscapeUtils.escapeSql(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeSql,java.lang.String,_,t:0061003d0062)	R:"a=b"	0
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.io.Writer|java.lang.String,_,_,t:00270027)	E:java.lang.IllegalArgumentException:The Writer must not be null	0
+org.apache.commons.lang.StringEscapeUtils.escapeXml(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeXml,java.io.Writer|java.lang.String,_,_,t:00610020006200200063)	E:java.lang.IllegalArgumentException:The Writer must not be null.	2
+org.apache.commons.lang.StringEscapeUtils.unescapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeHtml,java.lang.String,_,t:0009)	R:"\u0009"	5
+org.apache.commons.lang.StringEscapeUtils.escapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeXml,java.lang.String,_,t:00610020006200200063)	R:"a b c"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJavaScript,java.lang.String,_,t:00310032003a00330030003a00300030)	R:"12:30:00"	1
+org.apache.commons.lang.StringEscapeUtils.unescapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJava,java.lang.String,_,t:006100620063)	R:"abc"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeXml,java.lang.String,_,t:0023)	R:"#"	0
+org.apache.commons.lang.StringEscapeUtils.escapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeCsv,java.lang.String,_,t:0030)	R:"0"	1
+org.apache.commons.lang.StringEscapeUtils.unescapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJava,java.lang.String,_,t:005c0075)	R:""	2
+org.apache.commons.lang.StringEscapeUtils.unescapeHtml(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeHtml,java.io.Writer|java.lang.String,_,_,t:00250073)	E:java.lang.IllegalArgumentException:The Writer must not be null.	2
+org.apache.commons.lang.StringEscapeUtils.escapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeCsv,java.lang.String,_,t:00310032003a00330030003a00300030)	R:"12:30:00"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeCsv,java.lang.String,_,t:0078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078)	R:"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"	0
+org.apache.commons.lang.StringEscapeUtils.escapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeCsv,java.lang.String,_,t:)	R:""	0
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.lang.String,_,t:002f0061002f0062)	R:"\u005c/a\u005c/b"	3
+org.apache.commons.lang.StringEscapeUtils.escapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeHtml,java.lang.String,_,t:007b002200610022003a0031007d)	R:"{&quot;a&quot;:1}"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeJava(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJava,java.io.Writer|java.lang.String,_,_,t:005b0031002c0032005d)	E:java.lang.IllegalArgumentException:The Writer must not be null	2
+org.apache.commons.lang.StringEscapeUtils.escapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeHtml,java.lang.String,_,t:005c00750030)	R:"\u005cu0"	0
+org.apache.commons.lang.StringEscapeUtils.escapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeHtml,java.lang.String,_,t:00310032003a00330030003a00300030)	R:"12:30:00"	0
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.lang.String,_,t:006100220062)	R:"a\u005c"b"	2
+org.apache.commons.lang.StringEscapeUtils.escapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeXml,java.lang.String,_,t:00270027)	R:"&apos;&apos;"	0
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.lang.String,_,t:007b002200610022003a0031007d)	R:"{\u005c"a\u005c":1}"	0
+org.apache.commons.lang.StringEscapeUtils.escapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeCsv,java.lang.String,_,t:00250073)	R:"%s"	0
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.lang.String,_,t:00610020006200200063)	R:"a b c"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeCsv(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeCsv,java.io.Writer|java.lang.String,_,p(writer),t:0066006f006f002e006200610072)	R:null	0
+org.apache.commons.lang.StringEscapeUtils.unescapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeCsv,java.lang.String,_,t:0020)	R:" "	2
+org.apache.commons.lang.StringEscapeUtils.unescapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeHtml,java.lang.String,_,t:0074007200750065)	R:"true"	0
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.lang.String,_,t:0061002c0062)	R:"a,b"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeHtml,java.lang.String,_,t:0061003d0062)	R:"a=b"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeCsv(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeCsv,java.io.Writer|java.lang.String,_,_,t:006e0075006c006c)	E:java.lang.NullPointerException	0
+org.apache.commons.lang.StringEscapeUtils.unescapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeHtml,java.lang.String,_,t:0061002c0062)	R:"a,b"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeHtml,java.lang.String,_,t:00660061006c00730065)	R:"false"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeXml,java.lang.String,_,t:000a)	R:"\u000a"	0
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeXml,java.lang.String,_,t:002f0061002f0062)	R:"/a/b"	0
+org.apache.commons.lang.StringEscapeUtils.escapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeXml,java.lang.String,_,t:0061)	R:"a"	0
+org.apache.commons.lang.StringEscapeUtils.escapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJava,java.lang.String,_,t:00e9)	R:"\u005cu00E9"	3
+org.apache.commons.lang.StringEscapeUtils.escapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJava,java.lang.String,_,t:)	R:""	0
+org.apache.commons.lang.StringEscapeUtils.escapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJava,java.lang.String,_,t:00660061006c00730065)	R:"false"	0
+org.apache.commons.lang.StringEscapeUtils.escapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJava,java.lang.String,_,t:0031002e0035)	R:"1.5"	0
+org.apache.commons.lang.StringEscapeUtils.escapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeCsv,java.lang.String,_,t:003c0061003e0062003c002f0061003e)	R:"<a>b</a>"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJavaScript,java.lang.String,_,t:003c0061003e0062003c002f0061003e)	R:"<a>b</a>"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeXml,java.lang.String,_,t:002d0030002e0030)	R:"-0.0"	0
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.lang.String,_,t:000a)	R:"\u005cn"	2
+org.apache.commons.lang.StringEscapeUtils.unescapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeCsv,java.lang.String,_,t:0030)	R:"0"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJavaScript,java.lang.String,_,t:0020)	R:" "	0
+org.apache.commons.lang.StringEscapeUtils.escapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJava,java.lang.String,_,t:005c00750030)	R:"\u005c\u005cu0"	2
+org.apache.commons.lang.StringEscapeUtils.unescapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJavaScript,java.lang.String,_,t:0009)	R:"\u0009"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJavaScript,java.lang.String,_,t:005c0075003000300030)	R:""	3
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.lang.String,_,t:0009)	R:"\u005ct"	2
+org.apache.commons.lang.StringEscapeUtils.escapeSql(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeSql,java.lang.String,_,t:0027)	R:"''"	0
+org.apache.commons.lang.StringEscapeUtils.escapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeHtml,java.lang.String,_,t:0032003000320030002d00300031002d00300031)	R:"2020-01-01"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeCsv,java.lang.String,_,t:0066006f006f002e006200610072)	R:"foo.bar"	0
+org.apache.commons.lang.StringEscapeUtils.escapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeCsv,java.lang.String,_,t:007b002200610022003a0031007d)	R:""{""a"":1}""	12
+org.apache.commons.lang.StringEscapeUtils.unescapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeXml,java.lang.String,_,t:005c007500300030)	R:"\u005cu00"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeJavaScript(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeJavaScript,java.io.Writer|java.lang.String,_,_,t:005c0075003000300030)	E:java.lang.IllegalArgumentException:The Writer must not be null	0
+org.apache.commons.lang.StringEscapeUtils.escapeSql(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeSql,java.lang.String,_,t:0061)	R:"a"	0
+org.apache.commons.lang.StringEscapeUtils.escapeSql(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeSql,java.lang.String,_,t:005c0075003000300030)	R:"\u005cu000"	0
+org.apache.commons.lang.StringEscapeUtils.unescapeHtml(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeHtml,java.io.Writer|java.lang.String,_,p(writer),t:006e0075006c006c)	R:null	0
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.io.Writer|java.lang.String,_,p(writer),t:)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.io.Writer|java.lang.String,_,p(writer),_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeJavaScript(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJavaScript,java.io.Writer|java.lang.String,_,p(writer),t:0027)	R:null	3
+org.apache.commons.lang.StringEscapeUtils.escapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeXml,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeHtml(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeHtml,java.io.Writer|java.lang.String,_,p(writer),_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.unescapeCsv(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeCsv,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeXml(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeXml,java.io.Writer|java.lang.String,_,p(writer),t:0055006e00610062006c006500200074006f00200070006100720073006500200075006e00690063006f00640065002000760061006c00750065003a0020)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.unescapeXml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeXml,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.unescapeCsv(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeCsv,java.io.Writer|java.lang.String,_,p(writer),_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeHtml,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeCsv(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeCsv,java.io.Writer|java.lang.String,_,p(writer),t:007b002200610022003a0031007d)	R:null	0
+org.apache.commons.lang.StringEscapeUtils.unescapeHtml(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeHtml,java.io.Writer|java.lang.String,_,p(writer),_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeCsv(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeCsv,java.io.Writer|java.lang.String,_,p(writer),t:002d0031)	R:null	2
+org.apache.commons.lang.StringEscapeUtils.escapeCsv(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeCsv,java.io.Writer|java.lang.String,_,p(writer),_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeSql(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeSql,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.unescapeHtml(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeHtml,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang.StringEscapeUtils.escapeJava(java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,escapeJava,java.lang.String,_,t:0027)	R:"'"	1
+org.apache.commons.lang.StringEscapeUtils.unescapeXml(java.io.Writer,java.lang.String)	m(org.apache.commons.lang.StringEscapeUtils,unescapeXml,java.io.Writer|java.lang.String,_,p(writer),_)	R:null	1

@@ -1,0 +1,1451 @@
+$ java -Xmx768m -Xss4m -javaagent:/home/pheerapat/aco-work/tool/jacocoagent.jar=output=none,includes=org.apache.commons.cli.TypeHandler:org.apache.commons.cli.TypeHandler$* -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/tool/jacococore.jar:/home/pheerapat/aco-work/jobs/Cli-3-r1/b/target/lib/commons-lang/jars/commons-lang-2.1.jar:/home/pheerapat/aco-work/jobs/Cli-3-r1/b/target/lib/junit/jars/junit-3.8.1.jar:/home/pheerapat/aco-work/jobs/Cli-3-r1/b/target/classes:/home/pheerapat/aco-work/jobs/Cli-3-r1/b/target/test-classes AcoSearch /home/pheerapat/aco-work/jobs/Cli-3-r1/aco.properties
+Unable to parse: 1e5
+Unable to find: 1.5
+Unable to find: 1.5
+Unable to find: a,b
+Unable to find:  
+Unable to parse: null
+A blank string is not a valid number
+Unable to find: ABC
+Unable to parse: null
+a,b is not a valid number.
+Unable to find: 1e5
+Unable to parse:  is not a valid number.
+Unable to find: a"b
+null is not a valid number.
+Unable to find: [1,2]
+Unable to find: a,b
+Unable to parse: 0
+Unable to parse: a
+Unable to find: foo.bar
+Unable to find: {"a":1}
+Unable to find: abc
+Unable to parse: ABC
+Unable to parse: 1e5
+Unable to find: -1
+Unable to parse: foo.bar
+Illegal embedded sign character
+Unable to parse: null
+Unable to parse: 1e5
+Unable to parse: 
+Unable to find: {"a":1}
+Unable to find: 
+
+Unable to find: 1.5
+Unable to find: abc
+Unable to parse: a,b
+Unable to find: %s
+Unable to find: -0.0
+Unable to find:  
+Unable to find: {"a":1}
+A blank string is not a valid number
+Unable to find: 2020-01-01
+A blank string is not a valid number
+Unable to parse:  
+Unable to find: 12:30:00
+Unable to parse: 1e5
+Unable to parse: null
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to find: /a/b
+Unable to find: null
+a=b is not a valid number.
+Unable to parse:  
+Unable to parse: [1,2]
+A blank string is not a valid number
+Unable to parse: ABC
+Unable to parse: 	
+Unable to find: 	
+Unable to parse: 
+Unable to parse: null
+Unable to find: ABC
+Unable to find: a=b
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+A blank string is not a valid number
+Unable to parse: %s
+Unable to parse: 123
+A blank string is not a valid number
+Unable to parse: 0
+For input string: "12:30:00"
+A blank string is not a valid number
+Unable to parse: null
+Unable to parse: null
+Unable to find: ABC
+Unable to find: 
+
+Unable to parse: 
+
+A blank string is not a valid number
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: 
+
+true is not a valid number.
+A blank string is not a valid number
+Unable to find: foo.bar
+Unable to parse: a,b
+Unable to find: true
+Unable to find:  is not a valid number.
+Unable to find: 12:30:00
+%s is not a valid number.
+Unable to parse: 
+Unable to find: 1e5
+Unable to parse: null
+a"b is not a valid number.
+[1,2] is not a valid number.
+Unable to find:  
+Unable to parse: null
+Unable to find: é
+Unable to find: true
+Unable to find: 1.5
+Unable to parse: null
+Unable to parse: a,b
+Unable to parse: a=b
+é is not a valid number.
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: <a>b</a>
+Unable to parse: Unable to parse: 
+a"b is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Unable to find: 
+Unable to find: 1.5
+null is not a valid number.
+false is not a valid number.
+For input string: "12:30:00"
+ABC is not a valid number.
+a is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to find: a=b
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+true is not a valid number.
+a b c is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Unable to find:  is not a valid number.
+a=b is not a valid number.
+a,b is not a valid number.
+a,b is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+A blank string is not a valid number
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+a,b is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Unable to parse: null
+Unable to find: 	
+Unable to parse: 0x1F
+Unable to parse: -0.0
+foo.bar is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+true is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Illegal embedded sign character
+<a>b</a> is not a valid number.
+{"a":1} is not a valid number.
+Unable to parse: 1
+Unable to find: foo.bar
+foo.bar is not a valid number.
+Unable to parse: 0
+A blank string is not a valid number
+Unable to parse: 	
+a,b is not a valid number.
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: -1
+A blank string is not a valid number
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+é is not a valid number.
+a b c is not a valid number.
+a=b is not a valid number.
+# is not a valid number.
+a=b is not a valid number.
+A blank string is not a valid number
+a,b is not a valid number.
+Unable to parse:  
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+abc is not a valid number.
+A blank string is not a valid number
+Unable to parse: 
+a,b is not a valid number.
+Unable to parse: 
+Unable to find: ABC
+<a>b</a> is not a valid number.
+Unable to parse: a
+A blank string is not a valid number
+Unable to parse: <a>b</a>
+Unable to find: 
+
+Unable to parse: <a>b</a>
+Unable to find: Unable to parse: 
+{"a":1} is not a valid number.
+Unable to parse: -1
+# is not a valid number.
+Unable to find: <a>b</a>
+Unable to parse: 12:30:00
+A blank string is not a valid number
+Unable to parse: 
+Unable to parse: a,b
+Unable to find: %s
+Unable to parse: a=b
+foo.bar is not a valid number.
+Unable to find: ABC
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to find: 1
+Unable to parse: {"a":1}
+Unable to find: 
+Unable to parse: ABC
+Unable to find: a"b
+Unable to parse: foo.bar
+Unable to find: /a/b
+Illegal embedded sign character
+Unable to parse: -1
+Unable to parse: 
+Unable to parse: a"b
+Unable to find: a=b
+{"a":1} is not a valid number.
+A blank string is not a valid number
+Unable to find: 1.5
+Unable to find: %s
+Unable to parse: 1
+Unable to find:  
+Unable to find: 1e5
+Unable to parse: true
+Unable to find: [1,2]
+A blank string is not a valid number
+Unable to find: 	
+Unable to find:  
+Unable to parse: 	
+Unable to find: <a>b</a>
+Unable to parse: 1e5
+Unable to parse: true
+Unable to find: 2020-01-01
+Unable to parse: 0
+Unable to parse: abc
+Unable to parse: a,b
+Unable to find: #
+Unable to find: null
+Illegal embedded sign character
+Unable to parse: a=b
+Unable to find: 12:30:00
+Unable to parse: [1,2]
+Unable to parse: 0x1F
+Unable to parse: a b c
+Unable to find: 1
+a"b is not a valid number.
+Unable to find: foo.bar
+Unable to parse: abc
+Unable to parse: a
+a b c is not a valid number.
+Unable to find: 1.5
+Unable to find: 0
+Unable to find:  is not a valid number.
+Unable to parse: null
+Unable to find: 	
+Unable to parse: 2020-01-01
+Unable to find: a=b
+Unable to find: 1.5
+Unable to find:  
+Unable to parse: ABC
+A blank string is not a valid number
+Unable to parse: é
+Unable to find: a b c
+/a/b is not a valid number.
+Unable to find: foo.bar
+Unable to find: foo.bar
+Unable to find: <a>b</a>
+Unable to parse: foo.bar
+Unable to find: abc
+Unable to parse: 
+
+Unable to parse: null
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Unable to find: a"b
+Unable to parse: 1.5
+a b c is not a valid number.
+Unable to parse: a"b
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+null is not a valid number.
+Unable to find:  
+Unable to parse: é
+Unable to parse: true
+Unable to parse: 0
+Unable to find: foo.bar
+Unable to find: [1,2]
+A blank string is not a valid number
+Unable to find:  
+Unable to find: false
+For input string: "12:30:00"
+Unable to find: 
+A blank string is not a valid number
+Unable to parse: ABC
+Unable to parse: ABC
+Unable to parse: %s
+ABC is not a valid number.
+Unable to find: [1,2]
+Unable to find: #
+A blank string is not a valid number
+A blank string is not a valid number
+A blank string is not a valid number
+Unable to parse: null
+a=b is not a valid number.
+A blank string is not a valid number
+%s is not a valid number.
+Unable to find: 2020-01-01
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Unable to parse: a
+a,b is not a valid number.
+# is not a valid number.
+Unable to parse: #
+Unable to parse: 
+
+Unable to find: -0.0
+null is not a valid number.
+Unable to parse: abc
+Unable to parse: abc
+A blank string is not a valid number
+Unable to parse: 12:30:00
+Unable to find: 1.5
+Unable to find: 1e5
+[1,2] is not a valid number.
+Unable to find: 0
+Unable to parse: Unable to find: 
+Unable to find: 12:30:00
+A blank string is not a valid number
+Unable to find: a"b
+Unable to find: 12:30:00
+%s is not a valid number.
+Unable to parse: [1,2]
+Unable to parse:  
+Unable to find: 	
+# is not a valid number.
+Unable to parse:  is not a valid number.
+Unable to parse: ABC
+Unable to find: 1
+A blank string is not a valid number
+Unable to parse: abc
+Unable to find:  is not a valid number.
+Unable to parse: 0
+Unable to find: -1
+Unable to find: a"b
+Unable to parse: {"a":1}
+Unable to parse: é
+Unable to find: 
+Unable to find: false
+Unable to parse: 
+[1,2] is not a valid number.
+Unable to find: foo.bar
+<a>b</a> is not a valid number.
+Unable to find: 
+Unable to parse: 0
+Unable to find: 2020-01-01
+Unable to parse: Unable to parse: 
+foo.bar is not a valid number.
+Unable to parse: Unable to parse: 
+A blank string is not a valid number
+# is not a valid number.
+Unable to parse: null
+Unable to find: Unable to parse: 
+Unable to parse: é
+Unable to find: abc
+A blank string is not a valid number
+Unable to parse: false
+Unable to parse: -0.0
+Unable to parse: true
+Unable to find: -1
+Unable to parse: abc
+Unable to parse: 0x1F
+Unable to find: abc
+Unable to find: <a>b</a>
+# is not a valid number.
+Unable to find: é
+Unable to find: 2020-01-01
+Unable to parse: 
+Unable to parse: foo.bar
+Unable to find: #
+Unable to parse: a b c
+a,b is not a valid number.
+Unable to parse: {"a":1}
+Unable to find: foo.bar
+Unable to parse: 
+true is not a valid number.
+A blank string is not a valid number
+Unable to parse: 
+
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to find: true
+Unable to parse: 1e5
+Unable to parse: 1.5
+Unable to find: 0x1F
+Unable to parse: null
+Unable to find: 123
+A blank string is not a valid number
+Unable to find: 123
+Unable to find: 
+
+Unable to parse:  
+Unable to parse: a"b
+foo.bar is not a valid number.
+Unable to find:  is not a valid number.
+%s is not a valid number.
+Unable to parse: null
+For input string: "12:30:00"
+Illegal embedded sign character
+foo.bar is not a valid number.
+For input string: "12:30:00"
+ABC is not a valid number.
+Unable to find: 1.5
+ABC is not a valid number.
+Unable to parse: null
+Unable to parse: null
+ABC is not a valid number.
+Unable to find: 0x1F
+Unable to parse: 0
+Unable to find: 	
+Unable to parse: a"b
+Unable to parse:  is not a valid number.
+Unable to parse: #
+a,b is not a valid number.
+Unable to find: 	
+Unable to find: 0x1F
+Unable to parse: 12:30:00
+Unable to parse: a b c
+Unable to parse: foo.bar
+Unable to parse: 12:30:00
+Unable to parse: -1
+Unable to parse: a b c
+Unable to find: 
+Unable to parse: 123
+Unable to parse: 12:30:00
+a"b is not a valid number.
+Unable to find: true
+Unable to parse: 12:30:00
+Unable to parse: {"a":1}
+A blank string is not a valid number
+Unable to parse: 	
+Unable to find: é
+Unable to parse: ABC
+Unable to parse: é
+Unable to find: é
+Unable to find: /a/b
+Unable to find: foo.bar
+Unable to parse: null
+Unable to find: a=b
+é is not a valid number.
+Unable to find: Unable to parse: 
+Unable to find: true
+Unable to find: 2020-01-01
+Unable to find: a"b
+Unable to parse: 
+
+Unable to find: 
+
+Unable to find: 12:30:00
+Unable to find: 0x1F
+Unable to find: null
+Unable to find: <a>b</a>
+Unable to find: 
+
+Unable to find: 1.5
+Unable to find:  
+Unable to find: 0
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: a b c
+/a/b is not a valid number.
+Unable to parse: a,b
+Unable to parse: 
+
+[1,2] is not a valid number.
+Unable to parse: a
+Unable to parse: 0
+Unable to parse: null
+Unable to parse: abc
+Unable to find: 
+
+Unable to find: 12:30:00
+Unable to find: 0x1F
+Unable to find: foo.bar
+Unable to parse: 	
+Unable to find: a b c
+Unable to parse: true
+Unable to parse: -1
+Unable to find: {"a":1}
+abc is not a valid number.
+Unable to parse: 1.5
+Unable to parse: %s
+a"b is not a valid number.
+ABC is not a valid number.
+Unable to parse: a"b
+Unable to parse: true
+Unable to parse: /a/b
+Unable to parse: null
+Unable to find: ABC
+Unable to parse: -0.0
+Unable to find: foo.bar
+Unable to find: a
+Unable to find: #
+Unable to parse: /a/b
+Unable to parse: [1,2]
+Unable to parse: 2020-01-01
+Unable to parse: a"b
+Unable to find: 12:30:00
+Unable to find: a=b
+Unable to parse: a,b
+Unable to find: a"b
+Unable to find: Unable to parse: 
+a is not a valid number.
+Unable to find: {"a":1}
+Unable to parse: 
+
+<a>b</a> is not a valid number.
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: 12:30:00
+Unable to parse: 1e5
+Unable to parse: 0x1F
+Unable to parse: #
+Unable to find: 2020-01-01
+Unable to find: null
+Unable to parse: -1
+Unable to find: foo.bar
+Unable to find: 1.5
+Unable to parse: [1,2]
+Unable to find:  
+Unable to find: 
+Unable to parse: a,b
+Unable to parse: 
+
+Unable to find: foo.bar
+Unable to parse: foo.bar
+Unable to parse: -1
+Unable to find: -0.0
+Unable to parse: #
+<a>b</a> is not a valid number.
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Unable to find: true
+Unable to parse: 
+
+Unable to parse: 123
+Unable to parse: 1e5
+Unable to find:  
+Unable to parse: 
+Unable to find: {"a":1}
+Unable to find: 	
+Unable to find: -0.0
+A blank string is not a valid number
+Unable to parse: 1.5
+Unable to parse: #
+Unable to parse: 
+
+Unable to find: null
+Unable to parse: null
+Unable to find: 
+
+Unable to find: 12:30:00
+Unable to find:  is not a valid number.
+Unable to find: /a/b
+/a/b is not a valid number.
+A blank string is not a valid number
+Unable to parse: a b c
+Unable to parse: a=b
+For input string: "12:30:00"
+Unable to find: 1.5
+Unable to find: foo.bar
+Unable to find: 
+
+Unable to find: true
+Unable to parse: [1,2]
+Unable to find: a
+Unable to find: a,b
+Unable to parse: 	
+Unable to find: 1
+Unable to parse: {"a":1}
+Unable to parse: 
+Unable to find: 1
+Unable to parse: a,b
+Unable to parse: 	
+Unable to parse: <a>b</a>
+Unable to find: [1,2]
+a is not a valid number.
+Unable to parse: 
+
+Unable to find: 0
+Illegal embedded sign character
+Unable to find: %s
+Unable to parse: 
+
+Unable to parse: a
+true is not a valid number.
+Unable to parse: 1.5
+Unable to parse: 0
+Unable to parse: 0
+Unable to find: é
+Unable to find: false
+Unable to find: a b c
+Unable to parse: 1
+Unable to parse: a=b
+Unable to find: null
+Unable to find: 
+Unable to parse: true
+Unable to find: 123
+Unable to parse: %s
+Unable to parse: a=b
+Unable to find: foo.bar
+A blank string is not a valid number
+For input string: "12:30:00"
+Unable to find: /a/b
+Unable to parse: 1.5
+Unable to parse: 1.5
+Unable to find: a
+Unable to find: a=b
+Unable to parse: %s
+Unable to parse: %s
+Unable to find: null
+Unable to parse: null
+Unable to parse: null
+Unable to parse: null
+Unable to parse: {"a":1}
+Unable to parse: 12:30:00
+Unable to find: 123
+Unable to parse: #
+Unable to parse: <a>b</a>
+Unable to parse: null
+Unable to parse: null
+foo.bar is not a valid number.
+Unable to find: 1e5
+Unable to parse: null
+Unable to parse: a,b
+a,b is not a valid number.
+Unable to parse: 2020-01-01
+Unable to find: a"b
+Unable to parse:  
+Unable to parse: a"b
+a b c is not a valid number.
+Unable to parse: [1,2]
+Unable to find: ABC
+Unable to find: a
+Unable to find: -0.0
+Unable to parse: 	
+Unable to parse: 
+
+Unable to find: 1e5
+Unable to parse: 
+
+Unable to find: 
+
+Unable to find: 1.5
+Unable to parse: 123
+Unable to parse: 
+Unable to parse: -1
+Unable to find: -1
+Unable to find: 12:30:00
+a"b is not a valid number.
+Unable to find: <a>b</a>
+Unable to find: true
+Unable to parse: 
+Unable to parse: 2020-01-01
+Unable to parse: null
+Unable to parse: a
+Unable to parse: null
+Unable to find: 1e5
+Unable to find: Unable to find: 
+Unable to find: false
+Unable to find: a
+Unable to parse: a,b
+Unable to parse:  
+Unable to find: 0
+Unable to find: abc
+Unable to find: a
+Unable to parse: Unable to parse: 
+Unable to find: -0.0
+Unable to find: 1.5
+Unable to find: %s
+Unable to parse: 
+
+Unable to find: 123
+Unable to parse: #
+Unable to find: <a>b</a>
+Unable to parse: null
+Unable to find: %s
+Unable to parse: 	
+Unable to parse: 1e5
+Unable to find: a=b
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: null
+Unable to parse: é
+Unable to parse: a,b
+Unable to parse: 0x1F
+Unable to parse: true
+Unable to find: foo.bar
+Unable to find: 123
+Unable to parse: <a>b</a>
+Unable to find: true
+Unable to find: 1e5
+Unable to parse: Unable to find: 
+Unable to parse: #
+Unable to parse: null
+Unable to find: a,b
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Unable to parse: false
+Unable to find: a,b
+Unable to find: 
+
+Unable to find: a=b
+Unable to parse: 
+
+Unable to parse: 
+
+Unable to find: 	
+A blank string is not a valid number
+Unable to find: 1e5
+Unable to find: <a>b</a>
+Unable to find: 0
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: 
+
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: a,b
+Unable to parse: 	
+Unable to find: 
+Unable to find: false
+Unable to find: a,b
+Unable to parse: abc
+A blank string is not a valid number
+A blank string is not a valid number
+Unable to parse: <a>b</a>
+Unable to find:  
+Unable to find: 0x1F
+Unable to parse: 	
+Unable to find: a,b
+Unable to parse: 0
+Unable to find: 
+
+Unable to parse: 12:30:00
+Unable to find: a b c
+Unable to parse: {"a":1}
+Unable to parse: a
+Unable to parse: 2020-01-01
+Unable to parse: 
+Unable to find: 
+
+Unable to find: /a/b
+Unable to find: [1,2]
+Unable to parse: {"a":1}
+Unable to find: 1
+Unable to find: foo.bar
+Unable to parse: null
+Unable to parse: null
+Unable to find: 
+A blank string is not a valid number
+Unable to parse: 
+a=b is not a valid number.
+Unable to find: false
+Unable to parse: /a/b
+Unable to parse: 123
+Unable to find: 
+
+Unable to find: 1e5
+Unable to parse: 1
+Unable to find: é
+Unable to parse:  
+Unable to find: 1e5
+Unable to parse: 
+
+Unable to find: Unable to find: 
+Unable to parse: 12:30:00
+Unable to find: 1
+Unable to find: 2020-01-01
+Unable to find: /a/b
+Unable to parse: null
+Unable to parse: abc
+Unable to find: 0x1F
+Unable to find: {"a":1}
+Unable to find: true
+Unable to parse:  
+Unable to find: 0
+Unable to find: foo.bar
+Unable to find: -0.0
+Unable to find: a"b
+A blank string is not a valid number
+Unable to parse: a=b
+Unable to parse: null
+Unable to parse: -0.0
+Unable to find: 
+Unable to find: %s
+Unable to parse: foo.bar
+Unable to find: a b c
+Unable to find: a"b
+Unable to parse: /a/b
+Unable to find: 
+
+null is not a valid number.
+Unable to find: -0.0
+Unable to parse: 	
+Unable to parse: Unable to find: 
+A blank string is not a valid number
+Unable to parse: ABC
+Unable to find: true
+Unable to find: 
+
+Unable to parse: a=b
+Unable to parse: [1,2]
+/a/b is not a valid number.
+Unable to parse: 0
+Unable to parse: {"a":1}
+Unable to parse: 12:30:00
+Unable to find: a=b
+a b c is not a valid number.
+Unable to parse:  
+Unable to find: %s
+Unable to parse: [1,2]
+Unable to parse: 1.5
+Unable to parse: a=b
+Unable to find: 
+For input string: "12:30:00"
+Unable to find:  
+ABC is not a valid number.
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: 
+Unable to parse: 0x1F
+false is not a valid number.
+Unable to find: -0.0
+Unable to find: 0x1F
+Unable to find: 123
+A blank string is not a valid number
+Unable to parse: null
+Unable to find: 1.5
+Unable to parse: 	
+Unable to parse:  
+Unable to find: 12:30:00
+é is not a valid number.
+Unable to parse: Unable to find: 
+Unable to find: 
+Unable to parse: 0
+Unable to find: Unable to find: 
+Unable to find: 1.5
+A blank string is not a valid number
+Unable to parse: /a/b
+Unable to parse: a=b
+Unable to parse: true
+Unable to parse: 	
+Unable to find: 123
+Unable to parse: foo.bar
+Unable to parse: true
+Unable to parse: 1.5
+Unable to parse: <a>b</a>
+Unable to parse: é
+Unable to parse: %s
+Unable to find: 
+Unable to parse: 
+Unable to find: 1e5
+Unable to find: <a>b</a>
+Unable to find:  
+a,b is not a valid number.
+Unable to find: <a>b</a>
+Unable to find: 1
+Unable to find: é
+Unable to find: a
+Unable to parse: a
+Unable to parse: abc
+Unable to find: -1
+Unable to parse: 1e5
+Unable to find: 0x1F
+Unable to parse: foo.bar
+Unable to find: <a>b</a>
+Unable to find:  
+Unable to parse: a"b
+Unable to parse: true
+abc is not a valid number.
+Unable to parse: 123
+Unable to find: ABC
+Unable to parse: %s
+Unable to find:  
+Unable to parse: 1e5
+Unable to parse: #
+Unable to parse: #
+Unable to find:  
+Unable to parse: %s
+Unable to find: Unable to find: 
+Unable to find:  
+Unable to parse: 	
+Unable to parse: foo.bar
+Unable to parse:  
+Unable to parse: 0x1F
+Unable to parse:  
+Unable to parse: 
+Unable to find: 
+Unable to find: a"b
+Unable to parse: 0x1F
+Unable to parse: a"b
+Unable to parse: ABC
+Unable to parse: a b c
+Unable to find: foo.bar
+Unable to parse: null
+Unable to parse: null
+Unable to parse: 12:30:00
+Unable to find: a
+Unable to find: true
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: abc
+a b c is not a valid number.
+Unable to find: #
+a"b is not a valid number.
+Unable to parse: <a>b</a>
+Unable to parse: ABC
+Unable to find: 
+
+Unable to find: Unable to parse: 
+Unable to find: 
+Unable to find: true
+Unable to parse: /a/b
+Unable to parse: true
+a b c is not a valid number.
+Unable to find: 123
+Unable to find:  
+Unable to find: #
+Unable to parse: 0
+Unable to parse: foo.bar
+Unable to find: 
+
+Unable to find: -0.0
+Unable to parse: Unable to parse: 
+A blank string is not a valid number
+Unable to parse: é
+Unable to find: a"b
+Unable to parse: #
+Unable to parse: a=b
+Unable to find: Unable to parse: 
+Unable to find: false
+Unable to parse: é
+a"b is not a valid number.
+Unable to find: a,b
+Unable to find: #
+Unable to parse: ABC
+Unable to find: 2020-01-01
+Unable to find: 0
+Unable to find: 
+
+Unable to parse: é
+Unable to find: 2020-01-01
+Unable to find: 	
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to find: 	
+Unable to find: 	
+Unable to parse: 2020-01-01
+Unable to find: 	
+/a/b is not a valid number.
+Unable to find: 1
+Unable to find: 1e5
+Unable to find: Unable to find: 
+Unable to parse: <a>b</a>
+Unable to parse: 	
+Unable to parse: a"b
+Unable to parse: Unable to parse: 
+Unable to parse: 	
+Unable to find: 1e5
+For input string: "12:30:00"
+Unable to parse: a"b
+null is not a valid number.
+Unable to find: a
+a=b is not a valid number.
+Unable to parse: Unable to parse: 
+Unable to parse: 	
+Unable to parse: a"b
+Unable to parse: a b c
+Unable to find: 1e5
+Unable to parse: 1.5
+Unable to parse: 123
+Unable to parse: null
+Unable to find: Unable to find: 
+Unable to find: Unable to parse: 
+Unable to find:  
+Unable to find: abc
+Unable to find: 
+
+Unable to parse: ABC
+Unable to find: 
+
+Unable to find: abc
+Unable to parse: %s
+Unable to parse: 	
+Unable to find:  
+Unable to find: -0.0
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Unable to find: a
+Unable to find: é
+Unable to find: 123
+Unable to find: 
+
+Unable to parse: 
+
+Unable to find: a
+ABC is not a valid number.
+A blank string is not a valid number
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+a b c is not a valid number.
+Unable to find: a
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to find: /a/b
+A blank string is not a valid number
+Unable to parse: 
+
+Unable to parse:  is not a valid number.
+Unable to parse: false
+Unable to parse: [1,2]
+Unable to parse: -0.0
+Unable to find: true
+A blank string is not a valid number
+Unable to find: null
+A blank string is not a valid number
+Unable to find:  
+Unable to parse: 	
+Illegal embedded sign character
+Unable to parse: 1e5
+abc is not a valid number.
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: 1e5
+Unable to find: /a/b
+Unable to parse: Unable to find: 
+Unable to parse: ABC
+Unable to find:  
+Unable to find: /a/b
+Unable to find: 
+
+Unable to find:  
+Unable to find: -0.0
+Unable to find: 1e5
+Unable to parse: 1.5
+Unable to find: foo.bar
+Unable to find:  
+Unable to parse: a
+Unable to find: %s
+Unable to find: [1,2]
+Unable to find: /a/b
+Unable to parse: %s
+Unable to parse: a,b
+Unable to parse: 	
+Unable to parse: 2020-01-01
+Unable to parse: {"a":1}
+Unable to parse: ABC
+Unable to find: Unable to parse: 
+A blank string is not a valid number
+Unable to find: null
+Unable to find: null
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+a,b is not a valid number.
+Unable to parse: -1
+Unable to find: a=b
+Unable to find: foo.bar
+Unable to parse: Unable to find: 
+Unable to find: -1
+A blank string is not a valid number
+Unable to find: -0.0
+Unable to find: true
+Unable to parse: 	
+A blank string is not a valid number
+# is not a valid number.
+Unable to find: Unable to parse: 
+Unable to parse: null
+Unable to parse: a b c
+Unable to parse: ABC
+Unable to find: Unable to find: 
+Unable to find: a b c
+Unable to find: abc
+Unable to parse: ABC
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to find: /a/b
+Unable to parse: #
+Unable to find: a,b
+Unable to parse: 1e5
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse:  
+Unable to find: 12:30:00
+Unable to find: #
+Unable to find: 
+
+Unable to parse: Unable to find: 
+/a/b is not a valid number.
+Unable to find: ABC
+Unable to find: 0x1F
+A blank string is not a valid number
+Unable to parse: 123
+Unable to find: Unable to find: 
+Unable to parse: é
+Unable to find: Unable to parse: 
+{"a":1} is not a valid number.
+Unable to find:  
+Unable to find: 0x1F
+Unable to parse: Unable to find: 
+Unable to find: false
+Unable to parse: -0.0
+A blank string is not a valid number
+Unable to parse: null
+Unable to parse: 12:30:00
+Unable to parse:  
+%s is not a valid number.
+Unable to parse: 12:30:00
+Unable to find: false
+Unable to parse: ABC
+Unable to find: -1
+Unable to find: 123
+# is not a valid number.
+Unable to parse: é
+Unable to find: 123
+Unable to parse: Unable to find: 
+Unable to parse: 0x1F
+Unable to find: 1.5
+Unable to find: 0x1F
+Unable to parse: 	
+Unable to find: {"a":1}
+Unable to find: 
+foo.bar is not a valid number.
+Unable to parse: 
+
+Unable to find: 	
+Unable to find: 12:30:00
+Unable to find: <a>b</a>
+Unable to find: a,b
+Illegal embedded sign character
+Unable to parse: <a>b</a>
+Unable to find: 	
+Unable to find: <a>b</a>
+Unable to find: Unable to find: 
+Unable to parse: 123
+Unable to parse: 1.5
+A blank string is not a valid number
+Unable to parse: abc
+Unable to find: foo.bar
+Unable to parse: 12:30:00
+Unable to find: a"b
+Unable to find: a=b
+Unable to parse: -1
+a is not a valid number.
+Unable to parse: 12:30:00
+Unable to parse: ABC
+Unable to find: abc
+A blank string is not a valid number
+Unable to parse: /a/b
+a b c is not a valid number.
+Unable to find: 
+
+Unable to parse: <a>b</a>
+Unable to parse: [1,2]
+Unable to parse: null
+Unable to find: Unable to find: 
+Unable to find:  
+Unable to find: false
+Unable to find: 2020-01-01
+Unable to parse:  
+Unable to find: 
+
+Unable to parse: 
+For input string: "12:30:00"
+Unable to parse: 2020-01-01
+Unable to find: a"b
+Unable to find: a=b
+Unable to parse: true
+a=b is not a valid number.
+Unable to find: %s
+Unable to parse: a"b
+Unable to find: abc
+Unable to find: a
+Unable to find: 	
+Unable to find: 123
+Unable to find: 0x1F
+A blank string is not a valid number
+Unable to find: <a>b</a>
+Unable to parse: 0
+Unable to parse: a=b
+Unable to find: 0
+Unable to parse: null
+Unable to find: foo.bar
+Unable to find: 12:30:00
+a=b is not a valid number.
+foo.bar is not a valid number.
+Unable to parse: 
+Unable to parse: 0x1F
+A blank string is not a valid number
+Unable to find: %s
+{"a":1} is not a valid number.
+Unable to parse: null
+Unable to find: 12:30:00
+Unable to find: true
+Unable to find: Unable to find: 
+Unable to parse: [1,2]
+Unable to find: 123
+Unable to find: %s
+Unable to parse: 
+
+Unable to parse: 123
+Unable to find: <a>b</a>
+Unable to find: abc
+Unable to parse: -1
+Unable to parse: 1
+Unable to parse: /a/b
+Unable to find: 12:30:00
+Unable to find: ABC
+Unable to parse: null
+Unable to parse: 1e5
+Unable to parse: a"b
+Unable to parse: 	
+Unable to parse: null
+Unable to parse: Unable to find: 
+Unable to find: 
+Unable to find: #
+Unable to parse: 	
+A blank string is not a valid number
+Unable to parse: 12:30:00
+Unable to parse: -0.0
+Unable to find: #
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+a is not a valid number.
+Unable to parse: true
+Unable to find: 
+Unable to find: 0
+a b c is not a valid number.
+Unable to parse: 	
+A blank string is not a valid number
+Unable to find: a b c
+Unable to parse: a"b
+abc is not a valid number.
+Unable to find: true
+Unable to parse: Unable to find: 
+Unable to parse: <a>b</a>
+abc is not a valid number.
+Unable to parse: %s
+Unable to find: 1
+Unable to parse: 1
+Unable to parse: a,b
+Unable to parse: 
+Unable to find: a,b
+Unable to parse: 123
+Unable to parse: abc
+Unable to find: foo.bar
+Unable to parse: 
+[1,2] is not a valid number.
+Unable to find: null
+Unable to find: 
+Unable to find: 12:30:00
+Unable to find: %s
+Unable to parse:  
+Unable to find:  
+Unable to find: a=b
+Unable to parse: 	
+Unable to find: Unable to find: 
+Unable to parse: 1e5
+Unable to find: 	
+Unable to parse: {"a":1}
+Unable to parse: null
+a b c is not a valid number.
+Unable to find: a
+Unable to parse: null
+Unable to parse: <a>b</a>
+Unable to find: Unable to find: 
+Unable to parse: 	
+é is not a valid number.
+Unable to parse: 	
+Unable to find: 123
+Unable to parse: a
+Unable to find: a,b
+Unable to find: 
+Unable to parse: false
+a"b is not a valid number.
+Unable to parse: ABC
+Unable to parse: 0
+Unable to find: 0x1F
+Unable to parse: {"a":1}
+Unable to parse:  is not a valid number.
+Unable to parse: a"b
+true is not a valid number.
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to parse: [1,2]
+Unable to parse: 1.5
+Unable to find: a
+/a/b is not a valid number.
+Unable to parse: 
+Unable to find: a"b
+Unable to find:  
+Unable to parse: 
+Unable to parse: 
+
+Unable to find: a b c
+Unable to parse: %s
+Illegal embedded sign character
+Unable to parse: -1
+Unable to parse: é
+a=b is not a valid number.
+Unable to find:  
+Unable to find: 1.5
+Unable to parse: 123
+Unable to find: é
+Unable to find:  
+Unable to find: abc
+Unable to find: %s
+Unable to find: 	
+Unable to find: 
+
+Unable to parse: false
+Unable to parse: false
+abc is not a valid number.
+Unable to find: a=b
+Unable to find: 123
+Unable to find: 0
+Unable to parse: 0
+A blank string is not a valid number
+Unable to parse: a
+Unable to parse: 1e5
+Unable to find: abc
+Unable to parse: 1.5
+Unable to parse: 	
+Unable to find: 123
+Unable to find: foo.bar
+Unable to find: a"b
+Unable to find: Unable to find: 
+Unable to find: <a>b</a>
+a=b is not a valid number.
+Unable to parse: 1.5
+A blank string is not a valid number
+A blank string is not a valid number
+A blank string is not a valid number
+Unable to parse: 
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+[1,2] is not a valid number.
+Unable to parse: false
+Unable to find: 0
+A blank string is not a valid number
+Unable to find: a
+Unable to find: 0x1F
+Unable to find: Unable to parse: 
+Unable to parse: 	
+Unable to parse: /a/b
+Unable to find: [1,2]
+Unable to find: {"a":1}
+Unable to parse: 1e5
+Unable to find: 	
+Unable to find: 12:30:00
+Unable to find: 0x1F
+Unable to parse: Unable to parse: 
+Unable to parse: -1
+Unable to find: a=b
+Unable to parse: 0x1F
+Unable to parse: /a/b
+Unable to find: 12:30:00
+false is not a valid number.
+Unable to find: é
+Unable to find: Unable to find: 
+null is not a valid number.
+Unable to parse: 
+Unable to find: true
+Unable to parse: 2020-01-01
+Unable to parse: {"a":1}
+Unable to find: <a>b</a>
+Unable to find: false
+Unable to parse: 
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx is not a valid number.
+Unable to find: Unable to find: 
+Unable to find: a
+Unable to parse: /a/b
+Unable to parse: 	
+A blank string is not a valid number
+Unable to find: 	
+foo.bar is not a valid number.
+Unable to find: 
+
+Unable to parse: 
+Unable to parse: null
+Unable to find: a
+Unable to find: [1,2]
+Unable to parse: %s
+%s is not a valid number.
+Unable to parse: {"a":1}
+Unable to parse: 2020-01-01
+Unable to find: [1,2]
+Unable to parse: 
+
+Unable to parse: Unable to parse: 
+Unable to parse: é
+%s is not a valid number.
+Unable to parse: 0x1F
+Unable to find: 0x1F
+Unable to parse: ABC
+Unable to find: 	
+Unable to parse: Unable to find: 
+ABC is not a valid number.
+Unable to parse: 	
+Unable to find: <a>b</a>
+Unable to parse: a,b
+Unable to parse: 	
+Unable to parse: %s
+%s is not a valid number.
+Unable to find: -1
+a b c is not a valid number.
+Unable to find: -0.0
+Unable to find: é
+Unable to find: ABC
+Unable to parse: é
+A blank string is not a valid number
+Unable to parse: <a>b</a>
+Unable to find:  
+Unable to find: a"b
+Unable to parse: 1e5
+A blank string is not a valid number
+Unable to parse: null
+Unable to parse: 1e5
+Unable to parse: 1e5
+Unable to parse: 	
+Unable to parse:  
+Unable to find: 
+
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to find: 1
+Unable to parse: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to find: 
+
+A blank string is not a valid number
+null is not a valid number.
+Unable to find: a"b
+foo.bar is not a valid number.
+Unable to parse: 
+
+Unable to parse: Unable to find: 
+A blank string is not a valid number
+Unable to find: é
+Unable to find: a=b
+Unable to find: #
+Unable to find: 
+Unable to parse: a,b
+Unable to parse: 1e5
+Unable to find: null
+Unable to find:  is not a valid number.
+<a>b</a> is not a valid number.
+Unable to find:  
+Unable to find: false
+A blank string is not a valid number
+Unable to find: {"a":1}
+Unable to find: {"a":1}
+Unable to find: 
+Unable to parse: 
+
+Unable to parse: a=b
+Unable to parse: 12:30:00
+Unable to parse: 123
+Unable to parse: abc
+Unable to find: -0.0
+Unable to parse: foo.bar
+Unable to find: foo.bar
+Unable to find: 
+Unable to find: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Unable to find: é
+Unable to parse: a b c
+Unable to find: null
+Unable to parse:  
+Unable to parse: Unable to find: 
+Unable to parse: #
+foo.bar is not a valid number.
+null is not a valid number.
+Unable to parse: foo.bar
+Unable to parse: foo.bar
+Unable to parse: #
+a b c is not a valid number.
+Unable to parse: abc
+[exit 0]

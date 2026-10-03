@@ -1,0 +1,6 @@
+test0001_setErrorIndicatorStroke(acogen.AcoGeneratedTest)
+test0002_equals(acogen.AcoGeneratedTest)
+test0003_setErrorIndicatorPaint(acogen.AcoGeneratedTest)
+test0004_getErrorIndicatorStroke(acogen.AcoGeneratedTest)
+test0005_getErrorIndicatorPaint(acogen.AcoGeneratedTest)
+test0006_init(acogen.AcoGeneratedTest)

@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Mockito-29-r1/Mockito-29b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - acogen.AcoGeneratedTest::test0008_matches
+  - acogen.AcoGeneratedTest::test0011_init
+  - acogen.AcoGeneratedTest::test0012_matches
+[exit 0]

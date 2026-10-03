@@ -1,0 +1,20 @@
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:0009)	E:org.jsoup.select.Selector$SelectorParseException:Could not parse query '\u0009': unexpected token at ''	7
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:0061002c0062)	R:org.jsoup.select.CombiningEvaluator$Or{:or[a, b]}	29
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,_)	E:java.lang.IllegalArgumentException:Object must not be null	0
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:0021003d)	E:org.jsoup.select.Selector$SelectorParseException:Could not parse query '!=': unexpected token at '!='	0
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:003d)	E:org.jsoup.select.Selector$SelectorParseException:Could not parse query '=': unexpected token at '='	0
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:00610020006200200063)	R:org.jsoup.select.CombiningEvaluator$And{c :parentb :parenta}	21
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:003a006700740028)	E:java.lang.IllegalArgumentException:Index must be numeric	2
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:003a0068006100730028)	E:java.lang.IllegalArgumentException::has(el) subselect must not be empty	3
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:0031002e0035)	R:org.jsoup.select.CombiningEvaluator$And{1 .5}	7
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:0023)	E:java.lang.IllegalArgumentException:String must not be empty	2
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:002a003d)	E:org.jsoup.select.Selector$SelectorParseException:Could not parse query '*=': unexpected token at '='	3
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:003a006c00740028)	E:java.lang.IllegalArgumentException:Index must be numeric	1
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:003a006d006100740063006800650073004f0077006e0028)	E:java.lang.IllegalArgumentException::matches(regex) query must not be empty	4
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:003a0063006f006e007400610069006e0073004f0077006e0028)	E:java.lang.IllegalArgumentException::contains(text) query must not be empty	4
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:003a006d0061007400630068006500730028)	E:java.lang.IllegalArgumentException::matches(regex) query must not be empty	2
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:003a0063006f006e007400610069006e00730028)	E:java.lang.IllegalArgumentException::contains(text) query must not be empty	2
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:005b0031002c0032005d)	R:org.jsoup.select.Evaluator$Attribute{[1,2]}	9
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:003a006e006f00740028)	E:java.lang.IllegalArgumentException::not(selector) subselect must not be empty	3
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:003a006500710028)	E:java.lang.IllegalArgumentException:Index must be numeric	1
+org.jsoup.select.QueryParser.parse(java.lang.String)	m(org.jsoup.select.QueryParser,parse,java.lang.String,_,t:002c)	E:org.jsoup.select.Selector$SelectorParseException:Could not parse query '': unexpected token at ''	2

@@ -1,0 +1,15 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Lang-63-r1/Lang-63b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 9
+  - acogen.AcoGeneratedTest::test0001_reduceAndCorrect
+  - acogen.AcoGeneratedTest::test0004_formatPeriod
+  - acogen.AcoGeneratedTest::test0018_formatPeriod
+  - acogen.AcoGeneratedTest::test0032_formatPeriod
+  - acogen.AcoGeneratedTest::test0040_formatPeriod
+  - acogen.AcoGeneratedTest::test0051_reduceAndCorrect
+  - acogen.AcoGeneratedTest::test0055_reduceAndCorrect
+  - acogen.AcoGeneratedTest::test0056_reduceAndCorrect
+  - acogen.AcoGeneratedTest::test0057_reduceAndCorrect
+[exit 0]

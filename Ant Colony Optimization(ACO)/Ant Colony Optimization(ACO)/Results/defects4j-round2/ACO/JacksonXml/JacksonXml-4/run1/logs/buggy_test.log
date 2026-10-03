@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/JacksonXml-4-r1/JacksonXml-4b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - acogen.AcoGeneratedTest::test0004_serializeValue
+  - acogen.AcoGeneratedTest::test0013_serializeXmlNull
+  - acogen.AcoGeneratedTest::test0015_serializeValue
+  - acogen.AcoGeneratedTest::test0017_serializeValue
+[exit 0]

@@ -1,0 +1,2 @@
+org.mockito.internal.util.reflection.GenericMaster.getGenericType(java.lang.reflect.Field)	m(org.mockito.internal.util.reflection.GenericMaster,getGenericType,java.lang.reflect.Field,n(org.mockito.internal.util.reflection.GenericMaster,),_)	E:java.lang.NullPointerException	1
+org.mockito.internal.util.reflection.GenericMaster.<init>()	n(org.mockito.internal.util.reflection.GenericMaster,)	R:org.mockito.internal.util.reflection.GenericMaster	0

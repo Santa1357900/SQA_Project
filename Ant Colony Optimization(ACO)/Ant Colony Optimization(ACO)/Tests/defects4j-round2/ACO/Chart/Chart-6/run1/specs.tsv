@@ -1,0 +1,8 @@
+org.jfree.chart.util.ShapeList.setShape(int,java.awt.Shape)	m(org.jfree.chart.util.ShapeList,setShape,int|java.awt.Shape,n(org.jfree.chart.util.ShapeList,),i:507,_)	R:null|S:org.jfree.chart.util.ShapeList	2
+org.jfree.chart.util.ShapeList.getShape(int)	m(org.jfree.chart.util.ShapeList,getShape,int,n(org.jfree.chart.util.ShapeList,),i:10)	R:null|S:org.jfree.chart.util.ShapeList	1
+org.jfree.chart.util.ShapeList.hashCode()	m(org.jfree.chart.util.ShapeList,hashCode,,n(org.jfree.chart.util.ShapeList,))	R:Integer:4699|S:org.jfree.chart.util.ShapeList	1
+org.jfree.chart.util.ShapeList.clone()	m(org.jfree.chart.util.ShapeList,clone,,n(org.jfree.chart.util.ShapeList,))	R:org.jfree.chart.util.ShapeList|S:org.jfree.chart.util.ShapeList	1
+org.jfree.chart.util.ShapeList.setShape(int,java.awt.Shape)	m(org.jfree.chart.util.ShapeList,setShape,int|java.awt.Shape,n(org.jfree.chart.util.ShapeList,),i:-1,_)	E:java.lang.IllegalArgumentException:Requires index >= 0.	0
+org.jfree.chart.util.ShapeList.<init>()	n(org.jfree.chart.util.ShapeList,)	R:org.jfree.chart.util.ShapeList	0
+org.jfree.chart.util.ShapeList.equals(java.lang.Object)	m(org.jfree.chart.util.ShapeList,equals,java.lang.Object,n(org.jfree.chart.util.ShapeList,),p(listN))	R:Boolean:false|S:org.jfree.chart.util.ShapeList	1
+org.jfree.chart.util.ShapeList.setShape(int,java.awt.Shape)	m(org.jfree.chart.util.ShapeList,setShape,int|java.awt.Shape,n(org.jfree.chart.util.ShapeList,),i:2147483647,_)	E:java.lang.NegativeArraySizeException:-2147483641	0

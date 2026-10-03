@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Compress-14-r1/Compress-14b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - acogen.AcoGeneratedTest::test0028_parseOctal
+  - acogen.AcoGeneratedTest::test0063_parseOctalOrBinary
+  - acogen.AcoGeneratedTest::test0064_parseOctalOrBinary
+[exit 0]

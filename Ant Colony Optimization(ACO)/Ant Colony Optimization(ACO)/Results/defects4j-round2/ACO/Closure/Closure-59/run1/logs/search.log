@@ -1,0 +1,507 @@
+$ java -Xmx768m -Xss4m -javaagent:/home/pheerapat/aco-work/tool/jacocoagent.jar=output=none,includes=com.google.javascript.jscomp.Compiler:com.google.javascript.jscomp.Compiler$* -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/tool/jacococore.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/build/classes:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/lib/args4j.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/lib/guava.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/lib/json.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/lib/jsr305.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/lib/protobuf-java.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/build/lib/rhino.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/lib/ant.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/lib/ant-launcher.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/lib/caja-r4314.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/lib/jarjar.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/lib/junit.jar:/home/pheerapat/aco-work/jobs/Closure-59-r1/b/build/test AcoSearch /home/pheerapat/aco-work/jobs/Closure-59-r1/aco.properties
+Oct 03, 2026 11:33:20 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:21 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:22 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:22 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:22 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:22 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:22 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 2 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 2 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:23 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:24 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 	: Compilation produced 1 syntax errors. (	#1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 	: Compilation produced 1 syntax errors. (	#1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 	: Compilation produced 1 syntax errors. (	#1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing removeTryCatchFinally: Compilation produced 1 syntax errors. (removeTryCatchFinally#1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 	: Compilation produced 1 syntax errors. (	#1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing jscompiler: Compilation produced 1 syntax errors. (jscompiler#1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing foo.bar: Compilation produced 1 syntax errors. (foo.bar#1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing generateReport: Compilation produced 1 syntax errors. (generateReport#1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing the error manager cannot be null: Compilation produced 1 syntax errors. (the error manager cannot be null#1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing No input to replace: : Compilation produced 1 syntax errors. (No input to replace: #1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing sanityCheck: Compilation produced 1 syntax errors. (sanityCheck#1)
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:25 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:26 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:26 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:26 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:26 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:26 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:26 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:26 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:26 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:26 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.AliasStrings process
+INFO: Aliasing common strings
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing a: Compilation produced 1 syntax errors. (a#1)
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:27 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing Strip code: Compilation produced 1 syntax errors. (Strip code#1)
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: [1,2]
+
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: [1,2]
+
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: [1,2]
+
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: parseInputs
+
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: generateReport
+
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: #
+
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: stripCode
+
+Oct 03, 2026 11:33:28 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: [1,2]
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read:  
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: true
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: [1,2]
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: [1,2]
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: a=b
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: runCustomPasses
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: [1,2]
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: sanityCheck
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: a=b
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: [1,2]
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: [1,2]
+
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:29 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:30 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: 
+
+
+Oct 03, 2026 11:33:30 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:30 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: [1,2]
+
+Oct 03, 2026 11:33:30 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:30 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: <a>b</a>
+
+Oct 03, 2026 11:33:30 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:30 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:30 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:31 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:31 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:31 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:31 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:31 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:31 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:32 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:32 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:32 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:32 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:32 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:32 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:32 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:32 AM com.google.javascript.jscomp.AliasStrings process
+INFO: Aliasing common strings
+Oct 03, 2026 11:33:32 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:32 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:33 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:33 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:33 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:33 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:33 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:33 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:33 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:33 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:33 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 
+: Compilation produced 1 syntax errors. (
+#1)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  : Compilation produced 1 syntax errors. ( #1)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing [: Compilation produced 1 syntax errors. ([#1)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing ]: Compilation produced 1 syntax errors. (]#1)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 
+: Compilation produced 1 syntax errors. (
+#1)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing ]: Compilation produced 1 syntax errors. (]#1)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:33:35 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:33:36 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:33:37 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:33:37 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+[exit 0]

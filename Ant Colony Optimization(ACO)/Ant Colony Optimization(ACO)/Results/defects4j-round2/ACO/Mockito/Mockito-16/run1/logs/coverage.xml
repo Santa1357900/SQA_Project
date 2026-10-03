@@ -1,0 +1,514 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.8942307692307693" branch-rate="0.8076923076923077" lines-covered="93" lines-valid="104" branches-covered="21" branches-valid="26" complexity="1.3255813953488371" version="2.0.3" timestamp="1791060668788">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="org.mockito" line-rate="0.9534883720930233" branch-rate="1.0" complexity="1.0">
+			<classes>
+				<class name="org.mockito.Mockito" filename="org/mockito/Mockito.java" line-rate="0.9534883720930233" branch-rate="1.0" complexity="1.0">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="621" hits="1" branch="false"/>
+								<line number="632" hits="1" branch="false"/>
+								<line number="664" hits="1" branch="false"/>
+								<line number="677" hits="1" branch="false"/>
+								<line number="711" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="619" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="atLeast" signature="(I)Lorg/mockito/internal/verification/api/VerificationMode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1439" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="atLeastOnce" signature="()Lorg/mockito/internal/verification/api/VerificationMode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1423" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="atMost" signature="(I)Lorg/mockito/internal/verification/api/VerificationMode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1455" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="debug" signature="()Lorg/mockito/MockitoDebugger;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1567" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="doAnswer" signature="(Lorg/mockito/stubbing/Answer;)Lorg/mockito/stubbing/Stubber;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1260" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="doCallRealMethod" signature="()Lorg/mockito/stubbing/Stubber;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1234" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="doNothing" signature="()Lorg/mockito/stubbing/Stubber;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1299" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="doReturn" signature="(Ljava/lang/Object;)Lorg/mockito/stubbing/Stubber;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1346" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="doThrow" signature="(Ljava/lang/Throwable;)Lorg/mockito/stubbing/Stubber;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1200" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="inOrder" signature="([Ljava/lang/Object;)Lorg/mockito/InOrder;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1371" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="mock" signature="(Ljava/lang/Class;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="722" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="mock" signature="(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="741" hits="6" branch="false"/>
+								<line number="742" hits="3" branch="false"/>
+								<line number="743" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="mock" signature="(Ljava/lang/Class;Lorg/mockito/MockSettings;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="827" hits="20" branch="false"/>
+							</lines>
+						</method>
+						<method name="mock" signature="(Ljava/lang/Class;Lorg/mockito/ReturnValues;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="777" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="mock" signature="(Ljava/lang/Class;Lorg/mockito/stubbing/Answer;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="800" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="never" signature="()Lorg/mockito/internal/verification/api/VerificationMode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1408" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="only" signature="()Lorg/mockito/internal/verification/api/VerificationMode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1475" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="([Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1082" hits="5" branch="false"/>
+								<line number="1083" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="spy" signature="(Ljava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="897" hits="6" branch="false"/>
+								<line number="898" hits="3" branch="false"/>
+								<line number="899" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="stub" signature="(Ljava/lang/Object;)Lorg/mockito/stubbing/DeprecatedOngoingStubbing;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="930" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="stubVoid" signature="(Ljava/lang/Object;)Lorg/mockito/stubbing/VoidMethodStubbable;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1182" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="times" signature="(I)Lorg/mockito/internal/verification/api/VerificationMode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1387" hits="8" branch="false"/>
+							</lines>
+						</method>
+						<method name="validateMockitoUsage" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1524" hits="1" branch="false"/>
+								<line number="1525" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="verify" signature="(Ljava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1025" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="verify" signature="(Ljava/lang/Object;Lorg/mockito/internal/verification/api/VerificationMode;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1051" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="verifyNoMoreInteractions" signature="([Ljava/lang/Object;)V" line-rate="0.5" branch-rate="1.0">
+							<lines>
+								<line number="1127" hits="3" branch="false"/>
+								<line number="1128" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="verifyZeroInteractions" signature="([Ljava/lang/Object;)V" line-rate="0.5" branch-rate="1.0">
+							<lines>
+								<line number="1146" hits="4" branch="false"/>
+								<line number="1147" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="when" signature="(Ljava/lang/Object;)Lorg/mockito/stubbing/OngoingStubbing;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="994" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="withSettings" signature="()Lorg/mockito/MockSettings;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="1558" hits="21" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="619" hits="1" branch="false"/>
+						<line number="621" hits="1" branch="false"/>
+						<line number="632" hits="1" branch="false"/>
+						<line number="664" hits="1" branch="false"/>
+						<line number="677" hits="1" branch="false"/>
+						<line number="711" hits="1" branch="false"/>
+						<line number="722" hits="4" branch="false"/>
+						<line number="741" hits="6" branch="false"/>
+						<line number="742" hits="3" branch="false"/>
+						<line number="743" hits="3" branch="false"/>
+						<line number="777" hits="3" branch="false"/>
+						<line number="800" hits="5" branch="false"/>
+						<line number="827" hits="20" branch="false"/>
+						<line number="897" hits="6" branch="false"/>
+						<line number="898" hits="3" branch="false"/>
+						<line number="899" hits="3" branch="false"/>
+						<line number="930" hits="1" branch="false"/>
+						<line number="994" hits="1" branch="false"/>
+						<line number="1025" hits="2" branch="false"/>
+						<line number="1051" hits="2" branch="false"/>
+						<line number="1082" hits="5" branch="false"/>
+						<line number="1083" hits="1" branch="false"/>
+						<line number="1127" hits="3" branch="false"/>
+						<line number="1128" hits="0" branch="false"/>
+						<line number="1146" hits="4" branch="false"/>
+						<line number="1147" hits="0" branch="false"/>
+						<line number="1182" hits="5" branch="false"/>
+						<line number="1200" hits="1" branch="false"/>
+						<line number="1234" hits="1" branch="false"/>
+						<line number="1260" hits="1" branch="false"/>
+						<line number="1299" hits="1" branch="false"/>
+						<line number="1346" hits="1" branch="false"/>
+						<line number="1371" hits="3" branch="false"/>
+						<line number="1387" hits="8" branch="false"/>
+						<line number="1408" hits="1" branch="false"/>
+						<line number="1423" hits="1" branch="false"/>
+						<line number="1439" hits="5" branch="false"/>
+						<line number="1455" hits="2" branch="false"/>
+						<line number="1475" hits="1" branch="false"/>
+						<line number="1524" hits="1" branch="false"/>
+						<line number="1525" hits="1" branch="false"/>
+						<line number="1558" hits="21" branch="false"/>
+						<line number="1567" hits="1" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+		<package name="org.mockito.internal" line-rate="0.8524590163934426" branch-rate="0.8076923076923077" complexity="2.0">
+			<classes>
+				<class name="org.mockito.internal.MockitoCore" filename="org/mockito/internal/MockitoCore.java" line-rate="0.8524590163934426" branch-rate="0.8076923076923077" complexity="2.0">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="26" hits="36" branch="false"/>
+								<line number="28" hits="36" branch="false"/>
+								<line number="29" hits="36" branch="false"/>
+								<line number="30" hits="36" branch="false"/>
+							</lines>
+						</method>
+						<method name="assertMocksNotEmpty" signature="([Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="96" hits="10" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="97" hits="4" branch="false"/>
+								<line number="99" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="doAnswer" signature="(Lorg/mockito/stubbing/Answer;)Lorg/mockito/stubbing/Stubber;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="116" hits="6" branch="false"/>
+								<line number="117" hits="6" branch="false"/>
+								<line number="118" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="getLastInvocation" signature="()Lorg/mockito/internal/invocation/Invocation;" line-rate="0.6666666666666666" branch-rate="1.0">
+							<lines>
+								<line number="136" hits="1" branch="false"/>
+								<line number="137" hits="1" branch="false"/>
+								<line number="138" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="inOrder" signature="([Ljava/lang/Object;)Lorg/mockito/InOrder;" line-rate="0.875" branch-rate="0.8">
+							<lines>
+								<line number="102" hits="6" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="103" hits="2" branch="false"/>
+								<line number="105" hits="4" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="106" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="107" hits="2" branch="false"/>
+								<line number="108" hits="2" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="109" hits="2" branch="false"/>
+								<line number="112" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="mock" signature="(Ljava/lang/Class;Lorg/mockito/MockSettings;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="34" hits="32" branch="false"/>
+								<line number="35" hits="32" branch="false"/>
+								<line number="36" hits="32" branch="false"/>
+							</lines>
+						</method>
+						<method name="mock" signature="(Ljava/lang/Class;Lorg/mockito/MockSettings;Z)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="32" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="([Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="71" hits="10" branch="false"/>
+								<line number="72" hits="10" branch="false"/>
+								<line number="73" hits="10" branch="false"/>
+								<line number="75" hits="10" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="76" hits="6" branch="false"/>
+								<line number="78" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="stub" signature="()Lorg/mockito/internal/progress/IOngoingStubbing;" line-rate="0.8" branch-rate="0.5">
+							<lines>
+								<line number="40" hits="5" branch="false"/>
+								<line number="41" hits="5" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="42" hits="5" branch="false"/>
+								<line number="43" hits="5" branch="false"/>
+								<line number="45" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="stub" signature="(Ljava/lang/Object;)Lorg/mockito/stubbing/DeprecatedOngoingStubbing;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="50" hits="2" branch="false"/>
+								<line number="51" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="stubVoid" signature="(Ljava/lang/Object;)Lorg/mockito/stubbing/VoidMethodStubbable;" line-rate="0.3333333333333333" branch-rate="1.0">
+							<lines>
+								<line number="122" hits="10" branch="false"/>
+								<line number="123" hits="0" branch="false"/>
+								<line number="124" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="validateMockitoUsage" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="128" hits="2" branch="false"/>
+								<line number="129" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="verify" signature="(Ljava/lang/Object;Lorg/mockito/internal/verification/api/VerificationMode;)Ljava/lang/Object;" line-rate="0.6666666666666666" branch-rate="0.75">
+							<lines>
+								<line number="61" hits="6" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="62" hits="3" branch="false"/>
+								<line number="63" hits="3" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="64" hits="3" branch="false"/>
+								<line number="66" hits="0" branch="false"/>
+								<line number="67" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="verifyNoMoreInteractions" signature="([Ljava/lang/Object;)V" line-rate="0.8" branch-rate="0.75">
+							<lines>
+								<line number="81" hits="10" branch="false"/>
+								<line number="82" hits="6" branch="false"/>
+								<line number="83" hits="6" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="85" hits="6" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="86" hits="3" branch="false"/>
+								<line number="88" hits="3" branch="false"/>
+								<line number="89" hits="3" branch="false"/>
+								<line number="90" hits="3" branch="false"/>
+								<line number="91" hits="0" branch="false"/>
+								<line number="93" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="when" signature="(Ljava/lang/Object;)Lorg/mockito/stubbing/OngoingStubbing;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="55" hits="2" branch="false"/>
+								<line number="56" hits="2" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="26" hits="36" branch="false"/>
+						<line number="28" hits="36" branch="false"/>
+						<line number="29" hits="36" branch="false"/>
+						<line number="30" hits="36" branch="false"/>
+						<line number="32" hits="4" branch="false"/>
+						<line number="34" hits="32" branch="false"/>
+						<line number="35" hits="32" branch="false"/>
+						<line number="36" hits="32" branch="false"/>
+						<line number="40" hits="5" branch="false"/>
+						<line number="41" hits="5" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="42" hits="5" branch="false"/>
+						<line number="43" hits="5" branch="false"/>
+						<line number="45" hits="0" branch="false"/>
+						<line number="50" hits="2" branch="false"/>
+						<line number="51" hits="2" branch="false"/>
+						<line number="55" hits="2" branch="false"/>
+						<line number="56" hits="2" branch="false"/>
+						<line number="61" hits="6" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="62" hits="3" branch="false"/>
+						<line number="63" hits="3" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="64" hits="3" branch="false"/>
+						<line number="66" hits="0" branch="false"/>
+						<line number="67" hits="0" branch="false"/>
+						<line number="71" hits="10" branch="false"/>
+						<line number="72" hits="10" branch="false"/>
+						<line number="73" hits="10" branch="false"/>
+						<line number="75" hits="10" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="76" hits="6" branch="false"/>
+						<line number="78" hits="2" branch="false"/>
+						<line number="81" hits="10" branch="false"/>
+						<line number="82" hits="6" branch="false"/>
+						<line number="83" hits="6" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="85" hits="6" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="86" hits="3" branch="false"/>
+						<line number="88" hits="3" branch="false"/>
+						<line number="89" hits="3" branch="false"/>
+						<line number="90" hits="3" branch="false"/>
+						<line number="91" hits="0" branch="false"/>
+						<line number="93" hits="0" branch="false"/>
+						<line number="96" hits="10" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="97" hits="4" branch="false"/>
+						<line number="99" hits="6" branch="false"/>
+						<line number="102" hits="6" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="103" hits="2" branch="false"/>
+						<line number="105" hits="4" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="106" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="107" hits="2" branch="false"/>
+						<line number="108" hits="2" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="109" hits="2" branch="false"/>
+						<line number="112" hits="0" branch="false"/>
+						<line number="116" hits="6" branch="false"/>
+						<line number="117" hits="6" branch="false"/>
+						<line number="118" hits="6" branch="false"/>
+						<line number="122" hits="10" branch="false"/>
+						<line number="123" hits="0" branch="false"/>
+						<line number="124" hits="0" branch="false"/>
+						<line number="128" hits="2" branch="false"/>
+						<line number="129" hits="2" branch="false"/>
+						<line number="136" hits="1" branch="false"/>
+						<line number="137" hits="1" branch="false"/>
+						<line number="138" hits="0" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

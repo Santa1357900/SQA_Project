@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Collections-8-r1/Collections-8b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 88
+     Lines covered: 37
+  Conditions total: 36
+Conditions covered: 13
+     Line coverage: 42.0%
+Condition coverage: 36.1%
+[exit 0]

@@ -1,0 +1,1030 @@
+$ java -Xmx768m -Xss4m -javaagent:/home/pheerapat/aco-work/tool/jacocoagent.jar=output=none,includes=com.google.javascript.jscomp.Compiler:com.google.javascript.jscomp.Compiler$* -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/tool/jacococore.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/b/build/classes:/home/pheerapat/aco-work/jobs/Closure-140-r1/b/lib/ant_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/b/lib/args4j_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/b/lib/google_common_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/b/lib/hamcrest-core-1.1.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/b/lib/junit.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/b/lib/libtrunk_rhino_parser_jarjared.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/b/lib/protobuf_deploy.jar:/home/pheerapat/aco-work/jobs/Closure-140-r1/b/build/test AcoSearch /home/pheerapat/aco-work/jobs/Closure-140-r1/aco.properties
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.jscomp.mozilla.rhino.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.jscomp.mozilla.rhino.TokenStream.<init>(TokenStream.java:85)
+	at com.google.javascript.jscomp.mozilla.rhino.Parser.parse(Parser.java:504)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:105)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:89)
+	at com.google.javascript.jscomp.JsAst.createAst(JsAst.java:78)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:51)
+	at com.google.javascript.jscomp.CompilerInput.getAstRoot(CompilerInput.java:86)
+	at com.google.javascript.jscomp.Compiler.parseTestCode(Compiler.java:1079)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing #: Compilation produced 1 syntax errors. (##1)
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.jscomp.mozilla.rhino.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.jscomp.mozilla.rhino.TokenStream.<init>(TokenStream.java:85)
+	at com.google.javascript.jscomp.mozilla.rhino.Parser.parse(Parser.java:504)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:105)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:89)
+	at com.google.javascript.jscomp.JsAst.createAst(JsAst.java:78)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:51)
+	at com.google.javascript.jscomp.CompilerInput.getAstRoot(CompilerInput.java:86)
+	at com.google.javascript.jscomp.Compiler.parseTestCode(Compiler.java:1079)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:34 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 	: Compilation produced 1 syntax errors. (	#1)
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing false: Compilation produced 1 syntax errors. (false#1)
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:35 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.jscomp.mozilla.rhino.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.jscomp.mozilla.rhino.TokenStream.<init>(TokenStream.java:85)
+	at com.google.javascript.jscomp.mozilla.rhino.Parser.parse(Parser.java:504)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:105)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:89)
+	at com.google.javascript.jscomp.JsAst.createAst(JsAst.java:78)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:51)
+	at com.google.javascript.jscomp.Compiler.parse(Compiler.java:1046)
+	at com.google.javascript.jscomp.Compiler.parseSyntheticCode(Compiler.java:1068)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing <a>b</a>: Compilation produced 1 syntax errors. (<a>b</a>#1)
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:57:36 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:37 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:37 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:37 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:37 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:38 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:38 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:38 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:38 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 
+: Compilation produced 1 syntax errors. (
+#1)
+Oct 03, 2026 11:57:38 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:38 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:39 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:39 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:39 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:39 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:39 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:39 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:39 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:40 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - At least one module must be provided
+
+Oct 03, 2026 11:57:40 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:40 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:40 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:40 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:41 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:43 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:43 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:43 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:44 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:44 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:44 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:44 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:44 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:45 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:45 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:45 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:45 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:45 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:45 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:45 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:45 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:45 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing %s: Compilation produced 1 syntax errors. (%s#1)
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing %s: Compilation produced 1 syntax errors. (%s#1)
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:46 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing [1,2]: Compilation produced 1 syntax errors. ([1,2]#1)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: [1,2]:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 1: Compilation produced 1 syntax errors. (1#1)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: 1:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. syntax error
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing a=b: Compilation produced 1 syntax errors. (a=b#1)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: a=b:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+WARNING: -0.0:1: WARNING - accessing name abc in externs has no effect
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 0 error(s), 1 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+WARNING: true:1: WARNING - accessing name parseInputs in externs has no effect
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 0 error(s), 1 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. missing ; before statement
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing removeTryCatchFinally: Compilation produced 1 syntax errors. (removeTryCatchFinally#1)
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: removeTryCatchFinally:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:47 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing a"b: Compilation produced 1 syntax errors. (a"b#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: a"b:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing foo.bar: Compilation produced 1 syntax errors. (foo.bar#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: foo.bar:1: ERROR - Parse error. illegal character
+AB
+ ^
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing computeCFG: Compilation produced 1 syntax errors. (computeCFG#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: computeCFG:1: ERROR - Parse error. illegal character
+AB
+ ^
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. missing ; before statement
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  : Compilation produced 1 syntax errors. ( #1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE:  :1: ERROR - Parse error. illegal character
+AB
+ ^
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 
+: Compilation produced 1 syntax errors. (
+#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: 
+:1: ERROR - Parse error. illegal character
+AB
+ ^
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing false: Compilation produced 1 syntax errors. (false#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: false:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing foo.bar: Compilation produced 1 syntax errors. (foo.bar#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: foo.bar:1: ERROR - Parse error. illegal character
+AB
+ ^
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing sanityCheck: Compilation produced 1 syntax errors. (sanityCheck#1)
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: sanityCheck:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:48 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing computeCFG: Compilation produced 1 syntax errors. (computeCFG#1)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: computeCFG:1: ERROR - Parse error. illegal character
+AB
+ ^
+
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing computeCFG: Compilation produced 1 syntax errors. (computeCFG#1)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: computeCFG:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. missing ; before statement
+
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: -0.0:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing sanityCheck: Compilation produced 1 syntax errors. (sanityCheck#1)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: sanityCheck:1: ERROR - Parse error. Unexpected end of file
+
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 	: Compilation produced 1 syntax errors. (	#1)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: 	:1: ERROR - Parse error. illegal character
+AB
+ ^
+
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:49 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.LoggerErrorManager println
+SEVERE: ERROR - Cannot read: 
+
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.LoggerErrorManager printSummary
+WARNING: 1 error(s), 0 warning(s)
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 123: Compilation produced 1 syntax errors. (123#1)
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing true: Compilation produced 1 syntax errors. (true#1)
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing 	: Compilation produced 1 syntax errors. (	#1)
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing Normalizing: Compilation produced 1 syntax errors. (Normalizing#1)
+Oct 03, 2026 11:57:50 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing Normalizing: Compilation produced 1 syntax errors. (Normalizing#1)
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.AliasStrings process
+INFO: Aliasing common strings
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing é: Compilation produced 1 syntax errors. (é#1)
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.AliasStrings process
+INFO: Aliasing common strings
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.jscomp.mozilla.rhino.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.jscomp.mozilla.rhino.TokenStream.<init>(TokenStream.java:85)
+	at com.google.javascript.jscomp.mozilla.rhino.Parser.parse(Parser.java:504)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:105)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:89)
+	at com.google.javascript.jscomp.JsAst.createAst(JsAst.java:78)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:51)
+	at com.google.javascript.jscomp.CompilerInput.getAstRoot(CompilerInput.java:86)
+	at com.google.javascript.jscomp.Compiler.parseTestCode(Compiler.java:1079)
+	at jdk.internal.reflect.GeneratedMethodAccessor20.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing abc: Compilation produced 1 syntax errors. (abc#1)
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: Compilation produced 1 syntax errors. (xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#1)
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing a: Compilation produced 1 syntax errors. (a#1)
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing this.passes has already been assigned: Compilation produced 1 syntax errors. (this.passes has already been assigned#1)
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:51 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing -0.0: Compilation produced 1 syntax errors. (-0.0#1)
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: checkVars
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: processDefines
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeStandardOptimizations
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeMainOptimizations
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: beforeModuleMotion
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: afterModuleMotion
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: denormalize
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.PhaseOptimizer$NamedPass process
+INFO: invertNames
+java.lang.IllegalStateException: FAILED ASSERTION
+	at com.google.javascript.jscomp.mozilla.rhino.Kit.codeBug(Kit.java:449)
+	at com.google.javascript.jscomp.mozilla.rhino.TokenStream.<init>(TokenStream.java:85)
+	at com.google.javascript.jscomp.mozilla.rhino.Parser.parse(Parser.java:504)
+	at com.google.javascript.jscomp.parsing.ParserRunner.parse(ParserRunner.java:105)
+	at com.google.javascript.jscomp.JsAst.parse(JsAst.java:89)
+	at com.google.javascript.jscomp.JsAst.createAst(JsAst.java:78)
+	at com.google.javascript.jscomp.JsAst.getAstRoot(JsAst.java:51)
+	at com.google.javascript.jscomp.Compiler.parse(Compiler.java:1046)
+	at com.google.javascript.jscomp.Compiler.parseSyntheticCode(Compiler.java:1068)
+	at jdk.internal.reflect.GeneratedMethodAccessor21.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at AcoReplay.value(AcoReplay.java:154)
+	at AcoReplay.run(AcoReplay.java:49)
+	at AcoOracle$1.run(AcoOracle.java:24)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing /a/b: Compilation produced 1 syntax errors. (/a/b#1)
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing Conflicting externs name: : Compilation produced 1 syntax errors. (Conflicting externs name: #1)
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.AliasStrings process
+INFO: Aliasing common strings
+Oct 03, 2026 11:57:52 AM com.google.javascript.jscomp.parsing.ParserRunner parse
+INFO: Error parsing  [testcode] : Compilation produced 1 syntax errors. ( [testcode] #1)
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler stripCode
+INFO: Strip code
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:53 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:54 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:54 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:54 AM com.google.javascript.jscomp.Compiler computeCFG
+INFO: Computing Control Flow Graph
+Oct 03, 2026 11:57:54 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:54 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:54 AM com.google.javascript.jscomp.Compiler normalize
+INFO: Normalizing
+Oct 03, 2026 11:57:55 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:55 AM com.google.javascript.jscomp.Compiler recordFunctionInformation
+INFO: Recording function information
+Oct 03, 2026 11:57:55 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+Oct 03, 2026 11:57:55 AM com.google.javascript.jscomp.Compiler removeTryCatchFinally
+INFO: Remove try/catch/finally
+[exit 0]

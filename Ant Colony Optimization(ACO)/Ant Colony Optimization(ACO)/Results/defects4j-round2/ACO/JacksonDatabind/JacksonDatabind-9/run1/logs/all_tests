@@ -1,0 +1,4 @@
+test0001_serialize(acogen.AcoGeneratedTest)
+test0002_init(acogen.AcoGeneratedTest)
+test0003_acceptJsonFormatVisitor(acogen.AcoGeneratedTest)
+test0004_getSchema(acogen.AcoGeneratedTest)

@@ -1,0 +1,6 @@
+org.jsoup.helper.HttpConnection.connect(java.net.URL)	m(org.jsoup.helper.HttpConnection,connect,java.net.URL,_,_)	E:java.lang.IllegalArgumentException:URL must not be null	15
+org.jsoup.helper.HttpConnection.connect(java.lang.String)	m(org.jsoup.helper.HttpConnection,connect,java.lang.String,_,t:00660061006c00730065)	E:java.lang.IllegalArgumentException:Malformed URL: false	5
+org.jsoup.helper.HttpConnection.connect(java.lang.String)	m(org.jsoup.helper.HttpConnection,connect,java.lang.String,_,t:006e0075006c006c)	E:java.lang.IllegalArgumentException:Malformed URL: null	0
+org.jsoup.helper.HttpConnection.connect(java.lang.String)	m(org.jsoup.helper.HttpConnection,connect,java.lang.String,_,t:005b0031002c0032005d)	E:java.lang.IllegalArgumentException:Malformed URL: [1,2]	0
+org.jsoup.helper.HttpConnection.connect(java.lang.String)	m(org.jsoup.helper.HttpConnection,connect,java.lang.String,_,t:00550073006500720020006100670065006e00740020006d0075007300740020006e006f00740020006200650020006e0075006c006c)	E:java.lang.IllegalArgumentException:Malformed URL: User agent must not be null	0
+org.jsoup.helper.HttpConnection.connect(java.lang.String)	m(org.jsoup.helper.HttpConnection,connect,java.lang.String,_,t:006100620063)	E:java.lang.IllegalArgumentException:Malformed URL: abc	0

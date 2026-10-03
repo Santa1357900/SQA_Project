@@ -1,0 +1,19 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p JacksonCore -v 18f -w /home/pheerapat/aco-work/jobs/JacksonCore-18-r1/f
+Checking out 96642978 to /home/pheerapat/aco-work/jobs/JacksonCore-18-r1/f. OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Backing up build file: /home/pheerapat/aco-work/jobs/JacksonCore-18-r1/f/ma OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 96642978:956e0ce3..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: JacksonCore-18f................................. OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /home/pheerapat/aco-work/jobs/JacksonCore-18-r1/f
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

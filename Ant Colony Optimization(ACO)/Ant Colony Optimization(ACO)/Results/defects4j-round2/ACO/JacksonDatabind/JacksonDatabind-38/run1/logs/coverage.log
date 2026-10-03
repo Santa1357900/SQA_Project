@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/JacksonDatabind-38-r1/JacksonDatabind-38b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 122
+     Lines covered: 59
+  Conditions total: 42
+Conditions covered: 20
+     Line coverage: 48.4%
+Condition coverage: 47.6%
+[exit 0]

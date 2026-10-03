@@ -1,0 +1,7 @@
+test0001_getCurrentNodePointer(acogen.AcoGeneratedTest)
+test0002_setPosition(acogen.AcoGeneratedTest)
+test0003_reset(acogen.AcoGeneratedTest)
+test0004_init(acogen.AcoGeneratedTest)
+test0005_nextNode(acogen.AcoGeneratedTest)
+test0006_setPosition(acogen.AcoGeneratedTest)
+test0007_setPosition(acogen.AcoGeneratedTest)

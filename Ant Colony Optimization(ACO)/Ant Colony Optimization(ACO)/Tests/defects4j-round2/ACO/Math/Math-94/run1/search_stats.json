@@ -1,0 +1,15 @@
+{
+  "target_classes": 1,
+  "skipped_classes": [],
+  "methods": 40,
+  "iterations_done": 9,
+  "evaluations": 166,
+  "probes_covered": 138,
+  "tests_archived": 99,
+  "timeouts": 5,
+  "blocked": 0,
+  "decision_points": 67,
+  "coverage_feedback": true,
+  "search_seconds": 36.717,
+  "history": ["1,43,17,20", "2,72,33,40", "3,84,44,60", "4,107,57,80", "5,114,66,100", "6,122,77,120", "7,128,85,140", "8,135,97,160", "9,138,99,166"]
+}
