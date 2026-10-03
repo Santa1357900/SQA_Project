@@ -119,13 +119,13 @@ python Code/validate.py --collect-only \
 | Fault detection rate                     |                     2.20% |
 | Test coverage เฉลี่ย                     | — (ไม่มีข้อมูลใน summary) |
 | Line coverage เฉลี่ย                     |                    68.87% |
-| Branch coverage เฉลี่ย                   |                    59.45% |
+| Conditions coverage เฉลี่ย                   |                    59.45% |
 
 ### ผลแยกตามโปรเจกต์
 
-FDR ใช้ค่าจาก summary (`detected / evaluated`). `Unknown outcome` หมายถึงผล inconclusive ตามสถานะของ Gemini; `ยังไม่มีผลประเมิน` คือ selected ลบ evaluated. ค่า test coverage เป็น `—` เพราะชุดผลนี้ไม่มีข้อมูล method coverage. Line และ branch coverage เป็นอัตราส่วนจาก summary.
+FDR ใช้ค่าจาก summary (`detected / evaluated`). `Unknown outcome` หมายถึงผล inconclusive ตามสถานะของ Gemini; `ยังไม่มีผลประเมิน` คือ selected ลบ evaluated. ค่า test coverage เป็น `—` เพราะชุดผลนี้ไม่มีข้อมูล method coverage. Line และ Conditions coverage เป็นอัตราส่วนจาก summary.
 
-| Project         | Selected | Evaluated | Detected | Unknown | Fault detection rate | Test coverage | Line coverage | Branch coverage |
+| Project         | Selected | Evaluated | Detected | Unknown | Fault detection rate | Test coverage | Line coverage | Conditions coverage |
 | --------------- | -------: | --------: | -------: | ------: | -------------------: | ------------: | ------------: | --------------: |
 | Chart           |       26 |        18 |        2 |       9 |               11.11% |             — |        91.07% |          79.03% |
 | Cli             |       39 |        28 |        1 |      18 |                3.57% |             — |        68.77% |          61.12% |
