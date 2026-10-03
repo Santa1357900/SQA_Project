@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "experiment": "closure-retry-v317",
   "algorithm": "DE",
   "algorithm_version": "3.1.19-rebuild",
@@ -59,10 +59,10 @@
     "lines_covered": 199,
     "lines_total": 1287,
     "line_ratio": 0.15462315462315462,
-    "branch_measure": "condition",
-    "branches_covered": 124,
-    "branches_total": 1006,
-    "branch_ratio": 0.12326043737574553
+    "conditions_covered": 124,
+    "conditions_total": 1006,
+    "condition_ratio": 0.12326043737574553,
+    "coverage_measure": "condition"
   },
   "generation_seconds": 1272.907,
   "total_seconds": 1454.541,

@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "experiment": "metadata-recheck-v319",
   "algorithm": "DE",
   "algorithm_version": "3.1.19-rebuild",
@@ -53,10 +53,10 @@
     "lines_covered": 105,
     "lines_total": 430,
     "line_ratio": 0.2441860465116279,
-    "branch_measure": "condition",
-    "branches_covered": 56,
-    "branches_total": 248,
-    "branch_ratio": 0.22580645161290322
+    "conditions_covered": 56,
+    "conditions_total": 248,
+    "condition_ratio": 0.22580645161290322,
+    "coverage_measure": "condition"
   },
   "generation_seconds": 257.601,
   "total_seconds": 337.949,

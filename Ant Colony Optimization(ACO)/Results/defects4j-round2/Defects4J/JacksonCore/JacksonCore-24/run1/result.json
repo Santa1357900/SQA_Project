@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "experiment": "defects4j-round2",
   "algorithm": "Defects4J",
   "algorithm_version": "2.0.0",
@@ -28,10 +28,10 @@
     "lines_covered": 427,
     "lines_total": 607,
     "line_ratio": 0.7035,
-    "branch_measure": "condition",
-    "branches_covered": 261,
-    "branches_total": 411,
-    "branch_ratio": 0.635
+    "conditions_covered": 261,
+    "conditions_total": 411,
+    "condition_ratio": 0.635,
+    "coverage_measure": "condition"
   },
   "generation_seconds": 0.0,
   "total_seconds": 75.97,

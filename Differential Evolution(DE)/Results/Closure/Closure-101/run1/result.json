@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "experiment": "closure-retry-v317",
   "algorithm": "DE",
   "algorithm_version": "3.1.17-rebuild",
@@ -43,10 +43,10 @@
     "lines_covered": null,
     "lines_total": null,
     "line_ratio": null,
-    "branch_measure": "condition",
-    "branches_covered": null,
-    "branches_total": null,
-    "branch_ratio": null
+    "conditions_covered": null,
+    "conditions_total": null,
+    "condition_ratio": null,
+    "coverage_measure": "condition"
   },
   "generation_seconds": 202.242,
   "total_seconds": 227.19,

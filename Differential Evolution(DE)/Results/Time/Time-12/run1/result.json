@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "experiment": "all-defects4j-v3110-full512-w4",
   "algorithm": "DE",
   "algorithm_version": "3.1.10-rebuild",
@@ -34,10 +34,10 @@
     "lines_covered": 214,
     "lines_total": 664,
     "line_ratio": 0.32228915662650603,
-    "branch_measure": "condition",
-    "branches_covered": 55,
-    "branches_total": 236,
-    "branch_ratio": 0.2330508474576271
+    "conditions_covered": 55,
+    "conditions_total": 236,
+    "condition_ratio": 0.2330508474576271,
+    "coverage_measure": "condition"
   },
   "generation_seconds": 1260.974,
   "total_seconds": 1430.092,

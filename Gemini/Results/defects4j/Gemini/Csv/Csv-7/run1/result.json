@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "experiment": "defects4j",
   "algorithm": "Gemini",
   "algorithm_version": "Gemini-3.5-Flash-Lite",
@@ -22,10 +22,10 @@
     "lines_covered": 91,
     "lines_total": 101,
     "line_ratio": 0.90099,
-    "branch_measure": "condition",
-    "branches_covered": 42,
-    "branches_total": 50,
-    "branch_ratio": 0.84
+    "conditions_covered": 42,
+    "conditions_total": 50,
+    "condition_ratio": 0.84,
+    "coverage_measure": "condition"
   },
   "generation_seconds": null,
   "total_seconds": null,
