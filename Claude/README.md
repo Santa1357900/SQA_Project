@@ -8,7 +8,7 @@
 | รายการ          | ค่าที่ใช้                                                                                                                                      |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | โมเดล           | `claude-sonnet-5` (adaptive thinking, effort `high`)                                                                                           |
-| ช่องทางเรียกใช้ | Claude Code CLI (`claude -p`) ด้วยบัญชีที่ล็อกอินในเครื่อง — สลับเป็น Anthropic API ได้ด้วย `backend: "api"`                                   |
+| ช่องทางเรียกใช้ (backend) | `kku` = KKU IntelSphere (gen.ai.kku.ac.th) ผ่าน Anthropic Messages API — ค่าเริ่มต้นใน config · `cli` = Claude Code CLI (`claude -p`) · `api` = Anthropic API ตรง — backend ที่ใช้จริงของแต่ละบั๊กถูกบันทึกใน `generation.json` (ผล run 1 ในข้อ 4 สร้างด้วย `cli`) |
 | ระดับการทดสอบ   | Unit test, JUnit 4, Java 6 syntax (ตามข้อจำกัดของ Defects4J)                                                                                   |
 | ชุดข้อมูล       | Defects4J 854 active bugs — ซอร์สโค้ดคลาสเป้าหมายอยู่ใน [`dataset/`](../dataset)                                                               |
 | Prompt          | [`Prompt/system_prompt.txt`](Prompt/system_prompt.txt) + [`Prompt/template_prompt.txt`](Prompt/template_prompt.txt)                            |
@@ -68,7 +68,10 @@ Prompt แบ่งเป็น 2 ส่วนและใช้แท็ก XML
 
 1. อ่านซอร์สโค้ดจาก `dataset/<Project>_<bug>/<Class>.java` แล้วดึงชื่อ package/class
 2. ประกอบ prompt และบันทึกฉบับเต็มลง `Prompt/history/`
-3. เรียก Claude ผ่าน `claude -p --model claude-sonnet-5 --effort high --output-format json --tools "" --system-prompt-file ...` (ส่ง user prompt ทาง stdin) พร้อม retry/backoff เมื่อเจอ rate limit หรือ server error; backend `api` ใช้ Anthropic SDK แบบ streaming + prompt caching แทน
+3. เรียก Claude ตาม backend ที่เลือก พร้อม retry/backoff เมื่อเจอ rate limit หรือ server error
+   - `kku`: Anthropic SDK (`client.messages.stream`) ชี้ `base_url` ไปที่ `https://gen.ai.kku.ac.th/api` ยืนยันตัวด้วย `KKU_API_KEY` ส่ง system prompt (prompt caching), adaptive thinking และ effort เหมือน API ตรง; gateway ตอบกลับชื่อโมเดลที่ให้บริการจริง (`served_model`, `provider`) ซึ่งถูกเก็บลง `generation.json`; เมื่อโควตารายวันหมด (`This model reached daily limit.`) pipeline หยุดโดยไม่แตะบั๊กที่เหลือ แล้วรันคำสั่งเดิมต่อได้ในวันถัดไป
+   - `cli`: `claude -p --model claude-sonnet-5 --effort high --output-format stream-json --tools "" --system-prompt-file ...` (ส่ง user prompt ทาง stdin)
+   - `api`: Anthropic SDK แบบเดียวกับ `kku` แต่ยิงตรงที่ api.anthropic.com ด้วย `ANTHROPIC_API_KEY`
 4. Sanitize: ตัด code fence, แปลง JUnit 5 → 4, ตัด diamond `<>`, เติม `throws Throwable`, แก้ `assertEquals(null,…)`/`NaN`, บังคับชื่อคลาสและ package ให้ตรงกับไฟล์
 5. บันทึกเทส + `generation.json` (เวลาที่ใช้, token, stop_reason)
 
@@ -92,13 +95,31 @@ Prompt แบ่งเป็น 2 ส่วนและใช้แท็ก XML
 ```powershell
 pip install -r Claude/Code/requirements.txt
 
-# ค่าเริ่มต้น (backend = cli): ต้องมี Claude Code CLI และล็อกอินแล้ว
+# ค่าเริ่มต้น (backend = kku): ขอ API key ที่ https://gen.ai.kku.ac.th แล้วใส่ KKU_API_KEY ใน .env (ไฟล์นี้ถูก git-ignore)
+copy .env.example .env
+
+# ทางเลือก (backend = cli): ต้องมี Claude Code CLI และล็อกอินแล้ว รันด้วย --backend cli
 npm install -g @anthropic-ai/claude-code
 claude          # เปิดครั้งแรกแล้ว /login จากนั้นออกได้
 
-# ทางเลือก (backend = api): ใส่ ANTHROPIC_API_KEY ใน .env (ไฟล์นี้ถูก git-ignore) แล้วรันด้วย --backend api
-copy .env.example .env
+# ทางเลือก (backend = api): ใส่ ANTHROPIC_API_KEY ใน .env แล้วรันด้วย --backend api
 ```
+
+หมายเหตุโควตา KKU: 200,000 token/วันต่อโมเดล — บั๊กหนึ่งตัวใช้ราว 15k (คลาสเล็ก) ถึง 80k+ token (Closure) ที่ effort `high`
+จึงทำได้ประมาณ 3–10 บั๊กต่อวันต่อ 1 key; ใช้ `--effort medium|low` เพื่อให้ได้จำนวนบั๊กต่อวันมากขึ้น และรันคำสั่งเดิมซ้ำทุกวันเพื่อทำต่อจากที่ค้าง
+
+**ใช้หลาย key พร้อมกัน** (เช่น key ของสมาชิกแต่ละคนในกลุ่ม) — ใส่ใน `.env` แบบใดแบบหนึ่งหรือผสมกัน:
+
+```env
+KKU_API_KEYS=key_one,key_two,key_three
+# หรือ
+KKU_API_KEY=key_one
+KKU_API_KEY_2=key_two
+KKU_API_KEY_3=key_three
+```
+
+pipeline จะกระจายคำขอแบบ round-robin ไปทุก key, key ไหนโควตาหมด (หรือถูกปฏิเสธ) จะถูกพักแล้วใช้ key ที่เหลือต่อ
+และหยุดเมื่อหมดทุก key; จำนวน worker = `kku.workers` (2) × จำนวน key (สูงสุด 8); `generation.json` บันทึกว่าใช้ key ลำดับที่เท่าไร (`usage.api_key` แสดงเฉพาะ 4 ตัวท้าย)
 
 สำหรับขั้นวัดผลต้องมี Defects4J บน WSL Ubuntu — รันสคริปต์ติดตั้งครั้งเดียว (JDK 11, Perl deps, Defects4J 3.0.1, แก้ classpath ของ Cli):
 
@@ -115,14 +136,14 @@ python Claude/Code/pipeline_claude.py --projects Lang --limit 3
 # เจาะจงบั๊ก
 python Claude/Code/pipeline_claude.py --projects Lang --bugs 1 5 7
 
-# ครบ 854 บั๊ก (8 worker ขนานตาม config; ข้ามบั๊กที่สร้างสำเร็จแล้ว รันซ้ำต่อจากเดิมได้)
+# ครบ 854 บั๊ก (ข้ามบั๊กที่สร้างสำเร็จแล้ว รันซ้ำต่อจากเดิมได้; worker: kku 2, cli/api 8 ตาม config)
 python Claude/Code/pipeline_claude.py --all
 
 # รอบที่ 2 เพื่อหาค่าเฉลี่ย (ข้อ 1.7 ของโจทย์)
 python Claude/Code/pipeline_claude.py --all --run 2
 ```
 
-ตัวเลือกเพิ่มเติม: `--workers N`, `--effort low|medium|high|xhigh|max`, `--model <id>`, `--backend cli|api`, `--overwrite`, `--dry-run`
+ตัวเลือกเพิ่มเติม: `--workers N`, `--effort low|medium|high|xhigh|max`, `--model <id>`, `--backend kku|cli|api`, `--overwrite`, `--dry-run`
 
 ตัวเลขอ้างอิงจาก Lang-1: 56 เทส, ~140 วินาที, input ~22k token / output ~17k token ต่อบั๊ก
 ดังนั้น 854 บั๊กที่ 8 worker ใช้เวลาราว 4–5 ชั่วโมงถ้าไม่ติด rate limit (สคริปต์รันต่อจากจุดที่ค้างได้)
@@ -191,7 +212,7 @@ JxPath 6/13 (68%), Lang 22/56 (76%), Math 33/103 (81%), Mockito 10/30 (82%), Tim
 - ชื่อคลาสเทสใช้ `<Class>ClaudeTest` เพื่อไม่ชนกับเทสเดิมของโปรเจกต์ (เช่น `NumberUtilsTest` มีอยู่แล้วใน Lang)
 - Coverage คำนวณจากเทสที่ผ่านบน fixed เท่านั้น ตามข้อกำหนดกลาง จึงอาจต่ำกว่าการนับทั้งชุด
 - `branch_ratio` คือ _condition coverage_ ของ Cobertura (`branch_measure = "condition"`) ตามที่กลุ่มตกลง
-- ไม่มี credential ใดถูก commit: backend `cli` ใช้การล็อกอินของ Claude Code ในเครื่อง ส่วน `.env` (สำหรับ backend `api`) อยู่ใน `.gitignore`
+- ไม่มี credential ใดถูก commit: `.env` (`KKU_API_KEY` / `ANTHROPIC_API_KEY`) อยู่ใน `.gitignore` และ backend `cli` ใช้การล็อกอินของ Claude Code ในเครื่อง
 - `generation.json` เก็บ `total_cost_usd` ที่ CLI รายงานไว้เพื่ออ้างอิง (ประมาณ $0.6–1.0 ต่อบั๊กที่ effort `high`) ถ้าต้องการลดเวลา/ค่าใช้จ่ายให้ใช้ `--effort medium`
 - `generation_seconds` = เวลาที่โมเดลทำงานจริง (`duration_api_ms`) ส่วน `generation_wall_seconds` รวมเวลา retry/รอโควตา — ใช้ค่าแรกเมื่อเทียบกับ DE/ACO
 - รัน generator หลายตัวพร้อมกันได้ (คนละบัญชีผ่าน `--cli-config-dir`) โดยแบ่งคิวอัตโนมัติ; `python Claude/Code/progress.py` แสดงความคืบหน้าสด

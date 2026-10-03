@@ -5,7 +5,8 @@ Claude test generator for Defects4J (SQA Project - AI-Assisted Testing).
 Flow per bug:
   dataset/<Project>_<bug>/<Class>.java
     -> assemble prompt (Prompt/system_prompt.txt + Prompt/template_prompt.txt)
-    -> Claude via Claude Code CLI `claude -p` (default) or Anthropic API
+    -> Claude via the KKU IntelSphere gateway (backend "kku"), the Claude Code CLI
+       (backend "cli") or the Anthropic API (backend "api")
        (backend/model/effort from Configuration/claude_config.json)
     -> sanitize Java 6 / JUnit 4 output
     -> Tests/<experiment>/Claude/<Project>/<Project>-<bug>/run<N>/<Class>ClaudeTest.java
@@ -63,9 +64,7 @@ def log(msg: str):
         print(msg, flush=True)
 
 
-# ---------------------------------------------------------------------------
 # Configuration & prompt assembly
-# ---------------------------------------------------------------------------
 
 def load_config() -> dict:
     return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
@@ -120,9 +119,7 @@ def build_user_prompt(template: str, notes: dict, target: dict) -> str:
             .replace("{TARGET_SOURCE_CODE}", target["source_code"]))
 
 
-# ---------------------------------------------------------------------------
 # Java post-processing (Java 6 / JUnit 4 safety net)
-# ---------------------------------------------------------------------------
 
 def strip_code_fences(text: str) -> str:
     text = text.strip()
@@ -189,9 +186,10 @@ def count_tests(code: str) -> int:
     return len(re.findall(r"@(?:org\.junit\.)?Test\b", code))
 
 
-# ---------------------------------------------------------------------------
-# Claude backends: "cli" (Claude Code, logged-in account) or "api" (Anthropic SDK)
-# ---------------------------------------------------------------------------
+# Claude backends:
+#   "kku" - KKU IntelSphere gateway (gen.ai.kku.ac.th), Anthropic Messages API via the SDK
+#   "cli" - Claude Code CLI (`claude -p`) with the logged-in account
+#   "api" - Anthropic API directly via the SDK
 
 def call_claude(backend, config: dict, system_prompt: str, user_prompt: str, label: str):
     """Dispatch to the configured backend. Return (text, usage, stop_reason, request_id)."""
@@ -339,12 +337,120 @@ def call_claude_cli(cli_path: str, config: dict, user_prompt: str, label: str):
     raise RuntimeError(f"Claude CLI failed after {attempts} attempts: {last_error}")
 
 
-def call_claude_api(client: anthropic.Anthropic, config: dict, system_prompt: str,
+class DailyQuotaExhausted(Exception):
+    """The KKU gateway's per-day token quota is used up; nothing more can run until it resets."""
+
+
+QUOTA_STOP = threading.Event()
+
+
+def is_daily_limit(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "daily limit" in text or "reached daily" in text
+
+
+class KeyPool:
+    """One SDK client per API key. Requests are spread round-robin over the keys that still
+    have quota; a key that reports its daily limit (or is rejected) is retired for this run."""
+
+    def __init__(self, clients: list):
+        self.clients = clients            # [(label, anthropic.Anthropic), ...]
+        self.retired = {}                 # index -> reason
+        self.lock = threading.Lock()
+        self.cursor = 0
+
+    def __len__(self):
+        return len(self.clients)
+
+    def acquire(self):
+        """Return (index, label, client) for the next usable key, or raise DailyQuotaExhausted."""
+        with self.lock:
+            for _ in range(len(self.clients)):
+                i = self.cursor % len(self.clients)
+                self.cursor += 1
+                if i not in self.retired:
+                    label, client = self.clients[i]
+                    return i, label, client
+        raise DailyQuotaExhausted(f"all {len(self.clients)} API key(s) are out of daily quota or unusable")
+
+    def retire(self, index: int, reason: str) -> bool:
+        """Mark a key unusable. Returns True the first time (so the caller logs it once)."""
+        with self.lock:
+            if index in self.retired:
+                return False
+            self.retired[index] = reason
+            return True
+
+    def active(self) -> int:
+        with self.lock:
+            return len(self.clients) - len(self.retired)
+
+
+def load_kku_keys(kku: dict) -> list:
+    """Collect KKU keys from the environment, in order, without duplicates.
+
+    Accepted forms in .env (mix freely):
+      KKU_API_KEYS=key1,key2,key3          # comma / space / semicolon separated
+      KKU_API_KEY=key1                     # single key
+      KKU_API_KEY_2=key2, KKU_API_KEY_3=... # numbered or otherwise suffixed
+    """
+    base = kku.get("api_key_env", "KKU_API_KEY")
+    raw = []
+    raw += re.split(r"[\s,;]+", os.environ.get(base + "S", ""))
+    raw.append(os.environ.get(base, ""))
+    suffixed = sorted((k for k in os.environ if k.startswith(base + "_")),
+                      key=lambda k: (len(k), k))
+    raw += [os.environ[k] for k in suffixed]
+    keys = []
+    for key in (k.strip() for k in raw):
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+
+def make_sdk_client(config: dict) -> KeyPool:
+    """Key pool of Anthropic SDK clients for the `kku` (KKU IntelSphere gateway) or `api`
+    (Anthropic direct) backend.
+
+    The KKU gateway exposes the Anthropic Messages API at <base_url>/v1/messages and
+    authenticates with the KKU-issued key in the x-api-key header, so the same SDK and
+    request shape work for both; only base_url and the key differ.
+    """
+    if config.get("backend") == "kku":
+        kku = config.get("kku", {})
+        keys = load_kku_keys(kku)
+        if not keys:
+            raise RuntimeError(f"No KKU key found. Put {kku.get('api_key_env', 'KKU_API_KEY')} "
+                               f"(or {kku.get('api_key_env', 'KKU_API_KEY')}S=key1,key2,...) in .env at the repository root.")
+        base_url = kku.get("base_url", "https://gen.ai.kku.ac.th/api")
+        timeout = float(config.get("cli_timeout_seconds", 3600))
+        return KeyPool([(f"key{i + 1} (...{key[-4:]})",
+                         anthropic.Anthropic(api_key=key, base_url=base_url, max_retries=2, timeout=timeout))
+                        for i, key in enumerate(keys)])
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise RuntimeError("ANTHROPIC_API_KEY is not set. Put it in .env at the repository root.")
+    return KeyPool([("anthropic", anthropic.Anthropic(max_retries=2))])
+
+
+def call_claude_api(pool: KeyPool, config: dict, system_prompt: str,
                     user_prompt: str, label: str):
-    """Anthropic SDK backend. Return (text, usage_dict, stop_reason, request_id). Retries transient errors."""
+    """Anthropic SDK backend (`kku` gateway or `api` direct).
+
+    Return (text, usage_dict, stop_reason, request_id). Retries transient errors.
+    Always streams: the KKU gateway only returns a parsable Message on the streaming path,
+    and long generations would hit HTTP timeouts otherwise.
+    A key that hits its daily limit is retired and the request moves to the next key
+    without using up an attempt; DailyQuotaExhausted is raised only when no key is left.
+    """
     attempts = int(config.get("max_attempts", 5))
     last_error = None
-    for attempt in range(1, attempts + 1):
+    attempt = 0
+    while attempt < attempts:
+        attempt += 1
+        if QUOTA_STOP.is_set():
+            raise DailyQuotaExhausted("daily quota already exhausted in this run")
+        key_index, key_label, client = pool.acquire()
+        started = time.perf_counter()
         try:
             with client.messages.stream(
                 model=config["model"],
@@ -362,12 +468,34 @@ def call_claude_api(client: anthropic.Anthropic, config: dict, system_prompt: st
                 "output_tokens": message.usage.output_tokens,
                 "cache_creation_input_tokens": getattr(message.usage, "cache_creation_input_tokens", None),
                 "cache_read_input_tokens": getattr(message.usage, "cache_read_input_tokens", None),
+                "duration_api_ms": round((time.perf_counter() - started) * 1000),
+                # What the endpoint says actually served the request (e.g. the gateway's
+                # "anthropic/claude-sonnet-5" and its upstream provider).
+                "served_model": message.model,
+                "provider": (getattr(message, "model_extra", None) or {}).get("provider"),
+                "api_key": key_label if len(pool) > 1 else None,
             }
-            return text, usage, message.stop_reason, getattr(message, "_request_id", None)
+            return text, usage, message.stop_reason, getattr(message, "_request_id", None) or message.id
         except anthropic.RateLimitError as exc:
+            if is_daily_limit(exc):
+                if pool.retire(key_index, "daily limit"):
+                    log(f"[~] {key_label}: daily quota reached - {pool.active()} key(s) left")
+                attempt -= 1
+                continue
             last_error = exc
             delay = min(60, 5 * (2 ** (attempt - 1))) + random.uniform(0, 2)
         except anthropic.APIStatusError as exc:
+            if is_daily_limit(exc):      # KKU gateway: 401 "This model reached daily limit."
+                if pool.retire(key_index, "daily limit"):
+                    log(f"[~] {key_label}: daily quota reached - {pool.active()} key(s) left")
+                attempt -= 1
+                continue
+            if exc.status_code in (401, 403) and len(pool) > 1:
+                # A bad key must not sink the whole pool; drop it and carry on with the rest.
+                if pool.retire(key_index, f"rejected ({exc.status_code})"):
+                    log(f"[!] {key_label}: rejected by the server ({str(exc)[:120]}) - {pool.active()} key(s) left")
+                attempt -= 1
+                continue
             last_error = exc
             if exc.status_code < 500 and exc.status_code != 529:
                 raise
@@ -380,9 +508,7 @@ def call_claude_api(client: anthropic.Anthropic, config: dict, system_prompt: st
     raise RuntimeError(f"Claude API failed after {attempts} attempts: {last_error}")
 
 
-# ---------------------------------------------------------------------------
 # Per-bug worker
-# ---------------------------------------------------------------------------
 
 def output_dir_for(config: dict, project: str, bug_id: int, run: int) -> Path:
     return (CLAUDE_DIR / "Tests" / config["experiment"] / config["algorithm"]
@@ -421,6 +547,8 @@ def process_bug(backend, config, system_prompt, template, notes,
         existing = json.loads(meta_file.read_text(encoding="utf-8"))
         if existing.get("status") == "ok":
             return "SKIP (exists)"
+    if QUOTA_STOP.is_set():
+        return "SKIP (daily quota exhausted)"
     if not claim(out_dir, config):
         return "SKIP (claimed by another instance)"
 
@@ -433,8 +561,6 @@ def process_bug(backend, config, system_prompt, template, notes,
         encoding="utf-8")
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    for old in out_dir.glob("*.java"):
-        old.unlink()
 
     meta = {
         "schema_version": "1.0",
@@ -460,7 +586,16 @@ def process_bug(backend, config, system_prompt, template, notes,
     try:
         text, usage, stop_reason, request_id = call_claude(
             backend, config, system_prompt, user_prompt, name)
+    except DailyQuotaExhausted as exc:
+        # Not a failure of this bug: leave any earlier output untouched so the next run resumes here.
+        QUOTA_STOP.set()
+        (out_dir / ".claim").unlink(missing_ok=True)
+        return f"QUOTA: {exc}"
     except Exception as exc:  # generation failed for good
+        if is_daily_limit(exc):
+            QUOTA_STOP.set()
+            (out_dir / ".claim").unlink(missing_ok=True)
+            return f"QUOTA: {exc}"
         meta.update({"status": "error", "error": str(exc),
                      "generation_seconds": round(time.perf_counter() - started, 3),
                      "tests_generated": 0})
@@ -487,6 +622,8 @@ def process_bug(backend, config, system_prompt, template, notes,
     elif not has_class:
         status, error = "truncated", "response is missing the class declaration (head cut off)"
 
+    for old in out_dir.glob("*.java"):
+        old.unlink()
     (out_dir / f"{target['test_class_name']}.java").write_text(code, encoding="utf-8")
     (out_dir / "raw_response.txt").write_text(text, encoding="utf-8")
     meta.update({
@@ -506,9 +643,7 @@ def process_bug(backend, config, system_prompt, template, notes,
             f"cached={usage.get('cache_read_input_tokens')} out={usage.get('output_tokens')} {seconds:.1f}s")
 
 
-# ---------------------------------------------------------------------------
 # CLI
-# ---------------------------------------------------------------------------
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Generate JUnit 4 tests for Defects4J bugs with Claude")
@@ -520,7 +655,8 @@ def main(argv=None) -> int:
     parser.add_argument("--run", type=int, default=1, help="Run number (default: 1)")
     parser.add_argument("--workers", type=int, help="Parallel API calls (default from config)")
     parser.add_argument("--model", help="Override model id from config")
-    parser.add_argument("--backend", choices=["cli", "api"], help="cli = Claude Code login (default), api = ANTHROPIC_API_KEY")
+    parser.add_argument("--backend", choices=["kku", "cli", "api"],
+                        help="kku = KKU IntelSphere gateway (KKU_API_KEY), cli = Claude Code login, api = ANTHROPIC_API_KEY")
     parser.add_argument("--cli-config-dir", help="CLAUDE_CONFIG_DIR for this instance ('default' = the machine's normal login)")
     parser.add_argument("--shard", help="K/N: process only every N-th selected target starting at K (run N instances in parallel, e.g. 0/2 and 1/2)")
     parser.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max"], help="Override effort")
@@ -546,7 +682,15 @@ def main(argv=None) -> int:
         if not m or int(m.group(1)) >= int(m.group(2)):
             parser.error("--shard must be K/N with K < N")
         shard = (int(m.group(1)), int(m.group(2)))
-    workers = args.workers or int(config.get("generation_workers", 4))
+    backend_name = config.get("backend", "cli")
+    kku_keys = 0
+    if backend_name == "kku":
+        # The gateway's daily token quota, not CPU or rate limits, is the bottleneck:
+        # scale parallelism with the number of keys (workers-per-key from config).
+        kku_keys = len(load_kku_keys(config.get("kku", {})))
+        workers = args.workers or min(8, int(config.get("kku", {}).get("workers", 2)) * max(1, kku_keys))
+    else:
+        workers = args.workers or int(config.get("generation_workers", 4))
 
     available = discover_targets()
     if not available:
@@ -578,7 +722,10 @@ def main(argv=None) -> int:
     if args.limit:
         pending = pending[:args.limit]
 
-    print(f"Backend {config.get('backend', 'cli')} (config dir: {config.get('cli_config_dir') or 'default'}) | "
+    where = (f"{config.get('kku', {}).get('base_url')}, {kku_keys} key(s)" if backend_name == "kku"
+             else f"config dir: {config.get('cli_config_dir') or 'default'}" if backend_name == "cli"
+             else "api.anthropic.com")
+    print(f"Backend {backend_name} ({where}) | "
           f"shard {args.shard or 'all'} | model {config['model']} | effort {config.get('effort')} | run {args.run} | "
           f"selected {len(selected)} | pending {len(pending)} | workers {workers}", flush=True)
     if args.dry_run:
@@ -588,20 +735,15 @@ def main(argv=None) -> int:
     if not pending:
         return 0
 
-    if config.get("backend", "cli") == "cli":
-        try:
-            backend = resolve_cli(config)
-        except FileNotFoundError as exc:
-            print(f"[!] {exc}", file=sys.stderr)
-            return 1
-    else:
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            print("[!] ANTHROPIC_API_KEY is not set. Put it in .env at the repository root.", file=sys.stderr)
-            return 1
-        backend = anthropic.Anthropic(max_retries=2)
+    try:
+        backend = resolve_cli(config) if backend_name == "cli" else make_sdk_client(config)
+    except (FileNotFoundError, RuntimeError) as exc:
+        print(f"[!] {exc}", file=sys.stderr)
+        return 1
     system_prompt, template, notes = load_prompt_parts(config)
 
     failures = 0
+    not_run = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(process_bug, backend, config, system_prompt, template, notes,
                                n, available[n], args.run, args.overwrite): n for n in pending}
@@ -615,13 +757,20 @@ def main(argv=None) -> int:
                 if outcome.startswith("ERROR") or outcome.startswith("TRUNCATED") \
                         or outcome.startswith("EMPTY") or outcome.startswith("REFUSED"):
                     failures += 1
+                if outcome.startswith("QUOTA") or outcome == "SKIP (daily quota exhausted)":
+                    not_run += 1
+                    if outcome.startswith("SKIP"):
+                        continue          # one QUOTA line is enough; don't print hundreds of skips
                 log(f"[{name}] {outcome}")
         except KeyboardInterrupt:
             print("Interrupted; waiting for in-flight requests...", file=sys.stderr, flush=True)
             pool.shutdown(wait=True, cancel_futures=True)
             return 130
-    print(f"Done: {len(pending) - failures} ok, {failures} failed", flush=True)
-    return 1 if failures else 0
+    if not_run:
+        print(f"Daily quota reached on every key: {not_run} bug(s) left untouched. The quota resets every day - "
+              f"rerun the same command tomorrow to continue from here.", flush=True)
+    print(f"Done: {len(pending) - failures - not_run} ok, {failures} failed, {not_run} not run", flush=True)
+    return 1 if failures else (2 if not_run else 0)
 
 
 if __name__ == "__main__":

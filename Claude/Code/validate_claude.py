@@ -59,9 +59,7 @@ def log(msg):
         print(msg, flush=True)
 
 
-# ---------------------------------------------------------------------------
 # Subprocess helpers
-# ---------------------------------------------------------------------------
 
 def run(args, logfile: Path, cwd=None, timeout=None) -> int:
     with logfile.open("a", encoding="utf-8") as out:
@@ -105,9 +103,7 @@ def kill(proc):
         proc.wait()
 
 
-# ---------------------------------------------------------------------------
 # Java suite helpers
-# ---------------------------------------------------------------------------
 
 def count_tests(code: str) -> int:
     return len(re.findall(r"@(?:org\.junit\.)?Test\b", code))
@@ -198,9 +194,7 @@ def find_block_end(code: str, open_index: int):
     return None
 
 
-# ---------------------------------------------------------------------------
 # Coverage parsing (Cobertura XML from `defects4j coverage`)
-# ---------------------------------------------------------------------------
 
 def read_summary_csv(workspace: Path):
     path = workspace / "summary.csv"
@@ -246,9 +240,7 @@ def ratio(num, den):
     return round(num / den, 4)
 
 
-# ---------------------------------------------------------------------------
 # One target
-# ---------------------------------------------------------------------------
 
 def base_result(config, project, bug_id, run, meta, test_dir, result_dir):
     return {
@@ -278,6 +270,7 @@ def base_result(config, project, bug_id, run, meta, test_dir, result_dir):
         "validation_seconds": None,
         "total_seconds": None,
         "configuration": {
+            "backend": meta.get("backend"),
             "model": meta.get("model", config.get("model")),
             "effort": meta.get("effort", config.get("effort")),
             "thinking": meta.get("thinking", config.get("thinking")),
@@ -453,9 +446,7 @@ def write_json(path: Path, value):
     staged.replace(path)
 
 
-# ---------------------------------------------------------------------------
 # CLI
-# ---------------------------------------------------------------------------
 
 def default_defects4j_bin() -> str:
     candidate = Path.home() / "defects4j" / "framework" / "bin" / "defects4j"
