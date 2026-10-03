@@ -1,0 +1,48 @@
+# ==========================================
+# SQA Project - .gitignore
+# ==========================================
+
+# 1. Security: Never commit API keys or secrets
+.env
+.env.*
+*.env
+!.env.example
+
+# 2. Python Cache & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+
+# 3. IDE & Editor Configs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# 4. OS Specific Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 5. Defects4J Local Files & Archives
+defects4j/
+*.tar.bz2
+*.tar.gz
+*.tmp
+
+# 6. Legacy & Temporary Directories
+TestCode/
+TestCode_v2/
+Result/
+Result_v2/
+scratch/
+experiments/
+Newformat/

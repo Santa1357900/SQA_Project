@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j",
+  "algorithm": "Gemini",
+  "algorithm_version": "Gemini-3.5-Flash-Lite",
+  "project": "Closure",
+  "bug_id": 155,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "inconclusive",
+  "error": null,
+  "tests_generated": 0,
+  "tests_validated": 0,
+  "fixed_failing_tests": 2,
+  "buggy_failing_tests": 2,
+  "fault_detected": null,
+  "test_coverage": null,
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 38,
+    "lines_total": 569,
+    "line_ratio": 0.066784,
+    "branch_measure": "condition",
+    "branches_covered": 2,
+    "branches_total": 419,
+    "branch_ratio": 0.004773
+  },
+  "generation_seconds": null,
+  "total_seconds": null,
+  "configuration": {
+    "generator": "Gemini-3.5-Flash-Lite"
+  },
+  "artifacts": {
+    "tests": "Tests/defects4j/Gemini/Closure/Closure-155/run1/",
+    "logs": "Results/defects4j/Gemini/Closure/Closure-155/run1/logs/"
+  }
+}
