@@ -105,11 +105,47 @@ python Code/validate.py --collect-only \
 
 ดังนั้นตัวอย่าง pilot ด้านบนแสดงรูปแบบการเรียก CLI แต่ full pipeline ผ่าน `run_all_and_validate.py` ยังไม่พร้อมทำซ้ำกับโครงสร้างปัจจุบันจนกว่าจะปรับ references เหล่านี้ให้ตรงกัน หรือเลือก input/output path ที่ CLI รองรับ ตรวจ `--help` และทดสอบหนึ่ง bug ให้ครบตั้งแต่ generate ถึง validate ก่อนรันชุดใหญ่
 
-## ผลการทดลองที่แนบมา
+## ผลการทดลอง (run 1, Defects4J 854 บั๊ก)
 
-ไฟล์สรุปปัจจุบันรายงาน 854 bugs จาก 17 projects: `evaluated_unique_bugs=455`, `detected_unique_bugs=10`, `unknown_outcome_bugs=290`, และ `validation_failed/not_available=399`. Fault detection rate ใน summary คือ 10/455 = **2.20%**. ใน 455 complete records มี 10 `revealing`, 155 `not_revealing` และ 290 `inconclusive`; ผล inconclusive ยังไม่ใช่การตรวจพบบั๊ก
+ตัวเลขมาจาก `Results/defects4j/summary_overall.json` และ `summary_by_project.csv`.
 
-ค่าเฉลี่ย coverage ใน `summary_overall.json` คือ line ratio 0.688727 และ branch ratio 0.594542; test coverage ratio เป็น `null`. ให้ใช้ค่าตาม summary ที่สร้างจากไฟล์ปัจจุบัน และตรวจจำนวน evaluated/unknown ควบคู่กับ FDR เสมอ ผลจาก model/API อาจเปลี่ยนตาม model version, prompt, source, API settings, seed และเวลาที่รัน
+| ตัวชี้วัด                                |                       ค่า |
+| ---------------------------------------- | ------------------------: |
+| บั๊กที่เลือก                             |                       854 |
+| ประเมินผลได้                             |                       455 |
+| ตรวจพบบั๊ก                               |                        10 |
+| ผลที่ยังไม่ทราบ (inconclusive)           |                       290 |
+| ยังไม่มีผลประเมิน (selected - evaluated) |                       399 |
+| Fault detection rate                     |                     2.20% |
+| Test coverage เฉลี่ย                     | — (ไม่มีข้อมูลใน summary) |
+| Line coverage เฉลี่ย                     |                    68.87% |
+| Branch coverage เฉลี่ย                   |                    59.45% |
+
+### ผลแยกตามโปรเจกต์
+
+FDR ใช้ค่าจาก summary (`detected / evaluated`). `Unknown outcome` หมายถึงผล inconclusive ตามสถานะของ Gemini; `ยังไม่มีผลประเมิน` คือ selected ลบ evaluated. ค่า test coverage เป็น `—` เพราะชุดผลนี้ไม่มีข้อมูล method coverage. Line และ branch coverage เป็นอัตราส่วนจาก summary.
+
+| Project         | Selected | Evaluated | Detected | Unknown | Fault detection rate | Test coverage | Line coverage | Branch coverage |
+| --------------- | -------: | --------: | -------: | ------: | -------------------: | ------------: | ------------: | --------------: |
+| Chart           |       26 |        18 |        2 |       9 |               11.11% |             — |        91.07% |          79.03% |
+| Cli             |       39 |        28 |        1 |      18 |                3.57% |             — |        68.77% |          61.12% |
+| Closure         |      174 |        56 |        0 |      42 |                0.00% |             — |        27.84% |          18.69% |
+| Codec           |       18 |        13 |        0 |       7 |                0.00% |             — |        77.61% |          68.11% |
+| Collections     |       28 |        15 |        1 |       8 |                6.67% |             — |        89.83% |          84.63% |
+| Compress        |       47 |        38 |        0 |      28 |                0.00% |             — |        61.53% |          55.28% |
+| Csv             |       16 |        11 |        0 |       4 |                0.00% |             — |        94.08% |          82.93% |
+| Gson            |       18 |         8 |        0 |       5 |                0.00% |             — |        62.70% |          60.94% |
+| JacksonCore     |       26 |        13 |        0 |      10 |                0.00% |             — |        53.68% |          42.50% |
+| JacksonDatabind |      110 |        41 |        0 |      22 |                0.00% |             — |        54.45% |          43.19% |
+| JacksonXml      |        6 |         2 |        0 |       2 |                0.00% |             — |         3.97% |           1.01% |
+| Jsoup           |       93 |        59 |        1 |      42 |                1.69% |             — |        78.17% |          66.29% |
+| JxPath          |       22 |         5 |        0 |       4 |                0.00% |             — |        36.04% |          26.65% |
+| Lang            |       61 |        43 |        0 |      31 |                0.00% |             — |        89.16% |          80.62% |
+| Math            |      106 |        76 |        4 |      42 |                5.26% |             — |        83.18% |          74.86% |
+| Mockito         |       38 |        23 |        1 |      11 |                4.35% |             — |        73.64% |          61.19% |
+| Time            |       26 |         6 |        0 |       5 |                0.00% |             — |        70.26% |          53.49% |
+
+หมายเหตุ: ผลจากโมเดล/API อาจเปลี่ยนตาม model version, prompt, source, API settings และเวลาที่รัน.
 
 ## วิธีอ่านไฟล์ผล
 

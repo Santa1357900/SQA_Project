@@ -173,38 +173,48 @@ wsl -d Ubuntu python3 /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Code/valid
 
 ---
 
-## 4. ผลการทดลอง (run 1, ครบ 854 บั๊ก — รันเมื่อ 1 ต.ค. 2569)
+## 4. ผลการทดลอง (run 1, 854 บั๊ก)
 
-ตัวเลขทั้งหมดมาจาก [`Results/defects4j-round2/summary_overall.json`](Results/defects4j-round2/summary_overall.json) และ [`summary_by_project.csv`](Results/defects4j-round2/summary_by_project.csv)
+ตัวเลขมาจาก `Results/defects4j-round2/summary_overall.json` และ `summary_by_project.csv` ซึ่งเป็นผลที่บันทึกไว้เมื่อ 1 ต.ค. 2569.
 
-| ตัวชี้วัด                                               | ค่า                                                   |
-| ------------------------------------------------------- | ----------------------------------------------------- |
-| บั๊กที่สร้างเทสได้                                      | 854 / 854 (เฉลี่ย 34.9 เทส/บั๊ก รวม 29,827 เทส)       |
-| รันวัดผลสมบูรณ์ (`complete`)                            | **697** (81.6%)                                       |
-| คอมไพล์ไม่ผ่าน (`no_valid_tests / test_compile_failed`) | 144 (16.9%)                                           |
-| เทสทั้งชุด fail บน fixed (`all_tests_fail_on_fixed`)    | 9                                                     |
-| วัด coverage ไม่ได้ / หมดเวลา                           | 3 (Jsoup, Cobertura) + 1 (JxPath-13)                  |
-| **Fault detection**                                     | **191 บั๊ก** = 27.4% ของที่ประเมินได้ (22.4% ของ 854) |
-| Line coverage เฉลี่ย (modified classes, buggy)          | **72.6%**                                             |
-| Condition coverage เฉลี่ย                               | **63.9%**                                             |
-| Method coverage เฉลี่ย                                  | **78.7%**                                             |
-| เทสที่ผ่านบน fixed ต่อเทสที่สร้าง (ใน complete runs)    | 96.3%                                                 |
-| เวลาโมเดลเฉลี่ยต่อบั๊ก                                  | 383 วินาที (Closure ช้าสุด ~600 วิ)                   |
-| Token รวม                                               | input 40.9M / output 36.5M (เทียบราคา API ≈ $784)     |
+| ตัวชี้วัด | ค่า |
+| --- | ---: |
+| บั๊กที่เลือก | 854 |
+| ประเมินผลได้ | 697 |
+| ตรวจพบบั๊ก | 191 |
+| ผลลัพธ์ที่ยังไม่ทราบ | 157 |
+| Fault detection rate (191 / 697) | 27.40% |
+| Test coverage เฉลี่ย | 78.73% |
+| Line coverage เฉลี่ย | 72.61% |
+| Branch/condition coverage เฉลี่ย | 63.89% |
+| Generation time เฉลี่ย | 363.42 วินาที |
+| Total time เฉลี่ย | 464.06 วินาที |
 
-### 4.1 รายโปรเจกต์ (fault detected / evaluated, line coverage)
+### ผลแยกตามโปรเจกต์
 
-Chart 16/23 (76%), Cli 7/38 (89%), Closure 10/91 (56%), Codec 5/17 (79%), Collections 15/26 (83%), Compress 14/42 (74%),
-Csv 4/13 (86%), Gson 6/18 (76%), JacksonCore 6/22 (58%), JacksonDatabind 13/90 (66%), JacksonXml 2/6 (62%), Jsoup 19/83 (76%),
-JxPath 6/13 (68%), Lang 22/56 (76%), Math 33/103 (81%), Mockito 10/30 (82%), Time 3/26 (66%)
+FDR คำนวณจาก `detected / evaluated`. Coverage เป็นค่าเฉลี่ยใน modified classes สำหรับรอบที่ประเมินผลได้; test coverage คือสัดส่วนเมธอดเป้าหมายที่ถูกเรียกถึง.
 
-### 4.2 ข้อค้นพบ / ประเด็นปัญหา
+| Project | Selected | Evaluated | Detected | Unknown | Fault detection rate | Test coverage | Line coverage | Branch coverage |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Chart | 26 | 23 | 16 | 3 | 69.57% | 85.44% | 76.19% | 66.17% |
+| Cli | 39 | 38 | 7 | 1 | 18.42% | 82.63% | 82.62% | 77.44% |
+| Closure | 174 | 91 | 10 | 83 | 10.99% | 65.58% | 56.41% | 45.91% |
+| Codec | 18 | 17 | 5 | 1 | 29.41% | 82.40% | 78.72% | 70.37% |
+| Collections | 28 | 26 | 15 | 2 | 57.69% | 88.05% | 82.92% | 77.30% |
+| Compress | 47 | 42 | 14 | 5 | 33.33% | 82.59% | 73.58% | 67.63% |
+| Csv | 16 | 13 | 4 | 3 | 30.77% | 93.87% | 85.80% | 76.47% |
+| Gson | 18 | 18 | 6 | 0 | 33.33% | 80.00% | 75.95% | 69.81% |
+| JacksonCore | 26 | 22 | 6 | 4 | 27.27% | 68.93% | 58.29% | 47.47% |
+| JacksonDatabind | 110 | 90 | 13 | 20 | 14.44% | 69.45% | 66.42% | 58.02% |
+| JacksonXml | 6 | 6 | 2 | 0 | 33.33% | 85.77% | 61.60% | 54.27% |
+| Jsoup | 93 | 83 | 19 | 10 | 22.89% | 81.08% | 75.51% | 66.20% |
+| JxPath | 22 | 13 | 6 | 9 | 46.15% | 73.25% | 67.74% | 58.73% |
+| Lang | 61 | 56 | 22 | 5 | 39.29% | 82.41% | 76.00% | 67.04% |
+| Math | 106 | 103 | 33 | 3 | 32.04% | 86.93% | 80.67% | 72.51% |
+| Mockito | 38 | 30 | 10 | 8 | 33.33% | 87.97% | 82.09% | 70.96% |
+| Time | 26 | 26 | 3 | 0 | 11.54% | 69.64% | 65.91% | 54.64% |
 
-- **Compile error กระจุกที่ Closure (80/144)** — javac ฟ้อง `cannot find symbol` / `no suitable method found for compile(...)` คือโมเดลเดา API ของ Closure Compiler (เช่น `Compiler.compile(...)`, `Node`) ผิด เพราะเห็นเพียงคลาสเป้าหมายไม่เห็นทั้งโปรเจกต์ รองลงมาคือ JacksonDatabind (20) จากคลาสภายในที่เป็น protected/abstract
-- **เทสที่ "ยืนยันบั๊ก"** — 9 บั๊กที่ทุกเทส fail บน fixed และเทสที่ถูกตัดออก 3.7% ส่วนใหญ่คือ assertion ที่คัดลอกพฤติกรรมของโค้ดที่มีบั๊กมา แม้ prompt จะสั่งให้ยึด Javadoc แล้วก็ตาม
-- **ข้อจำกัดเครื่องมือ** — Jsoup-4/6/9 Cobertura instrument ไม่ได้ (`Method code too large` ในคลาส `Entities`), JxPath-13 เทสค้างเกิน 15 นาที, Cli 1–34 ต้องแก้ `Cli.build.xml` ของ Defects4J 3.0.1 ให้ชี้ jar ที่มี hamcrest (รวมอยู่ใน `setup_wsl_defects4j.sh` แล้ว)
-- **Token/เวลา** — เทสของ Closure ใช้ output 40–115k token ต่อบั๊ก (ส่วนใหญ่เป็น reasoning) จึงต้องยกเพดาน output เป็น 64k และตั้ง timeout 60 นาที; การรันทั้ง 854 บั๊กใช้ generator หลาย instance แบ่งคิวร่วมกัน (claim file) และหยุดรอเองเมื่อชนโควตาการใช้งาน
-
+รายละเอียดสถานะและผลระดับบั๊กดูได้จาก `Results/defects4j-round2/`.
 ---
 
 ## 5. หมายเหตุ / ข้อจำกัดที่พบ
