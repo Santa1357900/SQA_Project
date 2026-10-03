@@ -127,4 +127,29 @@ Test/<experiment>/<Project>/<Project> <bug>/run<run>/<attempt>/
 
 snapshot นี้รวมผลจากหลาย algorithm versions ตามการซ่อมและ rerun แต่ละ bug (`3.1.10`, `3.1.11`, `3.1.17`, `3.1.19`); ตรวจเวอร์ชันราย bug ได้จาก `algorithm_version` ใน `result.json`. ค่า coverage ใช้ Cobertura 698 รายการและ JaCoCo 3 รายการ จึงไม่แสดงค่าเฉลี่ย coverage รวมใน `summary_overall.json`. ชุดผลนี้เป็นข้อมูลที่บันทึกไว้ ไม่ใช่ผลที่เพิ่งสร้างจาก source package 3.1.20
 
+### ผลแยกตามโปรเจกต์
+
+ตารางนี้สรุปผล 854 bugs จากไฟล์ `result.json` ที่แนบมา. FDR คำนวณจาก detected/evaluated; ค่า coverage เป็นค่าเฉลี่ยของ complete runs ใน modified classes. `—` หมายถึงไม่มีค่าเฉลี่ยที่นำมารายงานได้ โดยเฉพาะ Jsoup มีทั้ง Cobertura และ JaCoCo จึงไม่เฉลี่ย coverage ข้ามเครื่องมือ.
+
+| Project | Selected | Evaluated | Detected | Unknown | FDR | Test coverage | Line coverage | Branch/condition coverage |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Chart | 26 | 26 | 14 | 0 | 53.85% | 88.69% | 63.38% | 46.07% |
+| Cli | 39 | 30 | 7 | 9 | 23.33% | 85.80% | 63.00% | 50.90% |
+| Closure | 174 | 82 | 5 | 92 | 6.10% | 35.83% | 20.89% | 13.84% |
+| Codec | 18 | 18 | 5 | 0 | 27.78% | 95.23% | 80.77% | 72.84% |
+| Collections | 28 | 27 | 3 | 1 | 11.11% | 75.82% | 53.63% | 52.67% |
+| Compress | 47 | 46 | 9 | 1 | 19.57% | 72.89% | 41.44% | 33.86% |
+| Csv | 16 | 11 | 2 | 5 | 18.18% | 57.61% | 34.82% | 18.70% |
+| Gson | 18 | 17 | 1 | 1 | 5.88% | 68.09% | 30.04% | 18.79% |
+| JacksonCore | 26 | 24 | 2 | 2 | 8.33% | 51.78% | 31.29% | 21.19% |
+| JacksonDatabind | 110 | 89 | 4 | 21 | 4.49% | 56.96% | 30.51% | 17.09% |
+| JacksonXml | 6 | 5 | 1 | 1 | 20.00% | 80.76% | 44.59% | 35.90% |
+| Jsoup | 93 | 90 | 9 | 3 | 10.00% | — | — | — |
+| JxPath | 22 | 19 | 1 | 3 | 5.26% | 69.99% | 31.95% | 17.20% |
+| Lang | 61 | 60 | 8 | 1 | 13.33% | 85.48% | 70.44% | 61.13% |
+| Math | 106 | 96 | 17 | 10 | 17.71% | 70.34% | 53.24% | 43.00% |
+| Mockito | 38 | 36 | 2 | 2 | 5.56% | 70.40% | 48.01% | 29.40% |
+| Time | 26 | 25 | 5 | 1 | 20.00% | 80.06% | 53.13% | 38.97% |
+
+หมายเหตุ: snapshot นี้รวมผลจาก algorithm versions หลายรุ่นตามที่ระบุในแต่ละ `result.json`; ตัวเลขรายโปรเจกต์จึงสรุปชุดผลที่แนบมา ไม่ใช่การรันซ้ำด้วย source version เดียว.
 ดูตารางสรุปที่ `Results/summary_overall.json`, `Results/summary_by_project.csv` และ `Results/summary.csv`. test suites ที่แนบอยู่ใต้ `Test/`; paths ใน `artifacts.tests` ของผล `complete` ชี้ไปยังชุดที่มีอยู่จริง ส่วน logs และ legacy raw results ไม่ได้แนบและถูกระบุเป็น `null`
