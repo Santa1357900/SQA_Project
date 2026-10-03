@@ -105,8 +105,6 @@ Test/<experiment>/<Project>/<Project> <bug>/run<run>/<attempt>/
   Defects4J checkouts และไฟล์ชั่วคราว
 ```
 
-ผล `result.json` ใช้ schema กลาง อธิบาย field ใน [COMMON_OUTPUT_FORMAT.md](COMMON_OUTPUT_FORMAT.md). `Results/summary.csv` มีรายละเอียดระดับ bug; `summary_by_project.csv` และ `summary_overall.json` รวมผลในระดับ project และการทดลอง
-
 สถานะที่พบบ่อย:
 
 - `complete`: ตรวจ test กับ buggy/fixed revisions แล้ว และประเมินผลได้ ไม่ได้หมายความว่าตรวจพบบั๊ก
