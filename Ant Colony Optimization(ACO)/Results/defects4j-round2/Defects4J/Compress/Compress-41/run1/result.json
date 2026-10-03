@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Defects4J",
+  "algorithm_version": "2.0.0",
+  "project": "Compress",
+  "bug_id": 41,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 611,
+  "tests_validated": 609,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 2,
+  "fault_detected": true,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 37,
+    "total_methods": 43,
+    "ratio": 0.8605
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 323,
+    "lines_total": 412,
+    "line_ratio": 0.784,
+    "branch_measure": "condition",
+    "branches_covered": 161,
+    "branches_total": 260,
+    "branch_ratio": 0.6192
+  },
+  "generation_seconds": 0.0,
+  "total_seconds": 57.18,
+  "configuration": {
+    "benchmark": "Defects4J",
+    "timeout": 300
+  },
+  "artifacts": {
+    "tests": null,
+    "logs": "Results/defects4j-round2/Defects4J/Compress/Compress-41/run1/logs/"
+  }
+}

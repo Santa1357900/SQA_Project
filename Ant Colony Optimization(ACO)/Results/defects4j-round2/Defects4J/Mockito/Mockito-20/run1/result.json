@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Defects4J",
+  "algorithm_version": "2.0.0",
+  "project": "Mockito",
+  "bug_id": 20,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 1370,
+  "tests_validated": 1362,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 8,
+  "fault_detected": true,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 7,
+    "total_methods": 9,
+    "ratio": 0.7778
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 26,
+    "lines_total": 40,
+    "line_ratio": 0.65,
+    "branch_measure": "condition",
+    "branches_covered": 4,
+    "branches_total": 10,
+    "branch_ratio": 0.4
+  },
+  "generation_seconds": 0.0,
+  "total_seconds": 294.65,
+  "configuration": {
+    "benchmark": "Defects4J",
+    "timeout": 300
+  },
+  "artifacts": {
+    "tests": null,
+    "logs": "Results/defects4j-round2/Defects4J/Mockito/Mockito-20/run1/logs/"
+  }
+}

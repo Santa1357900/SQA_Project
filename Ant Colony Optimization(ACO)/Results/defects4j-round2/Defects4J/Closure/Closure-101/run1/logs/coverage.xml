@@ -1,0 +1,686 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.7393939393939394" branch-rate="0.6" lines-covered="122" lines-valid="165" branches-covered="15" branches-valid="25" complexity="2.6666666666666665" version="2.0.3" timestamp="1790692411280">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="com.google.javascript.jscomp" line-rate="0.7393939393939394" branch-rate="0.6" complexity="2.6666666666666665">
+			<classes>
+				<class name="com.google.javascript.jscomp.CommandLineRunner" filename="com/google/javascript/jscomp/CommandLineRunner.java" line-rate="0.6956521739130435" branch-rate="0.6875" complexity="2.6666666666666665">
+					<methods>
+						<method name="&lt;init&gt;" signature="([Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="344" hits="43" branch="false"/>
+								<line number="345" hits="43" branch="false"/>
+								<line number="346" hits="43" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="([Ljava/lang/String;Ljava/io/PrintStream;Ljava/io/PrintStream;)V" line-rate="0.25" branch-rate="1.0">
+							<lines>
+								<line number="335" hits="43" branch="false"/>
+								<line number="350" hits="0" branch="false"/>
+								<line number="351" hits="0" branch="false"/>
+								<line number="352" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="createCompiler" signature="()Lcom/google/javascript/jscomp/Compiler;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="443" hits="43" branch="false"/>
+							</lines>
+						</method>
+						<method name="createExterns" signature="()Ljava/util/List;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="449" hits="0" branch="false"/>
+								<line number="450" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="451" hits="0" branch="false"/>
+								<line number="452" hits="0" branch="false"/>
+								<line number="453" hits="0" branch="false"/>
+								<line number="455" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="createOptions" signature="()Lcom/google/javascript/jscomp/CompilerOptions;" line-rate="0.8666666666666667" branch-rate="0.8333333333333334">
+							<lines>
+								<line number="420" hits="27" branch="false"/>
+								<line number="421" hits="27" branch="false"/>
+								<line number="422" hits="27" branch="false"/>
+								<line number="423" hits="27" branch="false"/>
+								<line number="424" hits="27" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="425" hits="2" branch="false"/>
+								<line number="428" hits="27" branch="false"/>
+								<line number="429" hits="27" branch="false"/>
+								<line number="430" hits="27" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="431" hits="0" branch="false"/>
+								<line number="432" hits="0" branch="false"/>
+								<line number="433" hits="27" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="434" hits="26" branch="false"/>
+								<line number="437" hits="27" branch="false"/>
+								<line number="438" hits="27" branch="false"/>
+							</lines>
+						</method>
+						<method name="getDefaultExterns" signature="()Ljava/util/List;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="464" hits="0" branch="false"/>
+								<line number="466" hits="0" branch="false"/>
+								<line number="467" hits="0" branch="false"/>
+								<line number="468" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="469" hits="0" branch="false"/>
+								<line number="470" hits="0" branch="false"/>
+								<line number="471" hits="0" branch="false"/>
+								<line number="472" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="initConfigFromFlags" signature="([Ljava/lang/String;Ljava/io/PrintStream;)V" line-rate="0.92" branch-rate="1.0">
+							<lines>
+								<line number="360" hits="43" branch="false"/>
+								<line number="361" hits="43" branch="false"/>
+								<line number="362" hits="43" branch="false"/>
+								<line number="363" hits="106" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="364" hits="63" branch="false"/>
+								<line number="365" hits="63" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="366" hits="55" branch="false"/>
+								<line number="368" hits="55" branch="false"/>
+								<line number="369" hits="55" branch="false"/>
+								<line number="370" hits="55" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="371" hits="2" branch="false"/>
+								<line number="373" hits="53" branch="false"/>
+								<line number="375" hits="55" branch="false"/>
+								<line number="376" hits="8" branch="false"/>
+								<line number="380" hits="43" branch="false"/>
+								<line number="382" hits="43" branch="false"/>
+								<line number="383" hits="0" branch="false"/>
+								<line number="384" hits="0" branch="false"/>
+								<line number="385" hits="0" branch="false"/>
+								<line number="386" hits="0" branch="false"/>
+								<line number="387" hits="43" branch="false"/>
+								<line number="388" hits="43" branch="false"/>
+								<line number="389" hits="43" branch="false"/>
+								<line number="390" hits="43" branch="false"/>
+								<line number="391" hits="43" branch="false"/>
+								<line number="392" hits="43" branch="false"/>
+								<line number="393" hits="43" branch="false"/>
+								<line number="394" hits="43" branch="false"/>
+								<line number="395" hits="43" branch="false"/>
+								<line number="396" hits="43" branch="false"/>
+								<line number="397" hits="43" branch="false"/>
+								<line number="398" hits="43" branch="false"/>
+								<line number="399" hits="43" branch="false"/>
+								<line number="400" hits="43" branch="false"/>
+								<line number="401" hits="43" branch="false"/>
+								<line number="402" hits="43" branch="false"/>
+								<line number="403" hits="43" branch="false"/>
+								<line number="404" hits="43" branch="false"/>
+								<line number="405" hits="43" branch="false"/>
+								<line number="406" hits="43" branch="false"/>
+								<line number="407" hits="43" branch="false"/>
+								<line number="408" hits="43" branch="false"/>
+								<line number="409" hits="43" branch="false"/>
+								<line number="410" hits="43" branch="false"/>
+								<line number="411" hits="43" branch="false"/>
+								<line number="412" hits="43" branch="false"/>
+								<line number="413" hits="43" branch="false"/>
+								<line number="414" hits="43" branch="false"/>
+								<line number="415" hits="43" branch="false"/>
+								<line number="416" hits="43" branch="false"/>
+							</lines>
+						</method>
+						<method name="main" signature="([Ljava/lang/String;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="480" hits="0" branch="false"/>
+								<line number="481" hits="0" branch="false"/>
+								<line number="482" hits="0" branch="false"/>
+								<line number="483" hits="0" branch="false"/>
+								<line number="484" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="335" hits="43" branch="false"/>
+						<line number="344" hits="43" branch="false"/>
+						<line number="345" hits="43" branch="false"/>
+						<line number="346" hits="43" branch="false"/>
+						<line number="350" hits="0" branch="false"/>
+						<line number="351" hits="0" branch="false"/>
+						<line number="352" hits="0" branch="false"/>
+						<line number="360" hits="43" branch="false"/>
+						<line number="361" hits="43" branch="false"/>
+						<line number="362" hits="43" branch="false"/>
+						<line number="363" hits="106" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="364" hits="63" branch="false"/>
+						<line number="365" hits="63" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="366" hits="55" branch="false"/>
+						<line number="368" hits="55" branch="false"/>
+						<line number="369" hits="55" branch="false"/>
+						<line number="370" hits="55" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="371" hits="2" branch="false"/>
+						<line number="373" hits="53" branch="false"/>
+						<line number="375" hits="55" branch="false"/>
+						<line number="376" hits="8" branch="false"/>
+						<line number="380" hits="43" branch="false"/>
+						<line number="382" hits="43" branch="false"/>
+						<line number="383" hits="0" branch="false"/>
+						<line number="384" hits="0" branch="false"/>
+						<line number="385" hits="0" branch="false"/>
+						<line number="386" hits="0" branch="false"/>
+						<line number="387" hits="43" branch="false"/>
+						<line number="388" hits="43" branch="false"/>
+						<line number="389" hits="43" branch="false"/>
+						<line number="390" hits="43" branch="false"/>
+						<line number="391" hits="43" branch="false"/>
+						<line number="392" hits="43" branch="false"/>
+						<line number="393" hits="43" branch="false"/>
+						<line number="394" hits="43" branch="false"/>
+						<line number="395" hits="43" branch="false"/>
+						<line number="396" hits="43" branch="false"/>
+						<line number="397" hits="43" branch="false"/>
+						<line number="398" hits="43" branch="false"/>
+						<line number="399" hits="43" branch="false"/>
+						<line number="400" hits="43" branch="false"/>
+						<line number="401" hits="43" branch="false"/>
+						<line number="402" hits="43" branch="false"/>
+						<line number="403" hits="43" branch="false"/>
+						<line number="404" hits="43" branch="false"/>
+						<line number="405" hits="43" branch="false"/>
+						<line number="406" hits="43" branch="false"/>
+						<line number="407" hits="43" branch="false"/>
+						<line number="408" hits="43" branch="false"/>
+						<line number="409" hits="43" branch="false"/>
+						<line number="410" hits="43" branch="false"/>
+						<line number="411" hits="43" branch="false"/>
+						<line number="412" hits="43" branch="false"/>
+						<line number="413" hits="43" branch="false"/>
+						<line number="414" hits="43" branch="false"/>
+						<line number="415" hits="43" branch="false"/>
+						<line number="416" hits="43" branch="false"/>
+						<line number="420" hits="27" branch="false"/>
+						<line number="421" hits="27" branch="false"/>
+						<line number="422" hits="27" branch="false"/>
+						<line number="423" hits="27" branch="false"/>
+						<line number="424" hits="27" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="425" hits="2" branch="false"/>
+						<line number="428" hits="27" branch="false"/>
+						<line number="429" hits="27" branch="false"/>
+						<line number="430" hits="27" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="431" hits="0" branch="false"/>
+						<line number="432" hits="0" branch="false"/>
+						<line number="433" hits="27" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="434" hits="26" branch="false"/>
+						<line number="437" hits="27" branch="false"/>
+						<line number="438" hits="27" branch="false"/>
+						<line number="443" hits="43" branch="false"/>
+						<line number="449" hits="0" branch="false"/>
+						<line number="450" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="451" hits="0" branch="false"/>
+						<line number="452" hits="0" branch="false"/>
+						<line number="453" hits="0" branch="false"/>
+						<line number="455" hits="0" branch="false"/>
+						<line number="464" hits="0" branch="false"/>
+						<line number="466" hits="0" branch="false"/>
+						<line number="467" hits="0" branch="false"/>
+						<line number="468" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="469" hits="0" branch="false"/>
+						<line number="470" hits="0" branch="false"/>
+						<line number="471" hits="0" branch="false"/>
+						<line number="472" hits="0" branch="false"/>
+						<line number="480" hits="0" branch="false"/>
+						<line number="481" hits="0" branch="false"/>
+						<line number="482" hits="0" branch="false"/>
+						<line number="483" hits="0" branch="false"/>
+						<line number="484" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.javascript.jscomp.CommandLineRunner$1" filename="com/google/javascript/jscomp/CommandLineRunner.java" line-rate="0.0" branch-rate="1.0" complexity="2.6666666666666665">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="322" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="322" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.javascript.jscomp.CommandLineRunner$Flags" filename="com/google/javascript/jscomp/CommandLineRunner.java" line-rate="1.0" branch-rate="1.0" complexity="2.6666666666666665">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="78" hits="43" branch="false"/>
+								<line number="83" hits="43" branch="false"/>
+								<line number="89" hits="43" branch="false"/>
+								<line number="95" hits="43" branch="false"/>
+								<line number="100" hits="43" branch="false"/>
+								<line number="107" hits="43" branch="false"/>
+								<line number="111" hits="43" branch="false"/>
+								<line number="113" hits="43" branch="false"/>
+								<line number="116" hits="43" branch="false"/>
+								<line number="118" hits="43" branch="false"/>
+								<line number="120" hits="43" branch="false"/>
+								<line number="122" hits="43" branch="false"/>
+								<line number="127" hits="43" branch="false"/>
+								<line number="134" hits="43" branch="false"/>
+								<line number="136" hits="43" branch="false"/>
+								<line number="141" hits="43" branch="false"/>
+								<line number="146" hits="43" branch="false"/>
+								<line number="151" hits="43" branch="false"/>
+								<line number="160" hits="43" branch="false"/>
+								<line number="165" hits="43" branch="false"/>
+								<line number="172" hits="43" branch="false"/>
+								<line number="180" hits="43" branch="false"/>
+								<line number="185" hits="43" branch="false"/>
+								<line number="190" hits="43" branch="false"/>
+								<line number="195" hits="43" branch="false"/>
+								<line number="197" hits="43" branch="false"/>
+								<line number="203" hits="43" branch="false"/>
+								<line number="211" hits="43" branch="false"/>
+								<line number="214" hits="43" branch="false"/>
+								<line number="216" hits="43" branch="false"/>
+								<line number="219" hits="43" branch="false"/>
+								<line number="221" hits="43" branch="false"/>
+								<line number="224" hits="43" branch="false"/>
+								<line number="226" hits="43" branch="false"/>
+								<line number="233" hits="43" branch="false"/>
+								<line number="235" hits="43" branch="false"/>
+								<line number="239" hits="43" branch="false"/>
+								<line number="245" hits="43" branch="false"/>
+								<line number="250" hits="43" branch="false"/>
+								<line number="255" hits="43" branch="false"/>
+								<line number="260" hits="43" branch="false"/>
+								<line number="264" hits="43" branch="false"/>
+								<line number="266" hits="43" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$1;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$100" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$1000" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$1100" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$1200" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$1300" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$1400" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$1500" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$1600" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$1700" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$1800" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$1900" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$200" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$2000" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$2100" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$2200" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$2300" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Lcom/google/javascript/jscomp/CompilerOptions$DevMode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$2400" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$2500" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$2600" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$2700" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$2800" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Lcom/google/javascript/jscomp/CompilationLevel;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$2900" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$300" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$3000" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Lcom/google/javascript/jscomp/WarningLevel;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$3100" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$3300" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$3400" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="77" hits="1382" branch="false"/>
+							</lines>
+						</method>
+						<method name="access$400" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$500" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$600" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$700" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$800" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$900" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$Flags;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="77" hits="1382" branch="false"/>
+						<line number="78" hits="43" branch="false"/>
+						<line number="83" hits="43" branch="false"/>
+						<line number="89" hits="43" branch="false"/>
+						<line number="95" hits="43" branch="false"/>
+						<line number="100" hits="43" branch="false"/>
+						<line number="107" hits="43" branch="false"/>
+						<line number="111" hits="43" branch="false"/>
+						<line number="113" hits="43" branch="false"/>
+						<line number="116" hits="43" branch="false"/>
+						<line number="118" hits="43" branch="false"/>
+						<line number="120" hits="43" branch="false"/>
+						<line number="122" hits="43" branch="false"/>
+						<line number="127" hits="43" branch="false"/>
+						<line number="134" hits="43" branch="false"/>
+						<line number="136" hits="43" branch="false"/>
+						<line number="141" hits="43" branch="false"/>
+						<line number="146" hits="43" branch="false"/>
+						<line number="151" hits="43" branch="false"/>
+						<line number="160" hits="43" branch="false"/>
+						<line number="165" hits="43" branch="false"/>
+						<line number="172" hits="43" branch="false"/>
+						<line number="180" hits="43" branch="false"/>
+						<line number="185" hits="43" branch="false"/>
+						<line number="190" hits="43" branch="false"/>
+						<line number="195" hits="43" branch="false"/>
+						<line number="197" hits="43" branch="false"/>
+						<line number="203" hits="43" branch="false"/>
+						<line number="211" hits="43" branch="false"/>
+						<line number="214" hits="43" branch="false"/>
+						<line number="216" hits="43" branch="false"/>
+						<line number="219" hits="43" branch="false"/>
+						<line number="221" hits="43" branch="false"/>
+						<line number="224" hits="43" branch="false"/>
+						<line number="226" hits="43" branch="false"/>
+						<line number="233" hits="43" branch="false"/>
+						<line number="235" hits="43" branch="false"/>
+						<line number="239" hits="43" branch="false"/>
+						<line number="245" hits="43" branch="false"/>
+						<line number="250" hits="43" branch="false"/>
+						<line number="255" hits="43" branch="false"/>
+						<line number="260" hits="43" branch="false"/>
+						<line number="264" hits="43" branch="false"/>
+						<line number="266" hits="43" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.javascript.jscomp.CommandLineRunner$Flags$BooleanOptionHandler" filename="com/google/javascript/jscomp/CommandLineRunner.java" line-rate="0.7777777777777778" branch-rate="0.6666666666666666" complexity="2.6666666666666665">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="275" hits="1" branch="false"/>
+								<line number="276" hits="1" branch="false"/>
+								<line number="277" hits="2" branch="false"/>
+								<line number="278" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Lorg/kohsuke/args4j/CmdLineParser;Lorg/kohsuke/args4j/OptionDef;Lorg/kohsuke/args4j/spi/Setter;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="283" hits="344" branch="false"/>
+								<line number="284" hits="344" branch="false"/>
+							</lines>
+						</method>
+						<method name="getDefaultMetaVariable" signature="()Ljava/lang/String;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="308" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="parseArguments" signature="(Lorg/kohsuke/args4j/spi/Parameters;)I" line-rate="0.7272727272727273" branch-rate="0.6666666666666666">
+							<lines>
+								<line number="288" hits="10" branch="false"/>
+								<line number="289" hits="10" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="290" hits="0" branch="false"/>
+								<line number="291" hits="0" branch="false"/>
+								<line number="293" hits="10" branch="false"/>
+								<line number="294" hits="10" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="295" hits="4" branch="false"/>
+								<line number="296" hits="6" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="297" hits="6" branch="false"/>
+								<line number="299" hits="0" branch="false"/>
+								<line number="302" hits="10" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="275" hits="1" branch="false"/>
+						<line number="276" hits="1" branch="false"/>
+						<line number="277" hits="2" branch="false"/>
+						<line number="278" hits="1" branch="false"/>
+						<line number="283" hits="344" branch="false"/>
+						<line number="284" hits="344" branch="false"/>
+						<line number="288" hits="10" branch="false"/>
+						<line number="289" hits="10" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="290" hits="0" branch="false"/>
+						<line number="291" hits="0" branch="false"/>
+						<line number="293" hits="10" branch="false"/>
+						<line number="294" hits="10" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="295" hits="4" branch="false"/>
+						<line number="296" hits="6" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="297" hits="6" branch="false"/>
+						<line number="299" hits="0" branch="false"/>
+						<line number="302" hits="10" branch="false"/>
+						<line number="308" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.javascript.jscomp.CommandLineRunner$FormattingOption" filename="com/google/javascript/jscomp/CommandLineRunner.java" line-rate="0.0" branch-rate="0.0" complexity="2.6666666666666665">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="316" hits="0" branch="false"/>
+								<line number="317" hits="0" branch="false"/>
+								<line number="318" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/String;I)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="access$3200" signature="(Lcom/google/javascript/jscomp/CommandLineRunner$FormattingOption;Lcom/google/javascript/jscomp/CompilerOptions;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="applyToOptions" signature="(Lcom/google/javascript/jscomp/CompilerOptions;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="322" hits="0" branch="true" condition-coverage="0% (0/3)">
+									<conditions>
+										<condition number="0" type="switch" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="324" hits="0" branch="false"/>
+								<line number="325" hits="0" branch="false"/>
+								<line number="327" hits="0" branch="false"/>
+								<line number="328" hits="0" branch="false"/>
+								<line number="330" hits="0" branch="false"/>
+								<line number="332" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="valueOf" signature="(Ljava/lang/String;)Lcom/google/javascript/jscomp/CommandLineRunner$FormattingOption;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="values" signature="()[Lcom/google/javascript/jscomp/CommandLineRunner$FormattingOption;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="316" hits="0" branch="false"/>
+						<line number="317" hits="0" branch="false"/>
+						<line number="318" hits="0" branch="false"/>
+						<line number="322" hits="0" branch="true" condition-coverage="0% (0/3)">
+							<conditions>
+								<condition number="0" type="switch" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="324" hits="0" branch="false"/>
+						<line number="325" hits="0" branch="false"/>
+						<line number="327" hits="0" branch="false"/>
+						<line number="328" hits="0" branch="false"/>
+						<line number="330" hits="0" branch="false"/>
+						<line number="332" hits="0" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

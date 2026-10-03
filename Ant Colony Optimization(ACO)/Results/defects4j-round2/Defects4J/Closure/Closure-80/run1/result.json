@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Defects4J",
+  "algorithm_version": "2.0.0",
+  "project": "Closure",
+  "bug_id": 80,
+  "run": 1,
+  "status": "error",
+  "status_detail": "error",
+  "error": null,
+  "tests_generated": 3565,
+  "tests_validated": 3563,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 2,
+  "fault_detected": true,
+  "test_coverage": null,
+  "code_coverage": null,
+  "generation_seconds": 0.0,
+  "total_seconds": 678.31,
+  "configuration": {
+    "benchmark": "Defects4J",
+    "timeout": 300
+  },
+  "artifacts": {
+    "tests": null,
+    "logs": "Results/defects4j-round2/Defects4J/Closure/Closure-80/run1/logs/"
+  }
+}

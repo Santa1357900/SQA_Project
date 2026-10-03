@@ -1,0 +1,180 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="1.0" branch-rate="1.0" lines-covered="27" lines-valid="27" branches-covered="26" branches-valid="26" complexity="4.5" version="2.0.3" timestamp="1790723695019">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="org.mockito.internal.stubbing.answers" line-rate="1.0" branch-rate="1.0" complexity="4.5">
+			<classes>
+				<class name="org.mockito.internal.stubbing.answers.AnswersValidator" filename="org/mockito/internal/stubbing/answers/AnswersValidator.java" line-rate="1.0" branch-rate="1.0" complexity="4.5">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="11" hits="680" branch="false"/>
+								<line number="13" hits="680" branch="false"/>
+							</lines>
+						</method>
+						<method name="validate" signature="(Lorg/mockito/stubbing/Answer;Lorg/mockito/internal/invocation/Invocation;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="16" hits="688" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="17" hits="76" branch="false"/>
+								<line number="20" hits="673" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="21" hits="575" branch="false"/>
+								<line number="24" hits="663" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="25" hits="15" branch="false"/>
+								<line number="28" hits="661" branch="false"/>
+							</lines>
+						</method>
+						<method name="validateDoNothing" signature="(Lorg/mockito/internal/stubbing/answers/DoesNothing;Lorg/mockito/internal/invocation/Invocation;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="32" hits="15" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="33" hits="2" branch="false"/>
+								<line number="35" hits="13" branch="false"/>
+							</lines>
+						</method>
+						<method name="validateException" signature="(Lorg/mockito/internal/stubbing/answers/ThrowsException;Lorg/mockito/internal/invocation/Invocation;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="52" hits="76" branch="false"/>
+								<line number="53" hits="76" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="54" hits="6" branch="false"/>
+								<line number="57" hits="70" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="58" hits="55" branch="false"/>
+								<line number="61" hits="15" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="62" hits="9" branch="false"/>
+								<line number="64" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="validateReturnValue" signature="(Lorg/mockito/internal/stubbing/answers/Returns;Lorg/mockito/internal/invocation/Invocation;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="38" hits="575" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="39" hits="5" branch="false"/>
+								<line number="42" hits="570" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="43" hits="2" branch="false"/>
+								<line number="46" hits="568" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="47" hits="3" branch="false"/>
+								<line number="49" hits="565" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="11" hits="680" branch="false"/>
+						<line number="13" hits="680" branch="false"/>
+						<line number="16" hits="688" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="17" hits="76" branch="false"/>
+						<line number="20" hits="673" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="21" hits="575" branch="false"/>
+						<line number="24" hits="663" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="25" hits="15" branch="false"/>
+						<line number="28" hits="661" branch="false"/>
+						<line number="32" hits="15" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="33" hits="2" branch="false"/>
+						<line number="35" hits="13" branch="false"/>
+						<line number="38" hits="575" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="39" hits="5" branch="false"/>
+						<line number="42" hits="570" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="43" hits="2" branch="false"/>
+						<line number="46" hits="568" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="47" hits="3" branch="false"/>
+						<line number="49" hits="565" branch="false"/>
+						<line number="52" hits="76" branch="false"/>
+						<line number="53" hits="76" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="54" hits="6" branch="false"/>
+						<line number="57" hits="70" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="58" hits="55" branch="false"/>
+						<line number="61" hits="15" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="62" hits="9" branch="false"/>
+						<line number="64" hits="6" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

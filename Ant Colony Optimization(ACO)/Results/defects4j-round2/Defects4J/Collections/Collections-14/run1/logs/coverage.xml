@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.8888888888888888" branch-rate="1.0" lines-covered="16" lines-valid="18" branches-covered="2" branches-valid="2" complexity="1.25" version="2.0.3" timestamp="1790698559466">
+	<sources>
+		<source>src/java</source>
+	</sources>
+	<packages>
+		<package name="org.apache.commons.collections.map" line-rate="0.8888888888888888" branch-rate="1.0" complexity="1.25">
+			<classes>
+				<class name="org.apache.commons.collections.map.CaseInsensitiveMap" filename="org/apache/commons/collections/map/CaseInsensitiveMap.java" line-rate="0.8888888888888888" branch-rate="1.0" complexity="1.25">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="69" hits="283" branch="false"/>
+								<line number="70" hits="283" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(I)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="79" hits="1" branch="false"/>
+								<line number="80" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(IF)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="92" hits="0" branch="false"/>
+								<line number="93" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Ljava/util/Map;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="106" hits="1" branch="false"/>
+								<line number="107" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="clone" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="134" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="convertKey" signature="(Ljava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="120" hits="13460" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="121" hits="12720" branch="false"/>
+								<line number="123" hits="740" branch="false"/>
+							</lines>
+						</method>
+						<method name="readObject" signature="(Ljava/io/ObjectInputStream;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="149" hits="4" branch="false"/>
+								<line number="150" hits="4" branch="false"/>
+								<line number="151" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeObject" signature="(Ljava/io/ObjectOutputStream;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="141" hits="2" branch="false"/>
+								<line number="142" hits="2" branch="false"/>
+								<line number="143" hits="2" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="69" hits="283" branch="false"/>
+						<line number="70" hits="283" branch="false"/>
+						<line number="79" hits="1" branch="false"/>
+						<line number="80" hits="1" branch="false"/>
+						<line number="92" hits="0" branch="false"/>
+						<line number="93" hits="0" branch="false"/>
+						<line number="106" hits="1" branch="false"/>
+						<line number="107" hits="1" branch="false"/>
+						<line number="120" hits="13460" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="121" hits="12720" branch="false"/>
+						<line number="123" hits="740" branch="false"/>
+						<line number="134" hits="1" branch="false"/>
+						<line number="141" hits="2" branch="false"/>
+						<line number="142" hits="2" branch="false"/>
+						<line number="143" hits="2" branch="false"/>
+						<line number="149" hits="4" branch="false"/>
+						<line number="150" hits="4" branch="false"/>
+						<line number="151" hits="4" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

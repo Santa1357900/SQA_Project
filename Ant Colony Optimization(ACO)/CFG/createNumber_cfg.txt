@@ -1,0 +1,185 @@
+Control Flow Graph: org.apache.commons.lang3.math.NumberUtils
+Root node: D_ROOT
+
+Edges:
+  e_root_cn                 D_ROOT -> D_CN
+  e_root_is                 D_ROOT -> D_IS
+  e_root_cv                 D_ROOT -> D_CV
+  e_root_mm                 D_ROOT -> D_MM
+  e_root_cr                 D_ROOT -> D_CR
+  e_cn_null                 D_CN -> CN_NULL
+  e_cn_notnull              D_CN -> D_CN_BLANK
+  e_cn_blank_empty          D_CN_BLANK -> CN_BLANK_EMPTY
+  e_cn_blank_space          D_CN_BLANK -> CN_BLANK_SPACE
+  e_cn_notblank             D_CN_BLANK -> D_CN_HEX
+  e_cn_hex_match            D_CN_HEX -> D_CN_HEX_PFX
+  e_cn_hex_nomatch          D_CN_HEX -> D_CN_EXP
+  e_cn_hex_0x               D_CN_HEX_PFX -> CN_HEX_0x
+  e_cn_hex_0X               D_CN_HEX_PFX -> CN_HEX_0X
+  e_cn_hex_hash             D_CN_HEX_PFX -> CN_HEX_HASH
+  e_cn_hex_neg_0x           D_CN_HEX_PFX -> CN_HEX_NEG_0x
+  e_cn_hex_neg_0X           D_CN_HEX_PFX -> CN_HEX_NEG_0X
+  e_cn_hex_neg_hash         D_CN_HEX_PFX -> CN_HEX_NEG_HASH
+  e_cn_hex_long             D_CN_HEX_PFX -> CN_HEX_LONG
+  e_cn_hex_bigint           D_CN_HEX_PFX -> CN_HEX_BIGINT
+  e_cn_l747_int_fault       D_CN_HEX_PFX -> CN_LANG747_INT_FAULT
+  e_cn_l747_long_fault      D_CN_HEX_PFX -> CN_LANG747_LONG_FAULT
+  e_cn_l747_zero_int        D_CN_HEX_PFX -> CN_LANG747_ZERO_INT
+  e_cn_l747_zero_long       D_CN_HEX_PFX -> CN_LANG747_ZERO_LONG
+  e_cn_exp_match            D_CN_EXP -> D_CN_EXP_CASES
+  e_cn_exp_nomatch          D_CN_EXP -> D_CN_SUFFIX
+  e_cn_exp_dec              D_CN_EXP_CASES -> CN_EXP_DEC
+  e_cn_exp_int              D_CN_EXP_CASES -> CN_EXP_INT
+  e_cn_exp_neg              D_CN_EXP_CASES -> CN_EXP_NEG
+  e_cn_exp_err_double       D_CN_EXP_CASES -> CN_EXP_ERR_DOUBLE
+  e_cn_exp_err_dot          D_CN_EXP_CASES -> CN_EXP_ERR_DOT
+  e_cn_exp_err_end          D_CN_EXP_CASES -> CN_EXP_ERR_END
+  e_cn_suf_match            D_CN_SUFFIX -> D_CN_SUF_CASES
+  e_cn_suf_nomatch          D_CN_SUFFIX -> D_CN_PLAIN_DEC
+  e_cn_suf_l_pos            D_CN_SUF_CASES -> CN_SUF_L_POS
+  e_cn_suf_l_neg            D_CN_SUF_CASES -> CN_SUF_L_NEG
+  e_cn_suf_l_bigint         D_CN_SUF_CASES -> CN_SUF_L_BIGINT
+  e_cn_suf_l_err            D_CN_SUF_CASES -> CN_SUF_L_ERR
+  e_cn_suf_f_pos            D_CN_SUF_CASES -> CN_SUF_F_POS
+  e_cn_suf_f_neg            D_CN_SUF_CASES -> CN_SUF_F_NEG
+  e_cn_suf_f_zero           D_CN_SUF_CASES -> CN_SUF_F_ZERO
+  e_cn_suf_f_overflow       D_CN_SUF_CASES -> CN_SUF_F_OVERFLOW
+  e_cn_suf_f_precision      D_CN_SUF_CASES -> CN_SUF_F_PRECISION
+  e_cn_suf_f_err            D_CN_SUF_CASES -> CN_SUF_F_ERR
+  e_cn_suf_d_pos            D_CN_SUF_CASES -> CN_SUF_D_POS
+  e_cn_suf_d_neg            D_CN_SUF_CASES -> CN_SUF_D_NEG
+  e_cn_suf_d_zero           D_CN_SUF_CASES -> CN_SUF_D_ZERO
+  e_cn_suf_d_overflow       D_CN_SUF_CASES -> CN_SUF_D_OVERFLOW
+  e_cn_suf_d_precision      D_CN_SUF_CASES -> CN_SUF_D_PRECISION
+  e_cn_suf_d_err            D_CN_SUF_CASES -> CN_SUF_D_ERR
+  e_cn_suf_err_char         D_CN_SUF_CASES -> CN_SUF_ERR_CHAR
+  e_cn_plain                D_CN_PLAIN_DEC -> D_CN_PLAIN_CASES
+  e_cn_dec                  D_CN_PLAIN_DEC -> D_CN_DEC_CASES
+  e_cn_plain_int            D_CN_PLAIN_CASES -> CN_PLAIN_INT
+  e_cn_plain_zero           D_CN_PLAIN_CASES -> CN_PLAIN_ZERO
+  e_cn_plain_long_ovf       D_CN_PLAIN_CASES -> CN_PLAIN_LONG_OVERFLOW
+  e_cn_plain_bigint_ovf     D_CN_PLAIN_CASES -> CN_PLAIN_BIGINT_OVERFLOW
+  e_cn_dec_float            D_CN_DEC_CASES -> CN_DEC_FLOAT
+  e_cn_dec_double           D_CN_DEC_CASES -> CN_DEC_DOUBLE
+  e_cn_dec_bigdec           D_CN_DEC_CASES -> CN_DEC_BIGDEC
+  e_cn_dec_float_ovf        D_CN_DEC_CASES -> CN_DEC_FLOAT_OVERFLOW
+  e_cn_dec_double_ovf       D_CN_DEC_CASES -> CN_DEC_DOUBLE_OVERFLOW
+  e_cn_dec_all_zeros        D_CN_DEC_CASES -> CN_DEC_ALL_ZEROS
+  e_is_null_empty           D_IS -> IS_NULL_EMPTY
+  e_is_hex_valid            D_IS -> IS_HEX_VALID
+  e_is_hex_invalid          D_IS -> IS_HEX_INVALID
+  e_is_dec_signs            D_IS -> IS_DEC_SIGNS
+  e_is_dec_invalid          D_IS -> IS_DEC_INVALID
+  e_is_octal                D_IS -> IS_OCTAL
+  e_is_exp_valid            D_IS -> IS_EXP_VALID
+  e_is_exp_invalid          D_IS -> IS_EXP_INVALID
+  e_is_qualifiers           D_IS -> IS_QUALIFIERS
+  e_is_invalid_chars        D_IS -> IS_INVALID_CHARS
+  e_cv_int                  D_CV -> CV_TO_INT
+  e_cv_long                 D_CV -> CV_TO_LONG
+  e_cv_float                D_CV -> CV_TO_FLOAT
+  e_cv_double               D_CV -> CV_TO_DOUBLE
+  e_cv_byte                 D_CV -> CV_TO_BYTE
+  e_cv_short                D_CV -> CV_TO_SHORT
+  e_mm_long_arr             D_MM -> MM_LONG_ARR
+  e_mm_int_arr              D_MM -> MM_INT_ARR
+  e_mm_short_arr            D_MM -> MM_SHORT_ARR
+  e_mm_byte_arr             D_MM -> MM_BYTE_ARR
+  e_mm_double_arr           D_MM -> MM_DOUBLE_ARR
+  e_mm_float_arr            D_MM -> MM_FLOAT_ARR
+  e_mm_3arg_int             D_MM -> MM_3ARG_INT
+  e_mm_3arg_long            D_MM -> MM_3ARG_LONG
+  e_mm_3arg_short           D_MM -> MM_3ARG_SHORT
+  e_mm_3arg_byte            D_MM -> MM_3ARG_BYTE
+  e_mm_3arg_double          D_MM -> MM_3ARG_DOUBLE
+  e_mm_3arg_float           D_MM -> MM_3ARG_FLOAT
+  e_cr_int_long             D_CR -> CR_INT_LONG
+  e_cr_float_double         D_CR -> CR_FLOAT_DOUBLE
+  e_cr_bigdec               D_CR -> CR_BIGDEC
+  e_cr_bigint               D_CR -> CR_BIGINT
+  e_cr_is_digits            D_CR -> CR_IS_DIGITS
+  e_cr_constructor          D_CR -> CR_CONSTRUCTOR
+
+Leaves (target branches):
+  CN_NULL                   createNumber(null) -> return null
+  CN_BLANK_EMPTY            createNumber("") -> throws NumberFormatException
+  CN_BLANK_SPACE            createNumber("   ") -> throws NumberFormatException
+  CN_HEX_0x                 createNumber hex 0x prefix <= 8 digits -> Integer
+  CN_HEX_0X                 createNumber hex 0X uppercase prefix -> Integer
+  CN_HEX_HASH               createNumber hex # prefix -> Integer
+  CN_HEX_NEG_0x             createNumber hex -0x prefix -> negative Integer
+  CN_HEX_NEG_0X             createNumber hex -0X prefix -> negative Integer
+  CN_HEX_NEG_HASH           createNumber hex -# prefix -> negative Integer
+  CN_HEX_LONG               createNumber hex 9-16 digits -> Long
+  CN_HEX_BIGINT             createNumber hex >16 digits -> BigInteger
+  CN_LANG747_INT_FAULT      LANG-747 trigger: hex 8 digits starting with 8..F (0x80000000) -> bug throws NFE, fixed returns Long
+  CN_LANG747_LONG_FAULT     LANG-747 trigger: hex 16 digits starting with 8..F (0x8000000000000000) -> bug throws NFE, fixed returns BigInteger
+  CN_LANG747_ZERO_INT       LANG-747 trigger: leading zeros push hex length > 8, significant fits Integer -> bug returns Long
+  CN_LANG747_ZERO_LONG      LANG-747 trigger: leading zeros push hex length > 16, significant fits Long -> bug returns BigInteger
+  CN_EXP_DEC                createNumber decimal with exponent ("1.5e3")
+  CN_EXP_INT                createNumber integer with exponent ("15e2")
+  CN_EXP_NEG                createNumber exponent with negative power ("1.5e-3")
+  CN_EXP_ERR_DOUBLE         createNumber double exponent ("1.2e3e4") -> throws NFE
+  CN_EXP_ERR_DOT            createNumber exponent before dot ("1e.5") -> throws NFE
+  CN_EXP_ERR_END            createNumber exponent at string end ("12e") -> throws NFE
+  CN_SUF_L_POS              createNumber positive suffix L ("12345L") -> Long
+  CN_SUF_L_NEG              createNumber negative suffix l ("-12345l") -> Long
+  CN_SUF_L_BIGINT           createNumber suffix L exceeding Long.MAX_VALUE -> BigInteger
+  CN_SUF_L_ERR              createNumber suffix L with invalid decimal ("1.2L") -> throws NFE
+  CN_SUF_F_POS              createNumber positive suffix f ("1.5f") -> Float
+  CN_SUF_F_NEG              createNumber negative suffix F ("-1.5F") -> Float
+  CN_SUF_F_ZERO             createNumber zero suffix f ("0.0f") -> Float
+  CN_SUF_F_OVERFLOW         createNumber suffix f exceeding Float range ("1e40f") -> Double fallback
+  CN_SUF_F_PRECISION        createNumber suffix f underflow with nonzeros ("1e-45f") -> Double fallback
+  CN_SUF_F_ERR              createNumber suffix f malformed ("foo.f") -> throws NFE
+  CN_SUF_D_POS              createNumber positive suffix d ("1.5d") -> Double
+  CN_SUF_D_NEG              createNumber negative suffix D ("-1.5D") -> Double
+  CN_SUF_D_ZERO             createNumber zero suffix d ("0.0d") -> Double
+  CN_SUF_D_OVERFLOW         createNumber suffix d exceeding Double range ("1e400d") -> BigDecimal fallback
+  CN_SUF_D_PRECISION        createNumber suffix d underflow with nonzeros ("1e-350d") -> BigDecimal fallback
+  CN_SUF_D_ERR              createNumber suffix d malformed ("foo.d") -> throws NFE
+  CN_SUF_ERR_CHAR           createNumber invalid suffix character ("123!") -> throws NFE
+  CN_PLAIN_INT              createNumber plain integer ("-65174") -> Integer
+  CN_PLAIN_ZERO             createNumber plain zero ("0") -> Integer
+  CN_PLAIN_LONG_OVERFLOW    createNumber plain integer overflow ("3000000000") -> Long fallback
+  CN_PLAIN_BIGINT_OVERFLOW  createNumber plain long overflow -> BigInteger fallback
+  CN_DEC_FLOAT              createNumber decimal <=7 decimals ("0.49") -> Float
+  CN_DEC_DOUBLE             createNumber decimal 8-16 decimals ("3.697317372068") -> Double
+  CN_DEC_BIGDEC             createNumber decimal >16 decimals -> BigDecimal
+  CN_DEC_FLOAT_OVERFLOW     createNumber decimal <=7 decimals overflowing Float ("1e40") -> Double fallback
+  CN_DEC_DOUBLE_OVERFLOW    createNumber decimal <=16 decimals overflowing Double ("1e400") -> BigDecimal fallback
+  CN_DEC_ALL_ZEROS          createNumber decimal all zeros ("0.0000") -> Float
+  IS_NULL_EMPTY             isNumber null, empty, whitespace strings -> false
+  IS_HEX_VALID              isNumber valid hex with 0x, 0X, #, negative -> true
+  IS_HEX_INVALID            isNumber invalid hex prefixes and characters -> false
+  IS_DEC_SIGNS              isNumber decimals, leading dots, and signs -> true
+  IS_DEC_INVALID            isNumber invalid dots and misplaced signs -> false
+  IS_OCTAL                  isNumber octal notation numbers -> true/false branches
+  IS_EXP_VALID              isNumber valid scientific notation exponents -> true
+  IS_EXP_INVALID            isNumber malformed scientific exponents -> false
+  IS_QUALIFIERS             isNumber valid numeric type qualifiers L, f, d -> true
+  IS_INVALID_CHARS          isNumber invalid alphabetic characters and misplaced operators -> false
+  CV_TO_INT                 toInt string conversion with default values on null/invalid
+  CV_TO_LONG                toLong string conversion with default values on null/invalid
+  CV_TO_FLOAT               toFloat string conversion with default values on null/invalid
+  CV_TO_DOUBLE              toDouble string conversion with default values on null/invalid
+  CV_TO_BYTE                toByte string conversion with default values on null/invalid
+  CV_TO_SHORT               toShort string conversion with default values on null/invalid
+  MM_LONG_ARR               min/max long[] array with null and empty boundary checks
+  MM_INT_ARR                min/max int[] array with null and empty boundary checks
+  MM_SHORT_ARR              min/max short[] array with null and empty boundary checks
+  MM_BYTE_ARR               min/max byte[] array with null and empty boundary checks
+  MM_DOUBLE_ARR             min/max double[] array with null, empty, and NaN checks
+  MM_FLOAT_ARR              min/max float[] array with null, empty, and NaN checks
+  MM_3ARG_INT               min/max 3-argument int with all permutations (a<b<c, b<a<c, c<a<b)
+  MM_3ARG_LONG              min/max 3-argument long with all permutations
+  MM_3ARG_SHORT             min/max 3-argument short with all permutations
+  MM_3ARG_BYTE              min/max 3-argument byte with all permutations
+  MM_3ARG_DOUBLE            min/max 3-argument double with permutations and NaN
+  MM_3ARG_FLOAT             min/max 3-argument float with permutations and NaN
+  CR_INT_LONG               createInteger and createLong with valid and null values
+  CR_FLOAT_DOUBLE           createFloat and createDouble with valid and null values
+  CR_BIGDEC                 createBigDecimal with valid, null, and blank checks
+  CR_BIGINT                 createBigInteger with decimal, hex 0x/#, octal 0, negative, and null
+  CR_IS_DIGITS              isDigits with valid digits, null, empty, and non-digit strings
+  CR_CONSTRUCTOR            NumberUtils class constructor instantiation

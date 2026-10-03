@@ -1,0 +1,378 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.8144329896907216" branch-rate="0.8181818181818182" lines-covered="79" lines-valid="97" branches-covered="18" branches-valid="22" complexity="1.9375" version="2.0.3" timestamp="1790721130926">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="org.apache.commons.math.linear" line-rate="0.8144329896907216" branch-rate="0.8181818181818182" complexity="1.9375">
+			<classes>
+				<class name="org.apache.commons.math.linear.OpenMapRealMatrix" filename="org/apache/commons/math/linear/OpenMapRealMatrix.java" line-rate="0.8144329896907216" branch-rate="0.8181818181818182" complexity="1.9375">
+					<methods>
+						<method name="&lt;init&gt;" signature="(II)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="49" hits="112" branch="false"/>
+								<line number="50" hits="111" branch="false"/>
+								<line number="51" hits="111" branch="false"/>
+								<line number="52" hits="111" branch="false"/>
+								<line number="53" hits="111" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/math/linear/OpenMapRealMatrix;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="60" hits="19" branch="false"/>
+								<line number="61" hits="19" branch="false"/>
+								<line number="62" hits="19" branch="false"/>
+								<line number="63" hits="19" branch="false"/>
+								<line number="64" hits="19" branch="false"/>
+							</lines>
+						</method>
+						<method name="add" signature="(Lorg/apache/commons/math/linear/OpenMapRealMatrix;)Lorg/apache/commons/math/linear/OpenMapRealMatrix;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="95" hits="2" branch="false"/>
+								<line number="97" hits="1" branch="false"/>
+								<line number="98" hits="1" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="99" hits="9" branch="false"/>
+								<line number="100" hits="9" branch="false"/>
+								<line number="101" hits="9" branch="false"/>
+								<line number="102" hits="9" branch="false"/>
+								<line number="103" hits="9" branch="false"/>
+								<line number="105" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="addToEntry" signature="(IID)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="237" hits="0" branch="false"/>
+								<line number="238" hits="0" branch="false"/>
+								<line number="239" hits="0" branch="false"/>
+								<line number="240" hits="0" branch="false"/>
+								<line number="241" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="242" hits="0" branch="false"/>
+								<line number="244" hits="0" branch="false"/>
+								<line number="246" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="computeKey" signature="(II)I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="269" hits="27335" branch="false"/>
+							</lines>
+						</method>
+						<method name="copy" signature="()Lorg/apache/commons/math/linear/OpenMapRealMatrix;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="69" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="copy" signature="()Lorg/apache/commons/math/linear/RealMatrix;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="createMatrix" signature="(II)Lorg/apache/commons/math/linear/OpenMapRealMatrix;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="75" hits="19" branch="false"/>
+							</lines>
+						</method>
+						<method name="createMatrix" signature="(II)Lorg/apache/commons/math/linear/RealMatrix;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="31" hits="33" branch="false"/>
+							</lines>
+						</method>
+						<method name="getColumnDimension" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="81" hits="27195" branch="false"/>
+							</lines>
+						</method>
+						<method name="getEntry" signature="(II)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="211" hits="20797" branch="false"/>
+								<line number="212" hits="20796" branch="false"/>
+								<line number="213" hits="20796" branch="false"/>
+							</lines>
+						</method>
+						<method name="getRowDimension" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="219" hits="27184" branch="false"/>
+							</lines>
+						</method>
+						<method name="multiply" signature="(Lorg/apache/commons/math/linear/OpenMapRealMatrix;)Lorg/apache/commons/math/linear/OpenMapRealMatrix;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="180" hits="14" branch="false"/>
+								<line number="182" hits="12" branch="false"/>
+								<line number="183" hits="12" branch="false"/>
+								<line number="184" hits="12" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="185" hits="85" branch="false"/>
+								<line number="186" hits="85" branch="false"/>
+								<line number="187" hits="85" branch="false"/>
+								<line number="188" hits="85" branch="false"/>
+								<line number="189" hits="85" branch="false"/>
+								<line number="190" hits="302" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="191" hits="217" branch="false"/>
+								<line number="192" hits="217" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="193" hits="164" branch="false"/>
+								<line number="194" hits="164" branch="false"/>
+								<line number="195" hits="164" branch="false"/>
+								<line number="196" hits="164" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="197" hits="24" branch="false"/>
+								<line number="199" hits="140" branch="false"/>
+								<line number="203" hits="85" branch="false"/>
+								<line number="205" hits="12" branch="false"/>
+							</lines>
+						</method>
+						<method name="multiply" signature="(Lorg/apache/commons/math/linear/RealMatrix;)Lorg/apache/commons/math/linear/RealMatrix;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="146" hits="9" branch="false"/>
+								<line number="147" hits="1" branch="false"/>
+								<line number="150" hits="1" branch="false"/>
+								<line number="152" hits="1" branch="false"/>
+								<line number="153" hits="1" branch="false"/>
+								<line number="154" hits="1" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="155" hits="8" branch="false"/>
+								<line number="156" hits="8" branch="false"/>
+								<line number="157" hits="8" branch="false"/>
+								<line number="158" hits="8" branch="false"/>
+								<line number="159" hits="8" branch="false"/>
+								<line number="160" hits="32" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="161" hits="24" branch="false"/>
+								<line number="163" hits="8" branch="false"/>
+								<line number="165" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="multiplyEntry" signature="(IID)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="251" hits="0" branch="false"/>
+								<line number="252" hits="0" branch="false"/>
+								<line number="253" hits="0" branch="false"/>
+								<line number="254" hits="0" branch="false"/>
+								<line number="255" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="256" hits="0" branch="false"/>
+								<line number="258" hits="0" branch="false"/>
+								<line number="260" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="setEntry" signature="(IID)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="225" hits="6158" branch="false"/>
+								<line number="226" hits="6158" branch="false"/>
+								<line number="227" hits="6158" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="228" hits="129" branch="false"/>
+								<line number="230" hits="6029" branch="false"/>
+								<line number="232" hits="6158" branch="false"/>
+							</lines>
+						</method>
+						<method name="subtract" signature="(Lorg/apache/commons/math/linear/OpenMapRealMatrix;)Lorg/apache/commons/math/linear/OpenMapRealMatrix;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="129" hits="16" branch="false"/>
+								<line number="131" hits="15" branch="false"/>
+								<line number="132" hits="15" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="133" hits="89" branch="false"/>
+								<line number="134" hits="89" branch="false"/>
+								<line number="135" hits="89" branch="false"/>
+								<line number="136" hits="89" branch="false"/>
+								<line number="137" hits="89" branch="false"/>
+								<line number="139" hits="15" branch="false"/>
+							</lines>
+						</method>
+						<method name="subtract" signature="(Lorg/apache/commons/math/linear/RealMatrix;)Lorg/apache/commons/math/linear/OpenMapRealMatrix;" line-rate="0.3333333333333333" branch-rate="1.0">
+							<lines>
+								<line number="113" hits="14" branch="false"/>
+								<line number="114" hits="0" branch="false"/>
+								<line number="115" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="subtract" signature="(Lorg/apache/commons/math/linear/RealMatrix;)Lorg/apache/commons/math/linear/RealMatrix;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="31" hits="33" branch="false"/>
+						<line number="49" hits="112" branch="false"/>
+						<line number="50" hits="111" branch="false"/>
+						<line number="51" hits="111" branch="false"/>
+						<line number="52" hits="111" branch="false"/>
+						<line number="53" hits="111" branch="false"/>
+						<line number="60" hits="19" branch="false"/>
+						<line number="61" hits="19" branch="false"/>
+						<line number="62" hits="19" branch="false"/>
+						<line number="63" hits="19" branch="false"/>
+						<line number="64" hits="19" branch="false"/>
+						<line number="69" hits="3" branch="false"/>
+						<line number="75" hits="19" branch="false"/>
+						<line number="81" hits="27195" branch="false"/>
+						<line number="95" hits="2" branch="false"/>
+						<line number="97" hits="1" branch="false"/>
+						<line number="98" hits="1" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="99" hits="9" branch="false"/>
+						<line number="100" hits="9" branch="false"/>
+						<line number="101" hits="9" branch="false"/>
+						<line number="102" hits="9" branch="false"/>
+						<line number="103" hits="9" branch="false"/>
+						<line number="105" hits="1" branch="false"/>
+						<line number="113" hits="14" branch="false"/>
+						<line number="114" hits="0" branch="false"/>
+						<line number="115" hits="0" branch="false"/>
+						<line number="129" hits="16" branch="false"/>
+						<line number="131" hits="15" branch="false"/>
+						<line number="132" hits="15" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="133" hits="89" branch="false"/>
+						<line number="134" hits="89" branch="false"/>
+						<line number="135" hits="89" branch="false"/>
+						<line number="136" hits="89" branch="false"/>
+						<line number="137" hits="89" branch="false"/>
+						<line number="139" hits="15" branch="false"/>
+						<line number="146" hits="9" branch="false"/>
+						<line number="147" hits="1" branch="false"/>
+						<line number="150" hits="1" branch="false"/>
+						<line number="152" hits="1" branch="false"/>
+						<line number="153" hits="1" branch="false"/>
+						<line number="154" hits="1" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="155" hits="8" branch="false"/>
+						<line number="156" hits="8" branch="false"/>
+						<line number="157" hits="8" branch="false"/>
+						<line number="158" hits="8" branch="false"/>
+						<line number="159" hits="8" branch="false"/>
+						<line number="160" hits="32" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="161" hits="24" branch="false"/>
+						<line number="163" hits="8" branch="false"/>
+						<line number="165" hits="1" branch="false"/>
+						<line number="180" hits="14" branch="false"/>
+						<line number="182" hits="12" branch="false"/>
+						<line number="183" hits="12" branch="false"/>
+						<line number="184" hits="12" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="185" hits="85" branch="false"/>
+						<line number="186" hits="85" branch="false"/>
+						<line number="187" hits="85" branch="false"/>
+						<line number="188" hits="85" branch="false"/>
+						<line number="189" hits="85" branch="false"/>
+						<line number="190" hits="302" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="191" hits="217" branch="false"/>
+						<line number="192" hits="217" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="193" hits="164" branch="false"/>
+						<line number="194" hits="164" branch="false"/>
+						<line number="195" hits="164" branch="false"/>
+						<line number="196" hits="164" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="197" hits="24" branch="false"/>
+						<line number="199" hits="140" branch="false"/>
+						<line number="203" hits="85" branch="false"/>
+						<line number="205" hits="12" branch="false"/>
+						<line number="211" hits="20797" branch="false"/>
+						<line number="212" hits="20796" branch="false"/>
+						<line number="213" hits="20796" branch="false"/>
+						<line number="219" hits="27184" branch="false"/>
+						<line number="225" hits="6158" branch="false"/>
+						<line number="226" hits="6158" branch="false"/>
+						<line number="227" hits="6158" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="228" hits="129" branch="false"/>
+						<line number="230" hits="6029" branch="false"/>
+						<line number="232" hits="6158" branch="false"/>
+						<line number="237" hits="0" branch="false"/>
+						<line number="238" hits="0" branch="false"/>
+						<line number="239" hits="0" branch="false"/>
+						<line number="240" hits="0" branch="false"/>
+						<line number="241" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="242" hits="0" branch="false"/>
+						<line number="244" hits="0" branch="false"/>
+						<line number="246" hits="0" branch="false"/>
+						<line number="251" hits="0" branch="false"/>
+						<line number="252" hits="0" branch="false"/>
+						<line number="253" hits="0" branch="false"/>
+						<line number="254" hits="0" branch="false"/>
+						<line number="255" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="256" hits="0" branch="false"/>
+						<line number="258" hits="0" branch="false"/>
+						<line number="260" hits="0" branch="false"/>
+						<line number="269" hits="27335" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>
