@@ -1,0 +1,14 @@
+{
+  "from_version": "3.1.10-rebuild",
+  "to_version": "3.1.11-rebuild",
+  "reason": "shared-output-only upgrade; search parameters and Java sources unchanged",
+  "new_source_sha256": {
+    "DEReplay.java": "b47774cbfd5264e8aafde13dae61afea531549e3a23bb16158aca04cd52fa5f5",
+    "DifferentialEvolution.java": "64f7a727ea854de44a69d5a3c28d2840b19bd5525068d47d363b48332de33b63",
+    "MiniJson.java": "5306734dd701d22ab69e6bb9a24400aca3792274860c0ff4ca10cb5ed0831ce7",
+    "SearchMain.java": "dd160a8e75260eae3233cc91088f3c3a6945352dead16d769840cfa0d37ba5d6",
+    "common_output.py": "b5000f8468d457a73b810577594cec637d1b4ab30ccae209c96a97669eeae769",
+    "runner.py": "4ea5ecdacd1fea98599051bc1167bfc6e0b41a519cdc584f1f2efe31c730fb27",
+    "setup.py": "07dcabab821d4f3f80fabbfccd9e20bcd4a2e7784de046e547b6f9b90a33fcda"
+  }
+}

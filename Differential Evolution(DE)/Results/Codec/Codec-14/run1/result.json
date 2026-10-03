@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0",
+  "experiment": "metadata-recheck-v319",
+  "algorithm": "DE",
+  "algorithm_version": "3.1.19-rebuild",
+  "project": "Codec",
+  "bug_id": 14,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "stage": "finished",
+  "error": null,
+  "coverage_fallback_used": false,
+  "cobertura_error": null,
+  "jacoco_error": null,
+  "modified_classes": [
+    "org.apache.commons.codec.language.bm.Lang",
+    "org.apache.commons.codec.language.bm.PhoneticEngine",
+    "org.apache.commons.codec.language.bm.Rule"
+  ],
+  "modified_classes_exported": [
+    "org.apache.commons.codec.language.bm.Lang",
+    "org.apache.commons.codec.language.bm.PhoneticEngine",
+    "org.apache.commons.codec.language.bm.Rule",
+    "src.main.resources.org.apache.commons.codec.language.bm.ash_lang.txt",
+    "src.main.resources.org.apache.commons.codec.language.bm.gen_lang.txt",
+    "src.main.resources.org.apache.commons.codec.language.bm.sep_lang.txt"
+  ],
+  "modified_classes_excluded": [
+    {
+      "class": "src.main.resources.org.apache.commons.codec.language.bm.ash_lang.txt",
+      "reason": "compiled_class_missing",
+      "revisions": [
+        "buggy",
+        "fixed"
+      ]
+    },
+    {
+      "class": "src.main.resources.org.apache.commons.codec.language.bm.gen_lang.txt",
+      "reason": "compiled_class_missing",
+      "revisions": [
+        "buggy",
+        "fixed"
+      ]
+    },
+    {
+      "class": "src.main.resources.org.apache.commons.codec.language.bm.sep_lang.txt",
+      "reason": "compiled_class_missing",
+      "revisions": [
+        "buggy",
+        "fixed"
+      ]
+    }
+  ],
+  "tests_generated": 51,
+  "search_incomplete": false,
+  "search_recovered_from_stage": null,
+  "tests_validated": 51,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 10,
+  "fault_detected": true,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "covered_methods": 35,
+    "total_methods": 37,
+    "ratio": 0.9459459459459459
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 415,
+    "lines_total": 481,
+    "line_ratio": 0.8627858627858628,
+    "branch_measure": "condition",
+    "branches_covered": 190,
+    "branches_total": 226,
+    "branch_ratio": 0.8407079646017699
+  },
+  "generation_seconds": 1290.972,
+  "total_seconds": 1376.317,
+  "configuration": {
+    "population": 16,
+    "budget": 512,
+    "mutation": 0.7,
+    "crossover": 0.9,
+    "input_range": 1000,
+    "max_methods": 0,
+    "max_tests_per_method": 16,
+    "method_timeout": 300,
+    "job_timeout": 1500,
+    "validation_reserve": 180,
+    "test_timeout": 60,
+    "command_timeout": 600,
+    "candidate_timeout": 12,
+    "seed": 2026,
+    "heap": "512m"
+  },
+  "artifacts": {
+    "tests": "Test/Codec/Codec 14/run1/1790971181908370722",
+    "logs": null,
+    "legacy_result": null
+  }
+}

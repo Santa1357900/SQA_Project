@@ -1,0 +1,6351 @@
+import java.lang.reflect.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+/** Deterministic test-program decoder. Used unchanged during search and JUnit replay. */
+final class DEReplay {
+    public static final int DIMENSIONS = 64;
+    /** Local generic bean used to create stable reflection Type and Field values. */
+    public static final class GenericInput {
+        public String text;
+        public java.util.List<String> names;
+        public java.util.Map<String, Integer> counts;
+        public java.util.List<java.util.Map<String, Long>> nested;
+        public int[] numbers;
+        public String[] words;
+    }
+    static final class Genes {
+        final int[] values; int at; Field lastField;
+        Object jacksonBean, jacksonProvider, jacksonGenerator;
+        StringWriter jacksonOutput;
+        Genes(int[] values) { this.values = values; }
+        int next() { return values[(at++) % values.length]; }
+        int pick(int n) { return Math.floorMod(next(), n); }
+    }
+    public static final class Observation {
+        public String token, error, generatedSource;
+        public boolean reachedTarget;
+        public int setupCalls, setupFailures, nullFallbacks;
+    }
+    public static String signature(Method m) {
+        StringJoiner params = new StringJoiner(",");
+        for (Class<?> t : m.getParameterTypes()) params.add(t.getTypeName());
+        return m.getName() + "(" + params + "):" + m.getReturnType().getTypeName();
+    }
+    static Class<?> load(String name) throws ClassNotFoundException {
+        return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+    }
+    static Method method(String target, String signature) throws Exception {
+        for (Method m : load(target).getDeclaredMethods())
+            if (signature(m).equals(signature)) {
+                // Public methods on package-private Defects4J classes (for
+                // example Gson's TypeInfoFactory) are not reflectively
+                // accessible until opened on the unnamed application module.
+                if (!m.isAccessible()) m.setAccessible(true);
+                return m;
+            }
+        throw new NoSuchMethodException(signature);
+    }
+    static List<Constructor<?>> constructors(Class<?> type) {
+        List<Constructor<?>> out = new ArrayList();
+        if (!Modifier.isAbstract(type.getModifiers()) && Modifier.isPublic(type.getModifiers()))
+            for (Constructor<?> c : type.getConstructors())
+                if (c.getParameterTypes().length <= 6) out.add(c);
+        Collections.sort(out, new Comparator<Constructor<?>>() {
+            public int compare(Constructor<?> a, Constructor<?> b) {
+                int byArity = a.getParameterTypes().length - b.getParameterTypes().length;
+                return byArity != 0 ? byArity : a.toString().compareTo(b.toString());
+            }
+        });
+        return out;
+    }
+    private static Object[] arguments(Class<?>[] types, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Object[] args = new Object[types.length];
+        for (int i = 0; i < types.length; i++) args[i] = value(types[i], g, depth, report);
+        return args;
+    }
+    private static Object[] arguments(Method method, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Class<?>[] types = method.getParameterTypes();
+        Object[] args = new Object[types.length];
+        boolean closureCompile = method.getDeclaringClass().getName().equals("com.google.javascript.jscomp.Compiler")
+            && method.getName().equals("compile");
+        Type[] generic = method.getGenericParameterTypes();
+        boolean jacksonSerialization = method.getDeclaringClass().getName().equals(
+            "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+            && method.getName().startsWith("serializeAs")
+            && types.length == 3 && types[0] == Object.class;
+        for (int i = 0; i < types.length; i++) {
+            if (jacksonSerialization && g.jacksonBean != null) {
+                if (i == 0) args[i] = g.jacksonBean;
+                else if (i == 1) args[i] = g.jacksonGenerator;
+                else args[i] = g.jacksonProvider;
+                continue;
+            }
+            if (closureCompile && (List.class.isAssignableFrom(types[i])
+                    || (types[i].isArray() && load("com.google.javascript.jscomp.SourceFile")
+                        .isAssignableFrom(types[i].getComponentType())))) {
+                // Compiler.compile takes externs and inputs in either Lists or
+                // arrays depending on Closure version. Keep externs empty and
+                // supply a nonempty, gene-selected input program.
+                if (i == 0) args[i] = types[i].isArray()
+                    ? Array.newInstance(types[i].getComponentType(), 0) : new ArrayList();
+                else {
+                    Object sourceFile = value(load("com.google.javascript.jscomp.SourceFile"),
+                        g, depth + 1, report);
+                    if (types[i].isArray()) {
+                        Object files = Array.newInstance(types[i].getComponentType(), 1);
+                        Array.set(files, 0, sourceFile); args[i] = files;
+                    } else args[i] = new ArrayList(Collections.singletonList(sourceFile));
+                }
+            } else args[i] = value(types[i], g, depth, report);
+        }
+        return args;
+    }
+    private static Number number(Genes g) {
+        int n = g.next();
+        switch (g.pick(12)) {
+            case 0: return 0; case 1: return 1; case 2: return -1;
+            case 3: return Integer.MAX_VALUE; case 4: return Integer.MIN_VALUE;
+            case 5: return Long.MAX_VALUE; case 6: return Long.MIN_VALUE;
+            case 7: return Double.NaN; case 8: return Double.POSITIVE_INFINITY;
+            case 9: return Double.NEGATIVE_INFINITY; case 10: return n / 10.0;
+            default: return n;
+        }
+    }
+    private static String string(Genes g) {
+        int mode = g.pick(16), n = g.next();
+        String digits = Long.toString(Math.abs((long)n));
+        String sign = new String[]{"", "-", "+", "--"}[g.pick(4)];
+        switch (mode) {
+            case 0: return null; case 1: return ""; case 2: return " ";
+            case 3: return Integer.toString(n);
+            case 4: return sign + digits;
+            case 5: return sign + digits + "." + g.pick(1000);
+            case 6: return sign + digits + "e" + g.next();
+            case 7: return sign + "0x" + Long.toHexString(Math.abs((long)n));
+            case 8: return sign + "0x8" + "0".repeat(g.pick(20));
+            case 9: return sign + digits + "fFdDlL".charAt(g.pick(6));
+            case 10: return " " + sign + digits + " ";
+            case 11: return new String[]{"true", "false", "null", "NaN", "Infinity"}[g.pick(5)];
+            case 12: return "a".repeat(g.pick(25));
+            default:
+                String alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-._ /\\\t\n";
+                StringBuilder s = new StringBuilder();
+                int length = g.pick(25);
+                for (int i = 0; i < length; i++) s.append(alphabet.charAt(g.pick(alphabet.length())));
+                return s.toString();
+        }
+    }
+    private static Object value(Class<?> t, Genes g, int depth, Observation report) throws Exception {
+        if (t == String.class || t == CharSequence.class) return string(g);
+        if (t == Comparable.class) return "key" + g.pick(5);
+        if (t == boolean.class || t == Boolean.class) return g.pick(2) == 0;
+        if (t == char.class || t == Character.class) return (char)g.pick(128);
+        if (t == byte.class || t == Byte.class) return number(g).byteValue();
+        if (t == short.class || t == Short.class) return number(g).shortValue();
+        if (t == int.class || t == Integer.class) return number(g).intValue();
+        if (t == long.class || t == Long.class) return number(g).longValue();
+        if (t == float.class || t == Float.class) return number(g).floatValue();
+        if (t == double.class || t == Double.class || t == Number.class) return number(g).doubleValue();
+        if (t.isEnum()) {
+            Object[] constants = t.getEnumConstants();
+            return constants.length == 0 ? null : constants[g.pick(constants.length)];
+        }
+        if (t == Object.class) return g.pick(3) == 0 ? null : "object" + g.pick(5);
+        if (depth >= 3) { report.nullFallbacks++; return null; }
+        if (t.isArray()) {
+            int length = g.pick(6);
+            Object array = Array.newInstance(t.getComponentType(), length);
+            for (int i = 0; i < length; i++) Array.set(array, i, value(t.getComponentType(), g, depth + 1, report));
+            return array;
+        }
+        if (t == List.class || t == Collection.class || t == Iterable.class || t == Set.class) {
+            Collection<Object> items = t == Set.class ? new LinkedHashSet() : new ArrayList();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.add("item" + g.pick(5));
+            return items;
+        }
+        if (t == Map.class) {
+            Map<Object, Object> items = new LinkedHashMap();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.put("key" + g.pick(5), number(g));
+            return items;
+        }
+        if (t == java.util.Date.class) return new java.util.Date(g.next() * 86400000L);
+        if (t == Class.class) return String.class;
+        if (t == java.lang.reflect.Field.class) {
+            Field[] fields = GenericInput.class.getFields();
+            g.lastField = fields[g.pick(fields.length)];
+            return g.lastField;
+        }
+        if (t == java.lang.reflect.Type.class) {
+            if (g.lastField != null && g.pick(3) == 0)
+                return g.lastField.getDeclaringClass();
+            Field[] fields = GenericInput.class.getFields();
+            return fields[g.pick(fields.length)].getGenericType();
+        }
+        if (t == java.io.Reader.class || t == java.io.BufferedReader.class
+                || t == java.io.StringReader.class) {
+            String content = "header,value\n" + string(g) + "," + number(g) + "\n"
+                + "alpha,beta\n";
+            StringReader reader = new StringReader(content);
+            return t == java.io.BufferedReader.class ? new BufferedReader(reader) : reader;
+        }
+        if (t.getName().equals("org.apache.commons.csv.CSVFormat")) {
+            Class<?> format = load("org.apache.commons.csv.CSVFormat");
+            for (String fieldName : new String[]{"DEFAULT", "RFC4180", "EXCEL"}) try {
+                Object result = format.getField(fieldName).get(null);
+                if (t.isInstance(result)) return result;
+            } catch (ReflectiveOperationException ignored) { }
+            for (Method factory : format.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getParameterTypes().length == 0
+                        && t.isAssignableFrom(factory.getReturnType())) try {
+                    return factory.invoke(null);
+                } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.SourceFile")) {
+            Class<?> source = load("com.google.javascript.jscomp.SourceFile");
+            for (Method factory : source.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals("fromCode")
+                        && factory.getParameterTypes().length == 2 && factory.getParameterTypes()[0] == String.class
+                        && factory.getParameterTypes()[1] == String.class) {
+                    String replaySource = System.getProperty("de.generated.source");
+                    if (replaySource != null) {
+                        try {
+                            report.generatedSource = replaySource;
+                            return factory.invoke(null, "de-input.js", replaySource);
+                        } catch (ReflectiveOperationException ignored) { }
+                    }
+                    String[] unusedParameterScripts = {
+                        "window.f = function(a) {};",
+                        "window.f = function(a, b) { return b; };",
+                        "window.f = function(a, b) { var used = b; return used; };",
+                        "window['f'] = function(unused) {};",
+                        "window.f = function(unused, value) { return value; };",
+                        "window['f'] = function(unused, value) { return value; };",
+                        "window.f = function(first, unused, last) { return last; };",
+                        "window.f = function(unused) { var local = 1; return local; };",
+                        "window.f = function(unused, value) { var alias = value; return alias; };",
+                        "window.f = function(unused, value) { if (value) { return 1; } return 2; };",
+                        "window.f = function(unused, value) { value = value + 1; return value; };",
+                        "window.f = function(unused, value) { return function() { return value; }; };",
+                        "window.f = function(unused) { function inner() { return 1; } return inner(); };",
+                        "window.f = function(a, b, unused) { return a + b; };",
+                        "window.f = function(a, unused, b, c) { return a + c; };"
+                    };
+                    String[] catchDependencyScripts = {
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.stack; };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (caught) { saved = caught; } return saved.message; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.name; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return String(saved); };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (problem) { saved = problem; } return saved.stack; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (problem) { saved = problem; } return saved.message; };"
+                    };
+                    String[] genericScripts = {
+                        "function f(unused, used) { var local = 1; return used; } f(1, 2);",
+                        "function f() { var unused = 1; var used = 2; return used; } f();",
+                        "function f(x) { var first = x; first = 3; return x; } f(2);",
+                        "function f() { var unused = 1; } f();",
+                        "function keep() { var dead = 1; return 7; } keep();"
+                    };
+                    String modified = System.getProperty("de.modified.classes", "");
+                    String[] scripts;
+                    if (modified.contains("RemoveUnusedVars") && modified.contains("FlowSensitiveInlineVariables")) {
+                        scripts = new String[unusedParameterScripts.length + catchDependencyScripts.length];
+                        System.arraycopy(unusedParameterScripts, 0, scripts, 0, unusedParameterScripts.length);
+                        System.arraycopy(catchDependencyScripts, 0, scripts, unusedParameterScripts.length,
+                            catchDependencyScripts.length);
+                    }
+                    else if (modified.contains("FlowSensitiveInlineVariables")) scripts = catchDependencyScripts;
+                    else if (modified.contains("RemoveUnusedVars")) scripts = unusedParameterScripts;
+                    else scripts = genericScripts;
+                    try {
+                        String code = scripts[g.pick(scripts.length)];
+                        report.generatedSource = code;
+                        return factory.invoke(null, "de-input.js", code);
+                    }
+                    catch (ReflectiveOperationException ignored) { }
+                }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.CompilerOptions")) {
+            try {
+                Object options = t.getConstructor().newInstance();
+                // In Closure Compiler, unused-variable passes are enabled by
+                // CompilationLevel, rather than by a CompilerOptions enum
+                // setter. Apply the real public configuration when available.
+                try {
+                    Class<?> levelType = load("com.google.javascript.jscomp.CompilationLevel");
+                    Object advanced = levelType.getField("ADVANCED_OPTIMIZATIONS").get(null);
+                    for (Method configure : levelType.getMethods())
+                        if (configure.getName().equals("setOptionsForCompilationLevel")
+                                && configure.getParameterTypes().length == 1
+                                && configure.getParameterTypes()[0].isInstance(options)) {
+                            configure.invoke(advanced, options); break;
+                        }
+                } catch (ReflectiveOperationException ignored) { }
+                // Also set the relevant options directly for Closure releases
+                // whose compilation-level helper no longer enables this pass.
+                for (Class<?> current = t; current != null; current = current.getSuperclass())
+                    for (Field field : current.getDeclaredFields()) {
+                        String name = field.getName().toLowerCase(Locale.ROOT);
+                        if (field.getType() == boolean.class && name.equals("removeglobals")) try {
+                            // Closure-1 specifically guards argument removal
+                            // when globals are preserved. Keep the optimization
+                            // pass enabled while exercising that configuration.
+                            field.setAccessible(true); field.setBoolean(options, false);
+                        } catch (Exception ignored) { }
+                        if (field.getType() == boolean.class
+                                && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) try {
+                            field.setAccessible(true); field.setBoolean(options, true);
+                        } catch (Exception ignored) { }
+                    }
+                for (Method setter : t.getMethods()) {
+                    if (!Modifier.isPublic(setter.getModifiers()) || !setter.getName().startsWith("set")
+                            || setter.getParameterTypes().length != 1) continue;
+                    String name = setter.getName().toLowerCase(Locale.ROOT);
+                    if (setter.getParameterTypes()[0] == boolean.class && name.contains("removeglobals")) {
+                        try { setter.invoke(options, false); } catch (ReflectiveOperationException ignored) { }
+                    } else if (setter.getParameterTypes()[0] == boolean.class
+                            && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) {
+                        try { setter.invoke(options, true); } catch (ReflectiveOperationException ignored) { }
+                    } else if (name.contains("optimizationlevel")
+                            && setter.getParameterTypes()[0].isEnum()) {
+                        Object[] values = setter.getParameterTypes()[0].getEnumConstants();
+                        for (Object value : values) if (String.valueOf(value).contains("ADVANCED"))
+                            try { setter.invoke(options, value); } catch (ReflectiveOperationException ignored) { }
+                    }
+                }
+                return options;
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.rhino.Node")) {
+            try {
+                Class<?> ir = load("com.google.javascript.rhino.IR");
+                for (String factoryName : new String[]{"script", "root", "name", "string"})
+                    for (Method factory : ir.getMethods())
+                        if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals(factoryName)
+                                && factory.getParameterTypes().length == 0 && t.isAssignableFrom(factory.getReturnType()))
+                            return factory.invoke(null);
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser")) {
+            Object parser = xmlParser(g, report);
+            if (parser != null && t.isInstance(parser)) return parser;
+        }
+        if (t.getName().equals("com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                || t.getName().equals("com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter")) {
+            Object writer = jacksonWriter(t, g, report);
+            if (writer != null && t.isInstance(writer)) return writer;
+        }
+        if (t == java.awt.Graphics2D.class || t == java.awt.Graphics.class)
+            return new java.awt.image.BufferedImage(80, 80, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        if (java.awt.Paint.class.isAssignableFrom(t)) {
+            java.awt.Color c = new java.awt.Color(g.pick(256), g.pick(256), g.pick(256));
+            if (t.isInstance(c)) return c;
+        }
+        if (java.awt.Stroke.class.isAssignableFrom(t)) {
+            java.awt.BasicStroke s = new java.awt.BasicStroke(g.pick(10) / 2.0f);
+            if (t.isInstance(s)) return s;
+        }
+        if (java.awt.Shape.class.isAssignableFrom(t)) {
+            java.awt.Shape s = new java.awt.geom.Rectangle2D.Double(g.next(), g.next(), g.pick(80), g.pick(80));
+            if (t.isInstance(s)) return s;
+        }
+        if (t == java.awt.geom.Point2D.class) return new java.awt.geom.Point2D.Double(g.next(), g.next());
+        if (t.getName().equals("org.apache.commons.cli.CommandLine"))
+            return commandLine(g, report);
+        Object domain = chart(t, g, report);
+        if (domain != null) return domain;
+        Object language = language(t, g, report);
+        if (language != null) return language;
+        List<Constructor<?>> ctors = constructors(t);
+        // Older Java libraries often use public singleton constants in place of enums.
+        if (ctors.isEmpty()) {
+            List<Field> constants = new ArrayList();
+            for (Field field : t.getFields())
+                if (Modifier.isStatic(field.getModifiers()) && Modifier.isFinal(field.getModifiers())
+                        && t.isAssignableFrom(field.getType())) constants.add(field);
+            Collections.sort(constants, new Comparator<Field>() {
+                public int compare(Field a, Field b) { return a.getName().compareTo(b.getName()); }
+            });
+            if (!constants.isEmpty()) {
+                Object constant = constants.get(g.pick(constants.size())).get(null);
+                if (constant != null) return constant;
+            }
+        }
+        if (!ctors.isEmpty()) {
+            Constructor<?> ctor = ctors.get(g.pick(ctors.size()));
+            try { return ctor.newInstance(arguments(ctor.getParameterTypes(), g, depth + 1, report)); }
+            catch (Exception ignored) { }
+        }
+        report.nullFallbacks++;
+        return null;
+    }
+    private static Object language(Class<?> t, Genes g, Observation report) {
+        if (!t.getName().equals("org.apache.commons.lang3.time.FastDateFormat")) return null;
+        try {
+            Method factory = t.getMethod("getInstance", String.class, java.util.TimeZone.class,
+                java.util.Locale.class);
+            String[] patterns = {"yyyy-MM-dd", "MM/dd/yy HH:mm:ss", "EEE, d MMM yyyy HH:mm:ss Z"};
+            return factory.invoke(null, patterns[g.pick(patterns.length)],
+                java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US);
+        } catch (ReflectiveOperationException ignored) { }
+        try { return t.getMethod("getInstance", String.class).invoke(null, "yyyy-MM-dd"); }
+        catch (ReflectiveOperationException ignored) { return null; }
+    }
+    private static Object xmlParser(Genes g, Observation report) {
+        try {
+            Class<?> factoryType = load("com.fasterxml.jackson.dataformat.xml.XmlFactory");
+            Object factory = factoryType.getConstructor().newInstance();
+            String[] docs = {"<root><value>1</value><name>x</name></root>",
+                "<root value=\"42\"><item>a</item><item>b</item></root>",
+                "<root/>"};
+            String xml = docs[g.pick(docs.length)];
+            for (Method method : factoryType.getMethods()) {
+                if (!method.getName().equals("createParser") || method.getParameterTypes().length != 1) continue;
+                Class<?> p = method.getParameterTypes()[0];
+                Object input = p == String.class ? xml : p == Reader.class ? new StringReader(xml)
+                    : p == InputStream.class ? new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)) : null;
+                if (input == null) continue;
+                try {
+                    Object parser = method.invoke(factory, input);
+                    if (parser != null) {
+                        int advance = g.pick(4);
+                        Method next = parser.getClass().getMethod("nextToken");
+                        for (int i = 0; i < advance; i++) if (next.invoke(parser) == null) break;
+                        return parser;
+                    }
+                } catch (ReflectiveOperationException ignored) { }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
+    private static Object jacksonWriter(Class<?> requested, Genes g, Observation report) {
+        try {
+            Class<?> mapperType = load("com.fasterxml.jackson.databind.ObjectMapper");
+            Object mapper = mapperType.getConstructor().newInstance();
+            Object bean = new GenericInput();
+            Class<?> javaTypeType = load("com.fasterxml.jackson.databind.JavaType");
+            Object javaType = mapperType.getMethod("constructType", Type.class).invoke(mapper, bean.getClass());
+            // Jackson 2.6 (used by this Defects4J project) exposes a provider
+            // blueprint from ObjectMapper. Create a configured provider via
+            // DefaultSerializerProvider, the supported API used by ObjectMapper.
+            Object providerBlueprint = mapperType.getMethod("getSerializerProvider").invoke(mapper);
+            Class<?> serializationConfigType = load("com.fasterxml.jackson.databind.SerializationConfig");
+            Class<?> serializerFactoryType = load("com.fasterxml.jackson.databind.ser.SerializerFactory");
+            Object config = mapperType.getMethod("getSerializationConfig").invoke(mapper);
+            Object factory = mapperType.getMethod("getSerializerFactory").invoke(mapper);
+            Class<?> defaultProviderType = load("com.fasterxml.jackson.databind.ser.DefaultSerializerProvider");
+            Method createProvider = defaultProviderType.getMethod("createInstance",
+                serializationConfigType, serializerFactoryType);
+            Object provider = createProvider.invoke(providerBlueprint, config, factory);
+            g.jacksonBean = bean;
+            g.jacksonProvider = provider;
+            g.jacksonOutput = new StringWriter();
+            Object jsonFactory = mapperType.getMethod("getFactory").invoke(mapper);
+            for (String factoryMethod : new String[]{"createGenerator", "createJsonGenerator"}) {
+                try {
+                    Method createGenerator = jsonFactory.getClass().getMethod(factoryMethod, Writer.class);
+                    g.jacksonGenerator = createGenerator.invoke(jsonFactory, g.jacksonOutput);
+                    break;
+                } catch (NoSuchMethodException ignored) { }
+            }
+            if (g.jacksonGenerator == null)
+                throw new NoSuchMethodException("JsonFactory.createGenerator(Writer) or createJsonGenerator(Writer)");
+            Class<?> providerType = load("com.fasterxml.jackson.databind.SerializerProvider");
+            Class<?> beanPropertyType = load("com.fasterxml.jackson.databind.BeanProperty");
+            Method find = providerType.getMethod("findValueSerializer", javaTypeType, beanPropertyType);
+            Object serializer = find.invoke(provider, new Object[]{javaType, null});
+            List<Object> writers = new ArrayList();
+            try {
+                // Available on Jackson 2.6 and newer.
+                Class<?> serializerType = load("com.fasterxml.jackson.databind.JsonSerializer");
+                Method properties = serializerType.getMethod("properties");
+                Iterator<?> it = (Iterator<?>)properties.invoke(serializer);
+                while (it.hasNext()) {
+                    Object item = it.next();
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            } catch (NoSuchMethodException oldJackson) {
+                // JacksonDatabind-1 predates JsonSerializer.properties(). Its
+                // BeanSerializerBase stores writers in the protected _props
+                // array; read that array only for these old releases.
+                Class<?> base = load("com.fasterxml.jackson.databind.ser.std.BeanSerializerBase");
+                if (!base.isInstance(serializer))
+                    throw new IllegalStateException("Expected BeanSerializerBase, got "
+                        + serializer.getClass().getName(), oldJackson);
+                Field props = base.getDeclaredField("_props");
+                props.setAccessible(true);
+                Object array = props.get(serializer);
+                for (int i = 0; i < Array.getLength(array); i++) {
+                    Object item = Array.get(array, i);
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            }
+            if (writers.isEmpty())
+                throw new IllegalStateException("ObjectMapper produced no bean property writers for DEReplay.GenericInput");
+            Object writer = writers.get(g.pick(writers.size()));
+            boolean requireUnwrapping = requested.getName().equals(
+                "com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter");
+            if (!requireUnwrapping && g.pick(2) == 0 && requested.isInstance(writer)) return writer;
+            Class<?> transformerType = load("com.fasterxml.jackson.databind.util.NameTransformer");
+            Object nop = transformerType.getField("NOP").get(null);
+            for (Method m : writer.getClass().getMethods())
+                if (m.getName().equals("unwrappingWriter") && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0].isInstance(nop)) {
+                    Object unwrapped = m.invoke(writer, nop);
+                    if (requested.isInstance(unwrapped)) return unwrapped;
+                }
+            if (requested.isInstance(writer)) return writer;
+            throw new IllegalStateException("Generated Jackson property writer is not " + requested.getName());
+        } catch (Throwable failure) {
+            throw new IllegalStateException("Cannot construct Jackson BeanPropertyWriter: " + failure, failure);
+        }
+    }
+    /** Build the non-constructible Commons CLI result through its public Parser API. */
+    private static Object commandLine(Genes g, Observation report) throws Exception {
+        Class<?> optionsClass = load("org.apache.commons.cli.Options");
+        Class<?> optionClass = load("org.apache.commons.cli.Option");
+        Class<?> parserClass = load("org.apache.commons.cli.PosixParser");
+        Object options = optionsClass.getConstructor().newInstance();
+        Method addOption = optionsClass.getMethod("addOption", optionClass);
+        int numberOfOptions = 1 + g.pick(3);
+        List<String> spellings = new ArrayList();
+        for (int i = 0; i < numberOfOptions; i++) {
+            String shortName = String.valueOf((char)('a' + i));
+            String longName = "de-option-" + i;
+            boolean hasArgument = g.pick(2) == 0;
+            Object option = null;
+            try {
+                option = optionClass.getConstructor(String.class, String.class, boolean.class, String.class)
+                    .newInstance(shortName, longName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) try {
+                option = optionClass.getConstructor(String.class, boolean.class, String.class)
+                    .newInstance(shortName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) throw new NoSuchMethodException("No supported Commons CLI Option constructor");
+            addOption.invoke(options, option);
+            spellings.add("-" + shortName);
+            if (hasArgument) spellings.add("value-" + Math.abs((long)g.next()));
+        }
+        String[] argv = spellings.toArray(new String[0]);
+        Object parser = parserClass.getConstructor().newInstance();
+        List<Method> parseMethods = new ArrayList();
+        for (Method candidate : parserClass.getMethods()) {
+            Class<?>[] p = candidate.getParameterTypes();
+            if (candidate.getName().equals("parse") && p.length >= 2 && p[0] == optionsClass
+                    && p[1] == String[].class && candidate.getReturnType() == load("org.apache.commons.cli.CommandLine"))
+                parseMethods.add(candidate);
+        }
+        Collections.sort(parseMethods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return a.getParameterTypes().length - b.getParameterTypes().length;
+            }
+        });
+        for (Method parse : parseMethods) {
+            Object[] args = new Object[parse.getParameterTypes().length];
+            Class<?>[] p = parse.getParameterTypes();
+            args[0] = options; args[1] = argv;
+            for (int i = 2; i < p.length; i++) {
+                if (p[i] == boolean.class || p[i] == Boolean.class) args[i] = g.pick(2) == 0;
+                else if (p[i] == java.util.Properties.class) args[i] = new java.util.Properties();
+                else args[i] = value(p[i], g, 1, report);
+            }
+            try { return parse.invoke(parser, args); }
+            catch (InvocationTargetException ignored) { }
+        }
+        throw new NoSuchMethodException("No successful public PosixParser.parse(Options,String[])");
+    }
+    /** Optional type recipes, shared across bugs; none contains a bug-specific expected answer. */
+    private static Object chart(Class<?> t, Genes g, Observation report) throws Exception {
+        String n = t.getName();
+        if (!n.startsWith("org.jfree.")) return null;
+        if (n.equals("org.jfree.data.Range")) {
+            double a = g.next(), b = g.next();
+            return t.getConstructor(double.class, double.class).newInstance(Math.min(a, b), Math.max(a, b));
+        }
+        if (n.equals("org.jfree.data.time.RegularTimePeriod"))
+            return load("org.jfree.data.time.Day").getConstructor(int.class, int.class, int.class)
+                .newInstance(1 + g.pick(28), 1 + g.pick(12), 1990 + g.pick(40));
+        if (n.equals("org.jfree.data.time.TimeSeries")) {
+            Object series = t.getConstructor(Comparable.class).newInstance("DE");
+            Class<?> period = load("org.jfree.data.time.RegularTimePeriod");
+            Constructor<?> day = load("org.jfree.data.time.Day")
+                .getConstructor(int.class, int.class, int.class);
+            Method add = t.getMethod("add", period, double.class);
+            int count = 2 + g.pick(4), year = 1990 + g.pick(40);
+            for (int i = 0; i < count; i++)
+                add.invoke(series, day.newInstance(i + 1, 1, year), g.next() / 10.0);
+            return series;
+        }
+        if (n.equals("org.jfree.data.category.CategoryDataset")
+                || n.equals("org.jfree.data.category.DefaultCategoryDataset")) {
+            Class<?> c = load("org.jfree.data.category.DefaultCategoryDataset");
+            Object data = c.getConstructor().newInstance();
+            Method add = c.getMethod("addValue", Number.class, Comparable.class, Comparable.class);
+            int rows = 1 + g.pick(3), columns = 1 + g.pick(3);
+            for (int r = 0; r < rows; r++) for (int col = 0; col < columns; col++)
+                add.invoke(data, Double.valueOf(g.next() / 10.0), "R" + r, "C" + col);
+            return data;
+        }
+        if (n.equals("org.jfree.data.xy.XYDataset") || n.equals("org.jfree.data.xy.XYSeriesCollection")) {
+            Class<?> seriesClass = load("org.jfree.data.xy.XYSeries");
+            Object series = seriesClass.getConstructor(Comparable.class).newInstance("DE");
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) seriesClass.getMethod("add", double.class, double.class)
+                .invoke(series, (double)i, g.next() / 10.0);
+            Class<?> c = load("org.jfree.data.xy.XYSeriesCollection");
+            Object data = c.getConstructor().newInstance();
+            c.getMethod("addSeries", seriesClass).invoke(data, series);
+            return data;
+        }
+        if (n.equals("org.jfree.data.general.PieDataset") || n.equals("org.jfree.data.general.DefaultPieDataset")) {
+            Class<?> c = load("org.jfree.data.general.DefaultPieDataset");
+            Object data = c.getConstructor().newInstance();
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) c.getMethod("setValue", Comparable.class, Number.class)
+                .invoke(data, "K" + i, Double.valueOf(g.next() / 10.0));
+            return data;
+        }
+        return null;
+    }
+    static List<Method> setupMethods(Class<?> receiver) {
+        List<Method> methods = new ArrayList();
+        for (Method m : receiver.getMethods()) {
+            String n = m.getName();
+            if (!Modifier.isStatic(m.getModifiers()) && !m.isSynthetic()
+                    && m.getParameterTypes().length <= 3 && !n.contains("Listener")
+                    && (n.startsWith("set") || n.startsWith("add") || n.startsWith("update")
+                        || n.startsWith("remove") || n.equals("clear"))) methods.add(m);
+        }
+        Collections.sort(methods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return signature(a).compareTo(signature(b));
+            }
+        });
+        return methods;
+    }
+    public static Observation execute(String target, String receivers, String signature, int[] genes) {
+        Observation out = new Observation();
+        try {
+            Genes g = new Genes(genes);
+            Method m = method(target, signature);
+            Object receiver = null;
+            if (!Modifier.isStatic(m.getModifiers())) {
+                String[] choices = receivers.split(",");
+                Class<?> receiverType = load(choices[g.pick(choices.length)]);
+                receiver = value(receiverType, g, 0, out);
+                if (receiver == null) throw new IllegalArgumentException("Receiver construction failed");
+                // Compiler.compile owns a strict initialization sequence.
+                // Random calls to its mutators before compilation can corrupt
+                // state or spend the search budget on irrelevant setup.
+                if (!receiverType.getName().equals("com.google.javascript.jscomp.Compiler")) {
+                    List<Method> setup = setupMethods(receiverType);
+                    int count = g.pick(5);
+                    for (int i = 0; i < count && !setup.isEmpty(); i++) {
+                        Method s = setup.get(g.pick(setup.size()));
+                        try { s.invoke(receiver, arguments(s.getParameterTypes(), g, 0, out)); out.setupCalls++; }
+                        catch (Exception e) { out.setupFailures++; }
+                    }
+                }
+            }
+            Object[] args = arguments(m, g, 0, out);
+            out.reachedTarget = true;
+            try {
+                boolean jacksonSerialization = m.getDeclaringClass().getName().equals(
+                    "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                    && m.getName().startsWith("serializeAs") && g.jacksonGenerator != null;
+                boolean arrayShape = m.getName().contains("Column")
+                    || m.getName().contains("Element") || m.getName().contains("Placeholder");
+                if (jacksonSerialization)
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeStartArray" : "writeStartObject").invoke(g.jacksonGenerator);
+                Object result = m.invoke(receiver, args);
+                boolean closureCompile = m.getDeclaringClass().getName().equals(
+                    "com.google.javascript.jscomp.Compiler") && m.getName().equals("compile");
+                if (closureCompile) {
+                    // Result is only a status object; the compiled JavaScript is
+                    // the behavioral output that reveals whether an argument
+                    // was removed from a globally exposed function.
+                    Object js = receiver.getClass().getMethod("toSource").invoke(receiver);
+                    out.token = "CLOSURE_SOURCE:" + stable(js, 0);
+                } else if (jacksonSerialization) {
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeEndArray" : "writeEndObject").invoke(g.jacksonGenerator);
+                    g.jacksonGenerator.getClass().getMethod("flush").invoke(g.jacksonGenerator);
+                    out.token = "JSON:" + Base64.getEncoder().encodeToString(
+                        g.jacksonOutput.toString().getBytes(StandardCharsets.UTF_8));
+                } else out.token = m.getReturnType() == void.class
+                    ? state(receiver, m.getName()) : stable(result, 0);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof VirtualMachineError || e.getCause() instanceof LinkageError
+                        || e.getCause() instanceof ThreadDeath) throw e;
+                out.token = "THROW:" + e.getCause().getClass().getName();
+            }
+        } catch (Throwable e) {
+            out.token = "HARNESS_ERROR";
+            out.error = e.getClass().getName() + ":" + String.valueOf(e.getMessage());
+        }
+        return out;
+    }
+    public static String run(String target, String receivers, String signature, int[] genes) {
+        Observation o = execute(target, receivers, signature, genes);
+        if (!o.reachedTarget || o.token.equals("HARNESS_ERROR"))
+            throw new AssertionError("Cannot replay test: " + o.error);
+        return o.token;
+    }
+    private static String state(Object receiver, String method) {
+        if (receiver == null) return "VOID";
+        List<String> getters = new ArrayList();
+        if (method.startsWith("set") && method.length() > 3) {
+            getters.add("get" + method.substring(3)); getters.add("is" + method.substring(3));
+        }
+        getters.addAll(Arrays.asList("getItemCount", "getRowCount", "getColumnCount", "getSeriesCount"));
+        StringBuilder s = new StringBuilder("VOID");
+        for (String name : getters) {
+            try {
+                Method getter = receiver.getClass().getMethod(name);
+                if (getter.getReturnType().isPrimitive() || getter.getReturnType() == String.class)
+                    s.append('|').append(name).append('=').append(stable(getter.invoke(receiver), 0));
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        return s.toString();
+    }
+    /** Only whitelisted value types are rendered. Never use arbitrary object toString(). */
+    static String stable(Object value, int depth) {
+        if (value == null) return "NULL";
+        Class<?> t = value.getClass();
+        if (value instanceof String || value instanceof Boolean || value instanceof Character
+                || value instanceof Byte || value instanceof Short || value instanceof Integer
+                || value instanceof Long || value instanceof Float || value instanceof Double
+                || value instanceof java.math.BigInteger || value instanceof java.math.BigDecimal)
+            return t.getName() + ":" + Base64.getEncoder().encodeToString(value.toString().getBytes(StandardCharsets.UTF_8));
+        if (value instanceof Enum) return "ENUM:" + t.getName() + ":" + ((Enum<?>)value).name();
+        if (t.isArray() && depth < 3) {
+            StringBuilder s = new StringBuilder("ARRAY:" + t.getName() + ":" + Array.getLength(value));
+            for (int i = 0; i < Math.min(64, Array.getLength(value)); i++) {
+                String item = stable(Array.get(value, i), depth + 1);
+                s.append(':').append(item.length()).append(':').append(item);
+            }
+            return s.toString();
+        }
+        if (value instanceof java.awt.Color) return "COLOR:" + ((java.awt.Color)value).getRGB();
+        // Observe safe scalar properties of returned objects. This catches
+        // changes to value caches and state while avoiding identity-based toString().
+        StringBuilder observed = new StringBuilder("STATE:" + t.getName());
+        int properties = 0;
+        for (String name : Arrays.asList("getItemCount", "getMinY", "getMaxY",
+                "getRowCount", "getColumnCount", "getSeriesCount")) {
+            try {
+                Method getter = t.getMethod(name);
+                Class<?> r = getter.getReturnType();
+                if (!r.isPrimitive() && r != String.class && !Number.class.isAssignableFrom(r))
+                    continue;
+                if (r == void.class) continue;
+                Object result = getter.invoke(value);
+                String token = stable(result, depth + 1);
+                observed.append('|').append(name).append('=').append(token.length())
+                    .append(':').append(token);
+                properties++;
+            } catch (Exception ignored) { }
+        }
+        return properties == 0 ? "TYPE:" + t.getName() : observed.toString();
+    }
+    public static void main(String[] args) {
+        if (args.length > 4) {
+            String source = new String(Base64.getDecoder().decode(args[4]), StandardCharsets.UTF_8);
+            System.setProperty("de.generated.source", source);
+        }
+        String[] encodedGenes = args[3].split(",");
+        int[] genes = new int[encodedGenes.length];
+        for (int i = 0; i < encodedGenes.length; i++) genes[i] = Integer.parseInt(encodedGenes[i]);
+        boolean closureCompile = args[0].equals("com.google.javascript.jscomp.Compiler")
+            && args[2].startsWith("compile(");
+        // Compiler.compile is an expensive whole-program operation. Fixed-side
+        // suites are still executed twice by the runner, so capture its oracle
+        // once here instead of launching three compilations just to check the
+        // same deterministic source output.
+        int repetitions = closureCompile ? 1 : 3;
+        for (int i = 0; i < repetitions; i++) {
+            Observation out = execute(args[0], args[1], args[2], genes);
+            System.out.println("DE_TOKEN:" + Base64.getEncoder().encodeToString(out.token.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+}
+
+public class DEGeneratedTest {
+    @org.junit.Test(timeout=60000L)
+    public void testDE00000() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{271,-47,804,-971,463,1000,-142,-827,-790,869,-126,332,-1000,-24,928,698,-50,-421,-1000,1000,-1000,-234,-615,1000,-852,-533,-464,-165,-300,-1000,-97,-628,-959,513,771,1000,-1000,1000,102,-1000,-872,-827,137,-975,-880,-870,752,-1000,159,-374,-165,172,-588,-14,161,-254,-845,-629,259,-1000,-337,-559,1000,770}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00001() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{1000,-352,289,-1000,-1000,489,-1000,830,-1000,-265,742,-406,-1000,1000,-720,-1000,-147,317,1000,1000,-523,-907,701,-893,528,755,154,-1000,-1000,-1000,1000,281,642,-1000,1000,1000,-179,-14,-726,705,-337,1000,337,-1000,1000,826,301,950,278,640,1000,-993,-3,-1000,1000,-394,-111,879,1000,1000,1000,1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00002() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{534,-485,-928,1000,-971,1000,-106,-163,271,-939,1000,308,-464,83,-401,-748,1000,765,1000,-766,-1000,-1000,643,-1000,255,1000,477,740,-712,612,745,943,-169,-1000,175,315,293,822,-230,1000,-483,-94,-545,-1000,1000,659,865,388,485,555,1000,-1000,787,-301,113,607,490,-883,-1000,683,208,1000,326,427}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00003() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{-15,-429,-932,84,-866,657,-118,-751,-1000,-85,-103,66,777,354,-20,1000,471,-7,-122,299,-550,400,910,244,-765,132,-339,72,-250,742,769,-463,421,-1000,1000,471,-1000,-350,-331,-708,-433,-663,-1000,148,-1000,-319,726,89,-425,-558,490,400,-125,850,1000,350,328,-341,-200,1000,-986,266,135,273}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00004() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{230,-1000,-747,487,-775,1000,-408,-163,271,261,572,305,-464,271,-115,1000,-76,769,-915,1000,-1000,8,553,244,-1000,1000,-887,-222,-1000,-56,465,943,-366,-554,1000,1000,-1000,332,-681,-343,41,-1000,-1000,-57,-909,-68,1000,388,-945,-1000,333,86,-1000,-301,23,-456,-589,-1000,-687,46,208,446,761,546}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00005() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{456,912,233,-920,146,-76,-44,-266,-313,1000,27,-335,-1000,1000,561,-17,401,-541,-801,705,185,-1000,-1000,1000,-31,-84,-867,-484,-519,-1000,-285,-697,29,1000,1000,149,-153,-79,170,-935,-473,1000,-447,887,-121,165,230,-181,-707,796,-591,137,-739,-1000,-868,-144,282,994,1000,-1000,559,534,-526,412}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00006() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{-79,-1000,-96,-585,314,737,134,-971,-619,992,437,-825,-59,674,145,-473,250,682,-639,-294,-267,-81,1000,777,-921,867,-915,208,437,-203,-814,-1000,498,-299,506,104,986,-75,-326,-497,-260,311,1000,1000,731,104,-1000,345,-257,-342,-978,1000,-265,-983,-241,-101,-697,268,954,83,1000,638,-1000,-652}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00007() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{-248,915,-983,443,-253,751,-137,-193,1000,188,734,504,936,-1000,182,-262,1000,-355,78,-836,34,-1000,574,-1000,1000,757,435,1000,641,-265,-18,796,-1000,-1000,1000,-281,-262,924,802,1000,-331,436,252,-112,-136,-741,976,614,1000,1000,332,-1000,-413,-477,419,-73,679,-173,-1000,1000,378,394,-542,-196}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00008() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{-290,6,618,-653,15,278,484,-283,-232,-49,-473,-140,-342,1000,639,641,128,-640,-177,966,810,1000,-643,1000,-479,20,-383,585,6,-203,-97,-310,176,981,1000,-76,-131,-173,-627,-1000,-872,-246,287,-976,1000,-255,1000,-231,-721,-381,-231,1000,-217,274,97,-224,-84,-85,226,-474,-230,-226,347,242}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00009() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{910,-1000,-52,3,-754,845,187,-868,-1000,1000,-674,244,-232,-50,500,-1000,532,706,-468,1000,-86,-100,343,122,-782,-441,-646,24,-1000,-1000,-845,-1000,-408,-646,288,365,-160,881,263,-958,894,280,546,-535,1000,1000,975,1000,-653,-637,802,364,-313,-943,-791,45,-874,-662,156,115,-276,980,1000,284}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00010() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{99,-543,767,-648,374,227,123,-895,42,595,-955,44,-59,167,265,1000,323,-133,-939,-161,-720,1000,-1000,777,-1000,-655,-895,590,-473,-582,-119,-1000,186,1000,965,367,-979,156,-376,-1000,-190,-343,-672,1000,-1000,-28,-140,1000,-1000,-1000,-601,1000,-1000,-79,-736,-599,-1000,-51,297,-1000,-24,568,-235,-514}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00011() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{-1000,1000,-261,-431,503,-9,1000,-254,1000,358,377,-406,1000,-283,798,960,1000,-753,-424,597,1000,-136,980,-1000,1000,1000,-160,1000,1000,-442,-1000,349,-206,-403,197,-1000,607,179,-186,959,-1000,455,488,1000,316,-569,390,1000,384,550,-1000,-421,866,-117,-215,-960,493,125,-867,1000,190,367,543,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00012() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{672,970,-851,-260,-1000,440,-357,-20,-931,924,-355,-344,332,1000,337,-13,181,1000,-443,1000,-149,-867,574,-179,-81,538,-897,-552,-1000,-552,230,177,-319,-212,1000,1000,-568,-1000,-445,340,-673,1000,-660,387,-806,-399,911,906,-456,-438,908,503,775,-711,762,1000,79,-100,747,1000,30,1000,-1000,681}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00013() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{1000,748,-111,361,-430,481,-1000,-548,-1000,848,62,-60,-1000,1000,-193,-702,-787,1000,-610,1000,-1000,414,-1000,1000,-1000,118,-1000,-1000,-1000,-1000,230,-1000,68,1,1000,1000,-1000,533,-1000,-763,145,614,-1000,-312,914,1000,672,-694,-1000,-1000,276,376,-1000,-1000,-595,43,-1000,-12,1000,-595,810,896,-708,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00014() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{144,-1000,224,-2,-57,824,-170,-1000,-471,285,-576,323,526,-57,-88,1000,141,543,-1000,134,-1000,663,-20,247,-1000,-343,-1000,495,-954,-160,215,-1000,-45,-1000,965,1000,-1000,383,-649,-803,206,-1000,565,555,-1000,-55,585,561,-1000,-1000,-230,708,-1000,774,-498,-741,-987,-990,-511,-554,-779,684,225,-410}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00015() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation):void",
+            new int[]{426,-1000,-846,-116,-1000,788,-1000,-271,-943,-847,-140,544,65,1000,-620,-237,-38,935,948,833,191,957,1000,618,-1000,145,671,-285,-1000,-516,1000,437,746,614,1000,586,-635,62,-357,1000,-407,-400,-1000,-530,1000,539,1000,-314,-1000,-468,1000,228,507,652,-613,879,-846,-417,-519,-48,-905,314,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00016() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{737,100,-296,-253,210,-198,1000,-798,1000,28,-27,377,1000,-1000,-220,1000,-569,-217,181,1000,908,-129,1000,28,94,-809,-436,-441,1000,-579,-571,-1000,-1000,428,-445,1000,647,-1000,-103,256,-968,602,-312,-724,144,-16,-665,-641,-215,311,29,292,300,-661,1000,21,-886,-64,1000,-1000,328,645,-272,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00017() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{729,-358,44,592,303,346,-31,-1000,388,-205,-536,-614,-41,-492,-361,-380,796,868,-160,675,968,-593,30,410,-119,-275,1000,482,47,-49,-569,124,987,-981,216,461,-238,-305,-237,421,103,-749,320,-1000,1000,-555,37,1000,184,686,290,1000,167,29,-399,-10,7,1000,228,-445,-159,1000,-711,330}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00018() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{-719,145,1000,-264,-554,-628,-241,97,174,-574,-641,26,-67,113,847,-544,173,-685,-288,732,-635,-25,-36,104,435,1000,-217,-1000,-703,610,277,505,1000,1000,-243,-145,376,837,7,-296,859,1000,-1000,-651,-1000,1000,-278,3,768,-256,-949,-621,1000,-557,-26,1000,-200,-1000,-1000,-4,905,471,514,-393}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00019() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{-513,454,699,383,-743,288,683,986,256,-461,-396,456,984,-958,302,460,-388,-257,857,351,-344,165,372,-905,28,350,-963,239,-535,63,-301,-144,19,688,482,984,703,210,-913,911,669,950,-667,-142,-651,317,-794,-889,893,-275,-745,-561,-76,51,499,778,-859,-466,185,-416,614,-167,-270,980}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00020() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{-598,1000,-132,581,35,-485,495,635,782,-395,-909,825,-238,-333,50,76,665,-260,356,779,-238,90,182,598,736,347,181,255,-199,954,-348,755,-1000,-451,1000,806,-1000,-450,958,1000,-220,-334,-475,-640,33,-801,34,-13,-507,-12,471,100,620,-1000,-742,718,-1000,345,1000,-267,519,356,132,873}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00021() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{489,-786,-716,-839,-1000,-293,994,1000,-341,870,-125,831,1000,-148,1000,1000,-314,-192,1000,707,-451,-697,1000,-1000,461,-633,-1000,-87,234,-372,-307,-1000,-1000,645,-108,-905,1000,-1000,100,150,-166,1000,-190,1000,-810,-53,-534,-1000,-493,-463,-39,-1000,568,-648,1000,-31,532,-101,-727,-606,1000,855,361,829}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00022() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{1000,432,-256,-69,-268,-484,135,-1000,621,-530,-1000,3,194,897,-104,412,503,-128,288,635,559,-418,422,209,-9,-176,374,-830,490,-92,-262,-483,-20,-168,267,551,-353,-1000,370,652,-526,-189,6,-1000,156,214,-212,322,-118,31,-275,75,313,-867,-895,448,-315,26,82,-846,459,267,745,546}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00023() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{-1000,-722,-846,701,28,926,1000,-363,310,221,887,-1000,-277,-272,-522,-225,83,-257,-1000,626,130,-248,168,302,-136,106,302,562,454,718,-122,146,1000,-189,-291,1000,1000,203,-915,-933,-7,-691,-356,-699,595,-125,-686,57,-1000,411,-508,-561,430,197,373,-531,-4,823,948,205,-276,912,400,980}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00024() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{313,-84,218,211,117,-705,828,489,445,389,465,-130,-747,496,-448,571,913,-78,-464,-280,902,447,-963,-300,-252,-765,962,-845,644,63,-314,222,687,393,676,60,-766,-222,-968,658,61,355,340,43,-872,-209,979,544,594,917,-478,-459,483,530,269,-728,-160,339,96,688,-402,-109,769,96}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00025() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{-1000,1000,-436,1000,444,-684,286,-908,-995,679,490,-1000,-810,132,-1000,420,-1000,-1000,-1000,1000,-863,1000,94,-402,-1000,1000,-432,-1000,-794,1000,908,779,1000,-343,788,-156,1000,-1000,-144,11,-106,-949,-549,-1000,362,-280,-1000,746,-552,-1000,-688,1000,-630,-571,-384,864,-1000,1000,1000,1000,1000,-792,641,-229}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00026() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{433,474,829,784,1000,-525,-664,513,-906,222,-707,-1000,-1000,279,-568,-1000,148,-684,-1000,1000,-92,463,-1000,250,-59,1000,376,-1000,-1000,1000,-74,1000,1000,-1000,1000,-716,-621,-1000,204,304,567,-1000,-177,-1000,499,-326,-815,973,916,-543,607,-256,-210,-566,-1000,590,-469,1000,314,1000,-947,-472,-118,-224}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00027() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{568,209,282,603,335,-292,159,567,100,-311,-1000,1000,-19,-344,-15,-653,740,-43,870,764,-1000,717,-1000,-891,-222,1000,-350,11,-1000,475,-223,814,456,-929,311,-279,-1000,-585,-680,1000,961,-4,27,-417,-875,-111,-338,-454,1000,-542,1000,-892,-887,-612,-943,1000,-990,-131,-599,161,-189,-1000,230,513}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00028() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{665,-346,-201,-994,387,-704,-654,-510,269,-175,-142,539,-239,44,-329,992,326,506,571,-774,415,-109,571,93,-337,-885,394,863,754,-406,-173,-757,-989,770,-630,-845,-771,929,729,-223,524,656,616,562,-946,-177,35,-571,-677,932,-213,-863,-478,-156,281,-33,818,-566,-119,-738,878,577,-958,135}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00029() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{445,-253,780,-65,-1000,-666,608,-76,929,277,-672,-627,1000,1000,1000,-296,614,-266,-44,-1000,189,1000,1000,-494,-1000,577,691,-1000,-538,-812,-350,128,-199,-1000,374,-1000,-745,-587,276,106,360,-170,1000,692,275,-232,869,199,68,-733,1000,1000,26,-1000,-1000,410,-41,837,-325,1000,724,1000,120,281}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00030() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{-273,552,119,731,-277,-469,205,-91,1000,-685,-1000,-614,833,-925,-57,360,993,365,1000,645,-641,459,30,-1000,-90,792,-765,845,-232,393,238,182,-84,-981,-559,800,-850,147,-237,1000,568,1000,-50,23,-877,-555,-429,-683,987,686,417,-324,-532,-825,-85,1000,-979,-881,-593,-808,765,-429,389,793}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00031() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addAnnotation(org.jfree.chart.annotations.CategoryAnnotation,boolean):void",
+            new int[]{-407,1000,39,-87,-809,-702,680,-912,1000,-1000,-565,1000,1000,-1000,319,1000,-73,-507,1000,289,232,-146,1000,-875,227,53,-1000,-166,851,-96,388,-1000,-1000,1000,-1000,1000,456,-267,225,1000,-522,1000,-763,-560,-1000,1000,-886,-1000,365,-345,-1000,-236,498,-1000,1000,1000,-909,-579,58,-709,1000,21,443,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00032() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-1000,150,-466,735,-1000,1000,174,560,-543,-433,-1000,1000,1000,303,1000,-1000,-1000,-1000,-65,1000,-229,1000,522,-298,-1000,1000,1000,-1000,1000,-1000,377,1000,649,631,-670,-1000,369,-1000,-434,-475,-134,1000,1000,1000,-63,114,-1000,-1000,1000,-1000,673,-1000,704,1000,1000,1000,1000,-221,1000,-718,-1000,1000,-153,-290}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00033() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-1000,-827,-706,1000,-1000,-1000,516,-552,-603,-1000,123,1000,637,149,819,-346,223,19,1000,190,-876,1000,582,1000,-179,1000,1000,-544,58,-256,161,617,391,1000,170,-1000,-302,-1000,54,-633,-438,721,1000,768,-469,353,-949,-1000,419,-422,509,-764,-81,-821,21,1000,400,-347,323,-334,-262,-347,-772,-784}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00034() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{573,-373,6,85,93,547,600,-356,-379,-176,110,-743,-730,238,610,-449,-33,-1,78,1000,429,-301,69,224,-38,590,-389,-747,463,-622,1000,695,-432,-236,966,380,-18,-762,64,-503,-165,-86,350,-41,-212,353,38,421,-10,-422,-32,-688,378,925,791,646,-53,0,-375,-795,-444,854,-772,-784}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00035() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{470,1000,-676,-1000,837,1000,-37,1000,-146,1000,-336,-659,-98,1000,-1000,-629,-872,-603,479,-1000,335,-297,-502,-571,1000,-445,-987,1000,1000,-380,-966,237,-627,-153,-861,-661,-689,1000,-166,165,-505,379,-594,-1000,-1000,-936,1000,238,-1000,-707,-956,306,-511,1000,-1000,-253,179,1000,534,28,-1000,-619,335,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00036() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-1000,232,-546,-201,16,112,911,97,-998,117,442,1000,200,1000,88,-550,-635,459,1000,54,-404,1000,501,509,166,1000,307,107,524,554,-626,813,-107,-203,-1000,-711,225,838,-158,292,-104,941,322,928,-890,687,-151,442,644,-641,-401,0,-1000,-584,29,871,573,240,1000,-438,-497,-953,503,-246}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00037() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-990,428,-786,-841,43,742,150,1000,-80,487,146,963,-409,1000,316,-1000,-484,-1000,957,-972,-429,681,-1000,340,-251,574,-281,881,533,-231,-1000,-152,-558,234,-300,-829,147,539,-485,-61,-745,1000,1000,-758,-583,-1000,592,-1000,-577,-1000,-4,-210,-477,1000,-495,599,423,300,1000,596,-1000,-749,-74,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00038() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-904,918,-621,-429,-657,-399,-820,-22,-866,-830,-1000,28,-130,-1000,-534,-1000,560,618,72,184,-804,-741,245,-564,684,619,-484,-379,404,644,1000,-1000,-133,42,143,-378,-328,-1000,1000,1000,39,-356,-967,788,-458,966,767,240,-431,566,-290,-33,1000,-763,-617,-68,381,-101,-652,-609,880,-76,-414,390}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00039() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-163,101,76,124,-640,-1000,119,-392,732,44,-5,-410,-1000,-782,-122,773,961,898,228,-171,-229,-927,596,-298,690,-121,303,441,-1000,1000,1000,-1000,-695,40,-400,966,-272,-69,-239,843,423,-1000,-1000,1000,6,683,960,859,-870,1000,-337,264,704,155,-1000,-1000,1000,-179,-837,324,1000,-773,-21,425}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00040() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-870,-49,83,501,11,-1000,-774,-55,660,640,-1000,583,-641,-1000,-126,1000,372,-1000,-1000,412,-553,180,-234,401,-964,-100,586,-1000,-260,596,832,792,-1000,-667,-896,-1000,-327,317,890,-56,-474,-970,-827,760,-526,598,-233,-1000,-1000,434,874,-205,698,-1000,116,-998,-708,-323,-632,1000,1000,-370,770,39}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00041() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{922,-873,675,1000,-269,1000,1000,274,-535,-1000,-727,-1000,-1000,359,776,-28,1000,867,1000,919,37,154,1000,-745,-763,1000,1000,-1000,287,239,1000,413,603,1000,551,-81,326,-1000,-458,-1000,344,-1000,-762,1000,587,367,-470,-31,283,962,-1000,-536,517,-716,176,221,26,-485,-1000,-995,731,-268,905,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00042() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{768,-948,-552,519,-149,-234,918,167,665,347,949,-429,11,635,934,-305,-349,-503,244,-252,656,-2,-305,834,-190,-221,415,-178,-118,-318,-656,741,-659,235,-541,886,-386,-647,-463,-967,-655,-238,770,-305,-730,-916,-140,181,324,-753,370,369,-644,971,46,587,-536,-592,-407,729,-651,742,-53,-118}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00043() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{745,13,350,363,-93,1000,385,-735,315,135,-548,-1000,-51,188,216,-540,541,-718,81,-136,-232,-891,-539,-746,-22,-417,-483,153,375,-781,381,578,-161,680,75,208,-159,-325,114,-88,-517,-373,-1000,-730,-452,-139,743,-808,-847,-1000,-254,-570,-377,943,-707,-128,230,-52,-365,-47,-516,336,-797,-146}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00044() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-725,-812,-498,829,798,857,291,-241,584,-266,-848,-1000,-661,534,1000,-863,-36,244,70,985,894,465,-242,1000,-608,2,-315,-804,-322,-994,605,273,-647,-725,929,875,241,-938,-962,160,-95,-479,-608,-539,-755,355,181,1000,-731,-5,-223,-511,909,1000,249,510,-634,-397,-900,-1000,-180,1000,-988,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00045() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-1000,-315,-724,841,-744,-1000,-337,218,506,-1000,-479,557,-730,-1000,161,-49,238,376,189,-129,-1000,0,644,535,682,0,444,-424,-110,406,1000,-1000,46,977,966,-775,-497,-768,257,419,-875,-640,-899,1000,-811,-114,38,-831,-475,487,0,-688,1000,-1000,-1000,-147,721,0,732,-224,652,0,-6,387}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00046() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,130,624,319,198,-1000,996,-1000,447,-876,-202,-1000,-1000,-705,-1000,-13,1000,1000,547,-1000,-662,-1000,-74,-101,1000,377,-483,200,-206,1000,878,-1000,-797,948,1000,258,-878,130,1000,469,-1000,-1000,-1000,235,-673,-454,1000,-228,-1000,1000,-1000,872,1000,791,-1000,-1000,288,-219,-944,-432,1000,-1000,-813,174}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00047() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{63,-1000,14,1000,-646,217,1,-578,162,-1000,-781,-33,-862,-579,1000,-151,482,-988,679,1000,446,682,719,1000,798,596,1000,-1000,-50,-520,-148,1000,-357,1000,1000,-623,-108,-1000,-23,-1000,67,-1000,347,1000,-55,-59,-1000,-977,-1000,-909,800,-575,932,-377,1000,1000,-298,-767,-623,334,-387,1000,-631,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00048() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{283,648,-187,-543,-329,-257,539,-373,862,-1000,-116,1000,907,1000,732,62,343,216,-159,129,649,487,1000,1000,-1000,484,1000,826,872,-424,643,-353,764,332,328,404,129,-511,778,327,1000,1000,-213,-72,-449,1000,502,376,-505,978,-734,-113,-677,-1000,1000,-360,-842,-145,151,756,-208,938,-769,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00049() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-285,291,-238,-429,610,-505,1000,90,89,-446,-215,940,-741,100,-341,-1000,550,1000,1000,911,-978,1000,69,342,-225,-385,195,-1000,242,181,988,-1000,-302,323,127,-1000,-769,123,752,-614,-45,1000,359,-234,-21,681,809,1000,-1000,-867,125,514,775,48,23,80,1000,784,-419,215,-479,570,541,238}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00050() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-387,316,424,-413,300,121,-435,-450,430,-762,453,1000,1000,743,411,-312,346,1000,618,-814,154,820,184,337,-678,-14,780,58,-519,101,1000,-24,707,617,323,-1000,-1000,-434,-300,364,1000,266,189,29,291,-569,-368,527,289,-201,-41,-1000,-496,-1000,357,387,-547,862,-483,280,-1000,-817,265,788}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00051() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{1000,211,-24,-680,622,-657,616,814,-382,-1000,893,1000,0,-535,-422,-1000,-456,1000,1000,1000,-1000,624,-1000,-777,1000,-417,-1000,-269,991,644,763,-1000,-529,265,967,-599,-1000,718,-49,-130,-821,1000,47,-386,605,101,1000,48,-1000,-288,492,655,-178,-1000,514,599,1000,205,810,459,-300,-1000,704,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00052() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{429,448,-451,335,570,-645,-254,-339,190,-31,417,-51,-340,-393,48,-377,-325,966,689,719,107,172,-372,-280,412,-563,-486,-681,266,332,130,-507,-637,-80,721,-178,-1000,63,-739,-576,-441,319,357,-134,525,135,603,15,-539,-202,-862,515,796,-744,-287,752,-69,142,-101,161,723,-1000,544,-343}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00053() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{98,-95,-852,477,427,-941,860,-450,561,-627,594,263,-527,-76,181,-651,-206,681,993,125,327,221,-237,-862,195,-486,-347,-589,166,510,890,-403,-822,-492,908,-992,-617,-183,-620,-562,-875,135,808,-10,185,198,364,685,-648,-201,-388,548,935,-960,-592,69,159,821,-221,475,-425,-989,944,-942}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00054() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-279,773,-271,34,1000,449,-567,716,-728,-192,772,-256,-603,-969,-394,-751,-831,-103,-820,746,-32,-1000,-1000,-578,1000,-278,-1000,298,479,648,164,583,-990,1000,860,1000,-526,1000,-1000,114,-1000,117,-184,-706,636,657,553,-1000,145,451,439,206,581,-362,902,416,347,80,965,258,1000,84,165,-776}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00055() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{308,-124,-466,727,552,-1000,1000,-821,726,-283,400,-553,-1000,1,344,-706,-309,1000,479,911,-133,-1000,86,-375,-310,-199,24,-820,321,203,-724,-614,-604,-921,505,-400,1000,-188,-128,-722,176,429,792,116,-63,242,539,920,-830,-254,-755,1000,1000,-952,-431,57,-474,786,-663,224,251,-271,-325,135}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00056() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{405,456,-976,1000,1000,-1000,834,-184,75,912,1000,321,-650,-881,787,-707,-792,524,227,704,280,-438,-768,-1000,1000,-440,-1000,-648,725,214,-35,-719,-651,-226,258,-129,-428,946,-1000,-802,-1000,147,635,-137,-719,-354,829,-312,-459,785,-140,263,254,-1000,-1000,-260,611,1000,-393,61,-1000,-376,663,-659}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00057() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{26,-354,-737,805,1000,-249,641,-129,-140,22,-202,-874,-785,194,-635,-18,-729,-255,-918,1000,112,-1000,467,-166,25,937,-347,-395,684,-185,940,-130,-486,-424,93,1000,635,323,-524,-27,-373,-713,439,-278,-306,617,874,-479,-239,423,-215,1000,722,-282,-583,-547,-40,-1000,563,396,1000,1000,-1000,-344}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00058() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-79,450,-371,-2,1000,85,-420,662,-330,-406,-434,-52,-51,-1000,-891,502,-1000,-393,-568,1000,699,-994,-527,-236,749,-755,-772,76,211,105,-1000,531,-1000,470,823,693,-378,434,-1000,-70,-755,-420,-8,-459,459,703,527,-897,82,418,-311,292,-20,-58,874,315,-382,-853,1000,539,976,578,-344,-714}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00059() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-700,-8,524,599,72,-744,883,-1000,1000,-1000,-1000,65,338,-661,-383,51,-864,632,-921,-485,866,-1000,1000,10,-1000,247,513,580,989,292,471,619,-432,20,1000,1000,1000,-722,109,-353,1000,80,-256,-32,422,1000,774,-143,163,339,-620,198,73,-1000,902,314,-1000,-516,446,186,1000,260,-1000,396}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00060() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-761,1000,488,-829,-1000,920,-91,1000,-347,-1000,-1000,-692,1000,-2,1000,741,-546,-286,-1000,-420,-221,-300,902,368,683,1000,149,1000,1000,258,560,543,1000,1000,810,1000,313,1000,-216,1000,676,1000,-1000,-876,-262,907,537,-450,489,1000,1000,118,-1000,-1000,1000,-958,1000,-1000,1000,294,1000,-754,-460,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00061() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{587,-400,674,542,628,-678,1000,-623,832,-764,126,659,-455,1000,145,-519,714,592,352,944,434,-194,541,624,-510,309,468,-397,452,-588,716,-674,-45,-458,-262,-235,-275,-211,-556,-35,297,440,238,106,-739,-232,44,1000,-228,-14,-194,1000,578,59,222,-1000,-573,-859,-367,721,388,400,-887,78}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00062() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-329,1000,-772,-785,51,1000,-86,-1000,-632,-610,-523,-126,-463,-103,21,-853,-725,439,1000,498,-481,1000,-1000,-670,1000,-901,-1000,-1000,-622,676,1000,-30,-631,1000,938,-1000,1000,964,-1000,196,-1000,635,1000,-862,1000,1000,-79,-143,-421,-1000,697,-229,73,-226,243,1000,815,438,443,407,1000,-1000,-1000,396}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00063() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(int,org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-554,388,174,-288,-127,520,-639,720,-245,-815,-1000,-208,826,-155,-710,1000,-120,-1000,-1000,376,1000,-683,-1000,107,406,-379,-104,912,-129,-88,-790,833,-1000,446,761,1000,-202,272,-1000,649,9,-676,-189,-254,316,600,-79,-963,875,789,-453,624,-788,155,1000,199,-1000,-636,727,736,814,578,228,-378}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00064() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{642,603,-233,411,1000,262,1000,393,964,171,925,762,489,251,-297,846,-405,513,128,39,567,-893,99,710,786,367,285,-394,-494,-1000,635,98,736,1000,-521,-1000,163,-727,383,1000,-611,385,607,-27,285,-486,1000,-444,-228,-318,683,-533,-627,-259,345,1000,-1000,-386,-237,-940,-230,-214,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00065() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{-1000,-1000,-591,1000,-1000,-1000,999,-947,584,468,1000,902,-24,355,-1000,22,-727,-557,-596,259,1000,24,-1000,141,-1000,-193,46,242,871,-284,-1000,-272,42,-1000,533,71,964,-242,572,783,1000,-175,-802,777,-836,11,1000,83,-159,-425,680,-315,41,549,-927,1000,914,-1000,813,-1000,-28,-1000,-328,-338}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00066() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{-780,-141,-525,1000,1000,-459,1000,-221,-84,-894,1000,1000,-1000,815,436,657,-437,343,-93,-686,519,218,927,1000,45,-245,-667,351,117,-1000,56,-1000,565,-281,-497,-780,1000,-1000,431,1000,309,144,1000,733,372,22,1000,186,-921,844,1000,-774,-430,-981,-677,360,-858,-922,427,-1000,-310,-646,-95,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00067() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{292,-885,-68,-632,456,-386,133,121,-294,269,-654,328,-1000,572,477,958,-346,376,-95,-1000,-1000,1000,-752,1000,-944,-1000,-649,-647,316,-436,-254,-83,667,-241,-156,-589,-169,429,-216,307,728,-546,-261,793,8,-316,-885,-318,-783,661,542,503,-971,-49,-303,709,-708,-491,-573,101,194,-220,-172,-156}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00068() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{-5,238,249,46,-901,-75,684,-1000,-1000,-716,1000,-105,-386,-638,-966,834,-791,128,348,-287,724,-716,1000,575,774,264,-600,-702,-490,961,-539,-209,-68,322,665,-835,458,-1000,649,192,737,328,-791,-39,-1000,-1000,217,1000,-440,-291,-267,624,-1000,-545,-168,1000,1000,-1000,-963,-1000,1000,-648,-1000,571}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00069() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{-780,-1000,-211,228,216,-459,1000,121,-1000,-312,534,703,-1000,1000,436,1000,-1000,343,149,-1000,-297,1000,827,1000,-686,-813,-29,-1000,117,-105,304,-1000,565,-544,-1000,-780,174,-1000,306,1000,-155,-855,138,1000,-380,89,301,-302,-1000,1000,1000,-774,-1000,1000,-1000,293,-600,-1000,427,1000,252,446,-694,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00070() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{29,-1000,688,598,-524,-775,890,285,-1000,-509,815,-181,-1000,1000,1000,1000,-1000,959,-345,-1000,-319,1000,-995,756,-1000,111,-1000,-627,-105,689,-580,-495,1000,-668,-193,-1000,467,-744,373,610,1000,-799,185,873,-455,-605,109,-918,-1000,701,1000,301,-866,853,-893,709,419,-900,-1000,311,766,-528,-1000,-614}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00071() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{641,-454,257,824,1000,-620,1000,658,-844,-91,504,364,-1000,1000,1000,1000,-263,980,432,-678,-325,721,166,1000,-747,1000,-130,-825,277,468,706,236,1000,271,-870,-1000,-436,-1000,-140,756,1000,15,1000,485,145,-1000,648,298,-989,1000,1000,-208,-747,204,-325,-109,-1000,-470,-1000,242,1000,29,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00072() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{297,-420,-241,-1000,53,-185,934,-181,-1000,249,-836,929,-798,149,640,628,214,106,241,-252,-1000,1000,-742,952,-1000,1000,-939,-839,-141,1000,135,1000,459,1000,-459,-1000,-1000,375,-239,753,1000,-178,1000,393,790,-1000,-18,103,-739,1000,456,621,-1000,550,190,279,-953,-786,-1000,208,266,-1000,-1000,-668}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00073() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{1000,-159,422,946,1000,1000,166,967,-29,-1000,155,-107,1000,1000,531,938,-916,1000,910,-193,34,-1000,-554,-284,1000,-255,692,-883,-672,-1000,172,694,487,1000,906,-352,272,-553,861,799,429,354,38,-384,-868,-1000,-618,374,-781,131,323,-217,-850,321,811,611,-28,-261,-1000,-181,223,554,164,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00074() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{87,160,813,83,464,563,311,559,419,570,1000,-734,-430,823,-743,-7,948,310,252,-1000,924,-399,270,-472,63,-91,814,-1000,689,-105,81,1000,44,187,-802,452,92,-229,-229,508,637,434,-502,325,546,-493,-64,222,251,540,485,-334,-113,502,-739,370,261,-980,-504,692,344,-469,890,-961}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00075() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{937,-401,-289,975,1000,-153,994,1000,449,-977,360,111,-409,1000,457,575,-333,626,-267,4,769,-608,-382,507,-382,-1000,810,-133,183,-487,507,-800,1000,-172,-455,-288,748,-1000,-271,899,-1000,73,989,368,988,1000,-513,-358,-376,40,1000,-1000,205,-219,-283,-451,-1000,167,27,473,-459,668,930,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00076() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{691,-454,-271,109,-437,-39,1000,376,366,574,818,757,42,606,-508,771,-612,341,-224,-169,831,60,-40,797,451,-1000,1000,-1000,325,1000,-694,-232,835,54,-884,-1000,378,-336,391,1000,-400,-296,-147,932,-371,-280,-840,-572,-319,-121,778,-341,-889,1000,-285,1000,-585,-615,-941,353,-132,-188,-940,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00077() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{799,-278,-876,764,-286,-158,266,554,1000,-508,-598,870,700,295,-1000,-90,495,-468,-970,734,-165,-863,-1000,-258,9,667,1000,299,871,-389,-923,663,241,-450,431,380,1000,-1,570,834,601,335,920,448,607,268,460,309,906,-648,480,-909,260,-92,173,579,-837,-32,1000,-280,-987,-1000,270,-855}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00078() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{566,-173,1000,487,307,31,372,187,-596,659,-252,-371,433,-243,427,829,-521,921,636,537,-603,362,-291,-29,-128,-181,-151,-720,-651,-67,323,720,459,1000,521,-134,-1000,-259,-72,457,414,199,119,-476,-453,-405,-31,759,-305,269,-504,577,-639,588,490,468,447,-468,-976,-515,948,258,195,222}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00079() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker):void",
+            new int[]{990,133,-685,417,892,-394,858,754,-201,-1000,-680,617,-391,25,-256,32,-738,326,111,656,924,538,-1000,40,-393,1000,143,-108,-865,-1,778,945,60,1000,120,-204,-659,-843,-579,1000,1000,688,1000,-54,258,-929,353,-8,-395,1000,778,-850,-162,254,768,-528,-144,-27,-1000,503,58,-1000,329,289}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00080() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,313,-371,-1000,-1000,726,-19,-534,-699,238,-532,-291,-413,26,-1000,1000,436,145,-364,86,-142,-1000,-377,415,62,234,590,-971,108,-613,-94,73,-755,19,-1000,1000,-270,-1000,-814,-597,-324,-769,59,398,456,289,1000,1000,1000,365,1000,-638,-1000,-269,-276,767,-1000,-34,-1000,-122,-394,-803,1000,-959}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00081() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,1000,-691,-871,-1000,602,497,-569,-1000,-668,-854,371,289,102,-686,-845,26,1000,339,691,1000,-290,58,1000,1000,536,1000,-1000,-111,816,293,-1000,-1000,-486,1000,-195,406,39,-452,766,103,-864,21,73,-1000,-862,1000,-1000,-529,1000,204,1000,-1000,-1000,441,22,-1000,-307,-710,956,-1000,-297,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00082() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-602,725,753,-700,1000,723,417,373,-306,1000,1000,-553,-1000,9,-1000,-22,-1000,100,-555,-194,-624,-1000,307,-201,86,-1000,-1000,-915,-1000,-89,-312,136,23,-607,-242,1000,1000,190,-680,-614,238,841,92,54,687,1000,103,1000,934,533,-1000,-359,198,335,-640,-360,-124,1000,-661,578,-147,-243,710,-598}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00083() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,1000,-756,-76,-967,-472,575,1000,-1000,183,-825,-12,-463,645,-916,252,826,414,519,558,-667,-25,-234,922,134,126,1000,1000,-1000,76,1000,234,-746,-55,-542,-1000,39,952,-9,476,1000,-764,-80,220,-926,-1000,1000,-1000,299,1000,239,215,-1000,7,-492,-460,-123,-1000,-476,773,-609,549,659,-848}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00084() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{644,13,-1000,646,300,-716,24,1000,-253,595,161,-936,425,1000,-938,594,881,-383,-143,465,-902,-255,-725,867,-1000,-1000,836,1000,-1000,-914,1000,1000,117,581,-1000,-1000,-1000,700,-516,163,436,170,535,846,-923,1000,711,-896,211,34,845,-677,-950,657,-579,-209,490,-1000,-439,-732,489,1000,-553,-797}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00085() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-188,-1000,29,-201,300,0,-155,-1000,-34,-325,1000,1000,-1000,-1000,-1000,-729,232,615,214,28,35,-848,353,-1000,-1000,-62,549,400,930,-926,-1000,969,693,-389,820,1000,-1000,103,-967,-690,-335,-345,-806,31,1000,1000,-1000,1000,458,245,-827,476,507,-629,400,639,-580,1000,-222,1000,1000,-656,1000,47}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00086() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-511,-402,-916,3,770,93,41,1000,351,-42,745,1000,403,-931,-263,-804,-1000,-178,475,-460,-548,42,452,151,-631,-625,-644,357,608,973,-937,-1000,-329,-1000,15,436,-1000,-484,-904,1000,-43,30,-492,1000,131,762,-1000,-929,-407,-40,-927,1000,-44,894,-442,365,-1000,1000,221,-183,1000,-224,-294,-788}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00087() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,814,-916,-612,-930,314,-231,771,-710,660,-1000,-1000,749,908,-1000,315,1000,815,-389,1000,1000,-765,-851,719,-332,146,1000,-1000,-669,-549,1000,1000,321,955,-1000,-390,-364,342,-772,-279,251,-333,574,805,-818,762,-1000,39,847,603,1000,-260,-1000,561,-57,-142,-123,-1000,-727,225,-149,1000,561,-495}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00088() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-314,-529,557,528,-482,-584,-405,-967,-929,640,-992,-136,-772,-854,-564,855,-747,112,500,160,-184,859,-935,-333,-146,-95,-762,-207,-678,-175,-512,-191,-702,897,-557,103,372,265,-853,600,-284,-295,873,928,895,-6,-54,877,28,-653,448,181,-304,-577,158,732,-298,989,655,-62,-349,506,-910,-828}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00089() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-130,-384,-371,752,510,-1000,1000,734,-911,287,-532,536,-413,-400,-733,183,930,-568,488,-620,-779,-755,-498,-125,-1000,-1000,285,1000,108,-866,266,969,-276,-60,-1000,-919,-343,317,-161,-160,-605,199,59,381,-993,427,198,-255,-94,1000,-152,-178,-1000,527,218,-652,-757,-81,-797,265,642,-803,-687,-959}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00090() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-1000,-996,259,-307,997,791,37,674,770,1000,1000,-800,80,558,815,-663,-1000,448,-1000,913,-933,-1000,-587,-214,-1000,-345,-1000,1000,721,-1000,-626,1000,459,276,-1000,961,59,-594,-1000,514,-1000,1000,850,707,889,1000,-1000,1000,499,-1000,812,-920,296,455,435,-36,1000,721,-932,-966,177,429,-748,-759}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00091() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,313,750,-1000,-1000,443,285,-1000,-686,-290,-1000,1000,-1000,717,-985,-595,-1000,1000,1000,154,981,-219,1000,-197,112,1000,351,429,301,1000,-190,-1000,-157,-1000,178,1000,-219,314,-645,630,1000,-1000,-1000,-954,998,-679,1000,192,1000,1000,1000,1000,43,-855,-939,-298,-1000,1000,169,1000,-1000,-1000,1000,-149}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00092() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,1000,-462,-1000,-1000,435,526,-38,-1000,-307,-1000,433,408,-188,-443,-299,179,1000,969,122,1000,-566,275,1000,1000,1000,323,-1000,-580,-98,-357,-1000,-1000,-605,-90,-1000,534,599,-198,1000,1000,-1000,-424,-184,-1000,-1000,1000,-1000,-940,1000,698,917,-1000,-750,-369,-373,-1000,-780,-547,493,-1000,-120,1000,-897}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00093() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{-78,198,-258,207,291,35,627,1000,-543,555,1000,-91,127,930,401,-232,-1000,-33,413,-507,264,-441,-116,1000,113,-512,836,-180,-833,-847,350,-1000,-836,-1000,-545,-874,-61,682,-597,1000,465,208,-133,-70,-975,-1000,723,-1000,-942,34,133,73,-950,-121,-869,-218,-1000,-38,-280,-1000,-451,419,-315,-903}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00094() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{427,-657,-1000,43,967,1,-1000,220,241,226,703,-525,1000,1000,68,-620,219,558,-976,875,-78,-429,-1000,1000,458,-1000,371,546,194,-1000,204,492,-205,-10,-1000,317,-1000,-698,-1000,487,-787,932,1000,976,-655,304,-43,-912,-612,-193,483,163,-437,-869,35,706,290,82,393,-806,61,567,-881,-469}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00095() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addDomainMarker(org.jfree.chart.plot.CategoryMarker,org.jfree.chart.util.Layer):void",
+            new int[]{370,513,-717,286,392,-253,245,693,-233,-32,761,-528,641,1000,-383,-596,-895,290,-376,665,-261,-745,-427,1000,512,-584,753,-782,57,-433,300,-668,-1000,-86,-639,-545,-400,32,-784,350,-580,556,518,260,-958,-23,888,-1000,-538,738,-229,-300,-955,-912,-315,780,276,-316,-900,-863,-144,1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00096() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-525,715,981,-1000,-639,-92,-141,-1000,199,438,1000,-564,-1000,-341,-755,15,-1000,223,-507,-1000,124,-818,37,207,-517,830,-259,-562,-1000,-102,31,-155,-904,668,196,869,850,335,895,1000,436,-367,980,-1000,206,616,-643,672,-986,1000,931,-572,291,-182,1000,727,-587,932,954,647,-531,-89,822,-831}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00097() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-294,-834,-496,889,640,-1000,-516,461,739,1000,-370,563,-70,55,-426,825,666,810,787,1000,-1000,-1000,930,-442,-1000,-448,459,235,-522,-333,-995,-482,1000,1000,-1000,194,562,564,966,650,1000,768,1000,-1000,188,-32,770,-525,-948,-105,-956,-771,491,-865,-991,1000,105,-655,318,-313,-423,-115,327,708}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00098() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-199,-861,-220,771,460,-92,-77,198,-21,607,-745,540,-449,-819,3,1000,-141,-1000,-463,441,-741,-959,387,-1000,-867,-242,-718,-288,-898,204,-126,432,913,768,-493,166,390,-383,1000,1000,823,132,-121,-909,764,-153,1000,-407,-145,-184,799,-269,679,-1000,-217,698,713,-728,30,-384,-316,667,-54,-511}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00099() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-587,-1000,54,-1000,987,-1000,-1000,-504,392,1000,598,-905,-623,-721,9,-1000,-10,1000,135,-365,-885,-119,1000,-814,-196,787,-719,580,428,-258,-869,-1000,-849,1000,232,1000,1000,-528,714,500,239,-976,1000,-1000,-92,1000,516,1000,-324,1000,983,-763,451,-753,137,877,620,927,540,909,-1000,-964,1000,634}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00100() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{90,-27,-774,-551,1000,-665,-1000,-691,1000,400,-164,-958,-373,370,782,637,-1000,-980,-1000,1000,210,596,415,-1000,-1000,317,-1000,261,-929,-1000,-364,-1000,870,789,-219,1000,1000,-1000,1000,-400,-264,-595,-422,-1000,1000,1000,400,864,794,-1000,1000,-794,-710,917,-93,-260,-1000,-1000,-1000,863,-616,376,-367,333}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00101() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{505,568,-201,-526,-1000,211,1000,-327,-1000,-1000,787,-228,-922,-1000,-625,10,-367,-183,-441,-9,575,-639,134,5,-79,310,-1000,-213,-1000,1000,1000,626,-835,-826,1000,417,72,-556,801,1000,-769,-471,83,-381,524,-305,174,316,376,848,1000,16,-297,206,1000,-27,-315,379,70,641,-434,1000,-377,-179}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00102() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,400,-56,1000,-756,1000,801,872,-995,-1000,975,-704,1000,-201,-910,398,1000,-668,1000,52,252,-231,290,1000,-1000,-667,1000,1000,1000,829,213,2,1000,-1000,161,-565,-1000,1000,-429,-110,1000,411,1000,1000,-606,-1000,284,-758,-1000,1000,-1000,584,-733,1000,-330,1000,-1000,496,1000,-400,200,137,-1000,-392}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00103() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-305,516,789,-863,-362,400,-176,-1000,970,411,572,-910,-1000,709,572,562,-1000,-82,-1000,400,-246,-522,1000,229,-555,1000,-1000,-157,-809,-521,-1000,-92,-548,536,14,1000,1000,86,1000,8,-108,-824,951,-1000,874,1000,-982,-728,-452,-400,869,-506,9,-1000,860,825,-404,335,645,1000,-629,216,1000,-738}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00104() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-525,-146,-976,-285,1000,-1000,229,504,-1000,-333,422,464,-285,-1000,-654,-656,376,223,-507,25,-703,-241,-569,496,-378,207,-259,-420,-192,1000,608,1000,-625,1000,196,-493,850,-1000,-380,1000,-178,-308,-121,-883,-714,-637,1000,1000,-294,-237,1000,-572,-618,-342,-484,-269,-173,876,-657,-745,-730,-89,979,-391}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00105() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{201,286,558,-377,-1000,-1000,-1000,88,727,1000,-95,-1000,-967,352,1000,-522,-1000,740,-1000,438,-332,295,-290,-1000,-393,1000,-1000,-825,-1000,167,-1000,164,-900,132,-147,711,1000,1000,1000,-1000,-384,-1000,1000,-334,-85,1000,-170,251,22,-518,59,-580,-685,-1000,332,939,1000,860,564,1000,-1000,-45,1000,174}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00106() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{297,61,406,-200,299,864,950,61,107,-765,-756,-903,-246,427,-117,27,-43,131,396,552,-357,-430,939,-140,-763,-329,-26,491,804,104,-684,-296,-447,558,-148,499,868,-418,806,633,134,574,200,-659,-50,476,-884,-593,-221,7,203,-637,-899,-384,142,402,437,194,1,426,-741,-685,245,514}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00107() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{404,-1000,-337,635,807,1000,950,520,102,-765,389,-889,-623,500,896,429,-883,-259,-855,1000,-885,-235,1000,-1000,-1000,755,-355,580,428,401,-684,637,44,534,-478,-100,478,-528,979,-417,-462,347,200,-808,-46,601,516,-1000,96,-1000,175,-701,-1000,-1000,108,295,1000,147,-130,245,-1000,-563,245,-867}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00108() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-449,-795,-779,-158,782,461,-1000,1000,461,1000,956,-832,-30,219,434,-1000,371,1000,641,-161,-1000,-680,1000,-341,-717,1000,1000,-1000,-592,871,75,-157,-1000,1000,-1000,-14,959,1000,774,-900,828,-297,1000,-540,-1000,1000,400,497,-1000,1000,-1000,-1000,383,-357,-542,1000,-423,1000,1000,-979,-1000,-1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00109() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-305,200,523,-64,-442,-1000,-77,-261,-118,607,-260,526,-70,187,-1000,1000,700,-635,787,-7,-213,-1000,930,-155,-631,-448,459,-377,-522,-94,-126,-501,421,792,-163,765,780,-274,703,650,1000,358,-121,-1000,759,-278,-152,0,-462,823,827,-700,779,-427,-184,805,149,-681,300,-203,-57,546,-54,-189}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00110() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{133,-935,123,167,-639,753,-482,689,1000,1000,-406,335,-207,1000,-599,-746,257,259,-861,694,-1000,-282,334,-1000,-989,966,-923,758,981,-922,-1000,425,606,1000,-1000,417,922,275,19,480,670,295,-1,-731,582,1000,1000,-1000,-391,-565,749,-1000,776,-686,980,378,1000,254,610,-356,-1000,-340,599,435}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00111() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-217,-518,-342,-693,503,-904,-399,-155,-42,880,1000,-1000,-1000,255,162,-1000,-275,880,-917,-731,-213,-657,387,-200,-662,1000,432,182,-898,998,-667,925,-1000,488,-163,-192,338,935,926,-650,75,-553,1000,-866,-664,1000,245,578,-1000,961,297,-1000,-606,-522,122,1000,-492,1000,1000,381,-1000,-947,1000,-343}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00112() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{811,734,-16,-417,-674,942,-817,-554,555,-465,-744,-888,339,496,-502,-36,-456,-541,-355,-855,-158,341,778,-11,122,1,-734,434,547,968,235,-587,-21,159,617,247,-455,162,802,876,419,-874,142,-600,-420,-371,-871,-146,-768,-60,-98,-600,-109,-930,976,176,-310,-310,-476,954,-621,549,-609,-561}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00113() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{762,-817,1000,1000,1000,-914,940,-512,623,432,765,1000,-286,-167,709,26,123,-1000,-1000,-568,-289,-474,-875,-1000,1000,-149,941,614,104,-199,114,146,-497,568,-89,338,-1000,40,267,57,1000,845,325,313,-1000,1000,339,1000,570,-816,82,-699,345,232,-1000,-132,553,462,-21,-558,629,600,-989,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00114() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-1000,26,304,1000,-368,-1000,438,190,-400,-482,1000,-660,821,-1000,1000,1000,1000,-1000,256,1000,-76,902,-616,817,-251,-952,72,851,-342,-1000,-815,-1000,1000,-1000,874,-1000,1000,420,61,650,-472,-325,1000,329,1000,-668,-1000,-832,216,1000,-62,638,-1000,-252,1000,-1000,493,-177,1000,1000,-1000,-891,1000,365}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00115() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{220,622,244,-10,1000,-1000,-163,-394,224,-1000,-434,1000,-90,-76,-857,-1000,894,-1000,416,-48,122,-1000,-231,-1000,1000,-669,1000,774,-121,192,53,-890,-638,-954,955,581,30,40,517,-1000,1000,236,325,-1000,-145,97,-805,1000,264,451,-1000,-896,345,-200,-945,111,553,914,142,-1000,-95,540,-155,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00116() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{964,1000,-411,401,-1000,-259,-1000,-512,-375,432,-1000,-1000,233,-167,709,-510,748,613,1000,177,-19,1000,1000,1000,-1000,1000,-542,1000,1000,-108,1000,-1000,1000,568,1000,-1000,945,-1000,149,636,-774,-1000,-657,-1000,459,-1000,-1000,-456,570,-304,-763,154,-1000,-174,1000,-1000,216,16,-1000,1000,-845,223,320,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00117() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{113,-311,-774,-988,-290,4,-1000,1000,809,-1000,-890,668,793,90,-774,188,418,-376,1000,-417,-489,-1000,679,1000,373,-365,-372,-137,737,-815,281,-536,-340,505,-623,104,309,-920,-205,-792,1000,-655,-189,-244,-1000,-1000,-1000,-761,-1000,682,-687,759,421,-269,787,-534,-1000,-531,-649,-683,-1000,77,-40,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00118() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{20,-1000,159,-942,532,793,623,-150,973,975,1000,1000,314,-699,-543,550,-218,-658,-1000,1000,-346,-1000,-645,-1000,1000,-655,-273,-1000,-593,-304,-1000,1000,-1000,1000,-1000,1000,-1000,1000,-172,815,376,1000,796,74,-603,1000,91,319,1000,-882,482,-1000,126,-1000,-1000,769,-1000,-1000,12,-817,-140,1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00119() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-732,259,-387,916,576,-1000,-230,-362,815,-747,-964,-379,-1000,-1000,737,531,1000,910,1000,1000,420,294,53,-349,-684,-811,1000,1000,-128,-1000,-228,-1000,513,-1000,668,-1000,875,-457,-113,-598,-707,-84,-181,-328,646,-711,1000,-132,-643,705,92,112,-150,-258,175,-1000,519,-437,-107,629,-414,1000,1000,-931}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00120() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{716,-817,293,-1000,-622,358,-1000,420,1000,-537,-1000,-739,-287,960,-836,529,698,-4,821,-828,235,-166,225,56,768,-719,-867,209,994,-1000,544,-1000,-820,-854,-783,338,423,-883,951,-548,162,-567,325,-103,-880,110,400,-1000,169,202,254,438,345,-1000,434,-108,-1000,-1000,-798,637,-1000,600,208,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00121() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{1000,148,-181,-1000,-1000,942,-817,988,-391,-950,-744,-914,892,496,-652,-36,-967,-327,1000,-1000,729,-371,778,1000,308,185,-1000,415,547,-1000,235,-889,-569,536,-386,-2,511,-621,371,-65,1000,-1000,-294,-452,-1000,-258,-1000,-801,-768,176,-250,471,191,-651,1000,176,-1000,-453,-1000,280,-774,795,-749,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00122() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{1000,201,-279,-458,-200,-661,-1000,94,115,-465,-1000,-1000,506,1000,-833,-1000,828,-595,1000,-124,577,-35,604,-11,122,289,-734,1000,1000,403,1000,-1000,378,-428,838,-261,255,-1000,802,-1000,344,-1000,-987,-586,-420,-371,-1000,93,-1000,256,-1000,228,36,-671,846,-265,240,808,-964,94,-851,420,-267,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00123() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{946,-845,-507,455,-131,49,-979,-133,27,175,983,-943,-456,27,724,296,346,-1000,405,-706,-216,439,759,763,1000,563,-214,-344,-104,154,628,-186,-429,597,-397,-350,-1000,2,-780,-284,-1000,-76,-1000,836,-1000,-96,1000,-200,529,-1000,498,1000,1000,-82,-383,-735,-388,-388,-1000,-484,247,1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00124() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{1000,-471,738,572,287,-1000,-145,-82,198,130,-367,13,-414,658,709,26,291,-283,391,-358,364,31,-431,143,642,-105,500,1000,213,77,991,-1000,-342,365,187,-462,144,-466,-654,-151,201,-491,51,-563,-1000,331,-1000,1000,-469,-805,-280,214,358,582,246,-833,393,718,-572,-413,189,396,-1000,-266}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00125() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-473,-1000,914,1000,1000,259,573,-947,-58,-747,1000,-285,-917,-565,825,-572,-359,-1000,-593,-591,-750,468,-1000,-1000,1000,1000,926,614,90,446,127,1000,-393,538,1000,-119,-1000,504,534,178,22,984,-221,1000,890,1000,1000,1000,1000,-1000,-368,653,-938,366,-1000,631,738,898,-513,-593,982,1000,-333,469}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00126() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{112,1000,-802,-400,-245,-1000,464,115,283,33,-112,-517,372,-328,944,322,-541,-361,1000,-170,1000,-30,1000,1000,-1000,443,581,1000,-181,-840,-167,-785,351,-1000,647,-945,454,-1000,-546,-1000,939,-975,-516,-902,-1000,-1000,-585,56,-1000,-491,155,-134,372,496,671,-1000,-345,-222,-1000,192,-878,646,-913,-902}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00127() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(int,org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer,boolean):void",
+            new int[]{-537,-1000,534,226,19,455,1000,-24,805,1000,1000,410,555,-679,1000,1000,-941,-512,-1000,-1000,-528,-32,-602,-633,614,106,-105,-1000,-1000,-1000,-1000,1000,-1000,412,-1000,142,-634,1000,736,1000,802,909,1000,1000,-432,591,1000,-476,952,-812,1000,-304,-233,-107,-780,2,-772,-1000,-212,481,-25,1000,-895,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00128() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{-229,123,-1000,617,-740,-1000,-429,286,-248,127,-492,-74,523,166,392,-759,-218,934,-1000,-159,252,1000,385,181,841,85,293,942,-1000,250,677,452,440,-1000,-1000,-389,250,-1000,-719,240,412,-342,-517,189,-195,-1000,1000,-846,395,-573,123,-400,-353,499,-66,407,-24,-1000,-1000,-1000,555,264,-408,-417}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00129() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{1000,1000,274,718,555,1000,1000,567,194,169,-80,-1000,-1000,954,17,-321,-713,-1000,1000,-1000,372,-1000,-730,937,225,-360,-97,-76,380,-762,-1000,-647,143,842,604,763,60,204,-221,360,-588,-856,-538,596,335,1000,1000,1000,169,1000,-1000,163,-636,-1000,1000,272,-973,1000,199,1000,663,-1000,-759,110}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00130() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{-526,-362,-741,664,-270,-755,-722,-231,290,-693,928,1000,1000,583,-350,-1000,423,1000,-1000,442,817,-1000,1000,809,1000,518,785,419,-1000,1000,1000,204,1000,-545,-298,-1000,259,-1000,-1000,216,460,617,226,788,-900,-1000,1000,-1000,-681,-1000,907,29,1000,1000,-452,-1000,32,-788,-1000,-928,57,888,-28,63}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00131() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{374,-772,-16,370,-5,-423,-137,-417,-1000,-544,-206,471,-827,363,-190,-977,252,-713,251,-223,-1000,-1000,-804,1000,323,-1000,1000,-1000,1000,342,-843,-1000,-1000,1000,-448,-186,672,1000,1000,-857,-1000,165,465,42,288,1000,-641,94,101,1000,-1000,-328,560,190,1000,-121,-824,86,215,241,-62,-1000,-467,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00132() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{26,-855,126,1000,-1000,-344,1000,909,833,-347,-71,85,519,599,-303,-1000,-485,-50,-875,-154,19,513,890,639,1000,-1000,-5,457,-544,1000,740,-597,291,361,-291,-457,1000,370,575,-550,-922,-300,-491,1000,78,-691,91,-22,-583,-471,-1000,4,560,975,1000,989,-54,-209,-624,1000,-587,-800,-667,580}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00133() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{948,832,423,905,18,-269,906,-192,-14,514,-458,-1000,-383,881,433,-623,-575,-273,341,-743,684,-172,-575,849,513,-601,88,510,-402,-279,-743,-54,230,-519,154,338,385,308,-633,362,-615,-700,-894,9,-96,533,554,389,339,1000,-1000,-158,-1000,-318,1000,235,-872,397,220,338,895,-360,212,132}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00134() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{-229,906,-521,617,-740,-555,969,426,631,564,-379,-19,68,1000,167,-711,-201,-138,35,-59,252,1000,-38,682,981,285,293,1000,-1000,-87,193,452,1000,-353,-214,101,250,-281,-719,304,412,-675,-489,1000,143,85,1000,354,569,-996,212,-516,-757,456,-500,-135,-1000,-311,-409,-831,1000,264,-632,-238}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00135() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{11,87,-743,607,-962,-939,-366,1000,1000,-446,-1000,285,-798,1000,-909,-212,-1000,-659,-193,254,1000,1000,-357,550,-481,1000,-504,1000,-1000,-113,-169,-981,511,-384,-39,1000,-1000,-1000,-870,-1000,-1000,-1000,-1000,735,650,57,1000,1000,807,-1000,1000,-557,-1000,124,-842,-1000,-708,-1000,-1000,1000,90,344,-1000,-522}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00136() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{-123,-950,274,-457,758,1000,-902,320,-657,-5,396,1000,-358,135,-498,-1000,-291,-645,-153,-65,-193,-158,-402,1000,371,440,1000,-829,236,262,9,-1000,-115,948,-251,-669,-441,900,232,-1000,-1000,234,468,440,-366,157,450,427,-1000,-637,-70,479,1000,732,73,-1000,-770,-574,-737,-644,-775,-155,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00137() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{-369,386,414,-170,-167,-531,434,483,-81,436,-215,555,-379,1000,235,-1000,-738,37,-1000,802,797,674,-463,-560,163,-311,-783,188,-1000,1000,522,-576,262,-515,601,572,-123,-1000,-424,-1000,-205,-650,-921,215,437,-997,-363,304,-1000,-1000,1000,-193,576,1000,-429,-1000,-1000,-593,-870,1000,-28,1000,-1000,-728}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00138() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{1000,-258,-367,448,-490,201,-1000,-652,230,-766,951,1000,-143,567,-1000,-789,-161,-422,-290,-508,-624,676,-300,1000,15,739,947,-1000,236,409,342,-812,-191,22,1000,-500,-1000,400,-176,84,-346,103,-345,-1000,-1000,400,288,86,-1000,97,663,296,1000,204,629,-1000,541,249,-707,1000,-1000,611,-104,814}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00139() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{928,-855,-710,-643,-1000,-400,-913,617,-1000,58,309,-1000,-981,139,-1,764,-414,-40,-912,-1000,595,-130,-109,-1000,-152,979,-79,-42,-1000,-1000,-466,-597,706,-518,610,137,-1000,520,-669,560,1000,-1000,-729,-843,-837,-1000,-287,375,654,159,1000,-79,354,-634,-441,-352,1000,-1000,-624,-946,-423,400,469,-891}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00140() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{-20,-35,-914,120,-942,-1000,-364,843,613,-718,-330,58,91,249,222,-424,-421,438,-1000,-790,473,1000,483,-702,56,301,-290,702,-1000,-254,522,-19,523,-415,-957,-8,-118,-1000,379,138,521,-552,-592,-81,-78,-1000,784,-419,414,-573,629,-413,-190,646,-232,-121,-33,-1000,-1000,271,110,-144,-576,-797}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00141() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{247,374,-357,225,-796,-843,970,516,526,-314,-455,-929,-509,853,-140,-55,-101,-891,-835,291,-39,413,-665,-178,-298,656,-744,954,-760,-293,-768,-726,101,-97,78,300,-141,-666,-890,-287,-202,-402,-916,178,71,808,274,671,864,-378,350,-136,-563,786,-505,-519,-376,-717,-719,826,344,546,-777,-332}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00142() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{-849,-433,-884,836,-1000,-829,-1000,703,277,557,-949,808,-383,551,-383,-697,-556,-273,-940,496,477,700,-466,849,777,360,-297,1000,-1000,-40,866,-956,371,275,-682,329,118,-1000,-813,-375,-501,-423,172,699,416,-979,554,-196,211,-1000,1000,-570,280,818,-1000,-565,-299,-1000,-1000,-1000,895,-360,-1000,643}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00143() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker):void",
+            new int[]{486,-855,-630,-168,-434,683,-1000,-23,-1000,147,59,471,-439,139,-230,-792,-485,-50,-612,-202,-705,-713,-451,1000,279,-220,1000,-859,766,124,-466,-597,-632,158,-694,-416,-254,370,575,-805,-739,32,-94,-843,-408,591,-16,-190,-1000,562,-251,449,560,337,956,-813,-54,-411,-624,-149,-587,-539,-325,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00144() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{116,761,-17,910,-509,1000,-721,824,446,-466,-188,-968,-1000,-1000,358,1000,-715,-1000,1000,-707,1000,466,231,-1000,-16,569,-481,652,1000,170,-54,-533,454,1000,-110,695,-490,539,905,-1000,379,-430,-691,1000,-1000,56,227,-446,-1000,1000,-1000,46,-1000,1000,1000,-1000,97,-796,1000,1000,379,-653,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00145() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{186,1000,538,1000,-673,-100,-249,1000,-960,-1000,-23,-142,44,-611,-424,678,161,-419,419,-388,1000,-376,-1000,632,579,-738,-525,638,1000,-446,-621,-2,107,804,-125,-187,266,-108,706,-1000,428,806,-981,1000,-1000,-573,1000,723,-1000,-485,-219,39,591,412,734,1000,967,-450,1000,-83,-1000,-1000,-18,-757}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00146() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{576,679,1000,-720,-404,1000,-872,-81,249,991,594,1000,833,-757,337,503,-572,-1000,1000,836,1000,1000,432,-27,-903,-460,-546,-967,1000,399,-1000,1000,1000,1000,-1000,968,236,-108,-949,-1000,502,-446,-1000,-438,-1000,828,-279,779,-864,825,-1000,39,-709,-158,1000,-1000,-660,-265,34,1000,764,-833,-1000,403}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00147() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-1000,-13,1000,101,628,-1000,1000,-1000,4,337,-682,893,518,-459,-842,-1000,263,537,-1000,1000,-869,-880,427,-149,363,1000,-219,-365,-1000,1000,-138,-1000,-329,-1000,18,-1000,-974,-1000,-890,735,-333,1000,791,-550,-88,-508,-801,-1000,1000,-834,-47,-167,1000,-124,72,1000,-1000,1000,64,-556,-43,637,1000,526}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00148() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,573,366,-305,-1000,294,-1000,424,684,-466,1000,1000,855,-677,202,-317,-998,-1000,22,-650,345,574,231,-905,941,1000,-1000,1000,1000,1000,-420,-11,698,686,-439,1000,1000,393,-236,-12,1000,-24,-1000,324,-911,24,734,410,-614,449,-1000,1000,111,678,368,-1000,-56,-1000,-90,269,1000,33,-886,717}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00149() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-679,-817,161,-865,444,-843,-14,-639,339,1000,-311,211,17,-459,-711,-933,263,861,-86,643,-974,-437,1000,-467,-257,969,207,-891,-231,665,613,-115,195,-305,108,-839,-762,-1000,-442,705,-735,529,915,-1000,-552,-250,-874,-317,1000,-629,570,-636,614,-74,-75,171,-509,1000,64,-1000,-481,478,421,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00150() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{-1000,-1000,-486,616,-52,-1000,1000,-1000,-300,307,459,1000,1000,-144,-1000,-834,491,1000,-1000,1000,-1000,-1000,147,156,708,706,346,-365,-1000,330,357,-1000,-1000,-1000,-27,-1000,-974,-1000,-1000,1000,-1000,-1000,1000,-1000,806,-875,-1000,-1000,341,-1000,780,-255,-385,-124,-1000,1000,-1000,479,-826,1000,-453,1000,-800,-797}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00151() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{93,-1000,264,-501,-1000,135,601,-1000,5,-92,1000,1000,1000,-508,-5,-331,-46,1000,-299,-392,9,400,602,-325,862,580,292,-919,-1000,-36,367,470,116,47,-500,-21,-362,-704,-1000,658,-612,-1000,742,-512,-170,1000,-801,-1000,-1000,-673,628,372,810,439,72,552,-1000,-386,-1000,-79,-43,-129,26,-890}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00152() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{736,173,-494,-865,-380,984,-972,62,201,400,674,132,166,-837,840,-933,263,-1000,673,-686,336,835,1000,-773,-329,1000,-785,-234,1000,784,-12,947,962,789,108,1000,357,-328,175,-314,574,-828,-926,34,-1000,239,-152,-165,-448,1000,-1000,518,-1000,491,789,-1000,-509,-488,-347,775,1000,-334,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00153() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{181,669,-94,996,628,-263,-319,287,-518,385,-682,-31,788,-527,242,468,-146,379,128,-41,807,-168,-1000,-149,-149,56,-383,-734,200,1000,-509,1000,359,616,-961,-16,132,799,-328,-943,-931,859,-1000,-550,312,-508,611,857,-916,-834,-514,335,259,-536,740,1000,-659,947,64,-53,-1000,-794,1000,-957}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00154() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,81,-567,-932,-676,977,-712,-441,-512,-793,1000,1000,916,-840,855,-757,928,-1000,202,-369,178,1000,351,257,-72,56,-1000,658,778,1000,839,1000,1000,1000,15,1000,1000,-68,-625,-529,819,-1000,-941,-24,312,639,231,468,-406,360,-994,657,114,-219,529,400,-1000,-1000,-851,1000,1000,115,-874,-230}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00155() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{584,40,579,1000,-132,-981,-87,-409,-572,-1000,654,608,208,-534,-72,535,16,-192,-773,-142,309,-379,-964,660,581,783,-194,1000,-209,118,-270,-113,-121,547,-616,-515,542,839,-676,-3,-859,622,-798,1000,874,-112,-724,478,-92,-586,-48,1000,591,-803,450,-442,705,-366,447,41,-1000,407,-259,-757}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00156() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{552,-215,-626,-653,-743,1000,-1000,-28,95,-864,1000,-277,-121,-972,1000,531,-1000,-526,1000,473,1000,1000,464,-1000,-140,-453,-657,398,1000,71,709,1000,1000,1000,-219,1000,268,1000,-211,-1000,898,-1000,-995,88,-1000,1000,-20,-1000,-401,1000,-706,1000,-1000,41,-170,-1000,-1000,276,-111,1000,1000,19,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00157() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{138,761,-886,-905,24,1000,-25,-343,200,-1000,1000,433,-423,-1000,704,-500,3,-143,92,-199,367,1000,-557,-1000,289,1000,-391,474,227,802,776,211,937,721,100,932,-189,-530,531,360,245,565,52,1000,-1000,1000,-600,-876,593,-193,-906,-103,540,-278,-135,-488,-1000,-1000,-1000,1000,1000,724,-494,465}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00158() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{721,90,-422,-586,-383,432,-1000,245,904,978,25,209,-503,-840,426,610,242,-818,612,-628,-71,-880,1000,-957,-284,1000,-839,-473,1000,237,-380,348,134,445,18,396,135,-835,128,181,400,-940,-541,-323,-1000,-216,-489,-272,-253,1000,-1000,553,-1000,1000,770,-1000,287,187,-446,-116,1000,66,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00159() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "addRangeMarker(org.jfree.chart.plot.Marker,org.jfree.chart.util.Layer):void",
+            new int[]{1000,573,48,-59,-1000,1000,-1000,749,16,-566,984,-175,-184,-1000,824,1000,-491,-1000,22,-650,1000,1000,233,-1000,-474,569,-976,1000,1000,320,393,660,1000,1000,-22,1000,459,976,327,-1000,1000,-1000,-1000,324,-1000,455,734,-1000,-1000,1000,-1000,311,-1000,644,368,-1000,-565,-1000,57,1000,1000,-919,-886,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00160() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-927,755,316,355,-892,548,-44,-680,-1000,323,222,944,845,929,1000,-1000,147,-220,1000,726,684,1000,1000,627,-1000,-1000,-1000,1000,532,469,704,894,-645,-21,-58,1000,-624,34,-976,-236,-1000,23,715,239,-543,-428,39,-854,-1000,-486,-1000,293,62,602,-730,-485,-1000,-382,86,1000,-1000,-624,-842,393}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00161() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-1000,1000,404,-959,-1000,353,606,781,-123,-1000,323,85,1000,1000,900,-328,132,-712,1000,1000,-916,362,-1000,723,-1000,1000,1000,-204,-1000,-272,-494,1000,-396,1000,645,-1000,-1000,-554,-1000,-1000,-1000,238,1000,-1000,475,-1000,837,-512,-1000,-94,-417,1000,1000,-1000,1000,54,1000,-1000,1000,-821,-1000,1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00162() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-1000,-108,-131,-423,-407,623,769,199,-74,-411,-158,1000,-302,233,230,-1000,-687,-516,949,1000,-586,-35,54,-130,115,-29,-364,333,-133,406,270,-218,76,-376,657,-230,-377,-988,-601,110,412,1000,82,-214,448,86,-247,-811,-848,-772,-799,-275,-194,200,867,335,612,-200,-20,-326,383,-160,168,-240}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00163() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-1000,932,-646,-239,-407,-777,-1000,112,-1000,345,320,1000,-1000,377,-1000,205,-1000,216,846,-1000,1000,380,-44,1000,1000,1000,-871,-640,-170,-818,-123,-292,-201,-30,1000,-1000,-930,-888,-1000,1000,276,631,-310,-1000,-24,1000,-1000,851,1000,-705,-499,-459,-254,496,1000,79,1000,-418,-45,1000,-432,406,-662,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00164() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-1000,343,627,-66,-172,157,-1000,-290,1000,-51,-372,448,104,635,373,1000,281,793,559,1000,371,28,-480,810,-357,-777,-657,-272,-363,-1000,-21,928,458,1000,109,521,-1000,93,-391,-1000,1000,1000,-36,-1000,-825,661,1000,450,-848,536,-631,-1000,-92,569,607,169,1000,-452,1000,472,-1000,327,59,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00165() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{1000,-1000,488,-235,-448,-278,-249,-1000,460,132,-471,740,-375,33,-115,23,318,-505,-465,-627,696,519,1000,-1000,824,-1000,-1000,101,1000,-505,296,-983,-14,-1000,296,1000,-633,-198,1000,707,25,-214,-1000,-680,-1000,-1000,195,507,722,-179,-558,-1000,-1000,1000,-880,116,-3,1000,245,-110,777,-163,-928,-457}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00166() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-649,1000,804,-155,-170,727,220,122,-988,-383,-794,1000,-400,-238,-283,-82,-322,633,313,254,84,198,165,855,-20,1000,1000,1000,-227,538,1000,-1000,-363,136,286,804,-414,-655,-790,-108,503,383,44,1000,-1000,184,-1000,-216,-1000,-793,-785,-906,-343,-501,100,151,1000,-400,-1000,1000,-1000,-925,191,911}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00167() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-824,516,747,-816,580,-31,-656,-974,1000,-192,736,39,1000,1000,1000,-292,1000,247,112,-561,655,-1000,-1000,767,-1000,-430,511,-1000,-1000,-912,-299,1000,-801,714,-656,-1000,-1000,247,-601,-1000,-732,-358,715,-1000,-73,-604,1000,822,-425,569,-770,-353,948,939,23,-581,1000,-1000,-143,477,-1000,1000,-424,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00168() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{1000,-1000,-646,81,-1000,-372,-1000,-1000,442,1000,-29,499,-916,-1000,291,350,599,127,-1000,-1000,1000,-1000,1000,-1000,1000,-1000,-1000,-88,1000,-999,575,-356,221,-1000,-1000,611,617,0,261,973,-167,-1000,-894,1000,-936,1000,-240,519,1000,-810,-386,-1000,-814,1000,-566,-800,1000,1000,-1000,910,1000,-531,-1000,934}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00169() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-1000,739,406,-794,-351,-444,-998,-95,-492,-336,100,902,5,-142,277,-207,435,-409,1000,235,667,-746,-379,837,-180,-174,-483,-92,580,-919,-93,959,-508,743,-283,95,-858,-587,-555,-1000,345,51,893,-745,-981,65,0,257,-581,368,-945,492,529,344,6,-1000,1000,73,423,1000,217,-326,-13,146}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00170() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-884,1000,549,-920,1000,-216,1000,1000,-322,-592,37,48,963,1000,1000,-841,-1000,-851,949,1000,-1000,-113,-1000,-1000,1000,-1000,974,92,-1000,-284,-788,-840,-899,1000,1000,-380,-940,-1000,-209,-1000,1000,-381,-952,781,1000,-1000,336,-849,722,-218,-47,1000,698,-1000,1000,842,1000,-1000,251,-928,-765,683,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00171() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-649,-401,-680,531,-176,5,-287,-936,714,206,113,923,-302,177,239,-1000,936,-202,-164,254,498,-1000,813,-275,115,-552,-596,-289,304,283,485,902,76,-376,-122,173,-545,-643,-812,-1000,-746,65,-21,42,-594,221,-275,237,-1000,-739,-1000,-1000,18,698,-152,-464,-192,-200,295,567,383,-57,-641,-901}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00172() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-721,-106,-726,352,-1000,315,-830,199,-648,423,-1000,1000,-1000,-648,-1000,481,-1000,1000,73,-443,1000,-759,939,58,1000,-243,-1000,1000,889,55,1000,-1000,1000,-1000,634,736,738,-1000,-301,1000,937,394,-2,664,-274,1000,-1000,-274,1000,-1000,-660,-1000,-1000,-621,801,-82,132,1000,-1000,1000,1000,-1000,406,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00173() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-1000,1000,-492,155,1000,652,-704,1000,109,-1000,274,-223,1000,1000,807,-1000,-264,-1000,391,1000,-1000,-214,-1000,1000,-1000,1000,1000,-422,-1000,-752,-985,-1000,-837,1000,807,-1000,-1000,-1000,-1000,1000,867,-316,1000,-1000,1000,-1000,692,-725,206,408,140,1000,1000,-1000,1000,498,1000,1000,549,-1000,-1000,1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00174() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{-852,228,-462,485,-1000,601,-230,-368,-683,887,277,986,-107,55,1000,-1000,-52,-140,748,98,703,-663,1000,139,115,-351,-364,843,243,538,1000,642,-424,-1,-499,-230,453,-988,-1000,339,-277,-687,1000,979,320,-233,-332,-1000,-848,-1000,-568,905,900,325,-377,-939,31,33,-1000,848,-489,-869,-940,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00175() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearAnnotations():void",
+            new int[]{262,-1000,-736,-29,-1000,-352,-1000,-5,-1000,496,-787,810,-1000,-400,379,1000,-175,716,-157,-707,872,-1000,513,-545,1000,-452,-300,859,499,-1000,507,-191,1000,-217,-155,-367,375,-197,-45,400,-58,254,-952,-146,-216,1000,20,570,906,-573,137,-1000,33,722,541,-185,1000,1000,-1000,1000,661,-310,-1000,336}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00176() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{372,870,349,288,-1000,-215,436,-680,911,-1000,1000,-590,1000,1000,139,-160,-963,-183,1000,-507,289,-1000,713,495,1000,-1000,578,213,-228,612,-127,799,-116,74,933,-1000,14,785,-900,1000,1000,-1000,-246,-113,203,-1000,-236,343,-466,-65,-1000,968,-1000,38,800,-1000,1000,493,1000,-229,-792,-280,-783,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00177() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-881,852,49,-313,222,-415,1000,1000,-1000,-242,-162,-245,313,-837,1000,-76,1000,1000,-53,827,1000,-792,-1000,1000,-1000,-28,1000,-786,-1000,1000,991,-57,-1000,56,-1000,199,-1000,-636,-1000,-1000,-927,345,-991,-591,-1000,1000,-1000,1000,1000,1000,-1000,891,-42,1000,-1000,243,538,1000,-175,1000,-213,-64,-1000,730}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00178() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{343,623,-781,475,-25,-447,611,1000,149,-168,644,383,86,-837,-697,-38,146,1000,627,315,-1000,-433,-737,631,687,-1000,-966,1000,339,-201,481,-396,69,309,880,-662,-18,974,-295,571,1000,-831,878,-127,797,-753,-92,626,-120,415,-297,965,490,-771,1000,-335,559,189,761,-316,-593,-889,-129,-515}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00179() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-617,1000,-887,-741,211,-48,67,333,-516,-242,791,93,-332,-782,585,-847,1000,726,1000,817,601,-792,-770,917,-1000,-1000,830,-898,497,682,524,220,-1000,-95,-407,277,-970,-636,72,-1000,-927,345,-1000,-591,-559,996,-636,238,-518,-27,-309,238,-33,876,-708,-206,434,564,-175,1000,-402,866,-985,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00180() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-1000,64,-556,807,-149,15,74,929,-449,-614,-211,-372,-372,197,-307,-691,1000,236,1000,30,669,-1000,-896,1000,742,-1000,-222,1000,-188,-1000,846,-490,-804,-318,113,133,-464,-277,328,907,1000,-528,-101,628,793,-425,536,606,-699,1000,-777,7,1000,-463,-953,-1000,6,552,1000,193,361,76,71,-318}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00181() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-1000,1000,113,-1000,-912,471,-302,1000,-1000,-125,303,-1000,675,-1000,1000,149,1000,1000,-1000,-412,382,-754,-1000,1000,-1000,296,988,-1000,947,-191,638,840,-1000,-1000,-1000,-786,-838,1000,-553,-1000,-1000,1000,-1000,1000,-1000,1000,-634,513,-52,141,798,1000,1000,1000,-912,278,705,6,-1000,1000,384,1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00182() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-246,911,-598,1000,166,-84,1000,1000,1000,-1000,1000,-751,860,1000,-875,342,613,244,864,1000,1000,-761,-422,-520,-1000,-372,-762,-474,1000,831,1000,-302,-471,202,1000,-139,714,1000,340,-1000,1000,-1000,1000,-187,823,1000,-31,-100,-1000,136,352,636,-155,-638,-1000,4,-208,140,1000,-847,197,-404,137,-885}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00183() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-969,-340,699,-727,-1000,-913,-1000,-1000,-283,-400,77,-1000,65,-347,669,-125,228,940,1000,-908,-343,-740,-44,1000,-807,1000,1000,-1000,-720,-411,-750,1000,-491,99,-1000,144,-1000,227,303,-718,-672,1000,-1000,381,-939,1000,-988,1000,998,315,77,787,956,926,574,-1000,1000,771,-1000,552,357,-811,-746,-349}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00184() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-897,809,858,370,408,-615,825,1000,-758,-1000,693,548,857,1000,-667,44,331,1000,1000,979,985,-1000,-1000,413,974,-1000,-18,-86,62,164,524,-457,476,1000,10,944,-1000,1000,-1000,210,1000,-1000,1000,455,116,-994,-100,238,270,652,-1000,388,-107,336,-1000,-363,808,1000,245,-787,-558,536,-235,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00185() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-237,717,-869,-109,-819,342,479,788,699,-467,840,-877,686,313,595,-321,916,970,-590,-91,59,-1000,48,819,-206,389,-104,-289,506,-437,439,698,-1000,-311,268,-993,230,-661,-472,143,-20,150,106,506,477,1000,-959,213,-870,-429,704,724,260,318,551,278,620,-201,-1000,1000,111,814,-959,361}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00186() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{181,-1000,-856,-734,-223,36,517,245,-156,-165,-513,1000,-289,-1000,440,-239,-987,-1000,1000,-28,-897,-818,443,831,1000,-986,-686,-571,-439,729,-218,-539,1000,679,1000,11,-939,1000,-797,-277,1000,1000,1000,-838,-16,-1000,1000,1000,333,-126,-1000,-778,255,-718,145,-774,134,1000,-594,-1000,-617,1000,-727,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00187() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-749,647,-433,-527,216,-114,981,926,-918,-242,-228,-76,-9,-782,817,-461,1000,1000,705,822,814,-792,-937,1000,-1000,-1000,1000,-842,701,1000,1000,82,-1000,-20,-990,238,-1000,-636,-681,-1000,-927,345,-1000,-591,-1000,1000,-1000,1000,-586,1000,-1000,564,-37,1000,-1000,19,486,1000,-175,1000,-307,745,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00188() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-676,-192,209,1000,400,-522,628,1000,-184,-297,438,790,-108,722,-1000,-507,331,841,1000,972,47,-250,-1000,295,1000,-674,-261,-442,-512,-291,537,-259,476,1000,842,1000,-1000,1000,-256,210,1000,-1000,1000,455,746,-999,421,953,367,354,-92,-157,-101,-1000,-892,-640,-211,1000,-309,-787,-301,-819,-213,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00189() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{803,-453,272,-418,-1000,98,-1000,-815,1000,5,-213,-590,1000,-776,139,-168,-537,-183,304,-811,-1000,-1000,713,314,149,-428,578,-11,-381,-325,-532,797,706,-460,1000,-1000,1000,258,378,924,1000,-656,-246,-113,203,-1000,946,467,367,633,75,-105,-59,354,1000,-693,424,-698,-88,-466,-707,1000,-95,-325}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00190() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{356,-998,-776,-238,-514,-328,-836,94,164,-56,-1000,245,-1000,-664,374,-355,-720,-666,556,-768,-688,-614,121,1000,-69,-708,-903,368,-901,937,-923,497,841,145,644,-743,95,625,940,473,1,-218,-126,-114,443,-617,837,992,993,517,-209,-264,-631,112,488,-933,494,-279,-516,-490,-374,-528,-1000,-847}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00191() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainAxes():void",
+            new int[]{-168,1000,509,-777,450,-1000,510,1000,-858,-1000,1000,-1000,1000,1000,-1000,928,-702,690,1000,678,1000,-125,-1000,2,1000,-513,-598,954,1000,819,35,-871,1000,1000,31,918,-762,1000,-342,1000,1000,1000,1000,-271,-7,-1000,-312,736,631,701,-550,1000,-476,-11,-1000,-697,1000,331,-1000,-1000,-1000,-864,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00192() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{490,-467,-321,-492,-86,-568,-461,-398,608,578,-585,-980,305,-419,-744,470,-9,-902,-267,-714,712,34,-182,253,-838,-338,366,300,-271,400,225,-1000,-156,499,-89,-1000,373,-282,-142,423,-1000,-333,-223,-333,-633,-748,1000,-611,-670,151,-587,-65,-477,-455,-1000,805,-400,-948,-300,-719,-119,786,282,773}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00193() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{1000,1000,-561,-244,1000,-1000,-435,-1000,586,-810,-1000,-1000,-100,-1000,-760,416,-965,-1000,-1000,-1000,-797,-1000,-290,280,-887,800,837,1000,1000,20,-101,-1000,-531,-1000,370,-127,1000,-788,-1000,1000,-1000,-1000,-394,304,-1000,35,1000,-1000,-36,-285,1000,70,-970,1000,-1000,855,660,-338,333,319,-1000,-614,1000,681}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00194() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{537,-197,1000,-1000,677,1000,967,-569,-1000,-166,1000,504,-710,-826,1000,-392,534,-237,-940,-664,796,-340,-512,434,-707,594,-772,897,241,-90,-8,-1000,-363,-153,470,1000,739,-170,-1000,-445,-852,-489,227,-1000,761,1000,279,-1000,964,786,-1000,1000,-1000,-666,-1000,63,244,-1000,-107,-403,443,60,125,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00195() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{-718,-408,-136,-3,1000,-611,610,-812,-507,-388,-158,-311,1000,113,114,868,247,1000,-247,877,-114,523,67,-790,1000,736,-722,0,-484,-1000,385,1000,151,-643,-1000,1000,-586,549,1000,1000,1000,948,759,235,1000,-1000,-127,625,-73,1000,-269,81,1000,-498,542,-739,904,291,1000,-968,284,513,-29,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00196() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{-1000,-1000,224,85,-1000,-351,-750,62,1000,-791,1000,287,840,-696,145,-772,-630,1000,-390,1000,-1000,390,479,-77,1000,1000,-642,-996,-1000,285,-581,1000,1000,-1000,-285,1000,-1000,-1000,-201,-467,1000,1000,-435,1000,1000,-1000,-645,813,1000,-406,1000,138,1000,414,1000,18,273,1000,871,1000,346,-814,-255,158}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00197() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{784,152,-116,-379,1000,-44,1000,-414,112,-123,1000,-540,564,191,-242,1000,184,478,-492,-1000,-789,318,-247,-1000,-258,669,-80,1000,268,-755,-439,264,-605,64,-1000,169,492,582,488,970,-384,-1000,-1000,12,-699,-659,822,109,-803,-48,292,-406,-447,-1000,1000,-594,790,-728,435,-1000,-886,-495,233,795}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00198() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{1000,14,59,-856,157,-445,-537,-1000,-587,643,-1000,-237,150,-657,-263,1000,-601,-1000,-836,-1000,557,-210,-574,40,1000,-225,-75,886,114,1000,106,-1000,1000,77,79,-1000,-430,-208,348,-1000,-832,-334,-579,334,-1000,-521,1000,-832,-863,-154,-370,-192,16,-604,-1000,-377,-881,-86,-214,305,-438,525,-46,135}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00199() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{251,888,174,-165,-162,-612,-868,-629,984,1000,-1000,244,635,-353,-903,1000,339,-773,-492,-1000,1000,935,265,-1000,-883,-103,1000,1000,466,-542,1000,264,509,630,-1000,-1000,-188,-226,1000,1000,-1000,-613,1000,67,-1000,-863,542,13,-1000,1000,119,-1000,-351,-1000,-1000,-1000,1000,-882,-316,-1000,-1000,1000,233,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00200() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{-689,-467,-171,-153,-708,-804,-66,-267,498,831,1000,-1000,-190,-1000,-947,295,-332,115,-1000,519,-703,-961,-1000,1000,-838,-604,-586,-700,-224,785,297,-1000,-1000,-385,1000,393,1000,-1000,-1000,-974,-125,751,-1000,-1000,447,895,-369,-196,921,-1000,-239,1000,88,105,314,898,-921,773,-209,923,-623,-728,1000,-788}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00201() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{-405,-775,501,207,-929,-1000,573,-264,-1000,436,658,46,909,244,475,575,645,1000,-903,-1000,1000,-44,530,-866,322,1000,386,716,364,-1000,-1000,527,133,-892,-1000,1000,-575,-99,1000,578,426,278,882,-955,-374,-942,799,1000,-593,-337,841,-578,-112,-1000,-1000,-1000,901,-381,530,-874,-343,477,-881,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00202() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{-432,-314,34,-420,-854,-197,-713,-279,291,-657,-333,-616,-731,-717,-489,-754,-548,-333,-564,918,-934,-869,-430,41,744,207,-315,-994,44,-856,387,-757,803,-777,885,140,-300,-957,-976,98,724,123,252,938,395,-723,-36,-19,488,717,292,445,836,599,-187,516,290,808,871,429,-636,-803,268,-789}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00203() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{107,-374,-607,-90,807,-88,842,-703,-484,-559,775,-1000,63,-830,576,-104,-710,822,-1000,400,-447,-1000,-773,400,1000,151,-919,-400,104,-101,-1000,-77,-772,-1000,400,1000,659,24,-912,-340,740,542,-1000,-1000,-26,-145,707,-362,806,-1000,-385,994,-201,-161,400,142,-389,335,1000,377,321,-47,966,94}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00204() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{-527,250,308,299,-1000,-2,-435,-511,967,111,948,-1000,-870,-1000,-667,826,-548,938,-1000,325,-1000,-1000,-857,356,418,1000,-221,-7,543,-1000,878,-560,-409,-1000,1000,200,1000,-203,-1000,486,546,546,1000,493,8,-137,-284,186,932,81,939,-1000,-5,-805,-194,988,442,999,-300,-196,-1000,124,1000,61}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00205() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{-1000,-1000,-921,258,-929,-1000,469,-78,-1000,21,1000,-276,408,-672,978,-197,301,1000,-1000,-20,175,-966,222,114,1000,581,-452,-264,-1000,-370,-1000,535,-418,-1000,-20,1000,-392,-490,20,-360,1000,904,882,-1000,-80,-548,718,408,387,-35,672,402,61,1000,-20,-460,25,364,926,106,38,-255,-344,366}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00206() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{628,1000,674,67,350,-331,635,345,799,-134,101,-1000,-490,-752,-1000,265,-270,-207,76,-1000,558,-84,-1000,154,-1000,824,-747,-801,-633,-1000,441,-1000,-367,1000,127,-1000,93,73,-400,1000,-1000,-295,-558,1000,-1000,611,-853,-447,-826,1000,-1000,1000,-872,-954,-1000,-741,835,1000,-473,-1000,-917,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00207() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers():void",
+            new int[]{-120,711,534,-352,-33,-331,-36,-703,627,-105,-1000,-96,1000,0,-1000,1000,-199,-29,118,-744,-147,1000,125,-1000,289,1000,414,993,-172,-400,916,677,1000,23,-1000,-769,-427,-41,1000,1000,-247,160,1000,1000,-464,-1000,-2,188,-11,-519,1000,287,788,-827,-652,-370,1000,399,734,-1000,-259,1000,-687,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00208() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{-43,-529,570,93,285,-734,104,-810,-1000,-1000,270,-856,411,-759,-981,1000,648,1000,101,1000,-591,-1000,-106,-263,-893,309,85,-1000,-130,-1000,1000,-85,-216,-168,235,-129,629,-235,-913,1000,138,1000,-871,457,-293,1000,-392,1000,-1000,-269,-90,-833,241,-1000,1000,-169,421,-83,1000,-1000,17,88,1000,360}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00209() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{840,-24,-952,552,692,-576,1000,673,-754,619,274,330,88,945,151,-1000,-405,-1000,855,579,-226,273,-128,-1000,296,-1000,200,159,-105,-1000,-1000,-58,-676,-205,-45,-489,-282,1000,422,-1000,-1000,-1000,1000,-101,-363,-1000,779,-700,281,950,188,-20,-361,869,-1000,311,806,-3,-419,1000,-1000,-255,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00210() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{-773,155,939,-306,319,-792,-296,818,376,-568,-789,-790,139,-316,97,108,-590,-602,-918,209,483,-2,-850,104,-383,875,-421,435,714,-235,-163,281,723,-989,287,685,-738,787,92,-386,-589,78,766,-836,739,-10,402,-643,-789,-219,767,-523,-156,-94,-823,-403,714,310,-656,-354,-760,240,237,-797}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00211() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{-1000,-467,1000,142,-909,1000,-1000,-284,-63,-242,-171,-383,-767,-638,-1000,1,-1000,-860,-563,902,51,699,1000,-512,-1000,49,-277,1,316,-63,353,-1000,-448,-359,-20,515,-2,649,-362,121,-220,675,-138,-1000,-67,1000,50,-1000,-1000,1000,1000,365,888,404,158,803,578,48,-1000,-786,335,276,52,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00212() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{575,-458,-61,974,426,-437,731,-71,-828,-475,356,-146,116,293,-375,91,-89,-400,242,1000,-800,-115,196,-1000,-61,-970,-364,-1000,-250,-1000,-348,-170,-125,169,-188,-619,-149,1000,-384,149,138,-821,416,-314,-248,-400,766,266,-3,585,741,-147,372,279,-388,177,1000,-60,7,753,-558,-352,-154,-935}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00213() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{804,-503,274,322,577,-647,156,977,559,-733,-53,134,849,807,386,116,116,-640,-559,-323,-777,594,-265,624,937,-803,749,-225,-347,-459,-421,528,404,-550,921,670,-616,-67,440,499,707,-592,-281,-193,193,755,-441,-188,602,-671,-421,760,-93,-22,-229,-423,988,-946,-38,677,-603,-569,-28,870}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00214() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{-1000,-449,507,-640,1000,-724,-1000,1000,374,-292,-343,-356,-197,668,477,-106,-1000,-264,-1000,881,1000,404,-654,1000,-695,830,-270,733,205,-625,-245,-284,183,-686,477,700,-1000,84,828,-1000,-1000,196,419,-511,1000,1000,-394,349,-1000,331,518,-31,-356,-31,-942,-59,-440,716,-219,-899,315,-135,259,-141}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00215() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{-43,-428,538,-659,857,-1000,597,88,-470,-1000,11,-1000,1000,-558,-692,1000,935,588,453,242,-289,-1000,-1000,92,-461,784,382,-1000,98,-1000,1000,731,-160,-686,845,210,114,-594,-810,610,-722,278,-585,877,-304,293,-644,89,-852,-569,-524,-1000,-266,-1000,1000,-277,-683,-45,541,-1000,-749,-39,1000,661}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00216() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{421,-810,-517,551,1000,-389,563,102,-942,-129,388,74,-239,1000,15,-870,-332,-1000,226,1000,-275,-699,23,-1000,-515,-825,423,-722,-851,-607,-1000,-733,-987,192,-527,-607,-30,623,1000,-1000,-1000,-426,775,364,-259,-616,160,414,-290,1000,484,-66,-494,129,-183,783,401,114,86,1000,-732,60,-529,-935}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00217() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{212,305,385,592,215,-782,940,546,95,-1000,-779,-471,60,24,254,-289,-237,-722,724,1000,-547,-285,-1000,-889,192,-326,-604,47,679,-1000,-935,570,420,-475,565,151,-344,1000,-214,-570,-712,-245,856,-1000,228,-953,1000,-694,334,175,1000,-597,-76,190,-876,36,1000,-387,-1000,240,-1000,300,-134,-858}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00218() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{387,497,-1000,45,1000,-648,992,1000,-886,819,1000,875,510,-931,746,-573,-983,-1000,97,-332,325,230,-167,-958,267,7,907,304,-1000,-214,-929,-827,-874,75,-157,1000,75,-261,1000,-400,-1000,-1000,1000,1000,-279,-1000,-308,-271,-196,390,-528,486,-87,910,-1000,218,-702,1000,1000,1000,864,769,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00219() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{-168,-745,-85,522,433,-724,7,-605,-795,-837,431,-247,74,-82,-261,456,450,987,154,965,-981,-417,-646,-106,-436,111,-641,-639,29,-857,628,249,-560,959,337,-193,198,294,-667,480,-206,666,241,-670,47,410,-172,947,-412,366,-120,-617,518,-914,559,296,899,-643,508,-754,-923,-135,792,-141}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00220() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{320,-316,-292,-364,319,-1000,463,1000,-433,651,-535,610,786,88,-124,464,-542,-1000,-446,-723,-313,-89,-134,-1000,500,916,727,-593,-405,351,-1000,-617,-497,-437,-926,799,-157,1000,925,1000,-357,-822,971,214,-164,-888,-151,-1000,-644,96,-174,-412,-651,484,-1000,-658,152,330,-458,732,-670,-30,-1000,-999}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00221() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{40,-794,939,-306,1000,-792,-255,322,305,-902,1000,-222,-504,1000,1000,-505,-35,-602,-342,1000,817,237,-1000,-86,-383,-1000,-1000,24,714,-1000,-1000,-330,723,238,-831,-1000,6,56,92,-133,-527,78,968,288,1000,221,718,1000,-602,-219,842,562,-532,235,-1000,407,1000,-804,1000,1000,470,-1000,-1000,-606}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00222() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{-1000,-703,1000,552,-886,896,1000,-497,-260,-971,-48,-635,-454,-1000,-1000,-895,-733,598,348,1000,-664,-595,-128,-1000,296,-55,-179,159,-165,420,111,-1000,240,17,763,401,226,-943,592,-936,151,101,1000,-669,-307,1000,-1000,293,-450,926,353,-149,343,-824,1000,1000,998,123,117,-1000,40,886,-1000,251}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00223() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearDomainMarkers(int):void",
+            new int[]{226,-685,-931,-403,817,-1000,992,1000,-1000,633,471,-122,-486,945,379,-1000,-932,-1000,-46,687,842,582,32,-481,-568,-1000,778,-17,-609,-1000,-479,-877,-1000,-1000,-157,1000,-633,1000,612,-1000,-1000,-1000,980,1000,-740,-1000,73,-271,-322,1000,576,127,-247,932,-1000,1000,481,243,1000,985,91,-468,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00224() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{519,-883,612,-50,561,560,-430,754,937,885,232,-282,333,-118,918,-442,-984,28,-197,-310,869,-387,-710,39,869,-827,102,887,-439,635,482,-93,-8,-553,-541,380,246,-812,-528,669,229,-324,823,491,701,-548,406,248,-343,-388,-57,-251,112,504,573,7,136,-505,-963,511,500,-823,-33,318}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00225() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{1000,1000,-271,-381,1000,674,-486,653,-477,-1000,649,-434,1000,439,-1000,-53,-462,-51,-1000,-874,-69,-409,1000,-569,405,-317,-522,-583,1000,-719,262,-57,1000,-709,1000,-1000,-1000,824,-88,1000,776,-473,1000,35,1000,-431,-597,-778,1000,168,966,254,1000,-1000,-359,308,-1000,-702,974,818,-1000,322,309,669}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00226() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{1000,1000,-271,616,-677,-199,-486,653,-489,1000,348,174,1000,-1000,-819,-4,-415,336,-670,-1000,285,-532,-641,296,1000,-317,690,-165,312,67,129,-687,1000,-132,236,-794,195,-4,855,1000,1000,-90,45,-411,-376,-975,-207,-1000,1000,-588,509,-618,494,-1000,649,-335,813,487,1000,722,-1000,1000,309,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00227() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{-266,-868,-751,178,-814,553,804,1000,1000,-1000,-349,-1000,1000,-85,247,-806,-1000,577,993,-52,98,-353,-1000,-293,-879,-1000,1000,1000,1000,1000,-354,1000,741,-1000,1000,504,141,-883,-65,996,1000,-33,874,-967,427,-318,858,1000,-3,1000,-1000,-198,-823,245,-174,1000,-1000,-824,-906,-430,-57,973,-871,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00228() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{1000,105,1000,84,-706,-199,-230,874,-13,1000,476,1000,402,-1000,682,253,-89,884,681,-703,1000,-438,-1000,1000,231,-1000,1000,487,-1000,766,430,-996,1000,536,-1000,6,940,-872,316,849,94,186,-1000,1000,-1000,-398,1000,-95,304,-308,100,-418,481,700,1000,-564,1000,1000,823,-280,680,350,133,801}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00229() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{519,223,1000,27,466,-793,1000,-391,-232,-639,232,1000,-222,248,1000,507,1000,565,-982,1000,538,442,-1000,969,-867,754,-1000,-143,1000,635,780,-93,-8,1000,-903,1000,591,-812,673,1000,568,703,892,1000,-341,431,1000,1000,534,694,530,994,845,1000,-4,524,416,26,-298,-482,143,-707,464,-280}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00230() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{660,548,-781,-363,255,677,-903,1000,-371,-742,432,-299,1000,-30,-1000,-1000,-998,-2,-981,-1000,-409,16,975,-1000,-1000,-909,-85,-236,638,-637,383,-385,1000,-1000,1000,-1000,-585,-255,-391,1000,1000,247,1000,-783,1000,-955,-211,-1000,1000,103,97,-1000,564,-1000,-742,-136,-1000,-1000,20,792,-986,945,-1000,-44}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00231() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{965,1000,-401,-1000,1000,-428,-486,578,-1000,-1000,1000,-413,688,689,-1000,-48,385,284,-1000,-738,-1000,-284,1000,-656,-735,-438,12,-1000,1000,-891,811,460,935,-764,1000,-864,-1000,860,207,978,1000,-414,1000,-972,341,-809,-1000,-1000,1000,1000,408,715,1000,-1000,-628,-668,-1000,-1000,33,-307,-1000,1000,492,16}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00232() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{965,42,109,-385,-1000,91,-975,1000,-227,1000,-320,-89,475,-173,-907,-1000,601,725,-973,-175,10,-1000,-1000,-206,433,-803,692,502,471,1000,543,-64,894,-688,-422,-677,184,-1000,-1000,978,873,-506,766,485,205,-1000,675,95,223,235,-1000,-993,1000,-229,1000,-1000,745,477,-1000,-394,-44,-548,-250,-11}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00233() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{898,549,762,70,-849,-379,-818,979,-374,1000,-524,1000,690,-1000,-193,-337,1000,929,174,-116,16,-504,-1000,1000,-55,-688,1000,-298,458,798,576,165,676,1000,-1000,-304,439,-883,303,950,680,381,-480,546,-1000,-357,758,-742,825,-1000,-673,-198,997,1000,1000,-611,1000,1000,-9,-187,-94,409,-704,502}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00234() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{1000,968,738,-455,238,150,-1000,653,-760,923,-133,-286,787,135,-1000,-1000,928,783,-1000,-602,-600,-409,-151,-638,425,-606,205,-604,1000,270,692,-634,971,-697,1000,-1000,-651,-928,-256,1000,1000,-222,796,-54,473,-943,-192,-1000,1000,-176,182,254,973,-229,549,308,417,580,974,1000,-1000,295,-450,873}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00235() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{1000,1000,-751,237,-518,-1000,804,481,-435,-545,544,779,582,-316,-219,436,-1000,168,-696,-561,7,-315,431,835,-74,-196,-770,-610,538,-1000,184,-628,608,118,636,-510,-372,955,621,928,453,499,578,291,-389,-501,-416,-1000,1000,812,803,451,757,-622,-90,47,-1000,78,747,769,-1000,540,-871,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00236() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{295,-633,585,-672,1000,1000,-612,837,163,567,534,32,895,395,326,-481,-729,-141,-422,-465,263,-508,-1000,-219,788,-652,9,336,-116,564,886,51,296,-975,-1000,-26,-102,-781,-1000,612,674,29,823,-413,701,-914,-5,248,1000,-308,-57,-386,7,504,-64,-436,901,-956,-963,478,500,-175,-151,-374}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00237() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{1000,534,-516,-101,-839,-1000,1000,-44,-124,-1000,1000,591,834,586,564,1000,-1000,-617,30,-773,875,703,598,991,-446,-43,-869,-291,1000,-1000,-159,577,525,350,1000,890,239,1000,905,714,198,-112,-22,29,112,42,-1000,-557,659,773,670,465,6,-545,-744,459,-1000,-632,1000,1000,252,734,134,768}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00238() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{1000,1000,-191,-961,835,112,-393,449,-1000,-1000,982,-577,1000,932,-1000,145,-215,332,-1000,-1000,-1000,-338,1000,-1000,-687,350,-1000,-1000,1000,-1000,-6,99,1000,-969,-566,-870,-1000,1000,944,1000,-33,-768,1000,-907,1000,-464,-1000,-1000,1000,1000,1000,704,1000,-1000,-1000,555,-1000,-1000,1000,1000,-1000,1000,-5,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00239() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeAxes():void",
+            new int[]{534,295,967,736,-831,-245,-507,761,766,554,-146,715,787,-712,916,759,670,-76,-225,-437,193,180,-850,938,209,59,-192,-13,627,-289,-236,739,407,734,-501,63,20,215,816,755,352,343,115,156,-663,275,844,-631,750,-939,659,211,530,927,481,428,768,965,973,336,68,388,-724,94}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00240() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{831,727,-835,-1000,667,-1000,-389,602,-1000,-917,22,-95,575,-1000,-71,-409,387,-577,-634,-543,773,460,-1000,-417,-251,-220,640,375,592,-856,-462,-444,-741,311,-938,513,-152,-1000,1000,-262,815,47,-663,-162,821,-796,-1000,-1000,1000,-828,-232,30,-867,-582,482,633,-319,-608,1,-735,1000,248,1000,223}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00241() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{-268,358,-426,-628,1000,-385,-836,-934,-1000,-1000,-1000,-1000,-1000,321,-31,-1000,-373,-101,825,-917,392,427,-722,1000,568,1000,-250,1000,-1000,427,-186,-938,-831,-193,1000,-259,616,-480,1000,1000,-385,-21,-937,1000,1000,-475,517,809,497,833,-445,-905,-1000,-818,692,548,-1000,250,-978,855,-173,868,255,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00242() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{285,56,799,-734,835,-341,397,1000,527,-935,820,754,703,-598,636,-94,561,-388,-507,-516,707,460,-89,865,-1000,843,1000,-980,592,-856,-188,-444,267,-1000,-1000,33,-152,-1000,-49,654,815,-1000,-941,-1000,588,136,-1000,-1000,544,-476,272,1000,344,892,-362,424,311,-859,438,-781,970,-253,981,-296}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00243() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{630,-560,-932,-188,885,238,-175,-431,-787,-254,-754,-37,127,-979,242,193,-777,-877,195,683,393,-58,-254,983,-363,289,213,1000,-665,1000,825,-453,914,-271,-529,-910,-1000,968,376,-120,-24,-452,870,-141,183,-26,-1000,728,254,953,-360,-797,-1000,162,-1000,-1000,315,-86,-603,-127,-909,-645,418,940}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00244() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{796,-965,-861,139,340,851,-765,-583,-306,179,895,-481,-785,998,478,-9,140,-685,-792,-13,677,882,275,-886,-330,-729,-123,974,719,682,-556,-659,-913,871,406,823,975,817,-228,-971,-171,-639,522,-257,-776,951,-646,432,556,812,-329,523,303,430,-112,-681,-73,-963,77,164,-382,-52,-211,536}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00245() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{451,1000,78,249,-441,-210,62,1000,730,111,-794,113,73,-900,-1000,153,1000,-1000,-748,-131,-525,126,-413,262,117,-579,23,-417,-154,-1000,-114,-707,183,-421,-1000,1000,949,-1000,564,478,1000,-348,-183,183,271,257,285,-257,1000,-342,521,912,134,-888,210,338,-548,-1000,-312,286,-191,742,907,-145}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00246() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{-1000,-1000,839,993,58,-1000,1000,-415,-674,121,-804,-993,-1000,1000,-502,-476,-1000,1000,1000,561,-1000,1000,-961,-873,733,-879,-1000,-57,-383,456,1000,-900,82,1000,1000,1000,990,168,1000,702,-428,355,-782,807,-575,-645,1000,455,-1000,122,1000,-1000,-1000,-1000,73,292,-1000,1000,-906,1000,-742,-452,788,46}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00247() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{1000,544,509,-774,835,-1000,-1000,-19,1000,-1000,-915,-383,400,-979,-145,-760,1000,-1000,816,553,1000,732,720,1000,733,22,248,14,-85,-253,270,-750,-1000,-1000,-115,882,-747,-575,1000,-1000,762,-1000,-1000,758,1000,-1000,-781,-218,1000,-117,-976,-708,351,-1000,219,331,165,-679,866,590,892,482,1000,108}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00248() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{305,-933,1000,-1000,-325,-943,620,-400,1000,-199,1000,539,694,160,896,-103,430,1000,-535,502,507,-1000,422,193,-399,400,-593,72,668,-1000,877,722,-826,237,437,-45,-1000,-1000,-57,-99,-249,-441,-56,-1000,-683,-425,487,-146,0,-721,-171,-834,981,228,938,-1000,574,890,913,-1000,-211,-678,375,432}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00249() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{1000,1000,-243,-286,184,-878,-937,1000,288,-700,1000,-344,1000,-1000,158,-281,904,-1000,-1000,-734,1000,1000,-1000,-813,452,-431,1000,-104,1000,-1000,-1000,-821,-527,-1000,-1000,1000,336,-1000,410,-1000,1000,-1000,-195,513,-1000,-1000,-1000,-1000,1000,-346,1000,1000,-269,-425,1000,418,1000,-1000,-650,35,1000,77,1000,-16}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00250() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{-266,286,784,-955,1000,-983,-134,-903,-1000,-1000,-166,-1000,-1000,1000,601,-880,-1000,667,1000,-763,810,1000,-961,1000,221,1000,-176,1000,-406,513,803,-782,-552,-1000,885,602,822,-532,827,967,39,-1000,-393,-451,1000,-326,399,219,180,756,787,-705,-1000,-295,313,461,-1000,923,-358,78,423,305,702,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00251() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{110,366,589,-1000,1000,-802,-133,295,-163,-1000,-215,-911,-499,361,421,-975,-460,99,522,-464,898,191,-1000,882,76,1000,51,839,-403,-482,539,-759,-333,-1000,-758,-73,723,-982,136,591,242,-1000,-563,-100,1000,-187,149,191,644,701,866,-83,-394,-401,376,326,-794,257,-1000,452,173,232,651,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00252() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{966,20,-721,-563,-216,549,1000,10,717,-175,-747,-891,-202,619,1000,274,-824,982,1000,560,540,-535,-209,-1000,-783,-275,-956,639,-493,-444,1000,-631,585,716,685,-37,-118,1000,-862,-446,666,1000,52,-676,-241,-722,611,427,177,923,748,-1000,1000,331,-713,-410,1000,1000,-310,-115,186,-746,224,-190}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00253() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{903,1000,-798,-46,-930,1000,-819,-124,-115,93,-679,480,697,-1000,828,331,595,-1000,-1000,476,375,-55,-208,-640,715,94,499,719,568,-709,-1000,-119,860,-77,-563,-923,-73,924,-527,-16,705,-51,196,-481,-1000,-102,-1000,260,16,776,198,758,329,85,366,-1000,1000,-514,94,-1000,-87,-1000,-598,829}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00254() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{253,323,1000,687,-1000,-834,1000,739,1000,911,994,-36,913,353,-10,938,-16,1000,-1000,906,-900,-1000,1000,-1000,-1000,-563,-1000,-43,123,-611,782,709,292,1000,-142,-580,140,12,-572,12,370,768,1000,-467,-573,1000,79,1000,-444,-1000,-650,552,100,-175,-698,790,687,401,1000,-1000,-105,-615,460,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00255() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers():void",
+            new int[]{323,361,1000,-1000,917,-1000,-245,-122,-469,-810,-1000,37,453,-1000,47,-257,-540,538,225,303,-58,266,-850,111,345,-103,0,-1,274,-1000,-106,-310,-312,-573,26,647,-960,-911,601,3,356,-842,-464,-338,689,-844,-120,-537,926,-699,95,-252,-395,-690,315,441,-312,-443,-335,-67,748,105,862,352}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00256() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{245,233,1000,-1000,557,-179,-480,-896,-753,-306,-941,953,250,-1000,34,988,-1000,785,489,63,-243,916,872,1000,893,792,-261,425,-854,-562,1000,912,-737,446,-282,718,563,-236,627,1000,-73,-102,-441,-86,109,741,-700,189,-262,1000,-1000,-603,-522,122,810,315,-147,938,-411,147,299,-395,1000,207}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00257() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{554,246,889,-193,-1000,851,-935,-19,-285,716,842,-1000,-1000,278,-1000,122,-486,-1000,508,-73,898,-340,-1000,418,-1000,-691,-378,-1000,301,-384,827,169,117,283,-887,115,104,1000,-1000,52,-610,-985,-523,-300,-370,-829,-233,301,145,-1000,-694,-1000,-254,1000,-413,-1000,-379,-484,-832,839,421,396,-216,-846}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00258() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{-178,760,749,-349,1000,822,900,478,-868,1,-1000,1000,662,-928,-272,17,-1000,-196,-1000,577,-31,-225,696,-671,-253,640,720,1000,-1000,302,-603,485,-469,1000,109,-40,284,31,12,440,907,1000,-926,314,907,-1000,446,-920,299,743,783,812,577,-120,-207,-446,-18,353,1000,-421,478,-596,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00259() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{978,679,-11,-995,-1000,-556,-1000,428,-1000,314,55,-73,250,73,-288,988,-759,344,-867,104,-1000,1000,127,930,-169,-1000,-1000,-660,-384,-1000,1000,219,990,-1000,508,879,489,1000,-96,188,71,-263,516,132,-629,1000,-578,501,1000,1000,-944,-1000,388,-325,668,-697,54,218,-1000,1000,-578,976,-51,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00260() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{-1000,34,-227,714,-1000,561,1000,476,246,-1000,-1000,922,532,-467,-71,-1000,-218,-245,802,780,1000,-697,1000,-1000,-582,1000,1000,471,370,794,-1000,-734,-1000,1000,-696,-897,-558,-738,-294,-1000,179,521,-1000,610,632,-839,532,-885,-1000,-326,1000,1000,-144,557,-1000,468,91,36,1000,843,908,-1000,385,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00261() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{-708,697,-251,-1000,-622,548,-251,433,-458,472,459,-95,261,437,173,-311,-1000,49,187,473,-353,189,1,-1000,-220,343,464,224,-284,569,546,-734,202,-312,148,22,1000,1000,-42,-1000,542,15,415,-482,718,400,494,-731,481,1000,653,110,739,168,-340,-937,-578,775,-50,682,-372,-532,876,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00262() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{-255,300,-456,520,-721,473,686,766,365,45,553,-425,-430,719,-30,-758,531,-1000,-418,-641,-678,-273,443,235,-721,-1000,65,-1000,919,161,-1000,470,271,-413,678,-1000,-1000,241,-1000,-1000,684,-144,-783,488,-305,-714,300,-507,404,-811,-756,-647,917,1000,567,822,-78,180,-52,-478,310,440,-218,-356}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00263() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{910,731,970,-215,568,335,433,103,-952,719,-425,237,180,404,-869,-499,-811,182,-911,645,-293,-725,-203,-285,519,-619,162,486,-609,348,-288,480,-404,993,734,7,34,-16,334,513,213,621,-132,17,779,-115,936,-534,764,145,868,390,282,-409,476,-556,0,600,728,-887,397,42,980,152}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00264() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{-1000,275,7,1000,-939,937,110,-476,1000,709,-43,-562,-783,703,-1000,-1000,528,-1000,85,-346,1000,-1000,1000,-930,-547,-33,1000,-1000,1000,1000,-1000,-219,-1000,201,661,-1000,-1000,-424,-1000,593,-262,751,-1000,758,53,-1000,778,-857,-473,-1000,981,-757,800,1000,-1000,-145,-779,-889,1000,-492,1000,-245,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00265() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{307,265,-1000,-89,1000,-690,1000,1000,-1000,1,84,598,-430,-553,-30,515,-264,1000,-418,-283,-891,639,708,185,-1000,492,-188,1000,-1000,521,-803,745,-210,-329,-893,-332,-1000,173,-487,203,389,1000,481,25,-486,73,300,-1000,-480,755,-979,565,289,-436,494,455,-78,134,-7,-1,310,172,818,310}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00266() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{-699,927,-1000,-106,-1000,-684,-312,1000,-328,978,419,-341,-231,1000,-196,829,-1000,-243,-659,415,-74,-305,205,-1000,-549,-399,677,-400,-301,-267,499,-1000,467,-1000,-658,91,1000,1000,207,-159,-5,560,703,210,281,912,935,-742,1000,1000,839,-205,382,360,-871,-1000,480,-464,265,793,-1000,-331,-220,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00267() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{-724,-149,-817,85,-1000,353,1000,116,845,-1000,-1000,-186,34,-1000,421,-816,54,-638,1000,-162,1000,200,1000,1000,-511,-1000,825,-992,-216,376,-1000,264,-1000,1000,385,-774,-691,-1000,2,-236,-868,64,-1000,-430,-319,-651,1000,-617,-504,100,-400,206,757,934,-1000,807,-784,-174,-400,924,723,-1000,977,818}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00268() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{820,171,-1000,209,-926,-558,396,652,-113,823,1000,-496,286,1000,-307,-92,-287,-428,-1000,-890,-1000,-219,-344,1000,-1000,-1000,-643,-867,494,-557,-215,-261,883,-1000,634,-233,-65,833,-573,-1000,-110,-251,705,176,672,477,172,-730,801,-695,-958,-382,-88,368,983,222,553,393,-668,1000,1000,1000,267,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00269() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{-559,246,988,-985,499,261,208,-124,-753,823,-161,670,-523,-918,156,698,-564,898,679,-982,-343,296,819,336,344,357,-334,690,-956,-343,990,333,-414,142,-887,-384,567,-275,807,531,21,-157,107,81,340,683,551,-337,-21,868,-819,-761,68,37,445,252,619,-101,42,922,714,135,697,-100}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00270() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{-263,-174,-121,-665,284,134,640,476,-1000,371,178,628,1000,1000,-490,-692,-1000,4,246,347,-651,-224,-642,-161,-888,1,100,673,305,-570,-191,-162,102,-330,141,137,1000,825,232,-1000,319,685,190,-546,394,-106,1000,-1000,525,738,110,1000,-164,-307,284,-657,-116,628,-806,1000,-379,341,776,-314}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00271() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clearRangeMarkers(int):void",
+            new int[]{-824,680,-286,-556,475,1000,877,542,1000,-77,-889,257,235,-469,271,-1000,-236,-124,-221,-447,-347,-80,585,-206,-445,649,510,571,-461,380,-924,1000,-730,654,-148,-1000,27,453,-857,-261,1000,618,-773,-515,479,154,-397,-785,-274,655,-469,-358,724,1000,79,640,464,621,-159,-106,714,-1000,1000,695}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00272() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{-77,-217,-323,284,1000,-336,-247,1000,15,19,-908,-296,-87,86,1000,-348,331,315,1000,786,1000,135,-1000,-967,1000,456,282,865,-557,-223,-484,85,-673,368,406,-607,1000,506,718,-279,-70,12,-591,699,-792,660,-731,1000,-12,-523,-181,1000,141,-864,-1000,420,-984,-1000,-220,603,-525,-263,-39,-85}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00273() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{-1000,-1000,-1,397,-1000,-1000,224,800,-107,-471,-487,-1000,-33,531,170,-260,96,-384,-1000,608,-1000,256,-386,-244,1000,484,-26,574,-462,326,-595,235,83,137,-308,-729,-415,1000,-1000,102,88,-167,-469,906,58,799,-540,759,-1000,-538,-1000,225,664,-454,-18,-318,-1000,-207,-70,1000,-1000,-297,322,295}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00274() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{471,-347,-1000,1000,-59,-51,-1000,1000,653,135,-490,94,-138,-906,1000,532,381,291,691,695,-1000,9,212,-854,795,-378,249,1000,1000,-845,-75,-1000,-269,-354,185,-181,327,418,513,383,250,222,-439,1000,-625,649,-355,1000,-367,95,509,1000,41,-261,-1000,564,-493,-1000,-1000,28,-1000,42,593,683}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00275() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{417,-110,-886,585,-786,260,-875,1000,-85,-497,771,-1000,641,-495,-1000,792,-262,1000,-155,364,-488,34,-1000,-922,-270,-16,-321,736,-907,-1000,814,-1000,1000,191,202,689,642,-1000,1000,-1000,149,138,-190,1000,487,191,-284,1000,-348,1000,-161,848,-65,-23,-132,424,-774,-1000,-680,-1000,20,-508,66,-238}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00276() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{-44,-1000,-336,-1000,85,-1000,919,42,438,178,-718,199,300,-921,788,457,136,-297,563,436,522,1000,979,-316,-625,-463,1000,-457,-273,-165,-451,1000,-353,90,-640,-1000,-167,145,-165,670,562,-73,-308,343,-35,-225,446,249,-427,657,-752,261,-66,-1000,-253,-154,396,530,-21,36,631,-755,144,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00277() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{349,725,153,-383,-783,-1000,746,-481,274,-889,-1000,1000,-10,-85,982,-268,-1000,-769,382,295,-329,42,1000,29,345,-237,-828,-794,-522,277,283,-388,-412,765,-1000,-106,-82,771,-463,1000,498,-543,-248,449,-435,-368,-567,431,-357,-455,-610,811,-336,-1000,-1000,598,567,454,-82,-10,-268,-851,261,-270}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00278() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{-358,-998,3,4,859,878,-460,-261,387,425,-597,431,-936,-1000,555,1000,-242,-996,-1000,-313,-929,497,-941,-398,-335,-1000,670,761,756,-1000,-523,-987,-470,-237,67,-671,-399,193,-553,640,646,76,638,1000,534,434,-80,-396,-58,843,392,471,739,928,107,-408,883,247,-1000,752,-745,-208,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00279() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{-291,21,-421,126,-1000,-1000,824,891,1000,152,-1000,100,634,-694,553,941,-649,-175,1000,260,1000,1000,585,-281,-1000,-1000,447,-715,643,-751,-232,426,-161,213,-612,-8,417,-551,1000,432,722,53,-344,1000,3,-307,290,854,-1000,323,160,1000,-271,-1000,-325,844,877,-5,-955,-202,-173,-688,385,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00280() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{994,1000,-591,-748,1000,86,-1000,-398,1000,1000,-545,1000,434,-1000,679,941,-1000,-989,1000,-1000,1000,438,-386,-633,-576,-1000,-1000,-19,97,-1000,1000,-272,-126,254,374,1000,342,-30,1000,-296,889,-129,1000,803,-230,431,1000,419,475,894,-683,1000,214,531,-1000,1000,1000,429,105,-1000,996,-885,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00281() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{-486,222,-96,-97,196,-1000,-88,911,-84,-491,-357,-83,1000,-207,1000,-1000,-249,163,1000,-253,-280,385,1000,159,653,-288,-523,376,-287,-475,112,1000,-72,823,-217,-160,368,1000,141,1000,685,311,-1000,-323,-1000,-191,392,888,-667,-556,-948,740,1000,-1000,-898,809,-315,-296,-59,296,399,-763,293,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00282() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{315,741,272,211,-1000,-1000,946,-13,-426,595,506,-86,1000,118,-306,-915,334,1000,1000,705,1000,-759,-812,-174,-1000,167,642,-388,769,-167,742,1000,1000,-498,362,149,718,-264,1000,173,-247,552,-47,-34,-1000,-667,273,-532,-687,-729,1000,-750,-888,-1000,891,-497,918,-1000,700,-1000,-1000,-428,-605,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00283() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{-356,-549,581,795,-412,-828,952,385,595,179,-434,669,-646,-571,-713,812,-862,629,38,799,719,647,-518,-206,-839,607,538,255,638,51,45,-39,788,-701,-395,505,775,-300,778,59,-730,-104,163,256,-181,348,-378,-137,-283,451,949,-388,428,349,598,-971,841,-804,745,-625,-806,-924,-80,947}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00284() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{397,-460,-578,908,-188,512,-607,231,341,130,-998,744,428,-607,-565,915,320,403,-422,175,632,189,389,-183,344,29,-179,856,-835,-45,382,-677,601,888,217,-129,718,-588,-336,-201,-394,611,641,-347,-162,542,-52,-603,846,-20,-421,831,82,849,-526,-596,-957,413,807,-142,826,-253,859,242}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00285() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{-16,301,-195,361,756,414,584,894,364,-192,-1000,-150,-455,-69,1000,505,-389,-213,201,447,1000,-291,-1000,-790,740,-246,-698,243,425,-493,396,-26,-1000,770,-323,362,1000,641,1000,-271,637,-286,-972,1000,-439,452,-606,998,-235,-713,-877,1000,678,-207,-1000,687,100,-1000,-1000,717,-283,-598,-502,-225}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00286() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{-266,156,982,320,641,343,-741,736,817,-338,-1000,-1000,-757,1000,888,313,-1000,-567,869,-105,1000,-630,437,-391,680,329,-1000,-1000,860,-531,299,12,-1,1000,-1000,1000,-381,260,-133,-156,1000,-310,-1000,1000,436,81,-286,1000,-1000,847,-170,1000,-606,46,-132,852,649,-103,-1000,749,-190,-657,-145,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00287() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.CategoryPlot", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "clone():java.lang.Object",
+            new int[]{-1000,-919,36,757,-648,-676,596,979,407,25,-1000,-1000,-801,-100,709,4,-1000,-91,201,1000,-827,59,975,-410,766,517,361,354,-1000,-255,-734,-216,56,436,-133,-896,989,-20,539,96,10,157,-27,1000,-259,481,-538,1000,-935,-637,466,703,-1000,-936,-617,-338,-981,-841,-259,485,-698,-371,-83,205}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00288() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{-1000,1,519,-1000,1000,-990,-963,-1000,113,-789,1000,-324,-662,1000,-1000,-294,-938,228,-1000,1000,-207,-1000,-795,1000,-768,190,435,-687,300,-569,-482,1000,-425,1000,604,277,-190,1000,1000,-1000,-1000,115,1000,-1000,-1000,41,912,1000,522,-985,-754,-375,-295,-1000,1000,1000,-976,-1000,-644,481,-441,-1000,992,-558}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00289() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{454,812,-51,1000,-1000,393,499,626,-331,427,-792,368,338,333,588,-734,822,-1000,1000,-901,-195,760,1000,-889,757,113,-498,632,916,633,-270,500,1000,-727,-299,-500,-31,-1000,-1000,-505,805,-353,-479,969,768,255,-433,372,-344,1000,284,-599,-544,1000,-1000,-508,1000,293,110,408,807,400,636,90}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00290() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{-1000,-144,-731,58,-903,-1000,115,-1000,-978,330,758,678,-437,-744,-659,1000,-830,1000,427,1000,-1000,437,-1000,-873,82,-29,-270,-124,278,1000,1000,387,737,1000,165,-705,908,1000,935,56,-1000,-515,1000,-719,702,-311,-1000,-1000,-948,-116,-152,-653,753,-1000,-198,1000,334,-457,-366,-1000,541,-400,-328,-212}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00291() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{344,41,-983,557,-1000,-1000,-51,-803,-829,-125,-246,913,-368,413,-950,732,354,1000,40,224,231,196,-466,163,579,-527,58,-442,472,1000,519,-147,475,312,257,-156,526,628,-91,-539,-499,-977,250,460,1000,-251,-256,-195,-718,-594,-349,-944,316,-412,146,963,559,686,-400,-247,275,-1000,236,164}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00292() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{-944,-782,19,998,-1000,-1000,417,131,-409,-490,-1000,693,23,-1000,-37,823,696,501,1000,-510,898,778,820,-1000,876,-88,236,-384,814,831,619,-269,-102,-669,210,-1000,172,-226,-549,-428,-123,-1000,1000,1000,1000,176,649,356,-929,-677,371,-982,423,273,-1000,586,1000,1000,-500,-94,1000,-1000,-762,-637}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00293() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{-1000,-663,-200,-229,-282,-1000,-187,-879,-42,-238,1000,319,340,190,469,-207,-359,-689,1000,598,-1000,-831,-50,274,-490,1000,277,1000,865,716,934,1000,-947,1000,141,-493,59,599,550,-583,-98,116,1000,617,-841,475,-1000,436,108,345,-805,15,165,-362,-54,918,701,-1000,16,-698,776,-580,605,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00294() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{-442,1000,179,-471,-600,141,562,33,626,260,1000,-578,-724,323,-243,1000,-1000,-550,-548,224,-1000,-608,-1000,-861,-1000,56,-383,303,-1000,-3,-303,787,-233,1000,-727,1000,913,1000,1000,480,-588,-977,-670,-1000,-1000,148,-566,-1000,376,-65,407,-944,744,-659,-333,867,559,-1000,-400,-1000,285,20,-1000,164}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00295() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{-660,931,316,-617,1000,661,744,233,1000,339,1000,-724,-648,674,-1000,-679,492,-1000,-519,-93,-1000,-707,-39,-357,638,712,-547,459,-1000,-580,-330,1000,-544,420,887,-409,-816,-618,923,1000,226,396,-1000,622,-1000,-661,477,-99,601,-620,668,-314,1000,-72,772,-1000,-1000,-806,1000,-151,231,-277,295,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00296() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{978,884,513,-43,-794,-493,1000,344,-481,270,353,-489,1000,810,646,793,112,-521,-400,-361,-226,498,-1000,-863,-1000,560,-1000,1000,-509,817,-243,4,624,705,-299,-508,734,1000,1000,-754,-12,207,1000,-1000,135,149,-460,-695,804,1000,-861,-819,180,279,141,1000,-182,848,-460,-220,741,293,-470,-113}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00297() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{471,395,-1000,861,-1000,-1000,300,-345,-991,1000,-120,593,232,-733,-700,1000,278,1000,721,338,-735,-156,-125,-509,579,-139,-80,265,451,1000,597,268,1000,393,326,-1000,688,-96,-85,-629,-471,-865,937,1000,1000,316,-731,-875,142,372,798,-1000,159,570,-759,1000,559,841,613,-728,1000,-63,-871,-298}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00298() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{884,387,-140,1000,-912,50,-80,51,-822,-337,-161,672,-565,828,-92,-562,548,1000,-351,-1000,1000,-12,-733,-165,1000,-631,76,-1000,1000,-922,-1000,-321,246,-832,-70,1000,303,-746,-1000,-967,576,-434,-1000,-210,554,-385,705,1000,-267,-116,182,-278,-1000,402,46,-580,1000,356,-683,839,-298,-400,1000,479}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00299() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{-982,527,646,368,-777,235,278,200,-712,848,509,-303,-692,-1000,-371,106,-1000,1000,-210,1000,-749,1000,-307,-1000,37,-163,-832,-310,74,888,1000,696,736,563,55,-411,584,497,298,229,-1000,103,993,-341,702,-367,-320,-1000,-692,1000,792,147,353,-462,-1000,364,370,-344,-419,-489,1000,1000,-163,909}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00300() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{859,1000,574,-202,632,1000,690,-163,662,-337,-64,180,-378,-48,313,314,-335,1000,-526,-278,1000,185,-1000,-485,-201,-1000,-1000,-476,-971,-386,-632,268,-1000,499,-822,955,281,839,593,1000,-490,827,-1000,-901,-544,-1000,501,-77,-254,-307,-526,1000,-801,367,1000,-273,-1000,-445,-1000,-451,-789,165,582,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00301() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{794,885,-580,735,-933,-133,1000,1000,-701,-456,-626,609,307,1000,1000,55,775,-284,-181,-1000,-376,-118,-590,-423,-996,-676,1000,196,1000,-547,-997,-320,389,115,-1000,-167,831,849,-333,-631,1000,637,195,-803,60,-320,-430,-747,809,986,-60,-656,-586,169,-842,263,614,30,-205,564,156,606,-989,-896}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00302() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{-199,72,-746,-11,25,-841,271,-770,-60,238,554,208,-449,-275,-89,1000,-810,1000,-679,968,-367,-1000,-1000,289,-650,-575,1000,-184,-870,885,509,142,-189,1000,-164,-86,818,1000,1000,424,-1000,-220,961,482,-52,-207,-483,-1000,153,-1000,152,-294,1000,-780,549,1000,-841,-65,-165,-1000,145,-874,-909,-96}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00303() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureDomainAxes():void",
+            new int[]{511,711,-343,1000,-1000,-122,469,397,-344,578,-1000,528,765,-222,402,-479,933,-1000,1000,-901,349,760,1000,-979,757,91,-409,632,916,963,-195,439,1000,-727,-230,-1000,-4,-1000,-1000,-521,698,-544,397,1000,953,287,-567,707,-249,1000,302,485,-363,1000,-867,-328,1000,448,479,273,817,106,636,-33}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00304() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{1000,435,1000,663,498,304,-918,-941,-261,-785,721,-70,291,583,-54,949,499,-69,576,-88,-992,-1000,453,484,-812,-1000,1000,-700,-279,-973,-1000,-947,-486,638,-412,-976,731,355,-282,-1000,-199,739,-835,-952,539,619,-880,-135,1000,-905,-141,-842,282,-1000,-335,560,629,985,437,-1000,1000,-227,-937,-555}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00305() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{-455,714,-146,120,991,715,886,419,-243,-80,166,1000,-1000,-1000,317,841,405,-917,-984,367,806,-129,1000,1000,-1000,-641,-927,-247,-238,218,483,-10,-455,400,58,288,-542,-1000,1000,-747,-960,-52,239,909,1000,655,-1000,885,-741,-1000,-68,-431,-59,-370,400,390,210,-627,1000,-693,1000,-153,-340,-316}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00306() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{685,1000,509,899,639,1000,-274,-408,-905,-610,682,773,-795,-407,-54,686,499,-1000,-180,151,-281,-988,1000,1000,-929,65,-273,-480,-884,-894,8,-796,-1000,-292,177,-212,-312,-188,733,-1000,-1000,703,5,-339,860,-19,-880,692,-34,-1000,168,-1000,333,-488,-335,1000,-279,684,823,-932,1000,-633,-423,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00307() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{839,-43,1000,37,387,-486,-1000,-938,-138,-602,166,-185,-182,940,-646,72,1000,574,-1000,-160,-992,-1000,-13,-107,1000,-132,975,-741,157,161,-371,-470,-486,-725,-800,-547,236,1000,-693,-609,51,-1000,-992,-1000,745,619,-780,-389,849,-905,-74,-400,796,526,-817,-158,-771,729,554,-1000,-15,199,-730,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00308() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{-738,-692,363,851,522,957,-178,222,597,731,-197,-812,1000,-1000,1000,459,-881,-355,-16,1000,473,782,590,-230,-148,-1000,686,1000,-1000,-91,-1000,-562,-635,155,-1000,-194,1000,-730,724,-1000,-702,225,1000,64,1000,196,-1000,-655,487,-991,-377,-10,172,29,472,344,172,-323,451,-712,330,964,637,35}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00309() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{363,-123,1000,67,770,927,-286,14,299,580,3,-1000,-431,-1000,134,1000,335,-510,-696,1000,498,877,20,3,194,-1000,1000,887,400,-463,-734,-391,-516,-753,-1000,-413,1000,-649,721,-1000,-942,-202,500,-502,301,1000,-1000,-850,-700,-223,-1000,-413,1000,527,351,-515,543,65,824,-859,560,563,478,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00310() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{-624,-1000,-701,186,145,-1000,257,-624,1000,610,-1000,164,390,203,-904,-1000,-430,1000,-1000,784,-476,902,-1000,-1000,-82,787,788,-1000,722,449,1000,985,1000,55,-1000,-127,-11,213,-584,391,1000,-1000,4,407,541,658,4,-169,266,-124,-681,1000,502,715,81,-613,-585,-943,-601,877,-1000,1000,982,563}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00311() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{-244,-307,103,-269,551,387,330,-115,1000,-692,77,751,-1000,-496,-610,188,499,-565,-647,248,1000,1000,577,278,-352,873,-459,197,-342,479,-1000,312,-1000,234,-138,-750,235,541,-251,-1000,-856,782,-571,-1000,879,231,-1000,1000,-628,-541,534,-375,89,765,66,-1000,608,-842,581,-933,750,963,347,531}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00312() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{-38,338,504,612,1000,822,22,-752,-271,-176,-41,-70,593,-449,1000,225,-476,-426,431,-39,-654,-402,208,492,-1000,-1000,1000,-487,-855,-541,-526,48,-853,348,-611,-1000,471,-748,1000,-1000,-624,-627,162,248,1000,-232,-880,756,1000,-674,-417,-347,1000,-1000,565,887,-154,800,-353,-760,1000,-512,355,-671}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00313() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{-748,76,-897,399,704,392,368,-89,104,-495,209,1000,-583,-605,1000,-982,-1000,-554,-968,-124,-11,1000,423,348,-413,415,-958,270,-199,866,850,-408,-383,842,-340,90,-104,-237,165,-2,-347,-415,429,234,1000,-220,-553,701,-599,-427,329,8,406,359,666,40,-141,-644,286,-366,-25,-32,399,566}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00314() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{379,31,369,1000,603,-568,84,-621,-364,-828,209,26,435,509,-1000,-866,1000,-917,-705,-807,-729,-711,-102,432,206,183,533,-1000,-63,113,-88,-317,-111,-212,-200,-462,-521,746,-190,-350,39,-833,-1000,-640,301,912,-552,6,72,-616,-482,134,-59,306,-657,-396,-520,-75,544,-936,70,-247,-340,-316}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00315() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{-649,-863,695,391,497,-414,-953,-921,279,-429,-29,-1000,868,877,470,-892,-866,1000,389,625,-994,-252,1000,43,816,-213,1000,-1000,-444,-571,-1000,-963,-250,662,-1000,-1000,355,870,-1000,-848,251,-105,-444,-222,786,544,-676,-803,1000,-440,-357,-301,626,-522,-50,-79,-658,862,-737,-1000,-496,454,506,185}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00316() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{-1000,-316,-246,-83,967,382,562,168,418,42,-392,752,-588,-1000,610,-790,-1000,-198,-881,470,546,534,333,198,-352,-41,-383,267,-433,757,67,-362,-566,410,-505,161,427,-964,829,-864,-584,-793,359,687,624,176,-1000,-47,-425,-1000,-361,175,876,185,562,-161,45,-603,534,-648,295,841,675,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00317() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{-754,-201,-1000,400,609,159,-464,545,-252,-524,312,-361,-566,309,470,-400,-955,-98,540,472,-1000,921,-400,-651,236,-182,-884,-606,-863,-118,628,-918,-79,851,42,-287,-427,762,-141,918,-149,696,403,-4,197,-979,340,622,-728,1000,-25,-303,-43,-592,663,178,-431,872,-325,-849,-764,-542,-448,690}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00318() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{-423,-187,463,528,531,-297,-733,-621,304,-828,508,893,435,253,-1000,-981,348,396,-950,203,-729,-562,-414,-383,397,116,-289,-617,-275,506,345,1,-195,90,-746,-726,94,746,-190,56,-234,-668,-185,-640,-1000,223,-534,644,466,-22,-338,118,254,372,232,-773,94,26,-305,-414,75,-84,-165,-691}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00319() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "configureRangeAxes():void",
+            new int[]{164,-830,929,-485,495,-143,-1000,-14,990,-603,808,1000,-465,323,-324,-3,57,196,-779,996,158,-20,33,-67,-230,255,-279,-94,9,328,-1000,-342,168,-28,-808,877,698,1000,-497,-515,-592,426,-128,-1000,892,-277,-1000,419,-1000,-1000,392,401,-633,1000,-417,370,-761,-984,919,-1000,16,1000,-1000,728}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00320() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-333,-349,501,-481,-1000,179,-808,-86,309,198,-1000,-625,1000,-447,-334,899,677,-376,1000,-110,121,-19,-180,1000,136,90,809,-286,-558,42,542,849,290,145,513,-115,891,-1000,1000,1000,-1000,13,288,-584,-20,671,65,1000,-474,-688,-1000,-685,-497,691,-1000,-611,1000,1000,-1000,1000,1000,52,-913,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00321() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-648,1000,-66,-628,185,-617,-854,-550,3,844,1000,-741,-1000,763,394,11,-349,-149,-1000,40,1000,750,-1000,963,1000,1000,-1000,310,1000,-1000,775,280,941,-196,-1000,834,-1000,805,-854,24,855,-993,389,-518,1000,-619,65,-111,-54,238,1000,1000,-131,-1000,1000,-833,42,-362,642,476,-1000,659,912,-118}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00322() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-1000,313,147,-863,185,-617,-746,-221,3,1000,1000,-562,-981,-636,-1000,11,396,296,121,788,1000,329,-200,281,1000,652,-467,1000,442,-537,1000,-541,1000,-1000,-1000,568,-1000,1000,82,346,605,-1000,122,569,121,299,446,1000,-1000,1000,-388,1000,778,604,-76,-141,427,207,895,162,-1000,291,-821,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00323() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-1000,1000,-71,-900,729,-1000,-560,-651,225,958,1000,-773,-1000,453,-267,132,315,563,-584,161,1000,1000,-380,400,-388,260,-549,1000,1000,-298,288,377,1000,-865,-774,966,-1000,917,-105,320,584,-1000,215,-882,528,-364,395,1000,-813,676,187,994,527,-260,300,-459,131,42,626,146,-1000,21,-112,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00324() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-1000,884,-101,-111,556,-1000,-477,745,15,13,1000,-504,-1000,-272,-219,899,789,500,-655,556,804,1000,-758,122,1000,566,-720,1000,1000,-329,668,768,-679,-935,-1000,1000,-1000,565,119,524,1000,-1000,298,-684,91,-522,418,1000,-1000,-90,553,1000,-15,-285,237,-503,265,-478,818,-221,-1000,715,-388,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00325() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-1000,561,-652,-1000,273,-699,-84,709,682,1000,684,-416,-369,-20,-933,733,190,296,634,675,-9,-579,-36,281,1000,-320,245,1000,289,157,430,-541,-266,-840,-1000,-129,-591,716,82,421,932,-874,122,-804,-356,299,-192,1000,-1000,816,-266,780,778,117,486,-349,-527,-362,895,-84,-1000,-25,-821,813}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00326() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-515,694,-393,714,-485,27,-160,502,-870,-44,-580,-174,331,-660,-611,907,-665,46,-316,951,-453,-1000,-251,-347,-1000,1000,-471,552,-102,-423,1000,-1000,-804,1000,1000,-1000,-582,-1000,150,-963,-792,211,-222,855,-546,657,-1000,436,1000,574,387,373,465,1000,106,358,122,-1000,-393,380,201,1000,207,-531}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00327() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-333,-1000,-676,-74,-1000,1000,694,1000,-9,-204,-1000,319,-241,-447,-334,1000,-120,30,399,598,-1000,-1000,-84,-908,539,520,263,238,-1000,97,884,-1000,-185,407,-269,-1000,-491,-609,-461,-1000,-730,547,288,670,-1000,515,-900,216,540,-688,-551,303,309,1000,-603,1000,626,-668,65,-487,-52,630,268,260}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00328() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-1000,877,-1000,-762,388,-1000,367,537,403,662,116,-452,-756,1000,283,1000,-1,1000,-1000,781,1000,-401,-130,250,-66,-1000,338,979,1000,951,-302,895,185,184,-577,1000,-154,281,-957,36,1000,-290,915,-1000,360,-1000,-522,-5,-613,212,541,795,559,-463,1000,-485,-598,-667,-285,-855,-1000,-431,557,889}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00329() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-488,389,646,-700,-1000,154,929,1000,1000,-1000,1000,939,976,436,768,-1000,-106,-28,281,288,-310,328,268,580,-95,917,482,1000,-675,-243,-699,-1000,972,-1000,-252,1000,963,1000,1000,1000,274,-943,-80,-254,647,1000,1000,797,-690,-128,-1000,414,-878,1000,-97,-461,-1000,1000,-502,446,20,1000,724,571}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00330() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-559,-518,-197,-11,-958,-913,-1000,-731,1000,1000,-1000,-1000,1000,-628,-653,-563,1000,889,1000,100,896,1000,951,1000,1000,-488,1000,1000,665,219,-150,1000,1000,-1000,-867,1000,1000,1000,1000,1000,-1000,-1000,-224,-163,188,1000,1000,1000,-1000,275,-1000,-998,471,1000,-1000,-574,1000,1000,-1000,1000,-1000,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00331() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-1000,1000,644,-299,1000,-1000,-1000,-653,-418,1000,1000,-1000,-1000,-1000,-1000,431,710,188,-124,1000,756,165,-215,944,447,168,-1000,562,1000,-1000,139,924,706,-400,-880,1000,-1000,372,1000,1000,1000,-1000,-624,781,917,564,716,1000,-1000,1000,284,1000,1000,-333,1000,-1000,-1000,-342,888,1000,-1000,1000,-1000,-16}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00332() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{847,713,-853,-962,-183,-758,660,-490,412,544,934,-696,-497,434,1000,321,264,1000,-822,1000,127,644,-190,41,1000,-852,265,1000,841,733,189,769,407,-676,-1000,946,-280,-115,-827,587,1000,-1000,557,-621,21,-805,320,1000,-419,384,-298,896,259,366,786,44,-199,-1000,-285,-956,-1000,-370,-26,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00333() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-71,575,-439,240,366,585,288,-839,448,-703,418,-491,-671,-633,-134,395,-132,856,923,738,-561,-361,-973,-1000,853,-355,214,822,123,-410,800,-575,579,171,587,-146,-782,102,-803,-1000,-1000,-371,282,690,-1000,-1000,348,499,-359,555,579,192,284,-496,-391,-365,381,-769,-141,-1000,-949,-111,758,469}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00334() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-435,769,530,-822,65,-1000,291,304,-792,-124,-344,-456,-480,-311,-1000,299,-1000,-1000,313,-232,172,176,-1000,331,-1000,-99,-245,-503,-1000,-1000,-1000,-1000,-1000,-1000,470,-570,488,-1000,25,352,-833,-174,610,1000,946,-756,1000,-888,653,1000,810,-341,-22,-629,6,759,917,-5,-459,-1000,1000,699,75,-376}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00335() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "datasetChanged(org.jfree.data.general.DatasetChangeEvent):void",
+            new int[]{-1000,476,654,-1000,-767,-619,-686,-1000,923,974,882,-962,-1000,-149,-1000,-1000,1000,730,1000,-457,993,40,108,-267,672,-891,1000,875,-172,366,-38,1000,-942,-1000,-1000,981,1000,909,1000,1000,-329,-1000,1000,-1000,88,-443,564,1000,-1000,-818,-1000,42,291,328,192,-1000,-653,1000,-54,417,-1000,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00336() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-544,537,1000,815,344,1000,829,263,860,-414,-1000,-497,79,313,-453,-1000,1000,-884,-758,766,19,-611,-1000,-199,985,-1000,289,-682,755,1000,911,-1000,-1000,-1000,1000,-296,151,-1000,525,1000,-897,-602,1000,262,1000,1000,1000,198,-168,-488,1000,621,222,-285,446,-590,-363,400,-315,1000,-1000,59,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00337() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{351,-470,799,-977,749,-157,-735,-300,568,-444,-467,-949,-27,977,621,97,-532,-965,636,-376,-828,788,6,-218,-292,-339,635,-274,639,-604,-386,372,-917,-249,-338,407,-69,-429,957,302,-109,-977,679,-716,508,-508,-761,-26,229,933,-98,699,633,310,-681,367,996,-836,335,-745,535,-675,-612,-973}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00338() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{1000,-1000,714,-1000,-757,551,-835,-153,-1000,649,601,1000,74,-801,1000,-910,13,-1000,205,-1000,-1000,534,-287,-519,-1000,933,-366,0,-1000,-1000,-874,1000,-1000,895,860,1000,-1000,839,1000,-847,1000,749,-420,-945,-847,418,-992,-1000,-321,881,-1000,1000,-685,-485,-1000,1000,-510,1000,524,1000,859,108,-19,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00339() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{749,28,-951,864,-52,578,607,-1000,331,493,-1000,-108,607,-185,589,94,486,-1000,-395,-1000,777,-707,-965,916,221,-780,1000,737,-1000,-1000,204,-499,-1000,-738,1000,394,907,-715,272,6,280,363,159,-86,293,215,571,297,-1000,168,512,-442,-1000,712,-127,36,98,1000,132,382,-753,-38,1000,854}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00340() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{144,63,374,-310,346,10,-196,-674,-390,-280,1000,1000,-396,18,349,304,-38,-58,188,-588,-343,-585,-18,231,-360,1000,782,1000,-1000,-1000,881,37,-421,672,294,829,736,87,-95,-784,298,-35,35,-870,-147,175,-1000,357,-488,303,-111,246,-596,-244,818,87,-71,739,-147,-7,533,54,90,323}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00341() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{634,-641,1000,1000,1000,1000,680,344,568,-83,-220,594,-249,-956,374,-1000,1000,-249,-240,-610,-947,-1000,-1000,-29,840,-232,-577,1000,-737,1000,348,130,-156,-289,1000,1000,867,-116,404,-695,410,271,635,1000,953,1000,857,-670,-820,-832,-395,730,-513,-616,-21,135,-879,1000,-130,1000,-928,659,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00342() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-927,-1000,374,-789,1000,493,873,-193,6,-896,42,-352,-907,944,-65,-214,681,-783,-1000,-608,-1000,1000,-507,170,243,-588,-145,-1000,856,168,-1000,400,-191,143,-1000,119,736,-32,1000,716,269,-35,287,-217,-42,-1000,37,845,-464,303,-400,1000,1000,-244,-1000,301,963,-1000,-984,1000,-333,-1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00343() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{234,-62,118,-258,350,-270,-946,-662,101,103,202,945,684,-438,986,-134,-569,523,867,528,-359,150,627,363,-65,-545,202,406,274,-356,443,-875,-493,700,671,118,-925,-196,-574,-130,-665,340,446,-976,841,-37,-446,-694,905,489,899,611,-259,-794,776,597,624,618,111,596,575,-392,647,651}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00344() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{474,-1000,-248,-83,-299,1000,2,-300,568,1000,-799,701,592,-114,343,-1000,649,-1000,-581,-392,-208,640,-831,-311,-48,-467,-214,-408,-409,-52,-1000,372,-1000,-276,386,158,-815,79,1000,401,-109,73,250,-52,-113,-306,408,-684,-471,466,-98,1000,-322,386,-1000,239,239,283,111,305,-215,-629,-28,507}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00345() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{229,-394,-921,-1000,-791,648,-375,-79,154,1000,-320,-834,-88,285,226,429,204,-459,-464,-243,-67,146,1000,-358,-46,35,821,144,751,212,-655,125,-712,-26,-1000,798,347,814,668,519,-201,74,-441,292,217,-388,16,-872,-652,126,90,420,367,258,-844,-382,247,-1000,-504,-145,-57,-721,-422,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00346() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-258,-33,-1000,-177,106,729,186,140,634,1000,27,-768,417,492,-210,563,-500,229,-54,983,296,-382,-698,-453,300,75,331,434,123,800,27,-239,-152,-263,-92,-30,1000,-392,19,873,-973,-562,502,223,368,43,277,-176,382,225,-218,-333,256,303,818,-928,216,-564,-122,222,121,-367,-18,-139}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00347() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-14,-1000,639,-310,1000,-253,-394,-645,876,288,-1000,-975,-423,1000,1000,560,-466,-980,50,20,-389,-585,1000,-577,-360,-704,1000,-91,-35,-464,-1000,222,-587,672,-1000,1000,736,-570,1000,-96,-193,-1000,448,-1000,-902,-766,-1000,-1000,398,1000,-1000,856,633,645,-359,-391,885,-836,259,-1000,1000,-1000,-851,-594}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00348() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-929,249,672,-839,1000,1000,-66,204,447,189,-1000,-1000,-708,984,-270,-612,1000,-993,-1000,668,-1000,-436,-1000,175,1000,-1000,-364,-1000,267,510,588,907,-1000,-904,568,-144,72,-377,-25,1000,-214,-1000,339,682,1000,-1000,-1000,893,-1000,-53,399,-66,1000,-255,774,346,490,-1000,-1000,1000,-654,-869,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00349() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-623,231,464,343,239,865,122,-333,-133,126,877,1000,-235,34,378,-781,-365,-83,443,-273,789,-507,6,86,-502,995,1000,-1000,-819,632,648,-924,-253,297,57,1000,374,-313,-65,-850,124,267,255,-1000,-487,-71,-762,232,52,350,-257,457,-596,-380,1000,-479,-68,1000,-34,-186,859,350,65,313}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00350() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-1000,-165,282,-930,1000,364,652,-862,1000,-1000,-1000,-410,-467,1000,-487,634,1000,-854,280,229,-1000,1000,-1000,255,632,-1000,800,-1000,480,-520,-912,119,-1000,-761,380,-426,246,-1000,1000,727,-1000,-1000,1000,-1000,840,-1000,23,1000,441,1000,631,1000,1000,1000,-1000,-1000,1000,-1000,1000,-753,300,-1000,-1000,-980}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00351() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{904,-1000,219,-234,-505,-934,-1000,1000,-822,-224,1000,668,782,583,219,-1000,-1000,-1000,-931,-204,-858,1000,442,-1000,445,983,-116,-763,1000,-1000,-677,1000,-1000,-399,-400,646,-557,400,1000,-1000,1000,-83,951,-1000,-250,-378,-1000,-1000,-732,1000,-1000,1000,681,-254,1000,1000,1000,-400,-45,-400,1000,137,-800,-547}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00352() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{1000,-903,-889,39,562,376,1000,-690,-541,-1000,1000,250,1000,1000,215,-1000,598,-100,-1000,304,583,-197,308,513,471,536,-745,-1000,-247,784,-1000,434,1000,1000,522,765,-1000,-248,1000,140,-894,1000,-1000,1000,1000,1000,1000,-374,-1000,-104,-462,-323,-1000,1000,197,362,1000,-1000,-1000,33,132,1000,368,-464}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00353() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{639,912,338,-504,908,91,324,406,-46,-382,599,310,-14,917,1000,-592,-587,339,291,334,384,-105,-259,709,-10,-421,608,-148,415,644,-1000,555,230,892,-958,1000,852,830,-878,-896,-590,281,-352,100,1000,142,-277,109,77,186,336,-447,-908,606,-108,-308,831,-47,604,-2,-190,-224,731,794}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00354() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{-943,1000,-86,905,1000,751,-616,-934,-1000,-733,1000,-1000,-656,-566,-40,18,-420,-1000,627,-38,-206,-338,-1000,253,868,824,129,192,950,-236,-365,429,-505,758,572,272,1000,239,-1000,-826,-552,971,-1000,236,103,-1000,-701,434,-269,-495,-15,-144,-395,-2,-914,119,1000,650,-23,1000,-1000,1000,802,794}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00355() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{-1000,194,-791,-69,585,-1000,97,-20,417,838,495,606,-676,-768,131,334,-1000,1000,466,370,654,-1000,649,335,-1000,-1000,1000,1000,49,-481,371,-1000,-575,107,536,-434,200,1000,-1000,-214,346,-891,1000,-387,-322,-153,-536,-518,645,330,-1000,-1000,976,-582,-125,-650,-142,30,368,285,-608,345,-552,50}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00356() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{-139,-935,-299,1000,853,-943,-280,-441,583,259,-191,206,319,-56,-891,-148,-171,271,-257,607,-488,-712,-65,-151,-505,-51,-694,365,927,-152,595,-776,-933,392,-500,-929,687,-412,345,-607,-164,-1000,868,-554,146,148,-107,-1000,212,-94,-554,562,-1000,161,-979,-1000,1000,908,238,176,-454,60,-675,-499}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00357() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{126,-1000,-202,817,89,-871,339,246,565,-735,-956,437,-554,826,-925,-1000,1000,231,-677,619,-997,-1000,505,991,-425,451,-1000,246,753,-725,627,-911,-753,-261,-1000,-782,449,-1000,-819,-157,-727,-1000,-1000,-1000,266,422,-253,-1000,-243,533,-873,1000,-500,-70,-823,-1000,-400,879,254,-347,-604,-147,-842,68}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00358() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{-1000,685,-345,710,683,506,81,153,-757,-244,-51,-225,-366,-96,-492,-11,397,-859,377,-265,-365,-528,-1000,1000,708,75,554,1000,1000,-558,260,-680,-868,418,547,-211,914,-150,-1000,-1000,-182,-74,-768,-246,-365,-982,-607,434,-614,-495,-791,131,184,-607,-1000,793,-170,650,105,53,-924,796,556,794}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00359() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{1000,-793,-101,924,237,183,-537,1000,-528,-935,-787,163,749,203,-982,202,1000,-487,-345,237,-626,-1000,662,1000,474,-131,873,1000,-616,-854,254,-493,-581,172,-1000,-1000,208,-555,189,-561,-625,-786,-1000,-1000,-64,-379,-238,842,55,-221,-4,1000,1000,-467,-685,234,20,740,1000,-629,-500,-613,470,569}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00360() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{116,400,-617,443,677,-125,717,-1000,-513,886,367,-319,52,1000,-200,-1000,-1000,-49,-1000,688,-352,-180,-24,-105,-27,692,-1000,-1000,809,-290,-299,-131,753,1000,491,-70,354,-361,707,-218,-424,332,-74,471,814,802,-692,-493,-814,-993,-713,-83,-1000,260,-430,-21,1000,-323,-1000,1000,-439,340,-13,273}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00361() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{-1000,1000,-941,887,1000,1000,-710,-1000,-1000,-493,1000,-1000,-603,-486,1000,848,-1000,-300,957,-546,578,-17,-253,-395,1000,-84,850,-158,219,1000,-110,1000,-205,-42,1000,750,925,1000,-176,-13,-399,1000,-1000,1000,142,-1000,-272,1000,-1000,-1000,-236,-88,-208,-687,-311,861,1000,-271,-526,1000,-734,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00362() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{-653,560,-712,64,-911,680,259,-173,461,-144,-351,733,364,-444,605,-795,-682,-625,-727,-259,756,-96,-123,408,482,-936,-218,-817,241,-379,481,608,-347,-533,598,235,-700,-953,531,253,721,-211,-863,-603,216,-219,995,-289,942,114,211,103,-422,-748,-538,-274,25,-383,-938,-804,-972,165,167,398}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00363() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{-294,-1000,19,320,269,-1000,-48,182,1000,-262,-1000,426,-755,197,-1000,-1000,1000,465,-966,829,-1000,-1000,758,477,-1000,579,-1000,703,1000,-1000,-365,-993,-931,-603,-1000,-1000,1000,-1000,-407,-159,-305,-1000,-352,-1000,133,-866,-1000,-1000,265,1000,-992,-18,-1000,-324,-371,-1000,21,1000,190,374,-911,-1000,802,-272}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00364() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{964,-932,-937,249,255,989,668,-159,-1000,-1000,1000,480,1000,930,289,-473,1000,-401,-159,-30,1000,-190,-78,861,1000,274,1000,-558,-1000,1000,-1000,628,827,661,386,983,981,12,873,-256,37,-1000,-1000,1000,1000,480,1000,461,-1000,-111,41,-471,-163,1000,374,1000,580,-1000,-497,-616,517,1000,1000,-462}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00365() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{770,281,593,21,492,-314,950,-480,714,82,1000,-140,1000,418,782,-972,-896,-300,-650,282,-371,-131,-253,558,-59,-173,-792,-1000,1000,-718,-1000,306,472,1000,-1000,453,851,148,-53,-120,-1000,419,-302,-651,1000,937,-507,-1000,-137,819,338,953,-1000,1000,-384,-1000,1000,-828,-1000,160,-56,63,-1,409}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00366() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{-1000,-907,-678,1000,1000,-1000,771,-1000,1000,1000,1000,298,778,-801,-159,-857,-1000,619,-736,-388,36,-676,499,200,-1000,-647,522,540,427,-1000,-159,-1000,177,427,185,-1000,22,180,-588,-1000,-781,375,251,910,417,1000,-642,-154,215,1000,-817,-724,-1000,-610,-730,-1000,-105,125,-883,-1000,-1000,-1000,-1000,-377}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00367() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "drawBackground(java.awt.Graphics2D,java.awt.geom.Rectangle2D):void",
+            new int[]{1000,-998,-23,-584,1000,296,-280,490,3,-1000,-328,454,248,1000,-531,-972,1000,-326,-433,947,332,-606,179,475,-200,743,-514,-92,1000,122,-1000,429,-166,407,-852,-26,532,-1000,858,310,-583,-519,247,-566,691,-79,157,620,-393,227,93,-902,-993,828,-449,-46,782,379,981,1000,-311,784,-198,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00368() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{1000,-892,429,-1000,-1000,-659,932,1000,1000,-1000,-54,-598,145,-950,49,404,-916,-163,872,1000,-1000,280,-1000,-1000,-1000,-1000,770,97,1000,-1000,-1000,-1000,1000,807,-961,860,207,933,1000,30,133,-178,-1000,-1000,430,111,698,500,-1000,-545,173,560,-1000,615,-1000,-996,771,-519,1000,-730,-168,1000,601,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00369() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{-846,519,-376,-823,270,231,975,-358,-582,112,323,-378,10,283,312,485,-243,965,-683,-677,905,792,132,-30,773,681,-826,-812,-881,415,758,-531,244,-840,309,146,-527,-18,-994,459,-310,98,248,88,-99,-937,-363,266,497,406,669,74,816,311,228,-272,-98,-126,-848,-219,919,-824,-366,34}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00370() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{-922,-886,-201,-121,371,-451,-857,-706,-20,-118,780,825,-221,901,-887,-280,295,-932,186,-620,831,-59,869,-515,519,814,521,780,481,390,-709,603,609,-703,581,-562,266,171,-247,806,155,-369,-863,598,-991,-996,621,-388,-632,-79,-339,499,-330,-991,429,-426,-814,833,989,-973,-112,-50,-112,-47}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00371() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{189,519,806,-991,-661,141,836,949,155,-278,-649,-83,964,-850,84,-412,582,604,-575,-120,-436,320,-648,-559,-971,-724,792,294,858,-822,-787,-681,418,251,-426,-478,706,113,359,-18,826,741,364,-752,47,983,-852,541,-665,-645,618,605,-761,0,-924,-709,244,-438,255,25,-658,482,349,211}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00372() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{844,-1000,-51,-941,583,-1000,-410,70,-643,-333,-248,-1000,153,694,-1000,821,897,353,1000,-1000,1000,-677,-717,-854,-362,345,-327,1000,1000,-119,1000,127,74,-204,-255,812,689,1000,400,539,129,-145,-715,470,75,381,434,-355,-1000,-145,932,-795,793,624,442,-1000,-814,-1000,-400,496,1000,1000,-768,535}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00373() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{-1000,286,-626,-540,73,36,838,-1000,-707,549,744,70,221,342,-9,1000,-916,-158,-507,-92,1000,-423,294,-635,1000,668,-692,278,-416,1000,1000,919,-647,-1000,-547,139,-356,-43,-359,196,-725,7,17,1000,-598,-258,-227,110,27,816,669,143,1000,-684,1000,-538,-347,-413,-404,-123,1000,-413,-821,684}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00374() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{824,676,-881,694,-529,468,1000,-14,31,1000,-1000,-754,-1000,-527,650,157,30,20,1000,-1000,1000,597,-553,1000,1000,203,739,-872,-1000,-437,37,1000,-654,15,-1000,1000,-1000,-1000,1000,1000,-114,319,-511,-1000,1000,10,-66,-3,907,-1000,1000,-872,-246,-583,111,491,154,-218,400,1000,1000,-265,-867,289}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00375() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{-603,-316,803,-535,467,-1000,37,4,-801,-278,-1000,-1000,1000,885,84,-862,1000,-1000,983,-1000,196,-789,-779,-406,-711,-724,397,-480,1000,-1000,-787,-569,944,-328,1000,1000,580,855,359,-574,1000,741,-724,-1000,1000,1000,-852,833,-759,-1000,141,-374,-761,1000,-924,-1000,-705,-1000,143,380,-1000,1000,-729,745}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00376() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{89,-20,-651,-425,602,-1,629,-913,-1000,-60,29,-797,-202,728,-38,1000,-526,-505,1000,-125,1000,-400,-86,214,-264,731,-704,40,400,823,1000,964,-792,-559,-370,714,-382,123,-536,144,-436,314,311,-296,355,186,-399,73,-1000,-332,1000,-819,1000,277,1000,-442,-1000,16,1000,834,1000,400,-1000,838}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00377() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{699,677,-956,-730,467,-674,394,4,459,100,150,-131,-508,-26,-256,802,556,-1000,510,-717,109,-789,-281,141,-135,554,361,786,1000,453,-348,86,944,-413,1000,1000,-276,620,416,890,1000,-602,-793,969,-136,-341,380,225,-943,-197,1000,-635,358,687,-924,-1000,-664,-1000,1000,-95,-200,681,-1000,745}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00378() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{-746,1000,-302,523,-358,-415,1000,1000,458,216,-342,-749,-72,101,1000,-678,639,916,78,-976,24,1000,198,405,685,245,1000,-1000,-666,-1000,-942,9,194,523,-225,26,-839,-551,700,1000,-738,1000,-390,193,-725,-1000,-1000,1000,1000,-474,207,-709,-1000,913,-607,-941,-339,818,-1000,286,777,-1000,-565,-983}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00379() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{-738,-484,-646,-676,261,-818,-584,515,-840,-757,-310,-654,880,937,-679,-290,505,607,622,830,-810,30,330,-72,419,639,67,-339,681,-405,608,-912,995,690,842,100,478,949,-55,264,124,426,216,-129,348,191,263,-416,-549,-199,-208,-444,176,625,114,-872,-248,-657,665,301,-555,630,-661,56}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00380() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{-762,838,68,-583,207,484,720,-290,-436,187,847,-260,-281,825,943,774,-636,601,1000,-333,85,962,161,507,110,629,-830,-779,257,320,653,-146,-469,137,-7,384,-334,57,-140,479,381,941,-668,927,-337,-1000,-1000,267,419,-562,551,-650,-56,536,519,-846,1000,744,1000,274,134,-476,-764,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00381() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{-416,1000,59,-493,-370,1000,1000,159,-89,1000,-310,365,-317,-207,1000,1000,-1000,1000,-103,-384,-5,1000,714,682,340,848,-368,-646,-736,813,-251,188,-943,374,-828,799,-436,-965,-168,-558,-183,1000,150,1000,-1000,-1000,-1000,206,677,-486,1000,-166,-188,-803,237,-260,1000,1000,25,473,617,-1000,-522,-905}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00382() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{209,-426,-626,-297,-1000,-1000,503,-459,1000,-1000,-556,-240,217,65,-33,-1000,1000,-473,1000,1000,-1000,255,-1000,-558,-1000,-282,740,-349,1000,-1000,-1000,-1000,805,-116,-580,1000,-453,738,1000,-486,-297,-980,-820,-1000,1000,171,342,379,-495,669,-552,473,-1000,670,-1000,-1000,-945,-1000,-75,-1000,219,1000,-142,-629}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00383() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "equals(java.lang.Object):boolean",
+            new int[]{124,825,-247,1000,-394,-838,677,-343,-609,-1000,-302,-653,365,438,652,-212,-159,210,454,-610,992,247,-424,719,13,-28,376,-363,-609,266,1000,-106,-34,-408,-815,721,-1000,-589,798,-483,33,-707,46,598,205,81,664,475,1000,-146,721,-245,147,211,272,-576,633,-957,-1000,-147,1000,84,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00384() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{283,297,-950,84,-1000,899,313,-477,-942,-1000,-571,523,547,-1000,497,-600,-265,-821,-392,500,-335,231,-65,-452,-1000,799,-1000,577,562,-850,-190,523,634,178,1000,-695,335,-901,1000,347,229,902,-699,484,-887,-303,166,-1000,-1000,897,256,-271,-223,-277,-222,825,666,298,1000,262,1000,939,-150,534}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00385() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{1000,-944,-961,537,1000,-1000,806,-161,1000,21,1000,1000,-20,726,100,-389,-482,680,-380,-763,-954,322,-962,888,138,-945,-1000,-590,1000,-357,272,1000,-1000,-709,436,-808,-14,1000,-571,662,58,1000,268,-1000,-1000,-1000,561,1000,491,-165,-120,-266,46,-289,1000,219,1000,831,831,-864,663,-936,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00386() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{-283,377,-726,-715,-293,-604,75,-673,737,-1000,-414,-41,-342,-671,728,-788,491,-959,190,1,510,-220,601,143,119,529,-366,253,-608,-281,-1000,-562,11,-1000,-777,-355,346,-624,994,-245,578,498,-440,383,343,676,251,-635,-958,1000,1000,-318,-383,143,-517,-843,812,-133,532,1000,644,883,378,368}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00387() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{278,-475,-58,-652,1000,-1000,-655,-779,1000,1000,678,-666,-1000,1000,-811,966,-756,489,1000,-1000,-881,-863,228,843,1000,58,375,-1000,-694,432,235,-76,-1000,-1000,-1000,921,-58,331,-1000,309,-658,225,711,-1000,-975,330,-59,1000,1000,-627,-428,-411,303,860,963,-749,1000,-466,-1000,212,-1000,-1000,-494,-122}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00388() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{-273,-360,-881,562,-922,695,-855,-295,-188,-692,1000,705,175,412,-509,321,-272,105,-462,362,-41,-118,-514,1000,469,74,-1000,210,609,544,-512,296,-791,119,-745,726,-633,-599,233,-421,165,-46,-1000,-178,-265,561,-700,187,35,4,-27,532,-709,401,221,835,877,-315,1000,-137,200,-488,827,451}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00389() {
+        org.junit.Assert.assertEquals("java.lang.Double:Mi4xNDc0ODM2NDdFOQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{1000,427,-687,-77,370,-1000,1000,-407,1000,608,-645,28,409,-385,947,477,741,37,424,-620,-1000,-311,-409,-17,-741,-1000,-866,-1000,946,-1000,1000,236,525,-971,1000,-413,868,1000,-474,1000,-629,1000,384,-1000,-1000,-1000,437,802,1000,8,-1000,-919,398,-429,1000,-1000,1000,313,-625,-715,388,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00390() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{-1000,1000,-646,-1000,-842,608,462,-696,-355,9,-1000,-850,214,-882,89,594,1000,-1000,1000,222,658,-1000,1000,-1000,208,-90,933,-553,-1000,-500,33,-1000,1000,-387,404,1000,1000,-1000,-1000,872,376,-1000,-712,748,-537,1000,-1000,1000,-1000,833,-585,-86,-657,773,637,-1000,-811,-1000,-1000,1000,-395,-781,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00391() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{213,-309,92,1000,709,-135,-519,-361,-143,845,40,-727,-1000,592,170,-589,491,1000,-121,-196,-722,11,-831,143,-260,-158,512,267,255,-634,-645,118,-1000,-57,338,-458,-314,926,994,-933,100,960,-365,328,1000,514,674,-396,-958,-1000,851,567,-883,-1000,144,-843,-1000,977,-21,449,-1000,1000,-293,-46}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00392() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{1000,572,-281,-208,598,-1000,652,-137,1000,821,-395,-417,175,387,1000,308,-801,687,419,-793,-1000,-676,-749,229,469,-1000,-1000,-454,1000,-448,1000,-480,-643,-1000,1000,329,604,717,-1000,177,202,-46,-1000,-1000,-641,-1000,-321,1000,1000,-418,-1000,-100,206,-60,1000,1000,1000,-31,176,-44,-273,-936,-1000,322}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00393() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{-257,1000,834,-857,-1000,960,-518,-914,765,1000,-640,-1000,604,-47,1000,1000,-81,-1000,1000,295,-528,-1000,122,-1000,-724,-1000,375,343,-1000,345,-88,-1000,-83,-728,1000,1000,1000,-1000,-751,-274,417,-1000,-869,-287,834,1000,-1000,196,116,117,-1000,-472,-137,568,202,747,-73,-1000,-1000,1000,-1000,-1000,702,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00394() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{-289,639,-272,-1000,-1000,-151,-1000,-1000,-704,-338,-571,-9,165,-1000,258,-992,-265,-982,-45,466,316,231,1000,-917,19,606,-288,496,-1000,-728,-868,206,422,-57,-451,-158,335,-1000,994,347,910,524,-1000,419,335,1000,-578,-725,-1000,1000,834,-263,60,1000,192,-921,948,248,1000,927,-11,939,390,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00395() {
+        org.junit.Assert.assertEquals("java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{1000,-69,-409,1000,1000,-1000,1000,389,1000,1000,1000,254,-9,833,-10,561,-917,1000,1000,-1000,-1000,-807,-1000,1000,299,-1000,-288,-1000,1000,-61,1000,-105,-1000,-1000,266,-147,-1000,1000,-1000,636,-569,775,1000,-1000,-712,-1000,671,1000,1000,-1000,-922,-1000,-234,-1000,1000,1000,393,37,-292,-1000,-411,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00396() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{855,129,135,1000,273,-131,461,-596,860,970,-219,174,421,-757,100,-304,327,1000,636,477,-215,-103,106,-445,-32,-814,-1000,-590,208,-783,1000,16,753,-314,436,-808,1000,358,-585,858,-658,86,184,262,-1000,-354,-253,-410,274,377,132,-1000,773,-212,1000,-312,889,140,219,-582,-418,-603,-523,168}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00397() {
+        org.junit.Assert.assertEquals("java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{-365,593,-151,-1000,-1000,369,-904,-784,417,1000,-140,725,504,-1000,443,-631,-164,-1000,398,-590,413,-261,805,-936,1000,-91,1000,-281,-1000,153,190,-945,-275,-1000,696,103,1000,-1000,125,340,100,-374,-654,345,524,1000,-1000,728,-604,1000,727,-1000,-620,1000,1000,-1000,761,-1000,-169,1000,-124,-484,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00398() {
+        org.junit.Assert.assertEquals("java.lang.Double:LTIuMTQ3NDgzNjQ4RTk=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{-396,-522,-902,1000,90,-632,282,-580,427,-740,408,-192,152,-604,78,-26,-434,255,773,-145,95,-773,-1000,1000,-804,-909,-1000,106,5,-761,881,169,671,-550,95,266,-1000,623,-860,492,270,75,385,-1000,382,-580,1000,-190,852,-1000,-590,301,-31,-537,-493,-716,702,867,481,-963,446,-1000,-1000,633}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00399() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnchorValue():double",
+            new int[]{1000,116,678,-1000,-1000,-699,493,-439,362,1000,-477,371,1000,-1000,1000,-751,533,-68,99,-258,-577,231,623,-1000,-142,-83,406,-448,-580,233,1000,523,-276,-447,1000,-1000,1000,-167,-891,-1000,1000,678,-714,484,-1000,2,-1000,-1000,136,1000,-192,-1000,-134,882,1000,825,104,-130,1000,1000,368,-249,163,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00400() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-670,799,476,1000,1000,489,-530,96,1000,-148,-1000,689,-826,1000,-654,-694,1000,-310,-262,-6,496,-1000,-96,-543,1000,1000,-734,595,1000,-22,-1000,537,-510,950,1000,-303,-586,600,200,-1000,438,686,69,809,-158,290,-1000,1000,-1000,-529,1000,-335,-677,134,-526,1000,-1000,859,1000,331,-240,-357,439,-540}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00401() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-773,976,84,780,124,-492,-513,362,824,-608,-1000,1000,-790,-714,688,772,1000,-344,319,69,-102,-14,-398,-616,-103,1000,-499,843,1000,1000,-654,200,211,-1000,1000,737,308,744,209,-921,-1000,1000,48,105,-350,96,-1000,-351,518,-658,1000,-1000,-414,491,219,1000,-870,1000,1000,-1000,-144,-28,222,-265}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00402() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-440,1000,984,1000,1000,131,-653,549,1000,-444,-1000,795,-1000,1000,-519,-1000,1000,-624,255,-141,144,585,-806,-222,1000,1000,-738,-96,1000,511,-1000,212,-1000,1000,1000,1,-673,432,536,-1000,178,924,-138,675,-803,487,-1000,1000,-528,-460,1000,-917,-1000,972,-852,1000,-1000,344,1000,-64,-529,-272,382,-412}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00403() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-498,-259,-418,463,367,1000,-1000,126,1000,603,-866,703,-479,5,-1000,-743,479,-1000,-1000,-220,1000,-930,1000,-691,268,128,-1000,-65,521,449,-704,1000,1000,-348,1000,-1000,-833,1000,36,534,-214,58,-14,1000,-104,88,-104,1000,439,326,317,-852,-62,-77,495,136,-297,1000,751,-569,-59,-651,732,-748}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00404() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{40,599,-394,-496,633,659,-71,-623,1000,253,-1000,-146,-1000,1000,-281,285,-1000,-702,383,-933,114,-323,1000,-1000,421,471,-1000,-1000,1000,1000,-334,1000,1000,-1000,1000,-160,-515,-313,-665,-1000,-1000,908,-728,621,-1000,-1000,-796,1000,1000,1000,-1000,-443,450,-293,-413,1000,-1000,1000,1000,-1000,-422,-398,-608,-97}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00405() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-356,-892,563,64,49,-956,-313,-720,-859,-1000,1000,417,379,-99,875,-161,686,-1000,853,846,-815,727,-1000,278,-1000,615,-63,103,-342,299,472,-1000,-1000,-259,-867,1000,378,-932,609,-1000,431,-272,-918,-947,-1000,-310,393,-877,386,-206,-662,499,3,-573,-380,33,709,-54,-447,979,459,1000,-741,165}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00406() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-1000,173,505,658,124,-85,-571,78,-33,-403,-535,1000,-204,-714,-877,347,1000,-247,-68,1000,756,54,-586,-331,1000,1000,-163,843,-526,-621,-128,-110,-1000,873,219,10,308,1000,387,468,950,12,417,519,-87,596,-580,-351,-1000,-1000,-902,216,-43,250,219,-685,340,901,4,1000,-492,93,-84,-576}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00407() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-473,-429,815,1000,1000,1000,650,-236,733,-1000,528,983,243,5,-698,-1000,-471,65,-1000,207,27,-347,70,-421,856,42,-406,-1000,599,1000,-477,1000,-1000,1000,146,-916,-1000,732,512,-1000,-539,104,-964,374,-271,696,-1000,559,792,452,-573,-126,-1000,-973,217,768,-753,-1000,938,-696,-65,920,528,-683}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00408() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-12,-1000,-337,-496,-956,1000,-71,-1000,84,-25,1000,-510,-680,-1000,-608,74,-642,762,37,-933,114,-477,745,-486,-336,-851,-868,-91,16,-1000,1000,144,-245,496,-344,-624,-995,-313,-390,770,211,-151,-1000,8,199,-718,790,-27,1000,865,-1000,-443,1000,-311,548,-364,162,-1000,-459,-158,274,167,-608,-79}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00409() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-921,803,-192,126,1000,-151,-774,561,1000,-356,-775,1000,-35,145,-305,-493,-471,-1000,1000,716,-24,-163,-341,-412,-167,372,-146,4,-194,1000,-747,346,-143,-479,487,1000,248,1000,567,-137,-712,1000,209,145,-373,409,-652,360,7,-610,286,-394,-428,417,-645,752,441,1000,1000,-98,717,-233,-419,-414}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00410() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-532,-1000,-296,202,-1000,1000,-781,-1000,272,217,386,-888,379,-676,-265,974,424,723,700,-1000,461,727,66,-668,-1000,-515,-778,393,339,-354,1000,40,-1000,1000,-163,-34,-1000,787,-812,1000,50,-752,-918,-423,493,-1000,319,-877,482,191,-1000,499,1000,-727,-228,6,-37,-781,-42,-880,442,-127,-243,513}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00411() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-703,-109,358,1000,1000,58,537,989,202,-566,-400,111,-679,-303,-324,-367,1000,-1000,479,87,-490,456,-603,-552,400,-167,819,-133,400,1000,-400,565,-1000,874,1000,-276,324,142,1000,-1000,-572,537,-386,92,-40,1000,-1000,249,-1000,335,400,-1000,662,262,-1000,400,-677,167,982,147,49,105,-84,-659}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00412() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-480,-976,-986,498,431,1000,761,235,-310,372,204,178,-1000,5,468,885,984,-42,-226,-706,127,-653,1000,-350,-179,-692,-53,33,242,1000,-266,859,8,364,1000,-1000,201,671,704,-511,177,129,-474,22,-580,1000,13,934,272,1000,200,184,197,-1000,189,-35,-1000,-400,789,-1000,166,-277,-305,-542}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00413() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-1000,-544,-237,90,405,941,467,-378,-400,-125,400,478,-765,303,-896,539,425,620,-221,393,203,-1000,413,-651,-111,1000,-1000,843,-35,-792,320,415,-1000,1000,453,-830,-262,284,-235,-974,918,-510,-459,241,-87,596,132,-207,-276,-1000,761,316,506,-175,565,-279,-933,-376,4,149,829,93,-641,-678}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00414() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{-1000,-1000,-337,563,389,-459,-1000,-1000,-187,-433,326,29,224,-1000,-51,623,1000,-1000,1000,1000,1000,-266,-911,263,-1000,1000,794,-91,-86,-1000,464,-440,-325,674,-763,842,-81,710,39,715,505,122,-673,644,-624,-386,1000,-245,-28,-1000,-1000,932,1000,-983,166,-1000,270,262,-102,1000,1000,-160,-960,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00415() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAnnotations():java.util.List",
+            new int[]{149,862,854,731,709,-101,-1000,-635,1000,122,-1000,-146,394,-5,126,-1000,-83,-1000,-1000,-112,611,221,-458,-1000,906,-114,-656,-733,1000,-764,-1000,412,355,980,1000,-483,-1000,649,522,1000,692,405,79,1000,-1000,225,-563,632,-1000,-363,567,-568,-1000,-350,-532,1000,282,374,256,1000,-1000,-974,1000,-713}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00416() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-1000,-112,794,85,6,249,-485,-238,526,1000,-707,-959,1000,314,-511,242,-6,-247,261,-504,168,111,-946,-26,1000,729,798,590,-25,-1000,177,165,387,-164,-218,-229,973,-647,-775,1000,-329,-620,-307,-744,-621,950,632,136,863,-3,576,-309,-1000,-299,754,595,228,-544,-1000,7,355,732,-255,876}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00417() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{1000,239,304,58,-115,484,409,-300,-1000,309,366,-749,995,1000,332,-623,928,-1000,-1000,-533,1000,-1000,969,871,-382,-1000,383,-554,1000,1000,28,-113,-961,-64,1000,-650,-739,1000,360,676,-14,-713,732,1000,1000,-1000,-1000,568,1000,-705,-552,-1000,393,-181,-33,838,-445,-732,-812,-991,-1000,434,-440,158}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00418() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-168,-622,724,-413,-424,-201,-787,-1000,-803,1000,-1000,629,1000,527,-1000,1000,-767,-1000,-599,1000,422,-1000,510,-536,769,-1000,1000,-1000,203,-798,1000,319,913,166,49,983,933,-694,-716,353,648,-46,-1000,-288,1000,-669,1000,623,19,-596,932,-302,-551,-790,378,-673,-1000,-142,-1000,189,343,759,1000,-678}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00419() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-197,-668,-622,468,-327,-1000,1000,-736,-999,467,-549,1000,-1000,193,-564,-87,-1000,769,580,1000,-1000,432,-569,-845,2,1000,959,406,164,1000,395,850,1000,1000,-707,636,254,1000,-1000,-1000,-512,1000,-1000,-1000,-276,98,-735,490,-1000,363,432,-470,284,-725,1000,-714,-534,-186,951,1000,1000,38,515,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00420() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{936,838,-531,453,-118,-556,409,-1000,1000,724,218,908,-1000,365,-805,580,-1000,-1000,357,356,300,-672,-423,-1000,-962,-761,191,-664,-199,1000,523,773,-167,65,509,78,291,1000,-933,-394,-607,-87,-1000,-1000,1000,-226,1000,1000,-262,1000,-392,-1000,941,652,1000,838,-3,343,-99,-349,340,624,850,-773}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00421() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-304,892,684,214,917,-453,211,-393,-54,-358,-838,-784,-275,-652,313,345,-792,674,975,29,-357,-618,-290,-928,125,744,-723,-104,-608,-568,-311,640,-54,-374,297,-63,74,27,174,508,-880,-143,-201,-664,-589,196,-22,-479,697,9,297,148,-376,92,973,-510,-182,825,956,-297,-513,-902,-679,-210}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00422() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{270,-1000,279,485,-424,210,119,-1000,428,467,-675,278,400,-114,384,-491,-296,937,38,-73,-219,572,-810,309,1000,-412,-1000,334,148,-377,77,-1000,594,867,-510,519,178,157,-794,111,-621,-20,-10,-1000,-1000,997,399,-234,-1000,-31,385,228,-917,329,707,395,-231,265,141,731,347,245,-479,-8}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00423() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{547,-983,24,619,549,-840,-121,-941,902,-924,768,-810,824,-153,-734,479,-305,-606,656,989,-401,-201,-48,-20,354,-756,352,-216,-561,-225,-584,-627,337,-64,328,-65,313,-134,-31,588,398,-88,-792,-111,446,24,-177,199,531,228,745,-826,674,346,-34,-374,-120,-215,-634,-135,861,-295,-30,-769}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00424() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{11,27,-119,353,-97,-624,-254,-842,-104,350,-1000,589,-874,24,-290,-87,481,-121,-349,627,-549,-1000,-431,-321,900,462,-896,466,-93,-1000,436,-96,1000,860,0,1000,824,-657,-409,343,1000,604,-400,-245,-193,555,400,400,-1000,363,621,930,-440,-581,-576,-41,113,-172,-541,1000,1000,443,521,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00425() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{252,698,174,303,-419,365,400,67,-1000,605,-132,582,-877,510,604,-905,-22,232,-989,-290,-202,-481,4,892,186,-446,-45,-56,656,1000,233,-735,-523,641,893,229,-702,1000,340,-305,-1000,-668,1000,477,-21,-897,-168,-539,800,-123,-314,78,-150,610,690,349,-402,605,-27,-403,-659,-563,-355,237}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00426() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{1000,-347,-1000,938,-1000,-1000,1000,-736,-524,439,-53,386,-1000,1000,-151,-510,-604,769,-542,1000,-541,-761,510,201,-112,295,1000,751,814,251,-49,1000,693,858,246,240,130,1000,-1000,-1000,1000,580,-392,152,58,-906,-1000,366,19,-522,135,-470,1000,-790,1000,94,-1000,-440,911,987,-6,539,-34,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00427() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{352,-1000,668,-219,761,-200,-259,-1000,-910,1000,-1000,307,1000,-921,-1000,1000,-844,-1000,-104,55,-100,203,-1000,-1000,810,502,-1000,-1000,-1000,-74,793,-414,456,14,758,1000,516,-417,-1000,1000,-1000,424,1000,-1000,288,941,1000,1000,-1000,1000,787,-1000,-578,-862,582,-820,916,-460,-914,-441,1000,-67,834,-327}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00428() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{936,1000,513,660,-1000,-885,64,-240,1000,535,-900,-776,-516,1000,1000,-1000,1000,1000,-1000,652,-535,-885,1000,-536,185,686,252,-967,1000,-1000,-434,78,659,174,305,-856,879,-137,393,-199,1000,-455,1000,1000,-1000,81,-1000,-396,-218,-291,-386,930,30,636,-505,1000,-1000,-1000,-544,1000,-351,910,-1000,-161}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00429() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{352,1000,699,653,-1000,-630,972,435,903,809,336,173,-580,1000,467,-594,924,601,-104,588,-198,-239,1000,1000,166,237,578,-761,921,1000,36,182,-269,5,758,-1000,90,1000,109,-585,-427,357,1000,517,-582,-1000,-1000,-1000,382,72,-638,-1000,879,854,856,648,-1000,-1000,225,-1000,-1000,178,-940,-263}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00430() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-282,-912,-821,551,139,-206,588,-593,-195,862,-457,486,131,155,-1000,217,-357,1000,112,716,42,-53,1000,1000,1000,-144,25,373,302,-654,-173,-519,-892,485,303,-124,858,258,-359,402,-683,-673,-117,-341,-1000,35,-157,205,-972,-364,115,-97,34,-94,382,-141,-742,-874,587,-622,59,-735,-1000,405}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00431() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getAxisOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{824,955,104,563,-1000,-379,409,-425,774,232,-623,173,-1000,1000,943,-768,630,1000,-1000,982,-892,-942,165,1000,1000,429,-38,1000,998,-793,-59,-191,860,772,474,-1000,-383,-77,693,-645,914,-473,1000,1000,-1000,-169,-1000,-1000,117,-1000,296,1000,-158,1000,-384,471,-1000,-379,225,1000,-193,-5,-843,-848}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00432() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Collections$UnmodifiableRandomAccessList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{-1000,639,-495,-594,-350,-330,278,414,710,754,374,1000,-513,637,-586,1000,-822,-1000,1000,681,-6,468,363,520,-1000,666,611,91,-365,171,-608,557,-962,-306,459,1,-497,-391,-1000,-259,-681,-771,65,1000,898,-141,-875,688,211,278,-49,642,-163,-1000,167,-810,461,-948,1000,1000,-665,388,-1000,4}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00433() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{653,1000,3,-331,-615,387,-183,-743,6,-388,333,1000,-776,636,-519,1000,-1000,-766,743,-583,-795,-1000,932,1000,-607,-313,-106,1000,162,-246,-644,431,218,-979,667,-478,-916,360,-192,-833,-444,-712,238,-349,1000,-1000,-1000,-505,-1000,-1000,-1000,-210,-423,23,-487,-641,99,-701,1000,920,508,-113,-915,-70}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00434() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Collections$UnmodifiableRandomAccessList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{230,765,79,-588,-1000,-1000,406,382,436,854,-729,133,160,824,414,558,-544,-503,555,11,882,-349,613,-592,-6,314,607,-854,-438,440,-372,-332,-86,203,1000,-240,726,-373,-750,-965,-1000,364,470,315,-450,-9,-752,405,-254,-93,780,551,-505,-656,-60,-303,251,180,-89,1000,666,242,-337,466}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00435() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{1000,1000,-731,248,111,-978,214,-976,83,963,1000,1000,-1000,749,-1000,434,1000,-492,64,-239,-618,-818,-1000,282,722,-29,1000,1000,-177,-316,237,-4,1000,-739,925,-342,1000,-676,917,-1000,80,-499,1000,198,-554,-1000,-1000,937,-240,-1000,-344,1000,268,-1000,689,310,-1000,521,1000,43,-1000,-1000,-187,400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00436() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Collections$UnmodifiableRandomAccessList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{-117,653,-1000,76,274,-1000,1000,451,-601,907,585,406,-97,1000,-479,754,537,-797,756,-200,465,-453,-326,977,765,366,692,54,-12,-552,-213,610,493,406,1000,326,1000,-1000,-120,-1000,141,-384,892,821,88,-124,-713,1000,-62,70,-10,1000,-303,466,805,-109,-125,620,742,678,-734,-780,-353,894}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00437() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{903,230,-756,944,-559,901,-390,33,-704,-925,-664,185,587,1000,-1000,181,140,-1000,1000,-605,-560,211,-9,0,978,-1000,-1000,-298,-252,1000,132,-483,984,-323,106,-277,1,917,21,-954,609,-351,413,872,28,-1000,-564,-998,-219,-1000,525,184,1000,469,-1000,495,855,146,1000,-1000,818,739,-117,903}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00438() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{-402,-4,-411,336,-789,-158,598,892,-284,-147,32,13,-924,279,-391,548,-395,-479,142,181,397,-435,-414,-157,-382,-86,-172,-272,409,551,56,-451,-1000,-143,-55,234,-1000,-710,-1000,-153,392,-71,360,-499,-554,812,-994,-543,-152,-616,450,583,170,-602,-131,-771,429,-91,-298,194,109,327,-277,381}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00439() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Collections$UnmodifiableRandomAccessList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{-605,-93,-855,-136,-144,203,540,-126,-77,-1000,139,242,-1000,-100,-892,-931,685,-492,-639,222,-916,395,-1000,-683,-738,-702,-1000,-614,-582,1000,424,-1000,41,-1000,-752,818,-411,493,-780,778,999,252,439,-1000,1000,189,-709,-1000,-679,-765,1000,-688,-128,201,-318,1000,-934,-16,643,-442,-428,-375,245,77}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00440() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{-990,520,473,-749,-1000,400,-251,610,1000,-314,-843,1000,838,-55,994,-492,-1000,578,-102,1000,1000,933,1000,689,-501,942,-1000,42,63,-1000,-346,-95,-1000,-296,-399,858,1000,136,-858,-195,-854,836,-1000,443,-119,846,-37,-700,1000,1000,-49,-1000,-610,187,73,-1000,854,-1000,-338,1000,1000,1000,-1000,-892}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00441() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{1000,1000,-161,-513,-500,-1000,731,-243,-602,203,1000,1000,-509,-82,-1000,-682,1000,616,-802,1000,-1000,1000,-703,1000,59,543,-572,1000,33,-1000,299,1000,-158,-785,4,648,55,249,953,-999,-1000,-90,389,-241,1000,-1000,-737,-399,156,-1000,-1000,1000,-788,287,1000,2,-1000,-700,1000,-55,-1000,-1000,-353,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00442() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{233,170,-841,-229,-918,-885,83,-275,-909,861,811,207,-412,-338,-1000,-400,816,400,0,914,-152,742,27,1000,-5,1000,-184,1000,340,143,-371,1000,-777,-337,-199,1000,-528,-134,1000,-695,-1000,-241,-287,717,586,-1000,-727,114,789,-1000,-1000,1000,-408,365,1000,-1000,-1000,-880,545,151,-766,-388,-827,-816}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00443() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{-295,-598,888,-658,-1,554,1000,-70,369,149,1000,-983,-381,-150,1000,-1000,954,-591,-1000,1000,-295,329,513,1000,550,1000,-799,966,397,-1000,-285,764,-758,202,48,725,105,-1000,-150,-625,-1000,-358,-867,-113,-234,1000,328,284,962,1,-1000,-160,-1000,-314,1000,-1000,835,-881,-423,-912,1000,-926,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00444() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{1000,650,844,-990,269,383,-183,-743,611,-309,333,-545,-353,676,-519,751,-852,962,1000,-1000,659,-623,1000,-356,876,-750,438,162,311,-246,-336,697,871,664,114,-1000,876,1000,445,-1000,-580,405,146,-395,-668,-1000,634,-659,-1000,-579,-558,-210,-874,1000,-451,-1000,521,-220,1000,1000,924,-113,-743,-331}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00445() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{956,1000,-901,364,-697,-1000,1000,-1000,-560,858,1000,1000,-1000,1000,-1000,1000,1000,-1000,799,-442,-1000,-533,-247,1000,108,100,1000,1000,327,-272,-809,1000,489,-756,863,648,55,249,203,-737,-624,-1000,1000,988,1000,-1000,-1000,1000,-74,-1000,-1000,1000,-718,-1000,1000,-893,-1000,-8,1000,991,-1000,-1000,-1000,396}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00446() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Collections$UnmodifiableRandomAccessList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{636,409,-261,52,-383,-827,582,-341,-288,91,779,-50,-1000,1000,-615,225,-11,-444,-313,222,136,-265,278,-45,394,217,253,1000,302,178,-266,787,301,108,207,236,892,-1000,-884,-356,-481,698,78,892,331,-703,311,890,561,-18,-880,-826,91,-744,1000,-141,-571,47,1000,302,-648,-512,-637,-163}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00447() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategories():java.util.List",
+            new int[]{-604,1000,-591,-583,-615,249,762,658,111,1000,-729,1000,504,668,-519,740,-519,-872,123,615,-795,75,-239,-270,-58,690,-409,-854,-517,462,-467,27,-510,176,1000,-174,146,-353,-709,-268,-444,335,42,480,-389,-38,-672,405,-116,-249,780,551,-423,-531,205,-404,251,-243,493,1000,666,185,-201,840}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00448() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{688,-727,-1000,-698,-1000,778,1000,448,-254,504,311,25,-291,-1000,210,409,-659,818,-466,-383,-156,389,555,684,-22,1000,447,-120,1000,-920,-164,-500,82,239,167,-835,1000,653,-981,-1000,1000,-252,-838,112,-702,137,967,1000,103,-366,504,594,-861,1000,-614,-271,348,1000,177,1000,1000,-1000,-677,-347}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00449() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{-990,-192,738,562,-796,-159,-1000,331,450,528,-153,-257,487,-225,503,65,-1000,323,-1000,359,-721,-677,-409,242,380,-75,256,-459,-305,-750,284,369,-1000,1000,662,-989,-1000,866,-1000,-1000,1000,-348,-30,-276,1000,-261,248,-1000,-9,-320,846,723,-142,460,-1000,-797,-371,-308,-151,-28,-940,478,-598,225}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00450() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{584,1000,-491,-89,-6,7,477,1000,-14,654,-201,67,471,567,574,-414,-639,-247,-466,314,-438,665,-731,97,625,1000,1000,638,-240,-53,273,-1000,-634,1000,-580,60,-1000,716,-115,604,1000,-996,788,-1000,661,944,-536,-446,-490,-675,-839,234,345,-9,-859,-1000,-479,170,1000,-360,534,126,-669,-44}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00451() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{952,-1000,-576,-532,-767,892,-69,-1000,-404,-1000,-873,1000,-1000,-1000,-1000,1000,388,848,1000,344,1000,-923,608,-512,-1000,-1000,-205,-1000,713,-258,-265,-701,-30,-400,-824,883,400,-1000,362,-354,69,67,-960,4,-1000,193,465,200,-214,-699,-66,81,-1000,-301,399,258,930,1000,-1000,-435,1000,-2,1000,-46}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00452() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{291,-1000,-416,-884,-1000,1000,1000,277,-1000,525,814,-415,-291,-1000,608,717,-1000,-222,277,-1000,731,-323,555,35,-665,1000,-89,-789,-240,-920,-217,-1000,-311,-340,148,-1000,1000,253,-1000,750,1000,-788,-1000,1000,-702,1000,983,1000,1000,-366,455,1000,-1000,1000,92,-40,1000,1000,96,1000,1000,-1000,-649,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00453() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{377,256,-647,-38,-96,580,-175,411,124,763,695,-167,991,713,556,-758,126,-70,-1000,-198,-975,1000,-362,733,-106,1000,1000,1000,-964,364,-52,-981,-987,695,-267,562,253,447,-470,-246,-158,-1000,-624,-321,-26,651,-167,356,-214,-471,-627,477,385,-93,-266,-547,-241,1000,325,215,123,-58,-197,-853}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00454() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{429,629,-1000,-300,-393,-901,97,1000,154,525,-372,-1000,249,316,374,-281,-400,-222,-1000,-78,-251,376,-427,-6,-200,1000,1000,520,-240,17,-335,-1000,-444,1000,-820,98,-566,1000,-667,750,641,-811,788,-972,272,1000,-299,14,-500,-632,-539,399,442,506,-612,-1000,-443,1000,565,-140,527,-486,-669,-145}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00455() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{-580,-279,148,1000,-944,-848,38,-1000,-70,-326,-276,1000,175,-1000,-385,578,-1000,509,1000,1000,1000,-1000,1000,-836,837,-106,1000,-1000,1000,-396,-163,-1000,226,-1000,1000,-1000,-701,-11,-1000,-1000,1000,-811,788,1000,272,-1000,1000,-698,1000,1000,501,989,-1000,1000,229,1000,-909,-184,-826,-387,3,-930,26,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00456() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{744,160,453,735,265,-536,-167,-676,-276,349,839,692,718,569,280,-946,290,52,-957,445,747,828,-159,811,-321,-111,-77,478,-386,135,838,69,-614,-167,-77,384,276,-860,19,19,-743,-843,-857,-441,-769,674,289,94,108,372,-608,475,723,-471,562,249,155,500,144,-466,-154,-811,922,-763}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00457() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{832,-53,-351,-15,-463,929,-1000,979,626,1000,-626,-66,896,207,-128,-441,-916,26,-889,119,-1000,-743,173,1000,1000,1000,560,-257,-472,-208,-1000,405,-749,736,1000,-833,-1000,866,-780,-577,1000,-20,380,174,1000,-1000,-25,-1000,-537,-263,920,447,-442,275,-1000,-513,-1000,-208,-135,183,-934,1000,-1000,982}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00458() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{-473,491,867,618,-305,65,-751,360,361,669,624,-281,1000,831,613,-752,-55,-387,-1000,-411,-1000,516,-844,543,1000,849,484,580,-1000,-785,837,290,-1000,576,1000,-179,-1000,842,-1000,-873,149,-1000,-34,-937,668,-103,-419,-292,-281,-502,1000,595,652,387,-1000,-431,-451,77,-838,50,-853,534,-1000,-242}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00459() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{811,-126,468,1000,276,778,-175,-882,-505,-101,1000,-448,965,1000,1000,402,594,1000,-1000,170,747,1000,411,614,-1000,95,108,1000,-421,-363,-570,-1000,-963,868,-981,341,273,-627,1000,-7,570,-1000,-857,-739,-940,1000,-20,373,-505,-261,-1000,713,1000,-304,1000,-808,1000,435,100,89,-32,-1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00460() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{110,108,689,1000,265,-108,-237,-456,-29,275,237,177,1000,303,165,-695,290,229,-1000,282,-375,705,-476,1000,-160,-216,-2,660,1000,-99,1000,-170,-712,-1000,308,14,366,-627,1000,19,-743,-1000,-289,-947,-96,-956,-56,-45,-450,-205,-608,427,723,-304,629,-362,114,68,-274,300,-456,-156,922,-848}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00461() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{190,-690,-216,-104,-769,593,-1000,-82,1000,-478,-222,491,-934,-824,-619,-94,-136,-77,-682,232,-611,-517,72,-151,-683,-1000,146,378,626,-427,-408,15,-535,1000,-1000,-1000,-812,454,-780,-231,499,-655,1000,77,388,293,542,-1000,691,-320,1000,-872,45,-546,0,-802,-554,-207,-220,636,-86,-945,475,457}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00462() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{832,-239,1000,805,-307,165,-1000,-1000,23,-415,-173,-478,334,-339,-231,370,-1000,-70,1000,905,638,-1000,-113,-278,-552,-1000,-1000,-1000,677,-799,396,-997,-98,-762,37,-1000,-1000,-1000,97,343,394,-235,-774,245,44,65,457,-1000,1000,1000,-305,1000,-439,-791,182,509,-130,-1000,-188,-1000,-915,213,1000,323}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00463() {
+        org.junit.Assert.assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getCategoriesForAxis(org.jfree.chart.axis.CategoryAxis):java.util.List",
+            new int[]{700,185,445,1000,-490,-212,-102,353,-68,687,-45,-119,784,536,485,-72,-597,586,-979,505,-591,-431,-409,691,-179,518,-574,-261,-161,-963,91,625,-475,-559,1000,883,-224,17,1000,-533,493,-348,-624,-231,769,-282,512,654,-132,-699,371,1000,-10,875,-538,197,-767,-416,-409,246,-465,-709,-885,340}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00464() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{-815,605,603,-349,930,985,1000,-377,140,-324,-1000,4,-36,159,1000,-725,-571,766,502,1000,-622,664,569,-792,-1000,-851,766,-723,196,418,-56,429,1000,-1000,973,181,341,87,-68,1000,-343,-156,522,489,-1000,-416,415,-308,1000,1000,-1000,-14,-1000,-735,-1000,-888,570,118,279,1000,-1000,-480,327,968}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00465() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{207,-136,-656,358,-664,-216,-273,72,332,471,932,778,-653,-733,800,-292,656,-1000,-107,475,-695,-775,890,579,515,577,-708,-174,-322,785,851,-114,-978,585,267,-693,-40,-79,-500,-273,830,207,-895,-255,-1000,552,-242,-137,549,852,-118,-682,102,-622,-1000,-119,635,-664,-474,150,392,-933,-74,-76}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00466() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{-264,-549,1000,946,607,-787,706,-1000,766,688,878,-1000,-1000,-687,-823,171,-430,158,-1000,18,-532,-1000,-1000,-839,441,1000,-571,-447,-282,758,-1000,-363,-304,35,-117,-839,418,-448,848,89,-1000,658,-1000,-623,1000,-181,-1000,-57,-490,-1000,-301,-512,-282,325,103,-851,654,-1000,-474,733,781,742,-629,-333}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00467() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{-148,-308,-676,518,315,983,718,-69,320,233,-1000,119,-1000,-246,802,-1000,-1000,1000,-1000,1000,-499,-989,-472,-960,-1000,267,222,-1000,-622,1000,-400,113,-259,-806,1000,-884,652,75,486,551,-925,225,-1000,241,-1000,383,-1000,1000,1000,662,-1000,626,101,-299,-15,-407,1000,-188,346,333,218,-1000,-139,564}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00468() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{-1000,1000,14,494,-339,-232,1000,-649,-1000,292,-600,935,-650,-942,1000,-725,303,400,-1000,18,466,664,-65,146,-742,-793,766,-1000,-1000,587,130,-838,119,-1000,1000,212,341,-294,658,364,579,-949,-1000,143,366,-783,-207,-36,382,750,-91,240,-516,-735,-423,-302,398,-1000,1000,1000,691,-480,-38,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00469() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{-251,-90,14,537,-341,-378,718,-806,332,195,-1000,935,-1000,-1000,938,-1000,303,-14,-1000,1000,-839,-981,293,146,-64,577,-696,-634,-1000,1000,1000,-114,-1000,-452,978,-1000,608,-605,-257,10,530,-22,-1000,159,-1000,300,-670,617,1000,602,-1000,-682,309,-285,-1000,-806,1000,-1000,-179,689,747,-1000,-74,704}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00470() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{-98,-384,83,717,-266,418,818,923,-246,519,186,-788,678,475,-974,-533,-944,963,-508,354,839,-70,-646,-152,184,766,-172,303,455,777,-546,-35,262,918,221,-389,-645,53,865,-714,-818,-161,81,13,-963,-253,-773,774,816,-300,47,51,-349,351,-90,-180,-56,100,-882,-28,624,-367,-61,853}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00471() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{328,-631,-1000,636,-744,-782,-73,498,394,613,1000,-330,-650,-1000,-1000,-425,1000,-236,-1000,-423,132,-1000,222,825,245,-1000,-503,493,-703,191,63,580,-1000,777,-482,-340,-651,-550,188,-171,27,299,-1000,-1000,-633,-25,-898,1000,428,-930,601,-272,515,-884,-431,243,255,-188,-159,-937,1000,-1000,-1000,828}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00472() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{395,-1000,-46,243,605,-837,-237,-292,399,840,398,382,1000,1000,-1000,839,-245,-1000,-59,764,26,-998,212,520,991,1000,-1000,-625,-407,719,955,-763,1000,354,284,-232,83,319,-788,899,-13,647,457,-893,105,809,621,341,-383,161,-395,-1000,763,658,568,-582,827,-208,-661,431,324,-1000,471,-283}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00473() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{319,-1000,43,572,725,-254,95,970,-17,85,1000,-1000,175,-1000,-1000,1000,118,418,446,-1000,-35,361,-328,-887,979,1000,537,-247,1000,-418,-1000,1000,302,1000,-523,1000,-1000,990,-413,365,303,1000,397,-632,456,-31,-492,-245,-130,-642,827,372,-912,-644,919,501,-545,4,663,-985,849,1000,-149,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00474() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{-294,-708,-897,535,-3,983,774,231,-230,382,109,464,-1000,-1000,1000,-1000,-744,400,-413,1000,-732,-864,-329,-634,-700,267,87,-1000,-960,1000,676,-417,-1000,-253,1000,-1000,538,413,489,475,1000,-466,397,888,-1000,321,-775,828,1000,1000,-1000,626,-456,-400,-1000,-447,1000,-554,679,608,373,-1000,534,532}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00475() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{-367,-189,670,67,711,-893,1000,-349,682,-207,700,-4,38,-1000,748,626,903,-1000,-3,-24,516,-688,428,875,724,1000,-525,790,-390,407,1000,721,-976,152,-450,-615,-247,-215,-383,784,987,1000,-735,-165,1000,-384,221,436,-1000,-1000,-110,-1000,168,-1000,1000,229,-116,-1000,-471,475,867,1000,157,-134}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00476() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{699,-1000,-656,142,-664,-703,-237,72,131,443,972,9,1000,1000,-1000,839,-312,-1000,38,475,388,-881,367,520,1000,1000,-804,-300,199,-618,710,-244,-580,917,55,124,-723,671,-501,-945,346,1000,457,-313,-56,606,1000,625,-383,852,-215,-825,546,444,901,-223,791,605,-213,88,392,440,429,-76}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00477() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{-400,157,1000,-430,319,-419,-217,-987,-617,-1,-670,-516,-493,-9,1000,-1000,-881,1000,-1000,853,73,-495,-1000,503,-169,145,639,-1000,-1000,719,1000,25,84,-1000,508,-1000,641,-757,-322,-397,-1000,-1000,-1000,190,-5,34,-789,602,-256,192,-365,-377,856,-683,-969,-906,1000,-684,753,1000,130,-495,-856,-599}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00478() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{693,-1000,-656,667,53,-824,1000,-22,1000,169,-1000,424,-1000,-1000,1000,-455,501,-1000,-628,1000,-1000,-1000,726,1000,1000,1000,-1000,341,-538,1000,607,664,-1000,650,-200,-1000,-8,-299,-826,252,840,1000,-1000,112,-427,934,-707,1000,100,-1000,-857,-1000,671,-285,1000,-727,1000,-1000,-1000,-120,-405,-238,-74,-680}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00479() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.SortOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getColumnRenderingOrder():org.jfree.chart.util.SortOrder",
+            new int[]{537,-1000,-156,-351,1000,-513,818,-73,-124,217,563,-955,-659,1000,-565,-1000,-1000,1000,-1000,111,371,-739,-1000,-900,146,777,-269,-1000,29,-150,420,49,154,-324,483,-1000,-237,534,-154,720,-1000,329,-653,412,-741,381,388,1000,744,-352,-1000,-95,895,1000,-143,-618,1000,282,278,108,-476,-434,-602,-888}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00480() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{-1000,-71,-97,-445,-164,712,-441,790,627,-131,-307,840,-770,-142,-661,-396,574,-677,112,-730,360,-1000,1000,292,-477,196,1000,1000,216,-112,-553,-1000,213,229,518,-868,-462,479,291,-468,169,501,114,925,-652,-839,-1000,411,-112,-869,-245,416,-672,-134,434,-611,-1000,79,-1000,-293,-1000,400,706,-148}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00481() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{-275,-1000,129,-244,1000,1000,-41,601,529,-562,488,421,-864,571,-346,780,-39,-811,-29,1000,727,-31,-572,152,-286,494,-827,-1000,-700,-273,-160,-704,693,-23,90,7,-512,-273,-1000,-159,150,-446,-1000,-1000,181,-37,-606,383,719,1000,-653,-606,-549,-1000,1000,-591,729,-1000,8,1000,590,523,1000,-96}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00482() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{-924,-263,971,-1000,563,189,1000,406,135,447,-1000,-1000,1000,-206,-876,305,-419,717,846,-1000,-810,-516,-669,617,723,-1000,-1000,-917,889,-933,-1000,1000,-469,381,-1000,1000,1000,-1000,-1000,130,660,1000,369,-1000,1000,1000,905,514,1000,-933,-1000,895,198,776,-646,-40,-629,166,481,-1000,1000,-1000,-239,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00483() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{-628,881,-398,93,-819,845,-928,953,281,-106,1000,1000,-1000,-89,249,397,1000,-1000,-720,698,1000,-834,938,-505,223,1000,633,1000,-190,280,491,-1000,-90,-252,1000,-1000,-689,1000,1000,396,-715,-498,-208,1000,-1000,-748,-1000,-941,-1000,435,619,-1000,-251,275,450,-1000,-567,-84,-875,-157,-1000,-489,479,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00484() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{400,-1000,864,-920,756,-519,1000,5,-352,1000,-623,-1000,825,-75,-425,800,-210,484,954,-528,-942,274,-416,858,925,408,-1000,641,974,-836,-597,1000,-634,520,-1000,1000,1000,-1000,-1000,-144,436,1000,1000,-696,181,1000,925,549,439,-922,-1000,698,1000,1000,-1000,-291,-91,-36,1000,-1000,1000,-489,-1000,532}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00485() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{913,-1000,158,-1000,1000,982,-597,28,675,198,-108,572,-31,-726,224,-163,-508,-1000,852,44,-942,-388,682,-329,845,-979,-27,-979,-84,-995,346,-183,1000,-40,-617,176,-205,-847,-1000,-403,577,1000,87,-735,-162,-771,-67,-851,919,-479,-1000,673,-1000,-950,305,-809,600,-1000,-41,264,974,224,898,944}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00486() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{851,1,-97,-688,811,512,-306,54,-1000,153,-273,-1000,-195,-30,238,304,-1000,-207,-324,-505,-184,-459,1000,836,656,-731,-1000,22,248,-744,699,827,222,-575,-715,346,1000,-615,-1000,395,455,480,-500,-1000,479,-121,523,411,291,227,-549,363,-832,52,-441,-449,650,76,989,-189,1000,710,110,-148}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00487() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{-924,112,-287,40,-242,381,-638,-664,437,-105,1000,243,-913,1000,628,-112,-1000,-1000,230,-67,57,1000,-1000,-160,-868,-1000,173,383,1000,767,978,-1000,567,1000,776,-103,-28,449,-213,787,-445,1000,-1000,-552,-893,-563,962,1000,450,329,-785,-388,1000,-957,595,1000,856,-612,90,1000,1000,1000,1000,90}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00488() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{1000,-677,560,-669,-174,492,-803,356,-221,-64,-1000,436,63,-1000,-1000,-1000,977,753,-337,-1000,-1000,-765,-86,1000,-713,-572,1000,974,-126,-240,-932,-757,337,-314,-1000,-294,-143,-1000,-145,-1000,1000,1000,1000,-36,-211,-349,-1000,-1000,1000,-1000,-1000,1000,691,-836,-507,93,-1000,378,310,-529,100,1000,771,-343}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00489() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{-859,1,585,-557,664,512,93,752,930,191,-402,-740,-603,-912,257,677,264,-775,937,887,-227,-419,605,-699,351,-458,660,22,501,-558,-863,-539,222,-197,468,-817,861,648,-482,688,-218,905,-985,616,8,-698,-856,411,-929,391,-909,-100,-287,388,611,-606,-202,-633,-658,-29,-187,-999,478,400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00490() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{1000,-835,16,-1000,511,-1000,-356,-45,675,1000,-1000,-346,399,-1000,-901,-886,1000,186,1000,-709,36,-817,34,845,-377,-1000,-11,337,1000,-1000,-340,-547,-571,1000,-1000,907,321,-564,-621,-764,1000,1000,688,-1000,-606,-40,-475,-264,490,-1000,-1000,1000,1000,445,-976,342,-801,675,1000,-331,746,740,-791,313}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00491() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{-703,112,448,-948,247,-179,-318,365,1000,600,-764,173,-31,-221,-39,-406,575,-432,1000,299,-1000,-787,515,-720,-185,-868,1000,226,867,-510,-711,-982,206,384,-810,195,-388,-798,-356,-819,1000,1000,-215,740,-123,-466,-1000,-358,-7,-719,-614,95,-521,75,-239,-181,122,75,461,281,61,812,-31,682}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00492() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{844,-291,-378,904,-757,279,4,-953,-236,779,-960,767,-796,136,-223,975,-983,638,-908,293,-494,-385,446,-364,12,802,-470,495,350,102,587,-847,626,446,-69,196,675,-779,-767,-366,851,-613,528,703,666,-251,-437,-17,855,-844,112,-128,-128,-629,-821,-362,-513,262,-348,-728,237,603,864,225}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00493() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{146,-538,238,-178,1000,893,62,252,824,706,-15,642,729,-1000,-876,327,562,-490,-297,863,341,121,-508,67,-1000,1000,409,-475,-1000,1000,-214,-884,28,592,133,583,-665,-1000,124,-1000,892,289,-809,-1000,495,276,-1000,-689,552,1000,-788,408,-26,-1000,584,60,815,707,1000,1000,-16,1000,1000,-391}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00494() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{-642,-334,-97,-1000,-19,-946,-306,109,-221,1000,648,134,-954,443,695,-584,967,-1000,1000,-186,-1000,-1000,1000,-253,884,-1000,1000,22,1000,858,-499,-999,222,218,-715,178,290,271,489,-41,455,1000,-500,1000,-1000,-121,-933,-1000,-1000,-1000,214,-383,636,1000,-1000,-525,-184,489,274,-1000,-303,710,-1000,-148}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00495() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataRange(org.jfree.chart.axis.ValueAxis):org.jfree.data.Range",
+            new int[]{1000,-688,368,-530,787,819,419,809,-356,-221,-729,-507,82,250,173,250,170,-382,-281,-574,364,-634,1000,1000,617,-124,-207,-82,188,-226,-701,299,686,-224,518,472,932,-849,-1000,387,778,667,-436,1000,541,-3,-556,627,-1000,-99,-883,-113,-532,-607,339,-256,133,47,250,369,502,-690,424,530}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00496() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.category.DefaultCategoryDataset|getRowCount=22:java.lang.Integer:MQ==|getColumnCount=22:java.lang.Integer:Mw==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{241,-369,81,914,-1000,-89,669,572,244,488,-981,-300,-1000,839,-498,68,-773,-1000,-998,597,1000,930,1000,-650,1000,1000,-354,405,-122,365,-1000,297,-895,1000,817,-994,1000,-291,428,-402,-1000,1000,-864,136,1000,-20,1000,-889,-210,-1000,1000,1000,-646,-1000,1000,-54,1000,168,351,504,1000,920,-335,-50}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00497() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{737,-1000,189,578,-732,-482,532,1000,-32,376,734,-312,-539,214,-240,-305,-940,283,41,297,1000,1000,624,755,1000,701,-382,545,4,-392,-707,-40,237,901,776,-114,321,-624,565,300,-1000,848,-1000,48,147,-440,276,43,331,-250,263,558,-229,-637,584,-626,259,894,-985,399,-62,346,567,-318}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00498() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.category.DefaultCategoryDataset|getRowCount=22:java.lang.Integer:Mg==|getColumnCount=22:java.lang.Integer:Mg==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{460,825,-50,1000,-905,1000,1000,681,1000,324,-106,-626,-761,329,32,452,-1000,-1000,-1000,397,953,1000,229,-147,485,-62,439,845,-375,413,-849,-925,601,1000,1000,-1000,183,-244,660,621,-1000,858,-691,954,171,-990,-94,55,-245,-257,-671,500,-174,-3,-910,-420,528,1000,170,-806,-800,571,581,778}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00499() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{945,374,-896,-736,-905,382,453,352,-243,-340,-511,745,507,-891,696,362,466,240,-780,397,162,-420,944,-147,490,-62,-924,-395,731,-734,-303,-684,601,-749,-915,-414,-389,935,368,-451,612,-287,54,804,-644,845,375,55,150,-724,968,-890,-800,-3,-563,7,170,-565,573,944,598,443,627,-591}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00500() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.category.DefaultCategoryDataset|getRowCount=22:java.lang.Integer:Mg==|getColumnCount=22:java.lang.Integer:Mg==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{460,909,124,1000,-506,-659,1000,-236,1000,44,277,33,-1000,65,32,-1000,-1000,-697,310,-92,171,778,229,-147,639,-199,67,777,110,-443,-422,-925,688,1000,757,-1000,-449,-1000,1000,1000,-846,51,-1000,1000,-467,-909,-212,902,-78,495,-1000,-602,747,952,-806,-1000,-987,434,170,872,-1000,149,1000,778}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00501() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.category.DefaultCategoryDataset|getRowCount=22:java.lang.Integer:Mg==|getColumnCount=22:java.lang.Integer:Mg==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{141,1000,739,233,-1000,-580,18,245,433,-1000,-960,663,113,579,-340,257,200,272,34,256,-26,94,783,1000,-533,650,587,438,1000,434,575,674,1000,668,594,-1000,-1000,-335,165,1000,145,838,-853,1000,1000,-1000,-1000,46,-831,409,-301,-1000,-494,1000,-1000,-407,-447,1000,1000,-22,-1000,-1000,1000,286}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00502() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{-1000,-306,954,-164,-372,571,648,-1000,372,-662,-981,608,198,1000,-235,1000,1000,-1000,-1000,-838,-116,-1000,-1000,-1000,-566,529,624,1000,366,480,-656,-525,77,259,219,-1000,-976,624,1000,-1000,235,-328,1000,-218,646,917,105,-394,-1000,14,308,1000,-910,-1000,-132,-84,-260,-47,1000,1000,162,192,-682,383}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00503() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{-292,408,-471,98,-67,-593,780,244,-575,-803,569,471,53,81,-488,-373,634,-676,526,-339,-27,430,-919,-961,-171,262,-280,-167,106,-455,590,-399,-468,-302,116,264,-583,126,681,3,-309,-902,-800,875,-635,199,-221,331,-227,931,-635,-887,565,523,-817,-911,-781,256,-908,530,-913,-331,539,-960}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00504() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.category.DefaultCategoryDataset|getRowCount=22:java.lang.Integer:MQ==|getColumnCount=22:java.lang.Integer:Mg==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{114,-223,-336,-779,-22,-908,-400,664,-1000,-731,970,859,-150,-373,288,812,884,523,589,876,-1000,-646,-584,-1000,-174,-397,71,1000,1000,220,1000,28,1000,-561,-525,-607,-1000,-139,70,-50,253,-902,654,1000,298,202,-387,-89,-139,840,-66,-224,314,892,596,-1000,-1000,-993,-251,1000,-723,-674,314,928}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00505() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{1000,1000,-521,400,267,614,-503,-131,-1000,-352,278,450,-967,-1000,340,-1000,46,-1000,860,626,-1000,1000,-207,507,1000,-21,-943,264,1000,-1000,-56,-965,9,88,-576,-844,-1000,50,1000,1000,-789,-331,-1000,1000,-456,-292,-245,1000,1000,970,-562,-1000,968,1000,214,-1000,-730,380,-1000,-1000,-1000,859,1000,-471}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00506() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{-292,1000,604,1000,-115,697,1000,-766,-150,-458,251,161,-1000,-420,-640,-1000,-574,-1000,490,-824,-400,777,-310,-157,485,-550,70,682,-152,-394,-1000,-1000,197,607,482,-880,-423,-948,1000,795,-780,-732,-818,1000,-995,-800,459,1000,-227,1000,-1000,-1000,1000,944,-1000,-1000,-1000,-167,-1000,429,-1000,-8,503,-570}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00507() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.category.DefaultCategoryDataset|getRowCount=22:java.lang.Integer:Mw==|getColumnCount=22:java.lang.Integer:Mw==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{-1000,-213,605,-355,73,512,578,-410,-291,-337,1000,308,784,874,389,740,1000,-1000,-278,-301,-737,-459,-1000,-1000,-1000,-195,-87,951,138,1000,-519,-1000,716,-18,250,-1000,-1000,842,1000,-1000,-809,-1000,1000,491,-492,453,-1000,-770,-784,477,347,736,-978,-627,-290,-402,-16,-246,83,519,423,231,1000,127}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00508() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{714,986,674,1000,-486,233,9,-324,552,-782,-941,-211,-992,-279,259,259,-33,-1000,589,-898,-703,-127,-951,-492,-696,-153,271,155,-457,775,-1000,74,270,-187,371,-371,-738,-306,-201,731,551,-1000,582,833,-1000,-369,383,850,-227,1000,-247,-1000,1000,944,-1000,-62,-976,271,978,-396,-1000,-510,-204,-184}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00509() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.category.DefaultCategoryDataset|getRowCount=22:java.lang.Integer:Mg==|getColumnCount=22:java.lang.Integer:Mg==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{-815,-1000,579,-1000,-1000,-747,1000,-825,107,-1000,216,1000,1000,1000,-1000,-678,311,383,75,39,1000,-502,192,-977,-713,801,-81,-541,-670,191,-689,638,-1000,-444,77,192,332,869,-678,-1000,-809,815,-550,-995,1000,934,899,-1000,-1000,-575,761,569,-1000,-1000,582,-317,280,-699,1000,163,1000,-1000,115,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00510() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{398,764,189,879,-732,-482,523,642,317,-300,-360,621,-907,61,-476,-305,-814,164,20,-215,-249,-466,797,427,463,334,-214,549,838,33,978,-40,859,901,-114,-822,-853,-624,676,998,-468,332,-985,949,822,-846,-1000,187,-202,78,-806,-270,37,793,-240,-999,-987,479,-46,572,-874,-401,834,751}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00511() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset():org.jfree.data.category.CategoryDataset",
+            new int[]{-285,1000,-141,531,-1000,-593,412,187,-126,-329,-1000,-445,499,403,-488,1000,47,-248,-1000,1000,883,934,491,-110,-85,-858,-280,789,47,-455,-1000,-63,991,-20,410,-1000,-799,231,136,378,397,1000,110,1000,259,-1000,-982,-1,-753,-94,203,-506,-942,509,-1000,165,529,1000,-908,-2,-258,320,737,742}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00512() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{-1000,814,149,196,469,-79,315,741,-467,360,679,207,-150,-386,-18,-1000,520,-70,-167,-316,-1000,362,1000,-191,-10,-171,628,-1000,39,-329,-287,718,899,-869,189,-442,626,-1000,549,1000,-629,1000,1000,258,73,-839,528,-189,-749,701,23,-170,-199,-227,-296,883,-103,-851,87,-619,-220,943,234,-302}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00513() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{1000,233,644,-671,784,180,425,-1000,1000,-745,235,95,-161,1000,-235,681,-310,-764,-1000,-331,983,532,-487,1000,-1000,-832,-263,-699,-327,788,913,286,-233,822,995,1000,-489,1000,1000,407,777,-991,1000,-145,1000,-52,1000,-339,912,241,776,-695,1000,-733,-1000,-884,-700,158,58,211,-757,-862,-321,363}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00514() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{-394,-282,-266,-95,1000,261,-267,137,243,1000,118,-404,1000,-927,-590,-221,-385,511,406,-330,184,710,-659,-345,-636,14,756,-978,-1000,1000,-101,1000,199,808,-452,-20,348,1000,-1000,528,-893,-169,1000,-1000,576,53,-368,-59,-70,-1000,904,1000,-334,224,1000,-300,-1000,-1000,-355,-346,1000,-139,-522,-465}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00515() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.category.DefaultCategoryDataset|getRowCount=22:java.lang.Integer:Mw==|getColumnCount=22:java.lang.Integer:Mw==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{61,291,188,146,919,-630,494,-695,401,265,402,467,1000,-789,-604,-1000,-539,-136,9,-370,857,586,-220,659,-454,-48,-123,-490,-1000,179,12,922,572,767,655,-610,325,552,859,-214,-119,1000,429,-315,177,-321,447,183,604,-380,254,-6,468,-395,-213,89,-891,-900,-930,-403,-794,-290,-85,-668}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00516() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{-1000,427,352,-353,670,474,418,1000,711,-80,666,-185,-76,-506,-401,698,-45,345,-1000,-321,-185,-119,1000,26,239,1000,1000,349,153,36,1000,-262,197,-43,-663,-1000,926,-1000,361,482,-687,-484,-1000,-254,138,-347,372,-730,-984,420,1000,-364,-1000,197,-540,1000,-1000,64,369,-472,648,1000,-50,712}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00517() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{-730,348,-96,820,-121,-521,-395,468,-314,-702,264,-567,992,-299,-716,-556,520,47,-228,382,-978,-382,759,-352,205,690,582,79,39,-615,-287,183,546,-638,792,-946,547,-763,-606,-234,-471,130,-866,-747,-221,-839,-851,-265,258,-108,666,596,-730,-252,421,299,-39,-767,21,-619,884,437,-1,-115}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00518() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.category.DefaultCategoryDataset|getRowCount=22:java.lang.Integer:MQ==|getColumnCount=22:java.lang.Integer:Mw==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{1000,-405,696,383,-1000,54,-1000,565,930,-928,185,-126,851,-10,-417,531,-452,-1000,-249,441,1000,1000,378,1,-1000,-1000,-1000,-1000,292,1000,315,479,-338,286,-507,1000,-460,1000,-880,-279,-286,-956,386,-1000,76,170,1000,-409,454,-1000,1000,1000,754,-77,79,-482,-1000,-588,560,-466,706,-380,-538,-406}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00519() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{1000,829,1000,-796,307,560,680,-1000,628,-1000,-620,-381,-1000,428,727,217,810,-1000,-983,373,526,1000,-1000,1000,-1000,-787,252,618,1000,-96,1000,-447,-428,682,1000,1000,-1000,1000,-542,1000,1000,-22,-504,1000,1000,92,1000,639,1000,1000,1000,-1000,1000,-1000,-1000,-1000,720,-446,1000,1000,-1000,-439,-683,629}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00520() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{-728,-878,288,-324,-1000,-88,-865,680,375,-546,-243,354,1000,-289,897,-490,-856,88,1000,172,1000,1000,-685,785,-500,-497,-624,-565,-539,-739,443,1000,-464,401,-790,282,374,1000,-1000,-513,133,1000,99,482,12,878,849,1000,-620,-1000,-201,400,910,305,1000,603,722,-397,-649,-1000,187,-940,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00521() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{-313,42,154,-454,-1000,997,-413,1000,-314,434,-475,-567,1000,846,421,-556,782,-93,615,1000,1000,235,-1000,748,-83,1000,-236,-1000,498,361,-825,863,-1000,893,-263,663,1000,-763,893,-866,-276,-819,498,-993,180,1000,106,-265,653,-108,-79,-24,-730,808,1000,-467,341,-767,1000,-619,1000,445,-778,-115}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00522() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{925,-4,658,407,692,-638,50,-798,447,-791,701,284,-958,-1000,-1000,499,-579,-576,-865,130,-402,586,744,374,-1000,-505,-803,-490,-1000,520,12,558,686,267,271,567,-59,680,0,-178,-253,-200,876,-1000,176,-902,447,-744,392,-535,1000,422,531,-452,-575,-161,-891,-1000,-231,-289,-545,144,-71,-252}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00523() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{-70,626,-67,175,391,-94,886,-93,21,682,-498,-217,523,-702,145,-662,248,-935,1000,-137,-366,-22,-1000,816,-574,183,-880,-23,244,-631,-654,-77,655,400,783,1000,-163,452,346,-268,-165,725,-1000,1000,78,834,784,1000,1000,19,271,388,363,-622,595,32,1000,-147,-279,-433,-206,373,306,-205}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00524() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{-141,1000,-226,-503,1000,-359,1000,-659,425,79,92,-84,-99,138,-224,400,330,-398,-167,-693,-691,1000,629,-191,-947,-124,742,-788,-882,-1000,1000,72,861,312,189,-454,-55,-445,929,59,-183,-208,-182,-424,73,-711,1000,565,385,145,680,-1000,-617,-660,-390,-360,-28,-531,-587,-1000,-794,354,130,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00525() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{-342,-190,-406,-267,-1000,565,-342,1000,74,289,-50,-505,1000,134,93,-88,207,234,1000,-337,1000,1000,-344,-486,-220,-332,252,-565,-379,770,249,1000,-950,401,-1000,282,71,1000,-542,-257,-212,671,362,-33,-724,878,1000,987,-112,-796,-65,611,-6,467,1000,513,-48,-446,73,-784,1000,-940,-848,-712}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00526() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{1000,140,959,601,919,-988,33,-1000,1000,-587,566,732,1000,-889,-961,-1000,-1000,-1000,-865,174,857,586,285,1000,-1000,-515,-1000,-794,-1000,340,-1000,558,1000,686,1000,-108,-46,552,622,-229,-172,30,446,-992,736,-817,295,-794,1000,-522,1000,266,1000,-776,-858,-607,-788,-1000,-589,-180,-1000,102,132,-454}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00527() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDataset(int):org.jfree.data.category.CategoryDataset",
+            new int[]{537,-689,1000,-90,1000,-532,884,-131,-97,78,375,185,1000,-1000,-224,1000,-384,455,-840,1000,-654,-544,1000,303,-44,-230,1000,1000,-976,354,-409,-841,769,20,-507,-1000,-724,155,-978,-279,-858,-1000,-544,-988,76,-1000,646,-617,-450,-149,825,493,-324,492,-414,803,195,-947,740,-867,-286,1000,-320,425}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00528() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{-36,539,-414,142,305,-363,944,984,-899,-959,158,-38,395,-294,-725,-570,106,444,373,143,581,781,446,242,-555,-259,-512,623,741,-385,-749,-308,-886,-381,-251,-471,769,-974,-488,296,322,813,-142,359,266,-817,983,59,-233,-594,550,-712,-219,334,-355,-848,36,700,450,-171,386,-171,795,484}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00529() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{-60,678,-526,112,-323,354,297,-1000,-632,-781,-30,591,-762,-175,-650,-921,1000,-480,1000,-200,1000,1000,830,-1000,557,-481,-334,-117,273,353,-1000,-214,-331,33,-259,-1000,994,-1000,789,-348,-624,435,-399,-926,-797,817,33,447,-463,73,560,-168,146,273,-852,-144,136,579,606,181,1000,53,256,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00530() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{-14,675,1000,-1000,-1000,95,1000,930,136,730,173,-1000,479,159,808,654,-548,-11,-876,-1000,161,141,-828,99,-173,-593,1000,238,207,367,-68,376,-814,599,-251,129,418,1000,-808,1000,104,-989,-1000,788,-664,-245,-44,1000,-1000,-216,1000,-801,1000,-532,699,838,223,-790,396,1000,-1000,980,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00531() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{1000,297,1000,272,-824,132,191,1000,598,1000,687,-925,-30,-221,444,749,-133,166,-919,-1000,-584,531,34,1000,99,-200,583,1000,302,-705,-1000,1000,-806,1000,1000,-694,-311,1000,-304,1000,105,-924,-1000,1000,-1000,-551,693,1000,-630,1000,44,-1000,1000,-28,1000,530,-18,-1000,790,1000,971,1000,-858,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00532() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{1000,497,1000,-297,-458,329,204,-381,-349,946,1000,-984,-836,734,1000,1000,22,353,128,821,-455,-322,-182,968,225,-1000,1000,62,132,-403,-1000,183,-879,1000,1000,-321,-328,1000,-657,55,279,-1000,-591,-959,-879,353,-694,198,-1000,1000,-1000,332,1000,476,275,730,1000,-1000,561,1000,82,644,-870,-504}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00533() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{-1000,352,-876,-452,201,-251,-657,992,-536,-1000,-799,653,1000,-1000,-1000,955,601,-968,311,1000,434,839,763,-224,1000,853,-1000,333,951,452,-977,103,-873,-465,-453,-16,-100,-63,714,-873,-1000,1000,-70,917,772,-919,1000,-461,850,-712,1000,-56,-672,-34,1000,210,-702,1000,-291,-286,16,337,935,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00534() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{548,175,127,68,-21,637,165,-392,-465,-110,607,-310,-598,70,749,243,796,-36,978,-927,119,233,281,606,189,-905,157,198,338,-136,-1000,-28,-399,453,1000,-414,-124,1000,-463,1000,-24,-415,-1000,865,874,169,-624,-355,-1000,649,-314,339,1000,643,-673,-414,441,-1000,-16,1000,935,129,387,396}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00535() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{256,675,-229,48,-898,922,611,1000,-122,124,-743,-290,479,-315,109,49,-1000,1000,-965,240,15,1000,-709,-226,-1000,691,16,857,677,-132,-68,846,-1000,599,-704,766,113,37,-395,437,-47,-360,-747,1000,-648,-245,1000,718,400,-1000,1000,-777,44,-563,1000,145,223,-467,396,880,-358,372,-5,-929}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00536() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{-1000,-179,1000,-1000,-918,1000,1000,894,597,-86,-373,-1000,1000,-768,9,-111,413,-991,763,-928,-691,1000,-320,-171,-448,-525,752,250,173,110,-47,269,-752,-371,612,514,77,510,-626,800,-893,-278,-932,1000,-1000,-446,987,319,-939,918,-1000,-188,891,-266,-100,-129,-913,-111,-121,1000,-1000,420,124,-334}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00537() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{1000,76,-216,911,-876,-992,1000,612,343,-728,771,-287,1000,1000,-1000,487,-629,1000,741,686,-229,-690,-496,413,-111,-697,950,-34,174,-1000,881,-791,-1000,-1000,-545,-105,1000,-629,-1000,-468,625,-479,-193,409,-337,-13,-31,-1000,-873,-364,-732,-619,-108,228,-578,1000,-1000,-504,-479,-1000,1000,-1000,-338,-229}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00538() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{-20,46,132,278,-751,-347,-409,17,60,151,617,161,-400,148,405,1000,226,571,-47,312,-791,-578,-784,1000,435,-260,305,774,648,-880,-495,-13,-737,381,547,865,139,840,-202,423,-136,-1000,-260,14,898,196,-1,121,85,851,-359,147,372,1000,458,299,400,-1000,-275,921,485,501,180,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00539() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{15,1000,908,-671,-636,465,-193,-989,-632,506,690,-15,-1000,237,815,-63,678,-480,-873,-1000,503,29,830,197,-1000,-864,406,-253,328,467,-1000,329,-389,1000,1000,-906,443,518,2,1000,844,-643,-1000,-1000,-651,1000,-867,1000,-1000,1000,-19,-521,1000,-68,-852,88,1000,-1000,1000,1000,-451,1000,-1000,198}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00540() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{-915,955,-591,-630,-982,-607,-39,459,-244,-68,-278,-793,-144,232,322,437,-552,918,-117,-724,-429,-388,-425,-955,206,335,759,695,451,289,606,747,-997,-151,-293,-320,146,292,130,-453,-223,-749,609,228,-355,172,-889,181,-56,-832,-92,-198,694,570,442,-403,900,-798,788,-773,-590,961,-699,-788}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00541() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{-60,649,-340,-1000,494,1000,1000,894,-763,-86,-343,201,-1000,-768,9,-1000,-737,-503,1000,-1000,937,1000,780,-1000,-1000,-525,122,-133,-141,358,-226,-386,-392,-254,235,-582,1000,-1000,-497,912,104,-278,-889,-832,-65,240,33,1000,-1000,-145,-81,-188,1000,-1000,-1000,-716,-496,719,666,325,-572,-975,-27,-234}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00542() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{-1000,-866,-671,310,-1000,837,-978,1000,14,-128,2,44,359,-620,-1000,-91,1000,201,-22,1000,-1000,-748,981,1000,1000,1000,-660,1000,1000,-606,496,1000,-861,-944,164,929,-1000,1000,358,-804,-1000,-64,-490,1000,-1000,-688,1000,-1000,1000,-942,586,-155,-1000,1000,221,-1000,-670,-1000,-526,-557,1000,901,1000,-350}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00543() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetCount():int",
+            new int[]{-1000,-937,510,-908,-688,922,65,1000,1000,-701,-632,-378,1000,-1000,-565,-119,251,-972,171,462,-1000,337,174,-702,-1000,783,-334,1000,826,-89,224,571,-1000,-954,612,1000,-1000,982,-858,20,-1000,94,-474,1000,376,-950,1000,-1000,461,45,68,-246,-14,360,-218,-250,-1000,308,-793,587,-1000,723,410,297}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00544() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{215,-169,-871,-1000,77,1000,889,179,-1000,23,-545,-841,249,-1000,709,-366,345,-529,-444,489,-231,769,-1000,1000,-936,-1000,948,-127,-699,95,-588,-967,1000,432,248,-865,-1000,-372,1000,-633,-1000,-1000,-914,897,388,-1000,121,702,-1000,-5,60,930,-678,1000,366,1000,-187,-323,824,836,1000,1000,175,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00545() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{60,-572,-91,659,234,922,-712,184,-863,-337,-470,-1000,1000,-600,1000,-152,69,-1000,529,804,-178,1000,-1000,928,-176,-651,82,722,197,233,400,-1000,943,1000,956,-295,-307,757,525,-896,606,-601,-974,1000,668,392,547,-353,-942,-690,1000,-438,-1000,-784,1000,-402,-595,864,1000,1000,-416,-129,-36,583}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00546() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{1000,-316,-416,-267,242,-1000,392,473,1000,616,93,1000,-1000,1000,148,72,-547,880,820,-737,776,-1000,777,-1000,1000,419,-1000,-976,552,1000,1000,999,-83,-856,-318,1000,1000,-653,-249,399,-923,63,763,-11,-774,-683,-673,491,1000,1000,182,-631,1000,855,374,2,498,-806,-175,-308,581,-1000,590,-988}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00547() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{651,400,-202,-1000,173,576,-701,1000,-1000,-571,-737,73,1000,-438,678,-696,280,-842,-768,283,166,417,-633,841,-298,188,803,-1000,-1000,-11,-50,-953,847,185,547,139,-799,-945,476,197,346,-311,185,1000,1000,-457,-243,644,-1000,78,1000,771,-819,-285,-1000,318,5,-812,543,168,316,308,45,583}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00548() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{565,261,-923,-1000,218,908,571,446,-1000,275,-470,-521,909,-1000,612,-426,28,-1000,128,-232,145,1000,-215,907,-84,-99,546,-226,-110,320,400,-953,-508,238,9,-295,-799,-1000,1000,-476,-138,-777,-214,855,1000,-776,-926,193,-1000,-369,275,451,-1000,1000,832,1000,-43,-634,1000,1000,1000,374,471,583}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00549() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{1000,457,1000,-342,301,195,268,749,260,490,-1000,1000,-1000,-13,-751,463,1000,1000,-40,-146,508,-1000,-952,-992,-316,1000,-517,1000,-690,-465,803,1000,376,-173,-307,870,943,-739,1000,1000,-141,-48,763,-1000,689,-421,153,-672,1000,-199,260,1000,1000,-1000,-1000,690,-894,-1000,-435,838,97,-927,-692,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00550() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{773,-547,-32,1000,1000,80,-816,134,556,34,381,193,-1000,126,-831,840,-704,568,865,-739,1000,263,-1000,-678,1000,698,-683,-518,652,1000,1000,-138,681,75,310,723,-393,-622,158,572,974,1000,549,195,659,-225,-1000,-1000,283,69,1000,294,1000,-384,-1000,37,-237,-640,598,-330,120,-1000,883,689}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00551() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{333,-129,1000,-575,977,424,901,46,-1000,569,-624,348,535,-630,830,-1000,124,-1000,-137,-796,-220,-506,-484,-607,-813,-308,-396,1000,158,94,-582,202,198,-859,303,543,736,-791,-1000,-1000,-607,-1000,72,-812,267,-130,560,649,-345,-1000,-827,83,-1000,-1000,-747,75,26,-26,590,-647,698,671,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00552() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{259,-986,764,1000,-729,309,-532,-301,-435,-748,-314,-538,126,380,1000,-434,-325,-712,1000,37,90,-764,-297,281,419,896,-526,373,545,1000,571,-67,527,756,956,-479,437,-791,-257,388,459,-359,-180,647,-471,282,-376,124,218,-987,1000,-1000,688,-707,1000,-1000,25,1000,712,932,-859,-729,-274,-218}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00553() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{715,631,-808,-1000,477,908,52,446,-840,568,-611,-521,868,-1000,779,1000,-532,-355,-166,-232,1000,-29,-504,-434,963,1000,-621,-658,784,1000,1000,-953,-508,-766,-610,-295,102,-1000,1000,-329,516,-866,816,855,1000,196,-926,-1000,-802,1000,541,604,-1000,894,422,1000,263,-949,1000,1000,1000,-685,879,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00554() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{624,-318,524,410,901,1000,44,813,-115,823,-154,-760,-1000,1000,-679,1000,550,-13,81,358,-317,424,141,-270,-683,-1000,-719,1000,-631,-1000,-288,990,1000,-408,-832,-299,859,376,-802,890,397,844,-755,-971,-1000,-729,-267,400,504,-534,482,707,445,-661,674,354,-1000,-783,258,414,-671,-562,230,-708}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00555() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{305,-751,479,739,-191,286,-14,-326,-204,-61,-119,-933,1000,260,913,-761,-75,-859,975,1000,-537,931,48,730,-179,-380,-43,1000,434,-68,-840,-990,-67,658,1000,-1000,1000,588,109,-890,-740,-500,-1000,943,279,-384,986,741,-283,-1000,718,-951,-113,-950,947,-1000,-399,736,947,951,-440,-129,-529,108}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00556() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{1000,-764,-131,446,7,690,-354,1000,-1000,691,-325,-1000,68,363,-142,1000,617,-211,-97,-95,613,1000,-1000,1000,-358,-213,304,-581,-210,138,608,470,1000,1000,-232,-939,102,484,75,1000,-158,522,261,842,572,-926,-264,428,-568,-998,1000,933,40,172,244,1000,-963,-1000,1000,1000,549,-366,823,34}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00557() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{572,46,289,-382,-1000,-485,922,-634,706,-161,-682,933,-508,564,1000,-690,392,859,-1000,705,-798,1000,-487,-718,-955,-1000,82,-612,-843,233,-711,-153,994,756,198,182,575,-588,952,-802,-90,-951,-965,1000,-604,473,790,82,113,1000,-718,402,-1000,228,-936,-604,1000,-159,-947,-951,933,683,-592,-898}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00558() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{520,-760,-381,320,611,908,-82,426,-1000,338,89,-938,-1000,400,-27,-739,350,400,117,463,-567,498,-516,708,-84,-1000,-67,-301,-699,-371,-588,400,1000,927,296,-432,259,762,-400,-476,-462,202,-939,-276,-1000,-548,526,716,272,-5,359,358,400,178,321,-65,-43,-390,518,1000,1000,410,282,17}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00559() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.DatasetRenderingOrder", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDatasetRenderingOrder():org.jfree.chart.plot.DatasetRenderingOrder",
+            new int[]{767,1000,764,313,-638,-770,-572,205,1000,-1000,-1000,-695,65,237,1000,-1000,-374,-455,99,1000,810,988,-1000,-966,62,904,991,372,309,737,-1000,-1000,394,676,1000,-656,606,-316,952,-1000,347,-1000,-1000,-789,407,-461,0,-1000,-205,-962,759,-89,247,-1000,-120,-836,513,857,912,144,-1000,-426,-378,-733}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00560() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{-858,-1000,579,515,-208,-1000,-397,-823,-1000,1000,573,-1000,-325,1000,-734,-1000,-1000,-309,1000,-1000,1000,-733,165,-1000,1000,-1000,747,-540,230,-145,-382,-1000,1000,-1000,-710,-1000,1000,-844,1000,-1000,-1000,836,-743,-1000,1000,-676,215,1000,-1000,-784,55,1000,-988,-1000,-1000,-1000,-1000,-67,-1000,743,36,1000,-1000,783}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00561() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{-341,20,469,-382,-409,-1000,-229,-226,-584,325,1000,-735,265,1000,7,-1000,-555,-228,82,549,-1000,654,257,-807,323,-148,234,-1000,-801,825,-492,124,535,-546,-1000,-453,617,1000,-109,754,-1000,400,904,259,105,-400,874,-731,400,-881,-338,-307,465,-947,-98,-775,373,667,-1000,-297,-216,1000,-415,-301}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00562() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{-72,691,802,196,625,244,-1000,-71,215,-941,-611,-333,398,552,789,-132,1000,-289,415,279,-490,1000,-920,-743,-60,-834,-1000,-60,-296,973,-147,-670,-464,51,-1000,559,-7,55,-484,282,-1000,-174,85,1000,-1000,-429,99,-446,400,-330,-714,-1000,445,-257,682,-742,908,-827,1000,-636,564,-781,1000,-389}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00563() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{-1000,-1000,-431,645,1000,647,-204,-1000,-1000,-548,-573,862,-914,39,929,379,-298,372,323,-775,758,-655,-1000,-94,-723,-355,72,-1000,1000,533,-129,-377,1000,-1000,-1000,83,122,-1000,-344,-792,746,1000,223,-709,-308,-133,450,723,314,240,-906,105,-109,-400,-200,-78,-276,-1000,61,694,1000,6,838,617}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00564() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{128,-560,-781,698,785,1000,1000,820,2,-1000,-1000,733,800,-400,-555,400,1000,1000,-184,-1000,136,368,-529,522,867,-804,810,-692,504,1000,-723,-15,-526,400,-647,-2,-217,-1000,-1000,-371,897,806,139,-258,-974,-378,594,467,207,1000,-1000,-1000,678,65,837,-98,1000,577,483,-77,1000,1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00565() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{-1000,-1000,204,569,-60,-629,1000,-206,-1000,-516,-1000,-1000,409,1000,1000,-1000,130,636,1000,-1000,-735,-1000,-1000,-1000,-475,-489,810,-1000,704,1000,-1000,-15,610,-1000,-1000,-840,911,-1000,-455,1000,360,1000,225,438,-1000,-378,1000,1000,-1000,1000,-1000,259,1000,-1000,281,-32,1000,-1000,-1000,1000,1000,1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00566() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{-1000,-920,-941,641,450,1000,179,81,-1000,-665,-418,821,194,-605,-90,273,251,1000,-650,-1000,468,-437,-1000,1000,9,569,1000,-1000,1000,205,-1000,172,534,-664,-788,-607,-375,-1000,-1000,-113,1000,1000,543,-1000,-1000,-43,1000,1000,468,1000,-622,-126,166,67,524,895,320,97,-256,1000,1000,445,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00567() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{-879,-1000,-107,701,-738,-264,428,-734,-1000,711,188,-563,193,20,-1000,-738,-1000,1000,292,-1000,1000,-1000,621,-442,1000,-1000,1000,-1000,68,300,-1000,-551,1000,-1000,-763,-1000,1000,-1000,197,782,-652,1000,666,-1000,1000,-1000,554,1000,-1000,442,-263,1000,-1000,-671,-831,-547,-763,-180,-1000,1000,-331,1000,-854,665}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00568() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{552,-1000,-392,-398,-1000,-537,1000,-650,-224,255,160,-391,-263,-1000,959,-1000,-1000,1000,-436,143,-1000,-1000,-257,232,693,-1000,714,-462,1000,160,-925,601,-430,-476,-812,-391,1000,1000,-995,1000,1000,-26,1000,-775,-985,344,1000,-1000,-1000,218,223,74,1000,64,-1000,16,-831,1000,-456,-461,693,753,514,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00569() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{542,-20,199,635,-111,218,-375,-176,-4,-168,150,86,-286,-400,-1000,-1000,-1000,-220,-382,-890,1000,-1000,1000,-1000,162,-871,-564,-429,230,-145,750,400,-187,-1000,285,159,1000,-542,-256,-612,-371,766,-206,-1000,960,69,-1000,-400,-773,21,300,-160,-1000,400,-1000,-997,-1000,333,56,-657,-689,403,-901,836}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00570() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{-753,-920,-956,725,438,1000,1000,-28,-1000,-10,-1000,821,331,-605,204,273,251,1000,-820,-1000,382,-357,-974,1000,9,-148,1000,-1000,1000,205,-701,510,534,-664,-700,-453,-375,-1000,-1000,117,1000,1000,949,-1000,-1000,423,1000,1000,468,1000,-1000,-126,480,69,586,897,320,377,-256,1000,1000,445,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00571() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{-119,-640,94,-187,788,-877,-1000,224,282,516,-23,-488,-392,1000,353,400,556,-536,648,1000,-209,400,-562,-376,545,-1000,-400,236,-139,29,699,-1000,-365,64,-1000,-148,150,51,1000,-581,-364,-73,295,400,-629,-950,-9,667,207,-1000,22,-629,939,-584,36,-1000,158,-1000,400,-400,532,1000,-479,13}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00572() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{89,1000,674,141,-477,-389,254,-561,-74,-240,-340,-983,916,552,185,-1000,839,117,868,-1000,-831,153,-598,-1000,695,-1000,219,-186,-296,1000,-1000,-1000,-998,-134,-867,-2,925,684,-482,776,-1000,-99,85,754,-1000,-937,594,-729,-1000,-88,-313,-657,678,-668,396,-785,1000,246,251,-354,816,-243,814,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00573() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{449,328,-281,126,243,-454,1000,1000,1000,-665,-36,28,930,-204,532,-1000,466,772,-42,-86,-1000,412,-469,153,1000,-127,1000,-585,-610,-81,-1000,813,-64,435,-123,-734,-502,840,-230,1000,856,861,1000,727,-1000,1000,1000,-323,-382,-136,-1000,-771,810,-432,-526,-209,1000,907,642,-35,301,1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00574() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{1000,1000,-352,-248,-572,-418,-720,591,1000,-338,-219,-724,-217,-46,857,-114,-546,47,-1000,1000,-655,236,56,1000,282,-263,-514,-1000,197,-1000,548,967,-1000,588,71,372,198,1000,454,960,959,-1000,1000,-254,-1000,863,111,-884,-20,-540,21,-611,654,56,-473,-453,-1000,1000,342,-1000,-1000,920,-408,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00575() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis():org.jfree.chart.axis.CategoryAxis",
+            new int[]{419,1000,889,794,-102,367,1000,-217,423,-299,-589,-64,1000,1000,-1000,-206,839,-594,854,131,607,153,783,-245,207,-816,219,-628,-873,1000,-266,532,-1000,669,421,138,-68,-371,-639,-319,-1000,-478,-1000,495,682,-468,-921,477,-676,149,-594,-657,-85,15,714,-963,1000,1000,251,-499,1000,1000,643,-44}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00576() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-469,-169,-82,-440,-302,-709,-746,-1000,515,-60,984,38,-843,560,-157,-136,-243,-199,-428,142,-313,99,678,1000,893,492,237,374,-939,-1000,-856,124,-367,822,-25,-1000,243,-802,-143,-455,-631,496,537,-1000,637,-197,-697,595,839,-386,46,76,66,-145,318,-1000,-425,-276,122,55,435,554,-583,-86}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00577() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-1000,-526,-131,-1000,1000,1000,1000,-1000,905,1000,1000,-269,-660,327,-241,1000,-924,-217,904,1000,-998,1000,-30,-533,1000,1000,91,781,230,-420,-13,-541,-73,-737,-1000,-139,912,-753,509,1000,-232,1000,-378,-563,403,-1000,-1000,-576,741,-539,85,310,-1000,1000,-753,-297,1000,1000,53,-424,485,1000,-952,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00578() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{122,-129,-350,941,-1000,184,-355,171,-1000,-971,547,38,-697,-1000,-157,-632,78,26,-455,-562,-467,-66,372,-663,-1000,19,117,-190,-683,-753,-856,-149,-367,-321,861,-437,243,-237,17,-455,-63,-899,-100,-264,529,876,464,1000,-241,14,-540,642,1000,-402,318,-175,-530,-761,122,959,-26,-517,-233,-332}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00579() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{628,-70,-541,233,1000,1000,1000,16,1000,-1000,671,116,-1000,-804,941,1000,-1000,987,-35,150,375,1000,-565,-688,423,-242,-52,-1000,473,8,1000,3,1000,-729,-1000,-749,1000,-965,1000,19,-721,1000,359,-37,-786,-414,588,-55,-172,779,-781,1000,-1000,160,-1000,585,-1000,1000,897,85,559,1000,75,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00580() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{619,214,-551,702,-558,77,-154,71,-371,-658,352,141,-568,-950,239,172,-645,991,-586,-281,256,439,781,222,-860,-435,189,-700,-936,-716,3,-182,-873,413,-237,-828,330,-948,141,-683,-737,-160,449,-939,18,374,-656,864,-481,477,-964,983,541,-752,-688,178,93,843,988,391,540,810,-970,817}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00581() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-644,-854,513,-106,-1000,1000,1000,758,113,1000,8,21,-287,-543,664,920,190,1000,1000,1000,-1000,1000,-947,-1000,189,491,1000,-413,715,731,282,-1000,1000,234,-964,659,453,289,781,132,-602,668,-626,556,146,-660,-58,-134,-507,525,-240,179,-1000,779,197,1000,1000,757,342,-709,26,437,-547,447}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00582() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{234,-722,573,-759,-495,-1000,-920,1000,-1000,-1000,671,1000,-1000,-504,708,-1000,968,681,-892,-289,-1000,-71,-164,-688,-1000,744,1000,-1000,-838,-598,-1000,-661,1000,168,1000,-749,-972,312,-671,-572,486,-1000,-352,-463,1000,1000,588,745,-366,-369,-842,-188,-1000,160,921,585,-1000,-1000,1000,-611,-98,-1000,75,-199}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00583() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{820,693,-286,1000,1000,-1000,-154,-1000,691,-835,447,-323,-600,-558,-306,1000,-171,57,-1000,-1000,743,-198,706,1000,899,-427,-81,176,-1000,1000,-997,717,-677,-29,773,-795,-519,-1000,1000,-1000,-1000,435,1000,693,492,539,-734,1000,-666,598,6,475,1000,-1000,81,-1000,-977,-341,430,1000,439,5,-1000,-70}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00584() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{1000,105,-1000,1000,-488,795,424,708,-616,-1000,152,-181,-523,-1000,-666,789,-922,904,306,-1000,323,401,91,439,-1000,-529,431,-902,38,818,-97,-218,53,-272,313,475,923,-524,-858,-491,-116,-1000,-623,-388,-219,725,355,1000,-1000,156,-1000,1000,1000,-1000,-843,789,144,-431,1000,1000,-283,623,-927,626}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00585() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{526,731,-595,1000,1000,-1000,476,-1000,-546,-794,281,1000,-329,1000,271,-666,-289,676,1000,-1000,865,797,1000,981,-729,361,917,841,-1000,1000,168,-627,734,71,-338,-1000,901,-309,1000,-1000,-1000,779,-262,-65,-683,307,-1000,1000,373,1000,-296,150,1000,-1000,651,-150,983,-853,1000,1000,-212,-584,23,926}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00586() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-1000,-470,-551,235,-540,-203,1000,-302,-232,593,28,-664,15,-776,-218,-147,-91,-554,1000,844,-592,946,-557,-286,215,-49,200,829,40,-716,497,-1000,683,166,-1000,-65,33,272,907,245,-216,328,-365,-387,150,-1000,-433,167,-708,-157,-390,-200,-524,-123,-457,293,1000,949,411,469,540,152,-93,-551}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00587() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-388,305,-209,-31,-433,308,791,1000,573,482,-66,-492,-280,924,696,265,-336,837,-1,232,146,1000,-1000,52,934,-104,591,-837,-180,-137,585,-456,382,6,-1000,-208,1000,-26,-293,-208,-1000,990,-310,-751,-634,-768,-475,228,136,828,-409,207,1000,-594,-162,845,1000,287,822,-274,523,605,-403,492}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00588() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{385,-491,-131,-366,-247,-574,-742,659,-981,-948,1000,649,-1000,-1000,-118,-383,98,319,-618,-284,-545,-2,451,-1000,-707,388,752,-858,-1000,-773,-1000,-450,380,325,995,-749,-102,-466,-478,-619,26,-905,-688,-938,1000,772,305,1000,-769,-409,-846,320,-1000,-307,443,240,-854,-1000,1000,73,128,-331,-463,-81}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00589() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-53,-278,-131,1000,-247,679,-61,-474,113,-10,228,-676,-660,-5,177,650,-947,25,-428,-1000,534,854,636,684,657,-574,-714,755,188,367,773,-505,-1000,120,-1000,-1000,1000,-855,18,-645,-1000,110,-83,-196,-903,-24,-976,257,-23,149,18,701,617,-699,-97,-1000,-17,409,812,-37,349,915,-588,375}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00590() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-1000,669,678,561,-37,-515,293,517,-310,-131,-926,-376,-287,1000,-121,-1000,-758,259,-448,-567,-166,-454,-807,1000,-496,552,653,-616,-386,832,-248,636,667,-269,231,208,-1000,609,714,-1000,-1000,86,495,745,-564,-156,685,66,152,856,283,-689,-271,-385,1000,-710,-864,-547,264,-163,-49,-1000,590,-5}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00591() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxis(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-400,-244,474,442,-758,1000,952,229,798,822,-735,95,222,788,90,522,-559,456,123,214,-105,892,-187,908,829,47,188,762,825,-265,996,232,-266,-470,-857,-346,1000,-327,496,400,-662,1000,929,1000,-433,-481,-1000,-54,681,804,-193,248,-440,14,-1000,-503,1000,1000,7,289,-127,1000,-480,155}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00592() {
+        org.junit.Assert.assertEquals("java.lang.Integer:Mw==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-1000,-110,404,-54,-69,675,900,158,-1000,657,-1000,643,47,-96,721,624,309,1000,312,-317,140,-208,-673,-164,-602,-1000,225,-1000,-931,-120,-164,1000,-1000,-486,240,276,-882,141,314,849,-1000,-900,1000,169,-810,1000,-1000,-201,1000,441,895,-746,840,168,76,44,281,456,-447,-1000,-1000,-339,785,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00593() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-1000,-15,311,245,880,209,-15,1000,259,712,992,-1000,1000,-420,158,-1000,38,733,-242,-53,927,102,891,-669,986,1000,-327,-1000,43,-230,198,-1000,-1000,-1000,-173,406,-1000,-649,1000,184,-508,-202,1000,-100,-127,1000,-1000,-11,-1000,1000,1000,521,1000,501,826,691,40,1000,-620,1000,-42,959,107,505}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00594() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{654,-272,699,315,941,201,-808,315,448,448,61,-280,1000,218,1000,-513,-125,-778,-372,-944,-357,441,1000,458,122,864,384,859,1000,-20,163,-1000,507,-358,85,-823,231,-169,-214,-549,892,559,-290,-141,46,-76,-536,662,-1000,885,730,239,-105,-574,-417,-396,1000,-846,252,849,723,913,-1000,-230}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00595() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-776,-1000,139,598,-329,-204,82,1000,-266,-48,-212,-573,850,-168,-496,-70,-1000,1000,-931,-214,105,740,936,-1000,1000,1000,-551,-1000,-119,288,132,-300,-1000,-893,888,1000,-1000,1000,951,-136,-702,58,587,-1000,-47,1000,-63,-57,-948,1000,1000,236,1000,400,-797,-65,-684,747,338,-673,-1000,520,-527,407}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00596() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-698,289,291,-451,-420,368,289,400,794,576,1000,-400,626,-275,539,-1000,-243,213,-509,635,762,22,658,-923,573,702,519,-1000,-521,-461,388,-1000,-914,191,22,1000,-1000,-310,1000,1000,-55,-308,1000,-580,1000,1000,-400,-691,-1000,1000,489,690,-753,-1000,1000,539,-793,400,-532,1000,306,371,235,54}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00597() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-1000,-57,-459,1000,-1000,-835,836,-561,-814,827,1000,-202,788,15,-778,939,142,606,-684,-378,1000,1000,-1000,89,-1000,-1000,-1000,-277,63,-1000,606,-406,-687,27,1000,-235,-1000,-1000,1000,687,-623,1000,-710,365,1000,-120,314,-1000,122,23,-1000,-150,261,-812,-1000,-1000,-713,1000,1000,-1000,1000,1000,-972,636}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00598() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-931,-996,63,984,-1000,-300,928,1000,-1000,-1000,-1000,510,673,76,-622,1000,-1000,1000,-833,49,-1000,577,-218,-983,-166,-299,-69,-32,456,-139,618,1000,-499,146,897,811,-327,1000,-128,831,-833,244,-475,-1000,275,571,1000,-83,266,-251,503,-655,1000,-1000,-1000,-987,-180,816,1000,-1000,-1000,468,-821,23}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00599() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-1000,1000,319,483,-1000,-96,990,847,1000,901,-1000,840,1000,839,1000,-536,-723,-1000,571,-352,-580,-526,560,65,570,-488,1000,134,701,-1000,-109,1000,-117,-928,-844,331,-580,-324,-1000,-26,-162,145,-205,-615,-413,400,177,1000,166,1000,-566,-34,1000,-1000,798,-303,1000,-1000,1000,-1000,52,706,-703,-702}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00600() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-931,-1000,373,455,-764,248,340,1000,-1000,-223,-1000,99,673,-248,63,652,-1000,1000,-302,54,-932,-51,612,-751,-176,217,-334,-547,30,400,486,920,-893,-281,208,520,-327,1000,119,228,-1000,-373,500,-986,-467,976,518,320,115,-146,1000,-645,1000,-1000,-1000,197,548,1000,-79,-1000,-1000,439,-128,313}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00601() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-548,2,339,-995,-38,-195,-985,-772,364,56,241,40,289,-16,-10,392,-423,-589,-1000,-536,694,162,340,-457,-431,199,-880,-373,-37,-105,46,-595,-312,1000,50,416,-123,-353,1000,493,263,94,869,-240,723,209,-142,233,205,609,-607,-400,-394,-619,-296,658,-810,349,-92,140,375,20,-5,329}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00602() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-944,-97,24,592,801,-529,874,-171,-337,1000,710,-1000,1000,395,407,-1000,38,885,-659,-434,773,144,647,-48,1000,1000,-182,-911,366,-866,-348,-629,-908,-1000,424,406,-1000,-834,121,-165,-451,-414,1000,-100,-127,1000,-625,-156,-1000,1000,1000,983,1000,590,826,691,637,1000,-620,290,-584,1000,-296,181}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00603() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-627,-1000,719,-102,1000,-216,-1000,-172,830,53,1000,-840,268,-1000,-574,85,684,317,-21,-124,1000,59,259,1000,164,207,215,881,-255,407,557,-1000,-638,142,-765,-177,400,347,1000,1000,-372,497,805,52,400,-530,-1000,-962,-687,96,-1000,-93,262,1000,42,659,548,505,203,1000,-42,539,441,982}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00604() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-346,-323,-482,123,694,235,1000,-892,-638,346,-610,-932,-978,334,929,-425,706,-1000,400,611,1000,-672,-392,705,411,928,-697,1000,1000,385,-303,173,428,1000,-187,-1000,393,603,-1000,76,910,629,-484,223,-1000,-159,-953,36,223,593,67,780,-1000,333,-1000,255,720,-694,596,-562,564,-448,593,-173}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00605() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-1000,646,398,368,-218,413,223,1000,108,1000,296,-629,1000,-84,1000,-1000,-1000,1000,-919,-752,1000,-168,924,-1000,1000,1000,1000,-1000,681,-165,-593,-59,-1000,-1000,437,585,-1000,-1000,-369,66,-848,-1000,1000,-212,-1000,1000,-1000,-317,-967,1000,1000,396,1000,117,1000,1000,1000,1000,-517,267,-1000,971,-271,346}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00606() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{-399,-603,-882,1000,-415,-351,-452,-892,9,-253,-1000,449,406,607,252,1000,-535,-167,-84,-1000,126,275,439,735,-488,-738,-388,1000,439,-978,320,-101,876,27,1000,-966,-240,-539,-149,755,356,1000,-1000,189,1000,-803,404,-668,236,-356,-1000,-771,157,-1000,-1000,-1000,354,-1000,1000,-1000,581,1000,-1000,-611}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00607() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisCount():int",
+            new int[]{396,1000,69,12,172,-619,-139,-1000,1000,-909,923,200,-181,-244,-1000,768,-423,-1000,-796,135,803,520,-294,288,-1000,-594,-278,517,-37,-1000,615,-1000,615,-45,-26,717,-47,-548,1000,748,1000,1000,-531,-767,1000,-1000,1000,-795,-695,-367,-1000,749,-1000,-1000,-2,-742,-1000,-1000,898,727,1000,-19,1000,-335}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00608() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{325,-163,731,44,826,774,-118,-997,-899,1000,463,-290,641,52,-596,-656,-630,-808,-197,-956,404,264,-24,-498,896,561,50,254,161,-400,294,-306,-291,-486,-810,57,-713,-271,-290,6,-1000,-245,-175,325,-507,-680,883,1000,-940,-968,-727,-772,-691,648,596,261,-718,894,-81,705,-875,-204,-315,839}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00609() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{248,-634,154,-21,687,797,-1000,1000,390,874,-236,-958,-1000,227,1000,803,-690,1000,202,-557,346,-262,487,1000,-43,185,339,-1000,-1000,835,1000,520,363,1000,1000,745,-126,-865,1000,507,-123,-264,-1000,-142,216,913,-897,-343,-1000,-295,-81,902,-544,433,92,303,-167,-123,834,-427,-709,55,168,326}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00610() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{-159,-312,-123,-78,1000,686,-653,148,-610,657,404,468,-238,-27,518,396,-3,856,-343,76,483,1000,-304,1000,119,-30,262,-258,-547,-352,1000,-149,-546,784,436,322,-146,-816,737,841,-47,-43,-647,-519,-371,-478,-140,281,-1000,-208,-246,-1000,-139,73,587,32,-519,669,-557,303,578,-1000,543,722}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00611() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{-215,1000,-891,356,773,-469,1000,-834,-1000,1000,1000,919,686,-737,495,-121,1000,708,-1000,373,-413,825,-1000,-1000,1000,16,-36,-450,1000,-1000,895,-781,-1000,565,383,-601,-917,-874,46,1000,621,-882,-647,-1000,-1000,-613,1000,1000,-75,-726,-946,-1000,-156,1000,1000,270,-409,1000,-81,1000,-1000,377,1000,-298}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00612() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{-65,-140,49,53,918,415,902,-242,-27,79,-436,-776,61,-110,375,349,-768,1000,538,838,-787,-1000,347,278,141,337,173,-474,-74,790,624,315,-386,-485,-308,-29,-475,115,-565,-907,-465,553,992,1000,-541,-1000,292,628,87,-698,153,-42,-364,-262,-50,346,-569,1000,-391,442,-217,-389,22,274}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00613() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{-377,700,139,-206,952,-1000,296,-79,-512,-1000,-333,-108,-460,127,1000,913,794,1000,-401,49,-683,-365,954,-898,486,76,151,-284,-413,-230,488,266,-475,533,861,-1000,664,-811,-393,-251,698,-348,-812,223,255,763,-214,-267,315,215,-119,-215,-419,916,90,187,-591,1000,-1000,679,1000,244,1000,-726}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00614() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{453,-20,59,228,1000,537,902,318,-186,621,-196,-747,-317,-227,902,385,-1000,1000,-20,414,-95,-880,20,278,691,413,388,-773,-74,281,624,384,-470,226,218,101,-506,20,835,-20,81,176,226,201,-1000,-896,364,690,-373,-1000,160,-87,-91,245,240,729,-249,679,1000,715,-14,1000,52,9}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00615() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{-159,610,-586,97,555,195,491,-79,-885,-56,698,57,308,-612,495,358,822,708,-1000,-899,717,763,-1000,-898,1000,-3,262,6,197,-1000,1000,-504,-745,750,436,-197,-6,-816,433,841,376,-688,-647,-1000,-685,-650,892,503,-972,-293,-529,-214,-83,883,587,205,-527,1000,-1000,880,1000,244,1000,84}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00616() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{172,-805,139,-272,416,-22,-1000,131,618,99,-579,-1000,-460,395,247,752,557,-238,1000,49,-643,-433,954,1000,1000,76,31,-1000,-1000,1000,1000,421,483,-17,248,559,-83,-729,-1000,-760,-904,274,94,1000,1000,763,-1000,-431,-343,215,-90,737,-934,-292,-322,62,-626,336,1000,-818,-1000,55,124,705}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00617() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{292,-163,222,38,656,352,-734,-79,-46,1000,254,-461,-336,246,520,220,-362,708,-453,-1000,568,786,-153,-498,511,441,50,-260,-554,-135,1000,274,209,750,1000,-34,212,-1000,744,711,-411,-460,-1000,325,-778,618,-435,-11,-1000,-968,-727,-109,-1000,1000,589,83,-156,894,284,25,421,372,417,362}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00618() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{-308,-165,-425,-87,440,1000,855,1000,-787,279,-55,-837,-2,-369,526,1000,-206,593,390,1000,-325,-85,-488,1000,-163,-228,1000,-496,-402,248,848,-750,-713,448,-286,1000,-1000,469,-297,-1000,976,-334,1000,33,234,-1000,617,424,-396,-308,633,933,665,-359,-288,782,-1000,902,-667,302,-1000,-998,860,362}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00619() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{899,-324,-376,-93,814,1000,-1000,1000,-220,1000,767,-90,-1000,-48,688,501,-904,899,-577,401,561,1000,673,1000,-949,193,615,-1000,-214,1000,1000,113,-158,1000,1000,1000,0,-1000,1000,219,1000,-559,-1000,-409,158,-478,-1000,-653,-1000,386,318,768,115,-728,432,675,-115,-324,594,-547,-196,-557,98,291}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00620() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{-1000,-1000,-371,-561,47,257,15,1000,190,359,-209,-704,402,649,-708,803,-1000,-321,-327,-528,-364,-9,487,-447,-1000,732,381,250,-164,23,-39,24,-435,793,163,-277,-8,-110,1000,98,-123,953,-133,496,1000,913,-897,489,-347,-172,-325,-711,-544,688,438,260,-669,746,-1000,-427,796,-622,386,81}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00621() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{-885,230,-631,63,-234,334,-350,-394,-808,166,-550,-800,-184,-135,-803,-27,-339,59,745,-564,322,945,248,-744,656,149,711,-773,114,308,191,-591,-120,185,337,-872,-317,91,-741,-786,-503,-589,522,680,204,-898,525,922,-247,-817,-557,-609,-686,425,475,741,-462,746,232,449,118,109,-259,50}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00622() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{-161,486,239,-239,612,-310,-291,125,-336,-25,303,-75,-74,130,-55,814,1000,301,-1000,1000,-325,1000,-668,-986,370,403,306,-237,-200,-853,535,-314,-557,958,669,-801,93,-554,287,808,836,-375,-1000,-1000,-324,-755,678,125,-949,347,1000,-434,9,1000,530,-659,-434,746,-1000,1000,467,-183,976,-36}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00623() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge():org.jfree.chart.util.RectangleEdge",
+            new int[]{321,-500,-291,273,530,151,-473,1000,324,-764,-305,-788,-1000,-664,1000,1000,1000,942,671,1000,310,-937,480,1000,1000,-736,713,-1000,-701,970,520,404,-161,288,44,929,-422,-81,-237,-539,289,-286,623,-175,349,337,1000,-610,-191,92,727,1000,253,-816,-837,168,-436,786,-1000,-327,-166,-29,437,435}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00624() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{-941,654,534,518,1000,1000,-1000,-636,422,-476,-955,308,-602,832,-1000,1000,489,260,-910,-1000,-956,571,-471,-357,1000,-484,-414,-698,1000,1000,573,1000,-43,-1000,1000,-618,-153,-43,-54,1000,-1000,-1000,-773,-1000,178,-1000,789,-1000,-245,-1000,1000,695,1000,988,-520,1000,521,282,-498,1000,523,664,-1000,-332}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00625() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{-1000,151,80,-1000,1000,828,-423,-348,-37,-954,-1000,1000,-1000,-158,-961,991,305,15,195,250,-72,664,1000,-826,1000,-203,-1000,-291,1000,1000,331,847,-186,1000,-1000,-362,-1000,955,-666,-957,-482,319,-526,-764,841,-827,509,-466,-456,-770,-1000,541,-455,1000,-425,-1000,1000,-583,422,593,-112,-147,15,390}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00626() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{1000,1000,923,685,29,792,-295,-406,643,-528,110,-1000,-1000,1000,-677,-528,1000,-486,-1000,-853,1000,895,-944,-291,1000,-1000,1000,1000,641,718,11,-225,1000,-1000,621,925,1000,736,1000,187,357,-532,-241,-321,-800,-1000,885,-352,1000,834,1000,-183,712,-672,-708,708,154,1000,-95,192,-207,294,-16,-86}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00627() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{646,-986,409,-752,-1000,-447,1000,1000,-83,915,-714,511,631,599,-699,-818,119,124,1000,-92,1000,-551,934,-1000,129,73,264,-88,-110,-1000,-394,-1000,-792,-990,1000,1000,494,-130,-838,-701,-932,1000,-500,1000,1000,277,-124,1000,401,694,304,-731,-927,-608,-187,1000,-554,-183,-227,-783,-1000,-303,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00628() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{-293,937,1000,293,228,553,-2,-1000,-435,-15,-1000,-221,-92,64,450,1000,-12,-1000,451,783,-48,-55,-1000,873,947,-1000,1000,1000,-502,-361,563,-329,866,-1000,400,-1000,748,-1000,695,37,-1000,332,750,-913,271,-767,-97,-1000,875,255,1000,-12,595,939,-1000,416,846,1000,-507,-158,944,323,-44,170}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00629() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{536,-1000,729,376,-1000,-339,622,472,-116,159,-591,-1000,-156,1000,241,85,11,-257,1000,707,1000,-786,-815,-971,275,-370,1000,241,-463,-686,171,-405,-674,-1000,787,755,1000,-963,859,1000,-848,-520,-443,891,1000,-42,702,-306,902,-482,931,-1000,557,-483,-507,204,-1000,306,-121,130,408,879,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00630() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{1000,966,884,75,-944,765,408,693,444,-437,140,-1000,-1000,118,-807,-520,1000,-319,-623,-103,1000,324,320,-941,257,-1000,1000,370,-475,-154,-812,-1000,880,-1000,1000,1000,1000,-43,1000,388,77,-492,-669,959,-406,-399,663,-23,1000,867,1000,-854,945,-835,330,1000,-321,1000,-697,-340,-598,598,767,405}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00631() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{126,1000,534,43,202,328,-1000,-1000,-124,-382,-711,-1000,-1000,-471,1000,552,343,-1000,388,1000,542,-494,-1000,-357,834,-1000,1000,1000,-502,-361,573,1000,1000,286,-1000,-1000,1000,-1000,625,-1000,-851,332,1000,151,-373,-767,-1000,-285,1000,942,349,-24,595,424,-1000,1000,521,1000,-858,-158,535,374,-458,-136}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00632() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{75,-220,903,182,-880,-242,1000,-44,578,429,-406,-368,-216,608,474,-177,365,-704,618,378,1000,-202,-307,152,541,-847,400,823,-24,-181,-1000,-752,-367,-287,427,-51,-14,-1000,-395,-374,-137,1000,826,324,-345,-329,662,277,506,876,79,-434,-969,-946,-991,571,-218,62,-14,-1000,-547,-39,1000,454}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00633() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{284,-200,43,-292,168,386,-666,-9,315,-74,-848,368,-80,1000,579,1000,980,426,83,558,-239,37,-1000,-751,392,-810,-400,-999,243,85,467,571,-871,287,-613,305,274,-657,528,1000,-798,-738,-339,416,726,-445,1000,-651,384,-1000,170,400,598,908,-623,-137,218,-20,-46,695,975,1000,-7,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00634() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{-1000,1000,359,1,520,533,31,-641,1000,219,-268,1000,-83,608,-3,374,1000,64,-719,-599,535,1000,193,520,1000,-1000,-1000,-46,1000,1000,682,231,-89,1000,-824,-1000,-821,62,-1000,-690,274,691,812,-1000,-970,-1000,871,-209,786,513,-633,1000,-932,83,-1000,-271,1000,-318,235,-1000,-410,-181,1000,-156}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00635() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{536,-1000,729,376,-460,-339,-55,472,-116,159,-591,1000,-958,1000,75,1000,11,-257,1000,-183,237,507,-815,-971,275,-370,616,86,23,45,171,7,-674,-298,196,755,193,252,909,1000,-848,73,-443,-1000,640,-42,702,-1000,253,-482,257,-984,322,-483,-507,204,-1000,306,464,130,408,879,724,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00636() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{-660,1000,844,161,842,585,-980,-1000,204,-889,18,-1000,-1000,-107,1000,-237,971,-571,-810,-690,-755,405,-1000,1000,696,-1000,941,273,304,178,1000,354,1000,957,-1000,-1000,-153,-919,775,-988,-47,-1000,652,87,-783,-1000,-580,-705,1000,-1000,396,1000,1000,651,-855,-1000,900,1000,-1000,1000,1000,898,-1000,-936}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00637() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{-249,915,972,49,967,1000,-957,-1000,248,-1000,-1000,-946,-1000,397,15,1000,980,-1000,-858,331,82,265,-1000,491,1000,-1000,740,685,472,663,383,8,1000,173,-1000,-836,748,-756,916,200,-509,-738,174,-294,-452,-1000,409,-651,1000,159,312,598,1000,885,-1000,-788,1000,1000,-134,941,1000,760,-1000,-381}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00638() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{914,-259,1000,546,-1000,249,-194,-887,-44,-220,-908,177,-156,606,370,38,308,-257,309,-747,1000,1000,-1000,-572,1000,-989,1000,1000,506,239,148,-225,634,-1000,621,582,1000,288,859,67,661,187,-102,-1000,-412,-553,1000,-306,1000,279,944,-320,455,-304,-827,513,202,758,1000,-140,739,820,131,-317}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00639() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleEdge", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisEdge(int):org.jfree.chart.util.RectangleEdge",
+            new int[]{-946,654,489,777,1000,828,-1000,-299,1000,-1000,-242,1000,-631,754,-1000,462,985,856,-1000,250,-1000,394,5,-313,959,-386,-662,-1000,1000,1000,331,1000,165,-421,1000,-361,23,363,-978,496,-333,-1000,-526,-764,-495,-1000,159,-285,-423,-1000,853,1000,1000,507,-436,1000,268,-583,-1000,1000,-219,-190,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00640() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{812,460,224,5,453,-878,567,682,567,-795,-83,-376,909,824,698,-949,26,-621,1000,113,-847,-211,-340,-985,749,-431,-373,-923,-862,-585,-47,-1000,-836,1000,-179,-65,710,1000,1000,72,-394,-481,940,1000,972,250,-1000,1000,-19,-1000,1000,839,253,-1000,136,1000,115,767,-617,-1000,933,1000,-789,326}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00641() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{88,9,273,627,-184,-309,108,726,-333,-314,839,10,548,490,475,-382,-57,-25,-1000,570,115,639,47,395,527,-417,-682,-274,-692,191,-691,-684,-204,45,1000,-195,-873,717,1000,-477,-692,-11,-99,465,610,1000,-365,-960,193,-321,451,-174,-1000,-932,1000,-329,5,223,223,-998,20,828,-319,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00642() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{697,-334,-596,-126,658,-1000,1000,-677,-660,-890,-1000,-1000,392,-415,866,215,-447,526,513,272,-557,588,65,-378,-293,436,642,-1000,813,-117,1000,-585,910,-25,-622,-619,-1000,380,-473,-179,609,955,1000,268,-57,112,713,724,1000,101,1,-827,350,-323,-550,1000,-1000,-1000,158,-219,-898,522,-216,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00643() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-379,-978,224,-461,-302,-878,-859,1000,567,-795,-368,-171,-704,-1000,906,-949,-233,-621,-1000,113,-636,-696,-823,263,234,-431,-386,-517,555,-7,-12,-1000,-161,594,-255,-228,832,-645,1000,1000,136,507,461,1000,-374,334,280,405,627,-674,-73,839,752,-1000,-830,718,115,-562,-690,-884,48,1000,-862,-472}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00644() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-841,796,488,161,49,735,-554,824,115,-1000,-647,612,933,686,-464,-1000,-112,-353,-718,608,502,444,-823,-924,1000,-766,-821,42,-490,-863,-251,152,-706,909,1000,-156,606,264,1000,-1000,-1000,-1000,1000,1000,1000,1000,-946,-191,164,-403,126,313,-1000,-20,-774,-390,-561,1000,-1,-310,758,1000,110,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00645() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-436,12,824,550,614,-1000,561,893,379,-873,331,-1000,327,-89,1000,-174,94,-440,-1000,1000,-186,324,-588,-753,433,86,-682,-127,-674,378,-802,-892,-1000,1000,-51,-95,553,963,841,595,-378,-11,-99,1000,-246,665,439,907,1000,-1000,1000,342,43,-1000,1000,1000,296,591,-818,-998,-153,1000,-823,3}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00646() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{244,-164,344,572,-90,-559,1000,391,204,-615,839,-744,501,297,1000,-792,-65,153,-383,-210,-590,-15,-267,-335,-496,-487,-293,-1000,-23,182,367,-684,-875,1000,-112,-237,-227,1000,1000,-298,-453,53,-19,1000,43,162,-463,143,927,-1000,408,1000,200,-850,86,879,111,-280,-321,-1000,-180,1000,-1000,89}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00647() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{633,161,-407,1000,-213,-1000,741,-1000,396,-936,1000,-1000,434,-341,-164,-389,-804,775,82,226,-72,-17,36,-22,-443,57,332,-1000,950,997,692,887,-974,942,-992,-1000,-272,1000,-168,-868,-705,1000,-1000,765,180,1000,-366,1000,1000,-745,738,560,489,-868,-241,1000,-700,-1000,176,509,32,387,-362,263}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00648() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-436,-374,564,738,346,279,72,1000,396,-1000,331,315,64,297,-520,-1000,-541,-440,-240,666,461,-376,-588,-660,1000,-381,-395,477,-934,-953,-1000,34,-598,470,732,5,566,494,475,-706,-1000,-1000,1000,1000,691,1000,-1000,414,-471,-580,1000,419,-307,-231,-407,165,115,652,-108,-437,933,-203,292,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00649() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-1000,-777,-538,-169,-288,965,-562,1000,153,-685,-442,542,-38,55,-27,-660,159,1000,-936,-916,917,-373,-834,-534,126,5,-1000,-413,1000,155,890,669,-1000,-729,895,-223,-1000,-1000,-301,73,-960,1000,541,57,-1000,740,36,-1000,-49,-124,199,602,-260,762,-22,-991,1000,-1000,-639,387,-1000,-41,483,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00650() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{1000,-482,-108,45,-1000,-767,1000,-1000,-547,-174,1000,-1000,290,152,1000,1000,555,1000,-1000,-54,-731,-1000,592,521,465,1000,1000,329,764,386,-151,-968,497,-700,-320,782,-1000,33,-1000,538,1000,1000,-1000,-1000,-1000,-1000,906,-264,569,-93,697,548,16,-269,1000,1000,-1000,-1000,133,521,-1000,-1000,-238,-894}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00651() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{22,-937,-36,-861,-138,181,-345,485,-103,254,1000,-54,231,-40,945,824,716,352,1000,153,-610,537,575,-720,-877,5,-45,-640,1000,-374,1000,873,760,-404,12,287,-763,-468,459,439,519,-262,267,-2,-412,206,388,-963,943,-789,-332,-614,593,-268,-69,-200,517,-370,-301,-600,-1000,923,397,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00652() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-845,-1000,954,-280,130,-535,-1000,1000,-115,408,686,-276,-563,-858,1000,109,-11,1000,-739,-404,928,138,-739,970,1000,267,-1000,-1000,1000,423,947,638,20,293,561,-527,-492,-113,1000,317,870,1000,-437,1000,-1000,598,1000,-607,1000,-163,-146,172,1000,-1000,-915,-236,-934,-1000,-857,-490,562,1000,747,-287}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00653() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{85,-498,384,-206,36,-90,712,-235,819,-192,1000,-662,613,906,480,662,-329,306,806,-1000,-1000,-910,-1000,-753,211,86,-682,426,-681,-155,-889,-55,-875,1000,-252,8,465,926,1000,919,448,-11,1000,922,206,-891,57,907,-400,-1000,1000,765,1000,-972,1000,858,296,1000,-810,-1000,862,-230,-794,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00654() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAxis", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{75,106,-601,-241,52,930,-131,883,233,-39,235,1000,602,1000,-569,531,-136,277,-496,851,-207,1000,-399,198,891,444,-358,-667,-400,-508,3,143,511,-716,1000,94,-1000,-634,-169,-1000,61,-1000,1000,383,473,1000,-219,-780,-546,412,848,-1000,-772,-239,77,853,93,137,832,1000,261,299,-87,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00655() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisForDataset(int):org.jfree.chart.axis.CategoryAxis",
+            new int[]{-240,-1000,129,-850,-384,782,-862,174,-88,843,1000,1000,-375,-65,-97,-844,-547,-136,-802,-859,-662,871,-1000,106,1000,95,-480,-1000,34,-37,-42,1000,294,-13,915,-101,367,-422,1000,-72,-282,-1000,1000,1000,-383,1000,-218,-47,-345,-184,114,-228,274,-1000,-1000,451,74,-34,-1,-91,687,606,-835,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00656() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{-902,1000,104,-215,445,65,-1000,-1000,1000,254,932,-333,-214,1000,-485,-1000,-905,-1000,-441,-1000,-1000,-381,894,-101,135,-724,-297,-506,1000,53,1000,1000,-284,299,170,-189,-1000,-638,-274,-471,-423,-655,-1000,-24,680,-1000,-693,-1000,-941,-933,-1000,36,601,585,621,-281,-980,-554,358,471,-524,1000,-988,-996}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00657() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{914,787,468,128,-710,-298,982,1000,-567,-677,166,47,-719,169,873,776,856,-538,1000,-372,322,-320,-460,45,-510,1000,-189,757,-787,-799,-879,-315,253,459,-709,356,1000,-146,-138,345,-838,540,-1000,1000,-627,-508,1000,-1000,560,-81,686,-575,-456,-105,-256,264,800,91,879,-772,-626,31,-169,119}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00658() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{914,400,-761,611,-778,-298,1000,1000,-567,-1000,605,-1000,-370,169,495,1000,1000,432,1000,122,1000,-891,-1000,-427,-1000,1000,-1000,-513,-1000,-1000,-1000,-107,-1000,-793,-1000,1000,1000,-725,692,1000,-1000,1000,-1000,369,-51,-481,1000,-1000,1000,-613,1000,248,-1000,-1000,269,629,928,-198,-1000,-1000,719,-436,1000,638}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00659() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{16,413,792,-259,-149,-661,-576,-206,949,368,671,-1000,-241,636,752,-13,217,-987,921,-1000,-340,-599,226,-23,-922,575,-1000,206,673,-1000,-25,600,-473,1000,-606,450,-13,-720,-116,470,-1000,-52,-843,306,483,-899,258,-838,-667,-927,-49,855,-419,246,567,604,-49,-476,930,-769,-567,685,-406,-338}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00660() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{731,1000,-251,444,-1000,-464,1000,361,-571,-629,861,-588,-957,538,659,1000,614,-720,1000,370,283,108,-311,42,248,841,-170,-265,-1000,-1000,-502,-474,-1000,-830,-665,812,880,-607,49,1000,-1000,1000,-1000,1000,453,-177,1000,-483,995,-69,475,-587,-1000,-1000,-941,9,134,424,-249,289,99,588,903,883}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00661() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{1000,1000,-161,140,92,940,535,-355,1000,-322,-90,1000,-782,929,160,-1000,902,-137,-89,-182,183,221,-345,-571,493,1000,1000,-659,-535,-521,-650,937,1000,130,-124,219,-566,-29,161,-681,-446,-564,705,853,-331,-1000,33,-1000,-662,-375,-436,308,1000,96,-830,131,1000,-91,-339,661,-224,1000,-29,-958}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00662() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{664,721,1000,-1000,-258,-637,558,967,-733,-147,786,-246,-562,392,537,790,654,-538,806,-430,142,-583,-283,741,-655,1000,414,1000,-459,-914,-742,-381,-186,763,-878,750,1000,-1000,881,922,-945,693,-1000,1000,-634,-214,1000,-768,784,-815,532,-1000,-556,-577,41,221,653,113,644,-844,-967,-197,16,441}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00663() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{731,440,339,386,102,91,-1000,-207,1000,-629,1000,-212,-213,1000,-452,-203,-577,-1000,145,-793,-396,-179,179,35,-60,-724,-705,-668,1000,-997,384,600,-733,1000,-665,228,-110,-607,-439,-820,-491,1000,-1000,316,265,-668,-154,-1000,995,-457,-1000,1000,-419,-189,-941,-796,-606,-1000,273,289,-734,996,-1000,-213}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00664() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{-106,1000,489,-731,-316,-831,-519,-999,527,368,557,-1000,-472,-76,752,-13,-71,-307,1000,-969,992,-550,387,374,-922,-167,-868,237,786,-1000,121,663,-473,883,271,356,367,-720,49,-671,-1000,-52,-1000,133,-54,-1000,392,-1000,-1000,-927,-347,-87,405,568,-3,604,359,-476,614,189,-42,685,-544,-407}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00665() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{4,1000,-187,-122,-1000,267,-251,-2,-439,-816,1000,211,-1000,740,-98,20,-1000,-1000,240,577,-197,583,442,-154,532,-459,311,-546,181,-578,543,-220,-173,-1000,315,-110,15,73,-551,-1000,-339,829,-1000,1000,45,-29,49,730,1000,412,117,-673,-96,-749,-1000,-877,-937,335,387,834,85,-105,619,424}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00666() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{-45,853,-723,460,-289,321,-400,-592,-148,-569,1000,812,-1000,684,-707,447,-608,181,-50,172,278,175,219,529,1000,-459,530,-756,364,-322,692,-378,-133,-654,315,-120,476,-886,80,1000,-403,926,-1000,670,24,55,281,81,502,136,422,485,109,-691,-367,-1000,-559,-291,-905,1000,174,1000,-497,399}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00667() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{573,1000,84,140,-493,378,1000,-155,-368,-382,-669,1000,-1000,553,1000,-1000,936,1000,218,-1000,-315,522,-194,-676,493,919,468,144,-1000,747,-561,1000,1000,925,-169,145,-177,279,-387,-185,-720,-321,53,1000,-828,-556,749,1000,528,-320,-817,-514,619,251,-1000,438,1000,1000,580,744,490,776,1000,-366}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00668() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{642,375,-116,-486,450,-446,-876,474,115,97,445,-219,-21,-738,167,815,366,335,112,-1000,-608,-298,242,272,-1000,27,-1000,1000,398,-441,-776,-490,428,598,338,779,41,-342,615,244,-1000,-313,-425,-930,258,537,-691,-731,-1000,-1000,544,276,-759,298,-346,60,-960,-345,-251,-1000,-601,-418,-1000,-444}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00669() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{364,-1000,-446,893,-122,378,-1000,-1000,165,1000,674,1000,943,1000,-1000,-243,-899,-168,-292,285,-762,581,970,-676,1000,-1000,1000,-1000,953,-3,1000,-267,-580,925,796,-636,-177,-918,-353,-185,292,397,1000,-557,1000,-556,-871,1000,-723,-72,-1000,423,717,-500,-1000,-1000,-860,229,-757,1000,-666,1000,-805,350}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00670() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{457,714,274,-1000,-645,-212,988,-46,-130,-565,-884,564,-1000,719,1000,1000,1000,18,303,84,-1000,-320,-2,-820,-758,1000,-15,817,816,248,-930,1000,894,-830,-986,-52,-946,671,-393,1000,-788,-1000,-106,1000,119,-758,437,372,383,-590,1000,345,15,537,-1000,1000,499,1000,1000,-60,-116,266,1000,-695}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00671() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisIndex(org.jfree.chart.axis.CategoryAxis):int",
+            new int[]{295,875,-208,335,-1000,-110,136,398,260,-10,1000,256,130,-1000,-586,211,-130,-313,1000,1000,1000,-724,844,-195,1000,-857,-331,-636,157,-782,1000,-1000,-1000,131,-157,592,541,-295,624,333,-511,1000,-1000,-543,934,-447,1000,-118,791,76,67,-254,569,-1000,366,-1000,-1000,-1000,-1000,1000,821,1000,-734,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00672() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{1000,-1000,864,124,746,79,581,815,-324,-471,-333,1000,905,546,272,142,301,1000,-1000,-647,-223,-1000,112,-450,-400,-579,-603,278,-1000,-871,-173,241,-1000,890,1000,-1000,1000,-59,876,1000,-1000,915,-760,255,1000,-400,1000,-1000,-527,926,-350,1000,-1000,159,152,-354,482,1000,1000,75,-436,500,-202,-570}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00673() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{-233,-979,864,124,746,-1000,1000,-342,1000,-770,426,232,695,684,-677,-1000,-668,1000,-1000,-1000,-27,-679,-288,436,-224,-999,-540,363,198,594,-173,-2,-674,-32,1000,-948,71,866,8,1000,-766,614,-467,1000,571,-400,1000,-1000,-1000,913,59,-40,-1000,82,-880,-662,-1000,634,592,-589,-746,-853,1000,363}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00674() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{1000,345,224,-487,-400,940,-819,59,-121,400,-376,374,-945,-189,438,380,-670,-506,194,632,15,-43,-89,-195,-297,-993,-1000,362,-14,874,-462,724,535,-829,150,99,-209,-203,552,19,958,199,239,-437,189,820,-318,-728,734,-268,288,390,-598,-1000,447,-559,-1000,48,256,936,431,57,787,-662}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00675() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{1000,813,470,-499,-1000,-1000,-241,-504,668,-1000,563,-90,-162,-225,1000,-1000,-755,-882,44,-76,190,-859,-1000,1000,63,-1000,-645,83,174,-1000,-1000,13,-1000,-389,92,759,-209,977,67,-1000,-1000,369,-1000,286,69,-1000,-777,-1000,-442,1000,-234,359,-187,-977,-529,-1000,-1000,274,62,-495,-965,-381,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00676() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{1000,-1000,259,-13,1000,1000,581,736,-324,-471,-34,659,-59,1000,77,860,298,751,-1000,-647,-278,-43,1000,-1000,-607,-1000,-1000,1000,-1000,419,604,721,-795,571,1000,99,250,-259,871,1000,-110,-205,32,-526,1000,1000,32,-728,482,352,-22,1000,-994,159,1000,-925,-1000,540,256,-142,1000,1000,567,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00677() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{352,1000,849,427,538,635,268,-174,-1000,1000,2,-103,606,40,-558,829,-82,67,-577,25,-1000,858,467,23,-455,-1000,105,1000,-598,810,875,178,-27,-360,-355,1000,-723,630,-100,-336,671,-433,-577,-1000,453,1000,-1000,1000,325,538,-873,479,906,272,891,692,1000,-118,-619,-1000,75,743,-213,10}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00678() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{438,-1000,-716,-206,301,359,-1000,-780,-248,-1000,-92,659,-1,603,1000,717,-342,321,-49,-404,746,-1000,1000,-1000,450,-1000,13,-143,-1000,7,259,325,-1000,1000,509,571,995,270,-146,1000,-826,-628,-1000,-1000,243,1000,-1000,-1000,971,572,-1000,1000,-839,-1000,495,-1000,912,-335,87,592,234,1000,457,-448}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00679() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{937,-1000,43,-175,1000,683,-1000,762,-324,-885,756,67,397,796,-660,814,-224,715,-1000,-546,420,-184,1000,-962,-357,-1000,-1000,880,-951,1000,-852,471,1000,-1000,299,79,-166,206,1000,1000,527,1000,32,-446,1000,1000,-211,-948,-357,352,-309,-89,-1000,349,1000,-10,-1000,692,-154,-620,1000,1000,1000,-218}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00680() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{1000,-873,-1000,-1000,1000,56,1000,762,1000,-343,-784,901,-582,1000,-241,-806,-258,284,-130,866,-618,-693,483,-1000,-1000,-349,-1000,1000,462,-140,822,608,706,-753,83,-1000,707,543,1000,407,-117,265,-1000,1000,797,136,1000,-1000,345,-4,1000,-25,-1000,1000,-99,668,-1000,754,1000,808,364,-679,825,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00681() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{1000,-1000,443,373,1000,574,1000,1000,-526,-363,-55,1000,826,1000,-505,648,1000,1000,-1000,-946,-781,-43,1000,-1000,-1000,-1000,-1000,1000,-1000,-532,497,567,1000,1000,1000,-731,907,335,-37,1000,-1000,94,32,-616,1000,200,1000,-728,-347,1000,185,1000,-994,1000,895,-597,-689,1000,703,-613,932,1000,-18,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00682() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{-306,1000,-687,-1000,-392,938,-306,409,281,884,-1000,-324,80,168,-622,-441,622,-547,1000,266,-795,-1000,-501,946,-1000,1000,324,278,834,816,310,132,1000,-1000,-309,-998,193,237,38,-1000,736,495,1000,608,143,-786,723,1000,309,-1000,808,-759,776,-488,-352,1000,37,-16,388,1000,-608,-1000,815,-262}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00683() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{-1000,1000,414,653,657,-729,995,-243,-1000,-130,1000,-231,-1000,426,338,-626,-214,-793,-221,1000,-148,1000,-394,615,-1000,-942,199,601,336,431,346,-391,287,-1000,-1000,1000,4,1000,1000,153,-543,-425,-80,-1000,173,-370,-464,611,92,1000,419,1000,938,1000,-470,-915,637,-166,-1000,-1000,-612,615,-796,375}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00684() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{1000,1000,334,-248,436,1000,551,1000,-151,1000,-655,374,-685,-110,-647,828,-255,-76,-757,1000,-465,678,-187,-195,-934,-698,-1000,1000,612,1000,681,821,94,-1000,641,-497,-495,542,1000,453,1000,828,1000,-65,946,649,838,-568,-305,-404,902,1000,-752,199,1000,788,-1000,923,424,660,462,-179,177,-957}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00685() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{-393,832,454,-309,-1000,-554,-1000,-195,74,789,-475,424,-634,-147,907,166,-611,851,97,-232,-457,-544,-638,946,-282,-1000,-1000,88,753,41,-1000,317,-51,-73,940,-230,939,-356,-844,13,532,600,17,943,60,-395,-178,-810,272,364,285,628,-430,-1000,-1000,-1000,-1000,148,1000,335,-555,175,297,-518}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00686() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{1000,-32,-232,-86,934,-1000,827,-556,-360,-1000,1000,-1000,756,-158,1000,-865,-606,-1000,-174,-51,1000,-1000,695,1000,678,-1000,1000,-167,-1000,-1000,-1000,11,-1000,612,442,1000,-1000,1000,394,175,24,41,-1000,-1000,132,1000,-1000,-1000,-976,1000,-975,482,-355,74,211,-1000,1000,-368,-1000,-1000,410,1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00687() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation():org.jfree.chart.axis.AxisLocation",
+            new int[]{-216,-32,-841,-1000,-293,231,-937,-1000,91,-876,-1000,-253,939,-236,896,-1000,-820,206,1000,-1000,1000,-1000,643,-917,1000,-258,1000,-1000,-1000,-349,-1000,11,-345,1000,1000,-793,-1000,-759,-1000,370,3,41,-1000,1000,-185,1000,-757,-1000,467,-677,-1000,482,-1000,-1000,-732,-48,615,-1000,526,1000,18,-765,911,92}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00688() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{-1000,-144,34,-51,637,-49,99,695,1000,812,493,-1000,-976,-249,-1000,790,-1000,-51,-1000,-546,-14,-1000,1000,-7,537,1000,-894,795,-724,1000,-1000,1000,174,-567,1000,1000,-398,-298,897,228,312,1000,-344,-563,-510,-632,-257,-1000,19,-1000,-889,-378,-1000,826,858,1000,-1000,879,-420,459,-844,961,-111,-730}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00689() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{-1000,-367,29,146,830,-138,710,968,-151,168,-645,-1000,-1000,411,-482,-80,-684,606,-1000,-329,125,-944,748,-446,-877,1000,-1000,1000,-315,822,-1000,221,-899,-221,1000,636,22,-509,686,-540,1000,364,-388,429,631,163,120,-893,969,-5,-1000,456,-248,918,-1000,718,-314,315,-106,-106,-891,-413,-826,-211}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00690() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{671,-1000,569,-825,880,653,270,694,87,-811,1000,-477,240,-87,132,194,-1000,-83,255,128,358,-285,-302,1000,361,196,1000,77,-1000,-744,889,-409,616,-252,-946,-1000,1000,-1000,290,292,-252,-140,-1000,-359,-1000,21,1000,-997,-359,436,-129,-88,-161,-1000,1000,-660,-863,-1000,181,818,-1000,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00691() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{580,-184,-322,-782,388,370,90,436,867,-537,391,-1000,-275,580,-808,-127,-1000,-731,-1000,-469,36,-338,323,610,42,911,488,28,-709,642,176,1000,-86,-935,654,1000,340,-984,-889,3,-535,-795,-994,-149,-331,94,1000,-946,939,484,-1000,141,-800,117,685,274,-1000,-615,-891,-195,-1000,903,274,503}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00692() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{-665,-1000,664,545,503,304,1000,1000,-792,-1000,-93,-907,-1000,148,-506,-1000,-1000,405,-1000,-518,-352,126,8,1000,-775,538,402,44,-788,-422,149,799,-1000,-697,86,626,768,-1000,-420,238,763,693,-384,-508,1000,614,946,-774,319,545,138,954,910,-880,-1000,389,130,-1000,-769,660,-746,-957,-392,341}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00693() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{-1000,-1000,949,352,1000,576,1000,1000,-857,-1000,313,-1000,-1000,-47,-312,-739,-1000,1000,-1000,98,203,-32,-479,1000,-1000,850,23,452,-536,-937,111,786,-1000,-289,423,814,1000,-1000,-580,105,1000,780,-61,-411,1000,-9,1000,-1000,414,839,129,760,1000,-1000,-1000,507,-81,-1000,-1000,626,-1000,-1000,-1000,480}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00694() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{1000,13,-215,-25,-654,512,375,-507,-1000,459,909,918,140,-646,-192,-121,-258,110,1000,193,-530,532,-554,441,-442,-383,633,-1000,-1000,-951,-1000,-1000,172,391,-1000,-1000,-161,1000,-676,732,-363,-1000,325,-254,-242,-385,-750,-105,-1000,-573,285,-71,1000,-1000,256,-400,418,564,878,839,1000,-187,-222,-145}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00695() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{133,311,-1000,-85,-929,62,-947,-624,832,1000,246,-498,-635,1000,-617,-1000,47,226,288,-962,-352,-458,399,370,-204,523,-719,-1000,-455,627,1000,632,478,-158,414,-990,-810,542,-1000,640,-602,958,60,-563,-305,-968,-928,-327,-165,1000,-300,78,-838,302,175,1000,-664,1000,399,830,284,324,-155,-589}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00696() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{-543,-574,-377,-628,-1000,-399,-286,-591,1000,278,730,-283,-564,830,-606,581,-90,-271,-897,-576,304,-449,1000,-237,-550,1000,563,358,-1000,1000,-603,839,1000,-710,1000,1000,-340,-49,-1000,-683,8,764,36,-44,-792,-55,-1000,1000,371,-1000,-1000,-665,27,1000,1000,730,-1000,408,-766,-886,592,1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00697() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{-1000,-590,-771,-752,-462,9,-748,-166,1000,-105,308,-862,-838,723,-1000,702,-724,-60,-1000,-612,-67,-1000,1000,-482,-1000,1000,91,-1000,-954,1000,-1000,1000,627,-319,1000,-287,246,-733,-1000,-103,289,1000,-1000,-827,-257,-129,83,-251,-433,-502,-1000,148,-1000,763,564,1000,-1000,290,-349,-634,-986,1000,1000,465}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00698() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{-570,-471,-412,199,352,266,203,-623,249,406,-410,-631,151,167,-886,1,-724,203,-381,-814,304,148,548,-605,-550,281,-15,358,-378,-57,-180,-66,-378,103,-391,1000,-74,-162,-1000,-333,356,575,36,412,-166,-362,388,-468,98,22,-59,254,27,-630,484,730,-46,290,-766,-402,-156,41,-272,-434}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00699() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{1000,436,163,-45,-537,474,372,319,-935,-210,-252,3,24,935,163,-1000,-29,263,-137,-304,-1000,-409,13,-152,246,167,191,-605,-855,-429,1000,830,20,-1000,637,-580,588,-597,779,407,-694,871,-122,-609,169,-298,597,312,171,-322,-304,1000,-228,48,-759,-381,-794,-339,-681,551,-322,-268,287,736}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00700() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{113,-1000,34,-392,637,263,99,695,-1000,-1000,-906,-278,349,1000,379,-1000,143,-51,232,-640,-657,453,-141,70,537,-70,1000,795,-721,-530,1000,123,-427,-676,-1000,237,1000,-962,897,-161,-84,-773,-464,323,-52,330,1000,459,602,1000,-191,1000,990,-656,-1000,-1000,30,-959,-949,459,-269,-578,298,839}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00701() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{-1000,-1000,334,948,-24,153,1000,317,-194,-758,-477,-486,-1000,191,-1000,-602,-746,279,-1000,-990,-245,161,1000,470,-636,464,291,14,-860,-331,-187,143,-939,429,68,765,130,-1000,-702,-410,590,991,-327,-368,945,230,522,-736,111,329,100,351,748,-832,-367,804,245,-776,-1000,283,-511,-376,114,70}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00702() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{162,-652,289,-156,-288,466,1000,-72,-17,610,975,413,-861,708,-617,-246,-1000,779,18,246,592,112,193,-968,-1000,53,277,-841,-769,-374,-1000,-334,162,-1000,-113,-3,-997,-847,-1000,277,946,225,762,284,676,-137,-422,692,-884,-1000,-597,687,796,-1000,553,264,-178,902,-142,-313,540,-1000,-998,-863}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00703() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisLocation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainAxisLocation(int):org.jfree.chart.axis.AxisLocation",
+            new int[]{-1000,-654,69,10,1000,17,150,695,1000,1000,1000,-1000,-976,-907,-1000,1000,-1000,-83,-779,-910,202,-1000,1000,434,1000,1000,-696,1000,-706,1000,-1000,1000,359,-274,1000,1000,-733,-29,1000,390,137,-140,-419,-964,-643,-911,-515,-1000,39,-1000,-735,-1000,-1000,1000,1000,1000,-1000,1000,-236,796,-982,1000,-167,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00704() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{-486,-559,27,106,-232,706,204,479,-255,40,-173,-472,-79,-53,-356,-433,496,-709,-607,-54,-617,-210,-99,99,989,-922,-213,34,-739,-261,467,938,376,510,569,-84,-556,465,-31,-205,-81,587,-64,-158,-465,-397,930,-715,872,318,-73,-283,144,252,-386,-676,-329,-832,1000,321,-426,889,-242,-509}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00705() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{-1000,-1000,294,-756,-484,-267,973,522,1000,-563,-271,88,-1000,-308,-135,722,1000,1000,-1000,132,-939,-1000,34,568,417,1000,-210,-576,-241,143,486,686,558,-400,660,1000,-671,-726,-342,187,-228,-856,-596,517,-136,465,1000,-1000,-538,-500,-59,451,387,-1000,429,-206,362,-631,491,445,-1000,-1000,338,-89}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00706() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{-75,-235,-354,-310,-1000,654,-769,-253,-702,-686,-284,-437,981,-529,26,-1000,-768,-114,-117,10,-801,1000,-200,-1000,1000,-441,-743,780,-21,623,1000,1000,359,1000,326,229,700,-1000,776,-979,-996,632,-220,-1000,-1000,-773,-4,-398,-1000,-842,449,-1000,-281,-694,-1000,304,-1000,-1000,3,262,-861,-1000,827,650}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00707() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{-1000,-810,-366,917,-1000,-791,-668,751,-1000,645,1000,-996,826,-1000,536,-1000,112,-1000,-1000,13,-494,-724,-1000,-247,-472,-777,120,-223,1000,-278,467,1000,-582,-965,868,1000,-1000,679,848,-174,-938,1000,-66,912,-859,102,-1000,-1000,-1000,788,-240,-1000,-183,-1000,-876,-1000,-527,-743,1000,517,-1000,-1000,385,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00708() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{986,-1000,-57,251,767,290,907,-124,0,405,-452,358,-529,-1000,-270,-1000,-236,-727,-1000,363,-1000,-845,-501,-492,907,-1000,-786,-677,1000,214,1000,1000,-449,634,617,1000,-1000,-1000,123,-221,-53,1000,-463,519,-726,131,1000,-1000,-1000,345,579,-1000,74,637,-1000,-726,-546,-1000,1000,-383,-1000,-1000,483,-938}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00709() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{-401,-635,254,-686,-1000,-315,-390,-1000,-552,802,1000,-716,395,-1000,-1000,-1000,755,-1000,-1000,1000,-867,180,-1000,166,239,387,-1000,-873,242,457,1000,972,-857,-349,308,1000,-898,-197,-774,-298,-625,1000,-236,619,-278,-1000,136,-301,-1000,355,974,-1000,1000,-1000,-1000,762,1000,951,541,1000,-1000,-1000,1000,-589}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00710() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{1000,302,-797,-1000,1000,140,-1000,-146,1000,-1000,-1000,-592,648,-583,640,-603,-532,-743,1000,-605,-763,1000,1000,-886,828,1000,-536,-65,-442,1000,-1000,-1000,1000,389,-433,-1000,1000,-469,-1000,-651,-742,-1000,-387,646,1000,1000,1000,1000,1000,-1000,120,1000,718,1000,1000,1000,573,1000,-1000,20,1000,1000,39,847}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00711() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{1000,-1000,-931,-973,484,1000,-1000,-933,-127,-244,1000,-1000,1000,-914,274,-705,-865,1000,-1000,691,141,1000,679,-859,1000,421,-811,397,-542,646,1000,616,269,973,-132,-84,836,-784,-42,-254,-1000,1000,1000,-820,-835,-1000,1000,803,397,1000,1000,-1000,0,-1000,-1000,5,-461,-1000,577,1000,1000,-1000,-84,-731}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00712() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{147,-547,-523,-65,-36,-4,-68,-163,1000,339,410,159,-84,-134,-364,-400,-87,-504,-400,-253,-494,-327,99,-264,989,-703,-442,-1000,260,746,457,341,-587,621,662,428,-522,-1000,541,-435,426,400,-340,-508,5,890,599,-59,46,85,648,-536,176,252,-510,-129,-578,-1000,368,644,163,507,116,-413}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00713() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{-498,-373,129,-138,-194,-55,-668,-788,-972,-707,780,109,2,-866,621,269,303,827,-864,-11,-247,-181,536,440,968,-324,2,-88,280,704,546,938,543,973,699,78,272,-1000,54,-411,288,-311,311,-309,257,-921,1000,89,910,-402,272,-151,-975,-617,-269,747,-490,-881,-430,1000,422,923,-447,38}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00714() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{1000,462,353,45,838,-87,-547,1000,1000,203,-1000,338,-1000,1000,822,1000,-274,-334,1000,-1000,711,-257,1000,-672,184,-518,-213,690,-795,-827,-1000,-632,512,973,620,-669,-79,-471,-82,212,623,-547,157,310,-465,62,158,-337,330,209,-269,1000,1000,1000,1000,-568,-1000,803,-62,321,269,1000,44,247}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00715() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{986,-415,-306,-225,-266,1000,-201,462,-1000,-338,-452,-400,253,-723,574,-43,-54,-43,-1000,-534,-1000,384,1000,-1000,565,-1000,-526,622,129,-104,398,671,115,822,230,1000,-49,-1000,-289,366,-666,182,468,-400,408,-1000,1000,-429,872,-197,400,-598,-303,-1000,-671,377,-1000,-1000,907,1000,823,-1000,-24,8}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00716() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{100,24,724,1000,-227,494,284,333,-956,-17,1000,44,648,-583,386,-603,-28,-743,-1000,-605,-763,118,381,-886,0,-692,-399,835,-545,-1000,301,156,160,84,811,-168,-200,-600,1000,567,415,969,784,636,-337,-864,176,-146,-964,1000,-490,-498,-758,-338,-570,-1000,-1000,-1000,1000,985,-338,-476,39,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00717() {
+        org.junit.Assert.assertEquals("COLOR:-6784765", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{-795,-411,-49,487,-95,469,587,607,-607,-270,-440,469,90,118,-616,-135,515,339,71,48,-773,-824,856,441,-750,-873,403,-48,320,-377,826,686,550,-167,990,-66,-277,-245,88,209,-708,-132,-732,775,-588,-48,-771,-341,815,852,-881,411,-776,952,808,-935,110,-99,698,-340,81,-257,552,-547}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00718() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{544,-772,239,-1000,759,-47,-1000,-357,400,-137,-1000,-839,33,667,-553,400,-276,67,1000,-274,29,1000,259,-543,-147,253,-437,-283,-1000,395,132,243,120,967,-446,604,495,1000,-723,1000,-1000,-161,32,-1000,491,-1000,-90,-571,1000,-1000,696,-331,1000,-1000,47,-862,-291,1000,-303,-595,490,610,979,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00719() {
+        org.junit.Assert.assertEquals("COLOR:-1", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePaint():java.awt.Paint",
+            new int[]{867,-184,813,417,198,1000,493,1000,516,-18,-101,509,-937,321,668,1000,295,560,382,962,84,-951,1000,358,-307,-164,177,-258,-1000,-1000,-980,-1000,1000,-1000,850,-165,248,-331,470,1000,1000,-764,599,1000,-231,-573,886,-183,-291,1000,-1000,1000,-370,-353,1000,-1000,688,-513,440,1000,-5,-234,868,-639}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00720() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{449,251,-1000,-182,-408,641,948,-849,109,-404,767,-476,-137,-25,-71,474,-498,-650,-185,895,978,-533,-219,273,1000,592,226,-884,-984,-1000,342,1000,188,721,308,168,108,532,843,-1000,339,873,-508,-1000,-883,-333,-841,-856,-247,-1000,-1000,258,-42,-581,1000,-759,391,-18,1000,1000,-1000,857,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00721() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{-878,1000,157,-54,-53,1000,168,555,-466,280,835,-753,1000,-1000,1000,1000,-1000,-577,-853,-499,1000,-1000,614,212,-870,1000,873,-1000,380,-1000,-555,1000,1000,929,-1000,1000,-442,1000,1000,-930,267,569,451,-958,-581,-1000,-853,-65,-1000,-1000,1000,1000,1000,-31,865,-1000,1000,-489,1000,1000,-1000,-30,1000,-63}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00722() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{1000,76,-786,283,-964,271,991,72,709,-322,-631,-773,-1000,454,241,1,1000,-630,1000,-138,293,579,-903,-174,1000,571,479,-499,-1000,-201,321,-200,-1000,-405,765,-1000,816,-604,-234,104,773,-938,1,1000,919,14,998,-736,1000,265,571,-368,-997,-318,11,-592,-803,921,-1000,-1000,407,381,-1000,-795}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00723() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{418,-195,-873,-562,-493,504,859,-606,-61,-93,551,-516,155,-633,-508,190,-380,-577,1000,712,1000,-442,-1000,363,-273,1000,143,-921,53,-863,1000,808,516,-154,528,-158,-476,1000,413,-74,1000,1000,-933,-1000,-1000,-636,-466,-734,157,-1000,-1000,1000,-931,374,1000,-445,209,-539,1000,20,-1000,303,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00724() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{1000,-1000,154,363,-964,664,74,118,709,-446,-325,199,-1000,346,-41,-19,1000,-331,1000,12,228,477,-1000,-66,834,-798,145,489,-792,686,-387,-200,-1000,-1000,730,-1000,-102,-377,-143,-71,159,-804,251,625,297,-132,1000,-444,697,172,571,-577,-478,-6,-658,-351,-956,-606,-1000,-476,-19,857,-712,-12}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00725() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{176,-122,989,2,-1000,1000,356,1000,-987,-144,924,-1000,1000,-1000,949,226,-187,-1000,469,-1000,-581,93,-200,-220,298,1000,431,-567,-628,497,-995,-267,276,-1000,-1000,858,-1000,446,-1000,972,1,-479,567,1000,-234,-1000,-297,-481,110,654,-852,710,355,-696,367,-314,-89,-1000,-400,-1000,-59,-924,540,-547}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00726() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{409,278,-822,449,-568,572,649,-543,102,-793,543,74,567,-1000,-171,308,-1000,-963,513,329,1000,-1000,1000,-22,111,219,643,-1000,1000,-1000,1000,1000,1000,1000,949,-469,901,1000,1000,-1000,706,607,213,-961,-1000,103,-50,-1000,802,-1000,-1000,1000,47,-457,829,-855,1000,36,1000,767,-1000,1000,866,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00727() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{932,-984,-456,-584,-1000,764,1000,-337,1000,-614,-1000,-186,-1000,-850,563,1000,673,341,-986,1000,-333,-1000,163,244,818,157,842,422,878,-585,516,1000,1000,540,705,-298,-198,1000,429,-1000,-1000,1000,-135,-991,-1000,-647,345,847,497,-995,-1000,1000,797,-820,428,-1000,184,270,1000,-200,-1000,-1000,1000,-308}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00728() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{684,-533,227,1000,-904,737,-353,571,478,-430,-338,-186,18,-818,274,549,-266,-331,1000,-158,633,-686,748,-79,-145,156,-12,411,1000,-20,824,744,418,494,828,-470,-86,554,1000,-1000,206,-1000,793,437,-485,-412,1000,-576,532,-411,-499,591,607,-34,-469,-652,403,-258,443,368,-285,1000,161,-495}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00729() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{416,106,-276,-164,380,-709,1000,276,-976,-329,1000,-640,856,-589,-62,-1000,-3,-1000,849,1000,35,991,-1000,-282,-1000,236,-33,-1000,-1000,-1000,1000,1000,107,-695,158,-826,728,-220,-92,170,1000,90,-1000,147,-674,-576,-107,-1000,1000,-1000,-1000,1000,-1000,-1000,877,-1000,683,-1000,-424,-1000,-609,1000,-699,-594}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00730() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{336,178,-881,700,-1000,-1000,1000,-518,-1000,-723,1000,-1000,1000,-951,-1000,391,-3,-1000,1000,1000,-460,1000,-178,-266,29,960,-1000,-164,-1000,-864,524,-1000,932,-1000,40,-1000,-110,-556,-137,470,1000,841,-800,-195,-480,-716,2,-1000,899,-1000,1000,-815,-1000,715,-150,1000,904,371,-663,-1000,-1000,1000,-647,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00731() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{753,-546,274,648,-923,548,748,577,756,-1000,-506,177,1000,-393,920,138,564,-516,516,-481,1000,-574,670,-187,549,-836,782,-1000,380,-763,702,1000,-568,488,554,-863,-442,-360,728,-1000,378,-1000,451,980,4,24,1000,-618,925,-1000,-829,-296,144,-1000,-79,-430,-235,-772,-504,-213,-297,1000,-433,-647}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00732() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{1000,-1000,-196,-53,-1000,-77,418,-749,1000,-534,-1000,1000,-1000,153,-314,1000,1000,190,1000,-25,1000,-413,-1000,2,1000,-1000,628,1000,-432,16,130,663,95,-461,1000,-1000,642,-377,251,-389,-220,-956,-830,55,413,164,1000,282,1000,-405,-363,-296,-540,454,-643,-762,-1000,56,-631,-1000,459,857,-371,71}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00733() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{1000,-1000,918,-261,-750,1000,-817,926,1000,-70,-1000,198,-647,-573,632,1000,1000,564,334,53,1000,-1000,640,-127,127,-735,1000,1000,-91,910,-939,843,-10,-635,-253,-340,-413,319,627,-840,-274,890,791,1000,903,-267,1000,809,1000,1000,-32,408,295,-197,-1000,-1000,-1000,-1000,1000,-1000,1000,-284,47,737}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00734() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{-819,270,-506,-86,981,71,-155,118,-741,468,885,247,550,282,801,739,-983,-331,-761,910,-981,-99,-830,234,-255,703,-31,-688,-31,-670,301,-861,-311,164,546,530,-617,-29,-143,-381,954,185,694,169,-982,-444,-344,-881,-851,375,-171,271,924,-940,461,297,182,-606,776,-636,755,-75,6,-410}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00735() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.CategoryAnchor", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlinePosition():org.jfree.chart.axis.CategoryAnchor",
+            new int[]{-320,454,-12,606,-357,1000,-401,650,-272,642,248,-700,389,-205,123,654,-999,-109,309,-229,314,-368,1000,117,-283,1000,-5,-254,627,167,-191,114,934,-987,-561,694,-1000,552,288,-712,-117,-779,830,-179,-303,-340,-81,-133,-925,260,280,508,1000,-681,-190,-1000,394,212,653,1000,-92,732,801,-96}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00736() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{1000,-275,-1000,-315,165,-687,65,732,714,848,1000,1000,-795,559,-330,-420,92,-633,-803,166,-870,-142,-762,-245,24,1000,259,261,-147,1000,1000,-772,170,401,135,-331,-374,-151,310,967,55,-728,-2,-89,-406,-192,685,-622,428,674,-301,-203,810,193,436,316,-92,180,1000,779,219,-956,-847,-269}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00737() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-79,-850,294,171,517,-1000,-52,619,462,988,-447,-187,280,1000,-937,-910,-1000,-1000,-23,248,60,-86,-545,-148,-135,907,38,61,358,-99,-143,-882,497,400,36,-740,-499,-17,528,411,899,-1000,105,-142,268,-341,74,-87,-778,177,-825,-432,14,-649,216,295,1000,378,-12,-641,491,73,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00738() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-31,572,999,275,-1000,-251,877,74,18,-130,-24,41,-343,583,-891,672,-151,228,40,-33,-353,1000,535,-1000,382,-1000,-608,246,-1000,1000,-420,-403,-207,877,-10,-450,1000,812,-234,1000,-901,-1000,615,290,272,-84,-207,-396,-153,1000,-175,-266,482,306,-847,147,-277,548,1000,-446,-1000,-639,1000,-275}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00739() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-873,-185,409,127,382,-1000,1000,395,4,-221,18,-1000,-675,-938,1000,-1000,-953,193,-553,-519,-915,-571,1000,74,423,-913,1000,-711,-727,115,-1000,35,24,-164,105,227,831,-180,611,158,350,480,377,-130,-247,66,-815,379,-642,-618,-932,344,1000,532,243,-1000,1000,-275,-394,-976,-741,-1000,-509,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00740() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{298,-65,689,-1000,-1000,502,1000,1000,-898,565,1000,-309,-773,688,864,151,-1000,62,-191,-1000,-302,722,1000,-539,1000,-1000,1000,-362,-711,508,210,864,-1000,-613,-1000,1000,1000,437,638,1000,-1000,213,911,-15,1000,91,112,336,-1000,1000,863,535,1000,-486,-517,-453,1000,-400,1000,-425,398,-1000,897,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00741() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-316,1000,294,733,961,-781,-66,308,651,215,-379,-600,-933,-356,683,-315,-1000,898,-306,-95,-532,184,-177,128,81,841,852,-426,-279,-287,-1000,25,11,-16,214,-400,-420,-484,603,879,168,-354,-363,-11,-707,37,-389,-615,213,470,644,468,971,1000,216,331,-1000,-713,301,187,-272,-881,-503,830}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00742() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{583,868,-971,-823,659,909,-999,-376,719,13,935,175,829,-421,-431,180,-715,71,385,-573,-539,-53,-436,-411,-356,-102,297,-233,54,-152,-279,256,-246,538,210,-634,-853,-960,-124,881,-606,57,-303,605,209,533,924,-709,235,-299,163,251,-530,496,815,911,-926,-980,473,716,271,623,290,867}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00743() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-1000,182,329,-780,-559,680,-1000,-1000,-557,791,470,-180,-102,-755,-1000,-133,222,-798,1000,-1000,299,501,4,-563,731,-1000,-687,401,1000,-814,15,332,-135,-244,-390,1000,-1000,363,1000,-568,527,910,828,-580,1000,1000,252,966,-396,642,310,-1000,-952,-679,651,789,463,-8,1000,-1000,-91,274,461,239}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00744() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-505,851,-1000,960,-1000,39,-823,-778,283,617,-1000,126,-78,488,-1000,-231,1000,-703,705,300,849,1000,399,-542,663,-565,-910,578,783,-805,-32,-89,139,302,207,-1000,-951,-493,35,-311,-254,-311,-1000,709,589,-417,-143,807,852,765,-172,-361,-206,-717,-52,880,-1000,1000,-9,-812,-384,1000,-861,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00745() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-1000,314,24,108,517,-439,-11,11,470,47,-428,-1000,478,-119,-882,-411,-495,-495,-259,-1000,-598,-220,239,330,404,-229,-495,-578,241,-41,-533,-39,143,-135,-468,15,-902,-133,484,186,-1000,923,-731,647,653,-73,-595,-22,-541,166,563,-1000,398,133,109,443,-126,-1000,-99,-519,297,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00746() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{99,1000,-816,1000,1000,-749,-1000,-1000,946,482,285,-927,1000,-592,1000,217,-1000,1000,454,-378,-595,-149,-387,157,-622,1000,1000,6,-61,-848,-1000,-155,823,-808,1000,-1000,-1000,-67,334,1000,-724,322,-1000,1000,-410,-138,102,-1000,-743,471,961,1000,1000,1000,1000,-1000,-1000,-1000,-21,51,-314,-1000,-293,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00747() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-661,-988,224,-812,211,527,536,729,588,545,60,-398,-514,-869,587,-662,-347,228,-489,-33,-295,1000,561,-314,-18,229,491,246,-1000,1000,596,-288,27,-126,-410,576,817,-76,203,541,935,-279,1000,-1000,-679,-390,-80,112,821,1000,-932,-448,255,306,646,-978,744,400,-255,43,-1000,-628,164,341}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00748() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-31,1000,733,752,-864,-534,201,-376,-42,-400,-44,-58,717,809,-1000,1000,-508,1000,571,-573,-539,1000,473,-971,315,-102,-578,551,-845,1000,-1000,-381,43,1000,583,-1000,-179,368,-374,1000,-1000,-968,-785,1000,1000,361,-247,-1000,-1000,841,942,442,724,878,-1000,1000,-1000,-980,473,-757,271,-821,888,332}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00749() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-1000,-1000,674,318,322,-595,1000,1000,-522,601,-379,-459,-1000,-327,975,-1000,-490,435,-782,281,306,-701,211,-4,244,695,530,-554,-313,-41,294,-359,140,-707,-622,613,783,370,727,368,1000,-357,1000,-880,-1000,-447,-586,208,-1000,1000,-52,-333,874,183,621,-1000,1000,386,-330,-198,898,-1000,-503,132}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00750() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{1000,-105,-1000,-1000,-258,1000,-635,-310,442,83,1000,818,533,-359,-709,966,-6,-850,439,-245,-370,909,128,-556,342,-1000,425,-6,-530,163,-184,145,-1000,698,-1000,-39,-606,-1000,218,927,-515,-466,287,-184,1000,997,295,525,361,-1000,-202,378,-890,-674,1000,1000,-1000,-115,1000,1000,1000,607,1000,521}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00751() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainGridlineStroke():java.awt.Stroke",
+            new int[]{-1000,-1000,13,556,-489,-925,1000,308,572,38,-1000,-496,-855,-1000,1000,-1000,-1000,-955,-950,725,-658,-1000,696,251,237,451,1000,-773,-602,1000,294,-353,225,461,692,113,727,-630,542,424,1000,-901,888,-1000,-1000,-826,-1000,-527,532,122,-1000,395,1000,886,1000,-1000,1000,85,-702,-231,-1000,1000,-259,875}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00752() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{1000,-839,-175,1000,895,-363,-1000,162,-901,769,-1000,244,-792,-1000,-837,-1000,-741,876,494,1000,1000,-943,1000,39,-368,-441,1000,-1000,-840,-1000,-826,-1000,1000,-431,403,-1000,-1000,-1000,-1000,-1000,1000,-394,1000,-173,1000,-797,-941,1000,-290,-807,-1000,-540,627,-136,441,-1000,894,123,-1000,-442,409,-485,-1000,134}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00753() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{288,1000,563,161,-281,-175,34,-182,1000,-253,-439,-967,-1000,-93,-1000,195,211,855,-361,91,-407,-674,-814,632,-175,307,-881,-1000,330,-957,-636,192,-1000,1000,-720,332,1000,-613,1000,-657,193,-1000,734,841,1000,-1000,-548,1000,552,258,-148,259,-539,641,1000,-407,-608,-55,-545,-88,-1000,-165,1000,-498}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00754() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{219,1000,133,577,1000,-1000,-1000,-823,501,-1000,414,-1000,-947,895,560,-1000,1000,876,1000,-581,1000,273,-490,-748,-368,-747,-921,108,-1000,958,201,1000,1000,-389,676,-300,-1000,685,201,908,1000,-394,-509,127,-418,903,-1000,-707,-232,863,-1000,-540,-1000,1000,-273,792,169,-263,540,-117,-1000,280,-847,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00755() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-129,867,-668,1000,526,158,193,-998,686,29,-95,-1000,-1000,-370,-1000,600,701,1000,-11,-105,-582,-750,-1000,-522,655,360,-633,-1000,338,-739,606,373,-1000,702,-324,1000,1000,-812,361,-719,-208,-1000,552,1000,246,-1000,-1000,1000,-253,95,355,-1000,-766,1000,1000,-468,-1000,-439,-1000,550,-301,-605,1000,-792}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00756() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{477,562,809,-953,-502,-888,-419,475,88,-1000,509,-247,534,622,1000,-1000,301,-148,278,-379,681,-416,1000,-1000,-228,-48,-16,1000,-609,316,-774,-5,1000,43,64,-353,-1000,544,836,1000,1000,711,-352,-311,364,1000,-175,-1000,150,1000,-1000,1000,89,-254,-1000,779,-602,-79,906,88,-866,1000,-951,107}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00757() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{189,1000,703,-1000,1000,-984,-923,1000,1000,-325,327,-1000,-572,-1000,-1000,-654,184,-255,251,1000,1000,1000,-654,558,-1000,337,-160,-1000,-134,267,-1000,1000,-1000,1000,-898,-353,1000,-158,1000,-1000,229,-269,-67,1000,862,-158,985,868,1000,-1000,-673,529,-970,1000,1000,-503,-1000,-445,828,-90,-1000,1000,-434,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00758() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{247,1000,98,660,1000,-1000,-281,-265,194,-593,368,-1000,-833,-702,31,-862,1000,802,1000,-74,993,244,-360,-209,-338,135,-635,-271,-1000,469,-26,663,268,100,390,-253,-1000,-109,-107,308,563,-330,48,-886,96,235,-1000,53,-134,394,-468,-540,-823,1000,-274,203,-1000,-523,-12,-228,-903,-193,-256,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00759() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{396,-283,-806,-533,884,399,704,861,-463,-828,176,44,704,-228,-646,508,152,-532,-313,1000,171,60,464,194,-200,748,-258,398,-1000,246,-936,196,-490,979,683,-238,341,88,-182,-214,-22,186,-133,-249,-400,247,1000,-26,768,-84,-22,678,734,1000,70,333,-508,-187,-303,1000,-50,-727,1000,-79}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00760() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{474,606,-996,664,1000,-818,-293,-582,-89,-338,992,-1000,-995,260,-362,410,559,1000,661,-120,902,-554,-213,33,567,-214,-1000,-142,-733,359,1000,355,-16,-1000,978,291,-267,479,337,-374,422,-344,-533,1000,-1000,-22,-349,449,-243,-314,-121,-1000,-708,1000,315,-405,-782,16,582,600,99,-334,-567,-950}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00761() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{250,-1000,-832,-430,851,1000,72,1000,95,326,-680,119,148,-745,-768,628,-645,-451,275,1000,-672,730,851,446,-1000,-21,797,-1000,846,-1000,-1000,-708,-770,958,-444,-817,1000,-1000,277,-1000,-810,263,1000,43,1000,-781,1000,1000,1000,-1000,1000,1000,1000,-529,1000,-1000,-120,-557,249,-511,-808,-560,41,-190}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00762() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{177,-192,-267,845,851,122,938,-116,-411,119,491,235,-550,350,-711,692,813,745,382,475,-574,-28,-82,561,94,-210,-335,-534,-208,-739,-1000,-64,-738,669,54,113,-671,-1000,-536,-368,-219,-218,646,302,586,-713,-978,1000,-394,-166,869,678,1000,-101,-493,-492,715,-504,-807,-18,255,-700,454,169}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00763() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{234,882,544,-373,-481,-96,-584,378,618,-595,-181,-481,-702,-158,-168,-552,144,-544,467,-440,-195,850,387,91,-434,348,426,-621,236,40,-974,-232,-710,856,-709,717,962,-222,803,362,549,-578,561,784,586,-421,-578,-465,752,57,-669,587,-659,158,224,-178,8,483,28,-604,-912,-586,442,-112}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00764() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-669,-142,-856,-111,-431,74,1000,-626,131,-503,1000,17,748,1000,-56,-116,869,367,-16,-298,-372,-632,15,-461,1000,-37,-969,1000,161,623,982,291,254,-82,-219,1000,-770,464,421,822,386,1000,353,82,-867,345,86,-337,-1000,792,28,-507,336,-24,53,753,400,-1000,434,1000,319,923,1000,211}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00765() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-293,-675,-376,618,427,-985,219,137,-134,-787,1000,-171,-202,1000,162,-502,42,143,-255,-412,998,417,1000,-1000,928,-515,252,1000,-1000,745,903,-789,567,-1000,1000,-421,-1000,982,-410,1000,1000,1000,-1000,-1000,70,1000,-555,-1000,-687,592,-614,-1000,-692,222,-1000,-192,70,110,1000,613,1000,1000,-1000,647}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00766() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Collections$UnmodifiableCollection", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-1000,96,-132,660,-939,-1000,-92,1000,1000,-517,89,-216,-264,-702,-96,1000,-827,-1000,1000,-1000,-1000,1000,-446,1000,-150,-203,152,-998,1000,469,-1000,663,-1000,1000,-999,896,1000,-859,1000,-123,-1000,-1000,1000,1000,1000,-1000,398,492,1000,-599,1000,1000,440,66,843,-902,-808,-210,819,-42,-562,-1000,1000,8}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00767() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(int,org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{806,55,-1000,161,-48,-203,34,-1000,-580,-171,1000,-33,-1000,927,-1000,749,1000,1000,-361,324,-717,-1000,-23,-58,1000,-115,-1000,540,-616,78,1000,-315,-202,-657,707,762,-1000,-113,1000,-625,530,158,734,-1000,1000,-317,-838,1000,-1000,-187,1000,-1000,727,-595,-1000,-123,729,-1000,-831,1000,-1000,111,674,-498}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00768() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-1000,201,879,-428,545,378,58,-386,241,-873,1000,-805,-1000,457,637,1000,-1000,-396,-55,-859,-1000,330,-162,462,-555,1000,511,1000,1000,-204,944,1000,-1000,-1000,622,802,-521,1000,359,-408,-55,-596,988,789,646,-367,-230,308,-1000,-1000,1000,-1000,1000,-1000,-153,-1000,-158,-292,-843,314,-313,1000,-1000,494}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00769() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-525,250,138,1000,-1000,-1000,-923,-495,249,302,62,1000,559,153,411,482,-572,165,682,1000,646,-54,-903,83,1000,666,421,154,-188,1000,-1000,25,694,-479,-818,-690,368,45,615,-1000,-572,7,636,-287,1000,-198,-256,-474,691,716,-824,-98,1000,-862,207,595,-1000,-10,-968,431,-426,674,-267,-257}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00770() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-441,-566,304,-736,-167,134,231,509,528,-1000,1000,26,-487,-31,-685,-294,-1000,-1000,46,716,-76,-740,-402,-399,-1000,-400,-838,82,1000,-720,-860,651,-1000,-1000,-114,36,-906,-337,-481,-408,3,-837,-19,-780,316,280,-1000,-121,-950,-1000,400,-893,-279,-1000,280,-935,1000,-136,81,257,-832,904,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00771() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-581,-58,879,-428,-163,-1000,-477,-1000,-168,3,287,-769,-1000,457,1000,468,101,583,849,-640,-821,636,816,1000,742,-132,1000,-269,-696,924,944,688,400,506,-203,578,504,-223,786,-408,512,-353,-136,233,156,25,-230,-726,-582,400,1000,-1000,606,-221,-220,-873,-796,59,-697,-785,322,542,-215,-329}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00772() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-48,-1000,-211,-598,987,-582,576,-878,-480,-314,-29,-1000,193,-610,-8,-574,1000,-921,-316,1000,-467,-807,1000,-168,-1000,-157,1000,-543,-398,-1000,683,219,-1000,1000,807,-444,30,-95,100,1000,-378,-565,1000,-426,-1000,1000,-258,360,1000,812,732,166,-448,765,815,-1000,1000,-183,581,-1000,-389,-960,14,-795}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00773() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-938,599,-422,-515,143,786,52,-1000,-713,-117,1000,1000,1000,-886,-49,618,-914,-26,-378,-8,-601,449,-627,674,-1000,618,-113,-489,608,-119,779,-788,392,-1000,-548,-1000,-288,949,-161,-344,1000,563,455,529,73,-340,734,978,-1000,-1000,-626,241,-1000,100,569,467,-542,373,-844,336,1000,1000,-29,-988}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00774() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{1000,-1000,-176,744,328,5,-1000,425,726,829,-1000,878,21,-218,-642,-1000,1000,1000,380,781,1000,1000,1000,-330,1000,-160,-1000,1000,340,1000,1000,618,635,1000,267,-651,868,1000,1000,-1000,-715,-441,551,1000,-1000,-1000,-187,-42,1000,1000,372,-164,83,977,-614,1000,1000,-879,407,-663,749,-1000,-107,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00775() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-457,427,-978,1000,-167,55,345,-1000,-1000,1000,446,712,192,1000,1000,1000,637,353,-179,-292,-763,513,-382,496,421,1000,999,-1000,-622,-98,543,-1000,1000,-167,73,496,785,1000,1000,243,1000,1000,218,-369,-745,280,620,753,-280,1000,212,442,1000,557,125,35,-838,745,-637,-155,916,517,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00776() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{311,-647,-418,953,-1000,-914,-1000,590,-390,453,-960,-644,1000,-170,-496,-368,1000,610,90,-1000,1000,-453,268,-437,-186,-344,285,-222,-902,447,-146,-967,464,433,-702,-607,198,-651,610,-939,-502,-33,-410,-1000,-565,1000,-3,-336,134,1000,-1000,630,-1000,870,505,325,690,571,-27,-444,-249,-1000,583,250}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00777() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{544,-584,174,-660,181,-697,414,-1000,732,-914,-1000,-1000,-74,-33,-48,-455,611,-1000,536,-371,-529,-920,947,326,-1000,-1000,-249,-748,-256,-1000,-1000,25,-1000,1000,-965,-63,-348,-1000,-23,1000,530,-687,43,-1000,-1000,1000,1000,-1000,228,400,626,-131,-868,-60,541,-381,1000,831,894,-1000,-1000,-400,28,15}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00778() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-1000,453,1000,353,-424,-617,-630,-4,286,-873,1000,-206,38,-556,618,400,-986,-396,269,-372,18,-137,-636,523,-904,1000,-102,775,824,-569,638,1000,-946,128,1000,345,-461,528,1000,-1000,-1000,-816,584,1000,1000,-615,-1000,495,-307,-766,-400,-592,952,-1000,573,-1000,-470,-504,-483,908,-715,215,-549,494}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00779() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-623,-648,28,-267,262,417,-496,-915,-203,-732,1000,-1000,-1000,1000,1000,1000,-497,-1000,178,150,-1000,1000,-175,788,-472,1000,1000,-552,-263,377,854,1000,-681,-1000,239,1000,289,1000,1000,-1000,206,1000,1000,403,416,-140,36,-757,-1000,-1000,1000,-257,1000,-638,-434,-996,-160,-384,-707,-16,-318,1000,1000,909}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00780() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{180,-580,269,529,-617,-1000,-713,-629,254,-102,-646,-501,544,257,1000,127,-582,76,1000,1000,52,764,107,1000,368,910,1000,591,-747,1000,-1000,794,326,-668,-1000,-234,583,292,742,-1000,-1000,-154,1000,18,658,352,818,-1000,-564,91,952,-701,1000,-1000,-383,1000,14,-95,-904,-582,-418,-185,638,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00781() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{238,827,513,346,-684,-1000,979,-386,241,-494,731,-805,701,103,1000,-793,1000,-396,-767,-859,963,655,-183,1000,-426,312,458,-805,699,324,944,-668,700,-110,959,-1000,-521,-1000,-152,546,861,69,988,-1000,438,891,1000,-1000,667,970,-1000,-791,-501,-843,-785,1000,688,598,-843,-1000,-146,-84,1000,622}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00782() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-426,-505,-216,-96,141,-393,1000,-1000,133,-211,68,-544,-325,1000,186,138,-466,-1000,168,161,-746,-540,153,723,-429,-10,503,785,-247,-885,-688,-550,58,705,-860,310,-187,-336,564,927,1000,553,507,-1000,17,1000,411,-223,-933,179,689,-496,289,-430,-23,-165,512,660,-69,-715,-357,521,-892,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00783() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDomainMarkers(org.jfree.chart.util.Layer):java.util.Collection",
+            new int[]{-115,-1000,-872,502,-260,-1000,-625,-613,-1000,985,727,-1000,1000,-919,754,226,1000,71,7,1000,-574,125,1000,-82,51,939,-226,-460,-1000,397,1000,-58,-71,674,680,-595,1000,832,1000,-400,-1000,43,455,128,-1000,1000,183,83,1000,1000,-328,1000,-21,1000,730,-529,249,-305,314,-1000,225,-1000,639,-795}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00784() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{-31,947,-1000,-392,-136,1000,-532,-1000,-1000,73,-739,-306,1000,-603,318,1000,294,-586,1000,623,589,-1000,-596,-470,-359,-78,-505,628,-71,-530,300,1000,471,-761,-668,-257,-517,-945,1000,-1000,-791,-513,570,61,850,475,-258,-237,-111,-152,-1000,-159,1000,-127,-382,620,-963,647,826,-252,758,-631,-423,59}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00785() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{226,1000,654,-242,-438,-1000,935,960,-428,-304,-739,-938,529,278,-96,-257,31,-649,-641,-280,-349,-1000,678,775,291,-78,781,-582,-71,-584,300,845,-593,1000,-1000,-257,-711,185,738,-143,950,-513,-21,-264,850,-532,1000,707,-1000,-1000,-1000,469,-537,377,261,-607,1000,-298,826,-969,-841,280,-423,59}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00786() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{1000,11,-262,-406,714,-33,820,407,1000,-529,-1000,136,-392,312,-216,278,32,587,1000,-51,393,887,-200,-1000,833,-974,638,-142,109,1000,1000,-308,-886,-1000,168,947,835,861,-1000,123,-703,-1000,1000,-205,226,-146,574,944,198,339,798,-1000,-145,262,406,-297,50,871,-404,833,1000,536,95,802}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00787() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{1000,664,-11,409,-5,277,274,-225,770,-206,565,-629,-1000,150,-193,-672,-617,345,1000,-96,183,-694,-440,-415,232,445,941,-241,-112,-183,1000,752,-896,-1000,-10,-206,-254,-300,-473,-1000,191,-570,414,18,463,528,1000,218,-1000,373,-802,278,603,-942,-1000,-61,1000,364,126,-655,-69,-128,-881,262}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00788() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{-417,-1000,238,-317,559,164,1000,1000,-384,-1000,454,-150,-722,1000,-523,-1000,689,1000,-1000,-183,300,578,685,848,-441,355,-725,-1000,-1000,1000,1000,-553,528,676,-453,-356,1000,-351,-291,1000,1000,-497,-458,-1000,-10,440,-578,495,28,-565,1000,-1000,-1000,144,-501,-65,294,-1000,-1000,-158,-1000,-219,628,572}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00789() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{79,1000,-846,-873,-1000,-400,1000,400,-800,239,-543,-11,1000,144,148,850,765,-1000,1000,565,204,-453,227,434,-129,920,-384,522,527,-553,1000,75,189,-223,-1000,-815,-869,-1000,939,400,-1000,-743,107,-135,150,406,58,-399,-963,-1000,0,-870,0,281,339,-344,-963,228,1000,34,1000,452,1000,-473}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00790() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{487,1000,583,662,-735,-706,-163,1000,1000,203,-952,-1000,16,-1000,-756,283,-706,-1000,446,164,-290,254,-1000,-838,1000,-275,-375,708,-205,557,1000,35,-51,-344,-610,-464,230,1000,-561,-1000,5,-235,344,489,-951,564,779,508,-1000,-675,723,-72,606,287,360,306,1000,-5,410,877,-616,887,-62,-438}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00791() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{-234,403,-476,1000,196,1000,-1000,-1000,-630,-536,798,-1000,-1000,-543,-741,-167,-781,634,1000,234,116,-615,-1000,-415,-658,427,443,-512,-748,-782,1000,1000,-378,-110,573,-1000,-138,-203,927,-1000,64,-1000,412,-538,214,410,103,257,188,836,-661,853,1000,-425,-898,847,1000,454,-291,-1000,-776,-889,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00792() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{127,1000,372,-661,-286,-927,1000,407,-400,-38,-1000,-717,1000,-9,280,807,339,165,950,513,-177,303,-698,-939,615,-731,820,566,370,-21,-370,167,-1000,-222,-625,9,375,-786,99,123,-467,-1000,746,-205,-434,925,544,1000,151,412,636,-235,-145,-565,1000,265,954,1000,633,-37,1000,192,192,-598}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00793() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{1000,788,-836,536,-553,150,35,-337,1000,-550,-1000,-219,-575,-307,-1000,1000,-175,419,1000,-178,-427,-419,-631,-363,661,381,-497,1000,207,1000,1000,706,-1000,-711,-1000,411,-239,1000,-1000,-1000,-789,-793,866,436,0,702,1000,842,-1000,318,75,-607,1000,53,129,-298,1000,-31,584,1000,1000,539,242,449}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00794() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{-1000,-1000,-74,-406,1000,584,905,1000,-879,-1000,-1000,-412,243,1000,-672,-428,1000,1000,-1000,-659,143,887,338,139,-491,-868,638,-1000,-1000,1000,722,-291,422,334,2,349,1000,861,-819,1000,1000,-320,-323,-1000,-571,-273,-1000,1000,413,-200,1000,-821,-1000,1000,1000,-257,412,871,-1000,202,-1000,-328,120,802}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00795() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{84,-515,-1000,-365,351,1000,590,-1000,709,-1000,-179,478,-191,1000,-548,746,537,663,774,-237,122,-205,-93,237,-439,377,-789,234,198,1000,1000,207,-656,-335,-918,767,-299,1000,-270,-624,-238,-1000,588,-332,898,222,257,452,-408,922,-123,-1000,314,-80,297,-388,611,118,-170,1000,1000,-583,481,487}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00796() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{1000,790,-412,284,1000,92,-226,-541,1000,-228,-1000,-359,468,-447,-216,472,-1000,399,188,-37,987,86,-768,-1000,845,-974,1000,-699,239,228,485,-79,-1000,-1000,501,548,298,878,-871,-577,-1000,-1000,375,119,401,-285,1000,906,23,839,279,-1000,-994,23,894,18,-377,1000,-386,561,-337,431,-787,167}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00797() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{-62,-890,-77,-431,860,880,656,-142,-930,-59,-1000,262,958,558,-16,1000,310,687,188,529,543,730,-494,-1000,-224,-1000,-175,334,676,-55,-193,-62,103,853,-953,-157,-481,412,-92,927,-242,34,787,-318,313,-210,-812,-307,224,-912,1000,-548,-566,1000,1000,261,-1000,687,44,792,906,977,247,-241}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00798() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{-1000,-485,-95,1000,1000,1000,-1000,-641,-1000,-546,-503,-1000,-669,-898,-1000,767,-909,978,1000,333,-368,-784,-1000,-1000,-633,-973,990,-479,-432,-1000,718,1000,-988,-1000,628,-535,197,-223,-168,-101,141,-1000,866,-1000,-500,-518,-550,1000,579,985,739,1000,874,835,428,1000,1000,1000,-953,-402,-375,-293,-87,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00799() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getDrawSharedDomainAxis():boolean",
+            new int[]{-123,914,28,967,594,20,-155,-548,-653,393,746,-1000,-996,-518,-341,-14,-827,338,168,93,-260,-1000,46,181,-500,427,793,-472,-504,-1000,380,1000,-712,83,-195,-1000,-593,6,605,-937,276,-973,360,-485,-206,32,287,3,-455,406,-661,1000,935,11,-508,585,1000,86,170,1000,-776,-606,745,-655}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00800() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{1000,1000,368,-461,-34,-1000,282,981,382,-1000,1000,638,151,678,1000,-1000,-1000,-646,-1000,1000,-725,1000,-737,1000,1000,-545,1000,-1000,1000,1000,-166,-1000,-1000,646,-1000,-1000,730,-405,-239,658,-1000,517,-1000,-175,-81,313,301,876,-1000,-60,-1000,-677,275,-1000,-737,813,1000,-148,-1000,-188,1000,-1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00801() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisSpace", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{415,282,-151,-445,-1000,-545,-40,1000,-653,-447,346,143,690,-197,1000,567,-220,481,-232,391,-971,-339,974,1000,-453,470,-620,-566,-925,141,-609,-606,-709,-541,-1000,1000,1000,-26,-861,-458,-1000,320,-335,-510,814,1000,-996,-113,-1000,46,103,-545,-719,-593,-1000,-435,210,759,-1000,-1000,31,-576,-6,-696}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00802() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-1000,429,-331,-165,-131,-1000,176,878,359,-347,1000,562,-1000,1000,602,335,-1000,-727,69,-745,261,734,555,635,1000,-626,-397,-1000,-432,-347,-794,74,-948,-100,-147,490,1000,-62,-914,-732,397,-750,-966,-483,-333,889,-909,-446,-440,483,-524,358,-449,282,-1000,926,-440,382,-897,-211,181,230,650,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00803() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{72,-1000,-841,386,-1000,345,25,-435,-235,-611,-380,-13,-834,1000,408,440,696,930,-1000,205,583,-1000,-216,676,-347,1000,501,1000,351,-256,522,188,200,-737,-21,748,770,-809,-32,-1000,293,640,1000,-75,904,659,-1000,180,-921,1000,-941,-800,-1000,-1000,762,-1000,352,221,365,1000,-369,-5,59,364}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00804() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-448,940,274,1000,-1000,297,690,-1000,-548,972,-25,-794,-450,745,1000,-187,-856,343,-910,436,1000,-351,-1000,1000,-342,-916,1000,573,568,122,800,691,847,-923,-581,232,428,844,-209,-998,913,880,75,-509,843,-593,-10,-1000,424,-1000,-1000,101,-161,1000,844,608,-485,-592,237,-952,-399,146,-963,127}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00805() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-1000,-85,-1000,-67,-1000,85,494,-332,-584,882,138,994,-1000,1000,-811,447,1000,-1000,101,-372,1000,651,-1000,-835,289,16,-793,-70,-236,-1000,727,551,277,-923,961,-829,66,173,-287,-1000,1000,-547,-1000,-166,449,516,-483,1000,1000,99,405,1000,-242,-761,-1000,14,113,290,461,578,-303,1000,37,-326}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00806() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-1000,-496,184,-289,320,-626,-305,1000,1000,-1000,235,348,-111,306,854,272,342,137,-486,182,26,127,625,588,-134,-503,234,-434,-410,-361,188,-447,-501,58,-690,565,160,-390,-513,-454,-266,-138,-1000,-306,-428,917,-1000,-1000,-685,477,-1000,-826,-869,1000,-1000,246,1000,243,-488,-900,1000,-1000,-218,-403}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00807() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{518,-342,22,168,-302,1000,731,604,326,867,24,-507,50,1000,1000,791,-152,294,-828,402,512,-461,-290,412,976,-1000,439,246,-481,609,1000,520,948,139,-1000,948,1000,103,-124,-1000,290,-331,-730,289,1000,-249,-1000,191,-1000,-317,-1000,-35,-894,148,397,-374,-1000,-1000,870,110,-595,802,-575,-787}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00808() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{36,138,74,-814,-954,-289,-50,791,-615,625,1000,33,869,639,65,1000,829,-284,646,-196,-60,-257,1000,489,-983,-33,-513,-17,-1000,224,-762,469,70,-1000,-266,1000,422,1000,-627,-839,256,1000,789,-683,1000,520,-1000,-742,348,-92,1000,-331,-844,36,-839,221,-1000,345,652,-379,-147,625,-781,-988}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00809() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{1000,1000,779,898,-815,-231,449,852,-628,-613,-788,3,464,1000,904,-833,829,-338,646,934,-212,551,50,1000,1000,-1000,496,-1000,325,1000,-913,-817,-1000,-327,-1000,-548,1000,438,-455,1000,293,-493,-972,-308,1000,228,86,522,-1000,-692,-569,-386,-6,-1000,-380,1000,847,-8,-1000,148,157,-1000,1000,431}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00810() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-1000,-1000,-351,286,332,516,198,1000,-653,984,346,1000,-591,-495,-1000,217,346,-426,1000,-912,835,839,553,-524,-1000,470,35,1000,-891,-1000,-609,-793,1000,1000,1000,1000,-1000,-26,-52,-1000,460,320,227,453,814,-498,814,-583,489,56,1000,853,-707,-593,570,202,65,-1000,-1000,846,1000,210,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00811() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{671,-1000,208,750,-605,-903,182,-401,984,-826,1000,504,-305,1000,400,-623,-1000,-281,194,885,324,-142,-22,597,4,1000,759,177,-294,-202,288,-156,-179,-1000,-608,-228,-210,-9,80,-791,-147,648,-801,-254,-319,199,-777,25,548,470,-837,-1000,599,-33,-667,1000,116,796,271,-1000,807,-1000,1000,256}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00812() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{746,160,504,-202,-369,364,212,994,-173,-510,595,75,537,129,-192,197,-61,34,-114,629,267,-396,246,598,386,-755,640,-693,-330,297,-78,79,-153,-135,-1000,-21,325,218,62,-345,-910,172,-774,-74,1000,312,-774,-207,-479,61,-672,-339,-770,-1000,-667,958,-326,-367,40,14,-270,-1000,-291,-586}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00813() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-929,67,-268,-7,-151,-368,-492,357,55,-363,489,1000,-708,708,149,-429,-716,199,-1000,1000,-338,-142,-746,623,-301,-1000,167,-158,-276,-128,1000,-1000,51,1000,-951,-513,793,-577,-674,-552,375,-1000,-532,-1000,-271,958,-899,-882,88,726,-1000,-132,-1000,140,-1000,927,391,261,-696,-1000,1000,-385,118,-75}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00814() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-975,958,518,-291,-213,-670,824,982,-103,-51,-504,-51,-1000,1000,1000,967,825,-1000,300,-437,-306,572,572,224,626,-75,-844,-1000,-711,-685,-1000,188,-1000,6,198,540,1000,-235,-938,-1000,967,133,-1000,-257,996,679,-766,-948,-233,-67,460,1000,-88,-1000,-1000,-559,-241,990,-853,127,-514,1000,500,-776}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00815() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedDomainAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-1000,336,-37,-254,-483,-591,160,346,-983,-108,963,527,-517,454,375,51,-642,-227,169,464,-71,225,88,551,-543,-1000,118,417,-731,-336,23,-605,93,-923,183,-112,221,21,-738,-532,427,-1000,675,-993,-286,859,-232,-612,568,762,360,223,-609,75,-1000,791,-70,596,332,-646,569,-114,-383,119}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00816() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{639,-885,1000,41,717,1000,-450,-552,810,198,1000,338,-76,192,473,132,789,946,847,-416,738,508,1000,494,-196,-480,-603,-1000,-315,1000,1000,383,-655,1000,1000,885,524,-424,529,-1000,1000,-445,-629,714,-681,-672,-856,101,-132,-116,1000,-350,292,-1000,877,863,296,-465,687,-450,245,256,-169,6}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00817() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-618,-1000,-16,1000,-521,-1000,-1000,-414,571,-262,940,-714,57,930,-1000,439,27,-591,1000,1000,216,509,1000,-457,-1000,418,-279,1000,399,359,950,1000,-1000,425,1000,1000,1000,-1000,1000,642,481,-1000,-424,-1000,710,885,-173,235,920,-820,-1000,-1000,-649,-200,957,540,-903,-1000,-686,-629,-678,-587,1000,-547}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00818() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-511,-388,-821,-970,92,-1000,-1000,134,354,829,1000,-449,-131,650,-400,-105,-214,-120,472,930,-115,-1000,1000,-258,694,715,1000,812,-264,-789,349,-129,-865,898,467,913,114,-490,228,-460,1000,-851,5,-409,1000,812,-1000,-832,857,-14,-446,-584,-405,40,559,-17,-508,-1000,-429,1000,-519,27,281,-469}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00819() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-646,-251,-937,-77,261,-1000,-800,-244,216,685,673,-1000,-347,844,-1000,343,-736,-1000,43,930,900,406,1000,-421,270,550,399,680,-308,-354,-305,283,-739,1000,809,1000,1000,-1000,1000,731,807,-851,-251,-900,1000,1000,-883,-404,1000,-1000,-834,-1000,58,152,794,342,-1,-591,-189,1000,-540,97,-8,-745}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00820() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{975,-665,673,-742,170,831,-176,949,-129,-851,924,423,690,479,561,210,771,942,532,-383,981,-480,64,-322,-722,-86,196,-998,128,696,384,953,133,836,744,-337,890,497,186,-566,486,834,-861,-782,33,-515,-395,-899,-862,397,785,953,363,-293,-306,755,-691,-511,853,-506,255,357,-597,989}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00821() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-191,119,-68,-775,-569,1000,253,-1000,-15,1000,1000,394,320,-118,-11,-450,-611,823,1000,-598,142,391,15,249,264,-1000,-623,-1000,502,1000,1000,-411,-1000,111,924,640,36,-194,-35,-728,431,167,-687,1000,-371,252,-46,-626,-563,-269,-1000,-650,-269,400,1000,356,-663,-723,-1000,139,852,429,737,498}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00822() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-581,283,-1000,-947,229,737,-60,-550,-908,489,205,1000,374,-1000,-796,129,-696,-773,1000,-1000,-922,352,-531,-972,-877,-409,-156,-552,-235,1000,-509,-995,-767,-940,-937,969,-669,868,-1000,-892,-801,1000,-114,1000,-96,1000,1000,-961,-743,-73,-923,7,407,918,-244,-328,-122,-727,875,-631,604,-516,657,904}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00823() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{365,-1000,259,964,44,-649,-1000,829,-343,447,1000,-1000,-1000,635,-337,-189,-418,-1000,715,1000,1000,-1000,1000,-791,1000,463,1000,742,581,699,1000,914,762,1000,372,1000,602,-878,881,-172,1000,-550,905,-47,1000,1000,-1000,1000,1000,-446,-1000,-1000,851,-1000,881,-1000,-1000,-953,-485,-1000,988,906,-4,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00824() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{1000,-253,-322,-589,-328,517,-828,51,-1000,833,57,-22,18,207,-755,-118,9,333,1000,569,572,-677,86,-218,497,361,39,-720,878,1000,711,-821,868,-209,-1000,978,-458,-1000,176,-1000,78,-786,821,433,-120,1000,7,859,-385,583,-1000,121,427,394,-306,-1000,-920,-982,-1000,-475,524,17,314,-584}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00825() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-1000,-731,1000,756,439,-622,1000,-311,-181,-1000,-109,-898,-772,-51,284,245,745,-1000,-1000,-242,-1000,770,211,42,1000,-301,1000,-657,779,-605,-987,1000,-852,-554,1000,-737,479,24,194,1000,615,-645,-582,-539,-130,-1000,-353,-876,927,949,1000,-918,516,87,889,1000,941,896,1000,482,788,499,-765,439}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00826() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-428,517,-706,-1000,1000,-718,937,423,-157,7,35,-349,553,-469,76,812,-321,-204,264,773,-1000,57,-1000,-13,635,987,889,1000,1000,-1000,-1000,37,1000,-668,222,-1000,758,1000,-606,1000,913,-271,317,-646,1000,-240,415,203,-884,641,-7,907,915,1000,-761,-217,221,2,33,683,716,-130,-183,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00827() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{34,-252,539,-75,-1000,103,-274,687,-215,670,-651,-769,1000,759,-443,567,569,-565,1000,587,1000,1000,328,115,-66,135,-569,-921,1000,888,-121,-364,127,-969,25,1000,879,-192,416,-573,-606,-263,196,-630,27,714,866,-190,-1000,-80,-708,225,250,-219,-372,-265,487,-916,-621,-609,-1000,-1000,1000,-379}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00828() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{1000,1000,-371,-447,1000,654,1000,-968,-1000,425,565,551,-749,-906,-535,-208,-996,-73,362,-969,-721,-546,154,-169,-271,-693,268,-673,141,1000,-201,-1000,-770,-777,-1000,-1000,-1000,537,-1000,246,-526,747,303,1000,-610,552,1000,213,-262,161,734,-257,709,1000,556,461,-684,765,62,-22,1000,901,-1000,489}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00829() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-818,144,419,849,-1000,-297,768,-834,-577,-425,151,-980,297,521,-231,-63,1,-1000,1000,337,768,793,-107,-25,1000,-486,745,-1000,1000,278,-54,273,-126,-932,914,1000,634,-333,303,624,-98,-776,107,-252,-191,-29,426,-896,-481,-278,-155,-816,113,711,611,1000,149,25,82,77,-1000,-507,980,-315}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00830() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-898,-170,-328,-748,-98,338,-415,-357,785,1000,1000,-64,300,724,31,48,-853,135,296,-61,716,1000,1000,621,-267,-486,-685,-720,-1000,-5,498,-135,-1000,1000,1000,919,1000,-1000,670,731,1000,-951,-1000,-171,120,506,-822,-1000,265,-1000,566,472,787,152,1000,1000,906,-353,992,1000,-939,120,240,-467}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00831() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{696,726,-437,-90,997,111,708,-259,-188,75,-273,511,84,-487,-308,560,-319,-667,-626,-1000,-353,521,-337,-97,-1000,-605,-53,-11,-653,1000,-1000,-449,-160,-231,-547,-1000,-119,271,-1000,992,-241,747,-155,1000,-772,-439,732,-168,40,-283,73,-86,1000,656,552,230,716,1000,1000,35,953,465,-914,270}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00832() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-306,-219,730,-355,-1000,1000,-94,-1000,-183,-801,846,-931,-1000,-973,-1000,1000,904,-608,1000,-941,864,268,1000,456,1000,8,28,694,-1000,-1000,890,70,-956,-228,-239,-1000,311,-1000,43,-614,78,-668,997,-971,216,-791,1000,47,1000,1000,1000,-689,-226,939,521,569,-531,331,815,878,710,-749,-486,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00833() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{20,-22,564,34,-1000,632,15,6,324,-1000,1000,-1000,-562,-781,-832,360,1000,-511,1000,-1000,1000,137,867,698,493,198,86,194,-1000,-828,1000,-306,-572,-522,-98,-228,-898,117,-241,278,-1000,-843,-384,184,570,-56,203,573,1000,1000,1000,7,-691,615,1000,305,-508,802,841,255,161,-390,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00834() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{202,774,-621,-297,-1000,-60,-370,-497,973,-729,905,-1000,1000,-809,-772,-1000,1000,-53,1000,-778,997,156,229,-723,586,200,270,-1000,-1000,-844,1000,-1000,340,-686,97,-260,-1000,1000,-1000,895,-1000,-84,-377,962,935,593,-341,1000,1000,1000,1000,307,-1000,611,1000,-440,1000,886,1000,-809,-658,-806,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00835() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-504,541,325,-776,-649,459,-967,-684,499,103,-84,-379,-276,-1000,-1000,471,390,637,311,-158,1000,158,-105,-532,751,-189,648,-287,-229,-434,-496,518,-630,-331,-197,-452,540,-1000,-369,-578,863,48,433,-976,1000,-54,589,226,690,581,771,-533,-485,-104,375,272,-130,30,870,-113,445,-441,321,-435}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00836() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-826,774,569,39,-38,151,-1000,1000,-327,1000,-301,1000,1000,-1000,-1000,569,-1000,-21,-1000,1000,997,-1000,-424,1000,-321,-519,-1000,-1000,1000,1000,-1000,-1000,167,-911,-1000,1000,1000,-287,-1000,35,1000,1000,413,-553,239,537,-196,-36,646,-480,-843,-756,818,-1000,1000,-1000,-1000,-721,910,-442,886,1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00837() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{243,1000,-181,723,-372,122,-483,-167,255,-788,1000,-626,977,-1000,-834,-836,1000,620,709,-2,1000,539,425,-177,175,645,1000,-966,-1000,-237,324,225,140,-155,-844,-721,-1000,-697,-1000,-434,-1000,1000,-1000,654,1000,740,233,1000,1000,1000,1000,557,-1000,1000,1000,-1000,77,1000,691,-1000,-841,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00838() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-740,502,-461,-1000,84,682,-94,-534,-575,623,564,-268,-45,-799,-1000,912,497,-631,653,717,543,-38,-847,-263,863,-255,-116,115,-1000,-819,-568,95,-1000,-228,-114,-948,1000,-683,-201,-1000,1000,111,972,-1000,140,-1000,1000,-442,291,752,163,-1000,117,1000,-1000,28,-331,-159,793,622,866,-967,1000,-464}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00839() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{400,1000,4,364,-1000,198,245,1000,1000,-952,829,-432,53,-710,-708,-697,856,-359,290,-1000,-124,502,391,-511,201,110,755,-237,-1000,-600,1000,-225,171,-890,-595,118,-1000,718,-241,1000,-1000,-390,-1000,955,581,729,-147,1000,884,1000,1000,459,-1000,474,1000,-53,282,506,590,-592,-694,0,-1000,-457}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00840() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.axis.AxisSpace", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-1000,-1000,-561,783,1000,-94,725,-1000,537,-1000,-1000,314,-844,957,593,375,-1000,-1000,697,754,-1000,-83,-574,-615,-488,-1000,-1000,1000,1000,-856,-190,-716,-1000,-854,1000,-998,424,51,765,740,746,326,1000,-612,-1000,-1000,-424,-55,-420,108,-1000,-1000,1000,442,-1000,-651,392,-1000,1000,982,1000,653,-1000,-764}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00841() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{518,614,174,693,-834,589,581,400,244,-952,-651,625,-712,-937,-532,-175,856,-784,290,-557,-124,645,149,-454,927,-123,354,796,-255,-156,116,-218,314,-584,-595,-674,-734,-429,506,796,-997,-153,-837,-297,-59,173,548,880,586,303,66,-597,-230,134,-27,86,305,-997,175,-154,-434,667,-818,-457}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00842() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{889,197,720,-11,-1000,1000,-94,-651,18,-1000,1000,-1000,946,-973,-1000,734,1000,-338,1000,-1000,864,235,994,-897,1000,7,1000,1000,-1000,-1000,1000,1000,188,-292,-654,-1000,-541,-810,43,-1000,-782,-1000,467,-1000,216,-817,1000,-159,794,645,1000,460,-1000,1000,1000,1000,635,1000,79,910,-624,136,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00843() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-202,860,429,-532,-641,1,-240,-121,-133,-87,794,-164,839,-694,-478,-673,226,605,-266,862,685,676,-843,582,48,828,102,-216,-530,-801,328,-394,-187,543,-657,153,-819,209,-929,796,180,676,-26,604,529,396,59,893,883,-123,949,-253,-590,971,210,-983,-442,136,454,-202,-301,-907,-579,662}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00844() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-594,-413,127,-105,400,-837,-385,1000,171,1000,-348,9,1000,-268,-334,-816,-592,-1000,948,-14,861,-925,-411,-224,-208,-1000,-969,45,610,-372,957,-1000,-1000,-423,1000,1000,48,378,-377,1000,33,1000,97,654,-306,-713,-570,804,1000,1000,-400,-842,153,319,-156,-1000,-661,-484,870,237,902,-207,-160,-400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00845() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-1000,-696,564,-247,640,86,-1000,618,162,1000,-234,-195,977,-1000,-1000,13,-1000,-221,20,-1000,1000,-640,187,-596,559,-642,-313,-1000,990,-484,1000,-1000,-264,-775,181,1000,1000,-89,-1000,278,-1000,1000,1000,-321,-89,-235,324,572,723,780,-677,-533,305,-975,-473,305,-242,802,801,255,715,53,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00846() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-716,-714,-826,-355,785,91,-815,680,685,372,-474,-1000,-1000,-973,-1000,190,-429,-665,1000,-941,806,-904,-25,-1000,1000,-1000,466,-496,648,-1000,855,63,-728,-867,1000,-292,942,-1000,305,-361,1000,334,1000,-971,216,-896,610,-232,322,1000,-598,-689,-458,-68,-217,79,634,-418,909,1000,658,-324,678,-260}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00847() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getFixedRangeAxisSpace():org.jfree.chart.axis.AxisSpace",
+            new int[]{-537,-1000,429,994,-102,88,-1000,1000,-645,1000,-206,1000,660,-355,-200,39,-1000,260,-1000,1000,376,-1000,-533,936,48,-489,-506,-1000,1000,1000,-772,-394,-187,-114,-250,1000,1000,-275,-1000,-653,1000,1000,-97,25,-22,48,-367,-183,-242,-123,-539,-333,795,-398,298,-963,-401,-10,323,-387,-172,654,1000,-723}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00848() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{16,-629,-149,1000,-796,-146,652,545,-1000,-76,769,-139,858,155,1000,274,-154,-538,-1000,567,98,835,-95,-251,-335,-566,225,-720,-133,-421,-986,-730,-202,-1000,459,1000,-445,-566,576,248,42,-718,-397,228,-580,251,1000,179,47,-219,-312,147,-1000,-555,995,270,836,803,369,-1000,-1000,1000,243,-80}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00849() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{830,330,574,-614,-268,1000,-1000,1000,-516,-617,-408,528,1000,-938,394,-194,370,981,-882,437,-657,-1000,18,-1000,-1000,-1000,-114,-1000,-715,-1000,-1000,-907,-65,1000,-1000,-1000,1000,1000,-116,-549,-741,-1000,1000,-181,328,482,1000,1000,1000,-1000,-51,288,1000,1000,-1000,598,1000,940,-1000,1000,-1000,1000,-1000,309}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00850() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{830,-34,-236,-138,491,1000,-1000,83,680,621,-984,309,570,22,-14,-812,844,291,-590,-110,-764,-1000,1000,-936,-1000,67,237,-750,-92,-1000,500,-582,-402,1000,-1000,-1000,432,1000,385,-288,-945,-1000,1000,-433,1000,994,1000,1000,1000,-1000,-51,1000,1000,1000,-1000,1000,518,214,-668,1000,83,1000,-1000,541}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00851() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{-824,-1000,399,309,83,1000,-1000,881,421,86,-352,366,-1000,-475,301,-1000,1000,1000,-466,68,-1000,108,-1000,828,-959,1000,317,1000,250,-509,-481,365,-121,1000,-660,-1000,-210,497,-386,965,-1000,842,821,-183,84,-312,-808,257,-401,-1000,-259,569,138,-58,-665,-683,640,415,339,851,-42,1000,-711,345}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00852() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{951,-1000,274,-755,-985,1000,891,919,-1000,-311,-212,-220,1000,-291,798,-99,-928,-613,-1000,-744,251,-275,680,-545,-1000,-1000,352,-1000,-713,410,-1000,-479,1000,329,752,956,-1000,-1000,89,286,1000,-422,1000,-684,-193,394,-533,814,1000,-23,-444,1000,-535,-570,-331,136,710,-627,-160,-1000,-1000,1000,-358,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00853() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{655,-1000,-146,225,1000,1000,-1000,208,1000,893,-724,-1,-830,-43,-462,-1000,1000,790,88,441,-1000,-454,150,-635,-959,1000,1,596,813,-1000,777,-1000,-654,1000,-1000,-1000,31,1000,861,-1000,-809,-27,649,-884,1000,-1000,-348,-395,-472,-1000,747,200,1000,590,-231,-569,85,415,339,1000,572,808,-368,802}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00854() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{856,-1000,-831,-659,623,-359,-500,221,20,525,-767,-992,914,591,-1000,-857,-45,154,-966,-226,383,-603,682,-120,-644,-1000,-50,-923,-43,1000,49,-129,-640,30,48,194,356,-811,704,-1000,-221,863,1000,-544,164,645,-972,207,377,294,1000,463,1000,1000,-926,454,422,-1000,1000,137,-1000,1000,-846,-181}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00855() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{994,-1000,539,71,-268,1000,-21,1000,-896,-546,351,709,379,-1000,947,-194,1000,1000,-1000,437,-940,789,-509,-311,-697,320,1000,-372,-725,-1000,-1000,-1000,712,1000,111,-634,215,719,-57,-549,-475,158,400,-1000,664,-737,714,1000,-576,-1000,-534,288,117,383,528,598,1000,1000,-1000,557,-690,1000,245,437}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00856() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{1000,-567,-677,-650,183,0,-450,221,642,834,-395,-753,-55,409,-967,-1000,235,-264,-712,-634,35,-913,-214,909,-1000,-642,-407,-466,247,1000,-164,637,273,42,-274,-132,356,-1000,458,-754,-18,1000,1000,-625,-78,99,-781,-175,7,-12,632,133,260,658,-834,220,285,-468,895,-400,-1000,1000,-939,68}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00857() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{1000,-1000,914,-529,-566,665,793,-950,-937,-246,578,-501,1000,1000,-737,417,514,9,-433,-1000,-520,-363,1000,-402,1000,-1000,130,-1000,1000,640,621,-354,1000,1000,-118,-482,67,615,-782,483,-563,284,-838,-412,232,1000,281,715,44,736,-442,354,822,1000,-348,985,173,-182,1000,-478,992,542,-133,-832}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00858() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{76,-1000,-256,786,-478,895,-201,1000,-818,-210,261,463,1000,-1000,774,-99,-210,-75,-1000,262,447,-176,11,-1000,-929,-1000,638,-1000,-1000,-348,-1000,-484,836,-804,799,830,-1000,-1000,633,-809,393,-980,1000,190,-616,189,754,1000,1000,-1000,-974,1000,-556,-1000,-235,693,1000,800,-174,-1000,-1000,1000,-117,875}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00859() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{154,-942,889,-868,-225,-22,392,-987,-723,-946,174,-753,973,1000,-286,519,235,309,-1000,-594,157,458,682,909,924,-1000,-407,-363,1000,515,-59,704,292,922,142,-1000,356,-247,399,156,-857,1000,-354,-625,-78,552,-124,149,-943,1000,632,-57,367,658,-58,-102,-511,-533,648,-1000,320,-110,1000,401}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00860() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{236,-775,29,-901,-1000,350,-370,1000,806,-317,-630,1000,1000,-1000,643,-1000,-339,-329,-1000,-902,-734,-1000,859,461,-1000,62,302,-788,-1000,-1000,-1000,1000,-375,-354,258,231,-238,-1000,-161,-249,-138,-1000,1000,107,-651,1000,1000,1000,-726,-1000,-846,1000,-400,1000,-1000,1000,1000,105,-381,-588,-74,1000,-988,640}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00861() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{933,-973,-1000,953,113,-1000,420,-606,-100,-161,1000,165,669,-1000,-453,-490,1000,1000,-654,-719,-833,695,456,1000,1000,-607,938,613,-1000,1000,208,-481,823,16,293,1000,-603,-1000,-677,1000,-914,600,-706,1000,324,339,354,-769,-366,875,-1000,-162,-1000,375,528,359,-1000,288,1000,-1000,-151,56,598,434}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00862() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{-381,-996,788,-843,-1000,93,420,124,-845,214,264,614,400,-31,1000,941,-400,-979,-1000,-1000,400,-240,-750,790,400,-1000,477,-886,-426,-113,-1000,1000,764,-174,925,-278,-591,-1000,-395,1000,732,-317,-244,-444,-1000,394,1000,969,-804,-619,-595,753,-1000,-273,-1000,-349,789,897,-252,-1000,-528,-1000,473,434}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00863() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getIndexOf(org.jfree.chart.renderer.category.CategoryItemRenderer):int",
+            new int[]{-1000,-987,744,164,-199,900,-568,724,389,525,-356,-373,-572,218,75,-729,33,122,-456,-787,-162,-1000,-526,-540,-633,313,-47,6,400,-1000,-785,602,-597,850,-694,-1000,1000,382,-754,328,-77,809,1000,-53,-635,-1000,-24,123,668,-912,-203,688,5,-818,-1000,-308,1000,191,-1000,-400,-854,377,-697,583}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00864() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{176,115,189,-110,130,-630,262,-276,-595,117,204,944,274,1000,-500,997,-400,1000,479,-466,278,-142,-418,-229,376,-243,46,386,484,-449,163,-10,1000,-1000,-882,-257,573,499,-240,-135,78,1000,-777,-898,65,629,-839,332,-769,246,1000,-1000,-189,-373,-860,-57,411,801,166,-581,-519,-191,-955,395}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00865() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-1000,-16,639,-414,1000,85,923,973,-90,655,-878,877,-793,-504,-239,-46,1000,-792,306,-1000,-125,-1000,1000,865,-53,720,973,-205,-783,-631,526,32,-901,1000,-18,935,-7,-284,-958,-181,623,-126,-633,-898,782,-1000,389,803,1000,-409,-810,1000,-1000,-437,-1000,186,-744,648,396,-419,302,-191,-636,735}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00866() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-681,1000,443,714,567,-1000,17,947,-912,-1000,-1000,410,803,922,-1000,1000,1000,930,1000,-854,422,-581,715,-532,-193,-955,-506,1000,-767,572,649,-495,1000,26,-895,-1000,-278,-479,151,705,-546,1000,-954,-54,-221,573,826,752,-625,643,-20,-248,-1000,-1000,-716,-768,-84,497,129,-1000,-823,155,-1000,-576}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00867() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{1000,426,-421,-373,-257,-1000,780,-302,845,-558,-372,-25,787,993,-770,1000,-1000,402,1000,12,435,-238,746,-1000,1,569,-834,1000,1000,-120,994,1000,1000,-1000,-1000,-1000,219,635,731,1000,-549,936,-806,1000,198,671,961,660,-1000,1000,-1000,-1000,-686,-333,-1000,-879,1000,-1,-814,-848,-514,691,-844,-1}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00868() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-804,-29,465,-818,1000,748,505,1000,-214,779,121,953,-818,-993,-244,-595,580,-1000,135,-485,147,-306,753,1000,-532,574,853,-680,-403,-53,551,19,-505,1000,-395,785,570,382,-1000,-1000,1000,-166,-729,-1000,548,-611,-97,188,435,30,-383,898,-475,-384,-416,521,-276,893,859,-316,872,-661,-320,884}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00869() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-1000,-1000,649,66,1000,270,1000,289,1000,273,933,493,-236,-283,271,-89,1000,86,226,-391,252,-535,-807,84,1000,867,28,-526,1000,-1000,467,-871,-1000,791,139,839,-14,-286,-1000,-1000,419,-410,-180,263,873,50,-631,-204,1000,40,875,615,547,666,1000,262,-619,366,-145,-940,1000,266,-793,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00870() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{1000,-517,366,310,465,303,1000,-776,807,623,518,591,-325,229,-480,46,-1000,811,284,-62,-425,-455,487,-697,847,1000,528,240,1000,-1000,968,1000,614,-902,-177,-291,334,-262,282,-1,-217,570,-1000,898,1000,61,-1000,912,-774,-547,323,-624,-121,1000,-8,761,-313,575,225,-147,792,-538,-855,342}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00871() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{776,73,71,-532,-428,400,686,299,1000,400,422,493,-205,-617,-520,-400,-1000,-1000,13,-73,252,-167,1000,72,-457,867,54,68,1000,-252,914,1000,751,77,-794,-703,567,546,-111,-194,419,137,-786,49,-145,-101,-235,323,259,701,-286,-126,23,22,201,238,359,680,380,-472,254,-399,-412,430}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00872() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{1000,-813,404,-742,619,-467,969,322,-1000,-273,-118,817,-561,424,-491,317,486,-257,304,18,-701,-242,-612,-414,593,-869,-349,1000,-595,-147,-41,161,-678,155,752,98,-190,-3,-1000,-678,-669,-475,18,1000,211,109,370,-659,1000,546,-195,210,-10,1000,31,-231,-751,-316,-1000,-1000,390,442,56,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00873() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{1000,1000,-22,610,-772,-1000,-332,313,-220,-1000,-501,-111,966,1000,-1000,1000,-1000,-329,270,61,-636,532,663,-1000,-95,1000,-896,811,354,1000,1000,508,1000,-1000,251,-1000,79,801,612,1000,-1000,353,-386,1000,104,907,935,-362,-1000,997,-866,-870,-1000,168,-1000,491,543,-391,-793,-150,-1000,167,69,291}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00874() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{619,1000,748,42,1000,-1000,-153,84,-339,-1000,-1000,396,1000,1000,-1000,1000,-122,68,1000,-1000,672,-1000,-499,-1000,-306,658,1000,1000,424,804,-54,1000,659,-578,-104,-1000,196,487,249,1000,-1000,671,-917,1000,396,-525,439,954,-372,-168,-1000,-1000,-1000,-583,-701,-1000,-1000,379,1000,-1000,-941,42,-1000,440}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00875() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-1000,-752,368,448,1000,669,353,44,-958,-100,1000,20,-277,-125,295,-969,1000,575,-543,862,-588,790,-877,1000,448,-1000,-87,-741,-811,-92,414,-530,448,276,-592,13,-146,-983,319,-724,127,378,-712,-1000,-485,1000,-987,-773,-409,-844,1000,77,-357,-284,-206,1000,-224,144,651,562,269,-1000,226,-941}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00876() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{940,-1000,-168,-583,-704,-371,650,1000,-1000,496,-593,349,-971,287,733,369,-577,-101,-999,561,-1000,-740,-69,-339,5,-875,632,1000,1000,-369,-618,-101,-1000,180,-119,93,552,-453,-835,-327,-89,-562,1000,1000,-623,-375,-1000,-392,1000,371,-707,253,884,1000,-215,61,-1000,-859,-820,-113,1000,385,-1000,-969}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00877() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{734,588,694,667,536,-667,1000,-716,858,-703,-673,1000,-101,768,-626,1000,171,862,1000,-1000,-675,-1000,1000,-1000,400,1000,125,1000,1000,-1000,1000,1000,1000,-451,-705,-748,-94,177,-88,490,-258,-391,-936,334,1000,-136,-63,1000,-695,-85,785,48,-358,-66,-353,143,-505,691,448,-563,1000,-255,-1000,571}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00878() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-1000,-770,979,400,1000,1000,923,232,-1000,1000,1000,848,-793,640,89,-1000,1000,1000,306,56,-1000,-820,-774,865,-53,-718,973,-463,-783,-631,226,-1000,-1,-874,-774,1000,653,99,-480,-1000,852,893,-610,-440,947,-25,-1000,53,196,-1000,1000,-1000,-1000,-437,-1000,434,-208,1000,396,257,1000,-1000,-1000,137}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00879() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{1000,-314,244,-1000,-11,-842,688,341,-847,-8,929,1000,64,1000,-491,1000,-138,-1000,97,642,-1000,-139,-913,-323,188,-935,-1000,63,-792,286,890,-138,-324,-844,-274,637,284,870,-1000,-518,-376,498,10,479,-770,823,343,-1000,1000,838,-1000,-351,14,336,-978,-335,331,-290,-1000,-733,-1000,532,359,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00880() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{447,-151,31,426,824,-1000,-860,-346,-628,248,-54,1000,-1000,-684,473,1000,608,-216,-1000,1000,1000,-609,-660,-238,414,352,275,-684,412,-943,812,1000,-1000,776,502,-956,1000,-16,1,-1000,1000,-123,-683,840,923,-485,487,91,1000,403,735,-130,-191,758,1000,34,1000,-303,-1000,-1000,-1000,1000,374,548}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00881() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{1000,438,789,-86,305,-39,-389,830,-577,409,389,1000,-611,600,996,-70,797,-540,1000,-852,114,97,-990,266,-1000,-523,25,-70,304,160,-352,-1000,265,-923,164,-168,-1000,1000,51,-364,-484,-1000,816,-290,-1000,298,603,764,-131,598,74,129,1000,893,-1000,620,285,1000,-663,-1000,711,155,537,113}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00882() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{801,-525,965,312,761,-584,-321,-921,-660,769,791,776,-286,133,960,854,244,66,8,-59,974,-928,-118,-674,-638,-421,-827,162,518,-431,459,724,318,49,275,229,202,882,357,685,203,-382,-67,44,-175,-79,343,517,728,-69,981,-644,909,510,-294,-397,994,662,-773,-627,-367,636,-316,69}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00883() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{-391,-793,486,-1000,1000,-283,-1000,-709,774,-666,-1000,941,-261,-218,-810,-106,-379,402,1000,-404,-392,1000,-1000,-216,138,-19,1000,577,-1000,139,-1000,-1000,188,-1000,-84,-967,-948,855,-666,-895,-167,170,427,357,-248,-1000,625,-684,1000,760,-1000,1000,-633,-529,238,1000,-398,-674,-472,-1000,626,937,1000,593}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00884() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{-527,-1000,-181,-214,1000,-1000,-1000,-250,318,-505,-1000,959,-755,-1000,-792,975,-215,444,-1000,1000,646,23,-668,-575,1000,705,958,-231,-501,-958,359,1000,-1000,722,329,-1000,1000,-117,-501,-1000,1000,696,-955,1000,1000,-1000,502,-923,1000,516,-17,480,1000,-237,1000,300,522,-1000,-866,-1000,-1000,1000,698,884}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00885() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{528,400,-781,248,1000,-1000,-419,-1000,-804,1000,1000,179,-1000,-342,1000,588,1000,-803,165,158,784,-848,-482,203,-1000,160,-198,-304,1000,-407,1000,1000,-1000,-344,608,852,-746,1000,232,-1000,618,-1000,-431,43,-368,382,1000,225,783,873,1000,-318,1000,1000,-220,1000,1000,1000,-226,-1000,-822,1000,934,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00886() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{-421,944,-186,791,-163,854,-321,58,480,769,-1000,546,-575,-380,-854,1000,-746,462,-133,-1000,974,1000,-118,-990,897,-209,941,162,-727,-231,-1000,-1000,-124,-250,671,-1000,241,437,452,-1000,867,54,-167,-122,166,-584,-293,307,437,-430,-496,-770,-478,-370,1000,781,396,-996,-793,799,-793,636,1000,-668}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00887() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{801,984,548,291,338,329,-321,-173,119,-195,-971,242,-1000,476,-1000,968,269,-928,640,633,-595,-928,-1000,-728,998,-223,867,-656,-782,-111,459,-1000,318,-1000,389,-483,-12,-634,-965,-453,548,-68,-67,-32,94,-1000,-236,1000,285,665,-887,-1000,-1000,-1000,936,1000,994,-934,-1000,534,-999,199,-56,-554}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00888() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{230,14,294,266,317,1000,154,1000,394,118,-1000,-437,-893,510,-1000,954,17,-550,8,-87,-365,639,-145,348,-638,882,-827,772,-1000,-111,-153,-967,144,-931,-113,203,-335,-250,-448,-722,-830,293,296,-520,51,-1000,-400,749,-840,1000,-1000,-1000,-686,-350,949,250,-835,-1000,-541,1000,946,-1000,1000,-944}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00889() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{-834,-811,-1000,1000,-560,69,-196,510,1000,-309,-418,513,119,-821,500,809,-331,729,-1000,655,324,513,1000,-731,1000,320,29,-241,-28,-487,-417,382,-166,68,-548,258,1000,-1000,-59,-587,436,164,-982,-670,1000,-1000,-137,86,493,-783,-122,-1000,305,146,1000,-983,-500,-668,117,-65,-1000,-1000,574,-180}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00890() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{-60,-930,-101,-578,868,-383,-823,-240,516,-1000,-101,0,-238,-421,-414,301,89,-142,1000,-545,-1000,1000,-669,-69,138,-475,763,611,-449,-333,-709,-637,148,-832,-110,-699,-882,418,-14,-605,-91,170,181,229,243,-967,815,-1000,1000,1000,-934,730,-373,28,309,1000,-398,-674,-512,-1000,96,855,1000,988}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00891() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{185,-886,93,1000,496,-1000,-44,1000,-784,-524,180,-203,-972,-433,699,1000,1000,-189,-1000,859,1000,510,1000,415,561,-580,-800,-304,581,-1000,753,1000,-1000,1000,-37,-629,1000,-1000,701,22,702,-37,-681,166,1000,-257,269,318,370,732,317,-809,-677,575,1000,-1000,-995,-310,-1000,-16,-1000,918,-1000,468}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00892() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{1000,-588,862,859,373,428,294,427,-658,-351,283,-218,-779,827,72,-55,32,363,1000,-747,832,-751,517,770,-1000,-475,-6,670,-878,-854,684,-609,809,764,-328,1000,-1000,-429,761,-605,-1000,-1000,352,232,-890,-485,-286,1000,-1000,738,-1000,-830,700,471,-257,-180,1000,303,-901,1000,-214,-1000,1000,-363}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00893() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{1000,-1000,-87,526,9,-657,-1000,252,-530,-178,730,-1000,94,-655,1000,-1000,565,-661,860,-1000,1000,-645,1000,1000,798,-1000,-1000,847,158,-1000,-829,1000,-313,1000,718,768,288,-1000,1000,-509,-40,-1000,675,-751,1000,-1,-554,1000,-330,338,-943,-1000,250,1000,220,-1000,-733,-2,-1000,1000,-1000,-313,-81,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00894() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{1000,554,-562,995,764,-39,-424,513,-577,735,848,1000,-1000,-323,1000,-70,797,-770,-412,850,1000,-1000,-646,931,-86,-523,-237,-874,960,-1000,1000,1000,-1000,1000,1000,175,464,1000,708,-1000,1000,-1000,-896,495,651,25,68,1000,-131,692,960,-1000,551,1000,186,0,1000,1000,-1000,-969,-1000,267,172,113}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00895() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PlotOrientation", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getOrientation():org.jfree.chart.plot.PlotOrientation",
+            new int[]{526,546,153,-188,916,-582,-357,226,-632,601,666,868,-1000,378,435,365,332,-135,785,40,203,-486,-979,670,-1000,445,68,-180,202,-199,69,-107,-846,-551,533,617,-897,1000,10,-902,154,-1000,-64,-20,-1000,64,213,1000,46,478,597,-499,628,937,-834,951,1000,1000,-702,-956,-243,-48,712,113}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00896() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{-1000,-15,1000,-1000,951,-239,-529,709,897,-1000,-278,-956,-218,1000,699,-604,1000,-1000,-897,-703,-1000,-134,-54,-847,1000,-471,-132,-1000,1000,1000,871,-876,314,666,118,-926,-321,-1000,-694,-320,233,535,-1000,1000,584,1000,-1000,1000,685,1000,37,471,-1000,-1000,-181,636,927,-1000,-1000,-783,-795,-527,-504,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00897() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{711,-1000,539,-490,616,1000,1000,824,674,-237,-902,119,515,651,661,-265,-70,-931,-847,706,-400,24,504,-480,194,-923,642,-104,287,513,1000,419,-697,166,-144,-1000,1000,-400,1000,20,119,673,-343,-1000,1000,-486,-794,470,-6,1000,272,105,-400,10,326,1000,475,667,-335,-85,-250,224,-113,691}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00898() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{4,-1000,-146,-106,890,407,1000,852,731,578,-420,-266,891,988,150,-757,-215,-1000,-1000,938,-394,-338,794,-566,954,-27,691,-493,-82,1000,1000,295,-742,1000,-498,-928,1000,-1000,1000,-460,-166,1000,-349,-895,1000,-324,-1000,940,-42,889,1000,303,-633,-615,1000,760,1000,1000,651,-923,345,-1000,322,240}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00899() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{-911,-1000,539,824,-507,-1000,-893,-481,233,-205,-902,-400,60,348,-377,-92,92,-1000,-847,-556,31,24,445,568,1000,-425,-698,-1000,287,513,1000,-803,1000,-662,-316,170,1000,-1000,-1000,762,1000,1000,-280,1000,1000,-486,-695,470,972,1000,-811,311,327,-1000,1000,237,-126,667,1000,55,-1,-1000,525,-68}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00900() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{-256,-851,172,-496,437,14,-400,-257,259,-149,331,-223,-264,440,34,-816,69,-300,228,-913,-406,402,-54,-187,-323,-658,-426,-682,1000,362,937,402,165,-14,220,-379,194,-214,-1000,59,263,-96,-508,253,611,-380,-1000,674,685,1000,-36,639,-400,-1000,-181,1000,775,-167,-176,-573,1000,-467,879,907}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00901() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{-1000,-1000,944,428,-1000,-1000,-1000,182,-1000,-933,-379,-1000,165,193,-493,220,1000,-591,-1000,-1000,453,-227,1000,1000,1000,-111,-1000,-1000,-415,-791,1000,-459,1000,-1000,-233,740,1000,-246,-1000,1000,-196,473,-127,1000,1000,-777,-245,320,1000,1000,-707,179,1000,-1000,1000,-139,-237,992,-314,815,348,-1000,-508,169}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00902() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{22,1000,-241,687,1000,1000,691,1000,1000,-1000,-239,-349,968,1000,1000,-904,1000,-869,-1000,15,-1000,-84,1000,-1000,679,-1000,669,-1000,1000,1000,225,-537,-1000,1000,433,-1000,-1000,-1000,790,-1000,583,-1000,-1000,-497,-653,1000,-1000,1000,-183,1000,1000,-308,-1000,-509,-1000,1000,1000,-1000,-1000,-1000,-1000,748,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00903() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{-713,-327,-180,18,-140,-249,-120,111,-232,-85,-532,-501,602,449,1000,-1000,819,-908,-1000,-1000,106,-571,472,-92,1000,40,841,-743,-413,277,793,-944,510,-148,-8,-52,204,-900,664,-400,-126,157,-974,708,138,149,-962,722,446,-40,202,-88,250,-443,444,869,23,-343,2,-784,23,-726,-400,896}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00904() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{268,-1000,73,-44,-570,-762,-543,-775,161,971,-532,994,-1000,-1000,842,-1000,537,-654,823,-1000,775,946,-1000,735,189,18,415,201,394,-205,1000,165,1000,-750,-1000,1000,243,1000,235,76,782,-1000,1000,-432,1000,-436,372,1000,447,-226,-817,1000,-1000,-812,624,-17,-120,-1000,1000,1000,32,129,335,-916}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00905() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{103,-851,754,-493,612,85,1000,182,1000,-22,-1000,119,413,805,-203,-302,-136,-1000,-1000,-550,-400,125,353,-318,72,-724,-58,-832,758,1000,1000,693,-472,113,-75,-763,1000,-1000,-1000,20,334,839,-673,-435,1000,-1000,-1000,1000,433,1000,479,412,-400,-996,725,1000,803,1000,-130,-649,1000,-808,1000,691}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00906() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{-470,-1000,799,-193,-507,-455,-816,-481,-266,-1000,-401,-428,287,472,6,-335,1000,-894,-904,-797,22,204,1000,294,605,-519,-938,-1000,450,-203,1000,-147,1000,-256,-374,170,727,-323,-1000,762,166,421,-573,961,1000,-130,-528,560,1000,1000,-647,-100,327,-1000,1000,148,-106,-4,-501,244,-126,-300,107,638}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00907() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{199,-1000,-292,-495,366,898,-1000,196,-385,-419,1000,-369,-453,130,1000,-1000,223,70,907,186,-409,420,-955,-293,-370,-828,117,111,1000,-399,909,3,212,-14,276,-451,-152,722,-410,76,17,-663,-106,-17,444,400,303,4,202,451,-464,430,-400,-547,-557,1000,435,-1000,-400,23,-17,711,-286,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00908() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{-109,-896,429,419,128,-240,1000,-172,1000,765,272,397,-122,319,-726,-268,-488,792,-1000,-1000,20,208,-646,212,533,-1000,-350,-257,-255,1000,1000,931,-30,-69,-253,661,1000,-1000,-742,314,543,-60,-239,59,1000,-1000,-1000,759,689,186,261,574,20,-1000,807,1000,731,775,453,-549,854,-1000,1000,179}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00909() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{70,-1000,149,-69,-815,-1000,-1000,-1000,235,774,-1000,958,-674,-177,-1000,-479,246,-718,-98,-1000,1000,871,-614,741,963,-308,-865,-1000,-413,-327,1000,-736,1000,-555,-397,1000,1000,-914,-1000,762,894,869,-507,487,654,-484,-202,-209,1000,186,-811,320,817,-546,1000,456,-1000,708,1000,-362,-704,-233,1000,-690}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00910() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{-22,-912,453,231,-626,-1000,60,-494,1000,612,-1000,1000,-1000,259,-76,277,1000,-146,202,-1000,402,1000,-625,288,285,-452,1000,-90,615,772,163,-828,-225,1000,789,487,645,-804,-325,1000,1000,567,-345,-122,1000,-518,-570,161,366,534,-498,406,350,-322,813,1000,-287,105,434,-112,-575,-582,1000,710}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00911() {
+        org.junit.Assert.assertEquals("java.lang.String:Q2F0ZWdvcnkgUGxvdA==", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getPlotType():java.lang.String",
+            new int[]{1000,283,-349,-639,590,-633,483,641,103,974,778,929,524,391,1000,-1000,253,-120,410,1000,-586,411,213,-612,-833,-1000,1000,396,564,21,343,588,-1000,524,-198,-668,-882,420,1000,-123,384,421,-374,-1000,-460,318,-55,-74,-477,68,42,653,-580,149,-470,1000,93,-1000,-280,19,-455,1000,-103,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00912() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{297,-624,724,1000,204,-526,-538,-477,-155,-542,-270,1000,-792,-13,613,197,1000,854,682,182,227,-583,-130,-765,-362,1000,-134,-848,993,874,451,-851,-1000,599,586,182,790,41,-909,-527,-631,1000,702,-311,1000,-280,-873,-1000,228,23,-193,-120,149,-555,-190,629,608,13,-399,328,121,146,-711,-331}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00913() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{606,-815,806,-387,-222,629,-223,-837,625,432,77,-802,455,-187,759,424,222,249,905,-317,360,318,-519,-118,-739,691,627,633,-66,-840,-764,-517,-1000,-256,318,-621,-176,671,-358,-125,-174,113,319,243,337,186,532,-1000,-5,8,-79,-929,-38,-712,-395,105,-70,742,-285,-503,-133,-2,518,-339}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00914() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{228,-540,888,-16,177,-567,-725,-988,-615,-221,-471,-976,-646,-760,579,746,923,795,602,898,-766,-794,197,-289,243,796,-1,-16,498,820,-789,-804,-672,619,996,359,541,729,-362,-516,-719,-948,981,-200,772,-732,-242,-803,-658,-221,-884,-229,354,-347,914,782,428,-758,142,869,705,-502,-758,-67}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00915() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{-65,-1000,159,578,-827,-1000,-1000,-1000,145,-687,-368,-232,-999,-1000,613,1000,575,978,1000,68,-1000,119,336,-552,-1000,764,-701,-660,870,1000,617,-337,-875,28,85,-863,1000,1000,-237,261,517,-1000,1000,-644,-892,-602,-803,-1000,-1000,-1000,-912,336,761,-415,1000,-122,608,-108,1000,519,850,-267,120,-273}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00916() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{654,-449,-61,23,-633,398,-637,-864,1000,527,-104,380,-732,-129,536,8,-400,740,589,395,341,-723,-636,69,-584,139,100,156,-371,581,-904,-322,-34,318,408,-505,1000,515,191,77,-364,-66,-32,-296,775,-318,283,-542,285,-184,135,-669,195,-596,651,-7,345,-76,-711,691,-47,-26,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00917() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{973,1000,699,238,-141,-916,148,-942,1000,103,957,1000,684,510,864,-352,705,-153,691,1000,594,-20,1000,-107,-1000,-355,-249,115,523,-329,509,-463,-834,1000,-86,778,1000,1000,-324,-814,-1000,1000,791,317,1000,508,197,874,519,295,189,-1000,220,-1000,-376,1000,1000,-1000,-1000,340,112,-559,-294,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00918() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{-684,116,918,-249,551,687,-746,1000,964,1000,1000,125,1000,1000,-275,-837,-1000,-1000,-251,-185,947,925,415,1000,-278,-162,-34,975,-1000,-1000,-304,1000,1000,611,64,-750,262,-874,1000,-327,-97,926,-1000,420,541,1000,704,1000,1000,1000,213,201,-37,-670,-1000,460,902,-540,-198,-268,-1000,1000,-1000,188}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00919() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{924,-747,-818,-464,-600,143,767,-944,923,-106,602,724,-773,-954,354,93,-145,411,262,-904,-802,249,385,-407,135,57,482,967,274,565,-744,-460,166,426,-852,-269,853,-27,-145,-913,641,-575,313,-430,81,974,-980,-163,-191,-719,248,-379,100,-897,975,-218,-212,-16,129,129,-445,266,188,-336}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00920() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{-389,-1000,-471,524,673,619,148,717,16,573,22,249,684,510,-764,-710,-1000,46,177,-1000,365,31,-466,423,-1000,-355,375,46,-750,-355,-414,621,1000,369,-86,-126,-729,-855,-324,-748,429,1000,-1000,317,356,960,-587,-493,1000,1000,1000,825,220,-276,-975,-1000,518,246,-1000,-703,-831,995,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00921() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{-1000,-506,-751,202,-1000,235,-270,-502,-41,208,371,1000,-310,63,1000,-737,-733,-100,811,-1000,479,1000,-74,653,-1000,-220,-868,-567,-537,882,-791,511,861,70,-1000,-1000,1000,346,306,680,479,-455,-713,-152,-864,1000,-844,166,123,-394,659,566,457,-241,184,-1000,1000,1000,462,-627,-440,1000,218,-481}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00922() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{-1000,-1000,159,-244,183,-1000,1000,375,671,-491,1000,-232,757,-165,536,-720,572,-1000,-694,-1000,33,1000,1000,-320,186,385,-1000,292,-922,-650,617,389,231,1000,81,1000,313,1000,812,-1000,-515,806,170,1000,-57,1000,-350,891,238,715,338,-468,-517,-1000,239,451,1000,132,472,-719,850,1000,120,-273}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00923() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{-268,400,464,578,-1000,-1000,-852,-687,-572,-1000,-167,279,-375,24,343,1000,575,800,1000,68,-1000,1000,-376,-391,392,312,-1000,-111,839,491,1000,-204,338,79,110,-728,957,1000,-10,485,1000,-1000,1000,-158,-1000,-399,-170,61,-1000,-1000,-1000,642,1000,-263,-408,-159,309,-1000,1000,-106,850,-267,120,267}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00924() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{493,-1000,528,1000,880,-92,-535,-186,897,-542,-430,1000,-1000,200,-621,-508,78,600,425,-210,752,-1000,545,-456,-1000,338,592,-714,526,1000,138,-457,1000,855,162,354,158,-1000,-1000,-174,115,1000,263,1000,1000,-362,-1000,-1000,560,314,41,974,-285,-726,-310,-735,700,673,-692,166,90,471,-805,466}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00925() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{-24,-1000,-502,766,1000,1000,788,553,518,1000,712,270,108,-464,-764,-1000,-1000,-747,-262,-1000,1000,-529,-1000,770,-1000,-355,913,215,-955,-273,-1000,809,-733,926,20,484,-939,-1000,-489,-1000,67,1000,-1000,306,1000,592,-273,-516,1000,1000,1000,563,-719,-1000,-1000,-948,556,538,-1000,-1000,-1000,1000,-1000,140}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00926() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{179,-1000,149,525,-1000,-1000,-1000,-1000,-257,-1000,-957,-1000,-1000,-1000,1000,1000,1000,1000,826,1000,-1000,-1000,-108,-1000,-405,1000,-787,-967,1000,1000,269,-1000,166,-53,476,-920,1000,1000,-754,-60,-261,-1000,1000,-1000,-736,-1000,-835,-1000,-1000,-1000,-1000,-174,533,-489,1000,559,317,-39,1000,1000,1000,-938,289,-377}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00927() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.CategoryPlot", "org.jfree.chart.plot.CategoryPlot", "getRangeAxis():org.jfree.chart.axis.ValueAxis",
+            new int[]{-1000,1000,-667,957,-1000,90,-386,1000,-474,901,-459,1000,609,-202,884,-1000,-1000,-800,547,-995,20,1000,1000,241,-611,-717,-1000,54,-1000,7,894,715,237,1000,-177,1000,-1000,1000,1000,177,1000,1000,-1000,122,902,136,579,461,1000,-444,-213,850,1000,-1000,-1000,-1000,192,-1000,246,-1000,-1000,-464,816,270}));
+    }
+}

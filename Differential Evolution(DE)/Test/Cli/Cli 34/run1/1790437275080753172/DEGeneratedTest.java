@@ -1,0 +1,1688 @@
+import java.lang.reflect.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+/** Deterministic test-program decoder. Used unchanged during search and JUnit replay. */
+final class DEReplay {
+    public static final int DIMENSIONS = 64;
+    /** Local generic bean used to create stable reflection Type and Field values. */
+    public static final class GenericInput {
+        public String text;
+        public java.util.List<String> names;
+        public java.util.Map<String, Integer> counts;
+        public java.util.List<java.util.Map<String, Long>> nested;
+        public int[] numbers;
+        public String[] words;
+    }
+    static final class Genes {
+        final int[] values; int at; Field lastField;
+        Object jacksonBean, jacksonProvider, jacksonGenerator;
+        StringWriter jacksonOutput;
+        Genes(int[] values) { this.values = values; }
+        int next() { return values[(at++) % values.length]; }
+        int pick(int n) { return Math.floorMod(next(), n); }
+    }
+    public static final class Observation {
+        public String token, error, generatedSource;
+        public boolean reachedTarget;
+        public int setupCalls, setupFailures, nullFallbacks;
+    }
+    public static String signature(Method m) {
+        StringJoiner params = new StringJoiner(",");
+        for (Class<?> t : m.getParameterTypes()) params.add(t.getTypeName());
+        return m.getName() + "(" + params + "):" + m.getReturnType().getTypeName();
+    }
+    static Class<?> load(String name) throws ClassNotFoundException {
+        return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+    }
+    static Method method(String target, String signature) throws Exception {
+        for (Method m : load(target).getDeclaredMethods())
+            if (signature(m).equals(signature)) {
+                // Public methods on package-private Defects4J classes (for
+                // example Gson's TypeInfoFactory) are not reflectively
+                // accessible until opened on the unnamed application module.
+                if (!m.isAccessible()) m.setAccessible(true);
+                return m;
+            }
+        throw new NoSuchMethodException(signature);
+    }
+    static List<Constructor<?>> constructors(Class<?> type) {
+        List<Constructor<?>> out = new ArrayList();
+        if (!Modifier.isAbstract(type.getModifiers()) && Modifier.isPublic(type.getModifiers()))
+            for (Constructor<?> c : type.getConstructors())
+                if (c.getParameterTypes().length <= 6) out.add(c);
+        Collections.sort(out, new Comparator<Constructor<?>>() {
+            public int compare(Constructor<?> a, Constructor<?> b) {
+                int byArity = a.getParameterTypes().length - b.getParameterTypes().length;
+                return byArity != 0 ? byArity : a.toString().compareTo(b.toString());
+            }
+        });
+        return out;
+    }
+    private static Object[] arguments(Class<?>[] types, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Object[] args = new Object[types.length];
+        for (int i = 0; i < types.length; i++) args[i] = value(types[i], g, depth, report);
+        return args;
+    }
+    private static Object[] arguments(Method method, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Class<?>[] types = method.getParameterTypes();
+        Object[] args = new Object[types.length];
+        boolean closureCompile = method.getDeclaringClass().getName().equals("com.google.javascript.jscomp.Compiler")
+            && method.getName().equals("compile");
+        Type[] generic = method.getGenericParameterTypes();
+        boolean jacksonSerialization = method.getDeclaringClass().getName().equals(
+            "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+            && method.getName().startsWith("serializeAs")
+            && types.length == 3 && types[0] == Object.class;
+        for (int i = 0; i < types.length; i++) {
+            if (jacksonSerialization && g.jacksonBean != null) {
+                if (i == 0) args[i] = g.jacksonBean;
+                else if (i == 1) args[i] = g.jacksonGenerator;
+                else args[i] = g.jacksonProvider;
+                continue;
+            }
+            if (closureCompile && (List.class.isAssignableFrom(types[i])
+                    || (types[i].isArray() && load("com.google.javascript.jscomp.SourceFile")
+                        .isAssignableFrom(types[i].getComponentType())))) {
+                // Compiler.compile takes externs and inputs in either Lists or
+                // arrays depending on Closure version. Keep externs empty and
+                // supply a nonempty, gene-selected input program.
+                if (i == 0) args[i] = types[i].isArray()
+                    ? Array.newInstance(types[i].getComponentType(), 0) : new ArrayList();
+                else {
+                    Object sourceFile = value(load("com.google.javascript.jscomp.SourceFile"),
+                        g, depth + 1, report);
+                    if (types[i].isArray()) {
+                        Object files = Array.newInstance(types[i].getComponentType(), 1);
+                        Array.set(files, 0, sourceFile); args[i] = files;
+                    } else args[i] = new ArrayList(Collections.singletonList(sourceFile));
+                }
+            } else args[i] = value(types[i], g, depth, report);
+        }
+        return args;
+    }
+    private static Number number(Genes g) {
+        int n = g.next();
+        switch (g.pick(12)) {
+            case 0: return 0; case 1: return 1; case 2: return -1;
+            case 3: return Integer.MAX_VALUE; case 4: return Integer.MIN_VALUE;
+            case 5: return Long.MAX_VALUE; case 6: return Long.MIN_VALUE;
+            case 7: return Double.NaN; case 8: return Double.POSITIVE_INFINITY;
+            case 9: return Double.NEGATIVE_INFINITY; case 10: return n / 10.0;
+            default: return n;
+        }
+    }
+    private static String string(Genes g) {
+        int mode = g.pick(16), n = g.next();
+        String digits = Long.toString(Math.abs((long)n));
+        String sign = new String[]{"", "-", "+", "--"}[g.pick(4)];
+        switch (mode) {
+            case 0: return null; case 1: return ""; case 2: return " ";
+            case 3: return Integer.toString(n);
+            case 4: return sign + digits;
+            case 5: return sign + digits + "." + g.pick(1000);
+            case 6: return sign + digits + "e" + g.next();
+            case 7: return sign + "0x" + Long.toHexString(Math.abs((long)n));
+            case 8: return sign + "0x8" + "0".repeat(g.pick(20));
+            case 9: return sign + digits + "fFdDlL".charAt(g.pick(6));
+            case 10: return " " + sign + digits + " ";
+            case 11: return new String[]{"true", "false", "null", "NaN", "Infinity"}[g.pick(5)];
+            case 12: return "a".repeat(g.pick(25));
+            default:
+                String alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-._ /\\\t\n";
+                StringBuilder s = new StringBuilder();
+                int length = g.pick(25);
+                for (int i = 0; i < length; i++) s.append(alphabet.charAt(g.pick(alphabet.length())));
+                return s.toString();
+        }
+    }
+    private static Object value(Class<?> t, Genes g, int depth, Observation report) throws Exception {
+        if (t == String.class || t == CharSequence.class) return string(g);
+        if (t == Comparable.class) return "key" + g.pick(5);
+        if (t == boolean.class || t == Boolean.class) return g.pick(2) == 0;
+        if (t == char.class || t == Character.class) return (char)g.pick(128);
+        if (t == byte.class || t == Byte.class) return number(g).byteValue();
+        if (t == short.class || t == Short.class) return number(g).shortValue();
+        if (t == int.class || t == Integer.class) return number(g).intValue();
+        if (t == long.class || t == Long.class) return number(g).longValue();
+        if (t == float.class || t == Float.class) return number(g).floatValue();
+        if (t == double.class || t == Double.class || t == Number.class) return number(g).doubleValue();
+        if (t.isEnum()) {
+            Object[] constants = t.getEnumConstants();
+            return constants.length == 0 ? null : constants[g.pick(constants.length)];
+        }
+        if (t == Object.class) return g.pick(3) == 0 ? null : "object" + g.pick(5);
+        if (depth >= 3) { report.nullFallbacks++; return null; }
+        if (t.isArray()) {
+            int length = g.pick(6);
+            Object array = Array.newInstance(t.getComponentType(), length);
+            for (int i = 0; i < length; i++) Array.set(array, i, value(t.getComponentType(), g, depth + 1, report));
+            return array;
+        }
+        if (t == List.class || t == Collection.class || t == Iterable.class || t == Set.class) {
+            Collection<Object> items = t == Set.class ? new LinkedHashSet() : new ArrayList();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.add("item" + g.pick(5));
+            return items;
+        }
+        if (t == Map.class) {
+            Map<Object, Object> items = new LinkedHashMap();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.put("key" + g.pick(5), number(g));
+            return items;
+        }
+        if (t == java.util.Date.class) return new java.util.Date(g.next() * 86400000L);
+        if (t == Class.class) return String.class;
+        if (t == java.lang.reflect.Field.class) {
+            Field[] fields = GenericInput.class.getFields();
+            g.lastField = fields[g.pick(fields.length)];
+            return g.lastField;
+        }
+        if (t == java.lang.reflect.Type.class) {
+            if (g.lastField != null && g.pick(3) == 0)
+                return g.lastField.getDeclaringClass();
+            Field[] fields = GenericInput.class.getFields();
+            return fields[g.pick(fields.length)].getGenericType();
+        }
+        if (t == java.io.Reader.class || t == java.io.BufferedReader.class
+                || t == java.io.StringReader.class) {
+            String content = "header,value\n" + string(g) + "," + number(g) + "\n"
+                + "alpha,beta\n";
+            StringReader reader = new StringReader(content);
+            return t == java.io.BufferedReader.class ? new BufferedReader(reader) : reader;
+        }
+        if (t.getName().equals("org.apache.commons.csv.CSVFormat")) {
+            Class<?> format = load("org.apache.commons.csv.CSVFormat");
+            for (String fieldName : new String[]{"DEFAULT", "RFC4180", "EXCEL"}) try {
+                Object result = format.getField(fieldName).get(null);
+                if (t.isInstance(result)) return result;
+            } catch (ReflectiveOperationException ignored) { }
+            for (Method factory : format.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getParameterTypes().length == 0
+                        && t.isAssignableFrom(factory.getReturnType())) try {
+                    return factory.invoke(null);
+                } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.SourceFile")) {
+            Class<?> source = load("com.google.javascript.jscomp.SourceFile");
+            for (Method factory : source.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals("fromCode")
+                        && factory.getParameterTypes().length == 2 && factory.getParameterTypes()[0] == String.class
+                        && factory.getParameterTypes()[1] == String.class) {
+                    String replaySource = System.getProperty("de.generated.source");
+                    if (replaySource != null) {
+                        try {
+                            report.generatedSource = replaySource;
+                            return factory.invoke(null, "de-input.js", replaySource);
+                        } catch (ReflectiveOperationException ignored) { }
+                    }
+                    String[] unusedParameterScripts = {
+                        "window.f = function(a) {};",
+                        "window.f = function(a, b) { return b; };",
+                        "window.f = function(a, b) { var used = b; return used; };",
+                        "window['f'] = function(unused) {};",
+                        "window.f = function(unused, value) { return value; };",
+                        "window['f'] = function(unused, value) { return value; };",
+                        "window.f = function(first, unused, last) { return last; };",
+                        "window.f = function(unused) { var local = 1; return local; };",
+                        "window.f = function(unused, value) { var alias = value; return alias; };",
+                        "window.f = function(unused, value) { if (value) { return 1; } return 2; };",
+                        "window.f = function(unused, value) { value = value + 1; return value; };",
+                        "window.f = function(unused, value) { return function() { return value; }; };",
+                        "window.f = function(unused) { function inner() { return 1; } return inner(); };",
+                        "window.f = function(a, b, unused) { return a + b; };",
+                        "window.f = function(a, unused, b, c) { return a + c; };"
+                    };
+                    String[] catchDependencyScripts = {
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.stack; };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (caught) { saved = caught; } return saved.message; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.name; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return String(saved); };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (problem) { saved = problem; } return saved.stack; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (problem) { saved = problem; } return saved.message; };"
+                    };
+                    String[] genericScripts = {
+                        "function f(unused, used) { var local = 1; return used; } f(1, 2);",
+                        "function f() { var unused = 1; var used = 2; return used; } f();",
+                        "function f(x) { var first = x; first = 3; return x; } f(2);",
+                        "function f() { var unused = 1; } f();",
+                        "function keep() { var dead = 1; return 7; } keep();"
+                    };
+                    String modified = System.getProperty("de.modified.classes", "");
+                    String[] scripts;
+                    if (modified.contains("RemoveUnusedVars") && modified.contains("FlowSensitiveInlineVariables")) {
+                        scripts = new String[unusedParameterScripts.length + catchDependencyScripts.length];
+                        System.arraycopy(unusedParameterScripts, 0, scripts, 0, unusedParameterScripts.length);
+                        System.arraycopy(catchDependencyScripts, 0, scripts, unusedParameterScripts.length,
+                            catchDependencyScripts.length);
+                    }
+                    else if (modified.contains("FlowSensitiveInlineVariables")) scripts = catchDependencyScripts;
+                    else if (modified.contains("RemoveUnusedVars")) scripts = unusedParameterScripts;
+                    else scripts = genericScripts;
+                    try {
+                        String code = scripts[g.pick(scripts.length)];
+                        report.generatedSource = code;
+                        return factory.invoke(null, "de-input.js", code);
+                    }
+                    catch (ReflectiveOperationException ignored) { }
+                }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.CompilerOptions")) {
+            try {
+                Object options = t.getConstructor().newInstance();
+                // In Closure Compiler, unused-variable passes are enabled by
+                // CompilationLevel, rather than by a CompilerOptions enum
+                // setter. Apply the real public configuration when available.
+                try {
+                    Class<?> levelType = load("com.google.javascript.jscomp.CompilationLevel");
+                    Object advanced = levelType.getField("ADVANCED_OPTIMIZATIONS").get(null);
+                    for (Method configure : levelType.getMethods())
+                        if (configure.getName().equals("setOptionsForCompilationLevel")
+                                && configure.getParameterTypes().length == 1
+                                && configure.getParameterTypes()[0].isInstance(options)) {
+                            configure.invoke(advanced, options); break;
+                        }
+                } catch (ReflectiveOperationException ignored) { }
+                // Also set the relevant options directly for Closure releases
+                // whose compilation-level helper no longer enables this pass.
+                for (Class<?> current = t; current != null; current = current.getSuperclass())
+                    for (Field field : current.getDeclaredFields()) {
+                        String name = field.getName().toLowerCase(Locale.ROOT);
+                        if (field.getType() == boolean.class && name.equals("removeglobals")) try {
+                            // Closure-1 specifically guards argument removal
+                            // when globals are preserved. Keep the optimization
+                            // pass enabled while exercising that configuration.
+                            field.setAccessible(true); field.setBoolean(options, false);
+                        } catch (Exception ignored) { }
+                        if (field.getType() == boolean.class
+                                && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) try {
+                            field.setAccessible(true); field.setBoolean(options, true);
+                        } catch (Exception ignored) { }
+                    }
+                for (Method setter : t.getMethods()) {
+                    if (!Modifier.isPublic(setter.getModifiers()) || !setter.getName().startsWith("set")
+                            || setter.getParameterTypes().length != 1) continue;
+                    String name = setter.getName().toLowerCase(Locale.ROOT);
+                    if (setter.getParameterTypes()[0] == boolean.class && name.contains("removeglobals")) {
+                        try { setter.invoke(options, false); } catch (ReflectiveOperationException ignored) { }
+                    } else if (setter.getParameterTypes()[0] == boolean.class
+                            && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) {
+                        try { setter.invoke(options, true); } catch (ReflectiveOperationException ignored) { }
+                    } else if (name.contains("optimizationlevel")
+                            && setter.getParameterTypes()[0].isEnum()) {
+                        Object[] values = setter.getParameterTypes()[0].getEnumConstants();
+                        for (Object value : values) if (String.valueOf(value).contains("ADVANCED"))
+                            try { setter.invoke(options, value); } catch (ReflectiveOperationException ignored) { }
+                    }
+                }
+                return options;
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.rhino.Node")) {
+            try {
+                Class<?> ir = load("com.google.javascript.rhino.IR");
+                for (String factoryName : new String[]{"script", "root", "name", "string"})
+                    for (Method factory : ir.getMethods())
+                        if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals(factoryName)
+                                && factory.getParameterTypes().length == 0 && t.isAssignableFrom(factory.getReturnType()))
+                            return factory.invoke(null);
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser")) {
+            Object parser = xmlParser(g, report);
+            if (parser != null && t.isInstance(parser)) return parser;
+        }
+        if (t.getName().equals("com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                || t.getName().equals("com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter")) {
+            Object writer = jacksonWriter(t, g, report);
+            if (writer != null && t.isInstance(writer)) return writer;
+        }
+        if (t == java.awt.Graphics2D.class || t == java.awt.Graphics.class)
+            return new java.awt.image.BufferedImage(80, 80, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        if (java.awt.Paint.class.isAssignableFrom(t)) {
+            java.awt.Color c = new java.awt.Color(g.pick(256), g.pick(256), g.pick(256));
+            if (t.isInstance(c)) return c;
+        }
+        if (java.awt.Stroke.class.isAssignableFrom(t)) {
+            java.awt.BasicStroke s = new java.awt.BasicStroke(g.pick(10) / 2.0f);
+            if (t.isInstance(s)) return s;
+        }
+        if (java.awt.Shape.class.isAssignableFrom(t)) {
+            java.awt.Shape s = new java.awt.geom.Rectangle2D.Double(g.next(), g.next(), g.pick(80), g.pick(80));
+            if (t.isInstance(s)) return s;
+        }
+        if (t == java.awt.geom.Point2D.class) return new java.awt.geom.Point2D.Double(g.next(), g.next());
+        if (t.getName().equals("org.apache.commons.cli.CommandLine"))
+            return commandLine(g, report);
+        Object domain = chart(t, g, report);
+        if (domain != null) return domain;
+        Object language = language(t, g, report);
+        if (language != null) return language;
+        List<Constructor<?>> ctors = constructors(t);
+        // Older Java libraries often use public singleton constants in place of enums.
+        if (ctors.isEmpty()) {
+            List<Field> constants = new ArrayList();
+            for (Field field : t.getFields())
+                if (Modifier.isStatic(field.getModifiers()) && Modifier.isFinal(field.getModifiers())
+                        && t.isAssignableFrom(field.getType())) constants.add(field);
+            Collections.sort(constants, new Comparator<Field>() {
+                public int compare(Field a, Field b) { return a.getName().compareTo(b.getName()); }
+            });
+            if (!constants.isEmpty()) {
+                Object constant = constants.get(g.pick(constants.size())).get(null);
+                if (constant != null) return constant;
+            }
+        }
+        if (!ctors.isEmpty()) {
+            Constructor<?> ctor = ctors.get(g.pick(ctors.size()));
+            try { return ctor.newInstance(arguments(ctor.getParameterTypes(), g, depth + 1, report)); }
+            catch (Exception ignored) { }
+        }
+        report.nullFallbacks++;
+        return null;
+    }
+    private static Object language(Class<?> t, Genes g, Observation report) {
+        if (!t.getName().equals("org.apache.commons.lang3.time.FastDateFormat")) return null;
+        try {
+            Method factory = t.getMethod("getInstance", String.class, java.util.TimeZone.class,
+                java.util.Locale.class);
+            String[] patterns = {"yyyy-MM-dd", "MM/dd/yy HH:mm:ss", "EEE, d MMM yyyy HH:mm:ss Z"};
+            return factory.invoke(null, patterns[g.pick(patterns.length)],
+                java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US);
+        } catch (ReflectiveOperationException ignored) { }
+        try { return t.getMethod("getInstance", String.class).invoke(null, "yyyy-MM-dd"); }
+        catch (ReflectiveOperationException ignored) { return null; }
+    }
+    private static Object xmlParser(Genes g, Observation report) {
+        try {
+            Class<?> factoryType = load("com.fasterxml.jackson.dataformat.xml.XmlFactory");
+            Object factory = factoryType.getConstructor().newInstance();
+            String[] docs = {"<root><value>1</value><name>x</name></root>",
+                "<root value=\"42\"><item>a</item><item>b</item></root>",
+                "<root/>"};
+            String xml = docs[g.pick(docs.length)];
+            for (Method method : factoryType.getMethods()) {
+                if (!method.getName().equals("createParser") || method.getParameterTypes().length != 1) continue;
+                Class<?> p = method.getParameterTypes()[0];
+                Object input = p == String.class ? xml : p == Reader.class ? new StringReader(xml)
+                    : p == InputStream.class ? new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)) : null;
+                if (input == null) continue;
+                try {
+                    Object parser = method.invoke(factory, input);
+                    if (parser != null) {
+                        int advance = g.pick(4);
+                        Method next = parser.getClass().getMethod("nextToken");
+                        for (int i = 0; i < advance; i++) if (next.invoke(parser) == null) break;
+                        return parser;
+                    }
+                } catch (ReflectiveOperationException ignored) { }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
+    private static Object jacksonWriter(Class<?> requested, Genes g, Observation report) {
+        try {
+            Class<?> mapperType = load("com.fasterxml.jackson.databind.ObjectMapper");
+            Object mapper = mapperType.getConstructor().newInstance();
+            Object bean = new GenericInput();
+            Class<?> javaTypeType = load("com.fasterxml.jackson.databind.JavaType");
+            Object javaType = mapperType.getMethod("constructType", Type.class).invoke(mapper, bean.getClass());
+            // Jackson 2.6 (used by this Defects4J project) exposes a provider
+            // blueprint from ObjectMapper. Create a configured provider via
+            // DefaultSerializerProvider, the supported API used by ObjectMapper.
+            Object providerBlueprint = mapperType.getMethod("getSerializerProvider").invoke(mapper);
+            Class<?> serializationConfigType = load("com.fasterxml.jackson.databind.SerializationConfig");
+            Class<?> serializerFactoryType = load("com.fasterxml.jackson.databind.ser.SerializerFactory");
+            Object config = mapperType.getMethod("getSerializationConfig").invoke(mapper);
+            Object factory = mapperType.getMethod("getSerializerFactory").invoke(mapper);
+            Class<?> defaultProviderType = load("com.fasterxml.jackson.databind.ser.DefaultSerializerProvider");
+            Method createProvider = defaultProviderType.getMethod("createInstance",
+                serializationConfigType, serializerFactoryType);
+            Object provider = createProvider.invoke(providerBlueprint, config, factory);
+            g.jacksonBean = bean;
+            g.jacksonProvider = provider;
+            g.jacksonOutput = new StringWriter();
+            Object jsonFactory = mapperType.getMethod("getFactory").invoke(mapper);
+            for (String factoryMethod : new String[]{"createGenerator", "createJsonGenerator"}) {
+                try {
+                    Method createGenerator = jsonFactory.getClass().getMethod(factoryMethod, Writer.class);
+                    g.jacksonGenerator = createGenerator.invoke(jsonFactory, g.jacksonOutput);
+                    break;
+                } catch (NoSuchMethodException ignored) { }
+            }
+            if (g.jacksonGenerator == null)
+                throw new NoSuchMethodException("JsonFactory.createGenerator(Writer) or createJsonGenerator(Writer)");
+            Class<?> providerType = load("com.fasterxml.jackson.databind.SerializerProvider");
+            Class<?> beanPropertyType = load("com.fasterxml.jackson.databind.BeanProperty");
+            Method find = providerType.getMethod("findValueSerializer", javaTypeType, beanPropertyType);
+            Object serializer = find.invoke(provider, new Object[]{javaType, null});
+            List<Object> writers = new ArrayList();
+            try {
+                // Available on Jackson 2.6 and newer.
+                Class<?> serializerType = load("com.fasterxml.jackson.databind.JsonSerializer");
+                Method properties = serializerType.getMethod("properties");
+                Iterator<?> it = (Iterator<?>)properties.invoke(serializer);
+                while (it.hasNext()) {
+                    Object item = it.next();
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            } catch (NoSuchMethodException oldJackson) {
+                // JacksonDatabind-1 predates JsonSerializer.properties(). Its
+                // BeanSerializerBase stores writers in the protected _props
+                // array; read that array only for these old releases.
+                Class<?> base = load("com.fasterxml.jackson.databind.ser.std.BeanSerializerBase");
+                if (!base.isInstance(serializer))
+                    throw new IllegalStateException("Expected BeanSerializerBase, got "
+                        + serializer.getClass().getName(), oldJackson);
+                Field props = base.getDeclaredField("_props");
+                props.setAccessible(true);
+                Object array = props.get(serializer);
+                for (int i = 0; i < Array.getLength(array); i++) {
+                    Object item = Array.get(array, i);
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            }
+            if (writers.isEmpty())
+                throw new IllegalStateException("ObjectMapper produced no bean property writers for DEReplay.GenericInput");
+            Object writer = writers.get(g.pick(writers.size()));
+            boolean requireUnwrapping = requested.getName().equals(
+                "com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter");
+            if (!requireUnwrapping && g.pick(2) == 0 && requested.isInstance(writer)) return writer;
+            Class<?> transformerType = load("com.fasterxml.jackson.databind.util.NameTransformer");
+            Object nop = transformerType.getField("NOP").get(null);
+            for (Method m : writer.getClass().getMethods())
+                if (m.getName().equals("unwrappingWriter") && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0].isInstance(nop)) {
+                    Object unwrapped = m.invoke(writer, nop);
+                    if (requested.isInstance(unwrapped)) return unwrapped;
+                }
+            if (requested.isInstance(writer)) return writer;
+            throw new IllegalStateException("Generated Jackson property writer is not " + requested.getName());
+        } catch (Throwable failure) {
+            throw new IllegalStateException("Cannot construct Jackson BeanPropertyWriter: " + failure, failure);
+        }
+    }
+    /** Build the non-constructible Commons CLI result through its public Parser API. */
+    private static Object commandLine(Genes g, Observation report) throws Exception {
+        Class<?> optionsClass = load("org.apache.commons.cli.Options");
+        Class<?> optionClass = load("org.apache.commons.cli.Option");
+        Class<?> parserClass = load("org.apache.commons.cli.PosixParser");
+        Object options = optionsClass.getConstructor().newInstance();
+        Method addOption = optionsClass.getMethod("addOption", optionClass);
+        int numberOfOptions = 1 + g.pick(3);
+        List<String> spellings = new ArrayList();
+        for (int i = 0; i < numberOfOptions; i++) {
+            String shortName = String.valueOf((char)('a' + i));
+            String longName = "de-option-" + i;
+            boolean hasArgument = g.pick(2) == 0;
+            Object option = null;
+            try {
+                option = optionClass.getConstructor(String.class, String.class, boolean.class, String.class)
+                    .newInstance(shortName, longName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) try {
+                option = optionClass.getConstructor(String.class, boolean.class, String.class)
+                    .newInstance(shortName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) throw new NoSuchMethodException("No supported Commons CLI Option constructor");
+            addOption.invoke(options, option);
+            spellings.add("-" + shortName);
+            if (hasArgument) spellings.add("value-" + Math.abs((long)g.next()));
+        }
+        String[] argv = spellings.toArray(new String[0]);
+        Object parser = parserClass.getConstructor().newInstance();
+        List<Method> parseMethods = new ArrayList();
+        for (Method candidate : parserClass.getMethods()) {
+            Class<?>[] p = candidate.getParameterTypes();
+            if (candidate.getName().equals("parse") && p.length >= 2 && p[0] == optionsClass
+                    && p[1] == String[].class && candidate.getReturnType() == load("org.apache.commons.cli.CommandLine"))
+                parseMethods.add(candidate);
+        }
+        Collections.sort(parseMethods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return a.getParameterTypes().length - b.getParameterTypes().length;
+            }
+        });
+        for (Method parse : parseMethods) {
+            Object[] args = new Object[parse.getParameterTypes().length];
+            Class<?>[] p = parse.getParameterTypes();
+            args[0] = options; args[1] = argv;
+            for (int i = 2; i < p.length; i++) {
+                if (p[i] == boolean.class || p[i] == Boolean.class) args[i] = g.pick(2) == 0;
+                else if (p[i] == java.util.Properties.class) args[i] = new java.util.Properties();
+                else args[i] = value(p[i], g, 1, report);
+            }
+            try { return parse.invoke(parser, args); }
+            catch (InvocationTargetException ignored) { }
+        }
+        throw new NoSuchMethodException("No successful public PosixParser.parse(Options,String[])");
+    }
+    /** Optional type recipes, shared across bugs; none contains a bug-specific expected answer. */
+    private static Object chart(Class<?> t, Genes g, Observation report) throws Exception {
+        String n = t.getName();
+        if (!n.startsWith("org.jfree.")) return null;
+        if (n.equals("org.jfree.data.Range")) {
+            double a = g.next(), b = g.next();
+            return t.getConstructor(double.class, double.class).newInstance(Math.min(a, b), Math.max(a, b));
+        }
+        if (n.equals("org.jfree.data.time.RegularTimePeriod"))
+            return load("org.jfree.data.time.Day").getConstructor(int.class, int.class, int.class)
+                .newInstance(1 + g.pick(28), 1 + g.pick(12), 1990 + g.pick(40));
+        if (n.equals("org.jfree.data.time.TimeSeries")) {
+            Object series = t.getConstructor(Comparable.class).newInstance("DE");
+            Class<?> period = load("org.jfree.data.time.RegularTimePeriod");
+            Constructor<?> day = load("org.jfree.data.time.Day")
+                .getConstructor(int.class, int.class, int.class);
+            Method add = t.getMethod("add", period, double.class);
+            int count = 2 + g.pick(4), year = 1990 + g.pick(40);
+            for (int i = 0; i < count; i++)
+                add.invoke(series, day.newInstance(i + 1, 1, year), g.next() / 10.0);
+            return series;
+        }
+        if (n.equals("org.jfree.data.category.CategoryDataset")
+                || n.equals("org.jfree.data.category.DefaultCategoryDataset")) {
+            Class<?> c = load("org.jfree.data.category.DefaultCategoryDataset");
+            Object data = c.getConstructor().newInstance();
+            Method add = c.getMethod("addValue", Number.class, Comparable.class, Comparable.class);
+            int rows = 1 + g.pick(3), columns = 1 + g.pick(3);
+            for (int r = 0; r < rows; r++) for (int col = 0; col < columns; col++)
+                add.invoke(data, Double.valueOf(g.next() / 10.0), "R" + r, "C" + col);
+            return data;
+        }
+        if (n.equals("org.jfree.data.xy.XYDataset") || n.equals("org.jfree.data.xy.XYSeriesCollection")) {
+            Class<?> seriesClass = load("org.jfree.data.xy.XYSeries");
+            Object series = seriesClass.getConstructor(Comparable.class).newInstance("DE");
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) seriesClass.getMethod("add", double.class, double.class)
+                .invoke(series, (double)i, g.next() / 10.0);
+            Class<?> c = load("org.jfree.data.xy.XYSeriesCollection");
+            Object data = c.getConstructor().newInstance();
+            c.getMethod("addSeries", seriesClass).invoke(data, series);
+            return data;
+        }
+        if (n.equals("org.jfree.data.general.PieDataset") || n.equals("org.jfree.data.general.DefaultPieDataset")) {
+            Class<?> c = load("org.jfree.data.general.DefaultPieDataset");
+            Object data = c.getConstructor().newInstance();
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) c.getMethod("setValue", Comparable.class, Number.class)
+                .invoke(data, "K" + i, Double.valueOf(g.next() / 10.0));
+            return data;
+        }
+        return null;
+    }
+    static List<Method> setupMethods(Class<?> receiver) {
+        List<Method> methods = new ArrayList();
+        for (Method m : receiver.getMethods()) {
+            String n = m.getName();
+            if (!Modifier.isStatic(m.getModifiers()) && !m.isSynthetic()
+                    && m.getParameterTypes().length <= 3 && !n.contains("Listener")
+                    && (n.startsWith("set") || n.startsWith("add") || n.startsWith("update")
+                        || n.startsWith("remove") || n.equals("clear"))) methods.add(m);
+        }
+        Collections.sort(methods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return signature(a).compareTo(signature(b));
+            }
+        });
+        return methods;
+    }
+    public static Observation execute(String target, String receivers, String signature, int[] genes) {
+        Observation out = new Observation();
+        try {
+            Genes g = new Genes(genes);
+            Method m = method(target, signature);
+            Object receiver = null;
+            if (!Modifier.isStatic(m.getModifiers())) {
+                String[] choices = receivers.split(",");
+                Class<?> receiverType = load(choices[g.pick(choices.length)]);
+                receiver = value(receiverType, g, 0, out);
+                if (receiver == null) throw new IllegalArgumentException("Receiver construction failed");
+                // Compiler.compile owns a strict initialization sequence.
+                // Random calls to its mutators before compilation can corrupt
+                // state or spend the search budget on irrelevant setup.
+                if (!receiverType.getName().equals("com.google.javascript.jscomp.Compiler")) {
+                    List<Method> setup = setupMethods(receiverType);
+                    int count = g.pick(5);
+                    for (int i = 0; i < count && !setup.isEmpty(); i++) {
+                        Method s = setup.get(g.pick(setup.size()));
+                        try { s.invoke(receiver, arguments(s.getParameterTypes(), g, 0, out)); out.setupCalls++; }
+                        catch (Exception e) { out.setupFailures++; }
+                    }
+                }
+            }
+            Object[] args = arguments(m, g, 0, out);
+            out.reachedTarget = true;
+            try {
+                boolean jacksonSerialization = m.getDeclaringClass().getName().equals(
+                    "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                    && m.getName().startsWith("serializeAs") && g.jacksonGenerator != null;
+                boolean arrayShape = m.getName().contains("Column")
+                    || m.getName().contains("Element") || m.getName().contains("Placeholder");
+                if (jacksonSerialization)
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeStartArray" : "writeStartObject").invoke(g.jacksonGenerator);
+                Object result = m.invoke(receiver, args);
+                boolean closureCompile = m.getDeclaringClass().getName().equals(
+                    "com.google.javascript.jscomp.Compiler") && m.getName().equals("compile");
+                if (closureCompile) {
+                    // Result is only a status object; the compiled JavaScript is
+                    // the behavioral output that reveals whether an argument
+                    // was removed from a globally exposed function.
+                    Object js = receiver.getClass().getMethod("toSource").invoke(receiver);
+                    out.token = "CLOSURE_SOURCE:" + stable(js, 0);
+                } else if (jacksonSerialization) {
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeEndArray" : "writeEndObject").invoke(g.jacksonGenerator);
+                    g.jacksonGenerator.getClass().getMethod("flush").invoke(g.jacksonGenerator);
+                    out.token = "JSON:" + Base64.getEncoder().encodeToString(
+                        g.jacksonOutput.toString().getBytes(StandardCharsets.UTF_8));
+                } else out.token = m.getReturnType() == void.class
+                    ? state(receiver, m.getName()) : stable(result, 0);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof VirtualMachineError || e.getCause() instanceof LinkageError
+                        || e.getCause() instanceof ThreadDeath) throw e;
+                out.token = "THROW:" + e.getCause().getClass().getName();
+            }
+        } catch (Throwable e) {
+            out.token = "HARNESS_ERROR";
+            out.error = e.getClass().getName() + ":" + String.valueOf(e.getMessage());
+        }
+        return out;
+    }
+    public static String run(String target, String receivers, String signature, int[] genes) {
+        Observation o = execute(target, receivers, signature, genes);
+        if (!o.reachedTarget || o.token.equals("HARNESS_ERROR"))
+            throw new AssertionError("Cannot replay test: " + o.error);
+        return o.token;
+    }
+    private static String state(Object receiver, String method) {
+        if (receiver == null) return "VOID";
+        List<String> getters = new ArrayList();
+        if (method.startsWith("set") && method.length() > 3) {
+            getters.add("get" + method.substring(3)); getters.add("is" + method.substring(3));
+        }
+        getters.addAll(Arrays.asList("getItemCount", "getRowCount", "getColumnCount", "getSeriesCount"));
+        StringBuilder s = new StringBuilder("VOID");
+        for (String name : getters) {
+            try {
+                Method getter = receiver.getClass().getMethod(name);
+                if (getter.getReturnType().isPrimitive() || getter.getReturnType() == String.class)
+                    s.append('|').append(name).append('=').append(stable(getter.invoke(receiver), 0));
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        return s.toString();
+    }
+    /** Only whitelisted value types are rendered. Never use arbitrary object toString(). */
+    static String stable(Object value, int depth) {
+        if (value == null) return "NULL";
+        Class<?> t = value.getClass();
+        if (value instanceof String || value instanceof Boolean || value instanceof Character
+                || value instanceof Byte || value instanceof Short || value instanceof Integer
+                || value instanceof Long || value instanceof Float || value instanceof Double
+                || value instanceof java.math.BigInteger || value instanceof java.math.BigDecimal)
+            return t.getName() + ":" + Base64.getEncoder().encodeToString(value.toString().getBytes(StandardCharsets.UTF_8));
+        if (value instanceof Enum) return "ENUM:" + t.getName() + ":" + ((Enum<?>)value).name();
+        if (t.isArray() && depth < 3) {
+            StringBuilder s = new StringBuilder("ARRAY:" + t.getName() + ":" + Array.getLength(value));
+            for (int i = 0; i < Math.min(64, Array.getLength(value)); i++) {
+                String item = stable(Array.get(value, i), depth + 1);
+                s.append(':').append(item.length()).append(':').append(item);
+            }
+            return s.toString();
+        }
+        if (value instanceof java.awt.Color) return "COLOR:" + ((java.awt.Color)value).getRGB();
+        // Observe safe scalar properties of returned objects. This catches
+        // changes to value caches and state while avoiding identity-based toString().
+        StringBuilder observed = new StringBuilder("STATE:" + t.getName());
+        int properties = 0;
+        for (String name : Arrays.asList("getItemCount", "getMinY", "getMaxY",
+                "getRowCount", "getColumnCount", "getSeriesCount")) {
+            try {
+                Method getter = t.getMethod(name);
+                Class<?> r = getter.getReturnType();
+                if (!r.isPrimitive() && r != String.class && !Number.class.isAssignableFrom(r))
+                    continue;
+                if (r == void.class) continue;
+                Object result = getter.invoke(value);
+                String token = stable(result, depth + 1);
+                observed.append('|').append(name).append('=').append(token.length())
+                    .append(':').append(token);
+                properties++;
+            } catch (Exception ignored) { }
+        }
+        return properties == 0 ? "TYPE:" + t.getName() : observed.toString();
+    }
+    public static void main(String[] args) {
+        if (args.length > 4) {
+            String source = new String(Base64.getDecoder().decode(args[4]), StandardCharsets.UTF_8);
+            System.setProperty("de.generated.source", source);
+        }
+        String[] encodedGenes = args[3].split(",");
+        int[] genes = new int[encodedGenes.length];
+        for (int i = 0; i < encodedGenes.length; i++) genes[i] = Integer.parseInt(encodedGenes[i]);
+        boolean closureCompile = args[0].equals("com.google.javascript.jscomp.Compiler")
+            && args[2].startsWith("compile(");
+        // Compiler.compile is an expensive whole-program operation. Fixed-side
+        // suites are still executed twice by the runner, so capture its oracle
+        // once here instead of launching three compilations just to check the
+        // same deterministic source output.
+        int repetitions = closureCompile ? 1 : 3;
+        for (int i = 0; i < repetitions; i++) {
+            Observation out = execute(args[0], args[1], args[2], genes);
+            System.out.println("DE_TOKEN:" + Base64.getEncoder().encodeToString(out.token.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+}
+
+public class DEGeneratedTest extends junit.framework.TestCase {
+    public void testDE00000() {
+        assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "addValue(java.lang.String):boolean",
+            new int[]{387,1000,700,55,-619,274,-578,-354,132,-252,98,-863,1000,246,1000,-1000,394,663,-1000,-101,-312,184,1000,-194,-228,-400,52,-945,189,-221,558,1,-290,268,-111,452,-779,-151,-317,289,1000,-1000,6,-170,-174,-284,46,690,-400,1000,240,473,-195,94,-793,-267,247,830,561,397,-225,-239,299,103}));
+    }
+    public void testDE00001() {
+        assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "addValue(java.lang.String):boolean",
+            new int[]{884,-990,-209,-881,1000,-724,745,58,-166,688,-1000,381,843,663,879,890,1000,-730,92,102,146,35,577,487,-896,-441,1000,683,-514,-425,229,-1000,98,333,-778,587,609,-217,666,-675,-373,-340,595,416,169,-409,-573,-991,376,1000,-149,-93,869,311,485,226,-754,390,-573,422,1000,-482,-358,-836}));
+    }
+    public void testDE00002() {
+        assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "addValue(java.lang.String):boolean",
+            new int[]{-37,973,0,-414,-1000,-131,-177,355,-157,137,210,-1000,344,229,1000,-829,572,-543,-33,99,531,-15,-331,57,48,1000,1000,-558,-128,-1000,914,-787,-669,751,-304,1000,-932,1000,-496,532,433,-136,-671,557,558,652,-135,-13,333,861,6,949,-218,-592,-1000,-600,27,465,221,941,-262,-501,894,-130}));
+    }
+    public void testDE00003() {
+        assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "addValue(java.lang.String):boolean",
+            new int[]{981,210,1000,616,-456,161,-1000,-1000,972,708,69,-1000,-441,318,100,-335,709,-572,-751,-1000,-1000,-656,408,-65,-52,-1000,-354,-418,300,-965,340,-561,-456,110,38,-10,-574,-1000,-917,-16,611,83,-475,-671,1000,-1000,1000,1000,-1000,471,-426,246,187,637,-698,-1000,546,628,112,-331,364,-1000,796,-755}));
+    }
+    public void testDE00004() {
+        assertEquals("TYPE:org.apache.commons.cli.Option", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "clone():java.lang.Object",
+            new int[]{-1000,-15,-5,-758,-287,-168,1000,-959,846,-342,474,1000,-1000,-723,-455,240,-249,477,-1000,-145,361,812,1000,459,-701,84,942,392,1000,-390,-1000,-843,-979,664,205,-760,-207,-247,-186,687,402,-454,797,-277,-831,-364,596,632,-255,556,968,72,78,-54,-131,-264,93,-96,806,832,276,1000,-995,-285}));
+    }
+    public void testDE00005() {
+        assertEquals("TYPE:org.apache.commons.cli.Option", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "clone():java.lang.Object",
+            new int[]{-64,-650,940,919,364,-149,-1000,-1000,114,548,167,-490,830,-497,-1000,168,-1000,1000,212,-1000,3,254,413,-144,-147,76,599,-375,-229,-347,161,-97,-1000,-353,191,111,-384,-737,21,-457,525,637,-489,-537,-207,800,-243,150,-1000,-89,363,420,-727,-781,-921,465,-149,110,-63,270,247,686,-422,807}));
+    }
+    public void testDE00006() {
+        assertEquals("TYPE:org.apache.commons.cli.Option", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "clone():java.lang.Object",
+            new int[]{125,1000,-384,220,151,-878,279,-83,-270,-501,374,894,-1000,-558,-381,1000,232,705,-70,1000,-910,400,74,1000,-171,-557,-674,-1000,-1000,1000,-395,914,502,828,-354,-920,425,872,-490,9,-55,-394,1000,-1000,728,-497,1000,-1000,134,-472,884,-126,-382,931,-17,219,-1000,1000,1000,-1000,2,335,28,846}));
+    }
+    public void testDE00007() {
+        assertEquals("TYPE:org.apache.commons.cli.Option", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "clone():java.lang.Object",
+            new int[]{-1000,115,-800,668,-97,1000,13,-307,-974,55,-580,-322,-161,-933,-614,148,-251,1000,1000,591,-242,-617,-934,1000,933,-63,1000,14,-55,213,1000,860,-837,1000,254,1000,-103,1000,-142,1000,38,1000,-1000,-903,-399,-41,-800,-1000,476,-622,1000,-546,369,-603,-756,-821,712,113,255,102,-66,-499,-1000,622}));
+    }
+    public void testDE00008() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "equals(java.lang.Object):boolean",
+            new int[]{-655,1000,-1000,502,-1000,-1000,-340,-108,1000,1000,209,105,921,1000,-660,-1000,1000,-228,-443,-1000,632,-1000,170,1000,957,-1000,1000,-1000,706,1000,473,1000,-113,-1000,-1000,-805,616,-64,-1000,-1000,1000,610,293,-1000,675,1000,-1000,-1000,1000,148,1000,-1000,888,-361,267,-657,38,279,155,213,804,949,1000,-1000}));
+    }
+    public void testDE00009() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "equals(java.lang.Object):boolean",
+            new int[]{235,726,-816,691,819,-504,-357,-987,794,-811,-777,887,-171,-576,-465,747,422,-197,138,726,438,148,80,228,812,180,895,-323,-338,-16,-75,-131,558,-890,-940,814,-969,-963,912,-326,-486,822,253,463,881,-721,-831,553,499,757,-239,710,276,-286,473,370,-426,-352,-819,176,-934,693,-7,-579}));
+    }
+    public void testDE00010() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "equals(java.lang.Object):boolean",
+            new int[]{-831,1000,431,1000,-970,326,-337,-808,593,-96,-567,-1000,841,711,496,97,449,-528,-181,1000,874,-728,286,-267,324,-1000,-950,40,555,428,1000,664,56,759,-769,902,-1000,-1000,756,212,-1000,215,799,-840,227,-796,-365,-187,1000,-57,-225,-1000,-962,-1000,-810,-63,161,-772,-1000,944,272,-472,115,406}));
+    }
+    public void testDE00011() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "equals(java.lang.Object):boolean",
+            new int[]{-1000,748,-1000,540,-1000,-1000,209,442,1000,662,434,-536,291,1000,-607,-796,242,-610,-610,733,788,-1000,-33,1000,190,-1000,933,-1000,794,528,1000,919,-582,724,-1000,-603,610,286,-1000,-1000,889,456,-208,-701,960,1000,44,-1000,1000,-1000,1000,-1000,362,-634,-750,-569,-655,785,-338,213,407,732,1000,-373}));
+    }
+    public void testDE00012() {
+        assertEquals("java.lang.String:", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getArgName():java.lang.String",
+            new int[]{-1000,225,712,175,1000,-126,529,948,282,44,688,-138,55,1000,-1000,840,-369,-160,1000,332,-812,-264,1000,26,198,480,268,280,-95,23,587,214,316,157,201,822,949,-272,660,10,-983,-19,1000,-580,210,-756,1000,-501,-418,761,135,641,872,286,30,-19,548,28,1000,-408,-1000,771,-488,-727}));
+    }
+    public void testDE00013() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getArgName():java.lang.String",
+            new int[]{986,-253,94,443,-787,-449,726,454,-405,409,502,-1000,-973,863,-195,-1000,248,-1000,1000,-105,-406,-1000,857,-184,1000,299,-210,277,-980,-1000,1000,400,336,-106,967,154,-656,447,933,328,186,-2,-754,-1000,-383,-262,13,-1000,-1000,562,-1000,-41,-71,30,343,366,-1000,860,893,-700,-385,684,684,-541}));
+    }
+    public void testDE00014() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getArgName():java.lang.String",
+            new int[]{-286,1000,-608,586,-1000,388,-1000,-261,168,-1000,-212,104,546,-1000,184,519,-586,-1000,-1000,-525,70,-402,-1000,-346,1000,1000,1000,795,-387,289,919,545,1000,-854,576,1000,-998,-462,-174,1000,576,1000,1000,-772,-1000,272,-307,500,-797,-1000,-1000,-1000,-219,-500,2,-649,-1000,1000,-1000,-788,-547,-792,957,1000}));
+    }
+    public void testDE00015() {
+        assertEquals("java.lang.String:LS0weDgwMDAwMDAwMDAwMDA=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getArgName():java.lang.String",
+            new int[]{565,858,-1000,1000,-1000,-629,30,-70,-248,-1000,-6,-514,835,352,1000,-1000,775,972,459,546,1000,-627,-124,1000,101,-444,-1000,-686,1000,-1000,897,433,-46,-330,46,345,-1000,945,-1000,812,722,632,1000,625,-1000,1000,-1000,-737,-631,-442,-1000,-966,-669,523,999,-1000,-934,112,-1000,167,648,-1000,1000,33}));
+    }
+    public void testDE00016() {
+        assertEquals("java.lang.Integer:MjE0NzQ4MzY0Nw==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getArgs():int",
+            new int[]{439,-599,620,-649,1000,-770,1000,-874,-869,1000,596,-406,866,1000,-1000,-791,-616,-1000,684,1000,-264,-543,-545,309,-1000,730,-1000,1000,-297,1000,1000,753,-887,76,710,643,307,-109,1000,-540,1000,767,1000,808,-186,1000,339,377,278,1000,311,204,891,292,-1000,1000,667,-704,93,-531,1000,-880,-523,-598}));
+    }
+    public void testDE00017() {
+        assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getArgs():int",
+            new int[]{167,396,-132,1000,-237,-749,17,-112,400,124,162,804,1000,-222,-1000,9,377,-632,-1000,747,1000,-112,159,316,241,906,-254,356,22,-521,-412,393,101,244,1000,431,-592,286,-38,160,-166,441,1000,-424,957,70,415,-131,-303,499,548,-215,252,-634,-998,998,343,-168,558,444,-701,-395,-602,-311}));
+    }
+    public void testDE00018() {
+        assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getArgs():int",
+            new int[]{565,1000,144,-46,-1000,-1000,-314,-715,708,345,339,1000,-361,-610,-15,714,402,-778,-268,-337,609,111,-447,355,448,373,306,296,707,152,-1000,-49,849,-1000,369,533,554,410,-37,-394,-124,644,668,-910,1000,1000,-109,189,1000,1000,-229,-502,-521,-422,-685,-936,256,863,-94,-176,646,-1000,-1000,-1000}));
+    }
+    public void testDE00019() {
+        assertEquals("java.lang.Integer:MQ==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getArgs():int",
+            new int[]{-1000,796,1000,1000,1000,-1000,-1000,1000,1000,-1000,-1000,979,1000,1000,-799,1000,76,214,-603,-1000,1000,1000,781,-568,633,-362,1000,-1000,-1000,-1000,-977,-1000,-965,1000,1000,-564,-1000,-1000,1000,1000,1000,-1000,-399,-1000,-39,-1000,1000,1000,-538,-778,-1000,129,-737,-1000,1000,-289,-1000,804,742,1000,-1000,1000,1000,699}));
+    }
+    public void testDE00020() {
+        assertEquals("java.lang.String:ICsyMjkg", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getDescription():java.lang.String",
+            new int[]{-914,64,429,-421,212,-674,-514,786,-246,-229,-990,-502,-194,-483,-552,-360,-563,215,445,641,219,-39,736,176,321,956,121,-530,-462,780,-251,740,344,-362,862,-774,-389,730,-154,-482,-31,-960,905,-627,977,-749,-949,62,223,236,-805,466,-709,-347,100,557,-897,-481,696,714,-397,328,836,387}));
+    }
+    public void testDE00021() {
+        assertEquals("java.lang.String:TmFO", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getDescription():java.lang.String",
+            new int[]{-283,-75,299,-1000,838,-791,-1000,597,449,-695,-371,276,-453,-231,267,-66,668,748,-1000,455,595,-1000,-1000,851,-1000,535,1000,609,-701,-432,-423,1000,1000,1000,-1000,-426,511,620,40,-918,-1000,31,-55,586,-947,1000,434,-1000,-153,1000,-717,1000,-1000,-360,665,-1,-974,-649,-1000,-382,1000,-751,-643,-544}));
+    }
+    public void testDE00022() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getDescription():java.lang.String",
+            new int[]{-1000,-728,655,-959,1000,-1000,8,592,1000,1000,784,549,-666,518,-95,1000,-163,864,131,277,943,896,-880,-197,-110,1000,78,255,-250,802,-997,1000,932,-1000,-890,-696,-939,-549,-1000,1000,246,-311,100,-352,-300,-1000,776,-1000,289,-948,-1000,-487,1000,946,-308,1000,380,1000,-841,-761,-245,1000,-677,1000}));
+    }
+    public void testDE00023() {
+        assertEquals("java.lang.String:KzEwMDBk", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getDescription():java.lang.String",
+            new int[]{817,-564,-288,-233,-1000,521,1000,-402,-1000,-96,739,-417,-312,-922,626,882,-598,-424,979,-1000,-337,565,1000,684,1000,-1000,491,634,188,1000,-185,-1000,-1000,-1000,1000,1000,-774,616,-21,475,777,-1000,918,-1000,1000,-489,271,-109,-1000,373,-239,-939,779,-1000,-1000,1000,1000,586,551,-666,131,1000,1000,848}));
+    }
+    public void testDE00024() {
+        assertEquals("java.lang.Integer:NTA=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getId():int",
+            new int[]{-737,247,-237,28,-914,-412,621,-1000,-798,-1000,359,19,-266,470,1000,-465,-1000,702,-345,-1000,-925,-742,-145,640,-104,193,-1000,-411,1000,-801,-395,-746,303,-758,-1000,-1000,-1000,1000,653,995,635,-752,303,746,18,-138,282,-483,-299,-233,242,27,-487,1000,875,245,894,1000,-792,745,1000,-402,-585,560}));
+    }
+    public void testDE00025() {
+        assertEquals("java.lang.Integer:OTc=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getId():int",
+            new int[]{-159,-243,-48,734,-843,735,451,338,438,-493,-855,389,-743,-789,735,654,-370,272,175,107,-673,-893,448,-553,-235,-14,-212,99,-453,620,-924,-45,142,232,50,90,-819,-975,-441,-386,-560,281,133,-89,-321,601,851,624,-783,231,663,-116,-634,-147,-857,572,-341,741,964,649,-813,-234,324,988}));
+    }
+    public void testDE00026() {
+        assertEquals("java.lang.Integer:ODg=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getId():int",
+            new int[]{-1000,-1000,77,179,-584,-374,59,-709,-489,-513,-877,1000,107,663,236,-1000,139,1000,372,606,-833,-265,-1000,244,-489,-364,-369,-80,-360,-652,417,361,445,562,-1000,-321,-532,809,639,-22,-819,428,1000,218,192,-1000,-346,-497,-635,-463,611,-266,-1000,-283,-344,1000,498,-846,-676,210,952,-1000,1000,805}));
+    }
+    public void testDE00027() {
+        assertEquals("java.lang.Integer:NDg=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getId():int",
+            new int[]{-305,519,936,-1000,-1000,-440,1000,-391,273,-1000,-271,-792,435,64,1000,219,-246,-1000,206,-974,-667,-273,623,1000,1000,-600,-1000,503,-642,1000,-1000,-1000,256,1000,713,1000,52,537,601,-1000,1000,-786,-436,1000,-1000,107,-30,-670,787,-1000,1000,-739,206,585,923,-1000,942,1000,-1000,-143,1000,-533,-407,-915}));
+    }
+    public void testDE00028() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getLongOpt():java.lang.String",
+            new int[]{1000,318,252,-956,-1000,-224,382,886,-244,112,-1000,633,1000,-996,-201,328,-335,-297,-245,34,598,989,-737,1000,1000,274,1000,-530,-897,898,-1000,-1000,639,-228,291,-975,-267,1000,1000,1000,49,-564,-87,-896,1000,-1000,361,392,-224,-646,-1000,148,-1000,810,-367,156,-892,-626,-975,255,-193,962,955,486}));
+    }
+    public void testDE00029() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getLongOpt():java.lang.String",
+            new int[]{56,55,-455,-1000,484,1000,556,86,-61,-692,122,739,-395,-1000,143,864,371,263,442,-400,572,282,276,-194,-13,988,994,292,405,-833,1000,-841,1000,355,217,-469,-330,379,400,1000,804,232,693,663,704,-513,-624,-118,-269,-427,241,351,-361,786,897,122,15,678,521,-950,-690,-382,-503,790}));
+    }
+    public void testDE00030() {
+        assertEquals("java.lang.String:KzB4ODAwMDAwMDA=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getLongOpt():java.lang.String",
+            new int[]{1000,-966,528,2,580,-1000,-57,823,1000,404,-56,193,1000,-1000,138,-533,659,1000,-1000,1000,-1000,883,1000,1000,451,1000,-1000,-530,-1000,869,-674,-1000,986,-264,300,619,1000,1000,-1000,816,1000,1000,-981,-1000,-1000,385,-1000,-512,-182,1000,224,738,-1000,302,-206,1000,-500,122,1000,1000,-1000,26,66,-22}));
+    }
+    public void testDE00031() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getLongOpt():java.lang.String",
+            new int[]{-474,-656,-631,-1000,484,293,816,-653,453,-756,369,680,703,-145,-318,864,-409,-88,-436,1000,1000,-467,508,-325,-382,1000,994,-532,-935,-833,1000,-841,549,-645,-654,422,-447,-217,-1000,949,804,38,586,861,609,132,397,143,-628,-1000,653,1000,125,1000,51,851,1000,492,521,-321,329,136,-1000,609}));
+    }
+    public void testDE00032() {
+        assertEquals("java.lang.String:Ng==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getOpt():java.lang.String",
+            new int[]{-426,1000,335,-307,1000,-199,1000,980,676,1000,-78,-47,-765,-873,910,829,-1000,1000,1000,-1000,-245,-1000,308,1000,11,-982,-1000,851,524,-1000,1000,1000,-58,1000,617,-1000,1000,1000,1000,395,1000,-1000,-613,1000,-480,-452,-1000,-640,1000,158,66,563,-1000,406,173,685,736,-1000,-962,-1000,-260,-497,757,628}));
+    }
+    public void testDE00033() {
+        assertEquals("java.lang.String:MHg4", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getOpt():java.lang.String",
+            new int[]{-472,-558,664,-218,-1000,-160,-536,-1000,161,-1000,484,-174,1000,-542,-608,-552,592,-1000,-1000,1000,-814,739,-598,-1000,-484,324,-1000,1000,-1000,732,207,1000,155,103,-386,477,-1000,-1000,-1000,889,-725,-359,908,801,-1000,-355,-830,54,-1000,-1000,-58,-538,1000,-766,-310,-1000,595,877,429,-43,-244,856,1000,-647}));
+    }
+    public void testDE00034() {
+        assertEquals("java.lang.String:OTI0Zg==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getOpt():java.lang.String",
+            new int[]{1000,-281,-119,924,-32,918,-704,48,-277,-1000,688,-958,-280,-880,227,-318,48,-395,488,498,-584,-35,-382,-162,33,-669,325,-233,-1000,774,-235,-762,892,661,1000,702,-862,-80,468,-170,-1000,1000,-1000,-166,134,-1000,300,-1000,1000,1000,280,277,-119,808,-49,439,465,-1000,1000,-1000,1000,1000,-741,-196}));
+    }
+    public void testDE00035() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getOpt():java.lang.String",
+            new int[]{-843,625,720,396,-710,1000,552,-646,-495,-767,789,-430,-117,-18,1000,436,481,-293,335,-309,-245,148,-791,-197,81,42,239,349,-1000,-1000,1000,-151,271,454,387,-135,139,-584,1000,970,109,-312,565,471,-1000,-1000,-716,-141,-252,623,66,158,289,465,768,-296,892,-594,-85,-425,-714,1000,57,-838}));
+    }
+    public void testDE00036() {
+        assertEquals("TYPE:java.lang.Class", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getType():java.lang.Object",
+            new int[]{-389,1000,1000,1000,1000,-130,-272,587,-119,-1000,495,369,-330,688,1000,286,-1000,-1000,1000,-1000,1000,1000,-472,-616,1000,1000,22,344,-894,-482,1000,-818,688,-1000,58,1000,-1000,1000,-267,1000,1000,-648,941,2,-1000,-16,1000,-95,-696,1000,-1000,-814,263,1000,646,-527,-1000,-1000,1000,16,-52,413,-1000,-1000}));
+    }
+    public void testDE00037() {
+        assertEquals("TYPE:java.lang.Class", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getType():java.lang.Object",
+            new int[]{998,966,-162,-865,829,-449,-141,-383,745,452,-238,864,-993,-668,-343,-12,-357,619,444,775,123,-959,418,384,6,374,785,320,359,-612,-500,-764,-868,-605,-153,-632,875,495,44,81,186,643,835,900,-905,-967,-511,657,-751,876,927,934,181,694,-197,875,-779,-538,-712,576,686,-457,-994,-188}));
+    }
+    public void testDE00038() {
+        assertEquals("TYPE:java.lang.Class", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getType():java.lang.Object",
+            new int[]{-70,897,999,278,732,-178,217,927,375,559,409,-52,1000,291,81,-516,-901,208,1000,-760,646,771,-182,-468,513,361,277,-198,-299,-33,907,-872,842,-601,-810,305,-753,804,538,594,509,-671,1000,-32,-161,-99,846,-922,294,254,582,-546,-51,1000,-1000,-1000,-1000,-513,469,666,294,263,-619,-254}));
+    }
+    public void testDE00039() {
+        assertEquals("TYPE:java.lang.Class", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getType():java.lang.Object",
+            new int[]{248,1000,800,468,1000,47,414,102,-404,4,-28,-1000,-815,565,-481,-34,-953,273,811,494,1000,674,-416,-383,1000,964,379,-81,1000,810,687,-788,-1000,-360,5,-87,40,321,422,-5,1000,686,79,844,-477,-232,686,-181,-131,1000,194,-90,436,759,765,958,-718,-1000,-951,844,955,-616,-339,-543}));
+    }
+    public void testDE00040() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue():java.lang.String",
+            new int[]{148,-98,444,-598,795,-239,822,660,443,-58,794,-1000,-660,601,-510,693,-1000,-575,527,572,319,410,742,375,-102,-280,-481,358,-230,689,-838,339,709,183,-742,-238,-470,560,-1000,-1000,-423,352,573,172,-163,-1000,-1000,-471,-612,-202,782,992,326,1000,398,-141,-1000,-531,455,94,-419,7,1000,1000}));
+    }
+    public void testDE00041() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue():java.lang.String",
+            new int[]{1000,1000,-80,644,-1000,319,399,-220,-530,551,627,-276,-223,690,-965,761,-686,-575,499,296,370,-813,420,-118,331,1000,162,-1000,-815,-12,-1000,1000,875,-428,-812,-125,391,-245,568,756,-234,881,-105,1000,-530,-194,-1000,-448,594,82,-724,676,-132,777,-28,-1000,-679,-85,-12,314,1000,349,-650,-69}));
+    }
+    public void testDE00042() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue():java.lang.String",
+            new int[]{1000,1000,-1000,-463,-104,-962,1000,-214,-1000,-493,-331,-387,-1000,-846,927,-107,-203,1000,-1000,-404,291,-596,-1000,363,1000,-541,481,689,1000,347,1000,1000,-474,183,-882,1000,-1000,-567,-87,-1000,1000,-1000,-152,-1000,-738,-396,-690,347,872,-410,72,-1000,1000,-1000,-785,201,-88,1000,-123,298,-1000,-720,-1000,418}));
+    }
+    public void testDE00043() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue():java.lang.String",
+            new int[]{-333,-3,-1000,1000,272,-952,35,-1000,-1000,299,602,-1000,833,-241,1000,558,-1000,1000,-892,-1000,-391,-498,-510,1000,-1000,371,1000,637,1000,-377,938,-1000,408,249,-1000,561,-859,-1000,409,-1000,1000,-175,-1000,1000,-1000,-129,510,91,-114,868,-438,-1000,1000,-106,-515,-352,-270,1000,-286,483,-1000,251,-874,-326}));
+    }
+    public void testDE00044() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue(int):java.lang.String",
+            new int[]{146,199,591,-935,-1,-899,-562,-836,-352,734,-269,194,-159,747,39,1000,-1000,-1000,-833,-53,-940,638,105,92,-688,-777,-466,376,-1000,695,654,-234,1000,-223,959,300,-232,-934,645,107,-557,-608,-1000,-165,-183,883,286,232,-1000,-329,-389,33,-262,556,410,492,158,-1000,-1,99,-1000,-79,215,149}));
+    }
+    public void testDE00045() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue(int):java.lang.String",
+            new int[]{-74,654,1000,-734,-1000,-674,-983,-606,-995,166,-76,-155,802,-665,41,744,-630,-377,-626,-66,-382,1000,-459,-777,-418,-82,541,376,-706,998,-678,361,853,-176,1000,-201,-876,-94,94,-334,-390,-1000,-673,-737,848,34,953,1000,-355,-1000,-209,-663,-562,664,-417,1000,-137,14,554,680,77,-1000,776,-970}));
+    }
+    public void testDE00046() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue(int):java.lang.String",
+            new int[]{758,-1000,416,-692,-561,-557,-825,-1000,-66,-15,-366,-608,-61,364,266,942,-1000,-527,-762,1000,126,483,-267,-345,-253,-889,-741,-259,-816,820,52,126,1000,254,-379,1000,-497,-946,-772,-53,-674,-700,877,-27,188,704,324,-98,-1000,-42,-1000,820,709,-197,752,761,70,1000,488,-409,-725,270,980,-218}));
+    }
+    public void testDE00047() {
+        assertEquals("java.lang.String:THFfZDZhdHAKX0xqMWJGRzFfX3dfYlRB", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue(java.lang.String):java.lang.String",
+            new int[]{-1000,1000,-770,-370,356,-849,1000,-77,0,484,887,-21,-68,-1000,-1000,847,-1000,-909,616,-101,-300,-19,-605,-221,52,679,-1000,671,-485,372,849,473,26,-1000,-697,1000,436,100,877,-356,-1000,473,-478,-780,-628,680,-526,285,-1000,-1000,742,-1000,366,55,-319,-146,469,337,935,-1000,-9,-1000,-790,-157}));
+    }
+    public void testDE00048() {
+        assertEquals("java.lang.String:KzB4OA==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue(java.lang.String):java.lang.String",
+            new int[]{-1000,825,-388,-1000,843,-995,941,987,-1000,-622,1000,-253,1000,654,-948,-118,-1000,-1000,-942,916,-685,1000,1000,-102,-1000,203,-1000,-1000,-362,-1000,1000,502,1000,1000,-920,-70,1000,-713,-21,635,-693,-46,-1000,-1000,-662,232,-252,-360,-1000,-1000,347,-1000,703,937,-82,-696,-85,18,629,-1000,-1000,5,1000,1000}));
+    }
+    public void testDE00049() {
+        assertEquals("java.lang.String:MHg4MDAwMDAwMDAw", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue(java.lang.String):java.lang.String",
+            new int[]{-521,1000,-320,793,-408,1000,-542,269,413,-336,-889,288,121,436,-1000,172,135,416,435,690,1000,-898,303,-376,568,1000,-1000,-351,110,-753,-286,-1000,77,154,-1000,-878,513,248,101,1000,-351,-873,-265,-1000,286,-938,-545,-1000,798,258,846,-946,-467,-1000,1000,-138,400,334,-881,309,-152,997,15,-174}));
+    }
+    public void testDE00050() {
+        assertEquals("java.lang.String:IA==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValue(java.lang.String):java.lang.String",
+            new int[]{-259,340,-388,-917,-14,-1000,1000,-696,-367,249,921,-51,41,654,-501,405,-53,-1000,-710,529,76,1000,-1000,289,-669,-558,-345,-1000,-362,-317,563,704,-65,756,370,931,-1000,-713,322,194,-677,740,423,-354,720,740,400,558,-1000,-342,10,89,-554,1000,-948,-208,-724,59,926,-722,-863,-1000,219,557}));
+    }
+    public void testDE00051() {
+        assertEquals("java.lang.Character:GA==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValueSeparator():char",
+            new int[]{1000,996,-401,537,1000,126,-508,-1000,-25,-453,-316,-857,-500,-1000,-296,133,-651,1000,-698,-823,-583,-1000,-793,-1000,-1000,-425,-132,1000,937,1000,-464,1000,-1000,-1000,570,800,-1000,-299,-964,624,939,-279,-441,-1000,1000,576,885,89,742,348,-503,722,-1000,-378,-1000,-1000,1000,-264,1000,280,757,-720,1000,995}));
+    }
+    public void testDE00052() {
+        assertEquals("java.lang.Character:GA==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValueSeparator():char",
+            new int[]{1000,1000,1000,-1000,-1000,-833,1000,950,-789,-58,1000,-881,45,-940,1000,-1000,779,1000,196,-397,-1000,445,167,407,-159,-1000,1000,48,-1000,54,448,-903,-1000,-338,327,-195,-184,1000,-1000,-1000,410,-1000,340,1000,1000,-77,-1000,1000,30,-1000,-1000,1000,1000,1000,-766,1000,448,-1000,-392,1000,1000,-1000,966,-27}));
+    }
+    public void testDE00053() {
+        assertEquals("java.lang.Character:AA==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValueSeparator():char",
+            new int[]{997,1000,-224,-258,979,566,-25,-1000,-271,549,-309,-81,-916,-1000,-886,316,-698,540,-787,127,6,-635,-1000,-1000,-507,142,-635,1000,942,1000,648,-128,-145,-629,-69,-1000,-1000,-69,-1000,1000,918,918,-1000,-915,-222,-943,352,-573,-234,1000,-340,1000,-1000,85,-1000,-1000,-679,1000,423,-434,574,1000,882,1000}));
+    }
+    public void testDE00054() {
+        assertEquals("java.lang.Character:AA==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValueSeparator():char",
+            new int[]{638,-27,-864,940,711,193,-761,-1000,204,346,-364,-389,-809,-726,-347,683,-1000,617,-112,470,-359,-846,-907,-1000,-808,-977,134,994,1000,1000,195,466,-1000,-748,120,380,-1000,-724,392,265,1000,-203,-321,-800,534,-1000,1000,-515,-110,491,-25,445,-833,-323,-1000,-1000,922,964,757,91,131,-674,802,1000}));
+    }
+    public void testDE00055() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValues():java.lang.String[]",
+            new int[]{-313,1000,-519,773,236,14,-250,-99,685,5,-37,973,319,-787,-35,-578,-145,199,166,944,-30,1,772,220,-141,-233,-396,-490,-373,584,-646,-862,819,-551,-312,-698,-971,140,-345,-11,-979,441,-214,223,473,96,674,-1000,-979,481,-784,351,-54,1000,-400,-328,847,1000,-224,-301,-729,-384,44,-1000}));
+    }
+    public void testDE00056() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValues():java.lang.String[]",
+            new int[]{-843,746,-852,1000,349,26,820,253,1000,449,-321,142,372,-384,1000,-729,390,-1000,1000,-547,976,1000,1000,825,-319,-59,-501,636,-678,1000,219,-1000,120,-583,-64,173,-149,-502,601,-221,-979,1000,-464,93,455,525,-910,-955,-1000,-987,-481,389,-129,1000,1000,1000,220,1000,-679,-1000,-544,-1000,580,-1000}));
+    }
+    public void testDE00057() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValues():java.lang.String[]",
+            new int[]{-209,-441,928,453,354,-537,-228,1000,454,7,-202,23,720,-99,948,-602,-1000,-131,1000,-413,1000,235,-239,41,-356,582,-277,1000,-998,1000,136,528,367,-1000,512,421,-1000,-131,908,-1000,612,255,-11,1000,-97,899,756,-202,-922,674,-46,-780,-701,708,592,466,23,647,1000,-1000,-353,-439,758,-1000}));
+    }
+    public void testDE00058() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValues():java.lang.String[]",
+            new int[]{-25,1000,-259,-317,195,730,750,-279,550,-772,364,1000,216,-1000,-106,-379,549,543,-317,-132,63,393,100,296,-52,-306,-354,-960,-108,406,-114,-1000,-334,-598,-637,-645,1000,-342,-529,-838,-1000,-210,466,323,886,-190,1000,-1000,-969,478,-441,1000,-1000,1000,-594,-899,785,-196,381,-428,174,662,165,-1000}));
+    }
+    public void testDE00059() {
+        assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValuesList():java.util.List",
+            new int[]{72,408,691,179,-1000,-1000,518,-767,318,-126,-925,-925,547,-1000,1000,4,1000,-185,-1000,460,1000,-712,800,-150,977,-94,-720,956,-1000,-667,-178,-150,-1000,700,771,391,487,-599,303,610,-298,-839,-86,-510,-365,-474,136,353,-982,-969,1000,209,-439,-601,-988,-1000,-266,-1000,589,-119,714,846,-497,1000}));
+    }
+    public void testDE00060() {
+        assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValuesList():java.util.List",
+            new int[]{-1000,-1000,716,1000,-400,-499,-959,-24,1000,-1000,544,-711,-45,126,-564,-361,789,-1000,148,-751,-165,-638,1000,636,-416,677,-1000,-1000,56,252,1000,1000,-489,638,-1000,909,1000,-1000,145,768,1000,556,-710,-395,98,1000,-320,-237,-107,-1000,1000,1000,-789,-254,894,1000,1000,-1000,-633,-1000,-1000,683,-1000,-1000}));
+    }
+    public void testDE00061() {
+        assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValuesList():java.util.List",
+            new int[]{-722,448,-432,105,-400,0,-394,957,599,-590,544,-711,-1000,-90,-1000,160,572,428,-177,-751,19,-175,353,-499,-480,677,-1000,41,-166,825,532,925,1000,746,-400,909,-472,-888,374,376,-1000,556,-116,573,-719,193,-1000,123,351,-68,283,441,-1000,767,-475,963,295,99,673,-996,-772,683,394,-637}));
+    }
+    public void testDE00062() {
+        assertEquals("TYPE:java.util.ArrayList", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "getValuesList():java.util.List",
+            new int[]{368,1000,-8,-139,-1000,387,233,266,1000,306,-142,-632,119,751,117,-39,904,-362,1000,-258,451,-527,-857,-639,357,536,-726,691,-74,-44,326,1000,-410,1000,1000,665,263,162,743,826,1000,-718,-1000,1000,-567,-522,-84,177,-434,-526,-783,-682,-1000,-1000,1000,-428,923,-815,10,-1000,-77,641,-402,113}));
+    }
+    public void testDE00063() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArg():boolean",
+            new int[]{1000,-753,-40,555,-448,298,712,-762,1000,-311,-916,-380,-1000,86,-449,1000,-1000,786,-1000,876,592,224,-319,527,-1000,-1000,11,897,-283,1000,-1000,-1000,1000,227,631,143,-1000,582,1000,1000,-147,-455,1000,469,-896,1000,-1000,8,897,1000,1000,360,-622,1000,102,-1000,1000,1000,249,400,-1000,-1000,948,806}));
+    }
+    public void testDE00064() {
+        assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArg():boolean",
+            new int[]{884,-880,107,-769,-20,1000,-66,565,900,781,167,38,-254,77,-1000,-234,1000,-66,-154,-893,82,-646,270,-531,1000,1000,-808,-1000,679,-563,1000,1000,-604,763,-984,1000,329,-737,593,-5,1000,1000,754,836,162,-641,960,1000,948,-450,-574,788,-168,-187,-1000,-1000,-542,-1000,-1000,1000,41,1000,247,-1000}));
+    }
+    public void testDE00065() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArg():boolean",
+            new int[]{849,-591,-243,263,-1000,776,619,689,821,-288,-639,97,-1000,-531,1000,930,-461,-50,-1000,845,34,-1000,1000,-541,70,70,-1000,299,1000,389,1000,1000,-10,1000,59,738,474,-195,-78,315,1000,391,-479,612,283,-239,-588,874,573,33,-780,-1000,464,315,-1000,-1000,1000,-478,-39,-407,1000,-748,-97,1000}));
+    }
+    public void testDE00066() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArg():boolean",
+            new int[]{974,-917,-496,325,-532,814,1000,-548,1000,394,-268,-745,-1000,582,-1000,1000,-348,839,-1000,581,201,-303,313,-329,-1000,-1000,-78,87,-277,1000,-1000,-1000,1000,173,427,628,-1000,1000,1000,1000,-302,-530,121,818,28,1000,-1000,648,-223,1000,1000,107,-193,1000,-141,-20,984,860,277,-1000,-1000,-1000,834,1000}));
+    }
+    public void testDE00067() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArg():boolean",
+            new int[]{833,65,-432,364,459,-303,-728,696,951,-208,516,-195,69,-477,502,-123,-54,414,379,-996,366,177,-392,-579,-354,-605,268,-371,-825,95,542,-438,981,978,-9,954,-495,900,41,169,-801,13,-399,-135,520,954,-297,-894,426,398,616,767,-422,397,37,435,-875,994,-375,394,-867,791,-582,-284}));
+    }
+    public void testDE00068() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArgName():boolean",
+            new int[]{757,-122,523,45,-1000,-267,287,-245,1000,1000,833,-176,83,962,-400,-960,761,1000,1000,-55,666,-907,-315,1000,181,762,-158,-1000,-264,1000,331,374,633,-379,-181,538,298,574,-347,1000,-971,-207,864,-804,321,1000,-1000,139,-485,1000,-729,-1000,1000,346,496,667,837,-271,-313,748,-1000,526,248,-1000}));
+    }
+    public void testDE00069() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArgName():boolean",
+            new int[]{-1000,-769,-961,394,925,-74,-1000,-380,-742,-510,-1000,171,393,-1000,481,323,386,-500,-1000,1000,-111,1000,1000,-1000,1000,1000,-1000,1000,-225,-1000,1000,-895,-902,-143,1000,463,-1000,-1000,956,644,853,1000,-1000,-729,1000,477,827,1000,188,-1000,-602,-853,-1000,-721,-566,-1000,-630,1000,1000,-1000,840,-1000,-1000,1000}));
+    }
+    public void testDE00070() {
+        assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArgName():boolean",
+            new int[]{498,-885,1000,1000,532,-304,613,-94,565,-471,399,1000,-1000,528,-1000,-830,-506,941,-127,-298,615,915,-381,1000,-449,-487,294,-1000,-374,87,-343,106,43,634,311,-120,811,-536,261,1000,390,-376,-195,1000,-384,236,-303,-1000,-847,631,-24,-12,692,-924,-618,1000,-187,-1000,689,26,-922,938,966,-380}));
+    }
+    public void testDE00071() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArgName():boolean",
+            new int[]{938,1000,848,632,-1000,-836,-684,166,1000,508,1000,-898,971,706,1000,-716,577,267,-339,928,623,-580,-28,1000,893,1000,-430,-970,485,-400,823,1000,452,-1000,333,-1000,959,768,-638,-624,-1000,639,946,-1000,206,-1000,-742,1000,-24,723,-1000,-589,1000,1000,229,210,-279,-470,-34,-616,-557,-1000,-733,-1000}));
+    }
+    public void testDE00072() {
+        assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArgs():boolean",
+            new int[]{-1000,1000,-65,1000,1000,33,-423,1000,-1000,-98,-536,-1000,-827,791,-1000,1000,1000,821,1000,294,173,311,-1000,1000,513,-1000,-381,852,642,-40,1000,-523,587,-648,1000,-1000,-88,592,716,-570,-801,546,-684,1000,-253,-1000,-1000,30,1000,1000,-1000,1000,-316,1000,917,1000,-180,-749,-1000,1000,90,961,525,1000}));
+    }
+    public void testDE00073() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArgs():boolean",
+            new int[]{110,1000,527,-353,1000,251,-1000,760,-468,-1000,-666,-1000,-513,-1000,610,353,1000,1000,584,-1000,80,239,-1000,1000,424,251,999,-956,-318,-1000,1000,-996,-1000,1000,-444,-1000,919,291,253,-192,-1000,295,604,130,1000,-1000,-129,-791,974,49,-1000,305,-358,829,721,1000,-1000,-106,-331,664,161,1000,578,1000}));
+    }
+    public void testDE00074() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArgs():boolean",
+            new int[]{-462,-384,-208,203,1000,643,426,-137,-796,-531,338,322,-1000,1000,-1000,772,-4,297,385,33,546,-457,129,616,-480,-363,-1000,-400,-454,-981,753,2,698,371,1000,-129,-262,782,781,730,-786,-46,446,919,-251,-776,-826,468,-84,1000,817,396,-22,580,650,540,22,-954,357,162,-254,321,-38,289}));
+    }
+    public void testDE00075() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasArgs():boolean",
+            new int[]{1000,-182,481,-979,-692,922,-74,-623,-468,-140,224,31,589,-522,37,1000,205,442,-1000,-74,-353,82,867,-579,-793,625,-54,-48,139,-1000,-281,81,424,-291,-1000,192,-1000,-1000,-181,1000,-1000,-602,825,-145,-228,-158,426,894,-321,-422,20,-1000,603,-883,618,57,-1000,183,88,1000,-793,640,-70,-1000}));
+    }
+    public void testDE00076() {
+        assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasLongOpt():boolean",
+            new int[]{83,514,-131,1000,1000,201,-97,136,1000,488,30,-554,593,-707,175,69,587,736,-168,810,1000,-805,409,-196,-400,113,499,-98,690,-1000,-627,524,-667,-1000,486,1000,-289,1000,249,-764,-1000,256,595,265,139,-728,-1000,-999,-415,-719,949,36,469,-357,-569,-372,-896,450,-55,998,-206,706,-1000,202}));
+    }
+    public void testDE00077() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasLongOpt():boolean",
+            new int[]{1000,-528,-629,-588,480,1000,-187,-1000,-20,436,-361,317,1000,-926,-387,999,-690,374,-699,-1000,-162,-154,347,-1000,41,686,-1000,133,-339,-50,477,-178,-77,-327,44,-371,-372,680,386,-447,617,-877,-1000,-770,132,-270,558,168,80,467,-1000,-867,359,616,513,-99,446,1000,66,-400,1000,-659,352,67}));
+    }
+    public void testDE00078() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasLongOpt():boolean",
+            new int[]{605,1000,12,510,-1000,-1000,-270,455,141,-59,94,626,-891,241,-1000,-1000,96,1000,-125,-1000,-1000,87,827,-1000,-1000,-1000,428,-971,487,-1000,-1000,40,-1000,-513,1000,1000,-1000,-1000,1000,-180,40,-278,-429,1000,1000,-637,-939,264,1000,214,-954,1000,-826,-1000,-1000,-1000,-1000,1000,80,1000,712,1000,-1000,-541}));
+    }
+    public void testDE00079() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasLongOpt():boolean",
+            new int[]{-405,921,-352,1000,-738,1000,375,579,1000,359,646,-296,252,-891,1000,-1000,318,447,-148,399,1000,-1000,1000,635,592,-380,332,-851,961,-919,488,-370,1000,-1000,17,437,-265,1000,-166,-73,-1000,408,520,-194,811,-662,-793,141,-224,-1000,1000,96,-245,-1000,-1000,-136,315,-1000,58,89,-1000,308,483,1000}));
+    }
+    public void testDE00080() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasOptionalArg():boolean",
+            new int[]{943,742,-332,-877,900,-555,933,1000,623,-15,594,299,-1000,1000,-739,-686,609,-532,-56,-1000,-793,-134,-319,-372,1000,-1000,34,-1000,312,481,1000,735,-496,1000,936,-1000,-1000,-1000,-1000,127,289,-1000,-1000,1000,-1000,1000,975,-1000,-1000,-358,160,662,-139,-956,-781,-127,-924,-1000,920,1000,157,-1000,1000,-271}));
+    }
+    public void testDE00081() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasOptionalArg():boolean",
+            new int[]{-143,-646,556,770,-955,476,-627,-832,-566,155,143,13,-514,-438,-253,428,401,-733,444,934,658,-997,-797,-180,-883,744,-651,150,-235,781,-446,26,-694,-342,-992,-228,751,280,189,78,-74,283,109,825,-615,856,-916,-681,-407,574,-832,925,464,-445,212,782,-691,248,190,137,121,503,-83,-862}));
+    }
+    public void testDE00082() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasOptionalArg():boolean",
+            new int[]{-785,208,311,500,400,836,-467,295,19,1000,139,571,412,-300,-158,-1000,714,748,1000,-1000,265,36,400,80,1000,437,-609,-904,-224,-1000,400,-399,311,1000,-932,-1000,-85,-303,437,932,-1000,156,-56,151,1000,995,352,-1000,367,200,428,1000,440,400,-181,-12,1000,-923,1000,1000,-1000,-577,1000,585}));
+    }
+    public void testDE00083() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasOptionalArg():boolean",
+            new int[]{1000,-330,-16,48,-1000,182,-1000,-1000,-1000,-887,-1000,735,-183,-1000,-916,-301,-780,-230,-537,-108,-256,-766,400,-808,-215,-356,-922,1000,519,637,389,-1000,-1000,-382,-1000,409,198,632,823,147,-263,843,-642,422,-1000,-991,-637,-375,-1000,609,503,323,1000,378,-400,1000,856,829,723,-282,-113,876,-682,-249}));
+    }
+    public void testDE00084() {
+        assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasValueSeparator():boolean",
+            new int[]{-1000,1000,-680,-939,1000,-278,-1000,1000,1000,1000,963,614,-596,-1000,279,114,-1000,1000,-698,303,1000,1000,-65,24,611,551,-1000,979,994,-710,317,-792,-101,-908,861,-33,22,950,799,415,807,139,1000,-688,-1000,1000,1000,1000,1000,296,-1000,-41,524,562,-496,990,1000,-267,-566,95,-892,-1000,254,708}));
+    }
+    public void testDE00085() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasValueSeparator():boolean",
+            new int[]{-1000,973,780,-259,1000,-74,-439,400,400,68,625,1000,-972,556,-105,379,-400,675,-1000,5,243,400,-345,452,1000,686,-290,-827,405,-355,522,400,491,-142,903,913,-207,374,160,355,-556,-785,-154,1000,-1000,1000,-551,-343,1000,69,-186,-201,67,506,-264,393,400,-43,-504,209,-813,-431,-122,196}));
+    }
+    public void testDE00086() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasValueSeparator():boolean",
+            new int[]{-1000,694,-799,-1000,1000,56,-730,1000,1000,1000,634,-70,-620,-1000,480,23,-1000,1000,4,405,1000,1000,1000,-207,-597,470,-1000,1000,1000,-858,755,-1000,-579,-1000,837,-362,469,1000,1000,-1000,1000,310,1000,66,-893,988,1000,1000,-1000,-165,-1000,-900,1000,291,1000,985,1000,-1000,-970,563,-621,469,844,996}));
+    }
+    public void testDE00087() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "hasValueSeparator():boolean",
+            new int[]{-1000,537,-256,-520,1000,67,93,1000,449,1000,800,633,-1000,185,138,-396,-20,753,-195,-19,924,369,-264,150,1000,243,-767,768,1000,-778,650,-20,111,-547,767,478,219,346,396,657,1000,-8,639,-298,-848,983,-422,-182,32,-64,-403,-1000,856,-83,-247,-643,154,-1000,-338,152,-348,-330,569,361}));
+    }
+    public void testDE00088() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "isRequired():boolean",
+            new int[]{-258,1000,-1000,-464,-1000,-333,324,1000,-956,-192,-193,474,-641,365,-271,555,599,-438,917,-1000,33,1000,-365,955,1000,120,-1000,474,189,721,1000,338,1000,-551,-183,-103,-83,961,79,589,46,89,367,1000,-723,-476,-1000,-803,-380,1000,-597,673,1000,-44,-23,-1000,762,17,-1000,-1000,864,711,72,1000}));
+    }
+    public void testDE00089() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "isRequired():boolean",
+            new int[]{1000,-1000,700,1000,1000,551,1000,391,-1000,-220,-663,474,834,365,-392,826,-1000,587,1000,242,713,1000,36,-642,1000,-386,797,184,189,-1000,-1000,338,12,-807,-1000,1000,-239,-1000,1000,-1000,363,-1000,101,-785,-1000,-1000,-1000,255,1000,-689,1000,673,493,-133,-1000,265,-1000,793,507,777,-1000,-1000,1000,-1000}));
+    }
+    public void testDE00090() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "isRequired():boolean",
+            new int[]{401,-729,-992,-370,37,-25,324,1000,-956,-192,-339,-203,541,734,-374,1000,669,-1000,8,-161,454,1000,-1000,1000,45,570,-910,-478,-220,1000,1000,89,-77,-183,-1000,-103,-247,-572,-1000,-819,1000,126,-1000,117,-738,-83,886,-1000,-1000,-1000,490,63,749,224,-479,-158,-215,-249,-395,-868,-921,-1000,-131,-135}));
+    }
+    public void testDE00091() {
+        assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "isRequired():boolean",
+            new int[]{-974,1000,-31,150,-176,-498,22,74,-1000,343,-467,-423,-657,160,-1000,-808,1000,459,-132,-1000,-645,-430,-1000,-402,781,735,-1000,-1000,228,-110,240,-483,326,-304,266,55,364,172,-1000,-370,-16,851,1000,-266,-99,-553,-1000,-34,-729,678,-970,-25,7,-35,217,-597,-728,-783,-228,-908,512,972,388,937}));
+    }
+    public void testDE00092() {
+        assertEquals("VOID|getArgName=java.lang.String:bFBqR1lkZ1Rh", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setArgName(java.lang.String):void",
+            new int[]{-255,328,364,241,185,727,-446,374,-699,-814,-58,-621,-82,562,189,152,-31,-678,873,-923,116,-699,215,-924,903,896,170,-627,-363,947,-541,-760,-304,-52,397,-650,-413,-907,-229,294,-345,168,399,-654,-880,319,-457,-403,820,-688,838,222,-76,-912,60,839,-270,96,-301,640,646,216,-944,335}));
+    }
+    public void testDE00093() {
+        assertEquals("VOID|getArgName=java.lang.String:MHg4MA==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setArgName(java.lang.String):void",
+            new int[]{-789,-180,-545,-331,-277,576,-1000,1000,414,-463,825,492,-597,-137,-997,-997,271,136,-624,-152,-719,-160,-1000,-400,887,406,1000,-7,494,372,612,-65,830,1000,-165,1000,489,159,1000,75,220,-1000,530,-909,1000,-1000,1000,-288,1000,-400,1000,1000,830,1000,291,-298,-1000,-940,23,-320,-1000,136,208,-259}));
+    }
+    public void testDE00094() {
+        assertEquals("VOID|getArgName=java.lang.String:MHg4MDA=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setArgName(java.lang.String):void",
+            new int[]{-30,594,640,-259,-210,258,-1000,171,868,50,-420,-1000,-582,745,-1000,650,816,-398,-85,-920,-255,-16,1000,1000,260,-251,-390,903,-300,1000,-226,-1000,-747,-387,143,-1000,406,-1000,-1000,-176,952,269,127,1000,-383,-93,-620,-1000,274,98,-329,-5,-556,333,-765,1000,1000,367,-11,597,-91,-688,-904,637}));
+    }
+    public void testDE00095() {
+        assertEquals("VOID|getArgs=java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setArgs(int):void",
+            new int[]{-764,-107,-133,-283,519,146,-270,77,36,-643,-217,-495,1000,4,-407,-517,-1000,536,838,-386,-303,-64,-1000,-151,1000,-863,-1000,-356,-1000,-83,-337,-400,587,240,-3,-828,-17,225,-296,-1000,155,134,317,-87,-1000,-1000,-268,36,-723,-204,199,-672,-581,474,-1000,388,-819,-114,-824,-917,426,-280,-1000,728}));
+    }
+    public void testDE00096() {
+        assertEquals("VOID|getArgs=java.lang.Integer:MjE0NzQ4MzY0Nw==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setArgs(int):void",
+            new int[]{375,-27,-369,-730,106,76,646,51,-360,264,338,351,71,536,-1000,484,979,-686,-292,-853,810,753,833,149,275,584,624,-940,1000,138,-356,268,-665,-1000,571,952,340,-749,784,1000,-230,623,-1000,972,108,388,-847,339,-447,873,136,-302,33,385,-415,37,366,-1000,953,528,-627,-568,-562,-147}));
+    }
+    public void testDE00097() {
+        assertEquals("VOID|getArgs=java.lang.Integer:LTIxNDc0ODM2NDg=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setArgs(int):void",
+            new int[]{-544,-125,-304,-794,-191,64,233,-138,387,-454,-37,-642,986,92,-1000,-965,-725,167,-135,1000,767,-63,-92,193,591,-663,-448,0,648,812,-67,-791,-417,976,73,-609,1000,462,-833,-734,77,1000,342,647,1000,-550,-215,341,226,570,199,-22,240,222,2,152,116,793,-430,-714,-903,1000,-1000,257}));
+    }
+    public void testDE00098() {
+        assertEquals("VOID|getDescription=java.lang.String:NjRkX01CX3V3eDZf", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setDescription(java.lang.String):void",
+            new int[]{491,937,623,649,-824,-499,-415,164,-892,-1000,591,-131,-1000,195,-74,-1000,-993,550,-249,-53,1000,-690,400,1000,537,-420,-990,297,-1000,971,960,-1000,-325,813,-890,1000,-1000,1000,-12,955,1000,491,600,920,117,-1000,-939,49,-93,1000,294,-861,-1000,1000,169,1000,1000,230,1000,612,-10,-1000,-539,-472}));
+    }
+    public void testDE00099() {
+        assertEquals("VOID|getDescription=NULL", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setDescription(java.lang.String):void",
+            new int[]{-159,451,253,-1000,928,680,949,266,-22,-734,-1000,-361,-71,-551,-651,1000,9,473,244,-1000,-338,-855,800,-88,578,812,42,-1000,-640,986,1000,55,-758,166,-96,456,-290,421,288,-956,651,-344,-952,-749,-1000,-379,-853,35,641,334,1000,942,-744,283,310,1000,1000,-227,-414,459,-546,-746,-702,-266}));
+    }
+    public void testDE00100() {
+        assertEquals("VOID|getDescription=java.lang.String:LTY5NS4yMDA=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setDescription(java.lang.String):void",
+            new int[]{1000,748,464,1000,-79,-1000,-299,502,580,1000,-61,1000,-542,-751,33,582,-1000,-700,977,1000,-113,241,-1000,-199,-235,695,-927,200,872,-527,-764,1000,12,-551,411,-807,-721,439,609,70,1000,1000,1000,1000,1000,-181,-490,170,-1000,400,-896,-513,32,839,-1000,519,703,152,-500,752,-39,220,1000,1000}));
+    }
+    public void testDE00101() {
+        assertEquals("VOID|getDescription=java.lang.String:MHgyMmE=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setDescription(java.lang.String):void",
+            new int[]{-304,537,-159,-1000,1000,1000,1000,47,317,324,-1000,-777,290,-48,-1000,1000,-418,1000,984,-777,-788,-1000,946,710,1000,1000,591,-1000,-477,1000,1000,-119,-1000,-630,126,1000,217,1000,269,-1000,341,-157,-1000,-524,471,554,-1000,40,478,1000,350,1000,-80,-981,488,722,346,-264,-1000,1000,-1000,-461,-921,-1000}));
+    }
+    public void testDE00102() {
+        assertEquals("VOID|getLongOpt=java.lang.String:LTB4ODA=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setLongOpt(java.lang.String):void",
+            new int[]{-193,1000,-1000,-135,-1000,1000,-1000,-127,-573,-256,-631,154,727,-1000,1000,-524,-313,1000,-187,-163,-559,-1000,-732,153,-259,507,1000,-686,-906,1000,62,1000,1000,457,-1000,-1000,-749,-515,-3,-1000,1000,917,969,-1000,-1000,1000,400,-866,769,1000,1000,-1000,-207,916,-846,1000,-1000,-513,1000,1000,-767,1000,1000,-1000}));
+    }
+    public void testDE00103() {
+        assertEquals("VOID|getLongOpt=java.lang.String:KzMw", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setLongOpt(java.lang.String):void",
+            new int[]{-88,-528,654,725,-1000,-165,361,-1000,-1000,371,-456,1000,294,-818,1000,-824,968,-1000,478,155,869,-525,573,-1000,-381,-960,527,-736,518,-20,276,-716,1000,-477,-740,-27,-1000,-1000,91,-185,276,30,-502,793,-1000,429,-353,245,1000,445,747,-15,-226,282,35,459,-1000,757,899,1000,-139,-503,-537,289}));
+    }
+    public void testDE00104() {
+        assertEquals("VOID|getLongOpt=java.lang.String:LTB4YWE=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setLongOpt(java.lang.String):void",
+            new int[]{-738,466,240,-818,432,-69,342,-804,212,-566,759,-127,-653,-755,-403,-766,605,-110,806,-536,146,-858,26,-12,-260,-375,52,-831,-839,-279,-387,-903,168,586,143,182,690,-1000,149,-247,119,-170,925,-816,-837,-471,1000,-571,403,916,130,31,-608,109,102,-372,-250,-478,-858,559,-13,-173,-1000,-95}));
+    }
+    public void testDE00105() {
+        assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setOptionalArg(boolean):void",
+            new int[]{1000,274,-82,542,-563,-524,484,923,-717,14,1000,-296,-168,-287,1000,602,-38,-226,-641,-661,-1000,-894,127,-1000,94,-351,122,-5,208,-756,-272,1000,100,829,326,-450,-457,257,505,1000,163,226,-94,-529,197,1000,-248,-1000,-277,-831,-186,352,1000,-785,-522,334,-199,464,-131,57,-850,103,952,-245}));
+    }
+    public void testDE00106() {
+        assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setOptionalArg(boolean):void",
+            new int[]{1000,1000,-517,983,1000,348,268,1000,-796,-69,-288,-466,856,1000,-632,682,892,-35,839,-847,-711,231,-442,-608,-1000,-443,391,-683,-191,178,-1000,813,557,-249,-1,-1000,65,77,-172,506,156,446,-626,31,150,577,806,-524,-424,184,-1000,-16,-656,-1000,-659,676,1000,752,-895,-871,-603,268,198,-556}));
+    }
+    public void testDE00107() {
+        assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setOptionalArg(boolean):void",
+            new int[]{1000,1000,192,749,128,1000,-883,488,-185,-98,-438,-845,124,1000,-358,-1000,1000,-711,454,-384,-978,671,-412,-1000,-1000,781,-1000,-105,-1000,-1000,-1000,-225,914,1000,-149,-1000,429,283,-712,1000,1000,905,774,-1000,-580,-1000,1000,542,-921,-1000,801,-1000,-503,-1000,-196,1000,687,711,-330,-522,1000,1000,88,-331}));
+    }
+    public void testDE00108() {
+        assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setOptionalArg(boolean):void",
+            new int[]{-603,507,-341,-855,811,466,90,-704,-931,-187,-79,-459,124,402,455,-347,-510,183,-222,-292,171,-410,169,802,-49,223,353,474,446,289,171,310,1000,-48,-60,-273,3,-434,231,86,-552,-337,-103,888,-1000,-695,205,569,-227,362,163,131,248,-45,742,-1000,-477,757,-622,-1000,-729,31,389,437}));
+    }
+    public void testDE00109() {
+        assertEquals("VOID|isRequired=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setRequired(boolean):void",
+            new int[]{367,304,-216,-781,176,-853,-528,1000,-145,771,87,159,1000,-661,-448,-640,111,421,-594,-562,1000,551,-689,549,-1000,-256,-921,-642,-1000,-919,-740,1000,-315,-370,-238,977,-881,-631,323,478,1000,1000,-263,831,-210,-341,-60,99,-131,52,-512,866,-44,81,-330,453,-342,-371,371,830,-877,-88,322,-565}));
+    }
+    public void testDE00110() {
+        assertEquals("VOID|isRequired=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setRequired(boolean):void",
+            new int[]{639,-596,652,326,1000,201,-1000,1000,533,-1000,1000,148,1000,-998,1000,-1000,654,-167,-293,-383,-1000,-1000,-1000,-26,-558,204,496,-1000,-1000,-595,798,1000,-1000,268,112,944,723,405,1000,1000,343,1000,220,-664,-428,1000,481,-1000,-558,-967,1000,-400,-1000,-1000,-1000,-826,-1000,615,901,-662,260,-722,-1000,690}));
+    }
+    public void testDE00111() {
+        assertEquals("VOID|isRequired=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setRequired(boolean):void",
+            new int[]{423,-699,-447,1000,478,-1000,-669,1000,772,14,768,-761,1000,-132,310,-1000,-320,1000,-459,-1000,8,-277,-1000,-216,215,-374,167,-977,-1000,-1000,1000,356,-910,-555,-1000,1000,-856,-1000,1000,596,1000,1000,-385,-38,352,149,-226,-785,-133,-337,-1000,1000,-785,-584,-33,-63,-1000,525,488,529,-314,811,-75,-681}));
+    }
+    public void testDE00112() {
+        assertEquals("VOID|isRequired=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setRequired(boolean):void",
+            new int[]{-246,-750,48,-400,-389,268,-82,-357,1000,-1,400,1000,-675,254,-2,221,679,226,-368,-258,-359,268,-60,-395,-664,-268,-1000,25,-296,-674,-316,356,28,145,-268,36,530,-98,-538,-557,551,-13,956,-695,237,221,134,-426,-225,189,420,-27,572,494,358,-1000,-154,-409,640,-609,-400,-572,-1000,611}));
+    }
+    public void testDE00113() {
+        assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setType(java.lang.Class):void",
+            new int[]{293,-633,-276,190,793,276,205,-357,-1000,-1000,923,-700,133,1000,-483,-1000,-500,-1000,-680,-1000,-499,414,-142,-765,1000,1000,-138,1000,-1000,512,93,1000,-93,-612,-469,653,1000,1000,1000,-1000,-899,153,-1000,-496,-185,-638,931,-1000,-22,1000,898,1000,-1000,-1000,-432,586,-833,588,1000,-736,-1000,388,1000,242}));
+    }
+    public void testDE00114() {
+        assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setType(java.lang.Class):void",
+            new int[]{352,-146,-76,-1000,-1000,-484,-931,737,1000,1000,-261,1000,-308,142,1000,1000,375,1000,1000,635,-119,-1000,979,221,-1000,-1000,653,-573,-437,417,-1000,-669,270,-222,-754,-1000,-949,-1000,-1000,1000,-401,-1000,543,1000,-683,-1000,-1000,1000,1000,-1000,-1000,-1000,1000,-239,-524,1000,-569,-234,-1000,-301,660,1000,-1000,1000}));
+    }
+    public void testDE00115() {
+        assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setType(java.lang.Class):void",
+            new int[]{509,333,112,-388,167,-233,-69,-701,-161,1000,-851,-958,-717,-238,-444,674,-626,-536,329,1000,-603,672,108,-365,-372,-1000,-382,705,-599,322,-270,-194,-1000,-509,-1000,834,-207,-82,-271,1000,-366,-34,-795,111,-58,819,482,723,900,-217,148,93,444,648,-982,142,-710,-265,-1000,-1000,-834,834,-789,-70}));
+    }
+    public void testDE00116() {
+        assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setType(java.lang.Class):void",
+            new int[]{253,-954,-207,245,355,-23,-1000,-991,-331,729,-39,-631,581,4,-692,-1000,-866,-549,-1000,-765,-1000,905,400,-1000,1000,-1000,556,1000,-428,417,287,1000,639,-820,631,1000,980,1000,1000,-1000,-401,359,-400,-687,345,213,-342,-1000,-46,640,275,1000,-1000,1000,-282,662,-1000,1000,200,-981,-1000,438,228,1000}));
+    }
+    public void testDE00117() {
+        assertEquals("VOID|getValueSeparator=java.lang.Character:Ig==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setValueSeparator(char):void",
+            new int[]{-377,-167,1000,83,1000,415,688,-490,549,346,178,-691,804,1000,-1000,30,1000,122,-626,1000,-80,429,1000,-338,-780,-722,-825,-350,716,-822,1000,-913,62,1000,-1000,-331,422,698,-521,408,1000,-750,-145,-353,-1000,1000,-1000,-571,-143,823,-470,357,-1000,1000,-1000,-1000,-952,-869,-733,-1000,618,258,88,947}));
+    }
+    public void testDE00118() {
+        assertEquals("VOID|getValueSeparator=java.lang.Character:fA==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setValueSeparator(char):void",
+            new int[]{-616,421,751,-692,1000,601,387,-650,835,363,689,-289,905,669,764,-602,587,-185,-712,1000,-606,1000,1000,-430,711,147,-531,701,343,228,-1000,-544,34,246,131,724,34,-329,-467,1000,-922,893,13,-592,-1000,1000,-1000,-108,-245,-347,-73,-897,-838,532,-477,-730,-1000,-937,465,-333,799,-1000,-119,827}));
+    }
+    public void testDE00119() {
+        assertEquals("VOID|getValueSeparator=java.lang.Character:aA==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setValueSeparator(char):void",
+            new int[]{1000,-693,-912,-430,625,-400,-831,-1000,-311,51,-920,942,1000,-128,-895,389,1000,-574,353,867,-1000,299,15,-1000,-1000,1000,-1000,1000,1000,258,741,-689,-781,314,-1000,-1000,1000,741,-1000,1000,-719,-645,-940,254,-1000,1000,-1000,-1000,-723,-371,-178,-272,400,1000,1000,-1000,-759,-831,-478,19,847,-879,291,780}));
+    }
+    public void testDE00120() {
+        assertEquals("VOID|getValueSeparator=java.lang.Character:Dg==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "setValueSeparator(char):void",
+            new int[]{888,303,628,-14,-452,1000,968,-760,-177,258,1000,-921,921,257,713,201,896,765,104,1000,-21,1000,782,-641,59,-1000,-1000,-986,-278,-29,551,-1000,764,1000,-1000,-668,665,-347,-225,598,-940,1000,366,-431,-274,972,-758,-946,425,385,-240,-283,-1000,662,-1000,-753,-1000,-999,909,307,511,279,260,1000}));
+    }
+    public void testDE00121() {
+        assertEquals("java.lang.String:WyBvcHRpb246IGRpUjZfYlBKNiAweDggIFtBUkddIDo6ICA6OiBjbGFzcyBqYXZhLmxhbmcuU3RyaW5nIF0=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "toString():java.lang.String",
+            new int[]{429,1000,510,336,1000,-341,-839,-53,479,1000,-1000,650,-162,-381,1000,1000,945,-744,-391,644,115,-1000,-451,-5,-1000,680,1000,-1000,532,241,1000,360,-1000,1000,-847,60,-259,-1000,758,1000,1000,-193,-1000,56,-468,-160,729,-682,-137,323,1000,51,-92,575,460,-1000,1000,-619,41,-119,601,338,400,36}));
+    }
+    public void testDE00122() {
+        assertEquals("java.lang.String:WyBvcHRpb246IDB4M2U4IFtBUkcuLi5dIDo6IE5hTiA6OiBjbGFzcyBqYXZhLmxhbmcuU3RyaW5nIF0=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "toString():java.lang.String",
+            new int[]{-1000,12,-793,-1000,-540,-821,1000,-276,598,778,-1000,747,245,-316,-1000,-678,365,236,913,623,-140,-239,-959,-743,1000,-36,-776,-535,40,-1000,37,-1000,790,-885,-426,-286,1000,989,-563,-382,-462,1000,176,1000,54,1000,407,-302,-818,985,-1000,-608,821,768,-1000,191,289,-221,31,258,448,631,-1000,-259}));
+    }
+    public void testDE00123() {
+        assertEquals("java.lang.String:WyBvcHRpb246IFMgIFtBUkddIDo6IHRydWUgOjogY2xhc3MgamF2YS5sYW5nLlN0cmluZyBd", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "toString():java.lang.String",
+            new int[]{888,-152,-146,787,1000,601,-514,640,-197,-1000,323,-1000,174,1000,-119,-770,508,-110,-1000,-873,-1000,384,-369,400,108,-1000,943,294,1000,-537,34,377,499,-1000,-541,438,-675,-176,998,-447,1000,536,191,-1000,-885,274,933,618,1000,1000,680,-1000,-1000,475,-1000,-879,130,9,147,-862,447,-884,78,-523}));
+    }
+    public void testDE00124() {
+        assertEquals("java.lang.String:WyBvcHRpb246IDB4ODAwMDAwMDAwMDAwICA6OiAKX2ZyUF8JZ29fLTg2MU5yOTNtXzY2NiA6OiBjbGFzcyBqYXZhLmxhbmcuU3RyaW5nIF0=", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "toString():java.lang.String",
+            new int[]{-1000,1000,-1000,-674,568,-129,824,-157,1000,322,119,1000,-25,209,-1000,219,894,-390,465,-377,283,-1000,583,-967,-20,917,-215,-55,-47,-1000,-292,-560,1000,-567,617,169,-204,784,448,-1000,1000,1000,1000,11,-631,1000,977,399,6,376,-1000,195,-130,447,-1000,-231,282,-283,-839,-84,1000,131,-1000,928}));
+    }
+    public void testDE00125() {
+        assertEquals("java.lang.String:WyBvcHRpb246IG51bGwgIDo6ICsweDgwMDAwMDAwMDAwIDo6IGNsYXNzIGphdmEubGFuZy5TdHJpbmcgXQ==", DEReplay.run(
+            "org.apache.commons.cli.Option", "org.apache.commons.cli.Option", "toString():java.lang.String",
+            new int[]{-416,208,-960,979,1000,-1000,1000,1000,-74,990,99,137,-1000,295,1000,1000,-100,-585,391,1000,372,-1000,-751,383,-1000,-944,-1000,-581,275,-306,1000,968,-1000,1000,780,753,-243,-1000,-1000,627,-186,-758,-557,811,1000,-442,-263,1000,138,-837,1000,971,947,-1000,918,-1,196,361,-778,-267,618,810,-825,651}));
+    }
+    public void testDE00126() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionGroup", DEReplay.run(
+            "org.apache.commons.cli.OptionGroup", "org.apache.commons.cli.OptionGroup", "addOption(org.apache.commons.cli.Option):org.apache.commons.cli.OptionGroup",
+            new int[]{-1000,-1000,-81,1000,-740,-1000,1000,77,1000,-447,1000,-56,1000,-1000,1000,1000,-466,1000,898,-1000,226,-1000,-902,310,-996,-589,-1000,1000,-270,887,1000,-532,1000,686,1000,-193,731,-648,-1000,1000,-1000,528,-51,1000,437,-1000,-87,302,1000,1000,1000,-671,-1000,835,-739,-1000,-1000,-583,-171,-1000,-1000,-1000,-231,1000}));
+    }
+    public void testDE00127() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionGroup", DEReplay.run(
+            "org.apache.commons.cli.OptionGroup", "org.apache.commons.cli.OptionGroup", "addOption(org.apache.commons.cli.Option):org.apache.commons.cli.OptionGroup",
+            new int[]{-1000,-412,-904,590,-234,31,1000,80,226,660,948,-1000,21,1000,323,188,-488,644,-228,-317,-1000,-445,597,-311,-584,804,-476,580,-863,719,195,719,691,-112,-60,-349,28,516,981,-446,-173,688,137,815,-766,179,1000,560,-687,33,-6,-234,-311,855,262,-429,-512,813,70,-386,-368,-105,-1000,454}));
+    }
+    public void testDE00128() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionGroup", DEReplay.run(
+            "org.apache.commons.cli.OptionGroup", "org.apache.commons.cli.OptionGroup", "addOption(org.apache.commons.cli.Option):org.apache.commons.cli.OptionGroup",
+            new int[]{-1000,-653,484,-300,-513,1000,709,-1000,1000,-778,-321,567,-1000,42,-1000,99,430,-215,1000,-1000,-241,-1000,-315,1000,-586,20,-828,-457,1000,679,-47,300,59,-434,315,1000,-823,-624,1000,-1000,-1000,1000,500,1000,-869,-1000,178,-1000,-673,1000,1000,-1000,-479,-340,1000,-1000,-1000,152,-472,-241,512,339,-1000,1000}));
+    }
+    public void testDE00129() {
+        assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.cli.OptionGroup", "org.apache.commons.cli.OptionGroup", "addOption(org.apache.commons.cli.Option):org.apache.commons.cli.OptionGroup",
+            new int[]{-1000,-623,64,-262,-504,433,1000,-817,1000,-719,-106,991,-998,-439,440,90,-227,948,342,-1000,575,-1000,-772,1000,-824,-293,-1000,307,-588,1000,-389,-92,241,-1000,1000,-379,-1000,-1000,1000,-1000,-248,1000,-169,1000,-580,-1000,82,-402,-349,967,1000,-1000,-1000,-421,506,-1000,133,1000,-386,-224,-58,1000,-685,659}));
+    }
+    public void testDE00130() {
+        assertEquals("THROW:org.apache.commons.cli.AlreadySelectedException", DEReplay.run(
+            "org.apache.commons.cli.OptionGroup", "org.apache.commons.cli.OptionGroup", "setSelected(org.apache.commons.cli.Option):void",
+            new int[]{-117,1000,-986,1000,299,-1000,-1000,442,281,-45,187,-371,-336,851,-410,-1000,1000,1000,478,-613,276,-721,-1000,1000,-795,-638,-1000,-1000,-480,876,-607,-1000,1000,-1000,267,366,-1000,299,451,-1000,-1000,509,1000,703,1000,-400,-633,-1000,691,54,783,922,-1000,224,272,-430,22,-1000,-889,-1000,840,-1000,1000,1000}));
+    }
+    public void testDE00131() {
+        assertEquals("VOID|getSelected=java.lang.String:", DEReplay.run(
+            "org.apache.commons.cli.OptionGroup", "org.apache.commons.cli.OptionGroup", "setSelected(org.apache.commons.cli.Option):void",
+            new int[]{-603,820,23,836,740,-158,-1000,671,-915,-250,970,-601,628,-561,288,541,-1000,847,-333,-55,1000,123,-190,1000,-130,-1000,-136,1000,-402,-720,1000,612,1000,-420,-1000,1000,-1000,-320,946,-1000,-1000,-603,188,-805,1000,1000,-1000,-1000,-472,312,1000,942,-860,65,1000,-402,-488,-1000,-413,-1000,1000,33,340,-290}));
+    }
+    public void testDE00132() {
+        assertEquals("VOID|getSelected=NULL", DEReplay.run(
+            "org.apache.commons.cli.OptionGroup", "org.apache.commons.cli.OptionGroup", "setSelected(org.apache.commons.cli.Option):void",
+            new int[]{583,-609,-431,729,-1000,-816,1000,-89,421,-1000,-667,-297,1000,1000,-1000,-1000,229,846,1000,-629,-91,86,-1000,1000,-938,333,-803,-1000,-482,1000,209,-177,1000,-384,-104,1000,-784,-203,1000,-1000,488,445,287,-1000,-77,870,-401,-1000,691,-578,1000,801,-761,-567,305,-952,1000,-1000,-890,746,85,-1000,1000,1000}));
+    }
+    public void testDE00133() {
+        assertEquals("TYPE:org.apache.commons.cli.Options", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOption(java.lang.String,boolean,java.lang.String):org.apache.commons.cli.Options",
+            new int[]{-869,1000,-641,-586,-612,1000,389,416,-493,813,-615,-1000,370,-1000,709,953,155,1000,-1000,-389,-1000,210,-684,-220,710,821,1000,-96,-245,469,-653,363,1000,-431,-1000,-372,-1000,-1000,-502,-1000,79,-17,-124,1000,-162,-966,-118,-123,993,521,267,408,420,-1000,213,-14,-213,-1000,-1000,111,337,-356,-400,126}));
+    }
+    public void testDE00134() {
+        assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOption(java.lang.String,boolean,java.lang.String):org.apache.commons.cli.Options",
+            new int[]{-635,-1000,373,1000,-372,1000,224,-1000,1000,271,-889,-222,-445,580,298,-939,1000,-1000,32,749,1000,-1000,767,-460,1000,601,-625,-1000,-1000,1000,955,-37,-170,656,216,172,1000,-1000,-242,105,1000,257,-929,-771,1000,870,-540,1000,-1000,1000,1000,398,-405,1000,-703,-380,715,154,1000,-1000,-1000,232,473,-1000}));
+    }
+    public void testDE00135() {
+        assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOption(java.lang.String,boolean,java.lang.String):org.apache.commons.cli.Options",
+            new int[]{-187,-1000,378,1000,-71,1000,896,-400,503,-741,-1000,-564,594,400,1000,-400,845,-608,210,1000,344,559,-1000,-1000,1000,243,-844,-381,-435,240,-1000,1000,1000,-289,-1000,1000,1000,-1000,1000,-806,1000,-263,-1000,-1000,400,400,1000,700,-745,620,837,966,-1000,281,-109,-1000,1000,-641,532,-1000,-1000,-100,400,-919}));
+    }
+    public void testDE00136() {
+        assertEquals("TYPE:org.apache.commons.cli.Options", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOption(java.lang.String,java.lang.String,boolean,java.lang.String):org.apache.commons.cli.Options",
+            new int[]{304,287,249,348,4,537,1000,-630,616,93,-1000,-455,-1000,699,-148,471,1000,550,771,-215,-65,-370,-709,884,-164,392,-690,662,153,101,-412,66,-67,755,375,-488,420,285,-17,-609,-645,185,-272,20,-965,793,-212,372,1000,-339,604,375,-607,-174,1000,479,-497,1000,248,-174,670,724,-232,1000}));
+    }
+    public void testDE00137() {
+        assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOption(java.lang.String,java.lang.String,boolean,java.lang.String):org.apache.commons.cli.Options",
+            new int[]{-400,-957,-726,-981,-558,-232,-280,67,32,-70,342,796,346,-1000,-666,-1000,-402,774,-1000,-287,-728,-246,1000,384,-518,579,-255,262,-130,-67,-97,24,160,-759,698,-176,1000,-1000,948,-58,386,-895,-438,-1000,233,603,-153,-156,-918,-223,1000,-1000,503,-67,336,-350,65,-1000,86,426,298,12,1000,-438}));
+    }
+    public void testDE00138() {
+        assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOption(java.lang.String,java.lang.String,boolean,java.lang.String):org.apache.commons.cli.Options",
+            new int[]{950,1000,-431,-182,-556,-100,-1000,294,-1000,-563,935,634,-811,624,285,-243,-214,-551,-763,-762,-844,205,-479,401,-708,896,233,1000,92,395,-314,-968,-839,423,340,-1000,-1000,248,313,106,-116,-262,1000,-686,1000,-464,-1000,-574,-1000,-667,-152,-131,474,151,-292,-135,660,-1000,83,-395,1000,1000,15,-450}));
+    }
+    public void testDE00139() {
+        assertEquals("TYPE:org.apache.commons.cli.Options", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOption(org.apache.commons.cli.Option):org.apache.commons.cli.Options",
+            new int[]{-1000,-26,-346,-1000,-727,135,-512,-255,130,1000,973,-194,139,251,-1000,703,-253,1000,270,-138,-1000,-1000,-604,105,311,241,-488,-688,856,-1000,250,705,-894,-22,-928,-48,494,-236,524,-1000,1000,1000,-1000,-1,-1000,539,-466,186,-1000,497,1000,-1000,1000,820,548,5,958,126,-161,-411,951,-453,1000,-616}));
+    }
+    public void testDE00140() {
+        assertEquals("TYPE:org.apache.commons.cli.Options", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOption(org.apache.commons.cli.Option):org.apache.commons.cli.Options",
+            new int[]{781,1000,517,1000,1000,285,829,62,426,248,-849,-1000,707,-1000,711,322,806,-1000,-611,-191,694,-1000,-145,-643,805,-606,-1000,164,-43,1000,1000,396,1000,919,237,-592,1000,1000,1000,898,816,-1000,980,950,-475,20,-1000,-926,730,-891,-245,413,1000,1000,1000,-216,1000,803,-509,-36,1000,741,-1000,53}));
+    }
+    public void testDE00141() {
+        assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOption(org.apache.commons.cli.Option):org.apache.commons.cli.Options",
+            new int[]{603,-78,-352,1000,744,435,99,336,942,-1000,-487,-1000,620,-1000,1000,323,400,-1000,400,695,-590,-138,496,-670,1000,400,-400,1000,948,902,917,-1000,404,492,-217,1000,-206,500,654,251,1000,170,-90,560,-492,-244,-949,-1000,1000,-1000,-110,158,373,-191,1000,-140,-924,599,-1000,1000,278,-167,-1000,-537}));
+    }
+    public void testDE00142() {
+        assertEquals("TYPE:org.apache.commons.cli.Options", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOptionGroup(org.apache.commons.cli.OptionGroup):org.apache.commons.cli.Options",
+            new int[]{121,991,614,402,431,-400,-201,776,892,-1000,-286,1000,1000,-999,1000,1000,-729,-810,124,300,-86,72,-990,-488,-1000,235,-188,-927,-602,-853,1000,-522,1000,620,-108,-105,-1000,-976,26,-103,1000,469,-239,-991,-399,-200,179,1000,-1000,49,-1000,99,158,1000,-1000,-230,-913,-934,702,-955,-198,184,85,271}));
+    }
+    public void testDE00143() {
+        assertEquals("TYPE:org.apache.commons.cli.Options", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOptionGroup(org.apache.commons.cli.OptionGroup):org.apache.commons.cli.Options",
+            new int[]{-246,506,679,937,1000,820,-902,1000,1000,805,461,637,1000,-280,536,-53,132,-952,664,1000,-1000,-234,1000,-1000,-243,18,338,1000,-969,-731,-106,-1000,-774,582,887,1000,-517,-324,228,-114,513,975,-656,-600,-1000,211,535,209,549,17,1000,71,-813,829,-138,-942,-1000,-672,862,318,371,-413,-1000,-913}));
+    }
+    public void testDE00144() {
+        assertEquals("TYPE:org.apache.commons.cli.Options", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "addOptionGroup(org.apache.commons.cli.OptionGroup):org.apache.commons.cli.Options",
+            new int[]{826,1000,544,-959,-1000,-1000,516,-1000,-1000,-140,321,740,1000,-785,385,-507,312,-1000,127,530,1000,904,-985,-42,-1000,-8,-635,-1000,-1000,-1000,-64,648,1000,-251,631,-1000,-102,113,413,-858,811,1000,-656,-818,-862,2,643,-95,-1000,1000,1000,-1000,1000,-394,-65,54,-1000,-20,-494,3,40,745,1000,976}));
+    }
+    public void testDE00145() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "getOptionGroup(org.apache.commons.cli.Option):org.apache.commons.cli.OptionGroup",
+            new int[]{1,583,-366,-472,-1000,138,-540,411,1000,-992,689,19,-153,762,-796,130,395,376,504,-1000,-247,26,-785,-1000,-45,53,651,-331,378,548,58,-360,-581,1000,583,-580,240,441,-795,-320,305,123,-1000,-21,-376,952,957,-1000,137,416,473,-548,1000,-471,224,444,958,457,359,770,-1000,898,241,1000}));
+    }
+    public void testDE00146() {
+        assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "getOptionGroup(org.apache.commons.cli.Option):org.apache.commons.cli.OptionGroup",
+            new int[]{-1000,319,-566,-620,-1000,-840,-1000,-1000,521,-603,666,1000,-330,-234,165,1000,1000,-1000,946,1000,0,751,-290,-614,454,-42,-1000,-1000,-792,1000,1000,137,-331,-943,886,-294,1000,1000,1000,1000,-78,-1000,-1000,-715,1000,-430,-610,1000,1000,1000,1000,-182,1000,-301,553,-1000,-1000,1000,-1000,284,-85,-575,1000,-743}));
+    }
+    public void testDE00147() {
+        assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.cli.Options", "org.apache.commons.cli.Options", "getOptionGroup(org.apache.commons.cli.Option):org.apache.commons.cli.OptionGroup",
+            new int[]{254,583,-497,-173,-33,1000,-1000,-1000,1000,-1000,-88,20,-1000,-632,454,-165,205,-927,1000,706,-621,-641,-138,-1000,-407,-550,-652,4,1000,548,519,-565,725,-1000,-1000,1000,-933,233,1000,463,305,-758,-400,-705,171,723,1000,1000,656,-19,1000,875,-166,-471,602,268,-69,457,205,220,569,647,1000,598}));
+    }
+    public void testDE00148() {
+        assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.cli.Parser", "org.apache.commons.cli.BasicParser,org.apache.commons.cli.GnuParser,org.apache.commons.cli.PosixParser", "processArgs(org.apache.commons.cli.Option,java.util.ListIterator):void",
+            new int[]{-867,141,1000,1000,-980,-1000,377,-699,-910,1000,-973,1000,8,-542,797,447,645,1000,-1000,40,-95,1000,842,-1000,989,-1000,969,-1000,1000,-132,-1000,1000,149,1000,356,-312,-294,93,16,383,-870,-1000,1000,725,-250,-502,-856,-1000,660,1000,-651,-82,-1000,-311,-1000,-368,-278,1000,185,19,-1000,-797,-1000,-1000}));
+    }
+    public void testDE00149() {
+        assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.cli.Parser", "org.apache.commons.cli.BasicParser,org.apache.commons.cli.GnuParser,org.apache.commons.cli.PosixParser", "processArgs(org.apache.commons.cli.Option,java.util.ListIterator):void",
+            new int[]{-313,407,-6,723,-327,-498,896,-162,-297,-326,283,198,-923,-708,579,663,-982,572,679,-847,573,-875,-1,-255,-800,274,-929,-46,-498,-71,551,-114,796,-772,-202,833,124,899,-679,984,142,-641,349,427,913,-59,-462,371,-962,-701,-618,603,815,-942,-702,630,115,81,564,-400,568,-676,253,206}));
+    }
+    public void testDE00150() {
+        assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.cli.Parser", "org.apache.commons.cli.BasicParser,org.apache.commons.cli.GnuParser,org.apache.commons.cli.PosixParser", "processArgs(org.apache.commons.cli.Option,java.util.ListIterator):void",
+            new int[]{-696,-76,386,-499,-494,715,-379,284,318,-1000,-615,442,-816,-1000,489,-805,-1000,1000,-192,578,-512,430,-1000,415,395,-804,1000,-798,605,-213,468,-29,-1000,-200,317,543,430,911,-552,-715,485,939,1000,-788,-1000,-78,-36,237,-213,335,1000,-125,-280,-1000,658,-682,1000,320,-1000,-123,-500,211,621,165}));
+    }
+    public void testDE00151() {
+        assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.cli.Parser", "org.apache.commons.cli.BasicParser,org.apache.commons.cli.GnuParser,org.apache.commons.cli.PosixParser", "processArgs(org.apache.commons.cli.Option,java.util.ListIterator):void",
+            new int[]{-432,61,-517,298,889,928,-462,-262,375,-627,-575,313,375,-472,480,723,-852,999,855,587,-61,296,-134,-422,659,-763,645,-755,277,-262,-448,864,-787,-170,157,495,977,475,696,546,-889,834,897,-343,-915,985,795,-564,-787,-219,748,-282,-117,-460,237,-620,452,546,-741,-526,-23,983,76,-522}));
+    }
+    public void testDE00152() {
+        assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.cli.Parser", "org.apache.commons.cli.BasicParser,org.apache.commons.cli.GnuParser,org.apache.commons.cli.PosixParser", "processArgs(org.apache.commons.cli.Option,java.util.ListIterator):void",
+            new int[]{-4,1000,1000,1000,-720,373,-2,-1000,-1000,326,-7,439,-563,-521,258,192,-707,1000,-303,-503,316,296,1000,-335,-1000,-678,455,-350,-153,194,406,-357,386,988,-308,-544,-554,1000,-615,28,-305,-244,183,57,467,-8,-942,-670,1000,501,267,1000,-1000,1000,488,1000,-78,539,1000,-835,78,1000,-521,-846}));
+    }
+    public void testDE00153() {
+        assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.cli.PatternOptionBuilder", "", "parsePattern(java.lang.String):org.apache.commons.cli.Options",
+            new int[]{629,-999,806,-830,-84,-807,-466,1000,893,1000,-832,-578,1000,-777,-1000,978,990,-332,-444,280,-1000,-1000,-68,939,783,1000,622,388,601,12,557,799,585,-1000,-1000,471,856,266,-1000,962,673,-1000,-503,-1000,209,1000,487,665,-285,-666,1000,76,-648,231,20,653,384,987,-536,-1000,-1000,-1000,-1000,472}));
+    }
+    public void testDE00154() {
+        assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "create():org.apache.commons.cli.Option",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00155() {
+        assertEquals("TYPE:org.apache.commons.cli.Option", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "create(char):org.apache.commons.cli.Option",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00156() {
+        assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "create(char):org.apache.commons.cli.Option",
+            new int[]{731,-766,-958,-559,-181,897,189,454,-304,453,923,-690,326,-585,502,294,-696,-381,403,366,353,2,-391,-149,-961,560,604,672,225,752,465,17,-819,-858,359,-284,-808,783,235,-990,-980,490,-493,877,-374,-46,-853,-349,-798,465,-247,267,744,904,-125,-869,-864,632,-835,-638,-935,898,-217,954}));
+    }
+    public void testDE00157() {
+        assertEquals("TYPE:org.apache.commons.cli.Option", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "create(char):org.apache.commons.cli.Option",
+            new int[]{-320,-853,515,-80,-1000,-1000,643,-514,1000,-706,-1000,283,-161,608,396,126,555,-527,23,-299,-1000,749,-486,-1000,675,1000,-620,-222,499,-422,-418,-1000,-1000,266,-270,499,613,-236,1000,-620,-1000,-1000,481,-1000,61,176,1000,-1000,1000,-402,-1000,105,8,-964,1000,715,441,734,-264,-1000,-430,224,-52,512}));
+    }
+    public void testDE00158() {
+        assertEquals("TYPE:org.apache.commons.cli.Option", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "create(char):org.apache.commons.cli.Option",
+            new int[]{-321,253,-1000,564,819,723,666,-1000,400,-319,-1000,-623,183,-967,-1000,-400,596,-13,-1000,786,-725,1000,1000,1000,-151,-345,-771,-134,-207,-1000,-355,703,-705,1000,-1000,-958,-1000,-49,-951,-242,-1000,448,-205,660,-490,-1000,1000,-57,895,-164,678,779,-78,1000,-720,472,-874,-1000,-181,-546,-290,-404,248,-1000}));
+    }
+    public void testDE00159() {
+        assertEquals("TYPE:org.apache.commons.cli.Option", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "create(java.lang.String):org.apache.commons.cli.Option",
+            new int[]{243,9,-357,-1000,410,164,-1000,1000,-294,-151,3,4,-1000,-253,-124,400,1000,-458,88,373,-799,-50,-431,1000,479,-57,-116,367,659,909,245,644,573,1000,238,-638,-521,-928,141,-480,689,-936,182,-1000,-400,1000,-225,629,-1000,235,-200,-534,66,678,601,774,161,-400,1000,192,1000,258,695,-231}));
+    }
+    public void testDE00160() {
+        assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "create(java.lang.String):org.apache.commons.cli.Option",
+            new int[]{541,905,679,510,-585,122,-653,-510,300,-333,-756,-3,239,175,450,360,-926,907,430,-798,190,487,-352,-474,-929,-768,-322,6,-886,994,727,669,-607,-650,650,-841,665,697,13,708,-204,-637,-385,-394,-973,-822,-65,498,996,146,472,120,-726,-198,623,276,-654,659,849,736,410,-269,-775,571}));
+    }
+    public void testDE00161() {
+        assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "create(java.lang.String):org.apache.commons.cli.Option",
+            new int[]{-766,185,1000,41,-74,-611,-40,1000,723,-396,1000,473,-843,-1000,285,302,1000,-637,-1000,1000,1000,1000,72,101,521,919,1000,358,519,508,310,1000,836,828,-1000,32,-533,676,832,-1000,791,1000,40,-934,-1000,869,537,344,-1000,291,-1000,-532,1000,-11,182,1000,1000,-736,-862,-936,369,-261,235,-1000}));
+    }
+    public void testDE00162() {
+        assertEquals("TYPE:org.apache.commons.cli.Option", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "create(java.lang.String):org.apache.commons.cli.Option",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00163() {
+        assertEquals("TYPE:org.apache.commons.cli.Option", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "create(java.lang.String):org.apache.commons.cli.Option",
+            new int[]{189,-885,-616,600,-21,-362,-388,-776,198,20,-447,312,245,205,-600,826,283,-302,-8,-354,540,-258,483,873,479,-596,-453,42,992,-32,246,346,-984,-75,846,76,604,-398,-622,344,-660,-13,562,-132,217,700,-225,-906,645,-829,261,-742,45,-873,433,-857,-316,-783,251,-806,839,270,984,-543}));
+    }
+    public void testDE00164() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "hasArg():org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00165() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "hasArg(boolean):org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00166() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "hasArg(boolean):org.apache.commons.cli.OptionBuilder",
+            new int[]{385,-530,692,864,-60,999,-688,871,250,-149,-263,422,-360,-921,640,962,-453,-754,768,-494,629,-459,993,-895,-660,139,-398,-481,-180,790,196,145,-592,295,-879,-701,277,511,720,393,765,855,-60,203,-214,887,795,-482,430,-530,26,-258,276,-730,-72,693,284,912,780,815,-794,-43,-468,-717}));
+    }
+    public void testDE00167() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "hasArgs():org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00168() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "hasArgs(int):org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00169() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "hasOptionalArg():org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00170() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "hasOptionalArgs():org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00171() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "hasOptionalArgs(int):org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00172() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "isRequired():org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00173() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "isRequired(boolean):org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00174() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "withArgName(java.lang.String):org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00175() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "withDescription(java.lang.String):org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00176() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "withLongOpt(java.lang.String):org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00177() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "withType(java.lang.Class):org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00178() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "withValueSeparator():org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00179() {
+        assertEquals("TYPE:org.apache.commons.cli.OptionBuilder", DEReplay.run(
+            "org.apache.commons.cli.OptionBuilder", "", "withValueSeparator(char):org.apache.commons.cli.OptionBuilder",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    public void testDE00180() {
+        assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.cli.PatternOptionBuilder", "", "parsePattern(java.lang.String):org.apache.commons.cli.Options",
+            new int[]{629,-999,806,-830,-84,-807,-466,1000,893,1000,-832,-578,1000,-777,-1000,978,990,-332,-444,280,-1000,-1000,-68,939,783,1000,622,388,601,12,557,799,585,-1000,-1000,471,856,266,-1000,962,673,-1000,-503,-1000,209,1000,487,665,-285,-666,1000,76,-648,231,20,653,384,987,-536,-1000,-1000,-1000,-1000,472}));
+    }
+}

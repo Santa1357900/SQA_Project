@@ -1,0 +1,8463 @@
+import java.lang.reflect.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+/** Deterministic test-program decoder. Used unchanged during search and JUnit replay. */
+final class DEReplay {
+    public static final int DIMENSIONS = 64;
+    /** Local generic bean used to create stable reflection Type and Field values. */
+    public static final class GenericInput {
+        public String text;
+        public java.util.List<String> names;
+        public java.util.Map<String, Integer> counts;
+        public java.util.List<java.util.Map<String, Long>> nested;
+        public int[] numbers;
+        public String[] words;
+    }
+    static final class Genes {
+        final int[] values; int at; Field lastField;
+        Object jacksonBean, jacksonProvider, jacksonGenerator;
+        StringWriter jacksonOutput;
+        Genes(int[] values) { this.values = values; }
+        int next() { return values[(at++) % values.length]; }
+        int pick(int n) { return Math.floorMod(next(), n); }
+    }
+    public static final class Observation {
+        public String token, error, generatedSource;
+        public boolean reachedTarget;
+        public int setupCalls, setupFailures, nullFallbacks;
+    }
+    public static String signature(Method m) {
+        StringJoiner params = new StringJoiner(",");
+        for (Class<?> t : m.getParameterTypes()) params.add(t.getTypeName());
+        return m.getName() + "(" + params + "):" + m.getReturnType().getTypeName();
+    }
+    static Class<?> load(String name) throws ClassNotFoundException {
+        return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+    }
+    static Method method(String target, String signature) throws Exception {
+        for (Method m : load(target).getDeclaredMethods())
+            if (signature(m).equals(signature)) {
+                // Public methods on package-private Defects4J classes (for
+                // example Gson's TypeInfoFactory) are not reflectively
+                // accessible until opened on the unnamed application module.
+                if (!m.isAccessible()) m.setAccessible(true);
+                return m;
+            }
+        throw new NoSuchMethodException(signature);
+    }
+    static List<Constructor<?>> constructors(Class<?> type) {
+        List<Constructor<?>> out = new ArrayList();
+        if (!Modifier.isAbstract(type.getModifiers()) && Modifier.isPublic(type.getModifiers()))
+            for (Constructor<?> c : type.getConstructors())
+                if (c.getParameterTypes().length <= 6) out.add(c);
+        Collections.sort(out, new Comparator<Constructor<?>>() {
+            public int compare(Constructor<?> a, Constructor<?> b) {
+                int byArity = a.getParameterTypes().length - b.getParameterTypes().length;
+                return byArity != 0 ? byArity : a.toString().compareTo(b.toString());
+            }
+        });
+        return out;
+    }
+    private static Object[] arguments(Class<?>[] types, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Object[] args = new Object[types.length];
+        for (int i = 0; i < types.length; i++) args[i] = value(types[i], g, depth, report);
+        return args;
+    }
+    private static Object[] arguments(Method method, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Class<?>[] types = method.getParameterTypes();
+        Object[] args = new Object[types.length];
+        boolean closureCompile = method.getDeclaringClass().getName().equals("com.google.javascript.jscomp.Compiler")
+            && method.getName().equals("compile");
+        Type[] generic = method.getGenericParameterTypes();
+        boolean jacksonSerialization = method.getDeclaringClass().getName().equals(
+            "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+            && method.getName().startsWith("serializeAs")
+            && types.length == 3 && types[0] == Object.class;
+        for (int i = 0; i < types.length; i++) {
+            if (jacksonSerialization && g.jacksonBean != null) {
+                if (i == 0) args[i] = g.jacksonBean;
+                else if (i == 1) args[i] = g.jacksonGenerator;
+                else args[i] = g.jacksonProvider;
+                continue;
+            }
+            if (closureCompile && (List.class.isAssignableFrom(types[i])
+                    || (types[i].isArray() && load("com.google.javascript.jscomp.SourceFile")
+                        .isAssignableFrom(types[i].getComponentType())))) {
+                // Compiler.compile takes externs and inputs in either Lists or
+                // arrays depending on Closure version. Keep externs empty and
+                // supply a nonempty, gene-selected input program.
+                if (i == 0) args[i] = types[i].isArray()
+                    ? Array.newInstance(types[i].getComponentType(), 0) : new ArrayList();
+                else {
+                    Object sourceFile = value(load("com.google.javascript.jscomp.SourceFile"),
+                        g, depth + 1, report);
+                    if (types[i].isArray()) {
+                        Object files = Array.newInstance(types[i].getComponentType(), 1);
+                        Array.set(files, 0, sourceFile); args[i] = files;
+                    } else args[i] = new ArrayList(Collections.singletonList(sourceFile));
+                }
+            } else args[i] = value(types[i], g, depth, report);
+        }
+        return args;
+    }
+    private static Number number(Genes g) {
+        int n = g.next();
+        switch (g.pick(12)) {
+            case 0: return 0; case 1: return 1; case 2: return -1;
+            case 3: return Integer.MAX_VALUE; case 4: return Integer.MIN_VALUE;
+            case 5: return Long.MAX_VALUE; case 6: return Long.MIN_VALUE;
+            case 7: return Double.NaN; case 8: return Double.POSITIVE_INFINITY;
+            case 9: return Double.NEGATIVE_INFINITY; case 10: return n / 10.0;
+            default: return n;
+        }
+    }
+    private static String string(Genes g) {
+        int mode = g.pick(16), n = g.next();
+        String digits = Long.toString(Math.abs((long)n));
+        String sign = new String[]{"", "-", "+", "--"}[g.pick(4)];
+        switch (mode) {
+            case 0: return null; case 1: return ""; case 2: return " ";
+            case 3: return Integer.toString(n);
+            case 4: return sign + digits;
+            case 5: return sign + digits + "." + g.pick(1000);
+            case 6: return sign + digits + "e" + g.next();
+            case 7: return sign + "0x" + Long.toHexString(Math.abs((long)n));
+            case 8: return sign + "0x8" + "0".repeat(g.pick(20));
+            case 9: return sign + digits + "fFdDlL".charAt(g.pick(6));
+            case 10: return " " + sign + digits + " ";
+            case 11: return new String[]{"true", "false", "null", "NaN", "Infinity"}[g.pick(5)];
+            case 12: return "a".repeat(g.pick(25));
+            default:
+                String alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-._ /\\\t\n";
+                StringBuilder s = new StringBuilder();
+                int length = g.pick(25);
+                for (int i = 0; i < length; i++) s.append(alphabet.charAt(g.pick(alphabet.length())));
+                return s.toString();
+        }
+    }
+    private static Object value(Class<?> t, Genes g, int depth, Observation report) throws Exception {
+        if (t == String.class || t == CharSequence.class) return string(g);
+        if (t == Comparable.class) return "key" + g.pick(5);
+        if (t == boolean.class || t == Boolean.class) return g.pick(2) == 0;
+        if (t == char.class || t == Character.class) return (char)g.pick(128);
+        if (t == byte.class || t == Byte.class) return number(g).byteValue();
+        if (t == short.class || t == Short.class) return number(g).shortValue();
+        if (t == int.class || t == Integer.class) return number(g).intValue();
+        if (t == long.class || t == Long.class) return number(g).longValue();
+        if (t == float.class || t == Float.class) return number(g).floatValue();
+        if (t == double.class || t == Double.class || t == Number.class) return number(g).doubleValue();
+        if (t.isEnum()) {
+            Object[] constants = t.getEnumConstants();
+            return constants.length == 0 ? null : constants[g.pick(constants.length)];
+        }
+        if (t == Object.class) return g.pick(3) == 0 ? null : "object" + g.pick(5);
+        if (depth >= 3) { report.nullFallbacks++; return null; }
+        if (t.isArray()) {
+            int length = g.pick(6);
+            Object array = Array.newInstance(t.getComponentType(), length);
+            for (int i = 0; i < length; i++) Array.set(array, i, value(t.getComponentType(), g, depth + 1, report));
+            return array;
+        }
+        if (t == List.class || t == Collection.class || t == Iterable.class || t == Set.class) {
+            Collection<Object> items = t == Set.class ? new LinkedHashSet() : new ArrayList();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.add("item" + g.pick(5));
+            return items;
+        }
+        if (t == Map.class) {
+            Map<Object, Object> items = new LinkedHashMap();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.put("key" + g.pick(5), number(g));
+            return items;
+        }
+        if (t == java.util.Date.class) return new java.util.Date(g.next() * 86400000L);
+        if (t == Class.class) return String.class;
+        if (t == java.lang.reflect.Field.class) {
+            Field[] fields = GenericInput.class.getFields();
+            g.lastField = fields[g.pick(fields.length)];
+            return g.lastField;
+        }
+        if (t == java.lang.reflect.Type.class) {
+            if (g.lastField != null && g.pick(3) == 0)
+                return g.lastField.getDeclaringClass();
+            Field[] fields = GenericInput.class.getFields();
+            return fields[g.pick(fields.length)].getGenericType();
+        }
+        if (t == java.io.Reader.class || t == java.io.BufferedReader.class
+                || t == java.io.StringReader.class) {
+            String content = "header,value\n" + string(g) + "," + number(g) + "\n"
+                + "alpha,beta\n";
+            StringReader reader = new StringReader(content);
+            return t == java.io.BufferedReader.class ? new BufferedReader(reader) : reader;
+        }
+        if (t.getName().equals("org.apache.commons.csv.CSVFormat")) {
+            Class<?> format = load("org.apache.commons.csv.CSVFormat");
+            for (String fieldName : new String[]{"DEFAULT", "RFC4180", "EXCEL"}) try {
+                Object result = format.getField(fieldName).get(null);
+                if (t.isInstance(result)) return result;
+            } catch (ReflectiveOperationException ignored) { }
+            for (Method factory : format.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getParameterTypes().length == 0
+                        && t.isAssignableFrom(factory.getReturnType())) try {
+                    return factory.invoke(null);
+                } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.SourceFile")) {
+            Class<?> source = load("com.google.javascript.jscomp.SourceFile");
+            for (Method factory : source.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals("fromCode")
+                        && factory.getParameterTypes().length == 2 && factory.getParameterTypes()[0] == String.class
+                        && factory.getParameterTypes()[1] == String.class) {
+                    String replaySource = System.getProperty("de.generated.source");
+                    if (replaySource != null) {
+                        try {
+                            report.generatedSource = replaySource;
+                            return factory.invoke(null, "de-input.js", replaySource);
+                        } catch (ReflectiveOperationException ignored) { }
+                    }
+                    String[] unusedParameterScripts = {
+                        "window.f = function(a) {};",
+                        "window.f = function(a, b) { return b; };",
+                        "window.f = function(a, b) { var used = b; return used; };",
+                        "window['f'] = function(unused) {};",
+                        "window.f = function(unused, value) { return value; };",
+                        "window['f'] = function(unused, value) { return value; };",
+                        "window.f = function(first, unused, last) { return last; };",
+                        "window.f = function(unused) { var local = 1; return local; };",
+                        "window.f = function(unused, value) { var alias = value; return alias; };",
+                        "window.f = function(unused, value) { if (value) { return 1; } return 2; };",
+                        "window.f = function(unused, value) { value = value + 1; return value; };",
+                        "window.f = function(unused, value) { return function() { return value; }; };",
+                        "window.f = function(unused) { function inner() { return 1; } return inner(); };",
+                        "window.f = function(a, b, unused) { return a + b; };",
+                        "window.f = function(a, unused, b, c) { return a + c; };"
+                    };
+                    String[] catchDependencyScripts = {
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.stack; };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (caught) { saved = caught; } return saved.message; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.name; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return String(saved); };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (problem) { saved = problem; } return saved.stack; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (problem) { saved = problem; } return saved.message; };"
+                    };
+                    String[] genericScripts = {
+                        "function f(unused, used) { var local = 1; return used; } f(1, 2);",
+                        "function f() { var unused = 1; var used = 2; return used; } f();",
+                        "function f(x) { var first = x; first = 3; return x; } f(2);",
+                        "function f() { var unused = 1; } f();",
+                        "function keep() { var dead = 1; return 7; } keep();"
+                    };
+                    String modified = System.getProperty("de.modified.classes", "");
+                    String[] scripts;
+                    if (modified.contains("RemoveUnusedVars") && modified.contains("FlowSensitiveInlineVariables")) {
+                        scripts = new String[unusedParameterScripts.length + catchDependencyScripts.length];
+                        System.arraycopy(unusedParameterScripts, 0, scripts, 0, unusedParameterScripts.length);
+                        System.arraycopy(catchDependencyScripts, 0, scripts, unusedParameterScripts.length,
+                            catchDependencyScripts.length);
+                    }
+                    else if (modified.contains("FlowSensitiveInlineVariables")) scripts = catchDependencyScripts;
+                    else if (modified.contains("RemoveUnusedVars")) scripts = unusedParameterScripts;
+                    else scripts = genericScripts;
+                    try {
+                        String code = scripts[g.pick(scripts.length)];
+                        report.generatedSource = code;
+                        return factory.invoke(null, "de-input.js", code);
+                    }
+                    catch (ReflectiveOperationException ignored) { }
+                }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.CompilerOptions")) {
+            try {
+                Object options = t.getConstructor().newInstance();
+                // In Closure Compiler, unused-variable passes are enabled by
+                // CompilationLevel, rather than by a CompilerOptions enum
+                // setter. Apply the real public configuration when available.
+                try {
+                    Class<?> levelType = load("com.google.javascript.jscomp.CompilationLevel");
+                    Object advanced = levelType.getField("ADVANCED_OPTIMIZATIONS").get(null);
+                    for (Method configure : levelType.getMethods())
+                        if (configure.getName().equals("setOptionsForCompilationLevel")
+                                && configure.getParameterTypes().length == 1
+                                && configure.getParameterTypes()[0].isInstance(options)) {
+                            configure.invoke(advanced, options); break;
+                        }
+                } catch (ReflectiveOperationException ignored) { }
+                // Also set the relevant options directly for Closure releases
+                // whose compilation-level helper no longer enables this pass.
+                for (Class<?> current = t; current != null; current = current.getSuperclass())
+                    for (Field field : current.getDeclaredFields()) {
+                        String name = field.getName().toLowerCase(Locale.ROOT);
+                        if (field.getType() == boolean.class && name.equals("removeglobals")) try {
+                            // Closure-1 specifically guards argument removal
+                            // when globals are preserved. Keep the optimization
+                            // pass enabled while exercising that configuration.
+                            field.setAccessible(true); field.setBoolean(options, false);
+                        } catch (Exception ignored) { }
+                        if (field.getType() == boolean.class
+                                && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) try {
+                            field.setAccessible(true); field.setBoolean(options, true);
+                        } catch (Exception ignored) { }
+                    }
+                for (Method setter : t.getMethods()) {
+                    if (!Modifier.isPublic(setter.getModifiers()) || !setter.getName().startsWith("set")
+                            || setter.getParameterTypes().length != 1) continue;
+                    String name = setter.getName().toLowerCase(Locale.ROOT);
+                    if (setter.getParameterTypes()[0] == boolean.class && name.contains("removeglobals")) {
+                        try { setter.invoke(options, false); } catch (ReflectiveOperationException ignored) { }
+                    } else if (setter.getParameterTypes()[0] == boolean.class
+                            && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) {
+                        try { setter.invoke(options, true); } catch (ReflectiveOperationException ignored) { }
+                    } else if (name.contains("optimizationlevel")
+                            && setter.getParameterTypes()[0].isEnum()) {
+                        Object[] values = setter.getParameterTypes()[0].getEnumConstants();
+                        for (Object value : values) if (String.valueOf(value).contains("ADVANCED"))
+                            try { setter.invoke(options, value); } catch (ReflectiveOperationException ignored) { }
+                    }
+                }
+                return options;
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.rhino.Node")) {
+            try {
+                Class<?> ir = load("com.google.javascript.rhino.IR");
+                for (String factoryName : new String[]{"script", "root", "name", "string"})
+                    for (Method factory : ir.getMethods())
+                        if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals(factoryName)
+                                && factory.getParameterTypes().length == 0 && t.isAssignableFrom(factory.getReturnType()))
+                            return factory.invoke(null);
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser")) {
+            Object parser = xmlParser(g, report);
+            if (parser != null && t.isInstance(parser)) return parser;
+        }
+        if (t.getName().equals("com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                || t.getName().equals("com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter")) {
+            Object writer = jacksonWriter(t, g, report);
+            if (writer != null && t.isInstance(writer)) return writer;
+        }
+        if (t == java.awt.Graphics2D.class || t == java.awt.Graphics.class)
+            return new java.awt.image.BufferedImage(80, 80, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        if (java.awt.Paint.class.isAssignableFrom(t)) {
+            java.awt.Color c = new java.awt.Color(g.pick(256), g.pick(256), g.pick(256));
+            if (t.isInstance(c)) return c;
+        }
+        if (java.awt.Stroke.class.isAssignableFrom(t)) {
+            java.awt.BasicStroke s = new java.awt.BasicStroke(g.pick(10) / 2.0f);
+            if (t.isInstance(s)) return s;
+        }
+        if (java.awt.Shape.class.isAssignableFrom(t)) {
+            java.awt.Shape s = new java.awt.geom.Rectangle2D.Double(g.next(), g.next(), g.pick(80), g.pick(80));
+            if (t.isInstance(s)) return s;
+        }
+        if (t == java.awt.geom.Point2D.class) return new java.awt.geom.Point2D.Double(g.next(), g.next());
+        if (t.getName().equals("org.apache.commons.cli.CommandLine"))
+            return commandLine(g, report);
+        Object domain = chart(t, g, report);
+        if (domain != null) return domain;
+        Object language = language(t, g, report);
+        if (language != null) return language;
+        List<Constructor<?>> ctors = constructors(t);
+        // Older Java libraries often use public singleton constants in place of enums.
+        if (ctors.isEmpty()) {
+            List<Field> constants = new ArrayList();
+            for (Field field : t.getFields())
+                if (Modifier.isStatic(field.getModifiers()) && Modifier.isFinal(field.getModifiers())
+                        && t.isAssignableFrom(field.getType())) constants.add(field);
+            Collections.sort(constants, new Comparator<Field>() {
+                public int compare(Field a, Field b) { return a.getName().compareTo(b.getName()); }
+            });
+            if (!constants.isEmpty()) {
+                Object constant = constants.get(g.pick(constants.size())).get(null);
+                if (constant != null) return constant;
+            }
+        }
+        if (!ctors.isEmpty()) {
+            Constructor<?> ctor = ctors.get(g.pick(ctors.size()));
+            try { return ctor.newInstance(arguments(ctor.getParameterTypes(), g, depth + 1, report)); }
+            catch (Exception ignored) { }
+        }
+        report.nullFallbacks++;
+        return null;
+    }
+    private static Object language(Class<?> t, Genes g, Observation report) {
+        if (!t.getName().equals("org.apache.commons.lang3.time.FastDateFormat")) return null;
+        try {
+            Method factory = t.getMethod("getInstance", String.class, java.util.TimeZone.class,
+                java.util.Locale.class);
+            String[] patterns = {"yyyy-MM-dd", "MM/dd/yy HH:mm:ss", "EEE, d MMM yyyy HH:mm:ss Z"};
+            return factory.invoke(null, patterns[g.pick(patterns.length)],
+                java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US);
+        } catch (ReflectiveOperationException ignored) { }
+        try { return t.getMethod("getInstance", String.class).invoke(null, "yyyy-MM-dd"); }
+        catch (ReflectiveOperationException ignored) { return null; }
+    }
+    private static Object xmlParser(Genes g, Observation report) {
+        try {
+            Class<?> factoryType = load("com.fasterxml.jackson.dataformat.xml.XmlFactory");
+            Object factory = factoryType.getConstructor().newInstance();
+            String[] docs = {"<root><value>1</value><name>x</name></root>",
+                "<root value=\"42\"><item>a</item><item>b</item></root>",
+                "<root/>"};
+            String xml = docs[g.pick(docs.length)];
+            for (Method method : factoryType.getMethods()) {
+                if (!method.getName().equals("createParser") || method.getParameterTypes().length != 1) continue;
+                Class<?> p = method.getParameterTypes()[0];
+                Object input = p == String.class ? xml : p == Reader.class ? new StringReader(xml)
+                    : p == InputStream.class ? new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)) : null;
+                if (input == null) continue;
+                try {
+                    Object parser = method.invoke(factory, input);
+                    if (parser != null) {
+                        int advance = g.pick(4);
+                        Method next = parser.getClass().getMethod("nextToken");
+                        for (int i = 0; i < advance; i++) if (next.invoke(parser) == null) break;
+                        return parser;
+                    }
+                } catch (ReflectiveOperationException ignored) { }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
+    private static Object jacksonWriter(Class<?> requested, Genes g, Observation report) {
+        try {
+            Class<?> mapperType = load("com.fasterxml.jackson.databind.ObjectMapper");
+            Object mapper = mapperType.getConstructor().newInstance();
+            Object bean = new GenericInput();
+            Class<?> javaTypeType = load("com.fasterxml.jackson.databind.JavaType");
+            Object javaType = mapperType.getMethod("constructType", Type.class).invoke(mapper, bean.getClass());
+            // Jackson 2.6 (used by this Defects4J project) exposes a provider
+            // blueprint from ObjectMapper. Create a configured provider via
+            // DefaultSerializerProvider, the supported API used by ObjectMapper.
+            Object providerBlueprint = mapperType.getMethod("getSerializerProvider").invoke(mapper);
+            Class<?> serializationConfigType = load("com.fasterxml.jackson.databind.SerializationConfig");
+            Class<?> serializerFactoryType = load("com.fasterxml.jackson.databind.ser.SerializerFactory");
+            Object config = mapperType.getMethod("getSerializationConfig").invoke(mapper);
+            Object factory = mapperType.getMethod("getSerializerFactory").invoke(mapper);
+            Class<?> defaultProviderType = load("com.fasterxml.jackson.databind.ser.DefaultSerializerProvider");
+            Method createProvider = defaultProviderType.getMethod("createInstance",
+                serializationConfigType, serializerFactoryType);
+            Object provider = createProvider.invoke(providerBlueprint, config, factory);
+            g.jacksonBean = bean;
+            g.jacksonProvider = provider;
+            g.jacksonOutput = new StringWriter();
+            Object jsonFactory = mapperType.getMethod("getFactory").invoke(mapper);
+            for (String factoryMethod : new String[]{"createGenerator", "createJsonGenerator"}) {
+                try {
+                    Method createGenerator = jsonFactory.getClass().getMethod(factoryMethod, Writer.class);
+                    g.jacksonGenerator = createGenerator.invoke(jsonFactory, g.jacksonOutput);
+                    break;
+                } catch (NoSuchMethodException ignored) { }
+            }
+            if (g.jacksonGenerator == null)
+                throw new NoSuchMethodException("JsonFactory.createGenerator(Writer) or createJsonGenerator(Writer)");
+            Class<?> providerType = load("com.fasterxml.jackson.databind.SerializerProvider");
+            Class<?> beanPropertyType = load("com.fasterxml.jackson.databind.BeanProperty");
+            Method find = providerType.getMethod("findValueSerializer", javaTypeType, beanPropertyType);
+            Object serializer = find.invoke(provider, new Object[]{javaType, null});
+            List<Object> writers = new ArrayList();
+            try {
+                // Available on Jackson 2.6 and newer.
+                Class<?> serializerType = load("com.fasterxml.jackson.databind.JsonSerializer");
+                Method properties = serializerType.getMethod("properties");
+                Iterator<?> it = (Iterator<?>)properties.invoke(serializer);
+                while (it.hasNext()) {
+                    Object item = it.next();
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            } catch (NoSuchMethodException oldJackson) {
+                // JacksonDatabind-1 predates JsonSerializer.properties(). Its
+                // BeanSerializerBase stores writers in the protected _props
+                // array; read that array only for these old releases.
+                Class<?> base = load("com.fasterxml.jackson.databind.ser.std.BeanSerializerBase");
+                if (!base.isInstance(serializer))
+                    throw new IllegalStateException("Expected BeanSerializerBase, got "
+                        + serializer.getClass().getName(), oldJackson);
+                Field props = base.getDeclaredField("_props");
+                props.setAccessible(true);
+                Object array = props.get(serializer);
+                for (int i = 0; i < Array.getLength(array); i++) {
+                    Object item = Array.get(array, i);
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            }
+            if (writers.isEmpty())
+                throw new IllegalStateException("ObjectMapper produced no bean property writers for DEReplay.GenericInput");
+            Object writer = writers.get(g.pick(writers.size()));
+            boolean requireUnwrapping = requested.getName().equals(
+                "com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter");
+            if (!requireUnwrapping && g.pick(2) == 0 && requested.isInstance(writer)) return writer;
+            Class<?> transformerType = load("com.fasterxml.jackson.databind.util.NameTransformer");
+            Object nop = transformerType.getField("NOP").get(null);
+            for (Method m : writer.getClass().getMethods())
+                if (m.getName().equals("unwrappingWriter") && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0].isInstance(nop)) {
+                    Object unwrapped = m.invoke(writer, nop);
+                    if (requested.isInstance(unwrapped)) return unwrapped;
+                }
+            if (requested.isInstance(writer)) return writer;
+            throw new IllegalStateException("Generated Jackson property writer is not " + requested.getName());
+        } catch (Throwable failure) {
+            throw new IllegalStateException("Cannot construct Jackson BeanPropertyWriter: " + failure, failure);
+        }
+    }
+    /** Build the non-constructible Commons CLI result through its public Parser API. */
+    private static Object commandLine(Genes g, Observation report) throws Exception {
+        Class<?> optionsClass = load("org.apache.commons.cli.Options");
+        Class<?> optionClass = load("org.apache.commons.cli.Option");
+        Class<?> parserClass = load("org.apache.commons.cli.PosixParser");
+        Object options = optionsClass.getConstructor().newInstance();
+        Method addOption = optionsClass.getMethod("addOption", optionClass);
+        int numberOfOptions = 1 + g.pick(3);
+        List<String> spellings = new ArrayList();
+        for (int i = 0; i < numberOfOptions; i++) {
+            String shortName = String.valueOf((char)('a' + i));
+            String longName = "de-option-" + i;
+            boolean hasArgument = g.pick(2) == 0;
+            Object option = null;
+            try {
+                option = optionClass.getConstructor(String.class, String.class, boolean.class, String.class)
+                    .newInstance(shortName, longName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) try {
+                option = optionClass.getConstructor(String.class, boolean.class, String.class)
+                    .newInstance(shortName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) throw new NoSuchMethodException("No supported Commons CLI Option constructor");
+            addOption.invoke(options, option);
+            spellings.add("-" + shortName);
+            if (hasArgument) spellings.add("value-" + Math.abs((long)g.next()));
+        }
+        String[] argv = spellings.toArray(new String[0]);
+        Object parser = parserClass.getConstructor().newInstance();
+        List<Method> parseMethods = new ArrayList();
+        for (Method candidate : parserClass.getMethods()) {
+            Class<?>[] p = candidate.getParameterTypes();
+            if (candidate.getName().equals("parse") && p.length >= 2 && p[0] == optionsClass
+                    && p[1] == String[].class && candidate.getReturnType() == load("org.apache.commons.cli.CommandLine"))
+                parseMethods.add(candidate);
+        }
+        Collections.sort(parseMethods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return a.getParameterTypes().length - b.getParameterTypes().length;
+            }
+        });
+        for (Method parse : parseMethods) {
+            Object[] args = new Object[parse.getParameterTypes().length];
+            Class<?>[] p = parse.getParameterTypes();
+            args[0] = options; args[1] = argv;
+            for (int i = 2; i < p.length; i++) {
+                if (p[i] == boolean.class || p[i] == Boolean.class) args[i] = g.pick(2) == 0;
+                else if (p[i] == java.util.Properties.class) args[i] = new java.util.Properties();
+                else args[i] = value(p[i], g, 1, report);
+            }
+            try { return parse.invoke(parser, args); }
+            catch (InvocationTargetException ignored) { }
+        }
+        throw new NoSuchMethodException("No successful public PosixParser.parse(Options,String[])");
+    }
+    /** Optional type recipes, shared across bugs; none contains a bug-specific expected answer. */
+    private static Object chart(Class<?> t, Genes g, Observation report) throws Exception {
+        String n = t.getName();
+        if (!n.startsWith("org.jfree.")) return null;
+        if (n.equals("org.jfree.data.Range")) {
+            double a = g.next(), b = g.next();
+            return t.getConstructor(double.class, double.class).newInstance(Math.min(a, b), Math.max(a, b));
+        }
+        if (n.equals("org.jfree.data.time.RegularTimePeriod"))
+            return load("org.jfree.data.time.Day").getConstructor(int.class, int.class, int.class)
+                .newInstance(1 + g.pick(28), 1 + g.pick(12), 1990 + g.pick(40));
+        if (n.equals("org.jfree.data.time.TimeSeries")) {
+            Object series = t.getConstructor(Comparable.class).newInstance("DE");
+            Class<?> period = load("org.jfree.data.time.RegularTimePeriod");
+            Constructor<?> day = load("org.jfree.data.time.Day")
+                .getConstructor(int.class, int.class, int.class);
+            Method add = t.getMethod("add", period, double.class);
+            int count = 2 + g.pick(4), year = 1990 + g.pick(40);
+            for (int i = 0; i < count; i++)
+                add.invoke(series, day.newInstance(i + 1, 1, year), g.next() / 10.0);
+            return series;
+        }
+        if (n.equals("org.jfree.data.category.CategoryDataset")
+                || n.equals("org.jfree.data.category.DefaultCategoryDataset")) {
+            Class<?> c = load("org.jfree.data.category.DefaultCategoryDataset");
+            Object data = c.getConstructor().newInstance();
+            Method add = c.getMethod("addValue", Number.class, Comparable.class, Comparable.class);
+            int rows = 1 + g.pick(3), columns = 1 + g.pick(3);
+            for (int r = 0; r < rows; r++) for (int col = 0; col < columns; col++)
+                add.invoke(data, Double.valueOf(g.next() / 10.0), "R" + r, "C" + col);
+            return data;
+        }
+        if (n.equals("org.jfree.data.xy.XYDataset") || n.equals("org.jfree.data.xy.XYSeriesCollection")) {
+            Class<?> seriesClass = load("org.jfree.data.xy.XYSeries");
+            Object series = seriesClass.getConstructor(Comparable.class).newInstance("DE");
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) seriesClass.getMethod("add", double.class, double.class)
+                .invoke(series, (double)i, g.next() / 10.0);
+            Class<?> c = load("org.jfree.data.xy.XYSeriesCollection");
+            Object data = c.getConstructor().newInstance();
+            c.getMethod("addSeries", seriesClass).invoke(data, series);
+            return data;
+        }
+        if (n.equals("org.jfree.data.general.PieDataset") || n.equals("org.jfree.data.general.DefaultPieDataset")) {
+            Class<?> c = load("org.jfree.data.general.DefaultPieDataset");
+            Object data = c.getConstructor().newInstance();
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) c.getMethod("setValue", Comparable.class, Number.class)
+                .invoke(data, "K" + i, Double.valueOf(g.next() / 10.0));
+            return data;
+        }
+        return null;
+    }
+    static List<Method> setupMethods(Class<?> receiver) {
+        List<Method> methods = new ArrayList();
+        for (Method m : receiver.getMethods()) {
+            String n = m.getName();
+            if (!Modifier.isStatic(m.getModifiers()) && !m.isSynthetic()
+                    && m.getParameterTypes().length <= 3 && !n.contains("Listener")
+                    && (n.startsWith("set") || n.startsWith("add") || n.startsWith("update")
+                        || n.startsWith("remove") || n.equals("clear"))) methods.add(m);
+        }
+        Collections.sort(methods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return signature(a).compareTo(signature(b));
+            }
+        });
+        return methods;
+    }
+    public static Observation execute(String target, String receivers, String signature, int[] genes) {
+        Observation out = new Observation();
+        try {
+            Genes g = new Genes(genes);
+            Method m = method(target, signature);
+            Object receiver = null;
+            if (!Modifier.isStatic(m.getModifiers())) {
+                String[] choices = receivers.split(",");
+                Class<?> receiverType = load(choices[g.pick(choices.length)]);
+                receiver = value(receiverType, g, 0, out);
+                if (receiver == null) throw new IllegalArgumentException("Receiver construction failed");
+                // Compiler.compile owns a strict initialization sequence.
+                // Random calls to its mutators before compilation can corrupt
+                // state or spend the search budget on irrelevant setup.
+                if (!receiverType.getName().equals("com.google.javascript.jscomp.Compiler")) {
+                    List<Method> setup = setupMethods(receiverType);
+                    int count = g.pick(5);
+                    for (int i = 0; i < count && !setup.isEmpty(); i++) {
+                        Method s = setup.get(g.pick(setup.size()));
+                        try { s.invoke(receiver, arguments(s.getParameterTypes(), g, 0, out)); out.setupCalls++; }
+                        catch (Exception e) { out.setupFailures++; }
+                    }
+                }
+            }
+            Object[] args = arguments(m, g, 0, out);
+            out.reachedTarget = true;
+            try {
+                boolean jacksonSerialization = m.getDeclaringClass().getName().equals(
+                    "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                    && m.getName().startsWith("serializeAs") && g.jacksonGenerator != null;
+                boolean arrayShape = m.getName().contains("Column")
+                    || m.getName().contains("Element") || m.getName().contains("Placeholder");
+                if (jacksonSerialization)
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeStartArray" : "writeStartObject").invoke(g.jacksonGenerator);
+                Object result = m.invoke(receiver, args);
+                boolean closureCompile = m.getDeclaringClass().getName().equals(
+                    "com.google.javascript.jscomp.Compiler") && m.getName().equals("compile");
+                if (closureCompile) {
+                    // Result is only a status object; the compiled JavaScript is
+                    // the behavioral output that reveals whether an argument
+                    // was removed from a globally exposed function.
+                    Object js = receiver.getClass().getMethod("toSource").invoke(receiver);
+                    out.token = "CLOSURE_SOURCE:" + stable(js, 0);
+                } else if (jacksonSerialization) {
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeEndArray" : "writeEndObject").invoke(g.jacksonGenerator);
+                    g.jacksonGenerator.getClass().getMethod("flush").invoke(g.jacksonGenerator);
+                    out.token = "JSON:" + Base64.getEncoder().encodeToString(
+                        g.jacksonOutput.toString().getBytes(StandardCharsets.UTF_8));
+                } else out.token = m.getReturnType() == void.class
+                    ? state(receiver, m.getName()) : stable(result, 0);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof VirtualMachineError || e.getCause() instanceof LinkageError
+                        || e.getCause() instanceof ThreadDeath) throw e;
+                out.token = "THROW:" + e.getCause().getClass().getName();
+            }
+        } catch (Throwable e) {
+            out.token = "HARNESS_ERROR";
+            out.error = e.getClass().getName() + ":" + String.valueOf(e.getMessage());
+        }
+        return out;
+    }
+    public static String run(String target, String receivers, String signature, int[] genes) {
+        Observation o = execute(target, receivers, signature, genes);
+        if (!o.reachedTarget || o.token.equals("HARNESS_ERROR"))
+            throw new AssertionError("Cannot replay test: " + o.error);
+        return o.token;
+    }
+    private static String state(Object receiver, String method) {
+        if (receiver == null) return "VOID";
+        List<String> getters = new ArrayList();
+        if (method.startsWith("set") && method.length() > 3) {
+            getters.add("get" + method.substring(3)); getters.add("is" + method.substring(3));
+        }
+        getters.addAll(Arrays.asList("getItemCount", "getRowCount", "getColumnCount", "getSeriesCount"));
+        StringBuilder s = new StringBuilder("VOID");
+        for (String name : getters) {
+            try {
+                Method getter = receiver.getClass().getMethod(name);
+                if (getter.getReturnType().isPrimitive() || getter.getReturnType() == String.class)
+                    s.append('|').append(name).append('=').append(stable(getter.invoke(receiver), 0));
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        return s.toString();
+    }
+    /** Only whitelisted value types are rendered. Never use arbitrary object toString(). */
+    static String stable(Object value, int depth) {
+        if (value == null) return "NULL";
+        Class<?> t = value.getClass();
+        if (value instanceof String || value instanceof Boolean || value instanceof Character
+                || value instanceof Byte || value instanceof Short || value instanceof Integer
+                || value instanceof Long || value instanceof Float || value instanceof Double
+                || value instanceof java.math.BigInteger || value instanceof java.math.BigDecimal)
+            return t.getName() + ":" + Base64.getEncoder().encodeToString(value.toString().getBytes(StandardCharsets.UTF_8));
+        if (value instanceof Enum) return "ENUM:" + t.getName() + ":" + ((Enum<?>)value).name();
+        if (t.isArray() && depth < 3) {
+            StringBuilder s = new StringBuilder("ARRAY:" + t.getName() + ":" + Array.getLength(value));
+            for (int i = 0; i < Math.min(64, Array.getLength(value)); i++) {
+                String item = stable(Array.get(value, i), depth + 1);
+                s.append(':').append(item.length()).append(':').append(item);
+            }
+            return s.toString();
+        }
+        if (value instanceof java.awt.Color) return "COLOR:" + ((java.awt.Color)value).getRGB();
+        // Observe safe scalar properties of returned objects. This catches
+        // changes to value caches and state while avoiding identity-based toString().
+        StringBuilder observed = new StringBuilder("STATE:" + t.getName());
+        int properties = 0;
+        for (String name : Arrays.asList("getItemCount", "getMinY", "getMaxY",
+                "getRowCount", "getColumnCount", "getSeriesCount")) {
+            try {
+                Method getter = t.getMethod(name);
+                Class<?> r = getter.getReturnType();
+                if (!r.isPrimitive() && r != String.class && !Number.class.isAssignableFrom(r))
+                    continue;
+                if (r == void.class) continue;
+                Object result = getter.invoke(value);
+                String token = stable(result, depth + 1);
+                observed.append('|').append(name).append('=').append(token.length())
+                    .append(':').append(token);
+                properties++;
+            } catch (Exception ignored) { }
+        }
+        return properties == 0 ? "TYPE:" + t.getName() : observed.toString();
+    }
+    public static void main(String[] args) {
+        if (args.length > 4) {
+            String source = new String(Base64.getDecoder().decode(args[4]), StandardCharsets.UTF_8);
+            System.setProperty("de.generated.source", source);
+        }
+        String[] encodedGenes = args[3].split(",");
+        int[] genes = new int[encodedGenes.length];
+        for (int i = 0; i < encodedGenes.length; i++) genes[i] = Integer.parseInt(encodedGenes[i]);
+        boolean closureCompile = args[0].equals("com.google.javascript.jscomp.Compiler")
+            && args[2].startsWith("compile(");
+        // Compiler.compile is an expensive whole-program operation. Fixed-side
+        // suites are still executed twice by the runner, so capture its oracle
+        // once here instead of launching three compilations just to check the
+        // same deterministic source output.
+        int repetitions = closureCompile ? 1 : 3;
+        for (int i = 0; i < repetitions; i++) {
+            Observation out = execute(args[0], args[1], args[2], genes);
+            System.out.println("DE_TOKEN:" + Base64.getEncoder().encodeToString(out.token.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+}
+
+public class DEGeneratedTest {
+    @org.junit.Test(timeout=60000L)
+    public void testDE00000() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{-839,-375,-296,-146,-971,237,135,-37,628,-870,-7,730,-118,-772,10,-656,-1000,700,-295,116,-1000,1000,1000,-781,1000,202,575,1000,-1000,436,-395,-1000,182,-1000,1000,283,225,-444,1000,-131,-352,759,1000,629,966,860,-150,-1000,-528,1000,594,-1000,-1000,-273,402,-1000,330,-395,1000,-798,-1000,185,-214,103}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00001() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{-1000,1000,34,8,1000,-1000,144,253,-1000,179,-782,1000,1000,1000,639,219,110,-1000,-388,-794,55,583,396,-386,-852,-291,481,-1000,390,-605,-504,-1000,-771,-1000,-1000,-1000,753,-71,398,1000,129,-1000,1000,-210,146,105,-834,-1000,406,51,-1000,230,810,658,497,1000,69,671,158,-801,1000,-401,-66,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00002() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{1000,223,789,280,444,1000,136,751,-376,-506,613,447,-1000,736,742,-329,339,1000,348,-1000,290,-1000,-1000,265,47,590,133,-699,48,290,-216,1000,-210,1000,-1000,-143,-592,231,187,-1000,1000,-906,-1000,-641,-138,940,829,886,109,-1000,-716,610,688,-1000,-40,-668,563,745,204,642,-1000,-254,321,-475}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00003() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{-945,1000,194,-368,1000,-1000,-165,775,-923,-120,-275,1000,1000,376,-611,297,-303,-757,66,280,-131,1000,1000,-1000,641,114,693,-635,-17,-1000,-540,-1000,-427,-1000,-203,-498,844,-71,1000,1000,-90,98,189,-741,21,-71,-881,-1000,-784,1000,-519,-1000,-429,-557,49,1000,1000,-117,1000,-1000,268,3,371,-70}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00004() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{357,325,789,-528,-338,-1000,1000,-148,413,-394,1000,1000,1000,-714,-427,-169,-816,-357,344,-1000,901,242,390,366,600,595,823,603,-711,265,-251,23,310,94,-233,-143,1000,3,1000,978,290,-906,87,515,-1000,-625,-207,-671,-736,135,-619,-430,-522,283,298,69,563,-199,455,-1000,-529,-239,-1000,-321}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00005() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{431,147,1000,584,464,1000,-470,1000,-372,-415,192,258,1000,896,1000,-404,339,1000,-288,-693,-1000,-1000,-1000,-645,47,271,46,-699,48,-105,-164,-1000,-510,849,-1000,-645,-1000,427,187,-1000,870,-449,-543,-901,1000,1000,-267,886,408,-896,-647,610,688,-1000,217,-1000,852,1000,586,-854,-1000,-326,837,-719}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00006() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{204,-1000,44,-187,266,-469,-314,155,456,1000,-1000,-1000,-783,181,-754,-97,1000,-1000,-296,480,1000,-282,-389,862,-548,-1000,-1000,131,602,589,649,582,-1000,-23,-497,855,-537,261,-1000,-1000,-645,-237,-1000,235,851,-142,807,174,1000,-51,-457,121,697,923,384,864,-831,1000,-1000,1000,729,889,-230,579}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00007() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{-651,-1000,439,588,-581,-424,-808,917,-443,1000,-1000,1000,-271,429,-339,-559,-874,-640,378,1000,1000,209,-396,-449,-950,-640,-1000,-575,1000,743,1000,316,-1000,-1000,-373,276,-537,-1000,972,-1000,-603,-996,-1000,1000,231,-271,-387,-398,-333,-356,278,-872,-438,-385,414,667,-890,1000,-1000,-354,685,1000,-834,477}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00008() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{-923,174,984,-63,196,-1000,-82,585,895,333,264,1000,-1000,644,837,-1000,-1000,409,-733,290,-495,1000,1000,1000,17,-260,242,266,-1000,403,-722,-1000,-273,-1000,-168,775,1000,-1000,823,442,-89,-147,120,-310,910,238,-253,-1000,1000,-474,-1000,-518,295,896,71,690,9,604,750,1000,415,-167,-1,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00009() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{839,1000,689,-973,-95,128,987,308,-566,-211,765,483,-181,99,-394,-901,-720,-865,22,-574,300,-181,-1000,526,641,548,901,-510,-499,-582,-64,253,-187,551,-1000,-505,1000,704,1000,1000,76,-605,-198,-1000,-976,420,-962,25,658,-703,-1000,1000,-35,-256,308,190,-554,-70,619,-899,549,-179,-272,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00010() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{-57,-633,-649,239,238,-676,-113,356,810,703,-1000,-162,337,266,-239,-666,912,-389,-1000,1000,308,8,-351,488,-567,-929,-273,496,31,-66,625,573,-952,-619,703,528,-448,-637,-823,-365,161,198,-723,1000,1000,687,736,-515,671,280,-634,448,262,1000,-110,-766,963,918,-455,563,626,1000,-224,-533}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00011() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{-408,300,-626,170,-491,-151,11,572,295,258,1000,1000,543,-908,763,-228,-1000,-477,227,-964,-90,-387,97,-1000,1000,1000,331,524,-703,-594,73,26,-245,97,-688,-469,697,500,1000,406,-121,-96,197,-1,661,782,-205,-446,-988,-353,-822,-791,-1000,172,1000,-680,-82,474,567,-1000,-742,-517,-162,-271}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00012() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{-1000,1000,-741,-581,107,-529,277,10,-354,-1000,51,1000,1000,-27,875,-622,-600,443,-1000,-575,-1000,583,1000,-1000,1000,538,1000,-83,-1000,-1000,-934,-1000,1000,-1000,866,107,990,-77,1000,1000,1000,462,1000,-28,1000,1000,-271,-1000,-262,845,-145,-693,-509,-838,-586,-767,1000,-1000,1000,-1000,-780,-983,-150,-612}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00013() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{-26,-266,-626,-581,-1000,-852,1000,-423,622,-1000,596,1000,1000,-1000,-1000,-549,-1000,-477,614,-322,901,1000,1000,519,1000,183,698,1000,-1000,1000,-469,-582,610,-784,1000,1000,1000,-723,1000,602,-167,106,347,1000,-1000,-723,-321,-1000,-955,851,496,-1000,-1000,157,36,-105,-82,-807,455,-1000,-598,288,-952,451}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00014() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{820,-226,64,-803,909,-806,116,151,1000,-203,-633,30,-839,26,-201,-109,606,-1000,-1000,553,337,251,-97,460,173,-730,179,762,-320,-956,-68,-287,-1000,-799,241,834,50,193,-398,-247,-408,574,-839,-148,649,-65,330,-1000,120,317,748,-137,-1000,464,177,-490,-575,118,-1000,592,487,1000,87,-177}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00015() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlot", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "clone():java.lang.Object",
+            new int[]{-1000,-266,-132,651,-1000,1000,-24,34,-496,-602,790,1000,1000,178,-480,-755,-1000,1000,466,-155,-1000,1000,1000,-1000,1000,1000,48,1000,-1000,1000,-656,-1000,1000,-1000,1000,-440,62,-789,1000,29,242,541,906,766,976,671,-1000,-1000,-1000,980,34,-53,-220,-1000,1000,-951,-1000,-714,424,-1000,-497,-694,-648,978}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00016() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{1000,-959,176,928,132,488,-891,58,42,-410,44,-383,-710,992,638,-1000,359,-1000,1000,-275,312,-917,1000,677,-376,692,-1000,-199,-287,-806,861,136,-788,-849,261,-568,-1000,-1000,436,-952,592,460,-125,-355,-242,1000,1000,746,403,309,-589,-479,1000,-717,252,-350,1000,460,198,-1000,-1000,-770,-408,-546}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00017() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{167,-257,1000,1000,13,1000,1000,-330,643,714,356,-534,-735,1000,965,-734,343,585,1000,-519,907,-908,305,786,-1000,-1000,-1000,690,-759,-329,-840,-481,265,-80,-1000,-469,-1000,-414,306,-1000,254,345,1000,1000,243,704,-388,-1000,-1000,1000,-1000,324,664,1000,1000,-769,458,1000,638,-113,-1000,616,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00018() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-195,-223,218,1000,-190,986,1000,-781,71,694,-1000,1000,1000,1000,-993,370,-726,165,-158,-41,1000,-520,-58,946,274,-1000,-410,560,-755,404,382,249,1000,450,-281,-574,1000,-113,383,181,-92,-1000,753,1000,-812,-1000,-1000,71,14,347,654,-436,-754,1000,400,-830,910,157,330,905,107,-354,-1000,-675}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00019() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{582,554,169,976,751,802,873,-171,861,908,-158,-137,278,718,291,30,920,-785,670,-521,47,-866,419,989,-132,75,-589,531,56,12,-213,-123,438,-265,131,-855,815,403,628,59,-812,-845,210,758,483,-496,543,-942,-718,98,-848,-792,60,-620,-1000,-601,916,633,380,-464,-57,-29,-890,-878}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00020() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{736,-465,795,986,339,433,-263,-540,184,-972,172,-62,-674,958,357,-537,909,79,84,-310,434,-588,-830,702,-190,-110,-975,180,-837,-309,-91,-236,-478,-448,-345,329,-767,-851,429,-145,-757,318,362,-411,-784,759,805,284,-116,663,-618,429,973,666,12,595,616,502,-346,299,-789,-214,-365,99}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00021() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{159,-735,884,1000,-525,832,1000,-900,314,981,-644,-98,-491,1000,874,-894,-74,458,927,-75,868,-624,49,583,-1000,-1000,-998,827,-1000,186,-752,69,770,266,-1000,-556,-1000,-517,393,-1000,474,-122,1000,1000,243,228,-778,-1000,-1000,1000,-1000,403,-1000,1000,1000,-1000,226,-172,694,323,-151,918,-977,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00022() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{873,1000,-521,-111,98,59,758,-171,-1000,-302,383,951,1000,-726,-1000,1000,-1000,1000,-1000,224,1000,1000,-830,339,1000,-401,-60,116,168,-810,-15,1000,1000,1000,1000,863,1000,1000,993,1000,1000,-1000,-99,-150,186,-1000,-964,-208,730,-808,207,-1000,184,-1000,188,545,231,-1000,-113,1000,1000,-1000,-844,281}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00023() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{140,-1000,494,514,1000,1000,922,1000,31,-898,271,897,207,645,-286,1000,-325,-1000,-567,-1000,-120,-36,1000,997,885,-401,-642,306,65,1000,374,-42,549,850,679,-829,-276,1000,1000,1000,1000,-960,1000,869,397,-891,549,-389,-457,812,-589,-26,-529,-931,-1000,-797,-380,-62,1000,447,1000,-269,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00024() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{284,131,-744,-15,-604,-521,-295,-608,-1000,1000,-427,1000,-85,345,725,-95,-1000,867,-549,1000,1000,1000,-830,-225,-286,51,-771,517,-536,399,-445,1000,332,1000,237,244,376,257,518,-1000,-3,-1000,-606,-546,1000,-1000,-575,-1000,-55,-295,-1000,-405,-1000,-1000,789,-192,458,-943,-1000,959,-422,515,-511,-333}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00025() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-195,547,189,959,-1000,843,1000,-822,563,1000,-904,1000,944,747,952,825,-1000,611,-670,-41,1000,-15,-826,794,-762,-1000,-149,1000,-718,585,382,324,1000,1000,-1000,70,1000,592,-285,474,-404,-1000,632,1000,523,-1000,-1000,-1000,-1000,593,-1000,209,-1000,1000,1000,-854,910,314,-36,1000,146,1000,-1000,-635}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00026() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-449,-65,-369,897,-1000,344,-172,-1000,-696,1000,-1000,1000,1000,645,-1000,208,-1000,647,-839,995,1000,300,-268,404,595,-1000,-52,934,-554,1000,853,1000,1000,1000,-575,225,1000,-800,-361,-51,575,-1000,298,495,-967,-1000,-1000,87,244,-330,732,-620,-1000,1000,1000,-1000,368,-309,-320,1000,-537,730,-681,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00027() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{1000,733,227,1000,1000,-218,-531,-729,1000,-447,549,-105,-94,1000,-314,-1000,884,336,1000,-1000,9,-1000,-406,995,-1000,544,-333,-7,446,-1000,324,-842,-628,-920,714,-882,-1000,-746,-31,148,-438,726,-227,525,-549,1000,1000,1000,923,-11,-820,-694,1000,24,-227,953,1000,1000,423,-1000,-969,-910,153,-264}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00028() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{-125,661,711,961,1000,724,-381,-1000,1000,1000,-277,616,708,145,-111,-731,-166,375,199,587,907,-335,-1000,-67,456,-691,1000,1000,-1000,802,-665,421,383,-31,-651,-118,139,-1000,-1000,57,1000,-703,-120,-581,-727,504,-1000,-652,221,334,-657,278,-1000,1000,969,332,1000,111,-247,1000,-129,1000,1000,-907}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00029() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{898,411,111,1000,132,589,1000,-1000,884,-369,25,-785,-89,992,1000,-1000,1000,1000,302,954,-1000,-1000,-1000,898,-181,508,-749,-3,-1000,-1000,-695,-1000,-1000,-1000,-131,-88,-613,-1000,-541,-369,-1000,198,-125,-220,-1000,1000,423,-106,-157,-290,-738,-149,1000,440,975,1000,1000,1000,-584,-280,-741,-970,-408,-727}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00030() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{0,40,99,-39,1000,641,457,568,-173,-284,207,489,452,-690,-1000,-229,449,-320,789,74,-668,499,-150,44,690,-969,539,-1000,-741,0,256,1000,432,0,-372,-602,-964,0,265,179,-1000,-31,776,-527,-276,-299,1000,837,886,-215,177,-185,819,711,-52,0,-965,-1000,-528,-507,0,1000,-1000,190}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00031() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "draw(java.awt.Graphics2D,java.awt.geom.Rectangle2D,java.awt.geom.Point2D,org.jfree.chart.plot.PlotState,org.jfree.chart.plot.PlotRenderingInfo):void",
+            new int[]{1000,-398,-527,936,462,-534,-1000,475,-451,-224,1000,-708,-1000,992,1000,-1000,-516,-415,719,-139,312,-333,1000,125,-462,1000,-1000,-386,-85,-518,310,662,-1000,-1000,654,-901,-1000,-976,694,-1000,1000,698,-1000,-1000,674,1000,1000,528,697,-215,-1000,-1000,1000,-1000,459,931,352,349,-371,-1000,-1000,-621,68,-918}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00032() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{-908,-1000,279,-398,-425,-765,-749,524,-70,-301,-1000,1000,910,-154,-831,620,13,323,-269,-574,211,-1000,-203,-637,139,578,-1000,-630,395,422,1000,-431,-716,436,-1000,-896,1000,603,-13,397,52,388,978,786,-760,864,481,-663,741,-1000,-1000,-570,323,401,1000,176,-984,23,-228,-623,-1000,-489,-239,-200}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00033() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{806,-759,963,1000,230,-481,-946,469,64,1000,1000,1000,969,-865,1000,726,-1000,-1000,1000,-614,-1000,-384,-242,896,1000,-1000,1000,1000,1000,-1000,906,-1000,-1000,1000,-1000,1000,-1000,-712,1000,1000,1000,968,193,918,1000,-1000,-690,1000,-851,307,1000,1000,-1000,-1000,1000,-1000,1000,1000,-1000,1000,1000,79,-129,-49}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00034() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{-1000,-1000,-227,-481,-396,-521,-223,-425,855,-270,-820,-800,-404,1000,-1000,1000,606,-484,-438,-1000,559,-689,468,-1000,397,135,-60,-826,-1000,1000,219,1000,-950,-949,-1000,-36,191,1000,225,-1000,-1000,-655,152,304,-206,655,440,-910,-311,-1000,-1000,72,-277,367,71,140,-1000,-431,1000,-1000,-1000,204,353,509}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00035() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{997,-1000,-591,-219,967,-1000,-720,-486,592,465,-953,1000,-81,-3,-124,875,-897,-375,438,-1000,-188,1000,554,225,357,-555,170,-107,410,-473,887,589,-441,-788,-1000,285,365,760,1000,-552,1000,-697,65,1000,490,456,-435,-645,-1000,-479,-1000,851,-372,-648,-518,247,341,167,922,629,224,292,803,-199}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00036() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{546,-439,-822,-997,1000,-382,-818,949,237,-400,-1000,454,313,-650,433,995,109,400,-708,-887,1000,710,111,-651,653,400,-1000,-1000,185,515,1000,-24,-806,-283,-674,-152,1000,165,1000,-488,515,-300,-186,986,736,576,-249,-1000,1000,377,-1000,84,848,278,400,1000,789,1000,1000,-1000,-1000,-1000,250,140}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00037() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{-167,-664,19,5,-239,-585,359,-25,63,9,-108,-130,129,-106,-178,811,154,-354,175,-755,266,-520,164,-202,476,-1000,821,287,400,250,219,8,-950,116,-1000,84,-6,437,767,64,-65,218,294,304,9,-208,-574,-105,140,-462,-201,695,-385,123,119,-7,105,388,-368,314,183,44,-201,294}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00038() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{-222,-1000,819,996,997,227,-1000,991,1000,-171,-623,993,-133,-496,-153,-163,-273,-130,-253,-92,16,-1000,109,-119,1000,-76,-648,-1000,959,1000,-131,-945,397,832,-1000,-953,598,520,-553,1000,75,1000,-246,-312,-132,186,1000,313,-170,-687,-185,320,965,-233,98,567,-308,-310,112,-490,-253,215,1000,-47}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00039() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{360,-1000,224,-148,598,-205,-1000,528,1000,685,-1000,839,490,441,-890,630,-1000,-871,-209,-767,-959,-164,326,225,403,-638,170,-107,1000,-731,951,-876,-923,-278,-1000,36,365,132,399,-335,1000,-869,65,1000,830,360,388,-956,-854,-593,-1000,999,-785,-860,-345,247,475,-467,1000,-1000,-363,480,1000,-446}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00040() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{687,-1000,-481,-1000,1000,-1000,-1000,808,1000,-245,-1000,1000,631,-1000,-856,275,-1000,745,-497,-241,151,-446,627,375,-649,-699,-1000,-586,588,640,100,-650,150,473,1000,380,1000,353,684,164,916,-13,822,483,283,1000,-176,-825,421,-327,-1000,-319,603,709,1000,873,-401,811,-133,750,-1000,750,691,303}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00041() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{629,61,-835,717,274,-31,725,-1000,-362,-378,247,-474,-473,733,1000,1000,979,-275,281,-1000,630,-502,321,70,299,161,1000,497,530,777,-251,919,-929,-318,-1000,-33,-598,862,1000,-1000,-845,-374,-295,-112,-156,-742,-789,365,-470,-270,604,945,-187,387,-229,23,-652,-17,-171,0,717,-740,-549,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00042() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{-311,390,234,414,-994,-805,132,-1000,-339,311,-723,199,-1000,-935,830,1000,291,-769,1000,-241,-472,-771,227,518,-640,56,125,325,-1000,165,318,-49,-874,-714,257,-252,-19,977,515,-578,-336,-1000,890,-620,-692,798,774,-598,-721,-1000,552,-187,-409,-702,580,1000,-414,334,597,-463,949,-462,-613,-459}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00043() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{1000,294,294,-219,713,-657,-671,-1000,1000,1000,0,813,-602,-1000,-1000,-1000,-1000,-1000,893,836,-1000,82,1000,1000,485,-1000,1000,-74,288,-1000,330,-1000,-464,-930,-1000,1000,-1000,255,-466,1000,1000,-908,90,324,1000,334,586,272,-1000,-715,1000,1000,-1000,-1000,-1000,-527,-178,693,745,283,46,1000,512,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00044() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{29,-1000,208,-757,132,148,-594,868,778,-474,-1000,1000,402,-1000,-791,-22,-97,1000,-505,92,1000,-866,460,-535,46,534,-946,697,1000,688,1000,47,-662,343,-951,-776,716,1000,-175,-533,-164,-877,290,303,-611,332,518,-322,1000,-826,-1000,-186,459,936,1000,1000,-414,-984,-296,-167,-1000,-1000,1000,303}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00045() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{385,496,234,-382,27,-876,-124,832,606,-477,-960,433,662,-660,-1000,-840,-220,1000,-539,486,570,759,675,378,-1000,-105,-1000,26,-1000,-851,99,418,1000,-619,1000,-249,1000,372,-180,169,-187,172,68,-12,199,1000,-585,104,1000,-49,-1000,110,-10,937,932,1000,-340,-62,-204,399,-400,810,349,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00046() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{1000,257,-274,826,1000,-481,-998,969,1000,472,5,1000,631,-865,-442,-844,-1000,208,307,522,-830,695,626,1000,-425,-1000,-561,268,632,-1000,5,-1000,1000,116,-203,429,427,-218,268,1000,1000,562,-467,-95,1000,67,-601,970,148,489,59,865,-160,-320,-1000,542,757,443,-1000,1000,1000,951,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00047() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "equals(java.lang.Object):boolean",
+            new int[]{629,-657,-991,-1000,419,-1000,725,555,-987,-321,-1000,655,506,-194,341,1000,979,-275,-361,-1000,758,403,-257,-807,299,742,-1000,102,-568,590,1000,34,-1000,-372,-1000,-100,1000,248,1000,-1000,491,-1000,1000,863,107,1000,-423,-1000,1000,64,-1000,-666,1000,316,1000,23,113,1000,-171,-1000,-970,-1000,-1000,-235}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00048() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{161,684,-416,550,-1000,1000,-289,432,742,-660,-1000,-903,-664,-957,-288,-560,-888,49,1000,-102,508,1000,380,-562,-671,960,-1000,-54,49,1000,-763,927,-429,-775,-1000,380,-705,-114,12,-295,1000,687,-1000,830,372,-121,210,-817,952,812,-285,-51,-718,667,149,290,713,-262,1000,951,515,1000,302,549}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00049() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-458,-214,-886,-1000,-296,-236,-455,-291,721,118,-947,-654,-85,-357,337,-634,796,-378,-408,530,-938,-702,976,60,1000,-440,-1000,1000,422,1000,72,713,-429,-957,155,-322,-1000,-85,414,170,808,-188,-1000,284,585,1000,524,333,-449,-477,1000,808,-1000,-658,-779,686,-243,-395,-546,1000,-388,36,-695,-822}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00050() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-429,-717,169,-967,-104,988,1000,-974,-766,-515,-129,-1000,-699,35,619,28,342,616,827,799,-1000,895,569,1000,207,652,-405,1000,760,-795,716,34,-1000,-909,300,-1000,-674,-799,-929,832,-46,106,1000,-1000,1000,1000,-352,168,768,-1000,64,-705,419,-277,1000,189,-923,-621,-1000,1000,219,-827,-944,-519}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00051() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-1000,190,89,-928,-1000,1000,331,88,-863,-488,-156,-788,614,396,-1000,-587,-804,-217,1000,400,-565,1000,284,-1000,-139,794,-728,1000,1000,-400,103,-1000,-1000,-815,-499,-1000,-1000,-1000,-1000,306,1000,625,875,205,1000,1000,-314,-1000,90,-638,595,-425,-411,378,-341,127,195,-790,198,1000,-640,675,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00052() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-386,685,-368,248,-940,572,84,836,603,-830,-901,-658,-762,-684,-755,-765,-538,6,591,-321,173,548,490,-585,-94,268,-888,-261,-244,730,-349,664,-341,-502,-983,209,-408,528,192,-426,661,422,-561,925,88,-19,54,-545,639,767,-538,-517,-818,703,113,-579,744,-845,865,645,-314,358,293,524}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00053() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-793,-264,-502,187,-1000,1000,-549,278,-1000,-714,331,-210,1000,1000,-842,-607,-1000,-1000,348,-535,-121,1000,-811,-1000,-57,-1000,-519,1000,1000,-287,-575,-1000,-1000,-1000,1000,-1000,-1000,-1000,-1000,-7,1000,1000,1000,577,1000,1000,100,-1000,771,-583,-1000,227,-300,948,-898,1000,-441,-538,52,1000,-604,344,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00054() {
+        org.junit.Assert.assertEquals("COLOR:-15162079", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-512,437,-621,-2,325,301,-927,-775,-421,-10,-626,-775,-232,421,-991,567,142,-260,-673,-579,981,638,-127,-206,-40,-323,584,753,728,965,-631,-941,219,476,667,-564,-971,-563,10,-416,672,-680,-440,934,521,-809,145,-848,-204,437,388,456,94,213,-776,885,-352,-642,271,-126,-249,978,-660,702}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00055() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-686,1000,-606,-491,1000,202,-549,-895,753,-631,68,-1000,-1000,-974,-695,-185,-941,789,-160,-1000,1000,-53,515,-518,575,-448,1000,-1000,-1000,1000,752,-59,1000,716,466,1000,806,1000,836,-1000,-884,-463,-1000,1000,-737,-708,447,1000,-65,1000,430,-1000,-409,44,511,-56,-662,-866,907,-838,-981,237,-1000,259}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00056() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-435,-382,58,-747,728,259,840,-686,-303,-1000,-648,744,-585,-688,-537,34,549,1000,715,460,-1000,-546,1000,815,203,1000,-1000,753,-716,309,671,772,-274,-1000,-340,-390,1000,829,-518,510,-821,365,97,-307,-243,-50,-578,-7,1000,-69,-650,-1000,276,780,1000,-705,321,-1000,-335,771,1000,-454,120,-201}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00057() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-458,635,712,-718,-62,-794,79,-464,525,-126,-200,-961,-601,-215,522,-736,837,-738,-952,186,0,-145,908,397,863,-591,147,143,-617,-660,963,578,305,-679,661,344,-200,633,829,-561,-345,-364,-428,277,-347,958,215,800,-583,310,943,576,-935,-858,-469,-77,-242,-227,-471,267,424,36,-951,-822}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00058() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-1000,-1000,-416,-54,-603,259,-296,432,-886,-215,-327,80,466,556,82,417,-742,-457,1000,392,-1000,741,402,64,-454,1000,-902,1000,1000,-78,-926,-565,-1000,-442,-340,-1000,-705,-1000,-1000,1000,679,837,1000,265,1000,151,-578,-307,952,-1000,-316,-894,583,912,454,273,950,-1000,381,809,792,-98,1000,549}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00059() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{202,-238,4,-843,-522,-260,29,520,-303,791,-574,744,-994,-560,-762,786,-697,901,922,-694,-295,-124,764,661,-38,867,239,682,-422,-317,145,-497,-274,784,221,-480,-105,229,352,417,-310,-905,427,106,157,-509,-520,453,608,505,797,-344,37,780,358,-705,888,-181,-790,-764,-771,-454,120,-201}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00060() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-269,1000,-292,173,1000,-866,127,545,586,-1000,648,-1000,-1000,-688,-564,-1000,-350,307,-963,-643,722,563,463,-22,-457,-1000,1000,-1000,-1000,1000,1000,402,1000,102,351,1000,1000,829,-247,-1000,-1000,103,-1000,1000,-1000,-1000,317,549,-158,-69,-704,-1000,534,54,1000,-204,589,-410,803,-1000,905,628,-588,524}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00061() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-406,-688,-781,-37,283,564,-236,-947,-191,-542,-1000,-427,23,-586,-210,303,-147,813,649,153,-444,172,262,962,-137,332,-472,1000,546,383,-457,261,-1000,-832,-498,-401,-782,-298,-648,559,166,72,299,-94,703,309,-142,137,1000,-222,-878,-1000,231,297,1000,572,-359,-993,234,1000,-162,-374,-446,-170}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00062() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{187,1000,-726,-464,-155,718,-891,-1000,-187,-1000,-1000,-1000,-1000,-1000,-757,-1000,-475,328,1000,-279,1000,405,-241,597,-191,-983,-1000,104,-631,1000,-780,1000,59,-439,-356,1000,542,1000,950,-1000,744,-204,-1000,804,-27,-272,292,239,908,1000,-1000,-301,-697,919,541,1000,-1000,-335,1000,645,-774,803,-1000,-181}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00063() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlinePaint():java.awt.Paint",
+            new int[]{-435,-382,58,248,728,259,840,-686,-33,-1000,-648,-934,-762,-688,-537,34,549,1000,715,460,-1000,-546,1000,815,203,1000,-888,753,-244,309,671,772,-389,-1000,-340,-390,1000,829,-518,510,-821,365,97,-307,-243,-50,-578,-545,1000,-69,-650,-1000,276,-204,1000,-762,321,-1000,865,771,1000,-1000,293,524}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00064() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-1000,-651,-272,609,-1000,192,890,-912,-27,-1000,-862,-90,130,-88,407,-1000,1000,308,-134,1000,-377,-639,195,-400,101,461,-1000,-858,-700,135,-871,437,1000,400,451,537,-1000,466,-1000,633,365,-108,-1000,-921,-1000,977,-1000,-646,1000,-836,-1000,470,-322,888,-881,447,545,-1000,-22,-578,1000,-324,963,290}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00065() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-1000,488,-591,-547,-524,194,867,-879,-26,-400,555,12,14,-362,-226,-1000,830,-383,67,1000,195,250,200,20,26,595,-1000,-865,-190,-113,-889,538,983,-20,616,261,-727,1000,-440,635,424,-278,-562,-532,-731,-715,-825,-68,639,199,-1000,482,-377,321,-917,55,507,-737,70,-538,880,217,374,606}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00066() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-420,-637,-359,158,679,864,-8,459,-1000,1000,656,-272,150,-545,433,995,-698,-671,-781,231,-1000,22,-416,-1000,-728,-1000,538,866,906,751,-605,-284,-493,532,937,1000,-805,-1000,-1000,929,-287,-713,-243,202,-1000,697,19,-310,466,-836,-474,265,341,-384,-1000,289,-125,-178,-375,-281,111,-494,-507,-437}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00067() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-1000,38,-56,-1000,-833,-849,921,-185,-326,1000,930,753,-1000,-1000,799,-910,-409,50,1000,457,409,-1000,144,1000,71,-1000,1000,-537,296,1000,46,-1000,524,228,740,-1000,-356,-760,-629,812,-787,935,-955,262,116,557,-1000,-1000,1000,-630,-186,928,-946,825,-1000,-310,-37,1000,-1000,-130,1000,-1000,-659,-498}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00068() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-925,144,-597,71,-1000,638,67,920,922,1000,1000,-1000,14,-1000,513,1000,-1000,-928,-105,1000,-1000,-621,-954,-1000,-409,-1000,554,1000,840,1000,-1000,-750,-400,1000,920,1000,-1000,-1000,-1000,541,-876,175,-518,121,-1000,39,459,895,247,-1000,-1000,276,280,-846,-1000,55,653,-141,-584,-838,-687,-494,1000,126}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00069() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-484,50,-761,186,-1000,-156,961,201,846,-735,-1000,-221,-1000,269,433,976,-998,-689,179,0,801,753,-356,606,-487,582,-35,-627,-194,524,-367,-491,-390,-135,414,-1000,-558,140,705,104,433,203,-808,112,321,-675,-8,1000,1000,-851,347,-138,-194,434,1000,-317,-588,-554,619,-251,458,-378,-210,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00070() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-20,-913,91,-54,-1000,-801,275,-162,799,674,-479,1000,-958,-193,1000,-495,229,358,-671,438,-210,-773,-41,-372,-205,-213,-63,-504,-354,760,-110,-229,1000,1000,344,-235,24,-541,-602,812,-730,189,-633,262,-62,355,-1000,-549,1000,-769,-865,1000,-130,607,-414,-679,-37,-234,-353,997,867,136,-683,-112}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00071() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{616,-635,-539,-97,792,-151,-609,43,-340,679,-426,536,77,-268,785,976,-557,748,-648,0,-819,445,-648,-4,-48,635,9,215,437,191,-710,-165,-390,512,482,398,428,-441,-586,488,-912,-476,-98,515,123,-313,-30,31,-46,-851,-520,140,-212,-228,874,-749,-834,-130,943,-339,-64,-7,749,-706}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00072() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-700,-504,-552,-269,-39,-192,372,-305,-903,1000,855,-1000,-373,-923,1000,337,-1000,-791,-699,623,-960,-676,-1000,-400,-492,-1000,915,1000,1000,1000,-716,-827,-391,1000,798,519,1000,-1000,-1000,1000,-1000,-821,-1000,1000,-1000,527,356,-8,173,-1000,-557,-423,-68,-437,-756,-752,-1000,24,-975,687,-34,-596,-1000,-518}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00073() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{1000,-502,-831,-1000,1000,1000,-427,425,-330,1000,1000,-101,1000,-441,-100,1000,-334,163,-527,-417,-808,-465,-963,-1000,833,-64,-343,264,-447,782,-951,407,-927,1000,293,437,686,400,-1000,1000,253,-1000,150,1000,-469,314,-700,475,-200,285,899,316,1000,61,-1000,-498,-376,230,-668,25,-479,1000,-1000,734}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00074() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-571,-1000,319,1000,-342,363,45,-1,-27,-1000,21,1000,-104,880,-553,100,924,1000,-994,416,-851,1000,52,-1000,793,-27,96,-793,-1000,-627,-7,450,991,155,312,955,-347,-20,-136,933,204,-850,-1000,340,-1000,620,-1000,-240,1000,773,-673,1000,331,1000,885,958,-1000,-1000,566,1000,1000,-422,-463,-543}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00075() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-1000,219,-769,-239,313,24,474,-368,-503,400,-206,-236,234,-504,210,-336,-88,-219,-13,730,-115,-521,-130,-400,-19,467,-713,-496,248,385,-699,-66,15,400,804,571,-199,166,-1000,764,-1000,-144,-300,-245,-788,-196,-100,-221,675,-1000,157,70,-129,201,-881,190,175,-507,-377,-461,255,-1000,16,1}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00076() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-1000,-1000,-267,883,630,89,-612,250,-531,1000,1000,357,-276,197,803,1000,-1000,262,-1000,935,-1000,975,-1000,-1000,354,-935,908,803,-42,1000,-1000,-469,1000,1000,650,1000,-1000,-1000,-1000,452,-932,-896,-1000,1000,96,68,-310,-302,1000,-1000,-1000,-444,855,284,207,-1000,-1000,191,261,1000,68,-561,-1000,-512}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00077() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-1000,-311,-478,1000,-829,-191,-906,512,551,704,-233,405,-720,159,-988,111,117,-12,-787,13,1000,247,1000,964,-21,125,427,953,-160,1000,-796,-867,-133,-1000,526,-920,-703,-982,959,-1000,-174,-228,-809,337,-373,-1000,-500,-399,103,-41,-810,483,-852,-1000,965,-75,-1000,-707,1000,-1000,81,-783,-101,-830}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00078() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{-977,-466,-317,-394,-684,-842,394,-428,366,704,494,-905,-687,-672,795,27,-167,200,376,576,-92,-984,4,-362,-180,-772,776,18,-203,890,-438,-843,751,826,586,-162,-347,-723,-629,812,-806,112,-809,262,-373,268,-851,-399,927,-864,-938,-779,-260,291,-560,-485,-13,191,-982,-290,450,-777,-459,-93}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00079() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionOutlineStroke():java.awt.Stroke",
+            new int[]{1000,-1000,123,865,544,736,69,-1000,476,-473,558,1000,1000,332,649,1000,736,223,-995,500,-1000,-811,695,-1000,-417,675,-1000,363,-284,751,-974,-284,1000,-189,434,959,-331,172,195,600,315,-1000,1000,-400,-996,-256,-645,456,-659,-836,-1000,1000,477,-692,-890,1000,752,-934,694,-281,-601,1000,324,-437}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00080() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{-1000,-384,644,-278,588,845,-354,-353,-290,-999,-1000,876,919,855,-1000,-979,48,1000,759,131,-1000,303,-974,762,-1000,-1000,-1000,813,-1000,-1000,376,-1000,842,-813,-835,1000,1000,-1000,425,-630,-1000,-806,1000,768,1000,-1000,753,-1000,997,-112,1000,1000,724,1000,856,1000,-1000,1000,-1000,1000,874,-284,-664,488}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00081() {
+        org.junit.Assert.assertEquals("COLOR:-11843816", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{399,161,589,-1000,-682,-268,-208,606,143,-852,1000,-892,-1000,-1000,-832,1000,127,-437,583,-1000,146,959,-551,705,1000,395,855,930,-689,-355,1000,1000,-822,-424,-473,-487,-167,-775,-596,1000,-686,1000,1000,-1000,-438,1000,958,-427,-767,157,533,651,164,362,-575,-1000,1000,125,655,-1000,163,-59,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00082() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{-142,-816,-486,-813,1000,-204,-1000,-65,-594,1000,-227,789,1000,1000,-673,-1000,1000,-740,-896,-22,297,233,-390,-79,-851,-34,-1000,1000,453,77,564,-1000,1000,-998,107,-322,215,9,1000,1000,-1000,-424,-195,1000,-989,-851,-114,594,677,-1000,-967,-115,724,452,1000,-291,-405,512,-730,1000,-1000,299,-606,-683}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00083() {
+        org.junit.Assert.assertEquals("COLOR:-1547945", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{-1000,954,899,389,-1000,-866,708,93,-1000,-399,-527,634,1000,-178,-1000,525,-773,1000,609,599,-673,-176,-1000,-136,-738,-1000,-397,106,-1000,-1000,-401,-1000,-422,-1000,-517,1000,302,-1000,1000,-175,-1000,42,-603,781,109,753,104,-1000,456,1000,1000,726,95,559,926,830,18,1000,-366,27,-351,309,-123,174}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00084() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{-106,-1000,749,-1000,-309,426,-42,174,-47,1000,-805,-49,-884,391,-265,985,-42,-412,384,1000,-1000,273,-524,1000,-1000,1000,-1000,1000,-1000,616,20,-65,774,-304,-307,-53,822,-167,-774,609,-266,-444,1000,1000,812,195,-484,289,-9,46,446,1000,723,1000,1000,456,-820,576,-959,1000,476,-570,-120,305}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00085() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{400,26,-366,-63,-788,278,456,-388,505,324,389,59,-14,-400,-8,1000,813,965,-133,-279,382,284,192,1000,71,-873,-671,-270,81,131,127,455,384,381,-545,-1000,-60,-629,-46,539,-381,533,410,1000,-620,327,481,298,-153,-608,866,-683,553,-521,-310,411,-152,132,-308,620,-128,198,219,-185}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00086() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{-867,210,199,-725,-357,170,-106,-317,-847,813,129,-71,938,-263,-149,-64,-853,381,-557,155,603,-881,-577,-858,197,361,432,512,-634,-461,-449,625,-880,333,38,124,-254,48,-771,300,417,-326,507,-878,-296,808,24,-260,221,380,-854,288,-464,-89,-506,-113,831,898,879,-105,812,-162,-567,-344}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00087() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{-238,-90,49,173,441,390,-355,944,47,589,725,-296,498,-1000,625,-939,318,208,-574,-127,-1000,1000,-777,-782,472,-311,-676,-177,-39,-400,1000,521,521,-209,128,96,-96,-141,704,816,53,-147,-355,-869,286,54,-1000,1000,775,-251,343,1000,-580,400,-254,-459,-304,-60,78,-22,149,-886,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00088() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{285,-414,-997,-1000,668,570,292,-89,289,731,542,147,1000,125,1000,-120,1000,146,-777,793,-446,115,153,302,166,-88,-1000,-190,-237,626,1000,-840,1000,-380,-599,-144,-248,553,1000,971,-1000,818,1000,1000,-1000,-897,680,971,1000,430,156,193,1000,-262,1000,880,-832,545,-963,1000,-646,-168,420,-206}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00089() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{-238,-769,-811,-536,1000,-882,1000,-356,-396,-287,1000,545,1000,1000,161,-587,1000,208,60,157,643,1000,617,2,-55,559,-1000,862,1000,-400,963,-209,1000,-847,1000,96,413,672,553,816,-964,283,-469,986,-1000,-213,-263,1000,775,1000,116,-477,1000,281,1000,-28,-252,402,126,695,-1000,147,1000,-998}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00090() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{1000,-1000,-341,66,265,351,-1000,-477,1000,994,476,-420,-914,-1000,904,935,-1000,9,-221,-172,-494,1000,1000,622,842,827,-432,795,-193,487,820,670,728,454,269,-947,300,646,-598,119,507,26,-337,-1000,270,6,-428,871,-423,-253,383,539,158,-305,-863,543,-511,-88,-345,305,225,-100,259,924}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00091() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{1000,-676,284,-397,448,923,-1000,-600,1000,866,-997,-264,-694,801,1000,892,127,449,-592,88,-1000,911,1000,-597,-464,-237,701,-333,-6,-1000,-761,1000,-1000,305,56,-1000,-202,1000,-928,18,488,-921,-152,342,672,-744,607,-223,640,-939,-571,528,-508,-425,492,-131,-40,-30,933,486,1000,-706,-764,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00092() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{399,-543,-1000,-1000,448,959,-1000,-464,1000,807,490,-25,709,-855,1000,749,127,519,757,763,-1000,295,519,752,551,-148,-1000,-333,-689,536,1000,-388,1000,-42,-957,-1000,-202,527,529,1000,-1000,732,1000,35,-1000,-744,607,881,814,-448,258,651,1000,-68,492,1000,-1000,652,-1000,1000,-7,-97,380,295}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00093() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{838,-816,-337,-521,579,-204,846,59,-16,887,550,-173,474,400,213,-306,423,-524,-191,-128,297,742,478,-20,293,911,-1000,1000,453,616,1000,25,1000,-29,780,276,223,684,518,77,-113,150,-188,939,-989,-213,-323,1000,301,1000,-599,-115,1000,-582,403,372,-271,-240,-291,695,-688,-201,316,208}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00094() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{694,-281,-454,824,448,959,-612,352,-842,340,-400,79,-1000,741,173,-1000,-628,-885,-417,-1000,547,1000,1000,-1000,89,1000,459,588,1000,-169,1000,1000,-266,996,-957,526,-563,182,-337,-1000,1000,-1000,1000,-643,704,422,42,-142,-941,370,-1000,-366,1000,-1000,-909,-1000,-24,-1000,1000,-920,-531,-394,-206,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00095() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getBaseSectionPaint():java.awt.Paint",
+            new int[]{1000,-596,423,639,448,312,-368,760,265,-479,311,-999,456,-1000,1000,556,-1000,-960,757,-182,-1000,1000,527,-872,1000,-148,-1000,330,976,892,962,903,894,958,-95,690,-500,909,518,951,1000,-287,-779,-1000,-640,312,-1000,944,488,-448,-668,253,-1000,-843,-1000,1000,-1000,-988,349,287,269,-882,-499,819}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00096() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:NA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{-940,877,-1000,626,569,-392,-735,190,-547,-1000,-488,-290,-523,-259,-767,19,531,620,-389,662,350,339,-1000,-1000,821,298,-914,-493,-570,-1000,-706,150,-843,272,-423,-936,-99,-236,510,402,-1000,-391,-1000,-296,-342,-505,-1000,176,947,-242,40,591,253,-160,22,-253,634,28,-164,-41,794,696,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00097() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{474,872,389,626,423,-393,865,-831,351,-739,-488,-1000,380,-1000,491,103,-236,-639,-112,-126,422,-1000,1000,995,1000,-221,522,954,-1000,-1000,164,-1000,-975,1000,778,1000,-1000,-1000,-343,-137,823,1000,-1000,-1000,-1000,-505,-819,176,-414,-242,-1000,591,-852,116,-147,-1000,-1000,28,1000,902,-1000,-1000,901,149}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00098() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:Mw==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{588,-97,-133,-922,-639,-98,334,-502,-153,224,414,-936,-275,-351,14,-130,-354,-417,64,-971,-416,-659,1000,1000,975,-1000,426,-14,-865,-1000,-156,-1000,-221,1000,137,-597,-556,-1000,342,740,1000,1000,112,-993,-330,-891,-1000,-1000,-622,-259,-351,-223,-1000,327,-1000,-909,-259,-725,768,736,-1000,-940,1000,180}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00099() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{-218,-580,828,-330,0,322,446,-403,-685,-62,290,-623,435,-158,973,12,-1000,13,565,-376,823,-630,1000,244,1000,510,-368,586,-67,-207,-863,133,14,710,-310,943,0,-294,-548,-144,810,1000,175,-160,-900,-725,1000,31,-337,-1,-486,-522,-1000,1000,212,-683,-875,-1000,633,43,625,-1000,681,473}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00100() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{-147,573,-795,682,-281,376,884,-324,159,-217,127,535,-562,-444,652,1000,436,-614,543,1000,1000,-1000,-1000,-1000,-368,-539,192,135,-1000,-1000,1000,875,-1000,-554,937,-933,32,-125,-561,-1000,-8,976,49,-558,-236,1000,-1000,-958,-105,-1000,-1000,-53,102,459,-275,-179,183,28,1000,-949,-837,-603,450,-102}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00101() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{-1000,809,-1000,862,49,-93,-1000,358,-526,-1000,-58,264,-523,-260,-1000,705,951,-11,1000,74,295,913,-1000,-1000,1000,-137,-1000,-506,-1000,-222,-1000,98,-409,-115,-1000,-1000,530,376,325,560,-1000,-750,-1000,-1000,31,-493,-1000,-134,1000,-1000,234,769,560,-580,545,137,1000,448,-678,-911,1000,787,-1000,270}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00102() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{1000,-688,-991,-70,143,417,1000,58,-672,746,-519,-1000,1000,-1000,1000,-549,-1000,376,1000,253,1000,281,1000,1000,1000,919,-11,1000,95,-244,856,128,-954,1000,783,1000,-1000,-1000,-1000,-841,1000,1000,252,-241,-1000,-805,1000,240,-1000,-105,-1000,-1000,-1000,1000,466,-1000,-1000,1000,1000,1000,643,-1000,1000,75}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00103() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{750,-339,-870,-196,-433,211,-867,79,-482,72,234,-135,-585,-86,143,-86,639,-386,-564,-580,-392,-341,81,391,-569,-929,-433,-947,-474,-861,683,-742,311,293,-1000,-365,-576,-126,-292,1000,752,1000,628,-916,683,-155,-316,-979,-561,-313,281,847,-437,-1000,-622,-411,665,1000,-203,167,-167,-88,230,218}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00104() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:NQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{-1000,417,244,319,752,-424,8,-510,819,-371,-441,-213,-115,-553,-1000,407,426,878,1000,1000,976,10,-427,-712,103,956,647,728,-245,882,-779,1000,-1000,15,1000,-62,-702,-817,-226,-1000,-299,-261,-1000,521,-944,894,-566,1000,761,-1000,-1000,-511,43,647,794,74,1000,1000,674,117,387,-6,-350,624}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00105() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{-553,-79,-1000,956,-111,-35,-1000,913,-594,-980,-445,-260,-657,203,110,-371,594,380,15,503,234,508,-906,-1000,1000,-88,-1000,-624,-863,-404,-1000,-551,-805,797,-1000,-637,-378,-361,130,517,-1000,407,-763,-651,-787,-499,-1000,-816,148,-676,920,500,-67,-1000,-288,-526,722,1000,-1000,-185,1000,-60,-835,735}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00106() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:Mg==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{-218,-565,-89,1000,158,699,-473,1000,207,207,-1000,-709,171,-1000,-241,-668,857,-576,425,1000,680,-48,-238,-717,893,668,-368,704,-378,782,1000,-570,-1000,1000,1000,112,177,-1000,186,-1000,-848,1000,-1000,-467,1000,289,6,-891,-1000,-1,278,-551,-1000,1000,1000,-1000,-860,1000,841,43,919,-1000,1000,672}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00107() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{74,-1000,-631,1000,-196,249,-1000,-560,771,823,-609,-60,-504,-174,-632,653,644,628,751,506,459,331,-545,-907,-279,-184,-1000,-471,-775,239,-777,-631,-1000,540,-214,-870,-709,-743,29,-562,-495,1000,-151,-736,-382,-306,-411,-863,-1000,-1000,747,-68,-353,-560,-533,-655,1000,1000,-711,56,960,-684,10,870}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00108() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{-1000,-882,-948,-267,727,-167,-466,-266,129,422,237,459,-1000,262,-764,-714,-282,1000,366,-83,-1000,478,-674,790,-1000,-694,563,-709,709,-1000,-327,1000,-262,23,-780,-93,-323,-148,419,1000,-172,-1000,173,530,344,467,-973,242,-773,-259,191,1000,1000,20,-1000,-278,760,846,-1000,-169,-399,795,7,774}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00109() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{-995,-211,1000,-1000,47,-148,610,-279,-1000,-457,1000,-107,195,42,1000,882,-644,-840,-151,-788,333,605,1000,244,1000,292,425,153,360,-298,-636,81,1000,-314,-1000,749,900,481,-731,1000,970,-400,400,400,290,-680,1000,383,627,391,-707,-166,-350,1000,708,-1000,-750,-1000,988,-466,-1000,-120,458,848}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00110() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:Mw==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{477,-717,142,637,332,637,-988,809,491,227,-768,-664,11,-526,-799,-320,259,-424,921,751,951,203,-656,189,-224,974,-123,555,-944,882,-525,-632,-820,817,929,-14,-863,-997,-536,217,-652,745,-448,-744,-743,230,-31,-978,-383,-727,572,-662,-722,-101,988,-520,423,434,-507,-391,657,378,-305,349}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00111() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.data.general.DefaultPieDataset|getItemCount=22:java.lang.Integer:NA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDataset():org.jfree.data.general.PieDataset",
+            new int[]{-637,510,-218,-699,190,-512,240,-666,89,-526,-55,-901,-127,-576,-9,148,-181,258,-475,-146,13,-223,899,803,673,-221,678,328,-469,-804,-427,-246,-369,975,531,975,-507,-798,-297,-126,484,442,-152,-193,-554,-307,-191,-149,180,459,-840,-116,-800,460,-147,-355,-683,-725,761,-81,-884,-179,362,723}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00112() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{285,443,811,368,361,639,-731,-55,720,-590,-655,1000,1000,1000,-103,-203,-896,973,-1000,633,-550,-987,801,1000,116,-11,1000,768,393,484,551,-415,1000,-1000,1000,1000,-866,1000,12,-1000,-709,-42,1000,1000,-1000,-1000,-1000,-314,1000,1000,740,-1000,-253,-266,1000,1000,701,1000,-1000,1000,763,308,118,719}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00113() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{1000,154,424,729,113,508,-949,-1000,54,-560,-1000,230,820,221,528,2,-191,232,-156,371,-782,-641,-232,-815,407,762,846,-1000,291,-400,1000,-230,502,106,-237,-1000,-48,557,397,805,-245,553,1000,805,-978,-585,-381,406,523,694,1000,-302,246,-1000,240,1000,-125,696,-750,145,-552,318,966,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00114() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{1000,-351,1000,945,524,214,164,-364,720,-1000,-1000,1000,857,685,-5,-404,-1000,973,-1000,633,352,-251,1000,1000,388,82,-544,569,433,1000,1000,-1000,1000,-1000,396,837,-1000,1000,1000,-1000,-1000,-1000,-362,-241,-933,-1000,-1000,429,1000,1000,1000,-1000,299,-266,869,1000,1000,1000,-1000,1000,1000,-889,-1000,-28}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00115() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{810,302,814,913,-820,1000,-678,-569,160,-372,-1000,-100,742,-681,-297,-28,165,487,206,302,-576,436,-761,477,527,-159,1000,-1000,-587,-1000,60,-232,289,-85,328,-812,229,-371,-1000,853,78,385,234,30,-806,-850,-116,469,319,698,1000,-1000,-948,-127,260,-33,793,565,-644,963,-537,-75,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00116() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{-181,1000,189,-34,216,102,-355,313,1000,727,833,-815,775,-76,-630,424,1000,1000,69,-1000,-525,-235,-802,-883,612,12,-1000,521,-599,-1000,-802,489,-1000,60,1,-498,865,-828,-1000,582,564,-747,946,-1000,267,-73,816,-1000,-1000,143,252,675,-1000,1000,6,-513,-226,-390,1000,-408,-407,865,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00117() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{361,-424,-121,575,-24,289,208,1000,473,-767,-88,-74,775,332,0,-218,-234,-980,969,-388,-1000,-753,463,-440,-912,-385,-293,881,-158,518,840,-515,-495,515,565,972,-76,-629,-363,-1000,-1000,338,263,-227,-494,-128,820,-633,-178,-147,-421,1000,395,1000,-847,1000,-316,1000,451,-774,723,-104,1000,518}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00118() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{-86,-444,843,477,-411,-851,922,-921,276,-579,-767,516,412,25,824,75,-155,622,-585,-914,606,551,829,-117,708,-873,792,-254,-819,516,962,-555,639,-596,1,-630,107,709,861,-555,-502,416,-958,40,205,-690,-491,-110,-430,853,233,-302,677,730,-175,522,853,695,-343,308,550,-709,-996,28}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00119() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{396,-156,764,697,509,269,421,-1000,226,679,-1000,196,1000,-1000,907,-448,796,-74,-578,-907,875,757,523,-1000,1000,-464,-627,-1000,1000,222,-257,1000,301,-89,-878,-1000,824,1000,-120,1000,492,-471,-768,-823,657,-1000,-88,-729,775,1000,551,-1000,-354,251,-681,-778,620,-105,1000,-42,-952,284,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00120() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{530,-90,584,-12,835,-810,484,-921,850,-238,-318,516,571,-482,163,472,465,437,-1000,-453,173,551,658,-1000,1000,831,-544,566,852,-37,913,109,387,-989,-883,-1000,124,847,584,-283,317,-1000,-763,-241,915,-150,-535,-1000,-287,894,981,-302,207,623,-175,-382,316,-105,1000,188,479,1000,-1000,-522}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00121() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{-567,1000,973,392,113,508,-417,-55,951,-167,-1000,270,900,312,212,-69,-842,1000,-798,1000,29,-1000,772,1000,-20,-338,1000,1000,-564,-181,-37,-230,1000,-1000,1000,1000,-97,1000,397,-1000,-631,-88,1000,805,-940,-1000,-1000,-22,788,1000,1000,-1000,-801,-462,1000,1000,1000,374,-1000,1000,1000,244,118,537}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00122() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{953,-953,7,-878,-733,-38,138,299,-845,507,278,-253,191,328,986,-218,-761,-863,-962,-42,702,-715,334,-942,-193,27,-650,-111,-309,-796,-11,788,113,-643,739,105,-974,-727,271,149,-38,857,321,-919,209,872,540,-950,-920,-438,-676,532,240,-517,-876,242,-973,-43,655,-709,949,-524,-429,-717}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00123() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{-1000,429,258,138,96,678,-482,-852,1000,704,882,669,321,693,-320,-108,360,-343,779,707,-1000,-1000,-554,991,-856,307,-539,753,250,136,395,620,-636,605,232,1000,-258,943,-1000,-926,-680,1000,1000,1000,-993,-880,-1000,-1000,1000,881,245,-455,144,1000,-477,314,-108,884,-1000,718,-277,1000,584,548}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00124() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{-655,-750,499,345,200,-548,623,-564,-581,76,-962,656,1000,445,271,391,-713,336,-608,667,-82,-389,977,461,-473,-450,840,224,-837,-690,644,-214,486,-404,-327,877,-518,1000,690,-1000,-1000,995,417,-838,-535,-833,-486,-668,397,715,8,-515,-951,-881,-442,1000,453,984,-1000,974,681,-219,-714,-333}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00125() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{285,844,589,49,479,-394,579,313,614,-153,-655,-898,384,147,193,146,921,-23,426,-11,-167,-58,801,-690,174,488,-605,1000,-856,484,-68,-739,-702,944,1000,1000,476,-1000,-323,-639,-103,333,-943,-193,601,530,572,-445,-1000,143,342,-1000,-87,1000,-374,191,400,99,-1000,342,449,-227,-50,224}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00126() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{1000,292,-576,133,67,390,-271,-557,372,-135,-257,1000,1000,-171,-257,-448,203,-567,-578,-52,-604,757,-115,202,534,7,-232,-1000,1000,-831,1000,-49,-183,-715,-1000,-1000,132,1000,-136,-1000,428,-135,405,-1000,-247,-639,-363,-439,775,569,459,-1000,362,349,-57,-509,-1000,1000,1000,-717,-493,798,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00127() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.Rotation", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getDirection():org.jfree.chart.util.Rotation",
+            new int[]{34,-465,156,245,-147,37,-474,1000,-171,86,1000,-207,590,-413,-526,-1000,-420,-980,-270,555,-1000,-143,-202,17,-1000,-762,-988,919,950,555,509,255,-141,-669,42,1000,-571,-756,-994,-1000,-1000,748,663,1000,-1000,-65,261,-1000,434,204,-418,69,-429,1000,-1000,584,-1000,1000,668,-557,517,573,963,-978}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00128() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{68,973,72,689,-126,-759,179,628,553,370,315,818,-769,130,867,99,235,1000,-516,529,247,488,-377,-1000,418,842,-1000,-195,473,-1000,-261,190,-698,529,1000,-585,-819,1000,-145,110,917,4,14,-1000,1000,211,136,224,684,1,46,92,23,1000,-728,-1000,-855,998,-460,-942,-534,-687,-85,175}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00129() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{-26,634,274,605,-11,117,151,589,1000,920,908,653,-843,-110,826,40,489,414,23,-437,287,320,-604,-232,256,1000,325,-79,493,-696,-290,145,420,364,955,-12,-657,1000,365,294,1000,355,717,-467,245,716,223,379,86,-42,178,175,191,1000,-775,-1000,-855,1000,-669,-756,315,197,528,477}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00130() {
+        org.junit.Assert.assertEquals("java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{-1000,-735,1000,1000,774,1000,1000,536,746,-175,-1000,378,-5,-131,-47,1000,675,-1000,367,-375,1000,-1000,-1000,1000,-1000,1000,-1000,1000,810,945,-359,-1000,1000,-918,-1000,-745,1000,-1000,-591,-793,-1000,1000,208,400,854,-1000,-160,-346,-1000,953,-228,-762,1000,-460,-594,1000,-739,1000,-598,175,1000,-1000,476,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00131() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{-327,-77,429,-403,-943,158,-717,862,284,-569,948,966,-816,94,358,-732,244,810,725,584,-941,-448,-851,-459,594,653,835,-726,502,-231,-132,818,540,63,218,-875,-819,-901,-370,-999,964,-977,-649,-507,786,432,269,215,408,-994,989,-25,-237,-538,-410,665,-689,-324,366,-170,-363,913,-247,-385}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00132() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{-1000,-787,-275,301,-836,386,-528,1000,435,-881,997,954,-376,97,-841,-1000,-590,201,1000,281,-42,-686,-1000,386,474,726,-998,793,-733,348,338,408,1000,-1000,86,709,-984,-972,-648,-1000,-187,-1000,-399,-591,262,-349,-264,100,-1000,-1000,1000,-493,791,-1000,-41,552,1000,8,-392,1000,-623,775,322,-755}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00133() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{-317,-390,749,697,288,-1000,775,-512,-666,-589,-605,114,469,-661,640,1000,713,-400,-539,-686,998,-573,-957,-106,-982,818,-1000,641,328,-322,-723,-235,491,-649,-400,176,454,-326,-886,1000,-425,131,-321,400,929,1000,494,-377,-495,700,-231,770,719,-400,-659,400,-179,1000,-174,417,-344,-1000,456,753}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00134() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{1000,223,-387,-425,-11,-494,-303,739,-868,467,1000,772,-931,-110,-364,-1000,-191,202,804,-187,-1000,-478,-227,593,806,-1000,-191,-1000,430,-140,-1000,514,1000,292,1000,-819,-893,800,480,-745,1000,4,-968,-1000,-332,130,-701,1000,1000,-1000,1000,-158,-1000,-1000,-439,490,193,-1000,483,-765,-1000,25,253,-648}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00135() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{790,82,728,636,875,870,-406,327,632,829,927,-620,-378,107,-18,18,642,-346,510,-1000,-919,-537,-490,-523,-1000,-99,-624,414,708,58,-857,859,1000,-1000,618,584,485,386,1000,-466,309,1000,-37,1000,461,344,660,1000,-442,909,425,-398,230,892,-707,1000,-1000,827,-1000,449,1000,-542,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00136() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{-959,52,-592,-39,383,505,297,-285,508,-1000,-340,1000,321,-344,1000,150,669,1000,-712,678,-737,512,-724,-899,29,1000,46,78,248,-759,-207,-42,-452,-443,129,417,-339,-945,-1000,-330,-633,-1000,585,469,1000,-524,-116,-255,-20,387,178,909,329,219,-1000,154,220,97,75,-303,740,1000,-289,43}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00137() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{-529,-994,-308,-189,53,311,-381,1000,499,-856,715,774,-186,-277,-90,-664,238,496,456,406,-367,-438,-423,433,1000,612,402,775,-172,-510,-127,408,678,124,26,271,-678,-808,-599,-881,404,-1000,-761,77,-158,-13,-178,202,-1000,-698,574,-370,-213,-1000,-719,552,773,-1000,-466,350,-134,446,-447,-105}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00138() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{402,-128,69,-782,-193,1000,-507,857,631,22,1000,662,-653,1000,514,-716,518,-27,1000,-882,-1000,-994,-1000,-381,-1000,651,294,-267,877,1000,-307,508,616,-377,200,215,-665,-1000,85,-630,946,-246,-1000,-93,1000,1000,-560,393,-232,-281,489,212,-412,-175,-1000,1000,-976,-891,-902,-944,561,553,878,-155}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00139() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{670,2,543,-636,539,-518,470,-400,-790,-695,-810,185,-170,-71,-942,1000,1000,414,-1000,1000,-420,634,700,-147,-1000,1000,19,-683,-363,-322,249,1000,-774,-1000,514,66,1000,1000,-1000,917,17,995,891,-334,1000,959,-175,-402,1000,1000,-2,-119,-168,611,108,-781,479,958,-500,-545,259,468,-562,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00140() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{471,-746,429,-437,294,158,-531,415,-209,-569,338,437,-512,94,424,262,745,409,-551,492,-664,-144,96,-169,469,653,1000,-295,562,-662,-326,567,-227,-639,215,-78,-48,424,-704,-127,1000,-194,693,-46,400,464,269,-50,180,479,543,-426,-721,-212,-909,-601,-513,-1000,-894,181,-363,-144,-478,440}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00141() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{-261,160,287,-344,-1000,-455,-697,889,-28,-953,533,1000,-764,262,387,-690,66,1000,347,1000,-969,-330,-692,-996,192,542,-92,-808,993,-444,-112,850,-909,178,1000,-1000,-932,1000,-726,-1000,1000,-1000,-1000,-880,1000,79,208,106,775,-964,897,-83,-354,-538,-377,665,-689,-325,512,-300,-956,295,-676,-597}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00142() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{-253,-810,709,512,-78,510,330,1000,-400,-101,-28,611,-838,-310,-309,11,105,-976,400,220,889,-1000,-688,1000,-796,-563,156,-53,1000,-310,-490,-693,501,-217,-1000,-1000,364,-348,-415,-752,-99,1000,-293,-499,-1000,-846,-754,-30,-114,-249,421,590,592,-1000,-1000,531,-1000,-160,-1000,-772,-369,-1000,-68,33}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00143() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getExplodePercent(java.lang.Comparable):double",
+            new int[]{-1000,625,37,1000,-1000,791,584,-1000,799,-1000,-1000,-68,1000,-605,-215,493,262,-938,-1000,-43,1000,-1000,-1000,-319,-1000,818,-1000,865,-957,1000,-1000,1000,1000,-1000,-1000,1000,1000,-18,-579,-1000,-1000,-1000,-1000,1000,1000,-760,1000,82,-808,599,369,1000,1000,-1000,-13,886,454,1000,494,1000,1000,-1000,84,644}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00144() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{229,-445,34,34,729,997,1000,-1000,159,910,-126,-792,-398,1000,658,107,-147,-630,405,162,-1000,-261,-535,1000,-224,-246,462,873,-894,-123,1000,310,98,-848,755,-175,724,75,182,-212,237,-614,977,976,1000,730,-651,-204,702,-1000,110,-952,-1000,196,-1000,919,1000,-769,-128,457,1000,282,-502,-582}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00145() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-1000,1000,649,602,879,-260,546,613,-655,-400,-647,-1000,248,949,-840,179,-676,-408,801,52,165,-72,-1000,370,-775,-1000,-1000,251,-940,-533,-20,-177,1000,-100,1000,-270,-369,-23,-576,-1000,-769,-24,-104,884,-131,-1000,-889,-584,-261,-1000,-250,-144,1000,642,-904,-91,-111,-895,-272,160,1000,222,-1000,131}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00146() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{107,1000,409,24,-521,-634,-625,891,-1000,293,-1000,-453,815,994,-670,468,-1000,123,742,553,1000,993,-1000,-184,-493,490,-1000,813,-121,402,-1000,138,120,311,361,-223,-371,-118,-719,-1000,-148,-267,630,1000,1000,-299,-1000,-1000,-886,-434,873,806,1000,-744,-349,1000,-757,-245,-265,355,1000,248,-872,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00147() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-1000,-668,34,719,-105,-647,-811,934,899,-1000,-126,-801,-1000,-400,-160,-1000,176,-630,647,-1000,379,825,6,490,-1000,-842,198,822,497,-1000,-263,-109,1000,1000,-143,-520,1000,320,-12,248,-661,1000,-601,976,496,-1000,1,-204,-1000,-303,1000,-1000,813,1000,584,-988,-909,780,-491,-367,855,-585,-127,-313}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00148() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{940,752,439,55,388,423,-1000,-268,-972,960,895,-509,1000,913,-185,1000,-940,-433,742,752,-261,-274,-635,191,995,-572,-102,1000,-853,425,-1000,-168,-567,262,1000,-875,1000,75,-122,1000,109,-772,695,1000,-270,378,729,-988,284,-1000,1000,-68,-69,368,-574,1000,91,178,-772,1000,316,303,-765,-701}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00149() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-461,1000,334,-967,-291,113,-1000,1000,-662,-205,-448,625,908,-537,-773,501,-539,69,745,692,248,-52,347,-274,-73,-690,-655,231,-20,-495,-35,-119,-273,505,1000,68,-377,-1000,-1000,-731,-542,826,1000,190,-820,655,117,91,-924,-31,561,-122,1000,1000,655,415,-795,1000,-967,279,188,329,-632,-480}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00150() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-902,-560,379,862,-499,-13,-205,-8,872,-961,777,932,-648,-602,754,-810,2,-95,665,-569,151,162,63,264,322,52,-717,495,86,-116,1000,-119,408,-64,-246,-368,825,394,223,129,-416,535,-243,-1000,-334,-54,392,-268,-605,-286,-137,-857,463,223,238,-758,-678,1000,92,-658,-349,850,1000,-869}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00151() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-349,1000,474,-577,-181,398,517,-567,-1000,579,-1000,851,936,1000,507,1000,-899,-823,1000,1000,-1000,-479,-603,1,-315,-115,-1000,1000,-1000,-166,860,-135,149,-229,1000,-93,-429,-950,-748,-245,339,-373,1000,1000,-389,-519,-860,-547,583,-1000,1000,106,1000,237,-243,989,-435,845,-1000,1000,1000,960,723,-126}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00152() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-675,-633,439,293,-1000,134,-1000,1000,64,-355,798,1000,324,-873,-540,-668,-435,702,-320,559,1000,1000,1000,455,123,-531,611,-1000,1000,552,-1000,118,-567,-334,-1000,418,1000,75,-456,1000,-678,-189,961,-1000,-1000,996,1000,113,-1000,565,373,-176,-254,156,551,-1000,-1000,92,1000,-832,-927,-34,1000,-421}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00153() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-1000,22,-361,-639,1000,467,1000,-970,211,-1000,30,-1000,-678,994,333,-173,-90,-571,318,-354,-855,-521,-1000,874,-561,-1000,-1000,-11,-1000,-297,1000,343,1000,-280,641,-78,927,195,233,-778,-17,-357,1000,541,1000,-957,-247,74,487,-927,-456,-708,974,335,-1000,825,1000,880,-1000,8,784,258,-867,-656}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00154() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-1000,-1000,784,-274,-686,-235,-1000,1000,1000,-1000,681,849,-371,-988,1000,-1000,83,229,346,-214,971,-64,1000,-271,-580,435,1000,-613,355,-1000,-99,-296,363,48,-422,50,744,641,-12,1000,-953,780,-867,-1000,-239,-655,1000,51,-1000,345,-529,-428,284,90,594,-1000,-970,1000,142,-887,-730,757,248,-865}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00155() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-423,-1000,819,814,-1000,436,-762,38,56,417,717,414,-216,585,7,-1000,-626,775,-674,414,1000,1000,997,710,63,1000,1000,-587,1000,-501,-1000,1000,-1000,-1000,-1000,360,1000,919,310,-400,69,-1000,-921,-1000,-895,995,617,-577,-628,-80,887,71,-797,-1000,-63,-898,-596,-1000,1000,-808,-330,-56,1000,-43}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00156() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-1000,270,-97,325,694,25,-144,153,1000,-1000,1000,-460,-1000,-807,702,-1000,804,675,207,-1000,-218,-342,912,480,-775,-1000,538,-914,-238,-845,375,-69,1000,343,-361,-514,1000,1000,1000,1000,-43,1000,-548,-1000,1000,230,813,-482,-614,567,-624,-1000,-313,854,655,-1000,223,875,-581,-541,-658,-222,247,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00157() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-1000,22,424,567,1000,-795,112,518,773,-1000,-85,-1000,-1000,-669,-452,-1000,-212,283,1000,-1000,-216,48,-669,-68,-274,-1000,80,573,-6,-1000,1000,-1000,1000,1000,875,-653,587,-340,221,1000,-395,1000,-363,-155,450,-957,-247,-508,-521,-1000,1000,-1000,974,945,196,-653,-298,880,-1000,5,378,39,-776,-481}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00158() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-224,1000,-276,-690,1000,-349,544,-1000,-1000,-195,449,-345,872,593,-386,1000,-768,-833,1000,46,-449,-1000,-1000,-215,-369,-1000,-1000,-77,-1000,-454,234,-572,799,808,1000,-630,-1000,-1000,536,-538,-291,151,1000,990,-546,-865,-315,-280,249,-1000,736,201,467,867,-1000,1000,-401,-7,-1000,1000,139,803,-738,-607}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00159() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreNullValues():boolean",
+            new int[]{-587,-219,-261,77,442,112,-700,1000,849,-872,1000,135,-586,-1000,-121,-546,189,154,69,-468,1000,89,357,695,-219,-290,587,-859,313,-501,-279,-251,715,103,-408,18,1000,919,-51,1000,-847,544,-409,-1000,610,724,609,496,-1000,-80,-785,-1000,-817,617,-246,-1000,-596,375,19,-877,-658,188,480,-923}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00160() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{-598,-1000,-291,528,454,909,-1000,-902,1000,-233,-616,-1000,-1000,136,-1000,39,-590,862,139,1000,-280,-595,1000,-1000,-1000,713,744,-1000,1000,-572,269,25,-677,-722,788,-170,263,916,-1000,1000,-1000,-398,477,-1000,-7,1000,-1000,-347,1000,30,-416,-776,-1000,-497,-877,1000,-532,-1000,-244,117,1000,128,336,269}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00161() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{-79,-908,-706,23,690,-385,-472,1000,-983,-819,713,300,-215,234,-573,1000,674,504,-556,-1000,-289,431,670,807,1000,-48,814,400,133,1000,468,-226,-901,603,-182,-126,-441,138,400,611,289,-107,-836,-346,-195,-498,400,635,176,-400,-573,-341,808,400,-969,753,93,1000,513,-182,-135,606,656,-864}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00162() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{-766,-613,-1000,-1000,408,871,1000,352,310,469,552,854,-1000,-808,-1000,-264,-233,372,1000,-1000,1000,844,1000,-776,-1000,1000,1000,-1000,1000,1000,-1000,-1000,-510,1000,783,-825,883,1000,-1000,1000,1000,1000,-1000,-324,-1000,1000,-1000,-115,1000,1000,-1000,-479,-585,-1000,495,-210,-1000,-69,306,1000,-556,-753,-694,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00163() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{495,-1000,59,965,1000,97,-589,-515,191,276,50,-964,57,-1000,-784,-373,-459,1000,-929,144,-1000,-455,1000,-739,254,358,1000,-397,-898,-59,550,427,-287,-1000,474,-796,245,-884,93,965,-692,-351,417,-1000,366,967,-309,407,1000,221,-722,-170,-158,-221,-794,1000,581,-1000,-116,383,504,942,1000,337}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00164() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{-451,-1000,613,-506,915,1000,-1000,-1000,595,489,635,-1000,-128,-564,-613,-229,-1000,1000,-752,319,-728,303,1000,-1000,-1000,429,782,-564,-1000,-75,-1000,-1000,-244,-1000,785,-622,1000,-822,-1000,614,-1000,1000,-78,-1000,-400,317,-1000,1000,1000,1000,-1000,1000,-1000,-1000,167,841,-873,-1000,923,139,1000,1000,923,-443}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00165() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{975,1000,-311,-638,-272,-170,820,-676,656,1000,-713,656,129,-94,-249,-908,-1000,297,-513,-1000,-92,-262,85,-589,727,554,-952,401,565,903,-1000,-555,-701,1000,289,1000,1000,1000,-400,54,1000,700,-941,568,32,-101,281,1000,341,416,-1000,-850,-179,51,868,-818,-445,-469,6,-303,-908,-1000,-295,-207}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00166() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{1000,-1000,-81,688,943,-821,219,-762,920,654,-1000,175,-128,-128,-167,-784,-371,241,-926,190,-764,-1000,-416,-504,1000,-1000,-618,255,186,498,-856,128,-325,400,428,1000,27,-195,728,268,-282,-683,-68,311,-400,-658,268,1000,1000,-517,-221,-58,175,-1000,-160,885,79,-632,-17,-302,-394,-654,841,-46}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00167() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{144,-1000,-281,147,1000,312,58,-751,408,448,199,-921,374,-1000,-1000,-1000,-1000,1000,-1000,-1000,-85,-395,1000,-1000,961,486,563,-105,-855,751,-1000,-1000,-447,-1000,989,-592,1000,152,-390,462,722,795,-400,-1000,811,626,33,1000,549,634,-1000,190,-527,-328,349,681,232,-633,802,227,8,756,289,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00168() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{637,890,259,-607,-558,358,-807,-1,-28,1000,744,254,1000,536,-1000,154,532,-978,-283,619,-376,-170,-812,1000,425,-982,233,1000,-443,332,-6,405,136,-571,-117,63,932,-700,953,-255,-98,176,852,1000,-590,176,611,-365,-684,-431,69,1000,16,756,-901,-184,1000,1000,-813,1000,403,259,50,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00169() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{218,-1000,679,908,580,75,507,-1000,217,1000,-88,-502,936,-1000,-483,-1000,-1000,709,-1000,-344,-1000,-703,199,23,951,-333,477,792,-640,-371,-1000,-510,480,-1000,152,-607,1000,446,604,347,639,919,1000,-295,1000,1000,421,1000,497,307,-1000,-31,-825,-529,510,478,232,-633,199,241,-83,756,1000,-363}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00170() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{-122,-264,334,512,736,-804,564,596,471,-311,-522,988,-135,226,257,423,114,-117,-941,-581,-426,-226,-856,-76,185,-333,424,48,-182,-964,-120,195,-831,441,-172,428,972,600,327,730,-699,-794,-856,-7,-510,-353,-339,17,841,-863,-144,-425,678,434,56,689,-452,-655,-437,677,-592,-503,431,-776}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00171() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{-1000,-1000,-191,-173,1000,74,-915,327,1000,-1000,568,-422,-1000,-767,853,335,665,821,704,331,460,665,1000,-1000,-1000,537,489,-1000,1000,429,-43,-1000,-554,20,562,1000,-67,-1000,-1000,1000,1000,-600,182,-1000,-743,1000,-1000,-599,1000,1000,-285,611,-1000,-1000,-1000,1000,-943,-571,-10,1000,467,223,633,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00172() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{842,811,-300,441,-341,-1000,981,194,293,1000,-1000,1000,705,741,326,-360,-377,-108,-761,-1000,-365,-1000,-871,64,1000,-259,-733,1000,780,580,-1000,752,-781,1000,255,1000,1000,1000,1000,-164,621,-407,-241,1000,32,-1000,1000,789,134,-922,-524,-1000,654,847,326,-422,124,183,-57,-866,-1000,-1000,-218,110}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00173() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{-662,729,-37,-616,-928,-651,225,-368,1000,1000,-1000,228,-167,730,1000,-1000,-1000,-438,86,-255,440,-1000,-1000,-800,170,649,-1000,437,1000,-331,-678,633,-144,1000,490,1000,1000,1000,935,-180,925,-1000,748,1000,122,139,216,4,570,-292,-1000,-1000,-164,-280,688,-1000,-745,-1000,-1000,-123,-1000,-1000,-1000,811}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00174() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{-675,-729,-1000,-1000,454,909,998,489,34,-27,13,1000,-1000,-1000,-1000,84,391,119,1000,-1000,1000,640,1000,-843,1000,1000,744,-1000,1000,1000,-541,-904,-677,1000,941,-1000,461,916,-1000,1000,861,475,-1000,-461,-671,860,-1000,-691,1000,945,-680,-776,-396,-1000,190,49,-1000,-372,1000,1000,405,-1000,17,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00175() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getIgnoreZeroValues():boolean",
+            new int[]{-1000,1000,253,-821,-1000,-524,407,472,543,474,-1000,-126,-167,719,986,-938,-855,-203,600,-255,528,-487,-1000,-515,863,649,-1000,437,822,-104,-233,633,-208,1000,132,1000,783,1000,935,-180,859,-747,748,646,352,183,216,211,570,-292,-3,-836,33,-280,325,-1000,-745,-369,-915,722,-716,-277,-1000,811}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00176() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{107,62,-661,-995,1000,534,310,-540,-234,311,1000,-421,-232,761,218,1000,-653,-892,305,535,-956,-287,-642,-811,-1000,291,-1000,-28,-704,358,1000,-596,-1000,1000,609,170,-91,720,107,-936,474,291,-1000,626,1000,-143,-117,117,342,715,-986,1000,-1000,-1000,1000,-495,571,632,-549,-394,-1000,955,532,-122}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00177() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{1000,943,804,331,-337,636,-528,-223,-421,-467,206,41,759,-805,-55,922,321,-260,529,-1000,587,-1000,1000,1000,1000,-93,872,454,-1000,391,-265,282,1000,-1000,-1000,-762,-236,-1000,1000,1000,314,173,481,-615,-87,-548,506,1000,34,69,1000,-225,1000,802,-1000,-659,-1000,287,474,936,1000,-1000,-1000,-164}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00178() {
+        org.junit.Assert.assertEquals("java.lang.Double:TmFO", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{621,938,-136,-82,303,762,-113,387,35,-318,-461,314,307,-549,-231,718,-22,-265,534,307,730,144,206,475,551,421,198,-928,-652,-291,-365,360,641,-1000,-687,40,-394,156,142,1000,64,-107,614,83,-268,656,-179,955,-162,385,169,787,1000,316,-70,-768,-753,695,990,885,66,-1000,-1000,712}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00179() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{-1000,58,-911,-1000,857,726,-598,-902,262,855,1000,-706,-321,1000,-98,1000,-362,-1000,615,-1000,-733,-744,-1000,-1000,-208,748,-918,-769,-927,1000,892,142,567,1000,372,255,-1000,-710,-661,544,274,1000,-905,1000,1000,-938,716,1000,-512,1000,1000,1000,1000,-1000,1000,-1000,-231,-1000,-1000,-1000,1000,-556,-452,630}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00180() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{441,973,7,1000,-858,942,-322,668,-1000,356,667,172,356,-58,1000,224,648,-192,854,-391,-53,-888,558,350,1000,-23,-1000,646,-659,1000,789,799,400,-1000,-1000,-1000,814,-1000,567,-71,664,-717,-340,-334,-624,-569,330,780,-130,279,-559,-378,-227,202,-1000,-766,-1000,-44,311,-962,-920,-691,-568,-350}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00181() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{-550,321,-1000,-537,414,729,453,735,-790,80,509,563,33,532,-303,1000,-828,-792,13,1000,-835,900,-887,-1000,-1000,-653,-413,-399,-420,-37,986,-135,-1000,940,1000,1000,600,757,-811,-509,-368,-572,-1000,453,64,483,-901,36,468,476,-1000,1000,-762,202,1000,-460,874,271,262,-350,-1000,1000,-164,564}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00182() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{-143,-531,-1000,-714,-36,86,582,712,-80,175,121,1000,-59,788,-1000,-71,78,-664,-188,963,-1000,257,390,-632,-895,-344,-609,191,-659,522,983,799,-1000,1000,928,1000,814,-699,-759,239,-707,-262,-1000,-8,483,535,-780,780,-520,-229,-78,644,319,-123,186,-346,1000,-987,636,-962,-1000,1000,-71,529}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00183() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{761,-88,-27,-926,283,650,93,-1000,233,411,660,-879,-363,-188,721,1000,-472,-584,610,-765,-195,-709,1000,-17,-839,1000,-1000,-632,-804,-65,45,-979,829,191,-541,-1000,-1000,556,867,-37,876,601,15,661,1000,-1000,1000,460,634,1000,962,1000,590,-1000,879,-1000,-486,868,-365,917,-1000,-415,-33,-410}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00184() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{1000,708,649,-678,1000,541,161,-927,676,22,-1000,133,1000,-874,-586,752,1,-611,951,-34,746,-1000,-225,700,449,1000,397,-1000,-931,-378,-44,-1000,149,-1000,-1000,-1000,1000,-424,1000,579,1000,350,289,676,837,-641,509,890,584,588,-597,851,-178,-560,-166,-675,-1000,978,324,916,-274,-900,-1000,-925}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00185() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{402,74,114,-82,154,-44,-1000,387,159,54,-461,-1000,-460,-449,-789,417,-313,843,418,-554,410,400,-309,101,189,365,1000,69,135,244,-289,-389,641,-137,-687,40,-1000,-260,20,-1000,299,535,481,215,627,-800,-179,-685,847,769,-173,112,172,316,396,-704,-753,297,990,20,-111,-544,509,-245}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00186() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{1000,303,804,453,-670,527,-614,343,-421,-332,-1000,361,493,-1000,90,-358,97,1000,648,186,468,163,-596,102,945,-93,482,-710,-806,-554,-650,112,-338,-1000,-1000,-103,-763,687,256,211,424,-612,481,-789,-594,-410,411,-838,796,-201,-529,-1000,-658,802,-979,-456,-634,-756,922,902,-1000,-57,56,-164}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00187() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{721,544,159,366,-178,650,93,204,829,-557,-203,-879,840,-374,-457,863,-472,-357,236,-313,208,-1000,665,1000,-274,1000,552,1000,-952,404,447,359,829,-527,-234,272,576,-1000,618,-37,55,-270,143,661,-221,-159,-256,912,-708,-414,722,1000,480,79,-1000,-1000,1000,64,41,294,-346,-127,-632,711}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00188() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{412,828,228,383,463,633,-280,158,956,-612,-693,308,-232,-842,-422,1000,-391,-362,-55,-668,-279,-1000,421,526,-1000,1000,-1000,-309,-888,76,243,-661,-981,-574,378,361,-91,-1000,807,340,61,-662,-50,-503,-328,232,-919,818,472,129,-232,-439,-1000,-1000,1000,138,-242,-384,475,945,-1000,490,-1000,275}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00189() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{1000,439,-244,-1000,540,617,38,-838,-270,370,714,-744,-338,-1000,560,856,198,-538,1000,-16,706,1000,135,485,1000,236,-811,-686,-772,116,-289,471,1000,-900,-1000,-1000,-1000,501,396,431,632,1000,504,795,1000,-744,1000,836,-212,853,523,1000,1000,-1000,378,-1000,-929,1000,47,241,1000,-1000,-602,221}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00190() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{-90,-274,-242,739,-930,801,76,1000,662,108,-762,1000,593,-537,724,803,-221,754,372,1000,-406,1000,-1000,-1000,983,-1000,482,491,-473,-311,-44,1000,-900,-491,-599,-330,365,-689,22,-782,-534,-945,45,-1000,-1000,341,20,1000,145,-542,-1000,-1000,-957,1000,-915,-26,685,-1000,873,916,-924,1000,459,630}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00191() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wOA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getInteriorGap():double",
+            new int[]{198,155,574,169,-483,1000,894,114,237,594,-572,-330,-561,-1000,823,-50,-87,583,796,244,554,269,68,-114,407,-1000,-1000,-688,376,-196,-510,-1000,-571,233,-809,447,-100,-203,1000,522,884,-325,-473,309,-147,-587,669,-86,413,693,-128,-25,-150,-159,116,-769,-879,-404,47,1000,-944,1000,-602,-862}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00192() {
+        org.junit.Assert.assertEquals("COLOR:-11434752", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{-992,-60,-21,-1000,81,-891,-256,-545,373,366,-448,425,-445,253,216,543,-643,515,-50,-254,4,1000,-1000,9,-231,-284,-32,-430,356,-430,64,-98,-144,-208,-935,536,-206,-628,283,-1000,1000,1,-854,-433,-663,745,805,866,-908,82,767,-72,-511,-110,-767,321,1000,-77,534,882,-779,708,-711,-161}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00193() {
+        org.junit.Assert.assertEquals("COLOR:-64", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{-710,-109,855,-943,-856,-891,-741,-721,248,421,634,151,62,253,654,323,-197,421,-50,459,4,-400,-287,-1000,-243,-1000,-32,-5,1000,300,348,-971,10,808,-629,1000,-1000,-469,308,-227,1000,96,-273,-297,-605,745,1000,866,-160,602,389,-432,627,317,-767,1000,1000,-129,-805,1000,-683,-104,-288,-383}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00194() {
+        org.junit.Assert.assertEquals("COLOR:-64", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{-771,-336,-636,-610,-840,-547,-1000,-194,66,-426,-448,1000,-445,1000,1000,-233,-955,-1000,1000,942,4,1000,-1000,9,-231,-1000,-1000,1000,-668,886,-400,1000,464,-208,345,-967,-542,-1000,978,-1000,1000,-1000,253,-433,-1000,-761,805,-568,412,82,-738,1000,287,400,-767,-718,1000,655,315,223,-779,1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00195() {
+        org.junit.Assert.assertEquals("COLOR:-64", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{-672,170,-121,-449,-448,-492,-1000,-365,-1000,-97,708,308,-276,1000,718,-261,-218,-688,566,556,-1000,-599,2,-1000,353,-699,-1000,519,-201,174,160,203,-41,-841,561,73,-303,-595,803,-424,354,-641,-479,-1000,-1000,-790,877,-644,74,-198,100,784,1000,-163,-1000,6,1000,141,-952,-103,-741,444,-81,-839}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00196() {
+        org.junit.Assert.assertEquals("COLOR:-93008", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{-620,134,-486,359,-1000,-770,660,-848,-881,-314,733,-503,-522,85,-1000,-1000,1000,782,-682,410,1000,719,778,292,631,-455,1000,-758,847,-865,675,-1000,-610,1000,-693,1000,-323,-24,-73,621,44,841,-230,-39,-605,727,971,-44,-878,16,1000,-1000,-278,-202,888,426,1000,-156,-805,1000,-401,-262,508,703}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00197() {
+        org.junit.Assert.assertEquals("COLOR:-64", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{-518,67,35,-677,24,25,-295,-1000,-478,-537,127,725,-841,372,1000,851,-1000,-5,-278,106,-549,-405,-69,-707,-165,-755,-392,56,-2,1000,-251,1000,-50,-82,216,-224,-244,-107,373,-759,742,-963,-532,-1000,-1000,-1000,112,-160,214,619,-329,1000,1000,186,-1000,-542,1000,493,292,-1000,-784,779,-752,156}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00198() {
+        org.junit.Assert.assertEquals("COLOR:-64", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{817,-131,62,-602,-582,658,319,15,1000,349,339,-593,-693,-138,-790,258,324,1000,-699,-525,1000,1000,-1000,609,-1000,-1000,1000,-1000,-688,-90,-437,-404,-1000,1000,-1000,457,638,57,-733,925,1000,832,-687,-122,795,1000,227,1000,-1000,63,121,-510,-235,-61,469,-923,-590,-690,-9,1000,-505,1000,420,225}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00199() {
+        org.junit.Assert.assertEquals("COLOR:-64", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{-727,-371,926,-538,-418,-261,249,-196,618,51,-454,290,-1000,102,444,172,-360,297,455,357,140,356,-306,1000,314,-510,-131,51,416,524,-374,627,156,1000,-564,-94,358,-328,44,-922,358,-704,-768,-605,-1000,695,-6,369,-262,575,141,711,-607,-298,-1000,-3,1000,1000,777,1000,-717,381,-647,-292}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00200() {
+        org.junit.Assert.assertEquals("COLOR:-5605077", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{-1000,-1000,-391,-932,-1000,-1000,-854,-391,-725,210,-254,629,-550,1000,746,-1000,903,-807,1000,1000,-596,1000,-1000,-1000,1000,-919,-1000,563,5,583,-94,462,-345,459,-460,-569,-110,-1000,750,-1000,-92,-700,-1000,31,-857,300,1000,-1000,-237,88,484,1000,-1000,-1000,-747,397,1000,1000,-1000,1000,-748,550,79,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00201() {
+        org.junit.Assert.assertEquals("COLOR:-64", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{-337,-575,-845,878,-841,-24,774,291,731,-764,-341,-624,-890,-741,372,-75,361,984,-449,-962,-352,-380,766,-39,444,129,778,-230,30,-755,637,-256,973,-484,-508,109,737,2,-75,-243,-430,-504,-826,-457,386,-647,691,795,-529,390,-832,809,-460,-320,-662,238,937,540,691,-441,566,512,549,-925}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00202() {
+        org.junit.Assert.assertEquals("COLOR:-15144728", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{1000,3,-60,-184,-16,1000,1000,-251,1000,42,141,-650,-731,-786,-1000,524,407,1000,-1000,-1000,1000,1000,-409,1000,-1000,-91,1000,-968,-538,50,-718,-225,-1000,1000,-1000,328,578,996,-1000,1000,398,323,-56,757,1000,1000,433,492,-1000,499,-173,-871,-18,-116,1000,-271,-1000,-709,-406,892,-10,-11,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00203() {
+        org.junit.Assert.assertEquals("COLOR:-14819745", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{1000,201,-202,-375,-477,609,877,-561,253,88,889,-344,-582,51,-490,442,164,1000,-1000,-483,990,607,-1000,155,-1000,-1000,1000,-1000,-1000,329,-94,-363,-1000,1000,-1000,498,-93,194,-407,1000,1000,575,-370,-303,795,357,799,740,-1000,379,61,-455,889,263,469,-967,-590,-975,-372,882,-612,1000,425,460}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00204() {
+        org.junit.Assert.assertEquals("COLOR:-15865702", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{-1000,-785,-202,-1000,-1000,-978,-558,-561,127,617,179,634,-672,1000,-490,-833,296,-1000,781,1000,-358,607,-1000,-1000,1000,-1000,-1000,618,-45,392,-121,1000,-192,1000,-920,-743,283,-1000,805,-983,-1000,575,-1000,51,-957,-535,929,495,-963,-700,24,1000,-798,-1000,-1000,-967,1000,959,274,603,-1000,1000,425,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00205() {
+        org.junit.Assert.assertEquals("COLOR:-64", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{1000,583,-1000,-25,404,-105,236,93,862,-499,-111,120,-1000,-361,-622,764,-757,410,-1000,-1000,575,1000,514,1000,625,251,678,-895,1000,-1000,15,1000,147,277,-776,888,381,723,407,123,1000,692,-324,264,612,-438,-1000,883,-1000,-1000,620,-1000,1000,1000,78,-1000,221,-1000,-220,306,-1000,918,-548,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00206() {
+        org.junit.Assert.assertEquals("COLOR:-64", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{1000,390,-556,-408,-367,1000,1000,-801,336,73,559,-608,-732,723,-904,691,1000,-1000,-1000,-1000,1000,861,1000,1000,-1000,-919,1000,-1000,799,28,-421,-443,-998,915,-1000,820,-77,895,-929,1000,1000,1000,18,274,1000,1000,719,1000,-1000,681,49,-1000,889,836,1000,-1000,-590,-1000,-329,882,-487,726,248,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00207() {
+        org.junit.Assert.assertEquals("COLOR:-15351687", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelBackgroundPaint():java.awt.Paint",
+            new int[]{1000,857,-1000,-267,-916,297,914,-411,-275,-344,1000,-41,-754,674,-280,277,-576,889,-1000,-638,993,178,586,-225,-769,-1000,-1000,-887,1000,-438,490,-328,-628,1000,-1000,844,13,428,66,1000,1000,-1000,-157,-890,652,-188,-258,1000,-1000,-978,137,-709,668,1000,154,-1000,1000,-1000,-366,993,-825,1000,-306,468}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00208() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{590,-964,-161,-287,-327,399,403,-952,-1000,-35,1000,-696,951,170,-1000,-69,-244,-789,680,-855,-701,-87,1000,767,-329,-968,1000,-1000,79,120,-961,-957,945,-1000,180,544,881,655,-879,-916,-509,-980,-338,1000,-462,237,-543,-162,-454,743,-544,32,-218,-1000,426,-463,66,69,705,-472,1000,1000,-19,803}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00209() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-759,-741,-24,260,-136,-153,430,649,493,1000,51,-108,796,-732,327,952,1000,900,351,-446,570,-1000,-75,484,861,-777,67,-370,-627,333,-1000,410,-334,1000,115,-582,870,-1000,-1000,-44,420,-148,-721,-574,-837,730,-311,-253,717,206,-727,-285,-415,480,-121,-890,886,15,-638,1000,-3,337,-1000,-841}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00210() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-653,322,-921,-1000,-660,-831,247,-336,196,1000,-624,1000,369,198,-843,513,-129,-751,610,-490,-576,659,453,-61,-443,-226,-1000,668,168,527,670,57,-1000,-794,285,-858,-721,-1000,802,1000,-704,-424,89,-171,995,350,-972,-202,-194,645,427,677,499,-246,-949,623,-580,-807,467,-71,586,-795,104,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00211() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{166,-1000,628,574,-428,152,221,377,91,-213,-174,-28,-14,-1000,213,-1000,1000,-36,-441,-475,384,205,1000,-896,194,1000,14,1000,1000,-711,102,-380,-195,-1000,876,-1000,51,48,659,-324,869,-779,1000,180,727,-491,-221,1000,-1000,-1000,308,-700,-1000,50,-336,244,-1000,-865,223,550,710,-112,384,317}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00212() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-302,-366,-692,-713,-886,-122,-113,-775,-376,599,-345,981,369,-52,-843,-487,-615,-442,401,-634,-575,742,969,208,19,-232,-203,382,550,-37,670,-271,-342,-971,285,-916,-95,158,649,586,-704,-743,509,214,995,-65,-431,-202,-612,766,269,182,459,-211,-886,181,-565,-807,682,-509,586,735,755,-175}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00213() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-206,-1000,-271,-451,1000,594,95,382,1000,1000,-215,1000,1000,-873,1000,1000,126,-155,422,-1000,471,-243,-1000,-29,-1000,-1000,-396,-288,-367,467,98,-1000,-1000,590,947,53,-598,-1000,-1000,1000,643,-184,320,234,-1000,1000,-1000,-112,388,1000,-831,189,1000,1000,1000,-1000,1000,-249,-1000,1000,1000,-186,-394,-335}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00214() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-571,-1000,68,71,-1000,-41,-1000,1000,808,94,-1000,-997,-681,-1000,513,-8,1000,237,441,-1000,216,-1000,71,-948,-570,851,604,1000,1000,-1000,-878,307,-285,-625,856,-1000,-285,-922,1000,-353,1000,216,1000,-43,1000,-1000,-264,868,-1000,-580,489,-1000,126,583,-732,-1000,81,91,278,304,631,-1000,384,213}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00215() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{1000,-534,698,-877,-171,211,50,-400,476,1000,-209,1000,509,-586,1000,557,-1000,-939,303,-1000,-523,-444,284,233,-1000,-1000,-907,-592,-667,247,937,-10,15,-672,768,240,751,-744,-611,1000,-812,-708,109,140,-301,1000,-537,-606,-361,1000,-428,758,871,-577,-74,-674,-80,840,-561,595,916,-1000,-769,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00216() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-1000,-226,-731,231,-770,926,-24,528,-487,524,-265,693,497,-882,-347,-711,980,929,526,265,-590,-34,700,793,604,-21,-846,270,854,-903,-799,800,-260,242,1000,-1000,1000,-317,149,-890,-595,-460,-676,-839,551,-887,-280,486,29,212,605,-109,462,1000,-1000,-819,97,-450,921,-306,539,1000,98,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00217() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-957,-493,-298,783,-1000,-10,-597,459,-356,795,-442,127,712,-565,-963,-122,-157,-1000,-57,724,855,583,728,-339,1000,-445,-532,-1000,39,-701,656,71,694,-311,161,-1000,1000,-209,-278,-450,1000,254,-93,246,-387,533,970,-120,835,-875,-96,766,-1000,-1000,643,-2,322,-600,635,-612,1000,-804,-594,-29}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00218() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-1000,-454,953,812,-1000,-447,39,-531,-213,-1000,930,-1000,-399,-36,-1000,-855,-1000,-442,787,186,329,-1000,653,1000,1000,111,1000,170,773,236,-1000,-921,1000,675,-656,-134,1000,321,243,-1000,-392,-882,531,532,485,-1000,751,-1000,1000,-352,1000,1000,-995,393,199,318,178,153,-397,-87,504,978,224,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00219() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{882,567,45,150,-562,235,221,-842,-603,-668,-304,194,106,490,595,-64,-731,-155,328,-475,348,205,246,201,1000,-462,-1000,-236,-334,-1000,102,-1000,-1000,-399,453,1000,683,334,-592,31,-63,-861,-157,782,356,49,949,-719,254,1000,-674,461,231,-648,219,1000,-211,-865,500,-586,710,814,618,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00220() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-495,0,424,195,-237,-274,639,343,119,183,-595,1000,20,-419,1000,-1000,-1000,263,-943,239,175,966,487,-733,566,978,-1000,772,245,-558,1000,254,-1000,-410,944,-681,-180,171,882,-563,526,-764,536,-766,470,-696,1000,413,18,-820,537,-23,-1000,50,-356,364,-665,-1000,-113,1000,710,-112,545,-530}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00221() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{1000,0,943,237,-318,631,-439,-1000,-129,-1000,778,-338,-66,249,-529,-1000,-191,-899,-1000,-217,322,-171,1000,-1000,-302,1000,361,103,1000,-1000,-20,-1000,1000,-1000,813,-78,66,368,241,-52,289,-1000,972,1000,791,-1000,1000,1000,-1000,-966,-117,-440,25,-1000,-60,1000,-1000,155,1000,-423,-298,588,400,880}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00222() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-1000,-80,613,419,-788,206,-26,-126,-540,-493,-271,33,-634,162,-807,-1000,-400,-359,-78,812,345,-400,188,566,604,1000,-399,1000,1000,-392,286,-661,253,-309,661,-612,-281,469,1000,-459,-277,-934,85,-273,1000,-1000,400,422,180,-697,1000,1000,-647,394,-944,728,-1000,-1000,203,-8,-203,681,914,591}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00223() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.plot.PieLabelDistributor|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelDistributor():org.jfree.chart.plot.AbstractPieLabelDistributor",
+            new int[]{-641,-1000,-666,-287,-660,476,242,-168,-221,599,336,-389,1000,-296,-566,-103,368,499,714,-467,-582,-87,749,1000,485,-1000,757,-844,-103,-259,-1000,29,327,237,340,-302,964,51,-879,-1000,-537,-592,-397,-102,-433,280,-385,62,138,868,-574,-180,192,36,-358,-1000,742,165,876,-257,879,1000,-181,891}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00224() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{-665,-1000,-516,-1000,-683,-332,-118,10,976,1000,-18,-971,-270,1000,306,-1000,785,1000,-1000,1000,-340,783,1000,327,-418,-781,-876,-995,-1000,31,-1000,125,-1000,215,529,-755,-570,603,366,-315,-867,1000,1000,1000,-223,-1000,-1000,-1000,737,-139,1000,-198,-899,523,-28,-605,1000,-365,-1000,423,257,476,1000,804}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00225() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{-203,-59,-292,550,-395,-1000,961,204,321,-983,-52,-424,347,794,893,492,1000,-856,731,1000,1000,1000,-447,-680,-572,-490,1000,334,987,291,967,-89,324,-65,66,-1000,722,-1000,1000,-632,-329,-323,-614,1000,-1000,339,-62,1000,-1000,394,-407,-944,1000,282,543,1000,379,-1000,1000,-650,-1000,-1000,1000,283}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00226() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{545,1000,-516,509,179,832,1000,-889,508,-635,-9,-614,95,922,306,1000,362,458,392,52,556,440,-863,-592,-449,175,-706,-995,-51,-104,1000,1000,1000,-1000,205,-755,918,-219,530,-545,226,-474,1000,1000,-254,326,367,822,737,745,-1000,688,341,-659,514,1000,341,533,1000,-1000,-289,-1000,-389,676}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00227() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{-662,1000,64,153,-71,631,821,-947,-1000,631,-926,-551,-1000,1000,173,-30,189,729,-85,437,-340,-708,-69,-1000,-418,-987,-754,-313,-1000,368,197,-626,102,-470,529,-941,-139,603,1000,-376,-1000,-400,-1000,1000,-1000,59,849,478,-400,1000,-400,1000,-243,378,-97,308,1000,400,400,-218,367,-119,598,646}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00228() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{771,-550,174,-812,182,-161,1000,759,-37,246,501,6,1000,740,-989,936,488,463,476,-195,701,873,-269,-48,-1000,556,533,777,1000,848,827,681,484,-1000,957,-1000,978,-872,-210,38,-136,-575,101,546,-455,271,-345,426,-398,984,-311,-899,568,-421,-27,1000,-531,-357,923,-856,-442,-1000,-1000,837}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00229() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{801,-1000,-941,-1000,-218,987,969,871,-414,-305,-289,277,946,1000,-978,1000,723,709,-129,-1000,578,1000,-190,217,-1000,-318,117,515,1000,1000,783,1000,720,-889,1000,-881,827,-291,-734,378,-626,-676,227,260,174,-326,-1000,645,177,1000,685,-48,-829,-968,285,-277,-1000,-1000,-893,-1000,681,-729,934,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00230() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{736,-487,803,-908,409,-1000,1000,634,5,-950,859,127,926,294,-847,1000,118,-1000,922,-195,738,343,-214,-48,-498,554,426,799,1000,592,915,378,1000,-1000,648,-1000,1000,-1000,-210,23,242,-676,-268,483,-567,1000,-45,1000,-398,-45,-894,-1000,1000,-494,218,870,-1000,-381,891,-215,-757,-878,-1000,3}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00231() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{-850,-848,524,-936,-508,-1000,761,-113,1000,510,316,-847,-215,1000,393,-741,168,-330,-395,827,775,1000,719,316,-438,-241,-36,-1000,-552,-64,718,71,-660,-767,282,-1000,-570,603,918,-617,-489,1000,1000,1000,-132,-358,-331,-808,262,-541,-62,-1000,481,210,280,80,708,-622,-1000,743,-525,-306,480,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00232() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{854,-39,-716,618,717,1000,455,1000,-646,419,-784,-405,-128,-601,622,-202,1000,159,-580,1000,-1000,136,40,-65,-159,367,211,927,789,650,-636,424,-507,699,429,-306,-603,-617,722,-428,-1000,-521,-769,1000,472,-1000,-885,-132,-551,899,-163,-70,-621,1000,-132,784,1000,894,398,-1000,-183,-1000,491,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00233() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{854,898,-356,1000,-246,972,-1,-832,422,-206,-496,-789,-253,572,262,-607,49,159,223,-480,752,136,709,-862,-167,221,-198,377,-636,-410,-204,-185,-449,-859,-165,-843,-180,-330,722,-473,-310,-521,-66,757,472,28,859,-856,-882,-106,-551,885,-19,-465,-397,-397,672,125,-137,-770,731,-915,289,-127}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00234() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{856,-464,249,48,-995,966,-1000,-155,-263,-390,1000,-894,770,782,-859,-342,-935,-854,711,-1000,1000,315,428,-48,-565,-166,-960,271,-397,586,184,-4,360,214,863,-1000,-148,-660,-1000,73,1000,-673,1000,630,603,1000,359,-1000,-370,-868,789,220,644,-1000,-285,-1000,-1000,-1000,-1000,540,549,1000,69,-526}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00235() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{409,832,-252,216,-515,-255,280,-453,785,-625,663,-472,-225,-457,-104,477,513,-922,878,-890,-955,740,-720,435,368,79,304,-166,48,-107,861,207,679,310,518,-479,513,-479,-465,96,792,-306,256,527,-421,724,-803,263,-769,-880,-730,-425,12,536,761,-146,-152,271,-83,-957,-291,366,-706,358}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00236() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{-1000,1000,598,-1000,-21,-488,788,217,-41,1000,-60,-197,-922,1000,-225,-626,422,1000,-611,1000,-11,-593,850,-192,-408,-1000,-1000,-1000,909,-30,-1000,155,-405,-266,-341,116,-348,974,933,-640,-1000,489,-843,1000,1000,293,-188,-346,1000,1000,1000,1000,-778,529,-160,-946,1000,-202,-454,933,-580,743,436,513}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00237() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{-1000,1000,223,-1000,733,-1000,208,199,976,-391,-53,-230,-8,750,-40,478,1000,-21,-1000,1000,-176,-429,25,-849,-284,-781,271,-81,-1000,-166,36,-25,219,-1000,-769,-260,-472,-674,723,-665,-468,-756,-1000,1000,1000,513,597,1000,-358,943,-163,173,407,678,182,306,1000,-365,-1000,100,-1000,-389,-984,-51}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00238() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{-230,915,-805,1000,798,131,-1000,-543,-1000,676,-459,-422,381,391,926,-1000,-1000,-61,-945,-50,1000,322,1000,-77,-622,901,38,293,490,817,-318,496,-884,1000,1000,894,-579,818,457,728,735,1000,214,48,1000,918,18,1000,383,-74,890,-34,270,-1000,-27,-31,-234,-1000,-298,394,573,89,838,-47}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00239() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.Font", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelFont():java.awt.Font",
+            new int[]{124,-52,-387,-1000,449,-566,440,171,-713,-205,-193,204,355,803,839,1000,-59,-489,525,-3,469,-338,580,493,-921,-67,-263,687,35,-852,468,75,1000,-99,1000,1000,-257,-262,-452,-412,372,-715,-1000,138,-190,1000,748,411,362,891,48,2,102,-1000,78,244,-1000,-99,149,472,631,309,-507,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00240() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{1000,-689,16,902,-152,-957,388,-776,-628,-211,640,-1000,550,-1000,-1000,438,-137,-111,-1000,-741,-585,-678,-891,-1000,471,-939,-1000,327,788,-102,641,-1000,-1000,539,202,275,576,-982,1000,794,-84,1000,-581,1000,285,-51,1000,976,443,-817,236,1000,-533,567,1000,138,-1000,-418,1000,-701,649,-1000,-42,757}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00241() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{-773,584,-296,9,-172,-1000,698,-1000,-14,-149,-501,864,-980,21,345,469,-467,180,361,658,903,819,-3,285,-484,-1000,933,-913,1000,4,276,-1000,-991,441,1000,-1000,-881,-541,1000,-1000,-346,-561,-761,669,26,64,716,-250,-172,848,-476,1000,-1000,498,-1000,764,-410,-798,270,-503,430,-1000,-162,610}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00242() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{593,-482,924,546,971,-504,320,-379,-198,390,768,-317,-127,-167,-705,-236,956,-569,-547,-598,-181,-515,-694,380,407,945,-117,213,231,-879,790,200,-601,-541,-571,255,361,-781,406,974,-521,325,53,439,-200,-185,-243,-906,70,-644,771,715,-90,94,545,964,-626,-251,255,-693,608,-683,-818,-810}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00243() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{-1000,980,514,82,218,162,-719,405,-429,1000,644,-910,417,77,735,176,-973,53,253,-277,365,-1000,815,-869,-435,-125,836,219,1000,973,-544,859,-10,188,208,279,-1000,229,-675,124,-519,596,-695,357,579,-736,245,-415,-380,-1000,-34,407,-1000,1000,-396,1000,-62,-85,-406,236,685,-698,-1000,-4}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00244() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{84,-668,-76,319,434,684,201,-267,-904,-789,-103,420,-1000,201,-236,739,917,970,-1000,-766,1000,-339,-1000,-339,-277,-133,1000,-656,-671,-274,354,825,-81,34,226,929,-185,-42,68,-677,483,140,272,268,-858,928,364,53,-33,-5,-546,-985,1000,-228,-830,-1000,-204,363,939,638,-528,-87,1000,-850}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00245() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{1000,-289,-831,35,123,150,217,-390,-426,230,640,-173,20,241,-1000,809,434,262,-1000,-741,586,-1000,-757,-590,826,-939,-1000,327,-971,-1000,303,605,573,174,523,846,17,-223,503,-183,697,598,1000,1000,-6,294,1000,-257,443,-1000,-514,-1000,-533,353,1000,404,-107,775,-91,1000,-556,-818,-40,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00246() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{1000,290,699,518,11,198,627,270,-815,-370,1000,-743,194,-1000,-1000,445,432,-814,-1000,267,761,-1000,-962,-715,-35,-141,-323,-354,-711,452,-144,460,-943,-906,-525,846,766,-89,467,245,-91,319,501,793,1000,-318,628,1000,550,-340,434,-728,-67,-640,250,-119,-928,273,618,170,1000,-57,-1000,-17}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00247() {
+        org.junit.Assert.assertEquals("java.lang.Double:LTIuMTQ3NDgzNjQ4RTk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{256,450,-36,911,-132,23,223,1000,-103,258,474,-198,-455,-449,727,-62,477,631,950,-352,-153,-242,775,-388,459,34,744,-544,-192,-3,-415,46,29,-643,-1000,225,-219,244,384,-424,-142,-104,200,-744,810,-305,104,192,-311,-776,-345,540,-344,859,125,-328,-708,523,-1000,241,186,-914,1000,24}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00248() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{551,-1000,-91,483,625,713,239,-110,-1000,-1000,-355,420,-1000,105,-236,953,1000,1000,-1000,-1000,1000,-930,-1000,-1000,-120,-348,1000,94,-819,-49,706,825,-153,298,704,1000,-257,-527,68,-821,553,269,17,1000,-1000,1000,1000,200,-76,123,-792,-985,1000,-562,-830,-1000,-440,225,1000,799,-773,-87,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00249() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{780,31,-270,-178,754,-806,853,-1000,110,-236,559,-413,42,199,-1000,3,663,-834,-656,-400,822,-753,154,537,719,189,201,-166,429,-948,844,-94,117,173,-157,-554,221,-893,684,544,-703,-247,112,277,219,-586,-140,-219,-460,-709,-501,-175,-882,760,733,1000,-90,-625,-649,23,-53,-744,-858,-604}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00250() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{1000,1000,663,635,-725,-1000,1000,-455,-1000,1000,615,-400,323,-1000,14,1000,-1000,-1000,-1000,622,-85,1000,-1000,-5,-345,-1000,-931,-611,587,-596,-308,-1000,-870,346,1000,570,1000,-676,-545,-389,534,-816,578,1000,1000,-928,340,493,887,-160,-251,686,875,-25,1000,275,-1000,499,-495,-91,1000,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00251() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{1000,-423,896,682,873,-472,1000,-440,1000,748,506,-947,193,-623,-54,-913,1000,-1000,-80,-706,1000,-549,1000,29,-201,-646,-157,1000,1000,816,972,-334,-605,-254,-983,-1000,1000,-1000,693,1000,-1000,-229,-1000,364,638,-898,344,387,-664,400,474,1000,-1000,732,1000,1000,-420,-1000,111,-1000,659,-771,-1000,273}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00252() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{-135,-731,-325,-263,99,-891,344,-898,-1000,62,-40,-95,-242,711,392,-75,-428,-422,474,-348,63,285,918,327,145,59,-400,-519,1000,-914,294,-10,146,628,-213,-894,-4,-503,427,198,-429,-343,-115,-1000,-692,258,-200,946,-153,-486,490,240,-795,1000,733,1000,162,1000,-1000,-87,-403,-744,188,-993}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00253() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{-839,1000,597,169,-371,394,-454,267,-12,186,1000,83,1000,-988,-290,278,188,-444,-524,-930,512,-1000,1000,-1000,-389,427,-550,119,444,721,-477,343,-63,-240,-912,974,522,-470,102,556,-313,747,-190,73,1000,-1000,272,474,-1000,-1000,277,-260,-15,461,-400,275,-945,250,-1000,520,1000,400,-190,497}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00254() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{-839,1000,924,-84,971,1000,-1000,-831,1000,-1000,-248,1000,-127,1000,1000,-685,1000,1000,1000,-598,926,-515,1000,66,-675,1000,1000,1000,325,-607,903,1000,484,367,-1000,-768,-949,-806,492,127,-334,325,-450,-1000,-1000,-228,-1000,-1000,-1000,-597,81,-514,-15,969,-1000,333,1000,-530,-942,252,-1000,1000,489,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00255() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGap():double",
+            new int[]{-912,-194,-481,-1000,198,-1000,169,-630,416,-278,-597,-50,-889,618,408,421,-74,418,496,300,-486,811,534,190,-198,-777,1000,-931,832,-482,265,-346,263,957,943,-1000,-637,-283,350,-780,-62,-934,-584,-197,-293,-125,146,64,-551,948,-746,346,-704,975,769,257,982,-367,-597,276,-510,-906,145,152}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00256() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{1000,-717,-1000,382,899,-590,-810,-205,899,878,-333,1000,-1000,-1000,-202,22,320,1000,-200,969,-1000,1000,926,1000,-1000,-924,285,581,1000,-856,-935,657,160,1000,-1000,-1000,745,1000,581,-1000,884,-1000,-907,158,209,383,-586,588,1000,-325,-215,-244,-384,-47,-1000,101,-25,-408,1000,-985,-1000,524,126,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00257() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-568,-1000,-976,-833,564,1000,-610,-347,-1000,-108,1000,-186,1000,21,-165,446,30,247,1000,1000,-270,389,-202,1000,701,-967,1000,1000,-715,-1000,457,1000,1000,-782,-437,1000,-1000,-1000,-862,-466,59,-1000,156,304,-76,-107,1000,-1000,-219,754,-949,-521,-103,1000,-1000,1000,-942,-1000,-331,107,260,-280,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00258() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-1000,-70,974,94,712,-1000,388,504,-902,-749,1000,246,1000,1000,1000,1000,-1000,-1000,297,570,13,-354,450,823,743,-1000,884,1000,-1000,-342,1000,437,-918,-1000,-1000,1000,-1000,63,526,-524,1000,571,-1000,-449,497,-1000,1000,-799,1000,1000,112,926,-931,766,483,902,389,-730,-695,-826,78,-1000,-639,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00259() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-4,-79,-400,-1000,-91,-404,-1000,-205,896,-963,-535,379,-18,-1000,-202,-552,1000,1000,-200,675,-454,208,-429,1000,223,598,182,106,835,-665,-1000,657,1000,-7,283,470,678,1000,-293,218,-824,513,9,-513,797,383,-167,588,53,-989,-553,-743,959,258,796,-87,405,438,470,636,-164,82,-688,-111}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00260() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-1000,182,868,288,513,1000,-32,864,-730,1000,249,497,1000,1000,1000,1000,-818,-1000,-44,-60,-146,-413,1000,124,824,-223,441,243,-1000,42,1000,-154,-1000,-1000,-714,799,-1000,-194,800,-466,1000,724,-1000,-925,541,-789,1000,-199,983,1000,666,1000,-280,300,986,-381,1000,-144,-365,-1000,-90,-896,-735,-213}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00261() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-823,-690,-961,40,918,-998,-493,945,989,-232,472,-332,-671,-1000,-802,-243,-195,774,235,1000,180,419,1000,-1000,221,-106,-223,-173,-1000,-754,399,531,553,120,598,-1000,615,-466,1000,-828,-28,-302,794,-202,-731,0,-787,410,-1000,754,291,-360,1000,683,-487,-202,368,-173,-1000,812,322,-535,184,-981}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00262() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{6,540,834,613,-468,766,63,1000,94,-568,-980,132,135,238,-251,130,-378,-254,-1000,-758,-594,-843,932,-843,830,1000,-768,-461,-114,1000,-360,-709,-557,-830,1000,-222,180,-622,889,-34,-7,1000,-1000,-739,802,393,-873,-98,337,456,377,538,-9,80,1000,-896,1000,367,485,-79,-530,-315,-1000,163}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00263() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{152,-887,-1000,-1000,974,-1000,-1000,0,420,-182,927,958,-965,-845,333,-712,215,1000,1000,297,-517,1000,679,-535,860,1000,794,-240,330,-1000,-195,785,416,596,-231,1000,747,-1000,-703,-413,-719,-1000,1000,-482,948,1000,-987,664,-758,-352,726,-2,1000,-723,-1000,890,729,637,-461,-605,675,864,345,846}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00264() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{669,-268,-156,969,481,-137,-739,-490,1000,519,-654,838,-514,-1000,-1000,22,692,1000,-1000,1000,-194,-222,779,1000,-221,-1000,-551,580,1000,237,-1000,-68,-54,1000,24,-1000,-1000,1000,954,380,578,40,-1000,470,-1000,436,-4,737,1000,-1000,-1000,-1000,-983,528,217,-732,-1000,409,1000,-328,-290,-68,-835,40}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00265() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-1000,-800,164,-828,452,-1000,24,-768,108,-945,53,227,547,-41,-547,-38,103,-56,572,159,185,-330,-289,701,1000,-656,-510,144,335,-539,-571,1000,-232,1000,115,1000,46,-859,-38,1000,469,1000,-845,-449,-102,-159,557,-634,156,-520,-1000,154,280,234,963,464,-593,258,-570,856,367,-753,-1000,-811}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00266() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{1000,370,-836,765,-827,336,-340,253,378,-1000,-447,-328,-311,-513,-117,-87,3,557,-496,184,-552,-556,369,93,-317,682,-238,-432,481,277,-565,-502,554,29,1000,1000,-1000,378,26,-324,-387,121,-63,346,322,-676,-1000,125,-245,408,564,560,-250,513,400,-253,864,526,674,-355,-390,562,-328,60}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00267() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-552,-672,-532,-992,785,-383,-800,163,-18,294,1000,741,4,2,-32,-186,-139,478,1000,-182,-376,719,490,226,1000,548,0,268,-137,-824,29,796,-262,-439,-433,1000,150,-1000,-18,206,128,237,9,-845,588,407,413,37,36,-284,-264,-319,354,-443,-353,205,213,252,-482,214,390,-149,-735,395}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00268() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-191,454,348,232,-68,-1000,-1000,504,463,1000,-1000,280,384,-90,-227,450,392,371,-598,687,-379,-347,-6,978,48,126,325,-499,81,-159,80,-242,-25,-97,-237,-96,-107,-62,888,312,299,400,-1000,-449,641,9,118,259,1000,1000,481,926,356,145,894,-251,824,423,608,95,-692,-450,-1000,182}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00269() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-1000,-222,-37,-412,417,-173,-913,199,-470,431,107,191,598,-137,876,170,339,558,-44,799,-547,-345,153,-67,995,329,872,625,-497,-665,504,805,424,-1000,-336,799,-400,-1000,-133,-654,-483,-987,-282,-1000,1000,876,1000,-199,-154,612,383,276,312,265,140,782,580,-243,292,-552,-90,-268,-735,-382}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00270() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-962,-1000,-957,-658,887,-8,505,-298,109,490,1000,762,-395,253,-113,356,-1000,341,1000,-68,115,152,521,-323,-1000,-1000,76,233,173,-826,-48,701,404,178,-868,-286,-233,1000,-397,-623,162,-37,592,869,-793,-853,311,930,528,-619,-379,-193,137,-229,-962,-4,-85,510,266,24,211,445,-948,-737}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00271() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-145,775,1000,80,-364,979,-789,-197,185,-257,-1000,135,978,139,-1000,634,348,102,-1000,798,-224,-924,-212,1000,-196,-173,76,81,-28,201,-753,5,514,-568,90,-447,-472,-517,525,335,48,1000,-1000,-593,201,-510,420,-700,1000,-638,-689,-454,-441,1000,1000,-673,-113,43,587,701,-643,-665,-688,-719}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00272() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{107,633,-803,-19,204,1000,754,-230,-1000,-845,-506,-647,-274,396,819,506,793,564,431,555,-597,-184,703,-234,-195,982,529,-502,849,-562,-466,157,261,-216,852,1000,756,572,-768,263,25,220,1000,952,789,-768,345,687,217,-821,819,1000,-566,-31,-121,680,-1000,320,907,1000,-524,-211,-853,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00273() {
+        org.junit.Assert.assertEquals("java.lang.Double:LTEuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{644,54,174,-309,-500,-1000,-1000,-566,353,1,881,-875,400,674,548,-569,-1000,-636,-982,1000,-926,-1000,-400,-605,-486,-559,633,-860,-1000,-766,-592,-914,768,255,409,-400,-262,1000,322,522,534,-1000,-390,-376,818,150,-725,-50,410,1000,-129,-400,854,95,400,-1000,874,922,813,-400,177,-1000,-1000,-400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00274() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{1000,-69,89,572,-868,-445,-1000,-1000,-736,-1000,427,-344,1000,272,1000,-1000,-119,633,888,-43,-734,-953,-788,-435,-449,-1000,389,608,-385,-865,401,32,799,1000,692,3,240,489,253,-376,-137,-1000,406,-437,656,-628,-1000,-1000,1000,199,940,-660,-35,495,691,544,47,920,733,-1000,328,643,-1000,27}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00275() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{504,329,-313,471,-1000,-201,-241,-373,-127,-25,179,-818,400,638,378,-237,1000,-708,53,1000,-610,-29,-400,-605,-340,-289,400,-1000,-1000,-1000,-362,-1000,851,223,176,96,-493,82,-580,522,1000,-418,-400,-1000,818,-850,-1000,-719,748,704,-46,-550,174,722,898,-418,69,1000,813,475,-589,164,-1000,-400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00276() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{568,-400,578,396,650,337,-227,-60,-257,-470,417,1000,963,787,819,122,367,230,400,-734,-780,-781,281,235,-400,-400,-950,-291,466,-494,-261,832,-253,-101,1000,-383,-562,-165,-165,-272,-552,8,774,-400,-62,-978,419,186,-395,-410,831,819,-343,55,-1000,-164,287,534,-400,-400,59,-955,-550,718}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00277() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{425,1000,608,-341,-46,135,-164,21,-192,-440,-515,-829,204,-632,231,-437,641,-189,841,286,-868,-33,-353,7,206,-1000,398,80,-251,-394,-390,412,-111,884,-627,-473,-262,1000,906,-804,831,-847,186,-301,-70,-560,665,502,237,448,-191,65,-1000,-731,1000,138,-109,263,-222,-1000,57,81,163,-816}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00278() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{467,-1000,-541,-343,1000,-254,34,661,-396,-7,1000,1000,1000,-572,-211,297,-265,473,691,-643,-1000,-1000,-901,715,-1000,-316,-1000,602,1000,-277,-44,817,-161,-1000,105,-824,-1000,280,-806,364,-1000,276,1000,-977,-370,182,32,1000,-1000,-358,616,1000,263,-267,-875,-1000,599,217,1000,-511,1000,394,-609,90}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00279() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{-3,741,-1000,-302,139,781,418,503,-938,210,95,-1000,-1000,1000,-500,195,1000,608,-942,719,-885,674,638,-788,986,773,1000,-1000,281,-358,19,-410,160,292,360,321,546,706,46,115,1000,248,769,422,1000,-954,869,-881,1000,-95,224,710,325,-647,-1000,479,-712,841,1000,1000,-1000,168,-854,-185}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00280() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{789,-215,-908,805,-743,-404,-876,-230,-851,-503,599,-769,963,21,819,-506,793,-690,845,324,-647,-925,-709,163,-195,-323,147,-502,-16,-141,-634,327,261,995,549,161,254,797,888,-772,-138,-657,747,-349,699,-978,-282,-784,897,-469,828,79,-548,-587,675,254,-165,786,707,-957,407,-99,-410,718}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00281() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{-24,-134,9,-68,863,275,410,277,-158,109,1000,-769,963,1000,-357,-506,85,157,-160,842,-634,-305,-54,-328,519,138,244,-1000,-463,-1000,308,-506,1000,-1000,525,193,887,70,4,1000,-269,610,-160,-349,825,634,-816,-850,265,358,828,-651,1000,257,-1000,89,395,160,1000,935,-1000,-83,-1000,673}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00282() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{1000,-703,-1000,1000,463,76,-12,-391,-856,-111,748,-693,428,527,1000,-1000,1000,1000,832,-505,-217,-91,-569,32,-953,-182,687,-1000,1000,-614,-130,262,-488,788,1000,-17,0,864,1000,-298,-151,0,1000,-700,-47,74,176,-1000,1000,-673,1000,-456,-250,-716,-93,925,-948,321,1000,196,-61,-719,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00283() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{-462,-397,-579,171,-541,723,-431,822,-1000,93,894,-769,1000,486,806,-506,1000,-529,649,127,-647,-445,404,-146,-98,-100,147,-729,485,-141,-1000,-22,241,499,1000,327,-154,1000,455,-279,-138,-657,1000,-191,1000,-951,34,519,989,-137,1000,526,-173,-696,-614,-41,-868,1000,707,533,88,-635,-614,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00284() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{-1000,1000,-1,489,-266,641,110,-1000,741,346,-726,-1000,-1000,1000,-1000,687,1000,709,-245,1000,-584,-901,859,-338,-16,287,1000,-1000,-918,1000,-437,493,-447,-589,-1000,222,1000,1000,438,-216,1000,-896,-67,1000,1000,1000,-64,537,911,307,-286,411,-752,-875,-1000,1000,303,-5,1000,1000,-499,-286,1000,349}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00285() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{1000,-183,-623,832,-1000,-551,334,-230,-1000,-817,612,-546,1000,322,1000,866,1000,-1000,1000,507,-519,169,-857,-148,-551,-1000,-694,-1000,-441,-523,-1000,-498,512,1000,968,-559,-153,921,28,-706,1000,-1000,627,-743,630,-978,-509,-1000,1000,210,1000,-1000,-90,246,1000,-887,-47,1000,908,-1000,34,-460,-1000,466}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00286() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{-322,517,74,-827,-150,-624,-615,-694,-271,275,876,-1000,-54,1000,136,-715,9,-168,-245,1000,-948,-476,708,-1000,315,-74,193,-785,-1000,-836,-1000,-1000,500,-121,665,658,367,1000,-75,709,465,-1000,186,434,873,319,-612,379,1000,104,216,601,990,1000,-393,-808,-51,1000,1000,771,-361,-1000,-1000,13}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00287() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4wMjU=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkMargin():double",
+            new int[]{672,418,759,-49,1000,-1000,983,-921,-225,-212,-53,1000,-1000,-91,-278,-65,-1000,1000,-754,-444,-1000,-978,17,-198,369,370,-135,1000,721,-1000,453,145,589,-1000,866,88,-656,-1000,-1000,939,-1000,1000,774,434,1000,588,-886,838,-583,-521,-643,170,752,339,-467,-369,195,-463,-195,-73,-182,745,-854,44}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00288() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{371,-204,89,1000,203,1000,-297,-480,490,770,-702,-347,865,-1000,1000,-585,954,-1000,1000,-1000,1000,-9,-747,-1000,1000,-256,1000,-1000,-1000,-896,289,815,-1000,1000,-18,1000,-1000,-400,1000,122,1000,-1000,1000,747,-840,-42,1000,-1000,567,343,-1000,143,-807,1000,-1000,210,-1000,-1000,1000,-1000,-1000,-897,-216,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00289() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{123,375,-601,282,-341,-328,-670,329,304,-341,-565,-654,177,493,-260,608,-1000,425,-867,585,-86,-985,464,1000,-319,458,649,1000,243,176,624,-654,338,-748,-312,106,-534,179,-194,-686,35,-128,323,957,645,686,-954,126,-23,-459,-634,-568,37,-692,-657,118,-279,-507,-537,-544,613,-558,489,750}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00290() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-1000,1000,749,971,-564,512,-880,447,-13,387,-95,-1000,-81,535,797,-567,-771,-1000,-467,331,-111,-1000,-91,-573,-201,94,-398,402,-769,698,874,-710,-160,1000,1000,729,-1000,1000,1000,1000,237,486,1000,892,1000,-1000,-511,-619,-1000,1000,-251,-675,1000,829,-602,162,-269,898,837,-839,-486,-1000,1000,-327}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00291() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-225,-319,1000,-1000,139,30,-198,-429,-232,784,1000,-65,215,-490,447,90,400,-994,-136,233,299,-20,591,-527,759,476,-16,638,717,-1000,-749,956,897,-334,1000,-603,564,113,-717,-439,944,1000,-591,-672,-48,-456,301,1000,-449,638,826,417,-404,-174,-472,987,840,-372,-326,-691,1000,194,-616,35}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00292() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-607,-389,606,162,795,134,-36,-164,-1000,472,-58,-1000,126,-124,1000,-830,540,-1000,1000,938,-831,-664,-899,-1000,822,290,-257,662,-424,1000,-738,149,134,-36,257,193,-96,672,-400,898,1000,26,-155,-473,61,-1000,1000,-339,-541,625,331,-154,187,421,-252,231,-46,-1000,1000,418,-226,-929,598,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00293() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-961,516,709,233,1000,-1000,-1000,-628,271,833,786,-1000,-293,-597,815,-1000,-1000,-1000,-874,280,-328,-1000,1000,-830,888,729,50,1000,1000,222,569,1000,484,32,534,290,-567,986,-155,54,974,1000,223,678,559,-1000,-759,937,-1000,757,970,44,1000,-104,-1000,733,1000,329,618,-1000,44,-903,274,367}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00294() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-386,1000,324,-335,277,361,169,628,-2,1000,-262,-146,298,-87,1000,757,400,152,-505,-21,-240,-1000,-25,108,-135,-21,395,-400,-283,1000,-970,-240,450,1000,-180,357,172,175,1000,400,-568,-1000,486,486,-152,657,368,-1000,-322,-247,-630,-289,10,120,950,-997,-1000,497,-463,763,-1000,-1000,-181,-888}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00295() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{959,-719,-300,171,34,961,628,-113,199,346,132,-78,-45,-130,1000,450,1000,-175,245,-911,1000,415,-646,-258,685,-535,580,-1000,-567,-1000,-249,-294,-480,501,83,449,-1000,-1000,411,39,443,-712,1000,1000,-1000,667,1000,-1000,899,-405,-1000,-142,-1000,81,-650,-76,-1000,-1000,554,-85,-714,-853,0,-973}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00296() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-1000,1000,-527,-99,-201,-1000,408,689,-1000,850,-602,-1000,1000,1000,1000,926,286,561,590,487,-707,-1000,308,-125,-1000,1000,941,1000,-711,1000,-395,-1000,1000,-553,-1000,1000,-599,1000,654,-58,-936,-649,46,632,1000,-1000,-63,103,-1000,-823,955,-979,1000,-1000,1000,-1000,-196,-343,-776,-59,277,-1000,681,47}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00297() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-1000,1000,-76,-689,-410,-1000,854,564,-649,939,365,-1000,576,73,1000,803,-1000,-12,-867,1000,-218,-1000,1000,1000,-865,1000,1000,1000,219,1000,-221,-1000,1000,-983,-467,142,41,1000,-230,340,-952,382,-165,787,739,-142,-1000,242,-1000,-386,-62,-568,1000,-1000,376,-1000,465,-282,-1000,-544,613,-1000,489,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00298() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-439,193,-1000,418,-231,-471,-746,298,-24,-1000,-1000,-721,458,742,233,1000,-1000,1000,484,487,-1000,-1000,61,271,-1000,1000,634,1000,-36,1000,154,-872,1000,-542,-1000,638,-714,1000,-197,-1000,-221,-1000,163,585,733,-111,-653,-504,-644,-831,-268,-291,439,-900,502,67,-669,-468,-1000,558,-766,-953,272,213}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00299() {
+        org.junit.Assert.assertEquals("COLOR:-2969832", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{707,-666,-836,-1000,1000,-471,1000,-274,466,687,-1000,-721,886,-1000,1000,1000,1000,1000,1000,421,743,1000,61,654,658,-706,263,-172,1000,-862,-1000,-872,1000,-404,-1000,-2,861,-1000,-610,-1000,1000,-167,-532,-539,-1000,694,1000,-960,-644,346,-400,121,-1000,1000,656,-113,-977,-924,-411,-842,-482,-1,-1000,213}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00300() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{1000,-1000,-748,637,55,-207,754,489,550,-743,-1000,1000,1000,399,218,1000,1000,1000,935,-1000,1000,61,-1000,-466,418,-880,-295,-1000,108,255,-695,680,284,741,-1000,1000,159,-1000,395,-1000,1000,-1000,-196,529,-927,956,-265,194,1000,-950,-464,-1000,-1000,912,16,1000,-1000,-113,265,822,-563,1000,-1000,-513}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00301() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-1000,1000,-33,754,-745,680,1000,786,-242,1000,-682,409,1000,87,567,575,-1000,23,798,-1000,646,-1000,1000,158,-672,1000,1000,-503,-1000,719,-972,-1000,820,822,-178,1000,-1000,1000,1000,422,-564,-958,-494,940,-1000,-265,-76,-1000,-626,-478,-809,1000,712,-448,-156,-1000,-240,222,-283,-54,104,-1000,919,-685}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00302() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-771,516,497,-442,-564,-547,887,256,271,711,604,-787,403,-671,769,-44,-1000,-994,-914,-126,-464,-20,292,336,221,196,806,868,-222,-160,-170,-374,791,-350,1000,-481,-160,727,-155,-23,622,1000,-203,-161,-110,-315,-511,769,-260,757,499,204,-140,-104,-1000,742,616,-124,-156,-1000,87,-682,83,437}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00303() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkPaint():java.awt.Paint",
+            new int[]{-961,516,709,-467,-723,-1000,-87,-66,271,-161,1000,-1000,411,-671,725,90,-1000,-994,-497,-126,-440,-1000,1000,252,103,900,1000,1000,266,222,59,-354,1000,-13,1000,-137,-567,986,-155,-1000,284,1000,223,306,-236,-583,-857,937,-1000,757,370,603,397,-104,-820,733,1000,0,-555,-1000,354,-392,274,885}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00304() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{383,787,-103,-315,246,-378,-6,562,-509,-1000,554,968,145,-711,1000,-225,-806,310,1000,474,351,-419,-739,1000,-951,-568,199,710,-717,-584,941,278,-219,633,-1000,-660,1000,154,-1000,1000,-770,395,1000,681,-938,-48,187,848,-284,109,-81,-316,296,-1000,390,-228,-288,453,73,-332,-230,-406,107,-467}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00305() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{-1000,350,-166,-472,935,-714,1000,-569,-1,-920,779,24,-1000,641,1000,744,-1000,580,-1000,632,-328,350,-444,1000,-366,640,-647,49,675,-204,-438,320,-1000,1000,219,850,1000,-1000,-1000,992,-1000,-719,-290,-834,-1000,-817,1000,-351,-524,-957,-503,-1000,465,-1000,246,440,179,-151,351,261,-1000,902,453,779}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00306() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{-1000,1000,-301,567,723,-910,90,-227,1000,-791,-341,-726,925,-106,-1000,444,-707,434,-846,-1000,-118,-914,-237,837,-854,-498,-137,-602,-866,-402,288,-94,1000,710,-501,-925,-844,304,-852,427,-371,-676,591,-552,-311,-1000,66,494,374,432,561,34,814,188,-60,-39,-644,-6,-627,284,112,-721,-200,231}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00307() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{-674,-430,-371,-221,622,-506,81,-127,-105,-431,695,-1000,-634,245,1000,-780,-806,851,572,1000,-653,981,-770,256,449,441,-461,-690,354,553,-62,424,-1000,289,159,477,1000,-848,-413,1000,-590,337,59,252,-192,1000,1000,-552,-33,-120,-135,-977,226,-1000,-213,181,634,884,1000,-27,-158,637,698,-13}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00308() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{-1000,250,-301,938,473,-391,-443,-154,1000,-791,1000,-726,-669,-115,567,-1000,-707,434,-336,1000,163,1000,-655,438,164,68,-542,-602,1000,-454,-226,259,-1000,442,-283,579,1000,-1000,337,1000,-1000,-330,1000,1000,-531,1000,360,-1000,-731,-85,-1000,-1000,183,-977,-60,-578,223,302,657,741,-432,198,176,-999}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00309() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{791,35,-550,-748,804,-304,-636,-552,1000,104,-1000,-1000,971,-153,-1000,-462,928,646,-787,-1000,-434,-1000,602,1000,-233,544,-708,-728,-1000,474,-585,-631,910,-1000,952,-431,-848,718,-341,-795,1000,-1000,-642,-1000,29,199,-601,415,1000,1000,901,169,984,964,30,-400,-739,-998,-399,64,-1000,-716,359,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00310() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{1000,-1000,494,16,-232,500,-407,1000,477,384,-637,-307,1000,-165,658,-462,-148,-185,1000,-487,1000,-1000,1000,69,464,-394,-714,158,-945,505,-786,-94,685,-1000,-290,-367,198,1000,1000,-551,-744,544,-1000,-924,-756,-520,951,1000,-527,277,1000,1000,-119,-671,1000,-1000,-411,-1000,-1000,-1000,-1000,-1000,-493,30}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00311() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{658,791,-1000,1000,-122,-371,-91,72,-225,-1000,630,1000,-88,81,1000,142,-1000,819,752,287,714,-227,-944,1000,-570,261,359,688,267,-380,892,29,-1000,476,-1000,-711,339,-784,95,937,-916,529,1000,1000,-326,-138,798,151,-734,-11,47,-684,1000,-1000,1000,-783,-54,60,-210,-230,-266,-444,-412,-697}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00312() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{-1000,-1000,-6,-133,-540,42,721,367,60,908,1000,-144,-659,553,-1000,-1000,-923,1000,-846,1000,-353,1000,39,-1000,-854,1000,-548,-1000,693,1000,-1000,612,-1000,-753,565,1000,1000,-680,1000,316,-336,940,-21,911,-386,1000,381,-1000,-763,-493,-635,-34,-299,-1000,178,-608,1000,71,1000,-1000,-929,775,292,381}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00313() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{-752,65,337,-678,284,-32,394,1000,-1000,-724,1000,-328,-998,160,1000,-545,-1000,206,1000,1000,373,521,-578,883,-366,-417,-241,6,231,-358,220,599,-1000,1000,-189,374,1000,-156,-1000,1000,-897,649,341,448,-1000,771,-1000,520,-72,-675,-509,-444,-246,-1000,-187,-179,393,854,1000,-414,-1000,423,700,-622}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00314() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{841,1000,-96,1000,86,63,-1000,957,-1000,-1000,1000,601,232,-1000,239,-834,214,-170,1000,-467,831,557,-513,873,-1000,-780,34,841,-173,-1000,1000,100,167,398,-1000,-922,-160,-550,356,880,-1000,326,1000,1000,100,884,200,768,-136,731,-903,71,-353,-881,-834,-904,-673,213,-636,1000,-443,-1000,-476,269}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00315() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{-989,250,448,445,-52,-855,-1000,334,-1000,-722,393,766,365,81,607,-993,-176,-595,700,-467,506,233,329,838,-975,-919,301,980,-1000,-44,147,332,-636,1000,-481,350,710,201,-597,821,-1000,895,1000,140,-608,-1000,-1000,678,-599,-1000,544,-474,-1000,-757,-1000,299,-89,1000,251,955,118,-50,36,-241}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00316() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{774,929,-607,243,667,-806,-527,-136,619,-859,-350,635,947,-347,-705,-235,8,-412,126,-758,-572,-507,-834,837,-820,-490,-158,521,-997,-218,644,-11,359,453,-599,-950,-844,86,-852,432,-210,-250,800,195,-268,-645,430,387,816,895,783,-148,696,188,-135,154,-495,417,-75,470,651,-663,-24,20}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00317() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{-278,811,261,1000,-873,223,-483,1000,-1000,-1000,1000,1000,-447,-741,1000,-932,-1000,886,1000,1000,371,777,115,-116,-1000,-562,-89,-54,-266,-599,995,263,-760,-320,391,-256,1000,-469,-211,-282,-1000,-1000,1000,1000,-562,-684,-4,52,-626,-187,-923,-544,-352,-1000,260,-1000,-48,975,800,-210,-188,-352,-76,-341}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00318() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{510,1000,-166,148,327,-527,876,432,105,-1000,567,444,114,-366,-626,744,-1000,228,-389,-22,1000,-1000,114,1000,-1000,-580,229,1000,-530,-847,433,159,773,1000,-860,-625,1000,465,-1000,992,-1000,-213,702,-387,-1000,-817,-333,1000,-915,-553,-399,-57,465,-1000,892,-503,-501,-151,-717,-596,-1000,-489,-145,-166}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00319() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinkStroke():java.awt.Stroke",
+            new int[]{281,419,397,757,759,166,-311,718,155,-380,-392,-347,367,127,981,-1000,586,-201,292,-1000,-706,-416,275,1000,-787,-951,-1000,-114,-1000,-80,699,-171,-475,236,837,-345,-243,862,-1000,290,222,-226,-627,-357,-1000,-269,-236,1000,1000,1000,751,285,-376,153,-758,-118,-1000,264,798,208,-140,-654,1000,710}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00320() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{1000,564,-631,665,-434,805,261,848,986,-170,114,567,356,-905,823,648,264,318,333,-30,511,136,159,-286,-34,57,738,-482,-634,155,970,-738,-457,3,669,466,-299,1000,581,-528,-48,-137,-573,-66,-380,-321,162,-395,-141,607,-570,111,605,-1000,355,651,-200,-93,252,-31,-410,-854,-323,-692}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00321() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{-116,271,1000,231,714,-1000,139,-284,-509,389,-951,-967,121,-893,-1000,-1000,-688,382,1000,763,-1000,-1,-1000,959,1000,-761,1000,-218,1000,-1000,-190,-1000,129,-289,986,-679,80,-1000,-173,-48,-904,1000,182,-1000,1000,-987,309,-615,-106,-1000,-786,-1000,659,-645,-1000,-794,-337,902,-1000,-1000,-262,902,400,263}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00322() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{-4,1000,94,232,18,951,-99,210,1000,-490,246,-749,341,-1000,283,-649,-38,231,-161,1000,132,1,476,494,138,-1000,1000,959,347,-657,1000,-1000,241,500,684,-737,-59,1000,1000,-227,31,577,-808,-203,-1000,747,1000,-635,-1000,322,-688,-425,1000,-737,418,633,935,294,862,-1000,277,1000,249,-897}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00323() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{-1000,-349,-61,-1000,888,-855,-124,1000,-652,493,784,-558,-331,506,-1000,-1000,30,-25,-656,-575,-1000,-1000,5,-376,-653,-893,-1000,-292,-634,536,-1000,997,-291,-702,-1000,-1000,771,-1000,-916,579,71,-143,-359,953,1000,-349,914,-551,256,-977,-462,799,-1000,476,726,-716,-147,-899,-796,-1000,-80,688,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00324() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{-1000,-376,-662,-633,-249,-481,921,589,-951,1000,784,392,856,238,-1000,-783,754,1000,392,-396,-341,-412,827,-830,104,-40,-626,-189,-1000,1000,-643,993,-1000,-737,-814,-413,609,-817,-1000,-385,1000,-1000,-1000,1000,577,-660,699,286,1000,387,-1000,1000,-193,-15,1000,284,77,-365,-983,-311,-284,577,-1000,714}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00325() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{-273,490,-321,-979,-717,-216,-213,839,-277,997,12,666,200,-852,602,-743,11,-20,-928,-349,18,-556,496,-766,-269,-190,-712,350,-315,-97,-315,-285,-673,497,-191,717,-211,510,-672,573,651,-677,-469,278,76,-715,913,-709,538,249,-735,994,-207,857,691,-917,686,-767,985,-722,-61,680,-645,987}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00326() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{406,-501,-85,-46,-421,-564,615,1000,-294,651,1000,916,379,440,551,814,1000,377,69,-1000,526,16,789,-987,-773,899,-400,-475,-1000,1000,-181,825,-1000,-420,-243,933,-110,713,-1000,-705,909,-1000,-838,1000,-592,-303,453,204,1000,519,-451,901,31,-179,1000,710,-162,-486,-539,724,-858,-386,-1000,11}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00327() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{1000,-856,-666,-337,261,180,-493,1000,-442,-170,905,809,356,-905,-677,350,378,-811,-192,-1000,400,-682,535,-892,-140,774,-315,-455,-607,337,-1000,611,-457,415,-573,-897,-81,1000,387,-84,409,312,-85,1000,-558,110,-57,-727,-888,-467,254,111,-38,691,608,-536,-68,-232,-493,-31,-410,-1000,-448,234}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00328() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{-274,-74,-456,217,-441,174,1000,-6,-207,409,800,403,420,-148,980,-550,524,648,328,685,-945,426,420,-390,-345,345,-14,-192,-815,1000,359,533,-695,-52,-237,-991,128,-405,-1000,-303,260,-1000,-950,979,29,-395,695,256,1000,295,-1000,460,1000,-400,445,767,-392,118,-580,5,181,831,-460,-13}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00329() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{1000,306,754,284,216,178,-635,276,405,-94,472,1000,-1000,-761,1000,-956,-421,-1000,-1000,714,-668,-200,-1000,811,-658,-341,475,28,1000,-896,751,-1000,571,750,482,-155,-1000,925,788,622,-1000,1000,283,-1000,-1000,907,-208,-817,-1000,-795,886,-1000,238,1000,-393,281,444,726,1000,-283,704,-373,1000,13}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00330() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{-902,-580,-102,171,477,-790,1000,-473,-926,-172,-1000,296,732,232,370,-795,742,1000,684,273,-887,58,138,-177,-451,-221,205,231,-1000,1000,-19,-1000,-1000,-1000,-541,1000,504,-1000,-1000,-673,1000,-1000,-1000,1000,288,40,337,764,1000,348,-1000,1000,783,-400,1000,1000,-366,608,-1000,-1000,298,1000,-1000,-46}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00331() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{148,81,-789,-623,85,878,-1000,508,18,359,-123,519,-1000,355,619,-187,-955,-1000,-1000,-28,22,473,-1000,-126,-781,126,-251,398,400,-1000,429,-1000,582,105,121,-768,-32,1000,1000,481,-990,1000,902,-1000,-326,1000,-580,-1000,-1000,-1000,899,-1000,-722,1000,297,-1000,1000,-20,1000,-389,-592,-148,1000,818}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00332() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{-1000,-1000,-306,1000,289,-1000,1000,473,-542,724,-1000,-1000,-916,1000,158,704,-715,-325,582,-1000,22,697,-907,1000,-134,1000,421,-1000,-1000,1000,-404,325,408,-702,-1000,391,70,-1000,-942,-1000,-770,113,-982,270,-961,-8,-1000,787,-866,-801,736,-319,-1000,-63,1000,1000,-866,1000,-1000,1000,510,-1000,767,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00333() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{474,1000,-448,-512,564,-491,335,640,-1000,193,336,-358,981,-1000,-975,-1000,382,6,-128,573,-151,803,978,-1000,381,-637,-46,616,-487,226,276,463,-987,-511,587,-401,-103,281,-698,79,-340,-1000,-969,-182,749,-989,636,13,1000,1000,-1000,130,1000,-1000,346,-39,173,-1000,32,-1000,-108,1000,-701,-132}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00334() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{1000,-895,862,1000,-1000,714,349,-761,-439,-845,905,-344,873,355,-233,1000,1000,654,1000,-1000,1000,-992,1000,-1000,182,1000,1000,-308,-1000,598,702,606,-179,365,-299,-43,-364,1000,502,-1000,-324,-913,-1000,1000,-1000,-335,-364,468,175,1000,-514,707,1000,-10,1000,-63,-1000,531,-760,1000,-1000,-1000,-352,-901}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00335() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelLinksVisible():boolean",
+            new int[]{-902,-475,-85,53,549,-564,1000,-6,-674,783,1000,594,281,270,610,-901,410,1000,562,349,-1000,-230,-85,-228,-580,-488,22,-311,-815,1000,-40,749,-1000,-986,-632,1000,504,-1000,-1000,-343,1000,-1000,-1000,867,340,-1000,453,310,1000,238,-1000,1000,506,-400,1000,1000,-162,463,-1000,-378,213,831,-1000,94}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00336() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{965,-158,939,10,-552,-112,248,583,-189,-1000,-842,-169,-361,874,-55,-829,568,-1000,145,-69,-295,324,-917,-36,690,-133,1000,809,-159,-288,305,8,965,308,-978,340,-738,-66,-1000,395,-699,602,-159,120,-1000,899,40,740,252,854,164,-495,-210,162,322,-433,526,772,-332,-29,870,-115,638,-116}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00337() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{893,-183,222,-432,1000,-392,584,753,391,-851,675,-472,2,-218,-1000,-929,-58,-805,-133,234,-573,648,245,1000,882,588,276,237,-791,-568,338,614,-133,740,-400,463,-63,-423,-919,-265,-339,-840,-365,788,-404,163,-326,-135,694,34,-1000,-3,-997,-71,53,-340,385,36,-390,623,294,-504,688,17}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00338() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{594,270,-721,-647,1000,-519,532,367,810,-458,80,-425,-72,419,479,-946,-48,-1000,84,-61,-1000,826,100,-508,554,-400,761,235,-724,-642,813,660,-291,400,-400,-21,757,149,-1000,-490,-207,287,-224,-292,94,109,-303,-426,-243,458,-876,32,-857,-144,-133,-130,-140,305,-432,151,579,424,644,-400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00339() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{869,256,-886,232,564,-1000,607,526,-268,-1000,433,389,-234,-151,-499,-972,-23,11,-116,-64,-1000,898,-14,-561,1000,-1000,237,1000,-874,475,1000,934,1000,821,-400,229,186,-355,-440,-156,-101,-455,-1000,1000,-1000,451,295,-38,718,-61,-75,-227,-158,86,-252,-596,445,1000,-64,706,1000,-373,736,-133}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00340() {
+        org.junit.Assert.assertEquals("COLOR:-10632814", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{191,-749,-219,-801,785,-882,-631,861,961,914,503,-206,-272,979,-695,-931,-133,-765,452,27,-356,-48,-624,552,-367,816,-190,-655,-130,652,163,-514,-1000,-672,989,-965,-760,-902,91,418,853,-577,-358,263,653,-677,-1000,-485,910,16,-1000,395,-212,494,335,-58,-560,-787,426,-164,-110,604,947,755}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00341() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{1000,-511,-945,384,599,-872,973,815,-744,-1000,431,700,-239,-4,1000,-1000,-872,391,-1000,638,-1000,663,-319,161,1000,1000,-118,-197,-110,-500,-144,709,251,1000,-32,735,-805,-687,-109,-609,-909,-800,-1000,1000,-1000,554,436,-32,1000,-1000,-385,-694,-91,323,-421,-481,1000,464,-98,665,166,-1000,663,-701}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00342() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{1000,357,-1000,-28,889,-401,1000,1000,150,269,-431,871,-725,-1000,180,-1000,-1000,391,-814,-593,-796,371,-232,1000,-307,431,632,-1000,628,-74,674,395,43,987,-1000,657,-478,-62,234,-1000,1000,1000,-347,-53,-564,-1000,-40,448,1000,-628,-1000,-173,-1000,796,-1000,821,539,1000,-29,-1000,662,441,-554,-831}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00343() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{288,-985,616,-384,-494,-252,-772,964,97,-715,654,-542,-326,753,703,-971,155,-677,1000,1000,-12,-50,-311,-440,802,702,-243,348,-514,-185,-443,-462,682,-976,1000,-34,-206,-724,-630,605,-221,-1000,-530,697,-149,860,-401,89,1000,160,70,519,-29,408,815,-915,645,-783,63,562,416,227,847,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00344() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{180,-1000,-306,-702,113,-763,-1000,1000,1000,914,182,176,-359,836,-430,-967,81,-535,958,433,-14,-27,-1000,708,-367,958,-155,-749,250,470,-178,-1000,-766,-1000,1000,-1000,-1000,-850,361,835,1000,-611,-242,263,653,-174,-1000,-132,1000,238,-1000,54,-189,640,762,-346,-443,-399,539,-421,123,831,12,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00345() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{818,-821,263,799,821,87,758,448,343,-534,-936,37,151,817,-63,-478,-277,-799,-530,-125,145,-16,131,-301,775,521,1000,385,267,-1000,-397,77,376,1000,-1000,1000,-562,144,-895,-523,-762,897,743,706,-1000,722,-84,-261,-258,467,213,-192,-1000,227,-7,677,899,1000,-797,-291,324,140,644,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00346() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{561,-973,1000,-385,-327,975,9,711,-471,-952,-574,-1000,-892,1000,674,-689,-481,-1000,280,762,906,-376,998,-1000,544,-99,395,1000,36,-1000,-1000,4,1000,-223,-734,1000,-252,524,-1000,-817,-1000,-382,649,462,276,1000,-200,-395,-12,163,-427,-227,-1000,316,366,-272,1000,-787,-98,166,880,-73,1000,-506}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00347() {
+        org.junit.Assert.assertEquals("COLOR:-15329156", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{836,-481,-833,145,-100,314,449,1000,320,1000,-56,389,-234,-1000,124,-843,-804,4,-393,-617,400,-391,-30,1000,-1000,-1000,990,-1000,385,475,-493,-543,255,821,68,131,-932,-288,164,-869,1000,844,-174,-937,686,-1000,-136,450,-321,-372,-75,-1000,-630,1000,-456,1000,837,715,-409,-548,442,206,80,-607}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00348() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{766,-935,-1000,221,238,398,302,801,-516,1000,758,63,0,-1000,-108,-775,274,1000,-1000,0,1000,83,-183,647,-754,-1000,-355,0,0,1000,-1000,-1000,0,893,0,390,80,-986,327,-326,-384,-542,221,1000,726,-1000,334,-230,478,0,0,-1000,0,1000,873,714,321,145,0,738,-490,-716,631,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00349() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{258,-1000,-246,-1000,-360,558,-1000,884,1000,520,-682,-69,-748,726,-401,-590,816,-1000,708,50,617,-128,488,787,-563,520,480,-373,-719,658,-439,-1000,-625,-1000,1000,-1000,-282,-395,-475,1000,436,207,604,-651,920,-540,-1000,116,918,1000,-1000,256,-484,295,1000,-69,-482,-783,59,-437,414,991,-178,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00350() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{-146,-1000,-603,-852,-1000,-926,-1000,1000,-291,166,583,158,-99,537,107,-1000,-386,720,1000,1000,-1000,-833,-1000,-102,554,1000,-1000,-211,-301,413,33,-1000,-390,400,1000,-1000,-638,-1000,961,829,556,-1000,-339,1000,260,109,-579,-110,1000,-709,-236,929,619,1000,1000,-1000,633,305,803,639,11,-176,735,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00351() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlinePaint():java.awt.Paint",
+            new int[]{1000,1000,-617,-110,97,-1000,551,471,-579,-1000,52,-7,-84,742,7,-1000,218,-482,625,220,-1000,772,-1000,-591,1000,-127,425,1000,-623,-941,888,578,486,590,-1000,681,955,-173,-628,132,-1000,-64,-885,714,-1000,1000,164,786,467,416,984,200,-43,124,103,-784,555,780,92,383,903,675,747,51}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00352() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{1000,281,208,-582,-984,-1000,296,344,820,791,-209,-190,-962,-290,536,1000,553,812,-1000,-338,-1000,-1000,777,49,999,1000,-423,228,640,1000,459,790,-1000,-1000,-135,-246,-667,586,-1000,1000,-451,-1000,-449,-146,648,904,-255,834,-1000,-395,427,102,347,-407,-1000,257,-882,-242,930,163,-155,1000,-433,-306}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00353() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{-613,618,-111,27,615,746,296,-774,395,-651,162,-751,680,251,-493,-122,403,-48,-92,-184,172,-630,-541,791,351,-91,299,-102,235,540,-762,-772,-468,-798,408,-436,-909,-742,531,506,-46,-47,388,773,175,863,398,-365,-427,198,-191,-594,-384,-553,-34,-194,964,388,324,-428,852,722,-517,-802}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00354() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{-871,585,-549,501,-392,264,-411,-373,140,-909,808,928,-368,251,-169,-122,-339,329,283,-44,270,10,-870,897,281,266,299,-808,-145,-55,-659,471,233,606,-966,-248,1000,90,-22,462,764,1000,778,1000,-285,100,770,445,546,198,-516,-486,-297,619,1000,659,947,-118,359,262,196,-419,-1000,-728}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00355() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{-803,1000,-461,153,-510,4,751,679,429,767,-638,-432,-580,-190,-100,-321,-81,234,1000,-378,90,955,765,90,-384,399,1000,-552,408,921,-454,-356,-228,-832,-1000,-624,233,84,-1000,-726,330,-813,-213,-550,311,-988,894,-954,773,3,959,1000,-972,194,1000,-111,863,-594,-266,889,1000,993,205,-253}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00356() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{1000,324,-331,-404,690,-306,417,596,-123,1000,942,815,-1000,-231,-904,610,-571,219,998,584,985,819,-12,130,610,-87,1000,7,97,544,384,-1000,-240,503,358,-979,-209,-286,-1000,-983,-860,1000,175,-69,472,980,1000,-883,1000,-438,1000,-173,-852,736,1000,-1,166,131,-295,-845,-767,-423,743,-27}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00357() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{-642,548,-461,-686,-934,458,328,849,118,938,166,-432,-465,-190,273,723,-81,-57,536,-3,-954,1,587,690,789,-1,550,-585,-350,162,-978,-374,-403,-831,-761,-960,728,298,-941,-396,330,-813,376,-975,329,-988,894,-896,823,-311,-183,90,-577,-597,920,132,471,-757,-266,498,836,993,123,725}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00358() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{654,-680,-266,-833,-262,-1000,33,408,-912,1000,-382,627,-556,1000,444,-485,-221,964,194,-451,421,337,540,-1000,-762,-193,-159,-163,-403,424,-120,1000,-67,-168,-64,131,517,413,-680,-774,18,473,-346,-1000,-531,-1000,477,-415,-1000,884,1000,336,80,-392,99,1000,-187,-662,-578,299,179,-315,873,-326}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00359() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{1000,148,389,-457,-649,-1000,423,477,-74,892,-379,693,-320,929,721,1000,281,963,-321,-694,-692,-504,438,-536,-48,320,-842,-197,486,1000,-389,932,30,-426,-612,-263,266,570,-270,814,-216,-668,94,-1000,22,-1000,40,90,176,425,599,-17,-433,-552,-975,537,-1000,-823,440,592,-961,812,441,-316}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00360() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{239,-661,-363,-741,466,-592,-321,91,-731,893,-19,4,-989,462,124,-440,-434,489,283,181,139,1000,792,-569,-1,4,304,135,-931,861,826,-162,-279,-307,659,-304,-325,110,-374,-1000,-64,133,-432,-294,191,3,648,-342,1000,273,1000,24,366,545,-10,1000,574,149,-432,-514,245,-174,476,-288}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00361() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{441,-16,-151,73,765,-25,-851,-315,-628,140,316,-91,466,-835,-794,-500,776,-708,447,941,-514,44,276,-628,19,655,-226,534,125,669,-205,-478,227,764,-754,-123,-260,-730,78,132,-836,86,-692,308,154,750,742,65,494,-757,641,-816,-94,802,552,-56,-23,-518,723,-479,-857,-505,-883,-959}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00362() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{-153,1000,999,368,292,90,604,895,1000,975,-1000,-437,-696,-473,1000,349,696,678,-368,-1000,-1000,-271,1000,429,662,1000,374,-340,397,1000,-128,1000,-1000,-1000,-1000,-542,-27,731,-1000,708,600,-1000,-623,-106,536,-268,-20,454,-789,-164,370,1000,-612,-1000,-400,-47,145,-778,854,-635,1000,385,-680,-375}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00363() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{-148,1000,134,876,58,66,250,747,129,1000,-799,204,-514,-660,44,-197,746,-237,613,-210,-296,1000,-419,-832,-455,1000,217,126,649,1000,102,-376,-1000,-48,-1000,-738,-127,-450,-727,66,200,-740,-960,-241,1000,-383,881,-500,419,-260,712,604,-940,585,686,-182,262,-841,584,-991,-961,146,-332,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00364() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{-1000,20,-901,-551,-794,849,-361,275,-490,185,745,-501,478,-831,-88,57,303,-759,1000,437,-490,-648,-252,721,870,-677,646,-912,-110,449,-1000,131,862,315,-1000,-852,1000,-131,-270,229,1000,401,1000,-496,-932,-988,870,-1000,1000,-438,-600,-373,-1000,-204,1000,-485,445,-711,-500,647,776,232,-244,567}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00365() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{-347,459,-837,-1000,-1000,587,-145,759,1000,-500,818,-524,964,-1000,-158,-554,-1000,388,0,-424,-1000,-1000,506,500,-467,117,-234,1000,-1000,-552,-1000,1000,480,-377,120,1000,-204,764,-203,-260,458,724,352,561,-21,-217,302,-290,520,-553,-185,655,547,375,-895,-130,-389,-166,1000,1000,847,-482,-1000,364}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00366() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{-827,895,-216,393,-939,-128,628,1000,-731,1000,-1000,295,-1000,163,113,-440,-168,294,1000,-382,139,1000,1000,-472,-539,742,1000,-972,65,1000,-238,-304,-68,-307,-1000,-1000,1000,404,-1000,-1000,713,-1000,-634,-1000,406,-1000,1000,-1000,1000,-211,1000,1000,-1000,687,-10,24,775,-1000,-813,1000,1000,-98,822,289}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00367() {
+        org.junit.Assert.assertEquals("TYPE:java.awt.BasicStroke", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelOutlineStroke():java.awt.Stroke",
+            new int[]{978,336,202,99,423,-1000,-215,94,1000,-86,823,-386,1000,-165,-1000,185,293,-740,897,-616,-1000,-300,751,295,-229,1000,319,198,-559,486,-1000,162,-150,152,-661,152,-345,-278,-567,479,737,390,-563,971,336,436,971,441,-388,-404,313,594,-131,-485,-559,459,555,-426,1000,-87,537,-823,-1000,-185}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00368() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{547,-165,-450,387,-941,-311,615,85,-220,-1000,794,-443,439,-1000,-32,-110,228,21,-1000,498,-204,473,-520,-925,235,-956,-1000,867,-1000,884,-1000,1000,-270,456,-1000,234,-544,7,1000,402,-404,1000,1000,1000,-232,-1000,760,-1000,229,-1000,1000,1000,-584,-336,-758,244,-400,434,-281,145,994,1000,1000,613}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00369() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{299,1000,-391,233,-344,1000,789,485,1000,-923,-173,-424,439,-1000,-218,32,-489,-203,121,-840,480,-382,544,182,885,-1000,-306,-19,1000,589,-406,722,725,-679,-501,-314,850,-587,-476,-967,42,-813,287,810,102,-430,609,-714,-29,-110,395,-1000,679,1000,164,-484,1000,-773,94,32,678,-131,992,208}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00370() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{1000,-550,274,537,678,-21,874,1000,-774,-458,853,-384,785,-248,402,-1000,684,-501,-814,-48,-574,1000,-985,-1000,-880,-1000,-725,559,139,493,-6,313,-94,-647,-963,-26,-777,-684,-89,507,-1000,360,1000,617,143,122,1000,-1000,219,-1000,553,625,-510,-316,-523,-1000,-1000,1000,-563,646,882,761,351,300}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00371() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{377,-29,-278,512,-211,-235,579,501,-221,-857,1000,-229,1000,-587,403,402,299,922,-1000,1000,222,696,-1000,-939,-323,-1000,-333,919,-561,298,-1000,603,163,880,-1000,-947,-960,181,1000,721,-511,1000,1000,580,-367,-185,713,-784,410,273,1000,854,-545,-740,-1000,215,-470,1000,-915,825,1000,1000,937,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00372() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{489,764,-141,322,697,822,1000,998,-312,-954,56,238,1000,-272,303,130,1000,712,-464,611,12,-345,-1000,-856,254,-1000,-805,-468,836,-463,-1000,1000,-516,876,253,-790,296,81,-383,566,-376,87,-343,172,-46,-383,1000,-928,723,-255,1000,161,143,-810,-612,-303,871,1000,-300,1000,-110,1000,799,-662}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00373() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{1000,1000,-371,151,-1000,1000,1000,219,1000,-1000,-210,-295,-504,-1000,-477,-1000,-533,-834,121,-902,-299,-81,880,-134,1000,-1000,-868,324,1000,1000,-410,1000,855,-664,-635,-153,549,-594,40,-998,33,-200,287,1000,74,-1000,782,-1000,-94,-110,395,-1000,-235,1000,-221,-1000,1000,-899,-376,-222,674,337,1000,788}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00374() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{-494,-356,123,-945,-1000,504,566,-294,673,578,354,-715,239,187,-1000,-268,736,-1000,-277,-274,-851,1000,617,101,444,-369,-1000,773,-838,1000,767,1000,-136,-1000,-579,-542,-798,538,-719,-1000,-744,277,60,-216,-654,-1000,52,-1000,69,-291,-68,-334,696,1000,-195,-1000,-802,-389,-42,-573,-1000,513,1000,-152}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00375() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{540,840,-191,277,513,697,983,799,749,429,488,-3,143,93,680,-404,-620,-478,-225,-171,-789,-468,-595,343,492,-19,385,758,-254,527,-736,168,-31,-163,-795,-912,962,16,-689,-398,533,-951,641,-162,-400,-837,858,-772,435,-796,686,-467,58,344,177,-936,170,751,-828,171,883,184,269,670}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00376() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{63,112,-552,990,269,218,838,635,648,-871,-819,88,439,-804,639,-1000,22,-314,729,-1000,-1000,43,457,-686,441,-1000,-1000,132,647,919,-1000,253,-181,-320,-268,-1000,1000,254,419,-592,-1000,845,429,789,-574,-941,627,-726,-35,-373,1000,1000,690,179,140,27,728,162,-1000,32,-186,885,-506,924}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00377() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{-1000,729,-511,213,-4,1000,562,295,194,759,-929,-411,695,179,-222,384,-197,-762,1000,-1000,-1000,-467,667,1000,1000,576,-498,770,-1000,997,-873,538,441,434,-809,4,1000,625,-823,-1000,-850,-327,149,-599,-265,-1000,1000,-1000,1000,83,-430,1000,1000,-150,1000,-1000,449,140,-1000,506,-984,432,-803,655}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00378() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{-509,482,-801,415,429,-448,405,-293,936,198,-585,349,-953,-343,710,-613,-738,112,655,-858,-475,-893,916,689,-224,927,221,269,-826,-108,-150,532,88,-588,258,-296,439,669,-218,-964,123,-211,-463,233,-150,546,-740,-54,17,743,-853,-137,942,718,520,465,212,-336,-455,81,-271,-143,-835,513}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00379() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{595,-206,-411,1000,17,-1000,405,831,-441,198,309,-353,590,-718,726,82,-738,286,-528,261,-525,-167,-606,-1000,185,-956,221,471,-409,24,-1000,532,88,1000,-554,40,-79,192,706,901,-859,1000,1000,1000,-815,-419,1000,-796,1,-1000,1000,1000,942,-1000,-788,986,59,631,-439,681,491,1000,-835,635}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00380() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{1000,508,144,837,224,476,-124,911,714,-987,950,-1000,150,-1000,-985,-892,926,-1000,428,-1000,-1000,1000,563,-1000,1000,-969,-1000,1000,233,700,54,600,697,-193,-670,-74,-83,-295,288,-775,-1000,479,-154,1000,116,-1000,832,-1000,289,-1000,-96,400,748,660,1000,-282,237,286,651,-388,1000,569,902,-444}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00381() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{-902,-631,-139,148,1000,499,265,-110,-228,1000,-548,-208,1000,1000,459,698,1000,848,397,-137,-1000,-368,-811,806,-879,-477,319,50,-1000,386,649,751,306,-65,1000,-912,-393,447,-1000,-484,-916,-136,-12,-1000,-568,83,779,-505,1000,-223,831,611,993,-717,1000,235,-947,1000,-1000,935,-178,981,-856,-366}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00382() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{697,1000,-397,267,328,913,1000,272,782,-1000,-173,119,-16,-1000,-10,-528,197,358,-72,-494,513,-340,-147,-51,630,-1000,-264,-106,1000,1000,-835,949,44,-497,-501,-521,535,290,-1000,-564,-350,-1000,695,681,183,15,198,-714,-63,-627,932,-397,1000,875,164,-151,59,-230,-93,147,678,461,935,-390}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00383() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPadding():org.jfree.chart.util.RectangleInsets",
+            new int[]{-192,-12,-412,571,1000,-495,1000,1000,-67,370,-76,80,1000,952,1000,536,197,949,-33,-78,-495,-1000,-712,-14,-252,807,607,-447,6,-816,-1000,-384,-1000,905,399,515,960,-548,-1000,514,-982,-1000,1000,198,-1000,-382,1000,-1000,921,130,902,254,-633,-1000,-88,220,717,1000,-1000,1000,-286,-304,-614,647}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00384() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{784,811,10,-871,-751,-364,-1000,-281,351,1000,-410,728,182,-543,-1000,-101,-178,245,1000,-1000,767,-382,1000,-718,29,254,-752,-386,-130,-56,989,817,-822,-679,1000,146,-889,-590,970,-882,-10,937,-1000,-496,-930,-287,50,812,1000,-411,824,106,34,1000,348,-249,656,916,-151,55,-828,407,770,47}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00385() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-710,210,774,435,1000,308,747,73,1000,-524,1000,655,611,-438,-307,1000,34,882,-917,536,-1000,953,-229,-1000,-901,-771,-250,-198,-266,1000,-1000,201,814,904,344,805,-824,-579,-1000,1000,715,-1000,1000,60,-447,-585,1000,-1000,1000,93,-604,-1000,945,-1000,-1000,-755,22,272,1000,-545,-57,1000,-1000,527}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00386() {
+        org.junit.Assert.assertEquals("COLOR:-1513291", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-1000,-156,794,6,1000,92,1000,1000,693,-216,213,-674,182,-107,1000,1000,1000,1000,-371,59,-719,1000,-1000,-1000,-575,-823,-950,-228,-1000,975,-1000,-569,1000,674,1000,-143,233,122,-1000,1000,207,-1000,1000,968,-785,-145,376,-1000,871,-877,202,-1000,1000,-1000,-927,-656,656,916,1000,55,3,763,-1000,941}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00387() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-796,-40,439,233,19,-426,-183,-340,-72,-366,359,-254,431,315,-1000,163,-424,-420,744,-662,-125,-1000,-820,406,697,403,721,-110,54,-204,901,111,-257,-34,-1000,590,239,303,-719,-879,-66,-970,-184,-323,-1000,-311,-140,-7,-107,532,-357,-76,551,382,949,434,-24,438,-743,346,-98,-834,540,951}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00388() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-809,541,-1000,-445,569,-789,-295,-725,990,1000,-1000,1000,442,-423,-510,1000,694,846,-663,-120,11,1000,644,-690,-1000,731,851,-1000,-1000,1000,-1000,856,553,180,-347,929,-1000,317,-1000,549,-648,542,-255,226,-1000,496,452,-1000,918,385,-803,-1000,-1000,-1000,893,349,-793,-1000,209,-1000,-1000,1000,-1000,-613}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00389() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-590,-846,-272,-758,-751,1000,-236,230,745,147,971,-208,28,679,-510,-893,239,-786,-132,747,11,189,644,754,-397,-215,-325,458,457,-260,625,121,-709,-372,-347,-604,157,-863,930,-926,-646,407,-638,624,556,496,637,603,-946,-268,570,212,645,861,-433,-48,365,649,51,-345,986,-59,642,976}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00390() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-1000,-789,709,-975,1000,-1000,1000,1000,259,725,-700,-556,-546,-83,-852,459,1000,1000,-1000,957,427,1000,-1000,-796,-1000,-220,-916,-112,-868,1000,-1000,-1000,1000,427,1000,-1000,452,892,-1000,114,-225,-1000,1000,1000,-1000,452,198,-1000,-376,746,-244,-1000,1000,-1000,-1000,-258,1000,1000,1000,849,-232,934,-1000,454}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00391() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-38,811,307,-166,60,-518,188,681,-788,147,-1000,49,-224,-887,-860,850,-178,1000,-489,-1000,1000,-472,-383,-1000,-421,588,-690,-1000,-1000,912,-310,56,95,-399,1000,755,-922,810,-120,-268,849,-412,-1000,-725,-1000,-485,-745,99,1000,-432,-340,-1000,-592,767,754,-791,275,330,-354,516,135,129,-372,245}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00392() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-307,-344,-962,-81,-94,937,-935,-87,220,-31,705,-513,653,424,24,-861,851,-506,395,528,329,-113,636,332,-42,-234,-316,-201,-4,-86,512,-145,-213,-241,-637,-377,545,-555,568,-662,-1000,1000,-1000,146,174,13,323,768,-856,-274,58,507,202,583,-684,643,141,-50,-216,-1000,30,99,635,957}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00393() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-1000,-389,1000,836,624,-654,1000,427,644,-1000,819,-573,259,-138,1000,1000,349,1000,-776,-909,-1000,485,-1000,-1000,-323,-990,-941,-212,-749,105,-1000,225,931,539,1000,436,-862,221,-1000,1000,758,-1000,1000,-33,-600,-902,1000,-1000,-66,-574,89,-1000,1000,-1000,-784,-399,-78,989,868,16,-229,969,-887,783}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00394() {
+        org.junit.Assert.assertEquals("COLOR:-3858129", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{132,895,396,-386,730,-41,-508,453,545,559,203,-53,-387,-705,-660,626,-443,-571,173,49,140,107,799,-120,-661,276,0,-372,459,298,-243,897,-855,-428,-809,881,-510,-525,348,-673,-154,-593,-90,-787,-518,-226,739,-7,719,-589,948,-606,-171,101,95,-486,-361,-390,70,-787,-473,978,241,-350}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00395() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-728,-64,714,186,-134,-435,-24,-812,40,-509,802,-22,-806,400,-257,467,70,-463,422,-540,-306,-257,-305,93,-313,-33,-262,-86,170,-700,195,930,-313,-792,-299,-155,-699,108,-662,1000,-214,-470,-405,-704,-737,-657,865,362,31,173,-12,-170,283,-866,-37,126,-642,1000,-266,-598,255,-306,1000,4}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00396() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-368,372,424,-968,33,939,358,-318,-746,373,753,338,-375,1000,590,-870,1000,93,176,1000,-100,1000,16,594,-934,150,-1000,486,-590,-216,470,-1000,108,183,521,-473,550,-722,322,-449,-1000,715,-1000,1000,482,880,-13,838,-1000,-1000,557,791,1000,-290,-1000,-392,447,1000,-441,-372,-381,-176,1000,712}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00397() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-40,1000,369,-446,350,869,101,-505,1000,41,957,1000,623,-24,-110,908,991,413,-487,646,-562,642,920,-562,-784,-385,-626,-885,381,900,54,-259,1000,798,-59,-215,-349,-278,-403,729,-982,-561,336,53,-1000,-706,354,-387,1000,-556,301,-889,-432,-509,-967,-827,-258,-57,911,-1000,63,-893,-832,211}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00398() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{138,811,125,-570,-171,-233,-888,109,336,1000,-366,420,-93,-234,-1000,-85,204,490,1000,-948,328,-24,957,-718,-187,236,-1000,-88,-703,45,719,630,-1000,-687,-600,-160,-636,-590,770,-611,-300,542,-363,-362,-662,-43,511,252,1000,-513,725,104,167,828,316,-221,117,324,-62,-349,-1000,385,602,283}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00399() {
+        org.junit.Assert.assertEquals("COLOR:-16777216", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelPaint():java.awt.Paint",
+            new int[]{-241,435,520,899,808,-354,-286,451,-1000,-315,1000,655,-1000,-310,-307,1000,-892,-4,-311,-937,-1000,173,-812,-879,-416,-576,-793,68,-1000,571,-792,1000,-148,318,-271,-1000,-1000,-1000,-544,727,1000,-1000,1000,-847,-1000,-937,1000,-1000,1000,-1000,1000,-964,908,-487,-666,-300,-590,370,1000,-620,-1000,1000,-947,485}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00400() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{151,-1000,-431,-1000,124,722,-1000,596,-189,439,743,655,188,374,-1000,-1000,829,-195,-947,-321,-560,-480,1000,-860,75,1000,8,581,1000,-522,-523,1000,1000,561,-1000,-882,490,622,787,-749,-1000,-519,-918,-1000,-845,-893,-785,-375,646,-1000,-1000,-709,1000,-884,-804,-1000,-790,-748,298,1000,388,-1000,305,867}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00401() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{1000,-338,944,235,522,-770,-428,-1000,134,-121,-566,501,1000,-245,-328,1000,-785,-1000,313,920,-729,-995,825,-274,1000,-698,-400,709,190,-400,877,27,-816,513,897,175,1000,905,654,798,707,-511,289,1000,-1000,-1000,-1000,-224,-426,38,-1000,-855,794,1000,252,180,-531,229,1000,-1000,-662,-164,-1000,790}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00402() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{542,-161,-288,-899,-890,-959,-801,-158,-1000,-491,-1000,947,-1000,422,-1000,875,1000,-620,-243,1000,-1000,-1000,-320,890,-68,-156,433,-761,-21,-224,-783,744,37,-48,1000,1000,-148,-959,-826,-1000,1000,322,-848,-202,1000,-1000,-844,1000,600,677,1000,-129,714,1000,-517,1000,-988,-186,-1000,1000,403,643,-463,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00403() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{985,-294,-336,-475,287,-46,-810,-649,-776,97,-608,206,330,-350,-1000,1000,497,-705,413,920,-87,157,855,-203,355,-698,-155,-615,692,180,-363,27,-1,322,546,848,349,132,26,777,707,-511,-567,443,-173,-306,-167,487,814,0,-195,-1000,913,1000,-111,411,-880,495,-64,-562,-75,-433,-1000,962}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00404() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{864,-64,-876,-818,137,859,-1000,235,-138,340,612,550,-47,-628,-1000,647,-195,-421,816,620,-1000,-128,1000,-703,57,400,409,1000,1000,992,87,-1000,1000,403,-545,410,486,1000,1000,-1000,-693,-956,-795,-608,-1000,-1000,-654,630,1000,-441,-1000,-784,1000,-516,-1000,-374,-1000,-147,923,801,-80,-740,-261,958}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00405() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{1000,368,174,-772,-2,-390,-1000,-464,-417,-276,-1000,-164,51,-709,-1000,902,-670,-1000,-285,952,-1000,-917,825,545,1000,-1000,-54,1000,1000,-572,877,717,-322,-131,820,-198,992,932,1000,-602,1000,140,-632,1000,-1000,-1000,-1000,643,493,-79,-1000,-1000,1000,338,-553,-61,-1000,272,1000,-1000,-907,-566,-693,763}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00406() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{87,279,-1000,-546,124,649,-701,-498,-366,439,-213,846,83,-1000,-1000,-799,1000,-404,251,254,616,-228,815,167,-51,-98,-650,-172,710,-171,-775,649,348,474,-69,-39,27,185,-93,-934,195,-519,-1000,-95,-149,-893,-664,-375,1000,-639,-112,-1000,1000,100,-286,-362,-327,-187,-708,-82,561,-953,143,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00407() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{1000,-338,-57,-291,15,-457,-94,-1000,33,146,7,141,1000,-552,-253,518,-785,-904,-364,-67,-1000,1000,825,-909,186,400,94,619,604,-166,840,406,-609,653,-400,-342,313,636,493,-290,-693,-533,194,792,-816,-286,120,443,150,482,-876,-758,667,660,-70,-418,-477,-311,1000,-497,-504,-643,-632,879}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00408() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{166,-610,583,-970,-905,-133,-454,457,-395,-765,-792,572,-547,590,-849,94,1000,-1000,1000,529,68,-650,-852,628,1000,-460,-1000,-274,-786,-539,-1000,435,-528,556,1000,237,658,-9,-1000,-1000,411,273,-1000,716,345,-488,-788,1000,-417,521,864,-407,386,388,-313,794,-366,295,-1000,643,-155,874,-815,748}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00409() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{746,-642,694,-1000,827,-143,-1000,989,-436,1000,962,34,-799,-849,-1000,1000,927,-616,-1000,-800,-1000,-66,953,1000,-563,1000,1000,1000,1000,-333,666,1000,1000,517,-1000,1000,1000,166,-966,-404,1000,-1000,-1000,-1000,-28,-1000,-1000,699,1000,1000,-313,-1000,-156,1000,234,-1000,-1000,-1000,744,1000,749,135,376,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00410() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{917,1000,-876,-307,90,-963,-1000,-1000,-596,-397,-745,609,994,-1000,-342,1000,8,-1000,-452,953,-1000,-119,1000,-1000,-270,-953,1000,424,726,1000,1000,-1000,828,5,947,1000,29,-738,-197,-438,-228,-120,322,1000,-6,130,1000,1000,917,1000,459,-734,1000,1000,67,1000,-1000,1000,396,839,-1000,-34,-1000,844}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00411() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{1000,-294,-336,195,108,-208,1000,-1000,661,466,81,894,1000,317,-1000,-177,-668,-1000,-290,-637,-403,1000,858,-756,1000,400,-660,654,343,-183,1000,448,-1000,653,-683,-1000,115,1000,26,501,-693,-511,267,1000,-1000,-306,-167,-707,-388,273,-1000,-914,520,1000,152,-946,637,-859,1000,-1000,-158,-1000,-434,802}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00412() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{-901,1000,-886,-152,-234,934,811,-1000,109,-161,231,1000,-42,-1000,1000,480,-1000,512,-634,-885,-559,204,1000,-747,-1000,568,1000,-781,-68,1000,947,-436,-299,546,259,178,-1000,284,613,614,-1000,-595,319,-500,331,-1000,1000,-1000,504,784,439,0,133,406,-621,146,330,-132,520,947,-322,206,-446,797}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00413() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{683,-1000,299,-675,-316,358,1000,-1000,303,-280,660,-329,853,-240,1000,-295,-1000,337,-61,262,-240,410,1000,-986,-841,786,852,517,-471,1000,51,-558,95,1000,-1000,580,709,686,-104,238,-1000,-837,279,610,-96,770,1000,304,-597,1000,-1000,-645,-183,762,48,424,1000,266,650,-100,-539,-685,-742,890}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00414() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{1000,715,1000,-1000,-471,380,443,-1000,362,-830,-110,-548,1000,-1000,915,-1000,-1000,-223,1000,967,-335,1000,1000,-1000,226,-839,8,1000,-410,1000,1000,-1000,-1000,561,918,960,-521,1000,383,924,-333,-1000,1000,1000,-1000,-893,1000,-1000,-665,1000,-966,-221,92,1000,406,912,400,1000,1000,-1000,-1000,-389,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00415() {
+        org.junit.Assert.assertEquals("COLOR:-2137548905", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLabelShadowPaint():java.awt.Paint",
+            new int[]{1000,-911,1000,752,379,-725,616,-1000,1000,389,519,188,1000,79,1000,311,-964,-562,-323,-1000,-172,1000,750,62,713,1000,-1000,1000,-302,-1000,772,1000,-605,1000,-1000,-1000,1000,1000,144,-26,-1000,-1000,743,1000,-1000,489,-356,-1000,-839,-590,-1000,-345,42,863,352,-818,1000,-971,1000,-854,161,111,-286,698}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00416() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{686,-603,-1000,-950,-421,130,623,1000,758,204,-1000,875,-1000,-1000,666,-896,731,-1000,-68,816,1000,-1000,-925,314,-269,-1000,-805,250,-1000,899,957,662,-138,511,1000,-236,-468,956,-1000,-2,-1000,558,-296,-1000,-154,1000,-1000,-1000,-396,-258,49,282,518,-1000,-1000,-1000,185,-304,-542,59,652,523,-433,833}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00417() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{686,-6,-616,-950,-472,-555,201,1000,300,321,-549,121,-1000,-1000,459,-351,45,-1000,1000,272,663,-511,-1000,565,-414,-1000,-478,-461,-393,1000,870,-43,-210,-109,670,-295,-247,1000,-1000,-351,-1000,950,-316,-1000,63,932,-1000,-1000,-1,-166,51,519,673,-1000,-768,-801,589,-212,-421,-184,591,-153,-1000,335}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00418() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{-887,134,154,331,1000,58,-128,-1000,-1000,-177,-863,445,1000,535,1000,-304,-1000,-739,-1000,-176,-1000,202,-1000,-407,-1000,-1000,-130,-314,-1000,839,1000,1000,298,514,82,588,-111,16,-1000,-698,-903,62,233,-64,548,-190,-1000,-263,-1000,-65,-672,1000,-524,390,-890,-348,-774,473,1000,14,-710,434,42,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00419() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{541,-205,323,-1000,310,-577,552,203,84,139,-121,223,-833,-778,1000,-205,-381,-1000,912,120,-594,-246,-684,-59,-859,-909,-697,-437,-725,938,604,-740,-283,188,451,-500,-493,486,-734,-200,-609,516,199,-836,148,-6,-198,-816,114,650,-702,-170,400,-687,-623,-160,683,844,588,585,729,-193,-244,697}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00420() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{345,-452,-616,635,-525,131,687,1000,208,754,-950,-359,-847,-481,-535,797,-392,-163,1000,996,1000,-575,-136,595,-414,236,-586,-693,705,106,1000,-723,-830,-109,615,-295,1000,938,1000,280,-8,1000,-1000,-707,-1000,497,-1000,-1000,1000,-760,321,182,679,-646,-221,154,1000,-255,-1000,946,1000,314,-598,574}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00421() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Rectangle2D$Double|getMinY=25:java.lang.Double:MjY5LjA=|getMaxY=25:java.lang.Double:MjczLjA=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{-1000,108,-241,423,893,-336,538,694,905,269,-431,404,-35,-798,-722,1000,1000,-643,642,44,98,-278,-1000,310,-115,-160,-801,-421,151,614,1000,-350,-396,117,645,-1000,-111,955,451,107,-1000,-1000,-1000,-1000,684,617,-1000,-1000,831,23,-1000,407,1000,-1000,-226,162,1000,316,221,1000,1000,771,-497,552}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00422() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{897,-348,-202,412,303,195,698,-424,752,-38,-155,279,-491,-1000,-555,733,-539,-582,1000,390,1000,-370,-1000,169,528,-218,-862,-154,423,647,1000,-733,-544,-587,324,-939,709,1000,405,60,-202,17,-1000,-905,-163,-890,-1000,-1000,699,-930,-510,693,1000,-1000,-397,238,1000,-251,969,1000,1000,615,-1000,263}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00423() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{751,-233,-372,-950,112,-62,378,388,-208,619,-1000,-868,-847,-825,-154,-382,568,-402,389,710,326,-29,109,372,-269,-257,-724,-1000,-45,979,801,-638,-1000,550,486,-476,349,-195,1000,1000,1000,776,-385,-183,-1000,-546,-162,-39,528,153,1000,-770,106,-47,-327,236,572,313,-883,334,203,-315,552,654}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00424() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{-1000,-936,789,216,-541,177,921,-501,-1000,695,-1000,-1000,223,387,695,55,403,-588,-285,1000,-80,-1000,1000,-265,-69,620,-1000,-443,-453,156,445,710,-1000,1000,1000,272,1000,-1000,-789,289,106,297,720,275,-1000,22,149,320,-217,-640,902,-1000,-524,878,-169,-119,-809,854,-27,796,-815,-444,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00425() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{-503,739,-414,1000,-315,774,-569,74,380,1000,344,880,904,-849,-1000,-162,-890,326,-877,431,-1000,621,-217,1000,-372,123,-87,-1000,135,632,623,249,-660,73,-515,-294,835,447,1000,-538,-52,979,-213,803,-1000,-713,367,632,585,-860,-267,-590,-374,191,314,81,-32,-1000,-391,-94,493,-1000,-1000,524}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00426() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{777,-252,404,-1000,-1000,791,552,916,-30,306,-806,-349,-1000,-1000,281,-530,1000,-956,1000,413,1000,154,-690,1000,-358,-1000,-800,-869,-744,1000,706,-997,-1000,-654,486,-88,237,655,730,472,893,7,86,-550,-1000,-194,-198,-763,1000,153,1000,-170,-357,-374,-376,109,931,188,-1000,334,931,-860,-222,297}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00427() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{1000,-197,1000,331,-111,628,688,-41,110,-121,-12,215,414,-25,-1000,1000,-425,-321,-567,-186,-764,536,-1000,-317,-302,76,-459,-314,-1000,273,682,-356,-583,-308,-300,-777,466,226,750,280,-181,985,-383,162,156,-571,-370,-862,921,651,-509,599,1000,-714,175,1000,1000,1000,349,1000,1000,434,-469,612}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00428() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{-1000,-170,-16,249,-400,-767,1000,-578,-794,320,-317,-288,53,438,531,-651,400,-157,-852,710,252,-73,109,751,-258,1000,-247,-490,-158,975,815,-5,-1000,431,-433,450,524,-469,-109,198,84,-107,546,534,-675,-844,-362,644,-879,-654,525,591,-1000,947,-428,-240,-1000,443,-1000,-263,460,217,-312,636}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00429() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{-98,-161,-71,1000,-1000,843,-366,-782,-323,330,-593,-371,780,410,-959,-619,370,-703,-1000,1000,-611,-199,892,988,-251,1000,583,-530,1000,50,582,-19,-393,1000,179,-340,864,-435,1000,660,321,-421,-667,1000,-1000,-352,1000,1000,569,-628,831,-222,-965,804,-160,857,-114,-816,-660,17,-907,-726,400,656}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00430() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Ellipse2D$Double|getMinY=25:java.lang.Double:LTQuMA==|getMaxY=21:java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{1000,499,589,-169,258,605,128,682,767,379,208,1000,414,-880,-988,758,-1000,-1000,876,-568,-852,578,-584,-621,-673,-852,-723,-954,-775,298,911,-81,-39,-400,223,-883,-373,1000,-223,-464,-1000,1000,-768,-624,901,124,-1000,-1000,584,418,-1000,952,1000,-1000,-623,182,1000,477,754,1000,818,-80,-1000,711}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00431() {
+        org.junit.Assert.assertEquals("STATE:java.awt.geom.Rectangle2D$Double|getMinY=25:java.lang.Double:LTUzMS4w|getMaxY=25:java.lang.Double:LTQ2OC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItemShape():java.awt.Shape",
+            new int[]{-1000,-146,-21,-1000,357,580,396,-407,-633,-299,-207,33,-226,-217,704,-86,-50,-531,-1000,223,-679,1,-55,232,-735,-430,-404,-327,-484,937,511,-7,-977,-185,-89,-93,-377,58,-684,391,-161,-55,411,-146,-689,-81,-322,372,430,848,-248,-662,-382,196,-348,206,145,325,372,111,-318,-359,-32,382}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00432() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:Mg==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{293,-573,-115,887,-461,-1000,-707,1000,560,-852,-850,-1000,-453,260,-350,-278,-818,1000,735,-869,-374,-73,167,681,-11,-570,612,393,200,-1000,-79,733,1000,766,-342,22,-465,-1000,1000,403,-1000,337,291,347,-990,-943,82,-418,661,1000,-1000,-700,601,-439,1000,956,681,848,620,-435,-246,422,86,43}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00433() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-254,1000,-386,-875,340,-250,210,613,994,913,-581,476,-1000,515,-194,-639,-159,-1000,-1000,-931,356,573,197,476,704,-755,92,249,-886,-904,1000,358,-286,-160,-1000,-136,-195,-500,-691,262,-327,-886,521,354,-246,801,303,-150,372,-238,10,113,-1000,951,-68,800,803,-1000,-1000,-1000,-1000,-1000,622,-68}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00434() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-283,1000,939,568,-328,-1000,-921,-192,128,-532,-315,-547,510,-693,-252,-1000,104,-573,920,-1000,816,1000,-1000,-1000,57,-1000,826,1000,-1000,-63,1000,-769,1000,-1000,-489,-109,-1000,-1000,1000,-157,24,-838,-598,448,-1000,1000,440,-1000,-1000,681,-89,-583,745,820,452,-604,1000,-1000,537,30,513,-1000,109,-925}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00435() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{1000,1000,59,-234,-463,253,434,1000,-182,1000,379,60,-93,495,623,-552,-252,-612,-622,-1000,-247,101,468,1000,-36,-357,-901,-251,161,-207,432,512,-67,1000,519,-683,-820,-1000,-544,-589,-167,-114,-191,1000,-259,1000,1000,728,530,760,116,46,-277,-153,513,126,609,-525,113,-920,-1000,-540,473,535}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00436() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:Mw==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{665,-147,-808,470,302,634,398,-461,-980,-671,232,-81,700,-468,267,-493,-214,-644,516,191,-338,415,98,705,294,383,-203,878,890,554,-501,39,-149,673,-627,849,73,58,-121,-766,793,482,243,-808,-403,672,-178,300,-49,349,-20,-526,686,-256,-465,-825,205,232,621,-333,-93,-663,-115,-858}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00437() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-309,-171,385,-547,404,903,702,274,-204,487,-87,225,400,632,-41,128,-433,-647,-434,-672,-93,-335,-372,472,55,1000,-20,-617,-551,544,484,-11,-399,389,-1000,226,277,534,101,-55,194,-791,409,-236,405,-181,-308,743,287,-902,-45,-48,-394,-7,-513,291,446,418,777,184,-254,-359,133,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00438() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-368,1000,288,-23,562,-21,404,810,1000,-315,908,-1,-591,-105,-426,-319,-419,-1000,-1000,-1000,-135,1000,-295,-1000,-29,-989,-559,-20,-668,-132,1000,-245,1000,-418,-919,-806,137,-1000,658,-771,1000,-1000,590,238,-404,758,404,-52,-612,-669,-691,-284,-444,790,-389,-624,1000,-432,-38,-617,221,-623,748,493}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00439() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-396,1000,179,-783,919,765,316,630,1000,393,526,-916,69,659,-1000,322,-1000,400,-55,-487,667,464,601,160,1000,951,962,-529,-348,-400,535,385,690,-132,-871,190,822,1000,-87,-582,-714,-1000,1000,-462,685,731,-1000,305,550,-1000,200,-181,451,42,-1000,677,293,38,-478,169,468,-322,167,347}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00440() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{378,-1000,384,-22,332,158,-374,829,748,-987,-867,920,-905,1000,-23,942,694,584,584,-249,-989,-1000,-56,1000,-858,-198,-1000,-184,1000,-856,441,-30,-416,1000,-69,-1000,-313,-863,-843,-1000,-68,14,401,243,899,-497,328,1000,547,-356,-1000,-632,-687,562,883,1000,66,1000,-413,-405,-1000,51,807,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00441() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-1000,861,775,-18,-506,1000,70,671,808,-1000,-9,-1000,-139,460,-1000,-511,-1000,1000,588,-613,1000,366,919,-337,1000,-1000,1000,-316,-740,-753,206,1000,-1000,-617,-293,168,-1000,128,1000,-896,20,-1000,778,-92,-1000,1000,-553,-664,1000,-720,-1000,746,514,310,-2,1000,1000,-1000,1000,-1000,295,-442,161,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00442() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-894,209,-235,557,-482,-514,-822,-1000,1000,611,-744,-1000,1000,-1000,-1000,1000,-1000,477,1000,-727,1000,251,566,-1000,1000,-528,1000,75,-369,-885,-121,-1000,507,-1000,-522,-952,428,1000,470,-751,-81,-28,652,-213,467,669,-1000,-1000,1000,-1000,197,-412,1000,-1000,-527,753,-169,1000,255,1000,1000,-448,-835,886}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00443() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-426,868,198,-655,-92,274,-116,-406,929,354,835,-905,181,50,-655,-191,-771,-296,-408,-957,541,-495,885,953,1000,-824,1000,152,1000,-1000,-987,1000,-215,349,910,-514,2,1000,-770,-656,-1000,-310,609,350,333,847,1000,19,920,-147,34,369,322,-119,-340,966,-338,-820,-901,-331,99,-1000,-403,976}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00444() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-347,-348,-16,470,-977,860,-349,-1000,-1000,-724,-656,-983,1000,-387,-1000,-286,-1000,1000,1000,-206,501,369,1000,288,753,-1000,639,501,954,-1000,-751,863,361,-181,73,452,107,754,744,687,-1000,-708,657,-159,-119,1000,-83,-1000,953,-44,-796,-886,1000,-54,53,784,793,567,792,-430,1000,-76,-147,509}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00445() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:Mg==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{653,-3,536,1000,956,-847,987,549,-602,912,-371,165,-56,336,1000,122,636,-820,-1000,-1000,-1000,564,-1000,396,-1000,1000,-1000,-320,-196,1000,1000,-1000,1000,1000,-447,99,-1000,-1000,1000,212,-502,668,-363,191,-1000,-73,-298,554,-846,905,854,687,792,435,1000,-1000,1000,862,128,-574,-458,448,-273,385}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00446() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-370,-944,468,499,-16,420,-221,199,-141,-972,-378,88,651,275,-93,-340,-46,384,691,-861,-334,1000,1000,685,-75,-525,1000,195,-501,-1000,340,47,960,499,-279,233,1000,-957,233,732,285,82,-120,258,37,-48,162,400,572,563,-1000,-428,1000,1000,799,316,1000,227,-78,979,422,-36,148,-400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00447() {
+        org.junit.Assert.assertEquals("STATE:org.jfree.chart.LegendItemCollection|getItemCount=22:java.lang.Integer:Mg==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendItems():org.jfree.chart.LegendItemCollection",
+            new int[]{-916,137,78,-1000,-183,877,570,-698,1000,200,311,1000,-1000,681,-855,21,-61,-988,-83,-743,-29,-421,581,751,639,-1000,187,-352,-41,-1000,407,884,116,476,557,-773,669,325,-1000,-1000,-792,-1000,322,114,1000,-356,716,790,532,-1000,-721,-927,-1000,915,-987,992,-415,259,-1000,-197,-141,-965,615,400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00448() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{1000,205,-448,-58,280,-1000,-206,-274,-169,-880,-576,-589,-261,-590,1000,-30,-578,658,1000,-147,-456,-31,968,-670,-584,-942,-180,-733,133,-990,473,1000,926,6,449,-119,908,606,53,290,-738,-1000,783,-278,-770,267,-510,9,449,1000,493,-617,-704,613,-154,199,15,-25,125,-414,-156,-196,-236,405}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00449() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{1000,882,809,113,326,39,-113,757,-20,312,-886,-1000,-111,728,334,1000,1000,-589,345,-883,-489,167,710,-1000,68,575,-1000,229,-1000,-1000,-877,1000,277,678,1000,533,211,1000,-689,864,229,1000,-160,991,398,1000,-137,-557,687,1000,-275,128,751,534,1000,1000,1000,-136,-1000,478,577,776,-254,-550}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00450() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{936,509,-1000,-239,509,-1000,287,992,-521,-125,-614,-947,-592,-367,1000,-436,-146,614,456,-604,-597,985,1000,-355,267,-1000,-195,-157,-489,-1000,-245,570,475,-197,1000,-125,587,320,-172,1000,-704,6,550,-209,-44,-422,645,-127,727,1000,-202,444,-241,-225,-1000,519,-553,-986,1000,-515,-678,-1000,-1000,348}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00451() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{859,199,-55,25,-206,-301,-97,303,47,290,-277,-474,9,876,87,684,543,624,492,-976,237,-47,-457,-870,804,392,-1000,-784,-1000,-834,-769,897,1000,1000,855,333,760,706,-301,528,-863,-1000,-248,752,520,1000,630,-826,-921,893,763,1000,542,960,586,661,995,-427,-20,-52,-41,908,-828,92}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00452() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-102,796,39,190,447,-801,33,268,153,823,-632,-222,-993,-957,-11,-596,2,891,476,867,-1000,-1000,1000,-659,366,1000,-109,145,563,-1000,-1000,-400,594,-531,-530,1000,442,226,-562,1000,649,670,-199,-137,222,-711,807,-690,752,-72,-580,-245,514,-946,1000,1000,-862,160,634,1000,-79,577,-478,315}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00453() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-618,-1000,408,313,-731,969,819,365,-803,607,-377,708,1000,746,-1000,328,704,-760,-225,-1000,1000,1000,-1000,477,1000,1000,-467,730,-1000,-217,539,-233,-258,-190,130,-884,-1000,1000,-516,531,-1000,733,-772,1000,911,-252,-381,-657,-973,-404,-406,494,1000,659,-14,724,1000,652,-1000,1000,1000,1000,442,101}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00454() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-618,-680,-132,657,-100,969,-25,874,-1000,12,-303,-404,968,496,-1000,421,1000,-1000,-225,-1000,415,876,-384,307,889,840,-155,514,-912,-210,568,851,779,-314,1000,-494,214,869,221,1000,-833,733,-601,955,863,-316,-38,-19,-144,10,-592,762,779,388,-750,338,1000,-66,-1000,109,1000,628,977,-315}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00455() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{798,-520,409,-150,-206,-878,228,-491,7,1000,737,1000,564,-154,-1000,64,-82,-16,-749,1000,-263,-186,137,314,556,1000,-415,481,445,-770,494,694,-667,-57,-1000,1000,-677,-1000,-668,450,350,-331,-204,256,248,-1000,1000,-783,674,-1000,-494,332,-163,-877,1000,-1000,-425,1000,1000,463,77,97,-134,652}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00456() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{1000,836,-332,298,932,-787,-688,446,-202,-1000,342,-1000,1000,1000,-1000,203,165,-760,982,-864,-630,-245,1000,-1000,-584,-1000,-672,327,-1000,-990,-34,1000,1000,165,557,-585,1000,1000,328,769,-738,68,1000,-303,-488,1000,-4,9,285,1000,1000,-49,-458,606,-154,1000,153,-818,-242,-936,409,-196,-236,-85}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00457() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{1000,166,-437,691,90,39,-264,1000,-581,-9,-414,-530,-303,417,1000,357,631,-650,286,-1000,-25,-63,31,-627,1000,63,-720,-497,-1000,-1000,-471,1000,320,217,1000,-418,311,668,37,1000,-1000,673,122,611,698,57,837,-270,-90,1000,-185,1000,185,194,790,1000,1000,-332,-157,-507,-360,1000,-435,-183}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00458() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{1000,42,888,-699,-324,-266,-864,195,761,455,-498,1000,-861,199,978,947,352,-988,-1000,62,581,799,-1000,75,869,914,-222,130,99,-988,-197,-130,-441,553,1000,546,977,826,-695,476,-1000,869,-307,413,6,-7,-855,-946,-995,14,731,-991,-177,952,1000,1000,1000,-454,-814,1000,-12,1000,534,-10}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00459() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-811,1000,129,564,-194,71,-189,-705,-145,-31,703,-113,1000,1000,-346,524,289,-785,818,791,-1000,576,-328,-780,80,866,-1000,-456,84,348,40,224,566,1000,-1000,1000,25,-176,-204,-535,-1000,-545,1000,-1000,-355,671,161,326,-153,-50,744,336,1000,183,586,-1000,482,1000,-1000,-1000,900,941,534,-690}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00460() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-988,-515,-472,289,-18,-591,-661,-561,-768,23,-344,901,-284,-157,-728,11,-471,-552,785,849,162,608,-952,841,615,465,82,444,884,-680,554,-243,544,-140,401,732,-628,422,-312,948,-741,-679,-640,882,10,-832,213,-978,77,-372,-909,249,730,130,95,472,743,653,-576,691,256,928,-654,358}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00461() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{150,946,-323,448,753,-549,-7,566,-584,-729,-736,-687,555,-22,249,-239,-960,370,-188,-506,-971,-1000,994,-717,-332,-787,-410,-156,207,-176,891,-243,1000,-906,641,-234,1000,1000,394,140,239,123,597,-351,178,719,519,128,1000,1000,434,1000,836,311,307,833,-85,-1000,-189,-551,111,31,-20,-265}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00462() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{1000,-976,-102,-41,-193,-1000,287,-996,-383,-316,-626,498,699,-303,462,639,-671,37,1000,-144,1000,1000,-855,-282,-109,-359,-107,-950,558,-1000,940,400,345,241,-76,676,235,711,-570,163,-1000,-1000,-691,212,-656,521,-760,-294,-1000,939,-92,-969,-306,-822,694,-220,1000,283,-653,1000,1000,484,-555,812}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00463() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.labels.StandardPieSectionLabelGenerator", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-772,-1000,-448,629,280,1000,563,308,-1000,573,766,1000,1000,1000,-1000,-30,325,-575,-1000,-795,923,495,-1000,-670,746,-942,-518,521,-580,-990,802,-1000,-189,436,-274,-871,-638,290,265,19,-881,188,-439,794,543,-68,-974,-49,449,-977,87,-617,778,158,-434,-489,1000,-25,-400,-403,409,908,614,425}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00464() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-249,-613,-229,-734,380,93,1000,412,-223,510,-581,-111,-151,90,70,-370,2,814,844,-754,1000,-1,268,961,-936,-58,-919,-238,355,-559,-280,-825,129,-761,-708,-400,-196,-586,471,-91,-349,-562,71,-275,-225,711,915,847,553,-195,855,425,-995,305,537,387,-1000,1000,939,792,17,-1000,-561,631}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00465() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{1000,-516,619,-294,311,487,-1000,-49,337,-910,114,-347,-571,1000,34,1000,-1000,345,-1000,210,358,80,-789,-374,120,-1000,-628,446,372,1000,731,1000,789,166,118,-284,-1000,-1000,1000,-606,972,1000,639,-883,1000,-399,-966,-1000,-1000,-329,-1000,-1000,1000,1000,-1000,930,-1000,-1000,-1000,-728,481,758,-363,-352}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00466() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-119,439,1000,-882,-871,769,-722,-292,475,-1000,841,-52,682,1000,-262,-93,-315,403,-1000,-574,-845,-428,-103,-709,168,1000,-824,965,408,1000,-538,1000,716,10,898,-47,-353,-1000,239,93,90,-274,673,-939,400,807,239,-484,-1000,338,-556,-1000,-1000,550,-597,366,-1000,-947,396,-1000,1000,-66,-1000,-451}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00467() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{334,796,-116,-100,755,1000,-205,507,452,-206,334,951,-417,1000,19,-806,-478,712,-909,-747,-291,702,183,-1000,444,-259,-933,-158,-963,1000,-599,-653,840,-327,338,-753,774,609,-966,602,698,632,1000,50,-562,972,526,68,-87,-627,12,-1000,990,-763,207,-1000,388,-553,620,-1000,-155,-346,-830,242}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00468() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{438,759,224,-947,-1000,-362,-396,233,-631,-304,659,383,622,715,455,111,-735,264,-1000,425,-192,-529,1000,-1000,341,652,-747,613,998,664,532,757,129,-761,111,180,-536,-607,-253,639,-473,102,1000,-337,-225,104,-644,-1000,-445,505,-550,16,-469,1000,-262,-276,-467,-402,939,572,102,-237,-67,-378}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00469() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{95,-142,-751,-218,0,728,1000,824,-92,749,-637,-110,-745,-856,198,-811,-178,944,953,-837,734,1000,-323,264,-511,-717,-976,-771,-594,-68,-376,-396,339,-836,-763,-820,560,454,-422,303,-859,133,721,278,-768,847,975,1000,866,-758,580,-29,397,99,861,-584,-366,1000,982,179,-585,-1000,-351,889}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00470() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-545,1000,-576,-690,-436,181,975,55,36,-357,-1000,-1000,-575,381,244,-1000,426,1000,1000,-250,640,514,1000,757,531,-801,-74,-1000,-860,621,483,394,1000,876,-50,-490,608,-707,-961,248,-51,-433,812,248,-1000,1000,1000,551,578,-743,684,-343,-858,587,941,-1000,-795,386,396,429,-669,-740,-1000,-352}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00471() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-648,447,1000,-1000,-397,-666,-758,368,232,213,-759,-1000,-572,-703,-75,204,249,-1000,-860,-1000,544,-1000,-599,-1000,-736,1000,-1000,-244,138,108,-482,772,-842,-1000,453,1000,140,-611,-359,911,-839,-1000,295,1000,-1000,-294,-1000,862,1000,-835,244,-870,-670,838,-383,-1000,940,-64,-208,1000,262,-106,-942,-285}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00472() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-209,965,551,291,-106,-481,-281,-29,-563,-554,545,359,-583,230,-149,53,-228,239,-107,-450,9,-1000,858,-809,-936,-1000,-739,1000,461,-13,-305,-90,129,1000,-462,614,-196,-480,-237,-1000,-303,-562,71,192,-7,162,-403,134,-1000,405,54,381,-995,-228,142,-292,-1000,-49,-823,628,-125,-268,-936,54}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00473() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-502,-1000,-492,-1000,-946,848,835,619,-563,499,-944,-502,639,608,-315,-24,-445,907,550,-443,1000,916,-841,1000,-992,364,-919,-1000,932,-146,237,-151,-938,-1000,-146,-1000,-1000,-544,1000,-881,400,-868,71,-785,181,-714,804,313,1000,-759,402,-355,-525,967,-5,1000,-1000,649,421,-80,734,-502,-111,631}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00474() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-1000,190,744,-471,860,672,113,806,-47,-1000,991,-366,-345,-782,1000,1000,-59,1000,-985,-722,-1000,32,-613,1000,-1000,-1000,268,-579,259,408,-302,34,327,-84,742,-308,1000,-45,1000,-395,-852,-1000,-1000,-1000,1000,-936,587,281,-353,-367,-290,-25,614,-104,-1000,1000,169,188,-787,-313,225,-120,259,-582}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00475() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-396,1000,968,-833,-400,-13,-1000,-421,168,-1000,-685,-132,1000,131,-469,-104,-581,-440,-1000,-139,-1000,155,594,-1000,825,1000,718,1000,141,517,-1000,1000,1000,863,1000,1000,-1000,-1000,-84,708,-1000,1000,-3,1000,225,289,-780,-952,-857,287,-715,-709,-1000,946,-651,-500,-281,-358,-1000,-848,1000,-25,-243,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00476() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-373,315,-431,1000,-690,335,1000,353,237,-208,-186,1000,-743,657,-895,-1000,-242,806,546,-1000,745,-988,1000,-1000,729,-468,-1000,-360,443,-944,-116,-1000,668,1000,46,-449,823,562,-1000,498,-796,-689,1000,965,-1000,913,407,1000,888,69,1000,681,-1000,-498,1000,-1000,-711,1000,975,1000,85,-1000,-346,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00477() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{414,-785,-976,3,332,498,1000,716,-273,621,513,310,-801,-584,159,1000,-977,1000,-275,-873,-370,505,-570,-374,-1000,-45,-632,-1000,1000,143,940,615,-369,-868,-1000,-613,243,-465,1000,286,-324,776,-391,515,1000,-124,-26,-781,-968,438,-462,333,651,834,-1000,1000,133,810,1000,405,1000,-755,397,-691}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00478() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-655,-1000,-952,-652,482,-876,1000,1000,-349,-1000,423,919,-1000,-237,427,-495,-716,1000,294,-848,748,665,-748,-647,-339,-1000,-919,-1000,487,-1000,-261,-653,-386,-561,-1000,-1000,1000,1000,73,313,-571,329,303,-522,-223,552,1000,1000,524,867,734,1000,1000,143,-142,42,185,1000,1000,506,-653,-1000,511,999}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00479() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelToolTipGenerator():org.jfree.chart.labels.PieSectionLabelGenerator",
+            new int[]{-920,-268,103,39,-1000,-1000,-179,385,-929,29,651,-110,988,101,45,1000,-181,-418,400,308,-258,-1000,1000,-1000,394,185,-888,1000,909,-563,70,-400,190,951,-581,1000,280,198,-407,-670,-1000,-1000,-896,684,-717,-597,-761,329,-893,520,357,773,-1000,-65,400,-400,37,579,481,973,1000,-833,-626,-272}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00480() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{146,847,117,-1000,1000,-221,-421,-676,-421,89,949,421,793,-650,-624,-521,-143,-503,-831,-1000,-385,-404,681,1000,-189,102,1000,-252,-1000,-220,218,-742,-481,-619,-1000,-1000,-203,196,1000,-1000,360,-197,-961,-1000,1000,-1000,1000,1000,-1000,-547,-294,97,1000,-1000,-1000,-178,-1000,-1000,-324,-236,49,200,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00481() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{361,1000,109,-54,59,-593,-534,-1000,-548,856,944,682,-524,719,-1000,73,235,-517,-197,-403,-135,926,304,373,-120,52,1000,-678,291,-349,207,-517,516,456,-1000,-356,-625,58,885,-783,219,-871,301,-447,1000,-268,156,-149,990,-571,-1000,-159,693,-1000,-1000,350,-881,-1000,-1000,-472,419,775,-1000,127}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00482() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{339,-5,-1000,26,-366,-1000,68,238,854,-456,189,204,378,-152,1000,-504,1000,-21,-98,366,367,356,565,-476,867,-74,484,115,-154,-708,1000,-96,327,-155,-123,-620,213,515,857,-845,585,1000,-1000,-366,538,145,147,487,950,134,537,387,806,2,-347,-849,-406,-313,434,-82,-663,-806,-117,128}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00483() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{751,419,-403,-678,343,-695,-671,-724,-450,-365,714,658,534,-367,78,-8,334,409,240,-584,521,665,904,-361,787,52,614,-910,-879,-829,757,-538,141,-488,-186,-832,194,468,885,-901,911,963,-644,-479,38,205,494,940,-417,-385,779,-659,566,76,-231,-677,-980,-706,-519,-661,-749,-702,-627,-475}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00484() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-945,-120,84,-647,199,-395,1000,-477,146,-1000,-750,-362,348,896,725,112,-563,530,-563,1000,-986,87,897,-646,-331,-335,-267,149,-304,876,310,111,347,-232,53,-1000,-790,-1,-607,-1000,220,1000,815,-1000,570,-119,-20,853,-830,-350,1000,-719,259,165,0,-799,-591,1000,435,-141,74,-1000,1000,-296}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00485() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-1000,-152,-391,362,-860,376,371,-855,-337,-1000,-1000,326,730,1000,979,302,-436,570,-264,1000,683,-525,149,-1000,8,311,-110,825,-1000,907,219,1000,848,457,663,-712,-1000,-58,-1000,-705,166,108,824,-630,132,1000,-1000,-764,1000,-573,740,-1000,-1000,799,1000,118,614,1000,896,-111,103,-1000,1000,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00486() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{600,561,-680,135,-71,272,-922,-158,103,-55,884,832,-907,-663,-336,-761,724,-468,-205,-478,445,-291,298,348,928,156,283,115,-521,-918,504,-343,-51,-328,-271,-444,179,644,986,-641,686,148,-1000,-411,236,227,333,-551,-204,-198,-121,463,220,-299,-672,-219,376,-771,227,-1000,-516,514,-429,-107}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00487() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{1000,1000,-497,-146,500,255,-1000,-317,-695,-989,676,109,-460,-1000,-1000,-1000,287,-366,324,-1000,-23,-1000,1000,-134,1000,309,1000,839,-521,-1000,401,-732,-634,-718,-699,-839,1000,1000,929,-1000,1000,1000,-1000,-1000,-569,-23,907,575,-1000,-910,-157,429,1000,-883,-508,-504,-1000,-1000,1000,-845,-752,381,89,-954}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00488() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-338,-523,-683,-23,-901,-467,8,-8,730,-1000,-179,375,1000,-264,871,-342,509,294,-258,822,214,-98,508,-790,862,-21,-776,318,-926,-31,1000,577,28,-206,1000,-860,82,-642,-66,-789,525,1000,-918,-193,-576,-471,-532,556,-891,104,1000,-147,-313,677,1000,193,-1000,835,632,100,-494,-1000,575,-150}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00489() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{223,743,98,-437,834,-369,571,-632,-487,363,964,428,255,919,-583,-1000,114,-620,-690,-811,-97,-154,952,1000,-710,-1000,849,-477,-1000,-372,512,-657,-272,-630,-1000,-721,-336,525,984,-684,331,-724,-840,-937,1000,-546,791,538,-400,-475,-267,-60,575,-622,-1000,-14,-1000,-847,-65,-465,-149,440,-897,-887}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00490() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-1000,449,470,-437,-311,-1000,571,-1000,100,-213,46,59,355,919,-457,132,-313,-394,-1000,606,-1000,371,359,188,-870,-1000,1000,-14,-199,964,1000,260,160,487,-329,-745,-1000,-642,309,-1000,-327,-724,873,-594,1000,-471,-91,1000,-105,-382,-330,-240,464,-1000,-1000,193,-1000,-165,-1000,130,1000,-285,-355,-6}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00491() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{20,488,104,-1000,-70,-1000,-863,-989,-770,-1000,-322,769,308,-37,-738,87,-483,-176,-922,-37,-649,-759,1000,585,-154,-715,771,-780,-797,-121,1000,468,-632,-402,-430,-711,-278,-371,215,-1000,-327,-879,-278,-528,1000,-637,-132,1000,-105,-276,-79,-757,608,-523,-440,817,-617,-371,-804,1000,804,-482,-1000,-563}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00492() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{283,1000,333,-576,-521,-704,-480,-996,-682,118,863,893,-1000,896,-978,-1000,-563,-1000,-853,-174,-452,601,664,-646,-170,211,1000,149,-304,-292,1000,111,347,-333,-1000,33,-729,-121,1000,-1000,258,-1000,-84,-663,915,-809,-31,165,1000,-786,-554,-393,833,-1000,-1000,449,-591,1000,-1000,-841,434,-1000,-1000,512}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00493() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-146,89,-1000,-774,548,335,-652,1000,-141,523,703,38,1000,-1000,404,-293,377,-202,282,-394,1000,468,-176,737,1000,734,-1000,-841,-1000,-1000,971,-83,851,-805,-256,-102,266,777,1000,937,1000,1000,-1000,799,1000,115,-145,-247,1000,297,334,531,-1000,723,-25,-301,1000,-1000,-1000,-112,-1000,821,-112,228}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00494() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-226,1000,179,69,269,-27,291,-932,-395,634,66,109,-1000,1000,-671,-23,-233,-208,-284,392,-815,674,438,3,-420,-868,1000,-172,871,255,-653,-441,870,407,-1000,-383,-1000,223,377,-759,134,-391,1000,-870,1000,-302,-77,-747,952,-618,-927,-311,515,-907,-1000,-73,-434,-621,-675,-446,468,381,129,-198}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00495() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getLegendLabelURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-94,-116,-656,-742,-473,-563,73,-19,597,-55,884,-4,-1000,-550,622,-1000,1000,-1000,-1000,922,516,19,-65,1000,240,541,106,-788,-1000,-714,1000,224,-325,-57,-952,-49,-548,507,1000,-1000,100,-939,-1000,-117,-714,-555,39,-276,773,211,786,71,-299,459,-1000,-220,816,315,-721,-1000,-604,1000,363,501}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00496() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{-659,237,-400,248,929,289,0,886,-110,1000,-350,1000,-157,-75,-996,622,-515,-1000,-461,164,200,740,562,1000,161,-810,1000,179,741,1000,-252,-330,752,52,1000,-1000,-1000,708,345,1000,-262,1000,-468,-337,-928,-181,-1000,453,-9,1000,1000,-1000,-1000,1000,204,926,324,-1000,-327,-539,539,734,-901,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00497() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{-866,-1000,-771,835,659,995,-1000,1000,-597,-1000,346,-159,-35,1000,-532,-591,708,759,1000,1000,-198,436,-433,1000,-1000,129,511,78,-950,-398,-1000,832,-936,1000,-541,-1000,-948,-1000,-1000,-458,1000,-1000,1000,-1000,888,411,-1000,1000,-1000,-385,-1000,571,-1000,499,162,-677,-1000,547,16,-725,-487,-1000,996,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00498() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{-333,-659,-1000,-386,824,966,-1000,620,-596,-1000,-26,-709,1000,987,268,288,1000,672,1000,1000,-310,946,254,1000,-773,613,24,890,241,589,-842,1000,-1000,1000,-1000,-406,317,-950,-1000,-964,601,-1000,1000,-728,621,658,-1000,1000,-1000,-545,-596,-13,1000,133,-608,-922,-1000,849,1000,89,-393,-713,1000,-493}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00499() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{1000,1000,214,332,641,1000,-299,-303,-298,101,321,144,1000,-1000,-20,672,-580,1000,-1000,714,-1000,1000,530,-1000,-1000,798,-1000,103,-190,838,-1000,1000,-1000,102,133,-1000,1000,-971,-379,-1000,-329,234,-1000,255,1000,-1000,-228,519,-1000,-1000,-1000,550,-445,843,-210,-1000,-321,-588,1000,577,-894,-1000,849,-727}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00500() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{990,742,309,457,605,204,428,-862,-397,376,305,-668,231,375,11,591,-806,-26,-841,-184,-790,883,-36,1000,-10,-1000,-613,-867,-443,-93,359,-808,189,-1000,-594,52,-157,721,-612,-324,-88,914,-486,652,-839,42,-157,-1000,567,-44,-120,-1000,-674,476,480,967,1000,-531,-176,-999,-648,-177,-615,398}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00501() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{48,-34,-392,-387,713,-311,281,-966,-974,10,733,349,376,-509,-412,534,-100,346,248,1000,-14,607,246,786,298,560,664,540,325,104,-1000,509,-738,1000,-155,-41,209,-270,-513,-386,534,-1000,332,-415,641,-590,-1000,1000,-855,-117,-546,92,168,345,-898,-845,-1000,-437,713,670,-140,-818,75,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00502() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{472,765,-842,-1000,749,665,-964,344,-421,-754,208,668,924,-245,-59,520,646,456,-351,1000,-14,904,897,547,-798,834,-447,1000,550,965,-1000,1000,-1000,1000,-808,-77,715,-971,-807,-602,178,-1000,-5,893,431,-201,-1000,1000,-1000,-166,-558,-345,318,1000,-551,-889,-1000,19,937,750,6,-590,929,731}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00503() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{-741,717,-1000,173,-467,-904,1000,30,-617,-733,-941,-1000,505,1000,-846,-834,-320,1000,1000,-131,494,700,-927,-486,517,533,-1000,-981,268,-1000,-764,48,-824,663,-1000,-721,65,-783,301,-1000,-450,-1000,-376,191,848,-154,1000,-602,-8,-362,217,1000,801,-1000,831,-320,631,323,-582,-1000,-247,-1000,904,225}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00504() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{-361,125,-1000,-937,84,-871,-1000,1000,-164,672,-592,-682,-161,1000,-313,89,125,846,1000,-296,390,283,-230,177,771,380,-576,-410,704,-910,-632,99,-553,720,-123,-20,-682,-864,-297,-600,-695,-947,-770,23,241,36,508,-495,592,313,546,-41,-198,-1000,1000,119,959,414,1000,-179,305,-991,270,-110}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00505() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{987,-429,-296,-1000,-533,20,-1000,637,584,-89,-1000,-832,1000,-251,620,538,1000,333,205,-224,1000,342,1000,-629,-583,472,-117,1000,1000,951,-1000,1000,-892,730,-990,749,831,-72,-337,-842,-1000,-980,44,326,-459,-362,-436,127,-186,491,-423,-107,293,208,1000,283,147,525,1000,916,860,-532,1000,-446}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00506() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{594,-303,-1000,539,388,154,1000,44,-1000,-1000,773,-1000,449,-118,1000,-264,-176,1000,1000,821,-440,200,-107,-865,113,412,-755,-540,-1000,-918,244,-365,-494,-908,-582,-1000,507,-1000,-180,-1000,895,-892,708,-818,931,293,-657,-925,919,-1000,-1000,1000,-557,311,-208,-860,-626,-423,129,-340,-1000,-1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00507() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{132,615,245,182,679,958,-949,-209,114,659,-194,-757,633,-643,-252,64,-44,-592,-377,709,131,287,959,-471,-996,472,536,489,675,665,-1000,1000,-1000,978,266,680,17,-343,440,-370,-88,-312,385,198,-839,-425,-893,1000,-1000,39,-672,-36,-456,1000,-219,-507,-1000,-665,852,286,263,-717,21,429}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00508() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{1000,499,-1000,1000,143,-469,893,-1000,-636,708,761,-202,236,-965,276,1000,-1000,1000,-934,189,-1000,301,74,887,-20,-1000,-1000,-1000,-762,-755,94,-1000,-733,-727,-495,-914,1000,-245,-1000,-1000,312,951,-216,955,865,-763,168,-672,-147,-1000,-1000,167,-820,-101,-244,-343,240,-104,-179,182,-453,-1000,302,-814}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00509() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{-1000,-157,414,508,152,-357,-614,-182,179,1000,-774,1000,550,671,-1000,328,76,-1000,620,87,834,71,534,427,486,-578,1000,196,905,1000,1000,-970,1000,-339,1000,1000,-1000,515,1000,1000,119,1000,488,-442,-1000,-4,-47,-733,-11,1000,1000,-1000,-1000,1000,-170,1000,1000,-56,-448,-751,1000,1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00510() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{-659,37,-753,729,813,-739,373,-514,-339,1000,-7,1000,-259,415,-1000,425,-645,-1000,760,225,200,292,14,835,602,-1000,1000,-594,484,118,1000,-1000,1000,-653,1000,1000,-1000,660,1000,1000,468,1000,544,-407,-901,-285,-428,-167,604,1000,1000,-1000,-1000,1000,-318,1000,1000,-1000,-1000,-514,400,734,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00511() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumExplodePercent():double",
+            new int[]{-1000,-123,-1000,824,798,-864,823,-895,-641,-228,233,710,-429,1000,-1000,58,-751,-325,1000,538,-160,702,-903,1000,817,-1000,400,1000,-147,-1000,968,-1000,400,-219,-580,348,-937,526,-1000,158,1000,651,1000,-168,-312,-517,-231,163,123,99,615,-321,-481,240,-749,400,-492,-499,-1000,153,-117,214,-1000,-408}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00512() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{389,-39,-94,-61,-275,744,853,810,4,591,610,198,-765,-80,-359,-198,-774,466,-1,-156,1000,-138,351,613,-412,392,491,1000,-800,-1000,756,418,-214,388,-27,-348,1000,-175,-1000,565,-1000,-587,-1000,1000,390,-238,-1000,-431,-568,-152,251,-66,-246,511,-743,-456,-343,101,55,1000,1000,-547,-1000,619}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00513() {
+        org.junit.Assert.assertEquals("java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{1000,-654,739,-311,41,1000,994,-836,-91,-55,-139,818,1000,-400,-655,-1000,-454,466,-285,-511,-1000,-376,1000,378,-491,831,-47,277,-163,-1000,-1000,1000,1000,493,170,-507,1000,5,275,-820,-294,62,850,-1000,-210,-130,669,-446,812,452,979,737,122,402,-365,-334,-381,267,472,110,-1000,-224,606,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00514() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{-1000,1000,569,-307,21,1000,728,695,-469,843,1000,1000,-1000,1000,899,561,-992,-1000,675,-406,1000,601,-315,-1000,-437,-628,-887,392,191,-1000,1000,-1000,-911,-681,1000,1000,-1000,-833,301,-683,-706,-852,-1000,1000,-1000,1000,-99,1000,-882,-659,-1000,1000,1000,-1000,263,-280,-238,-612,-1000,-81,834,-779,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00515() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{-225,-677,-351,926,-20,-988,-423,-492,-351,266,665,235,-391,636,-329,-687,-31,-49,-802,838,472,498,79,944,226,-1000,-262,125,309,-966,989,953,-950,122,35,-511,-649,1000,-850,887,-253,-706,-573,-1000,828,-453,1000,-906,157,303,976,-976,-400,1000,-9,581,-1000,842,881,143,776,-532,330,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00516() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{1000,1000,-887,147,1000,-1000,294,653,-875,427,255,1000,63,-328,520,-1000,-1000,434,-1000,804,-274,-204,1000,1000,-205,-577,-1000,117,-210,-1000,520,1000,-1000,-990,-1000,-25,1000,99,-1000,-1000,-730,-946,470,-772,1000,-1000,-293,-1000,984,-102,824,-1000,112,1000,612,-1000,-1000,-171,1000,467,1000,560,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00517() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{-400,-1000,-61,916,-6,502,-162,13,264,44,1000,-1000,645,979,-1000,387,-1000,-128,-81,722,-108,749,-1000,-509,128,-296,1000,35,461,536,-28,-1000,430,-608,879,1000,-830,275,142,1000,-515,-443,898,748,-377,1000,1000,1000,-196,1000,-18,1000,1000,-852,618,1000,-1000,-1000,817,-686,-1000,947,-788,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00518() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{813,-1000,-361,535,1000,-1000,-158,-376,-992,836,1000,563,804,-885,-1000,-138,-166,617,-741,957,-63,764,-107,-348,108,-82,-813,-361,180,-544,-1000,615,-800,-1000,-250,755,-1000,665,398,-283,467,-334,298,-879,-311,-952,150,1000,-293,267,377,141,-394,-283,744,782,190,355,1000,-324,1000,-70,-169,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00519() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{-1000,1000,603,515,-670,1000,30,-526,-610,-939,1000,-728,-1000,1000,939,182,-1000,-623,798,38,1000,343,-1000,-851,-858,-517,423,-80,-76,157,1000,-1000,-804,-582,1000,1000,263,107,-144,1000,-743,-1000,-1000,426,-1000,1000,-1000,978,-1000,-189,-1000,810,-558,215,178,-1000,-1000,-666,-1000,713,-233,-737,-1000,-847}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00520() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{-608,-434,-707,358,561,954,591,-758,-171,-4,952,1000,1000,-40,-871,110,-1000,-851,-172,-342,-400,-181,-1000,-1000,46,-1000,1000,774,235,564,-516,-1000,900,-1000,376,400,-1000,-1000,-358,229,-875,-808,169,-65,-1000,1000,623,1000,208,873,-851,1000,1000,-1000,1000,-780,481,-1000,-564,-653,-1000,1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00521() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{-1000,181,-1000,796,954,-912,24,-1000,-1000,-173,808,708,402,1000,1000,552,-909,-1000,-328,1000,437,866,-974,-1000,596,-1000,-482,-765,-290,-486,980,-687,-1000,-1000,957,1000,-1000,-621,-98,-168,-648,-136,-591,270,-821,961,484,1000,-327,-640,-1000,128,846,-1000,1000,-287,-275,101,-304,-1000,982,412,-340,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00522() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{-1000,357,-513,271,91,1000,314,979,-91,693,673,818,-664,358,-507,197,-1000,310,433,-1000,1000,99,-606,-239,-337,-279,900,1000,-519,-894,447,-982,979,92,-320,-348,596,-1000,-1000,972,-1000,-1000,-1000,907,399,137,-620,969,-760,132,-1000,-827,484,-889,138,-1000,-1000,-927,-1000,1000,-1000,227,-1000,-391}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00523() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{-1000,1000,-761,165,-179,1000,705,-758,-965,176,1000,-637,169,1000,413,543,-992,-851,659,-467,1000,140,-1000,-1000,16,-1000,201,-11,-344,1000,340,-1000,797,-1000,479,348,-1000,-1000,94,93,-780,-852,-1000,867,-1000,1000,-86,1000,-1000,323,-1000,1000,1000,-1000,1000,-670,585,-1000,-1000,-363,-709,501,-551,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00524() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{-225,958,388,-101,-378,943,253,695,-72,38,962,-873,-1000,370,22,360,-1000,-450,330,-281,1000,237,-46,-336,-463,284,646,1000,-266,-438,1000,-789,-341,110,897,855,1,-148,-358,1000,-926,-1000,-1000,1000,-590,589,-790,762,-878,-166,-342,541,495,-336,-281,265,-343,-367,-1000,1000,1000,-413,-1000,-509}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00525() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{313,-1000,-441,721,-445,-508,8,-405,-904,-501,435,1000,362,-132,214,-972,-666,130,-768,1000,1000,286,-511,1000,-83,-71,-1000,-980,272,-864,640,1000,-666,120,-433,143,1000,734,-850,327,53,-236,-491,464,582,-532,-620,-1000,-97,105,-287,-1000,-1000,1000,-576,-162,-778,1000,872,463,1000,53,-515,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00526() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{1000,1000,-976,70,104,-359,91,-207,-740,839,827,1000,-712,-482,370,-48,227,-359,-109,-56,1000,-257,453,1000,-368,-569,-608,712,580,-755,1000,19,-1000,-490,-870,393,-56,-636,-1000,144,-1000,-337,-917,726,426,-983,-1000,-688,-606,-870,-472,-982,1000,348,838,-866,-540,694,-272,1000,1000,429,-1000,63}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00527() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4xNA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMaximumLabelWidth():double",
+            new int[]{-141,260,449,-96,-445,433,481,548,-753,-651,32,-216,-34,657,541,-859,650,-628,207,0,246,312,54,187,-368,-76,-556,-651,122,-387,-159,341,696,539,876,-898,801,-68,280,-582,410,68,-755,43,-26,167,292,-601,210,-451,-191,-598,183,239,-1000,-606,-358,1000,-205,-183,111,-767,583,516}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00528() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{660,-1000,329,1000,886,1000,-465,-1000,190,53,335,-961,1000,459,13,977,-1000,-253,-1000,-656,565,568,-169,-1000,1000,-48,-447,229,-171,-600,208,132,337,-373,-75,-1000,-442,291,779,172,-767,508,-721,-36,1000,-1000,-466,726,1000,1000,358,-168,-1000,-275,1000,-1000,-135,1000,-808,-861,-787,205,-618,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00529() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-439,-365,551,342,1000,948,908,-462,518,994,745,-401,-294,248,-400,369,-649,-768,1000,-20,-929,-626,-993,-74,-1000,297,-1000,-319,-531,292,-1000,393,302,1,305,-78,-59,1000,437,1000,-76,-291,369,-17,635,-617,737,-29,982,459,174,-703,-555,116,-18,-900,-295,219,-694,223,-438,-938,-239,582}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00530() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-702,708,134,-431,-867,-322,694,666,426,600,-537,150,-734,-685,377,-424,295,995,662,-878,-9,-286,901,867,-111,-541,-543,28,330,682,926,-2,-803,833,759,286,-315,-50,-495,-977,628,-631,198,-459,161,869,-624,-252,550,-829,-111,-514,937,611,244,882,-586,994,562,-181,384,201,-605,-916}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00531() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-549,406,329,-844,111,247,1000,-1000,1000,531,-85,-629,-178,163,892,1000,-1000,266,299,-656,-917,-436,-1000,143,-129,-292,-994,-581,-792,-600,-752,132,-520,639,-184,311,-1000,1000,860,1000,480,508,1000,-1000,873,-119,469,963,1000,1000,234,-168,1000,95,1000,484,-1000,1000,-808,-1000,-134,205,-661,327}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00532() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-702,-357,-1000,-1000,154,-215,833,-1000,426,224,-547,-388,-734,707,307,807,-1000,995,-1000,15,-142,51,218,323,-111,-1000,-973,-701,-795,257,-100,871,204,281,496,765,-131,614,779,823,502,162,1000,-519,-328,-617,-316,1000,76,1000,308,1000,294,-307,1000,61,-1000,136,-459,-1000,-1000,-468,143,-624}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00533() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{369,-274,124,-541,375,354,-109,387,-652,356,917,685,-861,985,554,444,-510,-693,846,75,-257,463,-125,-491,-893,610,690,914,786,831,-832,10,-907,635,657,227,290,323,514,585,-631,467,-225,-20,235,-6,108,-218,-187,-8,-93,-869,-488,247,-33,-879,157,-308,487,-817,-994,553,-653,-575}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00534() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-944,-25,419,836,-71,671,-570,-694,209,-992,-711,-59,331,551,-1000,937,-1000,666,29,-301,1000,343,-566,81,-569,-778,-1000,-217,-823,130,-859,1000,-207,1000,737,-515,-877,1000,1000,613,79,731,-137,-930,-391,-471,474,-20,-486,330,1000,396,-1000,24,1000,-1000,-1000,124,-1000,-273,-499,-539,-47,131}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00535() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-969,267,678,-1000,-385,177,709,433,-818,-1000,4,-262,125,-83,-743,452,-1000,520,72,-813,280,-361,-95,919,-208,-552,-1000,585,-1000,11,-334,1000,-749,898,215,575,-463,1000,582,106,900,1000,1000,-239,802,149,471,160,963,241,277,-314,-150,311,1000,-977,-1000,34,-1000,-208,-168,-487,444,-824}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00536() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-1000,879,478,-1000,-356,360,232,118,430,-712,-553,-1000,509,1000,1000,-55,-904,1000,-432,-217,1000,336,743,-92,370,-1000,-1000,-190,1000,500,-859,1000,-438,729,-462,243,-1000,7,-853,64,-806,1000,1000,-1000,401,-1000,-1000,-82,853,120,-478,306,720,-1000,1000,997,-821,-475,-237,-557,-802,-873,-515,570}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00537() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-230,-570,373,-386,738,278,990,-382,117,989,317,267,-462,-589,-837,403,-628,-771,1000,-296,-1000,-856,-921,517,-821,594,80,-119,-1000,364,-1000,-12,205,195,518,-77,421,1000,790,1000,827,-955,1000,361,52,170,1000,230,131,192,299,-1000,-599,773,-547,-982,-666,856,-1000,-2,-49,-453,-51,-352}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00538() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-226,725,868,1000,-213,-109,-56,-351,189,-236,-22,-730,611,32,565,95,-863,-57,-58,45,902,528,289,-210,233,-212,-571,6,446,479,469,1000,6,613,-447,-564,-717,1000,684,215,-86,-123,-373,-455,795,-419,-700,402,577,578,-555,768,-544,-428,862,-450,-362,781,89,-597,127,-643,-578,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00539() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{232,-1000,614,149,-81,479,-109,-1000,-342,467,181,-55,-1000,742,398,1000,-1000,-1000,-174,1000,-832,-324,-1000,-551,101,250,393,97,355,638,-807,69,-907,305,1000,581,222,323,781,1000,229,623,-229,-68,738,-374,-202,244,132,843,591,-863,347,247,-33,-284,-681,718,487,-922,-1000,-123,-777,8}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00540() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-1000,1000,-291,-1000,-1000,-351,1000,1000,128,652,-1000,276,-574,459,395,-1000,1000,1000,1000,-1000,-145,-801,1000,1000,-1000,-829,-117,631,704,-122,1000,658,-1000,1000,938,1000,-497,225,-1000,172,1000,-1000,711,-448,-368,1000,-725,204,267,-1000,-1000,1000,-494,897,6,991,-594,337,1000,585,1000,1000,-582,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00541() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-841,159,1000,666,238,153,215,-660,-986,-1000,-659,-328,476,595,-1000,664,-1000,0,213,-574,509,223,-228,494,-531,-452,-1000,509,-1000,92,-705,1000,-610,974,-64,-166,-550,1000,1000,1000,728,1000,875,-1000,-368,-290,681,436,1000,646,144,444,-1000,254,-318,-1000,-910,271,-1000,-399,-841,-707,488,103}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00542() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{-1000,305,-140,-390,-532,-552,394,413,53,566,-885,266,-83,-431,458,-237,131,1000,-21,-434,661,98,1000,24,-706,-762,-620,-258,659,675,1000,576,-1000,472,1000,-142,-40,-613,-233,-1000,714,-1000,136,-4,473,-255,-937,-621,782,-810,-128,62,115,754,254,563,-229,788,506,-156,96,-97,-753,-838}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00543() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4wRS01", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getMinimumArcAngleToDraw():double",
+            new int[]{101,1000,-662,-951,-1000,-341,958,1000,1000,650,362,389,-144,-923,1000,994,1000,583,1000,-563,-380,-350,1000,513,-321,-346,681,211,1000,1000,1000,61,-482,510,305,775,209,-692,-1000,-1000,222,-1000,-446,147,798,1000,-1000,803,-353,-1000,-1000,-997,1000,478,820,1000,287,939,1000,141,780,907,-1000,-526}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00544() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{222,10,39,-1000,-218,-719,1000,86,1000,665,-361,550,779,-789,1000,620,688,-1000,268,-863,1000,860,-144,-492,1000,-621,-1000,163,490,-762,-323,594,-476,1000,-990,484,-1000,433,490,-28,842,-1000,1000,-1000,342,1000,-892,-529,137,1000,603,1000,-593,-1000,1000,1000,-386,-310,772,-920,-1000,-273,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00545() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTIxNDc0ODM2NDg=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-91,-275,459,-731,-340,334,-285,186,359,-328,191,358,1000,-853,442,-147,8,-348,94,-337,953,-265,656,-635,370,427,839,-1000,-872,-159,-1000,416,-350,-285,-973,125,452,310,1000,-786,176,644,240,254,1000,-494,642,199,1000,-916,-195,-38,-1000,66,1000,-533,15,-940,1000,266,-141,723,-634,44}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00546() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-119,1000,429,-447,-414,1000,448,13,-822,874,1000,278,-338,-716,708,1000,641,1000,167,-1000,1000,-234,1000,-274,1000,334,-1000,-1000,1000,705,-221,-1000,1000,1000,87,833,-188,510,1000,-1000,-1000,341,1000,-1000,1000,-989,631,222,-651,-1000,847,121,-205,368,1000,-817,564,-1000,-277,151,-414,-991,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00547() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{200,-706,-26,-941,-300,-1000,-295,197,-637,167,-184,1000,837,661,1000,170,-232,-1000,-702,-616,425,677,-313,-144,1000,40,-828,-185,-23,-813,-460,770,-674,145,-94,689,-699,-223,375,-205,840,-699,1000,-950,209,1000,-339,-1000,581,892,546,1000,-227,-898,1000,440,118,-140,258,-913,-75,-512,-947,-418}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00548() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-91,29,802,-257,1000,274,879,-113,763,475,-581,358,87,-401,-126,-147,-316,-403,-218,-483,-679,893,13,-1000,-466,-471,-298,454,970,132,-1000,474,811,156,1000,875,-491,282,718,399,1000,644,579,-615,385,-1000,-974,857,-262,1000,756,-119,-453,1000,282,-449,152,-630,369,-822,-141,653,-693,-307}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00549() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-179,-312,924,-731,743,754,-270,167,-921,1000,574,-331,1000,-1000,1000,-419,-654,-112,-77,-867,357,744,1000,-1000,341,1000,485,-281,-425,593,-1000,10,233,1000,1000,1000,343,528,1000,-845,-94,1000,636,-826,1000,-697,337,1000,740,-103,598,-521,146,1000,1000,-1000,589,-1000,968,266,689,450,-971,805}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00550() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-106,-236,774,-234,-832,-89,-160,0,235,-1000,998,921,1000,513,-103,16,-1000,143,709,575,277,-909,181,-269,226,810,0,-1000,-1000,672,-1000,240,-783,-717,-385,407,985,-514,756,-1000,368,895,-83,1000,1000,-221,921,-903,1000,-602,-725,-825,396,-27,1000,-1000,880,-327,378,429,527,-172,-756,689}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00551() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-253,437,465,408,94,38,172,377,-637,807,372,671,-924,261,-99,323,165,476,-315,-209,12,-208,-392,-370,315,458,-119,-628,428,480,-339,-883,483,198,738,393,683,452,431,-188,-312,121,579,-1,-451,644,474,-538,-745,180,-339,-820,264,654,218,-942,130,291,-382,-13,-701,336,-492,376}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00552() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{292,-795,889,-493,-312,-719,996,-157,-446,385,633,-168,656,-789,-464,-38,-241,117,617,96,437,134,-144,-399,-230,-621,-653,163,22,205,-354,432,-476,688,-990,-572,-755,-147,673,-28,842,-581,831,343,297,-203,-303,-198,744,552,-329,-326,496,-365,433,267,-102,-713,617,-920,-802,-273,-413,-556}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00553() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{5,-113,490,-257,544,-445,940,-188,763,631,-581,22,36,-254,228,46,-50,-664,-86,-387,-334,795,-389,-980,87,-273,-298,275,654,-226,-654,353,172,177,725,514,-491,187,404,446,1000,148,579,-615,-75,75,-898,-123,-269,1000,478,227,-168,327,282,5,-93,-147,210,-916,-462,357,-693,-665}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00554() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-36,748,539,-471,-1000,13,413,584,-850,78,-398,1000,-492,189,-644,927,122,708,781,420,-825,-1000,-736,-40,412,-13,-575,-898,-361,455,-570,-541,-735,245,-1000,-192,807,140,496,-1000,18,-75,288,1000,594,-357,903,-1000,384,-946,-1000,-719,280,-798,393,-380,-215,383,132,425,517,-752,-386,653}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00555() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-342,626,23,682,-494,-963,658,-18,1000,1000,-1000,117,-383,-8,245,983,1000,-1000,-529,1000,656,112,-1000,-261,965,275,-1000,1000,72,19,78,-54,481,1000,-734,497,247,-355,-330,-905,-826,-801,-988,-124,-61,1000,-843,-1000,-451,1000,-262,105,1000,-1000,533,1000,271,1000,775,-73,513,-1000,-348,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00556() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{70,963,816,-485,-702,-251,1000,-275,-205,-447,883,384,1000,-1000,-556,1000,12,425,592,329,587,-356,-591,-504,-190,-679,133,163,-302,1000,-542,-159,-854,1000,-1000,327,66,251,425,-408,873,-296,211,978,621,302,-473,-471,2,747,-556,-778,1000,-666,1000,-237,-49,27,342,-335,-1000,-1000,-1000,-459}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00557() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-65,-913,358,-459,-133,-613,-160,13,550,-540,379,717,991,513,708,-641,-859,-582,261,-218,-13,-234,837,-209,734,594,551,-622,-982,7,-934,361,-743,-842,605,250,501,-129,732,-510,442,566,469,129,578,81,985,-551,982,-508,-244,121,-395,102,911,-960,564,-623,265,151,527,-172,-538,319}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00558() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-115,1000,358,-189,131,1000,-467,1000,-630,1000,670,19,-753,-1000,446,1000,1000,1000,-270,-1000,1000,779,25,94,631,-34,-1000,-598,1000,276,-384,-1000,1000,1000,9,989,-393,1000,1000,859,-1000,-165,1000,-1000,662,-744,-626,728,-1000,380,1000,-723,-422,413,642,51,-278,-506,808,-238,-928,718,161,-24}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00559() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPieIndex():int",
+            new int[]{-526,-113,784,1000,919,507,940,-360,763,631,-47,-399,-604,243,-621,-408,-70,559,-1000,204,-334,95,317,-478,445,876,593,-349,207,974,-812,-864,752,606,1000,565,1000,589,-119,319,-289,1000,-360,-386,-555,-555,503,800,-269,-341,-427,-1000,-688,1000,-113,-1000,1000,-339,28,212,-1000,1000,-532,400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00560() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{776,-836,624,-675,-639,355,-577,409,140,-1000,-1000,862,516,-1000,-591,-359,-341,-187,-734,-170,1000,-629,-185,6,-478,1000,-384,-1000,568,-829,1000,-947,-640,874,1000,962,-356,-97,811,1000,-136,-715,28,246,-215,271,-995,-325,-537,-285,611,-746,802,1000,-1000,52,-1000,-10,778,-233,-1000,-757,-650,-564}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00561() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{-671,653,82,-531,279,576,-996,156,442,34,633,-252,73,426,-72,399,-1000,-20,408,1000,-662,-769,1000,1000,1000,992,-167,-199,-114,-50,-1000,411,813,745,846,-1000,194,-740,-506,-771,529,360,230,959,-1000,883,617,529,-94,273,992,349,-855,-398,768,-193,-36,852,142,881,1000,1000,-259,543}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00562() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{-754,364,289,-202,465,438,294,451,1000,-47,568,-573,182,316,-697,306,-167,691,10,-855,-117,331,-913,-511,-526,761,309,13,-360,-1000,463,-213,591,302,589,1000,1,-846,-48,1000,-1000,-735,579,668,588,670,461,-878,216,-1000,-584,-92,817,763,-688,160,-287,261,-622,577,-713,-973,366,-414}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00563() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{-965,378,279,967,-198,85,-485,-311,623,-561,620,-89,-526,675,369,-555,621,727,255,-1000,1000,591,390,501,-103,509,479,259,-194,369,-919,-136,868,-106,57,-354,-784,-520,-914,-737,-533,-38,709,82,-1000,896,768,-499,-991,490,20,797,-644,-748,760,1000,569,-601,400,818,259,168,-265,37}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00564() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{-1000,715,-340,1000,279,512,-559,214,896,267,821,-175,73,1000,-72,399,136,-20,896,-1000,-96,888,128,-176,-587,278,1000,682,-400,375,-883,246,764,109,557,416,-515,-774,-621,-625,-106,-69,738,480,-1000,561,1000,-1000,130,-45,-400,-224,-252,-754,768,1000,-36,100,142,914,75,-493,50,-489}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00565() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{-42,629,-310,-917,323,8,-996,-844,412,-26,633,-252,-355,572,-620,-58,-235,132,-61,709,338,847,455,556,451,600,-329,-400,515,-472,-526,84,890,63,846,-725,266,-740,-113,-619,224,129,-587,698,-813,348,894,529,-880,273,992,-399,-252,-519,815,-334,-193,198,141,774,916,929,-667,316}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00566() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{793,-580,824,-885,-200,-747,944,-777,-330,-1,-313,987,-886,-388,302,-484,-261,821,-861,491,902,-318,535,231,-1,983,-543,-419,682,-679,-224,-514,-690,-57,-700,-986,-827,508,292,334,495,-192,107,-308,29,201,780,766,-809,996,928,980,99,371,180,297,623,-477,-527,-167,631,715,43,223}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00567() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{1000,-156,469,-863,324,321,-1000,656,230,-1000,18,192,567,-1000,-606,42,21,991,-284,935,-130,564,-476,-11,126,1000,-797,-257,45,-1000,739,-1000,-103,416,1000,327,138,-676,673,-63,-139,-535,-1000,481,-376,-56,175,-972,-1000,0,1000,66,840,-400,-74,-363,-302,-545,1000,-111,687,-64,-54,-29}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00568() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{414,1000,-396,628,1000,-237,-1000,-462,926,-873,1000,-1000,-590,-1000,79,-520,-702,726,170,1000,321,-369,-988,929,298,874,41,434,-1000,-1000,553,33,1000,-134,1000,-568,1000,-1000,-487,-614,-89,-706,-1000,722,-391,273,1000,-858,-557,-441,983,-254,616,-1000,136,-132,247,144,92,1000,161,1000,-76,195}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00569() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{-1000,1000,557,335,151,-237,-1000,-848,450,1000,1000,-1000,-953,1000,886,178,591,726,1000,565,-506,13,1000,820,298,1000,232,682,-760,575,-1000,181,928,-134,1000,-1000,-516,-1000,-984,-1000,1000,497,592,41,-575,762,1000,531,-1000,1000,983,255,-1000,-1000,1000,833,1000,-279,1000,1000,1000,1000,-549,124}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00570() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{-763,1000,-866,30,1000,486,-66,1000,674,-1000,564,-1000,320,796,-1000,672,-782,-586,823,-1000,-1000,1000,-1000,-583,-1000,-1000,477,233,-300,-366,1000,230,1000,837,1000,1000,1000,-608,355,-222,-1000,-312,-537,623,1000,-1000,729,-1000,493,-898,-350,-572,709,-970,497,-1000,-384,848,-711,1000,-1000,-707,939,-654}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00571() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{-623,623,-90,955,774,836,35,653,743,-403,-307,-824,545,-37,-397,810,-479,-603,139,-505,-1000,-316,194,202,-65,-255,706,-58,-101,591,-438,0,-196,808,322,1000,1000,306,473,-135,338,-160,-173,156,-617,132,-992,-749,216,876,-777,-442,-279,-865,-804,-791,-832,81,906,733,161,-21,-212,-67}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00572() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{135,101,-36,475,542,-1000,-143,83,-166,1000,705,988,-1000,697,591,-249,-141,1000,353,777,-498,54,553,-521,-274,478,-251,761,420,526,-1000,-88,-153,767,-59,-924,-1000,-71,111,-646,206,283,864,-77,362,-223,984,168,-665,1000,132,-242,-29,-775,1000,485,1000,-367,718,440,1000,363,999,53}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00573() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{417,1000,963,-310,1000,-672,-1000,-1000,1000,547,1000,-1000,-1000,652,-976,-1000,-811,213,-1000,763,-265,277,810,1000,625,973,-344,-120,-1000,-1000,710,712,1000,166,1000,-878,1000,-496,-1000,-297,-903,-881,144,976,-270,1000,461,224,-100,-1000,935,-756,298,-285,904,-1000,1000,32,108,1000,580,1000,-498,629}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00574() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{1000,127,1000,-637,246,-650,783,-575,271,-824,1000,-1000,-481,-766,-361,-485,-43,-678,-182,1000,546,221,-488,112,316,1000,-44,-851,-345,-1000,1000,-1000,161,-391,298,-714,-1000,-1000,230,400,-71,-833,-542,-125,878,199,179,-177,-1000,-745,1000,-16,1000,64,-122,651,557,-18,-453,122,389,1000,-956,26}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00575() {
+        org.junit.Assert.assertEquals("java.lang.String:UGllIFBsb3Q=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getPlotType():java.lang.String",
+            new int[]{-86,122,-36,475,-569,392,1000,-1000,-189,336,-143,296,104,749,591,-367,-4,327,223,-22,746,54,553,274,-847,-3,422,-239,-665,526,-197,25,-356,767,-292,-281,-845,218,200,-466,761,-39,864,-265,190,-21,984,-453,61,823,1000,711,-262,-547,115,1000,317,36,59,750,184,280,-995,-395}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00576() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-48,297,-254,705,-1000,-682,-1000,-146,990,-1000,147,1000,-770,-1000,-187,273,405,1000,269,1000,935,1000,-1000,1000,-484,636,-133,499,922,-1000,1000,502,239,-693,375,353,383,-273,701,-752,-8,739,-919,1000,994,-1000,343,94,-800,840,121,-388,168,277,-807,-641,163,-1000,-1000,-879,-1000,386,99,-732}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00577() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-18,1000,-636,392,-1000,-1000,-16,390,879,-172,580,695,1000,-1000,579,-884,-631,-1000,-302,-187,-141,1000,-1000,255,-33,-49,-1000,966,1000,-1000,693,-1000,-295,225,-220,-718,-1000,296,1000,-408,42,-554,-258,-959,-719,289,229,-229,423,-1000,1000,-468,122,873,-118,297,-355,85,-499,-80,-35,-561,1000,-757}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00578() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-1000,1000,-286,606,-515,868,141,146,-805,330,-105,185,-749,249,-867,278,11,1000,240,571,4,-262,740,-288,101,-415,-138,-719,-345,766,-775,72,1000,-361,-1000,-1000,-1000,295,-324,854,392,315,53,880,-366,111,1000,-813,78,1000,-592,1000,255,602,-936,725,71,1000,-419,249,26,-11,-1000,73}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00579() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-875,1000,-757,913,-362,963,-46,991,-1000,-483,-1000,-948,-1000,249,-1000,1000,-558,1000,-302,979,189,-255,504,384,-33,-206,245,-559,-1000,1000,-1000,789,1000,225,-1000,-1000,-1000,639,-858,1000,88,-440,-1,1000,-251,-165,756,-1000,-466,1000,-1000,1000,-335,31,-1000,998,44,1000,-520,-89,627,-561,-1000,15}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00580() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-584,744,-466,340,-894,-523,69,384,-521,-1000,-353,-669,825,-1000,-735,490,-546,-1000,396,680,-708,921,-28,316,277,-854,-732,103,516,-468,-44,-405,916,-289,-993,-385,383,606,626,213,-217,-163,131,215,-759,-299,660,-513,-84,-464,23,932,587,297,-118,295,125,259,-163,312,-97,-727,1000,-144}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00581() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-619,532,-176,403,1000,1000,1000,57,-1000,1000,141,-101,-1000,944,233,498,-325,1000,-423,-533,-281,-1000,1000,-948,1000,-687,11,-386,-1000,1000,-710,-680,358,-370,-719,-1000,-1000,639,-765,1000,120,-627,48,905,-593,1000,282,-638,903,-771,-388,982,-210,583,-337,869,44,1000,-206,766,871,907,-260,110}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00582() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-678,668,-276,202,1000,1000,994,92,-1000,1000,624,103,-1000,1000,-59,625,-1000,1000,-800,-797,-978,-1000,1000,-972,1000,-860,714,-1000,-1000,1000,-887,-1000,854,-803,-1000,-1000,-1000,146,-1000,1000,486,-267,667,1000,263,1000,1000,-1000,1000,-232,-550,1000,534,880,-292,677,-131,1000,-352,1000,1000,1000,-528,488}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00583() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-118,153,709,289,1000,1000,440,-1000,-776,926,-216,766,-1000,329,687,1000,-793,590,-1000,623,-1000,-1000,1000,723,509,-124,250,-940,-1000,314,160,-746,159,-796,-306,-247,-1000,587,-1000,1000,346,886,-241,1000,689,564,24,-1000,1000,1000,112,1000,888,76,1000,325,1000,586,499,857,-29,1000,124,-417}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00584() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-538,621,375,165,-692,413,-286,-1000,9,-1000,-235,496,-691,-777,-499,-764,1000,953,-793,1000,39,-39,289,684,315,-614,-106,-197,-328,-934,995,421,1000,-429,-227,302,389,15,30,-185,380,1000,-920,1000,53,674,235,-155,991,1000,-252,992,844,55,155,-1000,1000,-919,-611,-134,-1000,835,105,-328}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00585() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-1000,1000,-966,804,-982,-232,327,757,-141,192,4,1000,-657,249,13,-240,-420,913,988,118,75,-244,7,1000,-321,-88,-1000,111,-345,416,-980,-335,50,-1000,-843,-1000,-1000,647,1000,872,392,-1000,53,-415,-930,902,335,-353,1000,48,934,-183,117,602,-936,710,-881,1000,-1000,-40,-99,664,-822,-369}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00586() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{247,1000,3,-165,-1000,-245,612,85,-132,-61,1000,229,1000,-656,-517,-247,91,-531,1000,26,-1000,820,-133,-427,473,-1000,-1000,-671,1000,-1000,563,-1000,1000,-446,-1000,-1000,-93,235,1000,-387,-217,106,401,-133,-1000,-71,1000,-1000,94,-603,645,1000,1000,1000,-379,746,-46,1000,-217,540,-545,434,1000,-163}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00587() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-488,813,-583,913,510,1000,-546,169,-601,131,-1000,-176,-1000,249,-1000,900,84,1000,-949,995,777,-624,504,-52,-493,864,925,-543,-1000,1000,-1000,1000,711,225,-788,-639,-1000,740,-1000,1000,769,439,-344,1000,922,-261,187,-248,-466,1000,-984,450,-852,-272,-1000,362,44,385,-416,-663,32,-768,-1000,-124}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00588() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{68,18,323,296,65,-1000,-517,-226,1000,-126,14,-323,506,-1000,101,389,1000,-1000,-214,-368,799,1000,-661,349,442,396,735,-243,211,-560,486,383,-47,-426,131,-365,-182,1000,224,-145,222,-1000,-895,-296,687,-461,443,855,-1000,1000,270,-942,-580,-894,-342,-732,853,-610,752,-1000,-207,-1000,240,-729}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00589() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-825,730,-6,-481,1000,1000,1000,-371,-1000,1000,459,-208,-526,464,-788,825,298,1000,-828,131,-960,-1000,1000,-1000,509,-1000,-1000,286,-1000,1000,131,-1000,689,-808,-1000,-1000,-301,598,-239,1000,-366,416,-175,1000,744,111,744,-1000,1000,859,-377,1000,136,1000,632,-50,53,1000,-90,1000,-394,1000,-747,126}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00590() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-1000,421,-512,1000,-490,897,-620,114,36,1000,445,-1000,-464,-1000,947,264,73,1000,-63,-893,-72,-979,-260,-738,987,-989,207,734,49,-375,-23,-130,187,-143,-672,-1000,-1000,487,-1,184,445,600,-856,885,-124,-1,1000,-663,349,32,1000,1000,-639,1000,-603,1000,59,1000,-1000,358,-741,863,-749,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00591() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinePaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-887,758,-112,847,-448,1000,-690,34,-841,-987,-879,-264,185,344,-888,1000,367,400,-1000,1000,757,-441,384,726,249,50,1000,-628,-1000,639,-91,1000,1000,221,-207,-823,-585,228,-1000,491,-40,435,-615,1000,1000,-1000,890,-544,-1000,1000,-1000,1000,-214,-379,-991,-107,573,-481,-266,-335,-199,-840,-1000,30}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00592() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{-460,927,465,155,-671,827,-989,-194,679,639,-271,310,-318,316,416,-20,210,729,549,-945,-791,-400,866,901,-898,825,-664,-64,-273,445,628,-36,639,13,915,-362,125,-805,603,-631,-212,30,424,147,-781,-491,-807,-528,-111,844,528,868,-809,-858,799,-695,308,60,-297,-745,-513,462,-42,-914}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00593() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{189,-642,-186,-412,-28,-1000,853,153,-559,-275,-1000,-880,-579,195,301,217,140,-75,-697,1000,1000,395,-542,-522,219,-431,721,1000,776,170,-80,-913,-425,-71,265,105,-197,568,-437,-306,-1000,10,-450,14,1000,1000,-503,913,50,-1000,-441,-916,808,-708,-1000,371,133,117,-137,1000,343,788,-78,543}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00594() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{881,-642,-186,143,275,-141,350,1000,-506,55,-213,611,-579,-132,-1000,530,53,-188,220,-647,60,826,-1000,-305,-449,813,-1000,1000,195,430,-706,1000,-835,-1000,1000,105,-843,961,-278,1000,-150,-820,-852,1000,-766,1000,-665,618,584,1000,357,1000,242,-708,-952,322,-263,-507,-824,246,-364,-79,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00595() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{-913,1000,-376,365,89,-1000,225,-128,880,862,777,-211,-77,645,-435,753,261,514,-409,-881,127,-197,138,228,279,600,-103,-1000,880,973,485,335,497,66,-53,875,1,216,1000,927,702,-381,541,-319,-633,-376,-1000,-1000,285,62,823,643,554,-108,951,-91,-370,925,16,-1000,-185,-598,-930,-865}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00596() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{1000,-1000,769,397,-380,476,-199,-295,-450,-407,469,569,-354,59,200,-785,459,-54,-809,1000,1000,1000,-1000,-658,507,312,691,1000,-34,867,-782,421,-425,-555,265,-613,-652,25,-495,-724,-678,-173,-227,1000,1000,14,-537,1000,-1000,-693,-994,-247,-1000,-1000,-1000,-18,-469,-77,-509,1000,374,1000,602,672}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00597() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{-177,1000,608,566,-949,-722,-992,507,1000,851,362,867,-1000,337,-861,-227,-396,1000,916,-1000,-1000,650,-428,792,-929,1000,-1000,-604,-267,1000,1000,1000,847,-1000,1000,-54,-118,-1000,1000,206,479,-853,1000,568,-1000,-935,-1000,-1000,232,1000,323,1000,-912,-571,1000,-871,-654,715,-100,-289,-1000,-104,-13,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00598() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{876,768,-556,-756,-665,-722,197,507,-109,-536,652,-1000,274,-533,332,-648,208,-1000,-613,-244,674,26,-300,-1000,-810,-60,-1000,1000,311,-58,-1000,-104,-1000,-652,546,-54,-507,1000,-1000,473,982,-260,-1000,96,-1000,1000,-53,-186,969,1000,1000,1000,365,728,22,2,-1000,-866,-1000,374,591,-385,-13,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00599() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{515,723,-533,-1000,323,-608,978,-338,134,-275,-865,-669,-159,331,603,935,-672,110,-1000,1000,1000,315,-378,43,1000,-267,721,859,625,-232,-75,-1000,-425,270,-892,561,10,979,746,-658,-1000,-194,-673,-849,1000,1000,-1000,546,2,-1000,-1000,-1000,848,-1000,-1000,754,386,671,446,399,59,660,66,268}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00600() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{541,702,-542,-593,91,920,127,896,480,255,-898,782,-203,929,-684,553,-453,131,-774,-326,-139,-446,-340,494,844,972,-12,693,792,-40,31,782,427,-707,859,-829,-197,681,397,948,-939,84,557,637,-143,70,-454,-43,915,409,-71,859,934,-581,57,-23,856,-535,-469,-961,-628,435,548,752}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00601() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{-222,441,-1000,745,789,71,898,-951,40,-98,534,-832,318,357,115,808,140,-959,-892,-44,1000,-741,-121,-795,1000,-75,1000,-372,902,178,-445,50,233,551,-1000,1000,591,-69,-1000,1000,146,126,-507,-928,1000,1000,-503,913,-86,-839,-277,178,377,360,225,1000,152,503,128,-957,222,563,-950,545}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00602() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{-17,927,1000,937,883,-71,-229,626,486,1000,1000,-1000,1000,370,-872,-455,-182,40,831,-522,-1000,-196,818,-1000,33,-280,-1000,55,-1000,-493,1000,-1000,-122,755,-102,-120,1000,-1000,-1000,-1000,1000,396,407,546,-1000,122,140,850,116,1000,-951,1000,570,779,818,580,-421,-214,-267,-860,-346,-977,762,-251}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00603() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{-623,840,-991,833,-1000,221,690,-793,-632,835,1000,-1000,1000,-233,802,-205,-668,-839,-314,-727,-966,-1000,800,-935,700,-952,-410,-1000,491,405,-145,-1000,901,1000,-406,-757,840,150,-1000,-578,1000,629,421,-892,-803,-615,-204,-322,-188,-477,607,195,-53,-1000,1000,212,-659,312,238,-658,857,-1000,-1000,132}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00604() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{602,564,-712,19,315,415,44,341,-100,495,508,-182,88,971,-100,-390,-425,-256,296,-126,-1000,-602,452,164,1000,-244,-958,400,-780,-1000,650,-870,799,-62,1000,-12,453,-488,320,-182,-556,-340,1000,-1000,-39,-1,34,644,900,127,-635,-533,1000,719,452,401,466,-247,-76,-994,-833,-634,260,244}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00605() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{38,104,-542,696,-1000,189,-941,-389,99,391,-898,1000,-203,-312,-389,-664,836,954,600,-759,-139,1000,-319,-322,-189,1000,832,105,-352,-40,483,1000,1000,-944,-344,993,-245,-223,1000,439,-1000,-1000,-528,225,-34,-625,-1000,-1000,915,-173,-71,-390,-1000,-557,353,-106,856,999,461,1000,-965,238,740,-675}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00606() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{-54,1000,244,478,-521,-790,-609,812,-100,703,552,227,-888,726,-1000,25,-915,1000,916,-1000,-1000,293,-331,718,-337,-62,-958,-368,-267,-568,1000,530,692,-1000,1000,-412,88,-1000,839,566,479,-787,1000,57,-1000,-379,-828,-324,847,1000,290,590,461,-104,848,-213,-385,757,-286,-496,-833,-455,273,-750}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00607() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlineStroke(java.lang.Comparable):java.awt.Stroke",
+            new int[]{-74,-563,-1000,365,-381,-900,1000,-1000,-771,-772,-255,-545,-635,309,41,1000,1000,-742,-529,641,1000,259,-118,-313,1000,1000,1000,969,61,150,100,-435,-57,-274,-1000,934,538,-9,1000,927,-1000,-381,-1000,-1000,927,1000,-670,1000,-377,-1000,11,-1000,554,-186,-1000,1000,358,493,1000,981,-247,42,115,981}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00608() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{961,400,-436,-764,1000,-290,-314,-88,-520,19,-760,566,-612,-158,-1000,63,-400,-810,220,933,-221,251,101,577,193,645,-391,-189,136,-1000,-63,187,-662,-674,-1000,-52,-108,-102,-685,682,-193,401,316,-168,429,264,-147,1000,1000,-1000,561,-1000,-626,630,-264,-400,56,467,-109,-672,-130,-12,164,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00609() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{-465,-1000,649,-467,-957,1000,-93,-1000,-1000,1000,564,67,-267,1000,581,771,1000,-1000,1000,1000,767,1000,-594,-168,-1000,343,1000,330,-82,-28,-1000,216,-777,533,1000,271,1000,-1000,940,-889,-795,-978,-1000,769,204,-699,1000,-398,-197,1000,148,557,1000,-147,1000,1000,-1000,-895,953,-130,1000,-949,578,158}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00610() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{596,-1000,-391,-712,28,946,156,-506,-886,378,613,173,-240,715,-546,782,508,-584,624,1000,910,582,-76,95,-1000,509,540,-9,-74,-269,-1000,680,-711,-253,326,271,1000,-1000,-77,-606,-612,-164,-868,1000,609,-502,810,281,322,426,502,-557,76,207,1000,1000,-481,15,411,-100,432,-723,852,148}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00611() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{-1000,-861,-361,-1000,1000,902,-164,-34,-781,791,-221,738,-608,621,-92,-447,768,-853,1000,1000,835,661,-693,97,-512,618,659,784,-726,443,-953,-34,-924,-781,-234,99,1000,-1000,150,394,-677,-511,-818,829,432,-471,565,1000,708,-344,530,-502,-179,757,651,503,-873,-170,-177,-822,804,60,164,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00612() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{58,-780,429,-667,-324,140,330,-865,-964,212,-149,-383,-370,657,-1000,113,281,-714,184,568,104,7,-130,-15,-330,-537,437,119,-153,385,-848,-93,568,852,938,852,-267,495,1000,314,111,346,289,395,347,478,177,-184,407,16,22,56,913,-426,521,-497,79,163,-765,623,284,-136,37,13}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00613() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{-722,768,639,632,-1000,-1000,332,-12,238,-80,-1000,-511,-991,-402,-1000,-651,-99,-89,-1000,-1000,867,697,-522,-484,-1000,1000,760,938,350,513,-122,716,1000,101,-588,1000,-109,1000,-990,-217,393,534,-24,-1000,-1000,1000,-133,-742,282,-209,-333,768,991,-424,-1000,-46,591,-328,-1000,1000,26,743,-974,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00614() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{1000,-1000,-816,-922,547,1000,998,148,-165,49,1000,285,-323,1000,637,889,258,-1,1000,1000,1000,1000,-586,-112,-441,1000,0,529,-1000,-597,-439,935,-1000,-672,-111,550,1000,-1000,-696,-924,-1000,-806,-1000,977,-822,-1000,1000,546,938,1000,231,-179,-1000,459,736,1000,-782,-251,1000,-1000,226,25,634,-152}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00615() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{-1000,-321,-539,-892,468,528,-396,735,-416,-543,-948,-933,-1000,610,-1000,-1000,1000,-218,37,-63,39,0,-894,301,-779,1000,817,1000,-1000,-64,-930,482,836,1000,347,1000,518,1000,69,581,-398,1000,847,-1000,-44,1000,230,-29,7,86,656,1000,1000,-1000,-1000,784,654,69,-475,1000,-949,1000,-1000,753}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00616() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{1000,1000,-856,1000,-928,1000,644,-6,55,-1000,715,-733,58,-419,732,255,-1000,-565,-889,594,-921,-73,818,159,12,-1000,-777,-1000,1000,548,702,843,977,619,-1000,622,-1000,705,-1000,-639,504,-418,-75,353,-559,-568,3,-989,115,185,-1000,221,-1000,-702,271,-463,-31,-330,1000,146,-993,-996,1000,-892}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00617() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{190,-244,-62,705,-1000,259,1000,85,-161,-643,996,-451,117,202,1000,562,324,-1000,282,-139,273,1000,-516,-803,-1000,147,130,-560,584,391,217,925,105,-1000,-870,440,383,-571,-766,-1000,-640,-1000,-1000,1000,-1000,-1000,748,-1000,-429,1000,-1000,872,-1000,-422,347,1000,495,-24,1000,-534,-428,-1000,1000,615}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00618() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{479,-20,49,-675,400,50,-649,-192,-805,181,-861,554,-114,-95,-1000,134,20,-1000,368,923,-24,475,-373,65,-76,647,26,-800,176,-290,-352,202,-603,-1000,-725,-254,99,-322,-487,212,-713,6,-43,-1000,-126,86,89,670,1000,-400,663,-500,-614,461,116,20,-218,115,-72,-314,-263,-308,415,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00619() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{1000,912,769,125,-839,-669,535,-362,524,1000,-586,-242,-888,-1000,800,-452,-150,-1000,-1000,-1000,-1000,720,-241,-351,344,332,-286,36,1000,-850,-346,-49,792,-832,-1000,-434,57,409,-828,-1000,-377,-1000,-880,857,-1000,-261,1000,36,598,-1000,-301,315,-863,128,367,1000,-96,-787,-707,-846,-83,-243,-286,915}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00620() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{1000,1000,-173,-38,341,-269,151,-303,-618,1000,-521,-90,-181,-913,972,691,-4,-63,-889,-197,-529,-237,562,-290,710,-1000,-240,-1000,210,-482,-992,724,-251,-172,142,785,-865,454,-685,-1000,-795,126,547,1000,-44,-143,1000,1000,1000,-1000,-128,-99,-737,-40,1000,26,360,-217,-59,495,273,-1000,484,96}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00621() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{850,703,-723,468,231,-180,-192,540,-784,-390,-874,-434,-860,-448,-397,199,-306,-940,-80,-837,-392,-761,-140,285,606,-235,-969,-524,678,935,-685,102,-47,-955,-131,236,-170,-127,-376,33,-644,306,-609,-326,358,-93,-57,180,303,578,-286,741,-525,-633,125,-844,681,961,-7,507,-595,414,923,-802}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00622() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{361,801,547,398,-1000,-859,-214,-590,-425,-543,199,-605,133,-112,-1000,871,-668,-484,-235,74,-529,414,562,229,303,-454,-500,-482,1000,177,284,721,293,-338,-686,785,-1000,516,-277,-278,539,632,739,-756,-30,538,-378,85,63,-261,-956,-332,71,-382,-490,-290,384,890,-1000,367,-719,-717,1000,946}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00623() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionOutlinesVisible():boolean",
+            new int[]{114,-721,-825,-820,219,-548,83,328,-882,769,774,-301,-321,675,-295,738,-435,-871,-713,-669,-162,-679,761,-905,486,742,408,-759,658,-308,-855,972,-298,-610,-360,451,-588,-477,144,89,297,-709,467,-836,-889,767,710,-436,-554,774,-299,868,-274,-645,-578,870,-398,-598,147,-804,466,-974,505,697}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00624() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{551,-379,-178,-88,432,660,444,-1000,-954,217,-278,-341,-1000,-1000,430,-1000,594,144,-129,-563,-246,31,388,874,245,-1000,-1000,-924,90,-175,-60,-807,647,-1000,-123,-966,680,1000,-608,553,340,1000,-1000,295,-733,905,1000,1000,1000,-580,712,1000,-1000,-1000,-954,499,1000,913,-1000,-50,582,734,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00625() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{191,1000,-91,-587,214,47,1000,487,-343,298,-498,616,-966,149,1000,1000,268,-694,-915,-751,-581,295,408,-14,-428,917,590,-1000,-1000,-860,-993,-413,853,-176,-157,-406,-483,-478,-373,-861,732,828,455,1000,1000,-678,-43,-160,-31,-256,903,-998,431,187,-1000,567,487,-28,255,-269,261,-686,605,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00626() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{534,174,-296,-879,-926,312,856,735,-192,833,-840,132,-388,-193,1000,798,312,890,-1000,-1000,-158,260,149,-300,885,1000,590,-1000,-1000,-941,-402,-658,-1000,-739,340,8,-520,-668,-484,-861,827,323,429,1000,-1000,-732,525,-115,-133,-566,1000,-1000,1000,187,-981,262,737,-346,-327,-280,155,-460,1000,-381}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00627() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-1000,1000,-586,22,-114,-265,-387,13,459,210,288,672,-1000,493,-300,-753,96,-704,400,400,-878,-269,309,358,-1000,-363,-24,400,-408,-349,-1000,390,1000,573,-581,-585,-240,-258,-259,-919,-279,1000,110,-124,1000,-789,-440,-130,-510,85,-400,-804,33,467,-58,-270,345,78,562,119,801,-844,-100,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00628() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{675,-907,-1000,1000,359,-340,-304,-129,-820,386,-118,-1000,-1000,590,181,186,-234,-1000,306,-832,-1000,-796,896,689,-1000,-1000,-66,-96,805,-1000,-1000,-147,1000,-680,-675,-1000,800,-111,-279,587,1000,507,-1000,-408,461,-539,1000,-384,1000,-1000,-589,1000,-1000,508,-592,260,984,66,-347,699,1000,1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00629() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-872,-136,499,-1000,-72,280,687,-744,84,548,62,1000,-107,-1000,-10,1000,1000,317,-876,-751,982,1000,364,279,1000,680,1000,-1000,-1000,1000,-156,-413,-889,25,-58,-587,-776,587,955,-861,-834,1000,455,-482,-623,-70,573,-225,91,1000,903,-1000,1000,-976,-386,-277,-291,386,835,-121,-80,-1000,605,94}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00630() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{327,1000,-91,450,-683,651,-1000,-278,1000,438,-625,-1000,420,298,-491,96,-1000,1000,2,-604,-455,-423,408,-46,-515,312,-1000,-354,-1000,348,410,1000,323,-176,474,-406,-483,-478,-373,-861,944,828,115,1000,-327,1000,-117,324,-102,-256,476,810,47,1000,1000,567,487,-561,-403,662,456,893,242,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00631() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-683,1000,899,-303,229,-559,-301,-409,1000,464,986,735,1000,-1000,281,-501,941,-158,604,258,-44,-138,350,-1000,503,510,1000,-98,-1000,895,668,-819,-252,-437,1000,-1000,-565,201,86,-640,-497,968,-348,696,-114,323,394,100,273,159,-774,-406,729,-347,576,-982,368,-718,-757,295,885,161,685,585}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00632() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{268,-467,-405,-1000,-926,878,694,-636,25,1000,-1000,148,-101,-1000,80,-774,817,133,-1000,-1000,1000,1000,149,-300,1000,-921,819,-1000,-1000,183,-307,-355,-649,-1000,585,243,-409,1000,244,-861,495,480,69,146,-459,100,1000,167,579,905,1000,81,1000,-743,-820,-529,-70,-84,-160,-126,-313,240,303,604}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00633() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-882,1000,-617,-569,1000,-582,-307,1000,916,805,881,1000,-194,130,187,1000,-704,-969,485,649,-1000,-1000,-7,-1000,2,182,646,-1000,-455,156,-1000,987,1000,1000,-631,-1000,-996,-1000,-1000,292,1000,1000,1000,1000,1000,31,808,-1000,900,-848,-497,-1000,440,892,352,-226,381,-844,1000,60,-522,-1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00634() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{942,492,-877,109,-378,-113,-323,-47,1000,764,-353,-1000,1000,511,350,712,-936,818,-48,-1000,-395,-652,577,-499,-50,721,-1000,-692,-543,330,815,505,546,-348,625,-161,-275,-742,-1000,1000,1000,-429,267,778,471,509,812,-120,355,-1000,-176,-468,757,1000,797,355,5,-898,-650,984,1000,-308,637,398}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00635() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{492,174,-681,598,-926,770,-1000,-1000,508,776,108,-1000,-36,566,-719,186,-1000,-195,-671,-586,-1000,-1000,448,58,-414,-829,-1000,44,1000,198,-524,1000,-1000,-470,-263,-850,787,-226,-997,1000,728,341,-471,-165,291,239,1000,-384,1000,-1000,-941,1000,379,314,760,260,602,-395,-212,1000,155,1000,-396,-381}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00636() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-541,-429,-450,449,939,-1000,241,1000,-1000,255,864,400,-1000,1000,523,1000,955,-1000,1000,322,-1000,-1000,545,479,-1000,190,708,21,166,-1000,-1000,-731,1000,510,-1000,-1000,639,-868,293,-813,-83,747,-460,-1000,1000,-1000,840,-1000,150,-1000,-1000,-400,-979,683,-1000,934,427,1000,548,536,671,-400,-937,-962}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00637() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{135,63,898,-88,-215,194,-436,-376,774,-751,903,172,-623,951,-805,-390,-730,-156,-600,993,-556,-165,373,-479,150,258,973,965,642,381,-543,431,849,-691,-632,319,951,313,569,-817,296,752,30,-846,74,965,-510,523,753,-223,261,197,-618,599,-968,-225,-410,470,821,-761,321,888,-52,-559}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00638() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-257,-1000,-707,823,1000,-537,-326,-216,-341,-132,288,147,-1000,824,108,368,-273,-934,400,400,-1000,-497,614,919,-1000,-1000,354,400,564,-516,-1000,-231,1000,742,-1000,-1000,294,-869,-54,-140,-279,994,-401,-461,1000,-685,-314,-864,122,-351,-400,-138,1000,647,-135,-93,1000,633,909,259,1000,-336,-837,185}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00639() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSectionPaint(java.lang.Comparable):java.awt.Paint",
+            new int[]{-1000,-504,204,-637,-744,595,-1000,-989,114,-410,-436,1000,-107,-363,-764,-1000,960,581,38,1000,982,195,-419,1000,82,583,132,2,667,351,985,-117,-675,1000,-868,494,-169,487,1000,613,-1000,-796,-152,-427,-1000,-727,-936,-152,-1000,1000,988,1000,467,-875,563,51,-436,702,557,-1000,-115,-1000,803,-447}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00640() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{-489,327,115,860,644,310,-236,-88,-921,859,-302,440,-923,-932,264,185,628,836,-200,199,235,-394,-1000,-606,-1000,161,927,644,-1000,-484,404,-159,-613,359,-33,-324,-235,1000,-1000,509,1000,404,270,-11,410,-1000,435,-299,317,-596,234,743,1000,1000,658,-532,-34,-111,681,-176,-1000,-428,-239,250}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00641() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{753,-262,-231,-1000,-473,-48,695,368,213,-7,-688,-252,253,314,-621,-313,-768,-13,-1000,283,1000,19,-663,230,-131,459,-946,540,693,-482,334,-904,329,-756,432,-714,629,345,400,161,-738,100,-479,-408,-694,432,-5,-477,21,-167,669,182,715,-1000,177,280,603,595,68,168,-49,-163,-761,372}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00642() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{-190,-331,-155,361,259,-534,637,115,-363,-521,-1000,-1000,-459,649,-893,174,154,-494,336,-232,-342,-1000,44,-241,502,827,909,-41,-673,-36,430,796,-1000,-501,176,-476,842,-70,-766,-126,189,-126,-201,160,-613,-210,-113,16,-530,54,332,591,-231,-617,272,280,-134,-287,87,-1000,-76,-157,1000,-111}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00643() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{443,-86,-771,-581,-553,672,13,308,-579,-382,-921,-1000,373,86,-1000,756,28,-270,-1000,1000,-479,-54,570,474,267,387,792,-887,-150,-379,26,-165,-936,-881,1000,-1000,809,-1000,-634,-865,-635,581,-1000,-1000,-198,125,464,169,-210,-60,10,853,78,-436,1000,657,1000,-127,-908,-503,309,-953,276,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00644() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{-594,-1000,-611,251,1000,-767,370,155,-956,442,-395,-1000,579,-40,-1000,514,-980,498,201,717,266,-25,-627,202,30,-729,1000,-564,-1000,1000,626,416,-858,199,1000,1000,1000,636,1000,-1000,1000,-344,-674,1000,-242,497,-1000,-450,14,696,891,587,800,63,-332,353,-1000,90,1000,-1000,100,-13,741,491}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00645() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{773,-579,-1000,1000,53,-833,139,-1000,-926,156,-96,-398,-415,-319,-404,673,-741,1000,-1000,49,106,1000,-892,-948,298,742,-7,1000,-342,-482,901,-748,221,-419,1000,-171,172,-122,-408,801,251,1000,-754,-866,405,1000,-885,-319,537,-519,518,661,1000,413,1000,85,1000,493,517,-1000,-886,158,-817,30}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00646() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{1000,-1000,459,718,-922,-482,1000,195,770,-106,372,412,-17,-1000,-410,-1000,-603,-230,-916,464,1000,-415,272,-370,-719,76,-256,1000,-243,-1000,459,-1000,1000,-1000,910,-795,1000,507,-197,897,404,833,257,-99,-636,565,-554,-602,-306,-588,-420,-55,730,-423,935,-250,1000,338,328,-16,-646,-367,-1000,958}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00647() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{410,667,297,-400,-224,671,119,-121,-370,1000,-526,941,-234,-755,649,372,-649,725,-1000,-192,354,545,-663,-1000,-452,231,-638,991,548,-1000,-15,-1000,-1000,-463,-382,-1000,-815,146,215,-347,266,493,-508,-1000,-451,-10,1000,279,679,-99,793,455,1000,273,1000,-936,1000,183,1000,-100,-1000,-4,-995,-70}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00648() {
+        org.junit.Assert.assertEquals("COLOR:-2042369", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{1000,-1000,-286,-1000,-502,-1000,1000,-535,1000,-115,229,154,40,-125,-955,-1000,-68,736,-43,-257,1000,380,107,1000,-906,249,-595,1000,-146,-1000,140,-686,607,-1000,-9,123,-11,1000,1000,1000,-435,875,390,586,-1000,262,-386,30,-506,-698,-682,-436,1000,128,-56,748,471,702,-82,489,145,246,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00649() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{-670,-674,-22,428,-922,-912,1000,734,1000,-297,831,-332,1000,162,-1000,-1000,-142,-893,-1000,1000,1000,-512,73,360,-51,-991,-335,-484,-387,-287,361,-1000,1000,-1000,1000,-307,1000,-184,959,601,816,674,-153,761,-1000,1000,-825,-1000,-382,-22,-420,-579,526,-1000,103,565,-1000,409,532,760,536,-385,-397,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00650() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{717,-12,149,916,146,-990,813,866,385,-659,789,60,979,-1000,-901,-762,-1000,167,-170,1000,1000,-183,63,359,-675,-1000,258,633,-932,243,405,-889,717,-510,1000,1000,1000,1000,1000,232,1000,207,-28,1000,-671,1000,-1000,-1000,26,42,146,333,1000,-252,-246,173,-210,408,1000,-16,74,-157,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00651() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{-208,-854,754,-468,349,1000,69,644,-437,749,-562,-192,-99,-789,-893,52,-17,-117,-47,741,624,-876,1000,262,-483,591,1000,198,-1000,-376,430,-394,-355,493,424,-321,889,358,820,637,335,52,-762,-780,-73,-1000,-113,-1000,94,1000,86,155,-295,-590,169,281,-365,-349,-86,-755,511,-540,-211,-351}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00652() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{662,-1000,259,1000,-95,-699,1000,379,963,-759,-805,-684,240,838,-720,455,-358,-1000,655,-791,839,-1000,284,-134,255,972,334,1000,-305,1000,-363,703,-899,-1000,-225,-1000,764,1000,-671,1000,-208,-537,102,290,-1000,519,577,564,-1000,-389,-94,321,-698,-382,447,-166,611,-147,-438,-1000,-127,654,293,917}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00653() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{616,-964,-911,366,214,-1000,977,744,260,-846,-181,-574,-733,-144,-700,-625,724,-311,1000,542,788,-760,73,-65,-978,226,335,831,-595,-288,457,538,-352,-922,790,681,752,583,-23,238,-270,-154,227,1000,-914,-61,-710,-350,-667,-154,276,155,571,-335,219,-77,302,184,699,-116,-447,159,-8,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00654() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{610,-432,439,911,-394,-772,1000,745,866,-1000,-629,-524,-642,1000,-1000,-716,183,-1000,388,-228,266,-1000,618,-468,566,1000,932,1000,-738,-1000,-30,899,-847,85,19,-993,812,1000,-1000,1000,452,-123,657,566,-668,519,421,119,-1000,-1000,-351,178,338,-616,420,15,-941,-300,-75,-608,-273,106,-107,477}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00655() {
+        org.junit.Assert.assertEquals("COLOR:-8355712", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowPaint():java.awt.Paint",
+            new int[]{1000,-1000,-911,-49,39,-1000,1000,-115,-89,-38,81,-763,1000,606,-1000,-405,-1000,-32,-913,512,1000,289,-1000,62,-46,-480,-157,648,-135,166,805,-884,555,-1000,1000,84,1000,65,1000,-690,149,299,-717,201,-760,1000,-1000,-489,-387,571,452,119,713,-710,414,279,305,545,522,208,-87,-49,-848,956}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00656() {
+        org.junit.Assert.assertEquals("java.lang.Double:TmFO", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{60,-319,505,541,-816,-410,-801,-510,-647,89,787,31,53,801,-125,-819,-821,-335,859,-323,-128,-57,769,-535,518,-560,-934,-633,-361,-449,-894,199,458,260,510,765,403,-464,526,-848,528,-278,-405,-474,899,-577,-172,-770,362,-791,848,428,785,978,-442,725,863,232,787,272,894,-291,483,699}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00657() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{-503,-1000,-256,-767,74,96,-1000,845,505,-961,108,514,-900,1000,-341,-1000,-232,335,794,792,-635,-121,493,486,-240,-927,-681,-1000,772,-1000,361,1000,-662,-359,328,428,485,-326,28,1000,-1000,-652,575,189,934,815,-11,-1000,1000,-1000,110,-304,-711,-121,-80,473,197,52,-1000,-931,59,-7,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00658() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{-81,894,959,-698,-1000,-515,619,-89,-855,-344,161,606,956,-398,-216,-351,1000,-462,-96,42,-1000,104,975,840,320,-694,-165,-163,-141,-1000,670,515,285,-1000,-1000,-363,-1000,1000,-1000,1000,781,-460,-397,348,-851,226,-219,495,958,-1000,457,-765,-1000,561,94,534,1000,376,-57,-476,-1000,-622,-1000,559}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00659() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{-71,338,559,-782,-1000,-233,-39,-357,-329,-128,-965,775,-568,1000,866,-112,-274,75,206,985,-1000,74,10,640,331,-800,482,-457,-149,-750,-277,591,1000,-1000,-180,-910,39,-130,236,1000,-1000,-719,1000,-111,353,983,-273,-187,504,-956,163,161,-828,392,-513,-424,-357,1000,-1000,-555,17,-1000,-499,654}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00660() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{-389,308,34,449,-75,-77,-1000,632,165,-798,284,631,-1000,1000,-279,670,-623,251,-322,1000,-576,-100,476,960,-726,-1000,-982,-1000,-756,-1000,791,1000,233,1000,1000,1000,-911,-1000,-506,347,-673,-1000,761,-1000,1000,567,-599,-1000,1000,-1000,995,323,597,16,-342,-107,1000,-743,-1000,186,576,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00661() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{97,964,539,439,-232,-183,-213,-299,-611,220,220,-32,1000,240,544,562,-238,-1000,1000,-236,3,358,46,501,-51,328,415,331,-1000,-334,-827,-273,1000,559,697,-1000,-4,1000,-289,373,-993,-54,-40,-483,310,-401,-1000,810,-1000,-72,242,-221,895,-76,356,-918,272,1000,605,514,-24,-604,-460,119}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00662() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{682,338,979,210,-519,-1000,864,-563,-786,-485,1000,-726,1000,-1000,-214,83,1000,-1000,-78,-846,-193,74,1000,1000,1000,-237,-600,200,76,-1000,659,515,-377,-563,-1000,-240,-1000,1000,-1000,1000,1000,-346,-1000,158,-1000,-1000,-912,1000,643,-621,1000,-897,396,9,1000,562,1000,767,913,-1000,-1000,-685,-1000,559}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00663() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{-993,138,914,626,656,-307,-686,359,-276,-84,931,5,886,-959,-600,-580,640,-132,107,-436,-363,-886,974,178,-276,-194,-879,-448,519,611,522,202,796,-1000,-995,298,-617,666,-1000,-70,518,-647,-940,1000,934,815,-11,-1000,-182,-598,489,-797,-986,-587,589,864,303,-516,118,-752,-1000,479,-1000,573}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00664() {
+        org.junit.Assert.assertEquals("java.lang.Double:LUluZmluaXR5", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{-269,-22,-96,575,-612,-424,-920,-151,-349,10,1000,-252,53,804,-291,205,-1000,-859,449,-219,-2,-168,972,-44,-98,-860,-1000,558,-306,-810,205,201,1000,788,842,864,1000,-535,-331,-660,91,-388,-487,-474,1000,-667,-531,-905,540,-835,1000,326,1000,899,619,421,1000,412,516,44,1000,596,1000,699}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00665() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{80,-117,-217,401,-367,-55,-831,119,-261,-685,-94,634,-1000,996,-43,-792,-281,1000,263,851,-613,60,186,258,154,-571,-339,-482,-836,-1000,97,998,-928,246,527,858,-1000,-898,720,79,-50,-842,879,-1000,-1000,696,-85,-807,746,-937,255,469,157,130,-683,328,507,-1000,-613,512,-52,96,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00666() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{566,-420,169,-213,141,-82,-612,-54,-995,-139,539,380,-1000,730,675,-1000,-1000,470,1000,-577,10,-301,183,-1000,527,152,-1000,-981,-603,-1000,96,444,783,-608,611,-867,658,-887,1000,-441,878,-438,807,360,1000,441,947,1000,-282,1000,-727,1000,-47,201,-1000,387,-666,-664,128,123,-112,-179,711,41}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00667() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{-503,329,-642,-674,354,652,-188,604,-309,-120,-198,715,389,-37,-594,-361,-214,-515,-24,-135,689,-834,243,286,-909,944,-495,-392,-754,-49,-914,-233,904,240,773,-991,892,427,775,272,25,554,-100,-728,341,409,-887,352,-951,326,411,505,267,39,30,-732,-415,-445,411,186,-159,213,-927,411}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00668() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{-66,1000,-426,693,-692,-354,-738,-613,-628,-1000,-842,785,214,545,1000,978,1000,-124,-1000,1000,-1000,-696,633,612,1000,-135,347,-1000,-1000,-1000,1000,1000,1000,-442,-858,-467,-972,115,-1000,-176,-159,-1000,733,-1000,200,509,-755,-402,1000,-1000,690,-991,-655,-314,-1000,-625,1000,-431,-1000,-67,-1000,-403,-203,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00669() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{-331,329,-245,-296,-356,96,-890,604,-89,-798,-259,1000,-1000,1000,-180,-361,-26,1000,-233,1000,-1000,-834,130,486,-909,-1000,23,-1000,-754,-1000,791,1000,17,240,427,825,-896,-1000,-281,1000,-451,-1000,951,-728,347,1000,-11,-912,1000,-1000,153,-136,-1000,-212,-598,415,491,-1000,-1000,186,-458,74,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00670() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{760,-55,-217,1000,332,-1000,-540,-73,10,-1000,1000,-903,1000,-1000,-176,258,1000,-1000,-206,-269,152,1000,1000,1000,716,-348,-599,-482,-444,-1000,775,1000,-928,864,-41,1000,-1000,816,-950,-1000,39,-837,-1000,-1000,-1000,-1000,-1000,696,549,-458,1000,-324,994,-1000,957,456,1000,-899,386,-682,-840,1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00671() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowXOffset():double",
+            new int[]{-152,-265,612,-64,-772,699,474,157,-749,875,-801,943,-475,129,-308,-882,-969,616,-467,822,-189,-953,-478,-767,418,279,66,405,444,472,-249,-906,576,561,975,641,-972,-882,327,-38,986,-193,578,453,723,593,594,261,415,-382,-737,767,-590,230,-384,348,624,-966,-279,-447,-879,45,-358,-341}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00672() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-356,-329,-6,101,400,-412,-807,-502,449,238,-746,1000,-65,1000,535,10,-93,1000,-115,-513,1000,-1000,-1000,407,1000,-613,294,-1000,-1000,676,1000,400,30,444,-239,129,465,145,311,-203,90,-400,-43,168,1000,400,-135,222,1000,-533,1000,302,192,-75,768,240,-664,-697,-177,268,169,144,-685,905}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00673() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-1000,-1000,-911,126,1000,-29,-1000,1000,-268,-944,-913,1000,-673,815,-814,-1000,-792,1000,-1000,-72,453,-292,-1000,750,-325,596,-461,-67,358,580,16,1000,-244,-404,-217,251,415,-159,135,-1000,659,-1000,-1000,-489,-1000,1000,-284,-675,-1000,21,1000,1000,-109,-1000,-771,771,650,-1000,-126,1000,1000,-1000,-224,567}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00674() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{1000,-17,217,-1000,-664,1000,-131,-333,531,326,18,-980,836,-128,-82,-159,315,-1000,-127,-272,-175,-521,-540,-511,-640,489,895,-351,119,-62,-354,-1000,1000,362,400,1000,-343,678,-426,762,647,1000,212,93,720,-1000,-1000,229,1000,754,-1000,-1000,1000,214,73,-987,69,1000,-852,-653,345,32,1000,91}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00675() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-1000,-1000,244,307,1000,-636,400,368,-324,145,-569,1000,-241,1000,1000,-998,-237,753,1000,-240,1000,-1000,-610,-221,399,766,-790,946,-1000,-783,1000,1000,1000,179,-858,-593,-519,217,394,-294,-611,-1000,-933,403,934,1000,426,-406,1000,538,89,861,-155,-1000,-90,956,430,-676,-84,812,-187,-1000,-1000,141}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00676() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-1000,-58,-841,677,1000,-378,828,1000,-419,204,-392,1000,19,-811,851,-763,901,785,-5,-492,-1000,-45,607,26,679,510,-707,496,-880,-349,1000,1000,-979,-806,-1000,-742,-379,886,179,-660,-1000,-1000,1000,443,-600,1000,987,102,-1000,-73,1000,1000,502,123,-168,1000,1000,-230,-190,102,-742,-1000,-1000,-15}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00677() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-338,700,313,-44,-1000,955,-146,-1000,487,-1000,-458,-704,42,110,473,877,-53,339,271,-392,240,-807,335,-942,1000,-940,-108,-471,907,535,107,-746,-376,697,1000,-699,-75,-696,414,-382,689,175,-954,-814,-116,-1000,-1000,1000,1000,736,-574,-1000,269,-549,-1000,-183,-762,942,1000,-759,-511,593,1000,-603}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00678() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-1000,-413,617,59,611,297,554,-41,-318,-486,1000,-408,420,1000,-1000,23,910,883,-184,-22,-571,-1000,-1000,-768,-338,156,-436,876,358,-1000,1000,303,-588,1000,1000,463,-1000,-44,-739,26,-1000,-726,360,-1000,-992,-356,-644,891,-1000,1000,-1000,-748,-675,-431,114,-96,702,-142,155,1000,-235,-507,-1000,-878}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00679() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-98,211,-742,-1000,-132,1000,-484,674,114,523,-288,-386,-37,-429,1000,-362,520,-851,-612,-491,-463,571,-314,-840,638,177,-338,-286,825,-56,-265,-400,-587,-47,-338,257,-670,806,404,233,753,400,681,-4,204,-410,-461,439,570,131,-905,-155,1000,-150,-94,-41,761,188,-707,-508,244,-278,727,-539}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00680() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-398,-577,-742,35,-132,-612,-484,-171,-159,874,-420,814,-65,714,756,-771,-93,-851,1000,-358,848,-1000,-646,-372,638,1000,-558,869,-1000,-861,-265,794,-587,444,-1000,-353,-670,1000,67,-203,-678,400,-43,550,1000,648,1000,-490,1000,539,-430,-155,135,-150,428,1000,10,-554,-524,603,-400,-878,-942,-539}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00681() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-717,-1000,-81,-208,697,-254,-827,459,498,-717,-369,995,-488,647,-95,-626,447,43,309,592,263,-874,-1000,-1000,286,1000,-369,1000,-180,-573,772,1000,361,527,1000,-529,364,-699,440,-418,-911,-985,-462,-1000,-563,-204,-337,-376,-513,482,893,-80,278,-1000,197,-1000,125,1000,-540,1000,86,-1000,-41,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00682() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-1000,-1000,494,-238,1000,-854,-1000,46,410,918,-769,1000,442,989,-1000,-1000,-333,257,133,-474,705,-1000,-1000,434,780,1000,715,1000,-1000,-345,1000,1000,798,-641,-801,257,213,774,-554,-1000,378,-1000,-420,-603,-1000,608,1000,-651,-1000,131,1000,1000,335,-1000,118,-123,-285,238,-1000,1000,707,-1000,708,594}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00683() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-1000,-1000,-262,-224,983,-367,-1000,-1000,875,-1000,-263,1000,553,706,462,-496,414,-11,-990,-1000,-961,726,-238,-779,1000,535,-1000,932,143,915,1000,1000,-1000,-1000,599,1000,73,425,1000,-1000,625,-1000,-76,-1000,-1000,90,571,-1000,-1000,-935,684,756,832,-1000,266,533,350,-1000,122,-377,580,-1000,175,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00684() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{374,293,342,7,715,760,884,740,-292,-833,555,-990,1000,-908,368,-646,-196,-10,260,-825,77,-1000,117,-869,-980,285,1000,-35,-1000,-503,-134,-1000,1000,1000,-710,-923,-91,167,-995,112,48,660,-649,-467,1000,-583,-1000,609,-210,907,-1000,150,-408,-536,-1000,726,111,892,93,-201,-72,-580,487,-642}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00685() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{665,752,-352,-483,-651,-968,-671,1000,68,418,236,-847,-452,-419,769,-105,-334,-857,-218,-107,-407,73,-742,-37,1000,-171,-294,-672,781,-480,-411,-1000,-111,876,-125,147,-182,199,-110,-851,142,1000,424,631,-146,-660,-839,1000,857,1000,-274,-674,991,460,-722,-654,-22,1000,390,297,-333,233,357,132}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00686() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{-722,434,827,-216,-872,432,-379,-1000,-101,-1000,311,-1000,356,72,-796,1000,89,870,507,336,571,-234,-818,-651,-457,-421,-478,-403,84,251,-354,-857,646,497,1000,5,-263,360,-680,124,355,161,-662,-1000,-1000,-440,-226,1000,34,16,672,-890,-480,-562,-464,-352,-743,483,1000,610,-144,548,470,377}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00687() {
+        org.junit.Assert.assertEquals("java.lang.Double:NC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getShadowYOffset():double",
+            new int[]{833,448,274,-1000,-708,-1000,-1000,679,799,1000,-170,-565,527,93,403,-456,-712,-571,-913,-409,-606,511,-1000,684,904,41,372,546,1000,286,-495,-464,-587,94,-1000,1000,381,619,5,-1000,1000,1000,-494,624,340,-912,-64,-52,1000,281,985,97,1000,318,483,-770,-808,1000,-706,95,989,126,1000,912}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00688() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-1000,-769,1000,391,844,-350,1000,-88,-1000,-366,338,-990,-982,1000,194,-115,-1000,-393,1000,839,265,642,-318,750,-336,-1000,-247,-609,568,-1000,1000,-520,-1000,-866,156,296,690,-659,-525,288,-542,647,-345,-1000,-606,742,-141,-1000,1000,1000,667,735,-484,169,-893,-782,1000,26,397,184,557,1000,-723,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00689() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-549,994,134,68,732,-688,948,-1000,-235,590,-919,510,-1000,1000,57,470,-854,850,-691,741,877,-440,-354,895,-546,465,-1000,782,-239,-985,-1000,792,1000,906,-60,-106,699,-320,1000,727,-1000,-776,-685,-595,-499,1000,-52,1000,-1000,-965,995,-657,-301,-315,-801,-471,271,756,-302,-741,-1000,1000,871,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00690() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-623,102,359,-349,1000,-174,1000,-626,-455,-509,-336,-1000,-426,1000,-179,121,-437,228,1000,585,877,1000,598,-117,110,-1000,-499,-847,412,-921,1000,590,-677,-1000,-266,333,468,226,-1000,734,-1000,-184,-685,-807,-152,1000,-1000,-1000,926,1000,78,434,-477,-619,-402,-397,273,-137,-302,631,1000,1000,871,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00691() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-1000,1000,589,-224,179,-325,741,-732,-411,-770,-36,-449,-536,529,543,-468,-956,-133,-285,961,-148,1000,-1000,538,723,-328,-391,-231,-517,-586,348,-608,-148,276,-433,878,101,32,-369,614,915,620,341,-1000,-989,1000,-407,-961,-418,947,-429,560,-386,-775,-1000,-399,151,457,-87,-264,1000,857,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00692() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-1000,-769,1000,-467,-31,-441,12,313,-578,-858,-389,-1000,464,88,787,652,371,-871,866,-876,265,642,-295,-909,454,843,-396,548,664,675,438,-1000,-843,-770,674,1000,-388,446,-525,-292,1000,432,286,-901,164,-542,-156,-936,94,108,286,389,247,-202,736,-427,249,-492,-1000,925,1000,-953,-723,565}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00693() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-906,838,534,80,-5,378,475,473,-442,-163,171,-704,-139,110,-199,-167,-45,4,743,681,-139,866,-317,114,446,-395,-569,-720,207,-586,924,-569,-596,-546,-443,878,378,249,-357,385,381,620,-367,-679,-200,600,-512,-961,273,975,547,677,-156,-175,-839,-148,74,-209,369,574,797,626,-984,-886}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00694() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{486,1000,-381,-276,-153,-71,-193,-515,30,250,-235,-666,226,396,16,244,515,96,111,137,605,412,462,-318,549,-821,-20,661,-95,305,475,585,-137,-663,-965,-393,-582,698,-307,304,340,-767,-121,720,745,1000,-825,-773,217,612,-282,33,-11,-566,174,-83,-982,-432,127,-328,766,458,-116,-3}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00695() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{409,1000,-676,-465,171,-65,519,508,551,590,145,-1000,-279,857,-382,-35,686,356,167,711,1000,1000,1000,-294,1000,-1000,354,-591,234,341,1000,1000,-546,-1000,-1000,-659,-650,866,-853,979,-920,-739,-763,615,530,1000,-1000,-948,940,-330,-709,597,-490,413,-116,19,-1000,-391,554,40,1000,1000,120,-352}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00696() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-423,748,379,811,598,719,-524,310,104,-416,-251,131,-138,119,-683,914,284,506,-575,590,710,193,933,339,666,841,-934,-369,-699,36,-427,458,594,469,-916,365,-688,-292,122,-112,-783,-178,-938,633,561,-311,-917,-631,501,41,113,-771,-234,38,-314,-588,-363,488,672,-395,-924,685,-118,768}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00697() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-100,1000,-277,-151,249,-440,128,19,-168,258,-995,77,766,-281,114,-355,-214,435,627,889,718,-8,-748,73,-452,1000,-1000,864,-562,-469,-944,-416,716,146,-243,744,782,498,-102,-41,1000,457,-1000,-280,-598,554,-1000,-250,-288,-744,841,-895,389,-302,-154,-106,-42,-66,-214,428,-352,329,451,-920}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00698() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-677,-750,828,991,-163,88,362,350,-103,647,1000,-3,-1000,638,396,-544,-726,-741,210,1000,616,592,-324,379,34,-1000,503,-1000,698,-751,1000,-73,-1000,-746,-373,-516,108,-692,-515,216,366,1000,-282,-230,-648,491,880,-743,1000,542,577,1000,-643,-292,-1000,-846,633,24,448,654,143,658,240,341}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00699() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{424,1000,-796,-2,852,-1000,-427,-1000,-276,-243,-1000,537,101,1000,108,784,-440,975,-140,155,1000,-1000,-221,489,-1000,163,-810,1000,-225,-109,-1000,154,1000,-78,-545,-1000,40,-116,1000,39,-260,-1000,-1000,1000,898,1000,-1000,147,-83,-650,171,-1000,158,-191,60,-573,606,-431,75,-365,-1000,591,-132,-117}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00700() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-834,-900,998,-368,647,-407,-929,-550,-666,453,728,899,-127,803,-8,180,-368,-94,1000,-525,862,701,105,-596,160,-615,-514,-310,447,-278,836,-182,-869,-1000,84,812,193,-565,-766,360,-305,421,452,-868,139,404,-866,-1000,387,1000,95,531,-239,-336,-134,-436,57,-362,-988,803,1000,242,699,-502}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00701() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-1000,1000,-607,-760,1000,-277,1000,-351,-1000,-823,-757,-1000,-103,381,-188,237,-681,-39,1000,643,-440,-115,787,-825,866,-149,-731,-396,444,-647,1000,-592,-1000,-1000,-1000,713,570,325,-433,423,826,-601,-1000,-726,156,899,-555,-1000,1000,1000,659,939,176,-343,-1000,-490,-236,-151,940,624,1000,587,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00702() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-513,1000,-381,-282,208,-342,38,-374,30,-13,118,-659,212,832,142,556,119,511,111,166,1000,161,444,65,63,-1000,-231,934,-313,109,475,922,-137,-1000,-777,713,-425,420,26,472,-337,-1000,-277,720,156,1000,-599,-773,217,612,-62,-152,207,-634,193,-543,-885,-197,-202,-899,456,641,533,-59}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00703() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.util.RectangleInsets", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabelOffset():org.jfree.chart.util.RectangleInsets",
+            new int[]{-725,224,-396,-701,711,-1000,562,-766,121,-678,-945,130,-459,559,942,1000,-585,-439,558,-321,1000,206,-1000,-483,256,155,-495,961,263,-291,-990,-159,472,1000,-349,573,348,532,259,211,194,-992,-583,68,-279,628,-542,1000,-547,-188,1000,-610,676,-663,-289,-7,540,254,-1000,-127,250,537,153,-625}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00704() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{329,-61,-396,1000,-1000,782,305,300,869,-569,479,473,-439,1000,-64,40,-605,-207,-269,-493,-227,-1000,-414,595,-926,-1000,856,210,354,550,-484,-1000,738,176,-1000,-118,-511,-452,207,297,-321,-144,625,-606,-1000,160,958,-337,1000,-1000,-1000,1000,866,-294,-379,905,-418,729,-526,-413,566,1000,-101,-528}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00705() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{-11,796,-476,-788,673,-926,-657,-353,74,-84,-635,-83,608,528,244,-731,-873,-75,391,717,132,1000,33,-198,603,246,-272,528,-595,-1000,1000,-278,254,-756,831,-720,-733,1000,-402,815,705,715,-744,229,1000,-494,79,-723,88,-505,1000,-676,-219,327,-278,-280,625,-441,295,239,-794,-140,-528,512}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00706() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{40,-1000,309,-229,-367,-1000,-186,-778,1000,230,-696,-164,1000,1000,-216,-1000,-460,97,-166,55,-320,235,736,892,-367,1000,538,842,-831,63,93,-639,1000,-89,-332,-1000,712,-298,516,1000,1000,-495,1000,-462,-292,-117,607,-734,260,-891,-490,-593,365,566,-98,-779,653,-176,-1000,-1000,-225,-740,169,-574}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00707() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{-270,145,-883,-258,797,288,-446,-701,-540,99,-151,186,34,-535,981,283,417,1000,-215,444,139,361,-733,-1000,733,-1000,-782,355,-877,-752,451,292,434,1000,1000,-986,125,385,-709,523,-192,-1000,-1000,252,1000,-1000,-166,-224,81,800,-205,-1000,-367,-1000,-1000,326,368,-1000,827,887,-165,-384,125,-302}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00708() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{69,447,488,-570,281,-716,-286,323,228,627,-489,-382,797,6,153,-415,-672,-118,391,444,336,923,3,-635,504,-679,46,243,-739,-139,438,-665,261,-657,-233,-643,-296,440,-52,730,510,-698,-57,-290,56,-487,30,-391,-95,-1000,556,-209,190,312,-849,-280,-98,-140,497,824,-468,231,-595,-11}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00709() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{1000,1000,164,-484,1000,-22,-502,-1000,622,-1000,404,28,667,421,1000,789,-192,-766,-958,561,1000,-574,748,-724,1000,449,-1000,1000,-1000,-1000,1000,-44,-516,-245,857,-748,97,873,-1000,1000,993,-72,508,87,850,-909,-129,-1000,-1,539,312,331,234,-661,-200,-411,1000,9,1000,-586,-922,1000,-1000,-589}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00710() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{1000,495,26,1000,-966,299,-273,-75,-815,-1000,363,756,-526,212,812,-38,-924,204,-1000,-40,870,-94,-1000,-840,412,46,742,824,-735,294,-120,-768,12,-557,-1000,179,-609,-267,433,-129,-789,-108,-98,-928,-196,-1000,-34,-1000,-294,-1000,613,823,1000,-231,-478,640,-4,851,-449,222,1000,1000,-161,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00711() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{-537,-548,-407,769,-1000,44,415,200,153,205,-40,271,492,-58,-811,-548,-52,919,1000,146,-477,890,-889,-279,-1000,-212,1000,-873,1000,1000,-166,-945,1000,867,-654,-613,-376,-223,1000,-155,-902,-226,-747,-328,-360,870,145,57,264,-901,-102,-332,72,-28,-1000,1000,-1000,-570,-124,840,813,-225,548,-144}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00712() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{-314,-225,507,-884,-244,-668,209,-209,406,54,-798,183,565,618,377,-1000,-317,373,-376,1000,-657,923,111,-274,-96,644,340,196,-466,-338,1000,-484,997,551,267,-1000,-353,692,167,988,689,-89,506,69,48,723,553,-171,267,-436,259,-904,-200,261,-1000,198,625,-1000,-609,-797,-750,-776,512,-667}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00713() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{296,928,114,493,-150,-1000,1000,857,-208,1000,-797,281,1000,-81,-312,664,-1000,-292,935,833,644,1000,-27,-269,969,-377,823,-445,142,281,-510,-1000,-339,-170,-230,-189,59,547,661,-554,392,-4,291,-1000,-403,187,-413,-461,-1000,-1000,782,34,618,948,-807,-627,-1000,-140,810,1000,-544,1000,-877,150}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00714() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{148,-139,198,254,-1000,-117,495,494,369,-984,871,-973,1000,-100,-772,189,-483,-97,716,-980,82,515,140,1000,1000,607,1000,-650,699,1000,306,-1000,-155,672,-72,65,324,-76,1000,-583,-242,-1000,1000,-1000,-1000,935,-693,-734,-988,-1000,-490,1000,1000,1000,885,-1000,-995,960,-381,-354,444,-740,-304,-894}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00715() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{224,673,287,-1000,810,-1000,-402,-572,-179,32,-1000,-443,848,65,985,-731,-857,-341,-572,717,-11,1000,703,310,1000,-542,-416,1000,755,-1000,1000,-495,259,-878,412,-914,-280,1000,-635,1000,1000,961,310,-12,344,-626,316,-907,-93,-179,808,-609,0,515,-278,-841,1000,-441,-393,-1000,-1000,-155,-619,-378}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00716() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{-1000,-464,-866,110,-1000,-510,1000,304,534,-315,-756,-726,934,-244,-1000,-669,-908,751,1000,-11,-880,1000,-1000,-134,473,-542,1000,-1000,-1000,826,-16,-1000,527,-1000,-616,-142,-1000,543,1000,-605,-563,1000,217,-1000,188,1000,-462,465,163,-1000,701,425,-282,1000,-278,742,-1000,-318,-504,-175,17,425,-735,474}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00717() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{941,-543,164,788,-162,-669,1000,-374,-282,75,-1000,943,-556,1000,1000,-481,-280,-179,-1000,1000,234,-285,539,-1000,-204,1000,151,1000,-1000,-1000,967,-471,1000,1000,-1000,-1000,1000,67,-668,692,734,144,127,142,-107,-172,1000,-651,236,102,479,-579,-226,-555,-1000,-218,1000,-761,-157,-1000,-478,-93,580,-934}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00718() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{-1000,704,-396,271,-383,782,310,-1000,869,-27,462,473,512,-789,-935,-458,429,1000,885,-1000,-530,714,-1000,-703,-1000,-1000,-213,-544,-396,397,-1000,-604,1000,77,-666,-1000,-179,-603,306,666,-374,1000,-693,23,410,-877,-1000,674,1000,-747,-1000,-228,-703,1000,-41,648,-418,-381,-1000,342,1000,748,-1000,990}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00719() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getSimpleLabels():boolean",
+            new int[]{-517,294,-618,412,-684,602,670,79,-218,-113,535,-120,327,-695,-440,185,136,1000,490,-365,-236,-178,-1000,830,-562,-1000,753,-1000,824,872,890,-834,-28,298,283,-260,-129,-95,909,-679,-887,-198,98,-682,-399,419,-466,353,197,-937,289,933,36,294,-796,762,-1000,-21,-54,948,825,120,-229,-530}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00720() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{-1000,-637,1000,359,-177,130,332,-843,-91,112,-985,-1000,1000,-370,626,524,-547,1000,-748,-497,-1000,-957,1000,479,-1000,1000,1000,930,-1000,-1000,392,329,1000,-621,1000,-586,1000,1000,-1000,-786,-1000,754,-113,-310,422,1000,872,221,-1000,230,-1000,1000,-554,-1000,1000,999,-1000,-1000,-307,-705,1000,1000,143,332}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00721() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{-1000,672,774,288,-789,758,-1000,1000,8,-154,-157,-1000,1000,175,-574,227,-420,-187,-193,333,-1000,-855,997,-601,-1000,1000,1000,1000,-693,-348,-181,1000,1000,-47,-492,-1000,1000,1000,-379,1000,-514,1000,344,-544,1000,559,81,-265,-573,-510,-34,992,-1000,544,385,-534,-1000,-37,69,-318,-1000,754,288,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00722() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{857,1000,809,-218,-921,1000,-1000,1000,1000,-303,119,-837,1000,951,663,139,-760,-955,607,1000,-921,-805,276,26,-1000,193,-50,1000,-134,1000,-659,951,711,1000,-1000,-330,-124,210,1000,-735,338,881,907,-1000,-185,513,-1000,-1000,-914,-898,1000,62,-1000,1000,-404,-1000,-361,1000,-478,-1000,-1000,432,37,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00723() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{-780,183,102,-1000,1000,-800,894,807,-915,474,-1000,42,973,11,428,1000,-827,1000,-471,-52,-1000,-1000,-58,-361,296,-20,417,-779,897,-1000,-315,-348,1000,58,965,-717,747,427,-186,87,-1000,-300,-719,-36,-1000,1000,1000,913,-681,1000,-109,213,1000,-1000,252,187,603,-640,-24,62,-402,921,-411,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00724() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{1000,964,-196,-121,801,-861,-678,1000,866,-729,388,359,-1000,-42,585,101,-286,-817,1000,1000,-186,66,-61,268,-167,-1,89,-834,897,411,36,-909,-1000,-474,-1000,-508,1000,-860,30,224,-654,-170,-449,115,1000,519,-1000,-578,-820,-809,574,674,-482,53,23,-1000,971,233,-974,-808,-714,-26,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00725() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{-1000,108,-471,-829,327,-525,1000,-1000,-469,474,-569,-326,171,-326,-93,1000,-763,1000,271,-52,-891,-944,362,-110,-540,20,482,-1000,608,-723,0,-437,895,-495,1000,345,664,404,-863,1000,432,-165,-980,0,-1000,935,866,537,-696,765,-292,784,831,-473,220,489,135,-523,-280,-46,-154,1000,-250,-967}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00726() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{192,-384,-281,698,-1000,832,631,-238,372,-154,1000,-1000,687,-739,-648,266,-184,438,1000,874,898,1000,194,1000,-215,-777,1000,-832,-988,387,-1000,-126,-791,-350,823,-112,252,-198,-689,-214,-821,902,344,-149,178,-574,110,-513,617,-531,-151,992,-1000,-1000,-896,-178,-928,820,-1000,-681,54,-301,170,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00727() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{1000,239,-212,-65,133,933,-1000,259,1000,505,-472,-278,454,993,1000,681,-967,-124,372,688,-512,-649,-199,901,-159,-392,-555,1000,-349,587,203,-43,-921,912,-669,416,-124,-383,904,-1000,-2,336,1000,-1000,-337,821,-906,351,-257,91,504,53,-631,487,-265,-643,158,666,-324,-1000,-192,605,-271,505}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00728() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{-303,-116,553,136,-488,667,-315,-936,682,379,-89,-863,673,1000,710,-179,-388,350,201,-48,-77,229,521,880,-1000,229,617,1000,-299,99,-106,-43,555,107,-539,-489,260,350,-554,-966,-678,1000,-56,-512,1000,389,622,72,-1000,-42,121,702,-1000,-1000,368,123,-750,-29,-771,-902,395,385,-675,42}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00729() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{-163,827,550,-223,-46,306,-746,503,-598,-466,-1000,-1000,1000,-580,665,-71,-17,-166,-942,-198,137,273,-510,329,-537,1000,425,1000,-945,-821,465,1000,901,-460,-140,-238,1000,1000,5,-163,-237,871,157,-234,1000,-148,-54,133,363,-47,-667,834,-1000,-325,1000,85,452,-731,-237,-1000,-791,381,497,962}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00730() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{731,636,183,-335,246,942,-647,-317,966,1000,49,227,-113,400,-350,317,-419,-39,404,1000,712,572,-1000,-139,-232,-822,-229,138,54,1000,-498,78,-880,400,-633,403,42,-985,330,340,-361,384,-14,-1000,-357,534,220,-755,-459,-747,1000,317,-502,763,-1000,-1000,515,-255,-1000,-1000,-274,147,10,61}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00731() {
+        org.junit.Assert.assertEquals("java.lang.Double:LTgyNS4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{-804,-908,-787,-906,-608,-76,-691,452,144,150,297,-825,107,947,-300,256,-988,713,-275,454,77,-691,838,961,-323,-284,782,511,945,-734,-801,5,845,960,939,-638,-247,812,-333,-966,609,-362,-565,364,-703,-730,-497,811,-936,-235,887,-46,-476,-110,-112,144,-943,-143,120,-307,280,-898,484,557}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00732() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{121,-1000,-306,1000,-1000,497,1000,1000,-8,978,1000,-1000,384,-721,-633,887,-354,1000,1000,820,597,651,650,1000,-294,1000,1000,-949,-1000,-34,-1000,-423,-807,-422,1000,-266,239,1000,-1000,-453,-874,886,835,216,1000,-536,22,-275,756,-141,-966,1000,-839,-1000,-851,153,-1000,1000,-1000,-474,445,-375,-77,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00733() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{-400,810,54,-135,225,-67,627,-216,-356,632,-541,-650,-323,-528,-221,730,-480,94,490,243,-919,-361,-47,-649,-700,644,418,-506,-92,-348,-434,567,394,-646,445,-387,472,837,-67,353,2,185,-113,-432,-400,773,63,-338,-404,162,-184,871,601,507,138,73,-381,-66,-554,-247,-233,1000,105,-977}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00734() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{929,676,-6,-514,153,1000,-1000,891,166,1000,350,-869,-196,-451,-221,-573,-53,-646,1000,891,368,500,-352,123,-551,101,412,236,-384,-242,-507,1000,-658,-1000,-359,-746,-97,416,492,353,-57,1000,1000,-532,1000,-238,-446,-156,229,-793,1000,599,-680,138,-643,-970,-1000,847,-1000,-657,-871,-348,994,-756}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00735() {
+        org.junit.Assert.assertEquals("java.lang.Double:OTAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getStartAngle():double",
+            new int[]{898,115,1000,496,-106,1000,-139,-207,278,746,-242,-245,467,369,153,-16,-268,-39,1000,874,636,564,-553,274,-554,-137,133,1000,191,806,-434,614,-608,312,-633,-249,278,-568,234,-911,-1000,1000,593,-1000,638,580,223,-976,-672,-1000,504,468,-1000,394,-454,-644,-279,-589,-1000,-1000,534,147,285,970}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00736() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{428,843,402,-885,-1000,-871,-556,1000,-1000,1000,805,-1000,668,-1000,270,-1000,790,664,-1000,728,-242,-343,1000,370,808,-1000,-465,-639,397,-408,20,-101,-1000,609,-583,-472,167,-292,47,-654,-1000,99,-1000,605,1000,1000,-376,-614,248,-231,-159,298,109,-1000,555,-123,528,412,924,714,410,681,-1000,-587}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00737() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{556,-394,-311,-724,-1000,-505,653,811,-437,793,694,-249,995,-620,22,-762,-1000,564,-938,565,348,-491,-94,375,329,-647,-883,-326,1000,-408,20,480,-1000,-118,0,-1000,-328,227,157,69,201,-58,-36,-97,-187,851,428,389,114,-241,-642,195,65,-810,311,676,777,457,78,203,-108,1000,-911,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00738() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{1000,-473,-1000,-491,-576,514,-1000,292,355,-1000,-203,665,672,-410,-580,-829,1000,-1000,-1000,220,489,400,777,308,-225,1000,-986,-231,-250,-1000,1000,963,1000,312,-784,-306,-865,863,-621,-954,-395,556,325,-679,-1000,-739,423,-59,-794,-288,1000,880,-220,-336,82,71,893,1000,-1000,-1000,-825,532,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00739() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{265,1000,-356,-581,-1000,-519,714,421,-1000,-878,314,-1000,813,-823,642,-451,-1000,-30,-396,1000,54,-15,1000,-1000,431,-1000,-1000,363,-369,-312,-1000,629,118,-232,-1000,661,-161,779,-252,-1000,-4,-1000,-530,-167,1000,1000,-23,-547,1000,-454,-294,-554,820,-1000,1000,403,-268,179,-1000,451,327,704,-1000,-120}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00740() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{1000,1000,-261,-804,-811,-263,-392,532,-242,726,1000,-132,518,-720,-522,-240,326,1000,-313,1000,475,-1000,-789,1000,782,-1000,-967,-342,296,-309,1000,-67,-513,1000,323,333,-284,-440,134,1000,305,1000,-926,-570,1000,478,2,1000,-300,-559,1000,378,-766,-1000,309,319,769,-68,1000,246,-77,-548,-162,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00741() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{1000,92,-856,-1000,9,130,-314,169,-441,-1000,686,-437,682,-329,75,-407,869,-473,1000,1000,15,43,39,670,-369,-134,-708,-84,-615,-347,1000,-206,-389,422,128,-613,-778,697,124,166,-638,430,-164,-177,-1000,-152,393,28,28,-579,411,473,33,-439,576,-34,154,922,358,-703,-797,129,368,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00742() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{13,-492,-177,-809,-66,727,-1000,-943,-59,-183,-808,549,1000,1000,329,-238,54,28,347,308,-387,-233,149,505,404,723,-89,-175,682,-1000,-962,-528,-1000,-180,577,613,-1000,-67,-399,-149,614,-207,1000,854,-754,-6,1000,-583,-68,549,-349,245,0,887,-219,147,315,1000,499,-688,-407,1000,-732,-18}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00743() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{957,-55,-1000,-452,-66,1000,908,-1000,-81,-1000,76,-526,572,689,-635,652,-253,-397,43,557,17,-513,-136,-1000,-63,188,-517,709,-1000,-761,-314,223,894,-295,-379,-366,-561,1000,-465,-34,1000,-728,1000,-1000,-1000,161,923,181,1000,-313,-193,-760,274,182,1000,780,-58,1000,-1000,-1000,-960,-35,126,-137}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00744() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{857,980,-81,-816,-577,-879,-734,1000,-867,762,1000,-769,669,-1000,165,-1000,144,-775,-441,861,345,1000,966,-229,315,-623,-760,-670,-22,-1000,481,1000,471,377,-799,-571,-830,-479,-217,-1000,-1000,554,-1000,-464,1000,211,-282,-63,-727,203,862,1000,-38,-1000,689,-197,1000,-198,-664,-563,-1000,902,-543,-551}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00745() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{291,1000,-336,-1000,126,468,-123,-439,-677,-646,-75,-779,933,49,1000,-1000,267,-982,-202,379,70,729,148,-296,195,-249,-242,-576,541,-140,-342,-488,-771,-619,407,876,-890,322,-566,-149,-994,-798,-111,1000,53,236,337,524,160,448,1000,1000,477,201,907,579,389,1000,-782,-678,-1000,633,-399,-290}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00746() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{656,-1000,-457,-639,953,810,381,-275,154,-1000,268,556,1000,129,-491,-539,832,-53,-687,181,-400,1000,330,-685,-867,1000,-882,-204,-264,-256,-409,1000,-9,119,-128,755,374,1000,717,-1000,285,1000,1000,106,-570,-202,1000,-950,0,175,-357,400,-940,102,14,-122,633,1000,116,-590,-1000,-135,206,-896}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00747() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{-361,488,447,179,-785,-1000,-1000,1000,585,-488,1000,-345,201,497,1000,174,1000,-1000,-1000,-272,37,1000,1000,-260,-1000,714,-1000,-434,1000,-845,1000,1000,-177,856,1000,-895,-890,117,16,-1000,-996,1000,-914,-1000,-1000,-838,-791,680,-1000,-88,813,615,-1000,-339,-1000,1000,654,1000,-882,-1000,-906,-593,1000,408}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00748() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{764,-268,469,-479,-761,-299,-312,1000,44,299,336,-430,695,-620,-74,-747,-128,502,-1000,255,113,-331,-94,1000,985,-396,-663,-364,509,-241,76,137,-918,75,584,-107,-454,-51,-16,69,-157,-27,-438,355,99,851,94,288,-691,309,333,1000,-383,-810,160,-3,1000,-243,-400,596,-378,704,-1000,-437}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00749() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{-1000,-76,-212,-770,1000,930,1000,-904,390,-372,-797,-308,796,190,-697,34,-1000,467,1000,1000,-1000,-938,-94,-340,-1000,-848,-364,-293,-860,489,-1000,-474,-805,112,-843,766,592,1000,623,143,590,-296,1000,-47,1000,1000,714,-808,1000,-168,-1000,-122,-175,-254,14,-419,468,242,1000,678,-1000,411,-1000,182}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00750() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{460,1000,-386,-1000,-1000,-300,-173,-209,-810,9,832,-1000,808,-845,373,-492,-1000,621,622,1000,366,86,757,-1000,-251,-1000,-412,40,628,-539,-1000,338,-715,-362,-1000,-515,-850,156,-161,-586,-397,-1000,-835,-432,937,1000,-47,-358,1000,-1000,-103,-152,1000,-306,1000,757,-124,790,-68,143,-267,332,-1000,-685}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00751() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getToolTipGenerator():org.jfree.chart.labels.PieToolTipGenerator",
+            new int[]{857,843,-672,-711,-268,64,-556,434,-419,-411,1000,-1000,572,-860,-335,-806,291,-843,-164,728,-3,606,1000,-1000,33,-109,-491,-265,-1000,-863,61,615,94,183,-906,131,-611,308,-422,-1000,-1000,-73,-932,-680,639,558,-81,-614,248,27,737,1000,109,-1000,1000,-123,755,412,-829,-225,-515,339,-206,-372}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00752() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-90,-363,-264,-1000,8,-336,-410,-45,-1000,-414,129,-1000,-618,122,36,560,75,-868,-405,-639,-789,415,1000,-1000,1000,35,-99,1000,1000,961,1000,-97,625,247,-190,-912,1000,1000,1000,954,-1000,-641,864,-1000,-1000,591,-29,-421,1000,-371,-276,-158,1000,98,-776,718,374,1000,701,350,858,-837,553,711}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00753() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-475,182,-931,-592,1000,1000,-243,-293,-704,-1000,861,598,-989,883,-515,52,-269,-163,-370,-1000,-1000,-521,1000,772,-259,610,-937,849,362,-397,399,374,930,982,-125,321,-177,1000,-250,463,-760,713,-199,-1000,-539,417,486,-607,1000,498,1000,-1000,-142,391,1000,-777,-344,373,1,482,1000,329,1000,992}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00754() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-49,-811,945,-62,-41,439,1000,-1000,-29,-1000,414,1000,-1000,-11,-100,-373,761,699,-670,35,471,-1000,-479,-1000,-797,-156,279,137,-291,-1000,976,-1000,327,-1000,298,-1000,609,187,-532,197,-472,-1000,-649,1000,-112,0,610,-254,1000,793,-777,-767,853,-1000,142,1000,-87,-409,-1000,103,665,-604,-1000,-361}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00755() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-720,678,869,-757,382,-1000,682,-1000,1000,-871,435,1000,-831,-128,843,124,-1000,529,1000,398,1000,-1000,-1000,-82,-1000,1000,-37,-101,433,-1000,-192,-784,1000,1000,-350,-594,-13,696,-331,24,445,-707,-194,1000,269,-1000,1000,1000,697,1000,352,-757,389,365,318,338,-583,-450,-1000,576,-461,-146,-435,-189}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00756() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-1000,524,554,-550,1000,-585,130,-289,1000,419,1000,1000,-473,1000,1000,515,-1000,1000,730,1000,1000,-1000,-1000,1000,-1000,1000,1000,-1000,149,-415,-1000,-805,823,1000,-1000,-29,-431,-1000,-1000,298,1000,-1000,413,1000,-65,-1000,1000,930,-1000,394,203,-1000,-1000,93,1000,-1000,-1000,-1000,-404,-1000,-1000,1000,-647,464}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00757() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-70,-811,-1000,-1000,-141,-164,1000,-366,114,-590,92,1000,-1000,-11,49,942,-1000,-1000,716,-1000,-1000,583,-479,-430,1000,650,-163,1000,1000,1000,995,519,1000,1000,-675,-976,665,1000,1000,1000,-472,-228,1000,-1000,-734,-246,145,231,1000,-1000,653,459,853,1000,-653,520,443,1000,838,578,775,-675,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00758() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{499,-316,-277,-456,274,574,-131,133,17,-167,161,139,216,373,566,499,125,585,254,-47,-123,-132,-438,619,24,-233,442,-216,183,495,-572,202,337,-10,-423,-824,193,-400,-371,-48,178,-256,-176,400,-759,-399,68,-192,-400,-15,539,-471,-517,-349,235,-960,-180,-497,-235,-289,-552,365,-125,447}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00759() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-29,-526,-712,547,206,121,-459,26,-785,637,117,-327,13,1000,-354,1000,400,129,66,185,-1000,379,400,191,400,432,151,923,36,400,222,-11,29,-397,161,251,379,-291,9,571,-187,-131,873,-79,-417,639,-400,-628,-338,484,615,342,400,-249,149,78,173,259,-803,-162,854,235,1000,-108}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00760() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{613,231,84,-435,212,-213,967,-38,-626,108,-479,-962,-299,92,210,425,-160,-64,-108,677,-775,-187,-8,1000,578,130,-14,1000,1000,704,267,745,351,-341,-531,537,-1000,301,543,352,553,-1000,1000,-927,-264,650,467,590,508,38,-527,130,-87,1000,-3,-304,-396,40,-1000,350,462,457,-435,6}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00761() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-1000,-271,-723,-579,632,-144,623,-572,1000,-247,482,1000,-624,719,870,465,-1000,1000,994,546,852,-1000,-776,1000,-1000,1000,521,-860,-395,-1000,-1000,-705,1000,1000,-754,-1000,-532,-1000,-1000,98,1000,-750,296,1000,269,-850,270,-5,-21,806,707,-737,-1000,714,1000,-444,-1000,-1000,-1000,-473,-669,701,101,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00762() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-1000,224,348,71,729,535,-650,-624,251,-457,658,400,-315,1000,1000,297,980,959,1000,134,-1,-1000,-1000,1000,-1000,-49,-740,-492,649,-760,-1000,21,818,995,-1000,37,-1000,-298,-1000,-255,153,-152,-1000,122,-900,-10,1000,-89,-321,-15,1000,-935,-1000,-44,1000,-1000,-1000,-1000,397,-817,1000,1000,640,362}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00763() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-1000,-462,-456,-177,82,732,-143,251,453,-142,209,-505,-1000,1000,1000,-112,-669,1000,700,119,252,-612,-18,1000,-954,170,952,-705,485,985,-1000,184,394,41,-1000,-954,-270,-1000,-703,-342,457,-376,-847,1000,-473,-749,725,-214,-1000,-486,342,-876,-1000,440,826,-1000,-1000,-1000,781,-837,915,1000,-108,924}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00764() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-262,-681,-326,-954,-215,82,585,-166,322,-213,323,865,-1000,-513,164,-319,233,245,-1000,455,780,-1000,-11,-1000,-858,213,1000,106,-906,-1000,1000,-1000,409,-397,691,-1000,916,147,-431,528,-585,-931,436,1000,890,-1000,679,275,799,508,-1000,-710,1000,1000,-466,1000,56,-36,-1000,794,-298,-914,-1000,481}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00765() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-1000,564,373,-1000,1000,-140,-183,-161,1000,199,1000,1000,1000,1000,1000,560,-1000,1000,1000,-148,522,-1000,-1000,1000,-1000,35,563,-1000,765,961,-1000,-217,906,247,-1000,-912,1000,-1000,1000,-465,1000,-1000,-432,1000,-1000,936,437,284,-1000,381,785,-1000,-1000,-546,1000,-1000,-1000,-1000,794,-1000,44,1000,-53,12}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00766() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-614,470,-382,-950,448,-598,461,-462,1000,-131,329,792,-831,-18,889,383,-1000,684,41,710,1000,-1000,-376,-204,-1000,875,923,-395,-338,-1000,-192,-948,832,1000,-187,-594,768,6,-545,375,445,-819,488,1000,269,-1000,951,1000,136,651,-186,-815,389,200,135,477,-583,-450,-1000,299,-769,31,-212,974}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00767() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "getURLGenerator():org.jfree.chart.urls.PieURLGenerator",
+            new int[]{-75,445,105,-226,759,-881,-720,-201,671,375,416,674,735,1000,370,450,-741,959,341,501,522,-612,-668,826,-1000,-124,577,191,-835,-1000,-1000,-1000,994,1000,-618,165,464,-580,-1000,706,498,-330,203,580,-988,514,1000,614,-327,212,172,-975,-854,59,739,-386,-1000,-1000,388,-414,638,1000,1000,785}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00768() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlotState", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{-122,-102,-711,-562,-806,633,-929,253,683,-521,383,379,654,-298,711,713,-436,501,70,-868,509,216,32,-878,-573,-251,-958,261,785,-356,147,663,519,481,6,-191,-41,-846,-142,58,603,971,-34,586,-289,-504,997,485,906,580,782,330,254,146,929,-349,585,912,907,-574,-741,-496,-639,-34}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00769() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{747,-441,-135,-981,224,79,-137,-301,70,318,1000,302,259,359,297,1000,-491,654,-371,-1000,393,754,594,-1000,-74,-43,-649,111,807,-552,1000,566,1000,760,1000,1000,-784,-499,29,548,833,1000,-102,463,156,-309,1000,355,613,147,474,751,168,782,573,102,396,495,830,-694,-400,34,-589,-1}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00770() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlotState", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{-212,-465,176,-1000,751,399,-1000,-261,-189,1000,-36,73,1000,446,-205,-492,-1000,-38,339,1000,-1000,-818,499,-200,889,-541,1000,-1000,922,383,1000,779,487,599,815,1000,-505,-133,-1000,482,154,-923,-21,1000,468,-1000,574,1000,797,318,419,-501,-869,258,641,-1000,-206,77,1000,-331,357,-345,-707,-560}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00771() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlotState", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{1000,274,-426,-169,1000,861,627,-554,-806,1000,-1000,935,10,847,928,-1000,1000,-889,-715,1000,-826,-1000,-1000,70,1000,1000,1000,-1000,-1000,1000,803,206,-1000,-754,229,1000,1000,1000,1000,1000,448,-1000,-34,931,-289,-504,444,-1000,-1000,-1000,262,-1000,-1000,675,-1000,-610,-1000,-1000,907,-574,1000,-1000,1000,-34}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00772() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{1000,369,16,-1000,-86,274,-698,35,-783,462,432,-86,-296,50,1000,-335,829,-1000,-94,-483,1000,-198,-751,94,773,758,510,-36,-817,123,764,657,697,290,344,1000,280,1000,-46,-103,785,446,-45,181,921,1000,742,-478,138,-1000,419,-79,-585,345,-285,-817,205,419,299,393,334,-1000,-755,-234}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00773() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlotState", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{1000,-790,739,-651,-68,-711,-775,132,44,830,547,-453,-28,-1000,1000,334,1000,-704,-51,956,1000,-664,418,-857,-1000,-331,104,-653,-1000,689,1000,-1000,1000,366,928,1000,443,229,-610,1000,89,861,1000,-665,1000,780,843,-1000,151,-552,1000,62,-1000,704,-51,-705,28,366,563,483,-708,-1000,637,-470}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00774() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlotState", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{-520,-226,-711,161,784,-241,-1000,697,919,-551,637,479,472,-19,342,-1000,1000,-1000,110,150,355,380,863,614,-1000,412,1000,261,763,840,848,-787,418,154,-813,-191,-41,-78,-1000,977,-1000,-941,-296,37,4,1000,1000,485,87,216,-125,-1000,-896,-539,708,-976,-1000,-320,907,1000,359,781,382,220}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00775() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlotState", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{1000,196,-206,1000,-357,76,-901,967,-585,510,572,-1000,-174,166,831,-1000,564,148,392,220,769,-953,342,1000,234,810,269,-604,69,-269,365,115,236,1000,323,-581,-717,703,-376,559,1000,359,-596,-39,396,-552,1000,-898,-547,246,-428,577,715,1000,103,-117,356,383,553,-485,-1000,303,-358,-241}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00776() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlotState", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{853,-126,504,-387,-1000,-1000,689,-244,91,-332,1000,-1000,-1000,855,131,-27,-313,627,276,-1000,1000,554,1000,840,-140,564,-390,161,422,-1000,-456,-923,1000,584,-131,-937,-1000,-777,-564,-457,1000,713,-942,-907,460,1000,1000,81,-1000,-587,-188,1000,1000,355,-494,-150,980,-129,-550,-490,-1000,61,-1000,-205}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00777() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{1000,441,898,299,1000,-286,-901,-536,-84,499,410,235,-1000,1000,-219,699,762,-570,-595,400,-501,-646,-500,467,1000,349,-596,-728,239,596,1000,423,121,1000,413,1000,388,-507,-376,559,1000,-64,-596,1000,814,-552,823,-869,-547,-1000,-338,-513,-676,1000,415,-1000,525,-840,170,701,1000,-1000,-32,-909}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00778() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{856,3,-240,88,-457,-518,-1000,547,585,-643,-1000,-1000,-256,-379,647,797,-1000,848,798,-324,1000,-1000,906,-1000,701,-364,1000,-219,-367,-1000,-213,-272,1000,896,207,-1000,-1000,-653,-1000,-231,999,551,1000,778,543,1000,866,1000,1000,-600,800,1000,-1000,793,280,-1000,-1000,-1000,-96,-1000,-1000,-628,-914,-808}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00779() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{1000,-115,596,-306,1000,513,-265,-36,-721,1000,-311,1000,340,-752,290,1000,986,-1000,-1000,-27,296,-1000,45,-73,140,303,28,-846,-1000,1000,1000,385,941,-885,977,1000,1000,1000,585,1000,762,255,614,306,1000,-274,684,-1000,-1000,-1000,470,-548,-1000,996,55,-691,79,189,-591,909,1000,-1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00780() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{823,-15,123,-46,1000,188,513,-532,497,1000,633,393,-826,728,142,-699,-569,-690,-774,1000,-131,228,-253,195,248,578,-675,-306,917,1000,1000,505,-60,416,543,1000,480,-391,1000,1000,608,-923,-1000,624,409,453,1000,-978,-802,-197,-2,-981,-1000,847,653,-18,-699,113,827,821,1000,-201,522,-56}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00781() {
+        org.junit.Assert.assertEquals("TYPE:org.jfree.chart.plot.PiePlotState", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{1000,748,264,-968,-1000,-462,-520,-284,-172,-1000,1000,-1000,-1000,1000,279,699,-1000,779,-40,-1000,1000,-394,1000,-1000,1000,508,-1000,-4,1000,-1000,-552,779,899,1000,128,-1000,-1000,-1000,-702,559,1000,-64,-310,598,-23,-996,823,570,932,-1000,-184,-513,1000,1000,901,-439,1000,-118,-281,-423,-1000,-231,-1000,554}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00782() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{-831,779,-1000,-1000,-326,999,786,1000,-1000,516,1000,-86,44,985,-323,49,561,1000,274,-750,868,-390,81,-911,-96,-123,-483,173,-1000,1000,-28,-258,-485,-2,242,860,-365,-231,1000,1000,978,-519,762,1000,-79,-876,696,-1000,-406,1000,71,603,-1000,1000,718,967,-801,-559,32,-1000,-364,1000,420,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00783() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "initialise(java.awt.Graphics2D,java.awt.geom.Rectangle2D,org.jfree.chart.plot.PiePlot,java.lang.Integer,org.jfree.chart.plot.PlotRenderingInfo):org.jfree.chart.plot.PiePlotState",
+            new int[]{-138,-383,123,-739,109,-356,-1000,324,30,1000,-36,70,847,-63,-138,-1000,-569,-448,26,1000,-826,-957,-256,-200,343,-284,1000,-770,-342,366,957,-22,433,363,255,440,49,739,-1000,332,223,-923,163,1000,681,-537,574,200,403,-159,424,-363,-636,-42,220,-1000,-85,113,322,37,199,-1000,528,-703}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00784() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{-359,1000,424,550,796,-296,-191,217,-49,1000,-206,549,-274,-1000,-679,1000,726,1000,-1000,-197,479,193,-521,-929,1000,206,607,-238,-907,283,-39,621,-1000,648,314,-1000,-1000,951,1000,-449,994,931,-58,1000,-823,1000,320,460,-914,1000,-282,-211,1000,-1000,-735,-202,-374,-1000,364,1000,-690,517,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00785() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{314,535,-268,-577,435,691,969,440,-950,355,-439,682,-692,847,980,842,-166,-24,-959,770,-425,-71,-896,-37,132,469,996,-611,-821,968,388,602,210,-850,952,576,-188,-533,470,936,-43,4,259,337,-614,-535,767,634,-969,-580,-992,-830,-311,-734,-397,-961,-362,571,664,470,-262,-566,447,-338}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00786() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{-116,147,857,-67,377,-121,69,-546,1000,-624,316,700,-328,-554,322,-292,5,-1000,575,-564,-104,253,498,-322,-465,-755,-1000,-707,-297,400,-921,-745,173,-782,-549,370,152,-1000,946,-232,140,-1000,981,396,641,-448,703,797,673,1000,600,-222,-567,1000,320,-1000,-136,392,-905,320,775,-1000,893,499}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00787() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{-482,1000,409,681,-129,-1000,1000,-721,-471,-310,-1000,-449,23,-941,-719,659,1000,866,-1000,70,1000,1000,882,-333,991,1000,1000,-30,-766,-1000,583,-126,-1000,89,-90,-292,-1000,944,1000,-280,653,1000,-1000,891,-1000,1000,333,393,-798,501,-468,-549,-22,-473,-811,-1000,1000,536,605,-386,-488,542,94,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00788() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{-268,608,349,506,-153,-609,-580,-511,1000,226,48,-247,-400,-348,-505,308,502,-603,-808,1000,717,87,876,-1000,-1000,599,408,-579,191,-1000,767,-751,-746,586,671,-693,15,324,187,182,-462,455,-571,-42,490,974,277,110,625,330,-355,-424,419,-751,348,-370,961,431,-1000,882,-647,363,665,-134}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00789() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{-214,1000,158,139,-719,-855,810,518,433,-215,-383,599,1000,-130,824,-1000,-400,-93,-460,-168,-335,-337,-750,-225,-400,132,-124,640,436,-563,169,828,-329,-337,698,821,237,-400,-400,-204,-872,-138,-503,33,-82,260,-738,-671,-298,171,612,-518,-88,-571,-649,273,580,-204,178,-1000,-365,1000,75,485}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00790() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{-429,853,-505,546,-697,-292,-1000,-381,1000,438,67,316,-1000,221,-411,-740,564,-1000,-110,1000,19,105,257,-996,-1000,1000,786,-337,396,-1000,1000,-1000,-3,-436,1000,-1000,-346,229,-10,1000,335,-1000,-700,1000,1000,51,890,-237,-52,1000,-824,-583,-417,-8,1000,-74,59,-1000,-1000,-700,-253,-69,186,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00791() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{-327,681,-133,828,-290,-631,-911,-39,216,779,387,-51,-680,-337,-512,421,304,-458,-678,719,114,-103,-465,-1000,-655,645,593,-271,418,-965,877,-674,-824,308,1000,-968,-357,382,142,754,-29,-235,-626,535,523,955,526,-367,338,709,-617,-642,515,-957,127,-74,-260,-1000,-732,256,-205,-81,515,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00792() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{-795,1000,409,458,-562,-1000,650,527,-275,952,-1000,229,517,-805,376,-767,1000,1000,-1000,-83,145,203,-827,-96,1000,1000,1000,286,-577,-563,502,-126,-407,140,820,379,-1000,1000,1000,-1000,528,978,-1000,1000,-964,1000,250,393,-200,38,-605,-297,906,-1000,-1000,485,255,-306,664,-1000,-671,974,476,856}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00793() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{304,1000,469,112,186,-449,-155,-590,1000,-857,530,167,23,-136,97,-292,197,-1000,575,-175,261,152,1000,-337,-465,1000,-725,-175,-766,114,583,-675,173,-686,-535,370,152,-965,783,117,-145,-952,600,891,673,-448,388,393,613,372,662,-563,-997,1000,510,-1000,444,577,-1000,-386,558,-662,482,271}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00794() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{-903,-688,454,-372,-873,-269,-560,-703,-1000,757,-1000,523,269,-168,-1000,-170,786,805,-642,928,559,1000,424,256,147,1000,1000,626,287,-1000,1000,-1000,218,-203,281,-99,-1000,1000,-35,-191,140,1000,-1000,396,541,471,244,215,-1000,-1000,-1000,-218,-1000,386,-440,362,1000,-1000,1000,-1000,947,834,78,-263}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00795() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{1000,1000,934,717,1000,-39,-357,324,-426,-387,710,836,659,695,117,-681,-690,26,-1000,118,659,11,283,-1000,435,434,-927,-1000,1000,-184,977,-296,-274,624,225,195,31,-503,-798,-344,-1000,818,194,-1000,-395,-38,-110,-606,-733,-630,-24,-1000,-677,1000,187,30,1000,613,468,1000,-1000,791,-415,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00796() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{144,766,433,-281,-1000,-581,1000,1000,-531,-215,-734,187,1000,-140,376,-767,1000,1000,-778,71,249,-735,-506,330,1000,1000,664,1000,146,-563,-32,1000,-407,159,84,978,-1000,1000,1000,-204,-174,768,-1000,1000,-1000,1000,-704,5,-221,-894,612,-518,634,-1000,-994,302,580,809,178,-1000,-16,790,-57,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00797() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{267,982,-397,915,-1000,-581,1000,-85,98,72,515,-523,-1000,80,-887,497,702,1000,-756,858,972,-159,212,-838,-319,768,664,421,708,-950,861,-344,-962,424,738,-822,-408,638,-26,769,-388,553,-863,582,301,821,124,-503,-33,43,612,-946,-159,187,135,-296,108,-249,-715,678,-465,790,145,-915}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00798() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{428,1000,329,398,-511,-476,-64,-178,971,-1000,-206,1000,924,-1000,-679,-1000,726,-23,-1000,583,647,193,-521,-850,-315,206,-1000,811,862,400,40,169,-721,648,169,-1000,1000,-1000,383,444,-1000,-658,-58,197,349,37,473,-790,-914,1000,1000,-902,334,790,-608,-391,1000,1000,-496,-404,377,-496,-79,625}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00799() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "isCircular():boolean",
+            new int[]{276,1000,-196,549,532,-275,-84,-613,-888,270,515,460,421,189,-360,-863,-690,-164,-1000,296,564,980,369,-850,-1000,1000,-256,486,839,-559,1000,-1000,-107,151,192,-366,-334,30,-798,-215,-1000,1000,-1000,-1000,130,-38,378,86,-1000,-555,-933,-820,-1000,1000,-201,-44,1000,-516,864,-475,-1000,551,-316,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00800() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-782,-847,990,-670,999,689,-889,86,305,257,-372,432,-290,965,-344,747,668,-481,-45,-369,-963,336,-887,773,793,200,182,-981,-673,310,855,-941,652,-642,-427,-426,-920,-62,-375,16,-504,995,-736,277,-775,-663,125,-577,657,-748,830,406,-696,-814,-430,-806,771,139,643,-881,215,-80,-509,423}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00801() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-670,-1000,834,-487,1000,-110,-1000,800,-122,-648,-565,133,-469,1000,907,964,79,806,-962,-588,227,249,892,463,-31,65,66,-117,-426,-715,727,116,551,1000,33,460,-615,-263,-1000,70,229,1000,-1000,-1000,-177,-1000,963,-1000,201,-664,615,728,242,369,725,-1000,-526,-382,543,-441,-197,1000,348,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00802() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-576,-900,684,-4,955,530,-322,427,-332,-614,165,-149,-751,988,492,247,-482,-993,-481,-123,392,56,477,-9,167,497,-186,-86,-665,-497,103,-189,245,758,270,703,37,-254,-1000,166,-395,965,-681,-493,30,-683,739,-554,-305,-1000,-570,188,363,295,103,-1000,-93,-784,-78,331,30,616,-150,827}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00803() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-523,282,588,428,47,-579,-327,-239,-384,-228,1000,-328,309,876,-425,-583,-1000,-26,375,446,102,-112,1000,590,306,1000,-149,-389,45,128,-1000,-513,-34,-97,338,613,879,573,-255,244,-1000,330,-137,1000,18,-208,-575,244,-1000,-809,-632,-499,126,-241,-992,-888,860,-1000,-807,1000,427,-779,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00804() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-637,234,588,82,916,-800,-461,-959,-180,36,1000,-312,679,1000,-1000,-1000,-1000,381,454,549,7,-520,1000,835,1000,1000,-210,-736,342,-1000,-97,-393,-367,242,446,795,734,1000,599,476,433,428,-49,1000,207,-525,-823,-525,-1000,-1000,-1000,-832,-177,-393,-1000,-1000,1000,-1000,-1000,1000,434,123,-1000,-857}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00805() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-316,1000,-271,475,-168,-1000,-36,-201,491,-474,1000,-756,1000,-1,-1000,-295,-1000,235,706,707,541,-492,1000,701,401,1000,867,118,-976,-596,-1000,-542,-233,-130,-459,745,879,1000,155,178,-1000,-429,206,1000,246,-533,-549,581,-1000,-809,-769,-1000,558,-186,-498,-1000,804,-1000,-45,496,194,-1000,-1000,-833}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00806() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-576,-900,549,-446,1000,-1000,36,-856,-750,73,348,390,49,988,492,247,-1000,-21,-41,1000,7,-1000,1000,1000,167,481,-128,-543,-211,-1000,-97,-92,459,1000,1000,1000,734,728,-594,1000,1000,582,698,770,545,-182,-506,-1000,-1000,-1000,-1000,-696,-161,-1000,-1000,-705,1000,-784,-78,1000,30,909,-785,827}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00807() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-783,1000,-217,855,-500,266,-444,523,1000,499,463,1000,535,128,-518,275,1000,91,777,-81,-587,-46,-823,55,222,-180,450,-656,-262,-733,667,-1000,523,-583,-640,-1000,-252,1000,918,-268,-1000,-674,-212,847,-1000,-629,-245,1000,-157,-877,632,-520,-837,1000,520,569,510,551,-807,-418,392,-90,-1000,-494}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00808() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-637,-501,664,-403,1000,-465,689,973,-51,-183,-243,494,-751,957,1000,-1000,-482,-661,-693,607,1000,-444,519,-117,-598,-416,376,-220,52,-1000,-97,738,887,1000,-181,703,-122,-705,-1000,694,86,370,-33,1000,30,-299,334,-812,-620,-1000,-1000,-832,1000,700,395,-1000,1000,-410,-1000,143,1000,-56,-579,104}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00809() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-683,-900,452,-769,1000,-383,-322,1000,15,480,-560,910,-297,318,875,639,-490,-993,513,42,7,-438,854,841,875,-591,-186,-364,-555,490,455,-359,1000,507,526,-308,-898,-112,-1000,311,-395,-19,-215,494,-46,-1000,739,-704,8,-1000,-671,958,-257,-1000,100,-264,839,-879,-693,-475,572,-251,-675,-241}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00810() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-255,-1000,149,-236,956,-28,-459,709,-1000,-181,-275,248,-1000,80,1000,-242,-467,-1000,-245,135,366,-253,1000,39,216,279,-632,95,-47,-970,613,-324,489,1000,1000,612,-19,-110,-1000,430,-170,418,-119,-217,211,-577,1000,-850,-891,-1000,-1000,365,166,164,746,154,20,-854,-497,247,358,818,-279,-169}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00811() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-629,-410,-642,-584,603,158,-545,-648,-558,35,1000,-474,-968,-513,308,-25,24,-412,795,608,-1000,244,-611,40,-182,1000,-208,-1000,1000,1000,979,-286,85,-1000,988,29,-476,-401,1000,359,-112,242,284,680,-988,798,765,-771,-978,832,-1000,516,607,-706,253,1000,-379,553,560,-224,387,-1000,-47,-871}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00812() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{224,609,-1000,-275,128,-425,-50,470,1000,1000,-1000,993,899,-153,381,669,1000,811,-508,631,-657,-802,-1000,150,79,-1000,990,-937,-624,-1000,1000,607,643,173,-1000,-1000,-878,-226,-121,642,-530,-475,962,-597,-1000,-470,487,346,1000,-913,1000,803,-1000,1000,541,1000,98,1000,-437,-1000,0,703,-1000,370}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00813() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-276,890,-66,903,-589,236,-890,-655,-303,-24,388,-44,737,-1,-518,-295,-634,396,-511,758,684,-943,-486,733,-327,16,867,-745,-976,-596,-819,739,-715,-296,-850,-216,658,606,-798,883,376,256,422,232,-587,-117,-696,351,-513,-57,-520,-51,-184,728,-498,20,866,-861,-45,496,-514,-202,-310,-46}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00814() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-256,-221,-1000,1000,13,-593,-59,-546,-1000,-818,1000,-799,286,114,312,-693,-266,-182,260,-393,410,-565,-384,1000,765,583,-158,-12,-1000,-774,53,-784,-494,405,680,-321,605,135,-883,447,-771,12,-1000,-379,-329,-1000,639,209,116,39,-474,-1000,445,96,221,706,792,-803,413,1000,-445,-589,-243,-353}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00815() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlinePaint(java.awt.Paint):void",
+            new int[]{-27,55,-1000,-932,693,-757,676,545,547,524,-197,388,682,534,-353,-1000,-32,-627,765,373,-373,-647,-18,1000,1000,308,-819,0,-19,-320,274,-611,716,711,-198,-367,-1000,874,-117,300,-530,-870,556,1000,-190,-975,1000,-519,-756,-1000,-26,-324,-360,-920,389,548,852,-487,-529,-268,351,-281,-1000,-761}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00816() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{-907,-615,124,474,-1000,1000,378,670,373,-230,-95,347,508,1000,845,580,-127,158,-298,-1000,1000,762,-892,744,-561,-1000,-1000,263,-696,1000,438,1000,1000,505,-294,-151,-57,-705,1000,-386,-613,-200,-1000,-278,-568,1000,-349,-527,-319,-1000,308,1000,1000,-219,591,874,407,1000,855,-330,213,-158,-950,808}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00817() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{642,-352,404,433,-360,130,-168,-400,828,-1000,868,-70,102,-274,439,-274,830,-358,-1000,-314,-423,227,401,550,-579,80,-864,-266,-1000,400,-1000,667,-172,284,-80,-329,725,-363,-326,-1000,-1000,-1000,-1000,-1000,-729,400,-913,289,-240,-722,151,702,400,611,683,-296,600,-25,-71,158,-134,1000,228,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00818() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{-1000,728,359,467,1000,-605,-712,1000,-443,-451,440,-205,-650,150,-704,1000,1000,-38,-451,1000,-611,1000,-121,177,208,-562,443,-1000,-1000,-1000,-1000,-185,217,99,448,-1000,1000,927,367,-300,-1000,-1000,-316,-1000,-1000,-1000,-548,-271,426,445,269,239,-677,-963,-1000,-1000,-338,-869,-836,307,-1000,540,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00819() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{-1000,1000,459,94,1000,-307,-1000,208,131,553,261,-401,-802,25,-436,-447,404,0,-761,1000,1000,1000,-556,353,465,-135,179,621,-845,-1000,-1000,-276,1,256,149,518,626,849,1000,-730,-1000,-349,-233,-413,-823,-1000,-511,93,-120,-694,-22,-496,-288,645,-55,-858,235,-321,-660,-148,-16,1000,-585,117}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00820() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{-686,659,-1000,200,779,-218,860,437,-810,308,-362,883,-281,508,-548,-187,644,-626,535,987,-432,-18,99,-778,336,-474,595,-118,280,646,-275,-272,-276,53,122,-205,-13,-1000,-484,107,375,694,-356,-303,230,-207,1000,-978,1000,-1000,318,111,41,-1000,-154,1000,545,-890,-470,784,118,-639,679,-383}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00821() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{756,-615,49,-172,457,-890,378,-533,373,354,32,-1000,-869,-878,-529,580,1000,-300,641,321,696,-587,-262,-303,673,931,793,85,-696,-182,429,-1000,-1000,505,926,-151,-57,398,-511,-278,-618,211,-101,-278,-823,-400,-1000,282,-891,-985,82,-1000,-400,378,591,-1000,1000,-548,-687,-1000,-85,115,493,-823}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00822() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{-532,-800,94,319,-1000,1000,692,565,-216,-73,-164,270,626,1000,739,-307,-376,77,-210,-1000,1000,861,-477,-54,153,-1000,-1000,-248,1000,1000,1000,446,1000,-676,281,363,730,-264,843,-301,-351,-673,154,-612,-830,1000,-709,-789,-421,362,-137,955,304,-315,131,434,769,1000,527,-473,-30,-1000,-965,-360}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00823() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{-786,-70,258,-667,305,-165,-156,-467,562,1000,207,-491,-629,-333,-79,1000,-377,-532,-219,1000,-1000,174,530,871,428,-303,807,883,-755,-346,-594,-616,-492,359,-454,1000,-538,745,154,-1000,-498,-1000,-155,147,402,-1000,-65,16,-1000,408,61,-36,692,1000,920,-1000,804,77,-654,-196,991,1000,-385,769}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00824() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{-924,220,353,333,307,391,-675,673,625,-1000,707,-604,136,-593,347,394,504,-410,-776,-524,1000,1000,64,3,332,-1000,-1000,221,-1000,-18,-1000,651,348,-366,97,-971,1000,-364,400,-774,-1000,-976,-691,-1000,-1000,671,-1000,-527,65,400,492,542,1000,-431,460,-790,945,-422,-206,-78,-18,539,-479,-179}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00825() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{918,975,69,1000,-1000,1000,1000,296,314,-473,-649,392,-862,37,952,-1000,339,-346,717,-95,1000,364,-888,770,-55,692,-1000,622,-595,-256,-263,-1000,669,-555,-207,-89,-562,-636,-537,-350,-639,-1000,-522,-309,354,1000,888,-549,-736,1000,967,268,-448,-564,-269,928,-1000,28,1000,-4,550,832,-625,-116}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00826() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{-957,787,-494,508,1000,-927,239,499,-184,172,231,-15,-479,-992,-465,1000,-81,-227,270,1000,-424,165,-431,230,461,90,179,-201,-1000,-1000,-1000,-384,-757,-40,110,-1000,626,695,-1000,-287,-959,-1000,453,144,184,-1000,1000,474,47,-167,-162,-853,-1000,-692,-746,-1000,210,-233,-918,601,-448,308,-835,-864}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00827() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{-1000,49,-31,-316,868,230,-918,1000,-616,265,416,-679,-1000,67,-742,1000,748,-753,-945,1000,-118,1000,-465,23,511,-1000,-914,-90,206,-1000,-1000,604,886,-1000,439,442,1000,997,1000,-970,-47,-1000,-1000,-864,-1000,-837,258,-312,73,-27,345,564,-1000,-1000,-431,-1000,975,-114,-1000,-99,-1000,786,-1000,-857}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00828() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{223,1000,-522,-93,1000,-410,-712,1000,-392,-392,560,485,-970,557,-871,1000,993,-769,-515,1000,-311,1000,-13,387,821,-1000,-143,123,-1000,-1000,-1000,53,98,-1000,338,-145,1000,977,608,-1000,-1000,-1000,-589,-831,-888,-1000,-67,158,205,668,100,106,-1000,-752,-182,-1000,85,-413,-1000,421,-856,1000,-1000,701}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00829() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{434,79,413,1000,-866,423,-6,728,-103,-1000,533,461,766,823,563,842,811,157,-546,-1000,1000,898,-320,-461,-332,-732,-1000,-1000,-787,1000,421,847,1000,-794,804,-1000,1000,-475,64,-225,-333,-1000,-1000,-1000,-1000,1000,-986,-117,309,1000,-76,938,-493,-916,-536,432,309,387,320,48,-1000,-904,-571,-838}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00830() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{-500,1000,39,99,-126,609,-378,706,-153,466,272,514,188,480,335,274,-659,-422,120,603,-371,1000,211,750,323,-1000,-12,238,-1000,-253,-424,-1000,967,-576,-875,765,59,287,879,-775,-255,-903,-298,-289,522,-400,1000,-549,-441,1000,101,939,785,-58,-221,-232,-98,28,-238,817,1000,670,-999,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00831() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionOutlineStroke(java.awt.Stroke):void",
+            new int[]{402,-406,887,623,-632,594,-170,-783,213,-918,-101,195,634,-22,1000,-87,87,-556,-719,-712,833,318,53,-645,-1000,99,-762,-511,-200,426,487,991,737,245,-57,282,371,-1000,493,88,69,285,-569,-952,-542,722,-1000,844,614,918,764,1000,159,285,176,1000,444,700,-138,-750,881,170,296,339}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00832() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-640,267,267,637,321,-1000,534,-49,-857,-72,589,-688,273,211,-486,1000,415,-290,71,304,804,106,62,587,-792,23,-863,1000,61,687,-780,716,389,-129,-394,212,624,600,-648,259,-66,-769,-481,-509,-943,-1000,169,-195,100,-248,946,70,306,-592,486,270,246,1000,503,306,-1000,505,-1000,-710}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00833() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-406,598,-6,-391,-1000,-197,-378,856,-81,68,-290,214,444,-217,859,-361,-604,827,-579,-120,-428,-741,897,440,-335,116,-308,683,715,-476,726,-427,1000,-1000,-411,-166,814,530,706,440,657,74,720,-1000,373,-390,215,74,-836,-877,-962,1000,-894,462,129,1000,-184,-38,1000,-507,408,661,-1000,-418}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00834() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{1000,915,480,699,-212,-1000,209,149,-378,793,604,-794,682,19,605,619,8,-589,-398,230,84,-462,-448,669,-796,-52,-1000,878,400,604,-511,1000,693,443,-232,-184,632,328,-57,-407,317,249,-401,354,174,-541,-12,232,-883,-975,287,638,126,-597,692,160,-145,660,-44,-133,-150,179,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00835() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-711,-433,-774,673,-131,-651,-23,-189,-520,394,-203,-157,-813,-295,-568,305,-285,-943,-218,-154,339,-731,-1000,-203,124,-536,-778,-248,565,-111,-248,-220,-417,562,-293,120,-101,-766,-153,-280,1000,693,-290,184,48,-764,-741,197,723,-408,-1000,1000,-232,-782,886,-358,-483,-282,64,-527,-369,-547,-870,-344}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00836() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-988,96,-371,115,-718,-1000,-483,576,34,584,89,-538,770,861,-578,1000,244,-1000,-239,776,780,-407,-138,197,-685,-505,-1000,1000,80,658,-780,940,1000,248,381,-259,1000,1000,-1000,844,201,-978,-78,-930,-615,-950,-70,180,-1000,-783,121,458,-299,-713,1000,318,-628,1000,59,-736,-553,1000,-1000,-993}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00837() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-822,799,1000,1000,-946,-432,837,217,-1000,670,356,-19,635,290,-106,-303,732,-764,-646,1000,243,-1000,-335,-119,-58,-324,-366,340,-986,884,39,1000,763,929,-50,-354,519,1000,-963,275,179,1000,693,-883,-1000,-755,627,-540,-216,-291,-107,1000,-652,-320,986,-349,-405,72,-773,-1000,-494,478,-1000,-734}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00838() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{433,-262,-201,909,455,-152,-29,-79,1000,670,446,1000,270,-453,653,230,-977,-345,29,-741,-209,-132,-994,607,-550,-560,5,370,237,-217,-179,-1000,-431,-570,-1000,-9,494,286,201,-1000,215,-1000,-479,-508,985,-516,-87,341,676,-1000,372,-324,108,-77,-842,-13,-1000,393,1000,727,-851,-166,-579,432}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00839() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{10,483,408,791,432,-355,497,-521,66,-36,561,-767,352,-1000,856,1000,-699,-756,-679,-816,-50,-1000,-606,353,397,-522,-1000,-661,246,-501,-833,-301,-936,890,-1000,361,-695,-1000,562,-830,1000,891,-22,-161,734,-799,-183,159,-1000,-1000,-1000,1000,50,-728,396,174,-609,-597,-99,166,-1000,-832,-897,450}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00840() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-11,328,442,-581,889,-1000,-835,120,773,763,1000,-1000,874,-2,-33,1000,-1000,-873,-629,-1000,401,-1000,564,416,-556,-570,-1000,686,263,679,-241,1000,-146,-1000,-316,-971,-156,658,-229,-132,-258,-1000,-27,-606,507,-1000,876,58,-558,-1000,-546,608,689,-1000,625,-504,-757,911,746,888,-1000,416,-1000,-914}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00841() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-873,-1000,-236,84,-518,-1000,-794,1000,181,328,-356,-571,1000,999,-607,-1000,97,-1000,30,221,1000,-149,-281,-315,-167,-797,-464,949,908,593,1000,804,902,-393,755,-842,1000,988,-1000,1000,200,-1000,-371,-956,-256,-170,-547,414,-1000,-117,-446,189,-329,-565,1000,230,-1000,1000,-93,-578,-706,1000,-912,-866}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00842() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{315,-798,23,0,366,-303,-94,-189,380,-1000,117,1000,-1000,-597,140,-478,-727,515,1000,142,-121,1000,-999,562,-303,-373,-1000,1000,279,-394,-248,-1000,-746,470,-5,1000,833,-393,-53,-1000,873,439,-1000,1000,204,-838,-1000,738,-417,-414,-15,946,678,154,-933,-299,-649,411,1000,-374,440,-1000,-612,262}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00843() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-678,255,342,314,648,-633,-326,-946,-990,-1000,448,507,-1000,-371,-1000,-223,338,292,1000,407,346,1000,-41,476,-887,402,-442,1000,-335,806,994,-734,-381,-1000,68,1000,586,149,-734,-1000,95,-228,-1000,-763,-1000,-1000,-1000,-428,-108,664,1000,725,1000,41,-253,-739,783,1000,941,747,-687,957,-1000,-848}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00844() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{10,413,-199,84,-13,-836,128,-84,27,584,349,-627,498,-46,-578,1000,-508,-886,-222,51,378,-806,-606,197,-478,-1000,-184,553,-71,735,-833,540,-936,890,46,-178,-695,1000,-816,0,383,-445,-220,-99,-448,-1000,322,240,-1000,-889,-17,521,196,-728,948,-21,-1000,575,455,-316,-698,116,-966,-993}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00845() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-13,421,1000,-1000,478,-813,-27,-181,311,670,1000,-456,1000,-6,24,-725,-553,-318,112,-324,103,-271,1000,555,-622,-949,-1000,1000,769,-144,851,59,-2,-1000,-79,-71,-168,247,167,-20,252,-1000,814,-37,-47,-640,583,61,-37,-781,-23,416,604,-967,986,615,-1000,1000,1000,117,-684,210,-1000,15}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00846() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-5,-364,279,115,-718,-518,-260,1000,252,275,315,-551,478,915,93,50,-56,-504,-310,61,-72,-635,818,566,-685,-749,-540,734,931,212,1000,428,1000,-651,86,-905,577,1000,-598,844,-303,-1000,793,-1000,189,541,297,38,-422,-1000,0,850,-175,-20,740,1000,-890,671,138,-36,400,1000,-1000,-245}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00847() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setBaseSectionPaint(java.awt.Paint):void",
+            new int[]{-472,824,983,-729,754,-597,642,370,994,-965,379,-925,709,-95,-92,-53,783,-234,215,24,-209,279,751,-706,-977,-873,166,-828,-484,264,479,-562,-165,-848,745,507,-319,684,-742,-373,538,658,-892,698,498,-887,550,-266,203,-391,-990,-304,366,645,-181,-589,765,-214,-209,-400,-238,-210,-382,649}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00848() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-871,-55,521,70,364,-661,370,168,-577,-628,-611,-788,-38,-910,-115,-1000,170,708,681,-310,-287,615,179,982,-1000,-1000,-609,-322,379,100,-785,358,477,-773,-828,-764,756,-813,1000,920,585,-214,-419,254,419,103,-1,-739,-283,-350,-80,-460,1000,-178,481,-368,-1000,663,60,-596,-595,17,-545,-322}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00849() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-569,518,-676,174,948,-994,118,439,-1000,-979,-713,-506,48,-846,116,-201,18,1000,1000,-654,-286,-366,204,1000,-1000,-1000,-751,-209,274,61,-91,690,563,-1000,-216,223,-221,-1000,1000,673,-121,-364,-486,-227,814,-482,153,-1000,712,-416,-1000,-293,908,17,1000,312,-1000,1000,228,-306,-654,-203,-500,-130}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00850() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-663,842,659,-383,-391,-440,-735,183,-692,-789,-709,120,1000,-888,740,108,-243,500,488,-499,683,-238,-18,1000,-344,-1000,-373,-79,-143,387,-678,358,-372,-952,-534,-308,-373,-761,471,-616,993,-238,91,589,-230,1000,-385,-1000,-488,104,58,79,1000,-739,-1,487,-352,773,460,1000,227,-673,469,193}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00851() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-701,895,396,-312,-895,-421,-541,-365,758,955,-116,255,761,364,220,-229,175,-242,-491,-316,-316,865,131,483,308,415,1000,-604,-16,81,-857,550,236,62,140,-300,891,-85,785,62,311,404,-21,698,-557,717,416,-708,-706,-400,-12,532,1000,555,6,1000,-468,-149,325,939,528,94,-894,-66}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00852() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-153,-586,504,-45,-757,-104,-686,96,357,648,-443,221,863,301,57,-855,-39,-117,765,933,1000,660,-567,347,471,82,-807,616,1000,1000,-683,242,-437,-421,517,-210,479,169,530,-91,-1000,-393,-1000,565,899,1000,-1000,420,-278,694,-182,1000,386,362,-208,433,-167,1000,77,-414,987,694,485,540}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00853() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-555,-1000,-131,913,732,-290,109,-614,116,-875,811,-999,-1000,939,1000,-531,-302,912,904,180,-631,756,-1000,217,1000,-999,714,617,479,1000,20,1000,316,147,1000,53,-950,-410,562,15,214,-712,-799,-324,863,-504,758,-391,18,-631,-1000,-772,-1000,216,844,494,-1000,-943,-1000,-714,-475,728,-845,-413}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00854() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-1000,-117,1000,119,-86,-268,-427,-82,1000,1000,388,-162,-574,266,1000,258,1000,875,-621,-86,525,1000,667,-388,-410,-94,104,186,50,1000,-25,576,911,854,-682,219,885,705,542,-49,-123,-503,-44,1000,1000,275,-1000,-254,-1000,179,-45,-107,470,173,-46,-759,-961,-147,513,800,509,657,689,101}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00855() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-724,186,-131,168,60,-436,109,18,-873,-628,-1000,-981,262,-1000,-115,-1000,-197,532,904,-607,-438,-265,106,982,-1000,-1000,-1000,77,733,1000,-1000,348,-130,147,-271,-415,-168,-410,1000,1000,836,-274,-285,-276,370,-234,525,-510,-178,608,174,-460,780,-596,481,204,-1000,649,-25,-596,-1000,-305,-545,-616}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00856() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-1000,-1000,-371,549,8,280,159,-299,855,790,-686,-1000,-1000,499,1000,1000,-567,995,86,-766,-171,756,827,-6,-455,264,-370,617,1000,-200,-1000,1000,951,-393,-881,-602,1000,599,268,873,214,183,-631,180,1000,-717,-529,1000,18,425,414,-919,702,901,519,-304,-521,-39,194,691,-846,1000,467,-875}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00857() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-865,652,579,966,-366,53,-52,-331,-560,243,28,193,-1000,-466,666,877,824,1000,-83,456,773,-374,145,203,-1000,522,-784,378,68,1000,-598,267,-33,-74,-629,-187,397,-10,998,602,-575,-383,392,637,814,712,182,-995,-569,-594,-216,185,1000,-1000,-297,-558,-927,608,505,-711,515,-573,-1000,618}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00858() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{32,100,-501,40,1000,-12,-441,-1000,232,-1000,852,-540,-262,517,-1000,-1000,-1000,-292,1000,364,-1000,831,-1000,1000,1000,-287,1000,-185,-44,394,-57,-1000,356,-515,1000,932,-929,-744,29,225,-1000,237,-966,254,-975,805,480,-1000,200,-1000,-1000,-1000,-618,-9,16,341,-13,-1000,-1000,-1000,579,108,-1000,-683}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00859() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-822,-818,404,1000,566,-845,-284,149,630,955,443,-869,-856,346,-703,-462,344,849,-218,340,-815,797,-544,131,-218,-828,337,-648,-201,751,-331,-176,908,-688,-1000,-214,-280,-324,682,763,-825,75,-515,297,821,-314,56,-627,629,-567,-972,-959,-752,701,555,846,-902,-321,-599,-609,460,932,-635,-58}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00860() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-1000,1000,209,287,-1000,-974,-137,-614,-189,789,-240,-21,347,334,1000,-103,1000,1000,-478,-257,104,756,1000,780,-587,-1000,225,-48,-101,690,287,47,993,-271,1000,53,43,-339,358,-1000,751,-712,278,723,1000,-500,-1000,-979,-476,1000,633,500,1000,-189,506,1000,-1000,1000,849,1000,-475,643,1000,305}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00861() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-1000,-226,-63,382,-400,-8,-720,-48,425,624,-924,-868,-336,-289,623,-196,106,680,42,-860,-76,435,927,223,-711,-1000,-726,389,862,-381,-752,576,42,-507,-642,-36,353,306,487,688,889,65,-562,960,1000,-471,-492,661,-569,647,699,43,-457,502,139,-385,-665,541,496,588,-903,363,481,-719}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00862() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-1000,-859,643,-216,482,197,-1000,32,141,473,-738,-120,1000,-806,1000,574,868,455,-335,-621,559,596,-875,633,-517,-11,324,309,112,672,-826,1000,458,48,-1000,-83,1000,-945,1000,743,722,62,-853,1000,367,1000,-567,-1000,-1000,264,-660,42,852,-532,-944,304,-1000,575,1000,422,284,299,650,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00863() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean):void",
+            new int[]{-673,-1000,834,1000,1000,-885,262,-225,412,-1000,-921,-1000,-1000,803,-744,-1000,-549,978,1000,449,-986,1000,-1000,1000,818,-999,948,-757,204,869,-91,1000,879,306,316,-1000,279,-1000,672,658,-186,-423,-1000,-89,534,-143,705,-1000,731,-1000,-1000,-1000,-1000,568,1000,-20,-1000,-1000,-1000,588,-1000,741,-1000,-289}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00864() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{344,197,-90,-499,679,-963,90,721,145,-885,138,430,-215,1000,368,-586,-207,-1000,138,259,-9,-1000,36,-631,1000,-80,703,1000,602,280,-389,1000,-1000,144,-384,-678,4,185,1000,261,-1000,1000,1000,1000,-455,-416,269,-634,-858,-1000,-715,1000,-780,-923,-1000,128,-81,-1000,203,-556,-225,313,596,-310}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00865() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{886,-1000,-246,-641,665,-701,412,745,-1000,1000,-650,-1000,-734,-1000,-822,1000,1000,171,-537,-583,692,-1000,-257,472,562,1000,400,1000,-1000,473,-1000,1000,-1000,473,-578,92,410,711,1000,266,-51,1000,-1000,-706,366,-868,-712,-318,-352,-1000,-460,103,974,76,-211,1000,-1000,-1000,745,-274,-460,269,-495,234}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00866() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{886,-599,-43,538,835,11,568,-459,-281,847,-164,-227,4,-580,106,485,557,-374,-573,-558,802,-727,-28,-411,-364,695,127,905,-967,330,-826,951,-593,-374,87,-180,226,-6,760,134,-880,609,-863,550,-228,-127,-803,-163,-746,-945,497,-12,-827,228,92,-913,-67,11,23,-349,-198,-211,298,71}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00867() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{1000,886,-656,-202,7,-1000,70,801,252,-1000,653,1000,118,-923,-596,700,-1000,-935,977,618,-488,122,-131,-64,-119,1000,948,-1000,1000,784,-127,589,-624,576,-1000,-112,-651,59,1000,-490,632,875,1000,944,-228,-1000,838,-1000,-793,-539,-596,663,981,-557,-1000,611,87,-842,156,91,-865,507,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00868() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{1000,1000,14,-1000,-267,-731,-339,86,1000,-1000,1000,507,1000,-744,-123,1000,-183,-810,1000,224,554,732,-3,440,1000,841,929,-1000,1000,481,1000,711,794,732,-468,1000,-1000,218,1000,-1000,1000,20,458,750,1000,-1000,1000,21,-887,254,-1000,950,1000,442,-127,867,967,-1000,-986,1000,-1000,-544,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00869() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{886,-1000,374,16,741,11,491,-515,-1000,1000,-808,-1000,-535,-634,-177,695,1000,807,-1000,-1000,1000,-1000,32,37,420,-61,164,1000,-1000,-23,-1000,852,-857,-77,390,271,862,653,760,670,-824,697,-1000,546,385,277,-1000,-99,-891,674,215,-172,-1000,150,751,-691,-828,-99,613,-801,-149,-346,1000,71}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00870() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{581,-923,474,-511,-978,-1000,-466,238,-281,-878,-599,468,-477,-692,-937,1000,-313,-288,246,-1000,612,743,1000,63,1000,-1000,90,905,113,-213,-826,507,-809,1000,104,-715,424,1000,142,-1000,712,818,950,193,-822,-449,557,-780,-222,482,-597,1000,540,-1000,-265,1000,-67,11,499,-844,174,552,298,71}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00871() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{918,-699,-356,-349,26,1000,-261,204,674,-528,-446,487,-761,331,-416,749,-430,-662,-1000,-636,1000,709,423,103,-1000,254,234,-1000,100,-1,-1000,-239,-1000,1000,-131,-243,176,835,1000,1000,522,519,1000,-88,-609,-547,1000,-1000,-832,-509,-231,294,1000,-590,-705,349,-27,-400,1000,-907,-176,833,-268,881}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00872() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{35,586,-441,714,-531,-1000,-586,614,957,-722,359,1000,-618,-76,-447,-1000,-459,420,-583,876,-1000,-347,-946,-402,-248,453,192,-1000,351,921,-647,-1000,-370,998,-1000,-283,-444,-383,-1000,-944,362,-510,1000,-60,92,-101,77,-451,-921,19,-365,1000,203,-491,-1000,314,272,591,202,-1000,-1000,-50,-960,305}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00873() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{-271,-153,541,1000,1000,229,268,-1000,-535,-426,-1000,1000,-81,638,1000,-715,-1000,-1000,-1000,-1000,1000,740,744,-1000,-1000,918,-661,-782,-255,-806,-1000,186,58,-1000,1000,-1000,932,-1000,838,1000,-1000,67,878,745,-1000,443,178,-448,910,0,1000,-658,-589,443,-953,-480,-90,1000,300,-1000,1000,635,104,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00874() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{1000,-417,-315,-870,-697,190,-436,721,1000,445,-247,-89,-265,-725,-157,1000,237,707,178,-404,480,584,162,576,939,-356,762,-389,-215,-97,-1000,-384,-777,1000,-582,561,52,1000,838,276,962,212,-370,-568,189,-514,1000,-1000,-250,-330,-754,307,1000,-440,98,928,-701,-1000,777,-385,-794,123,552,909}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00875() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{1000,-1000,-156,591,761,-16,-292,-1000,-1000,1000,-481,-973,-285,-982,308,1000,1000,215,-1000,-198,1000,-805,-611,-240,-316,873,391,104,-953,-169,-1000,766,-717,-496,710,221,394,387,760,351,-1000,1000,-1000,163,-393,103,1000,457,-574,-1000,-290,-528,47,1000,911,-913,-347,-295,477,175,194,-325,972,977}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00876() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{-576,-346,-391,1000,346,-693,-585,-689,-475,-1000,-1000,1000,-1000,1000,293,-991,-1000,-1000,-1000,-1000,1000,1000,830,-631,-1000,-1000,-1000,-581,-388,-1000,-1000,-1000,-515,-702,248,-1000,511,-153,205,124,-1000,138,523,287,-1000,171,838,-1000,129,650,1000,-435,-287,-843,-582,-33,-1000,1000,1000,-1000,1000,1000,-305,-807}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00877() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{234,846,-17,229,-239,-65,-279,116,1000,260,-650,494,979,-479,-658,-639,-149,370,394,1000,-1000,907,-39,-11,957,1000,-447,-338,691,1000,1000,-925,216,-169,-245,914,-459,446,-633,-769,831,-1000,-51,284,1000,72,-384,17,323,-51,125,-722,-668,-595,506,614,1000,582,1000,561,-1000,-1000,220,98}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00878() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{-130,1000,-966,787,-144,-1000,116,456,1000,-407,910,1000,337,-341,-4,-364,-1000,-1000,1000,516,-1000,-53,492,-843,-184,838,564,-183,-155,505,1000,155,728,-1000,-1000,-407,-114,432,-468,-217,697,-626,673,546,47,-1000,1000,-1000,-376,-413,360,97,1000,-1000,-875,92,675,-734,187,-693,-1000,-34,-112,-498}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00879() {
+        org.junit.Assert.assertEquals("VOID|isCircular=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setCircular(boolean,boolean):void",
+            new int[]{-1000,1000,254,235,-231,-987,786,1000,1000,-979,752,1000,613,121,-879,-1000,-1000,387,748,1000,-1000,804,740,104,-41,-1000,-60,-1000,1000,809,1000,-1000,591,474,-214,525,-111,78,-400,-919,1000,-1000,1000,89,1000,-43,-217,-427,-407,637,344,1000,164,-1000,-694,593,931,749,93,-257,-1000,-52,-1000,178}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00880() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-231,-590,114,729,47,-402,711,333,-914,-425,-259,790,-1000,-298,139,904,109,-138,-684,-708,593,70,-904,428,-269,1000,-264,-823,-714,-687,294,-790,-159,26,181,-534,915,75,190,-499,5,838,-497,-129,422,-189,-533,-245,-732,-198,-86,98,1000,1000,-607,-912,1000,-5,761,641,1000,-336,439,323}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00881() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-1000,-197,-520,406,-471,-928,1000,51,682,-867,-667,738,40,-756,-783,-271,-524,898,-1000,415,1000,1000,-1000,396,-1000,-52,-174,-1000,13,272,1000,-627,-1000,-590,1000,55,-1000,-1000,-1000,475,-1000,335,-23,1000,1000,486,-1000,-1000,-2,-125,947,-988,1000,756,665,-933,-22,1000,1000,1000,576,-1000,1000,595}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00882() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-1000,-1000,49,686,198,-874,491,348,-1000,-67,-659,1000,-407,-162,-1000,1000,-53,-63,-551,-602,1000,215,-1000,76,-1000,1000,-355,-1000,-529,-632,937,-1000,-432,-231,399,-513,-831,-1000,-1000,-621,-415,1000,-517,154,-384,-305,-338,-685,-987,-494,9,383,-92,1000,72,-932,395,306,507,768,441,-942,1000,375}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00883() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-1000,-333,537,203,-326,-734,-136,-490,250,875,-6,-154,662,-188,-997,-1000,-719,-177,-194,733,221,32,-970,247,-583,-517,79,-1000,-108,-574,504,-282,-870,-839,164,27,-1000,184,-221,879,-841,-507,6,1000,473,-374,-538,-432,1000,-519,442,-185,1000,913,329,-557,860,983,-974,-468,-675,-1000,820,-223}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00884() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-1000,-590,114,589,-538,-402,729,450,-313,55,-1000,-1000,1000,-206,-1000,-1000,-1000,1000,662,1000,776,1000,-904,194,-1000,-1000,804,-548,-1000,-699,1000,153,-752,-845,606,708,-1000,-1000,-162,753,-1000,-778,201,1000,-294,-590,1000,-245,663,-336,1000,1000,1000,-651,1000,-912,392,1000,288,641,-148,-1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00885() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-703,-188,-596,201,-225,-1000,987,35,-411,-1000,-824,1000,-31,-1000,-104,930,-1000,1000,-1000,-179,1000,836,-1000,185,-825,477,-705,-1000,417,30,1000,-426,17,-298,483,-480,-684,-1000,-1000,-624,-583,1000,322,-135,956,1000,-903,-780,-762,-356,522,-645,1000,427,448,-721,-505,267,1000,629,1000,-1000,546,977}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00886() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-406,745,-1000,140,724,156,556,-776,84,-835,-586,-1000,67,-199,1000,439,-234,1000,-661,-633,-384,318,455,-730,1000,434,1000,45,-375,839,54,1000,-284,161,-43,255,353,-400,-887,48,-916,39,283,-825,-35,729,-149,-822,-203,296,1000,1000,370,163,-325,404,40,-642,702,-477,-56,-393,-529,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00887() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-178,-822,-276,726,49,-419,311,-253,-1000,143,-840,1000,233,17,1000,986,205,213,-594,-1000,750,-345,-756,135,-1000,972,220,-920,-1000,-313,662,-1000,-89,-218,-24,-67,37,567,-1000,-387,-716,937,-429,569,164,174,140,-719,-1000,38,272,702,1000,1000,-785,-1000,1000,-505,407,1000,22,-1000,1000,-109}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00888() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-73,723,940,-310,144,342,614,-706,464,-630,810,-86,-1000,-665,-277,-535,-281,-27,-608,717,-338,898,-871,693,-136,894,191,-411,565,-1000,-279,-111,-582,-296,-122,-409,-661,-736,-47,326,-2,-626,591,143,1000,-772,-581,-123,683,180,-224,-823,245,718,138,679,-171,1000,332,-327,756,37,896,53}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00889() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{236,-40,719,155,293,1000,658,598,-793,-204,-292,738,-1000,224,1000,109,-262,-1000,-369,-1000,218,-201,-1000,888,-1000,1000,662,-608,1000,-856,-1000,-1000,171,-444,-594,-273,1000,583,-318,-1000,842,902,252,-1000,915,650,-1000,1000,-1000,676,-320,-1000,1000,1000,-1000,-543,944,381,245,-20,576,-1000,-269,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00890() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-746,-14,-612,322,-253,868,637,210,449,799,-597,-925,748,-169,-230,336,-775,-735,67,-955,-86,-90,833,-910,907,509,729,795,-517,990,-600,1,36,-314,603,608,122,-625,-926,-333,-324,54,524,-408,-887,761,-71,-176,-618,386,864,395,-677,458,-3,204,688,-834,51,-448,-954,-481,-423,-493}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00891() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-1000,-1000,-811,384,-541,115,822,697,-1000,720,-740,1000,-1000,916,-965,801,-436,-1000,-419,-1000,-276,-754,455,899,-429,1000,-148,45,775,-611,-926,-1000,52,-489,426,-34,993,1000,-956,-1000,-649,1000,-594,118,1000,1000,-1000,-96,-1000,31,-43,-389,1000,1000,-1000,-1000,600,-464,-326,609,470,-1000,417,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00892() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-758,-55,-1000,832,609,-761,-78,0,-1000,-1000,-1000,0,-1000,-690,904,199,0,811,-751,-539,496,348,-541,183,908,1000,1000,-1000,-461,-368,849,0,0,0,-36,84,0,-143,-1000,500,-438,228,-261,313,174,376,-320,-1000,-525,156,1000,1000,1000,1000,-438,-740,491,431,724,-12,32,-909,706,-765}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00893() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{122,-1000,894,668,66,-729,689,994,-1000,-1000,878,-1000,-1000,-581,884,1000,717,-613,-846,-1000,1000,-581,-1000,1000,-539,1000,-875,-1000,-712,-656,-127,-1000,225,541,143,-1000,-538,827,696,-1000,22,1000,-1000,-129,772,-533,-827,-245,-1000,-829,40,-418,-395,1000,-1000,-1000,-27,-848,596,641,1000,-336,242,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00894() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{461,230,114,-965,185,160,-544,152,-777,-749,-585,952,-585,-841,203,1000,886,-279,199,752,647,-804,-161,754,488,1000,40,-126,1000,-962,-550,-94,809,820,-847,-986,-222,248,-277,-1000,-975,1000,-455,-802,296,-925,-863,-1000,-1000,307,-934,-800,-1000,912,-525,65,-772,-638,-578,-62,609,576,-608,419}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00895() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDataset(org.jfree.data.general.PieDataset):void",
+            new int[]{-1000,-1000,-836,689,838,-1000,539,1000,-1000,628,-1000,790,-407,-215,-1000,904,-394,724,267,-310,1000,646,-904,-378,-1000,1000,381,-1000,-490,-319,1000,-790,-765,-668,603,-47,-916,-1000,-1000,-120,-1000,838,-383,925,-962,-98,130,-1000,-880,-730,924,1000,1000,1000,465,-845,328,1000,978,518,1000,-1000,1000,-302}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00896() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{383,96,629,250,-1000,241,750,159,654,-907,-1000,-170,-805,1000,693,19,-72,-705,-1000,435,-1000,1000,-259,36,-113,414,1000,1000,-550,-476,-1000,-704,582,-288,-1000,-42,1000,-211,-441,1000,-552,-635,-648,-1000,-126,-1000,-284,122,1000,316,-1000,816,-1000,958,-1000,67,887,81,-37,-192,-1000,1000,-326,-476}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00897() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{1000,-821,-363,241,-879,-1000,-46,-640,537,-573,555,228,-749,217,624,-959,-52,-732,189,-1000,-319,-452,582,-989,-841,-672,497,597,773,1000,-1000,693,581,602,-631,-1000,-85,-1000,1000,217,-1000,-59,1000,-721,726,104,-956,1000,374,1000,400,1000,400,817,97,18,73,-1000,-839,-1000,397,1000,-513,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00898() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{-585,369,138,-187,-545,930,549,-281,-449,-512,-403,437,-231,-551,1000,51,-891,428,19,1000,-200,454,-859,421,-723,447,95,-248,-20,-334,380,383,662,-886,-889,542,479,222,-430,806,691,-498,-146,467,112,-600,102,-161,535,-738,-333,-129,-23,-161,-540,-269,361,1000,943,964,-90,164,300,84}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00899() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{-373,466,-331,-835,-799,507,685,576,878,305,-1000,24,-25,926,810,-298,-304,192,-1000,517,210,897,766,-853,446,270,-58,890,1000,480,275,-838,-331,-1000,-589,164,1000,752,555,576,-25,527,560,-556,-39,-1000,761,460,41,-459,14,798,541,324,-216,-351,133,626,1000,265,-1000,901,-385,351}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00900() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{297,96,-791,63,355,241,906,-796,-693,-644,253,55,-684,-553,903,19,-651,7,948,-8,341,-591,-331,36,-191,59,-584,-899,-550,708,792,539,1000,465,-172,409,372,-906,-441,846,533,-6,347,510,-30,387,-50,727,297,316,33,133,314,-376,-282,304,522,266,876,291,1000,-738,145,-664}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00901() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{889,-709,105,-615,-772,272,25,41,839,-781,427,435,-200,770,-221,-678,-503,407,1000,-302,-546,319,-787,-1000,858,232,405,-507,909,-484,386,-598,1000,1000,-586,1000,-967,-1000,1000,-868,-603,642,91,335,-327,-91,-467,37,62,951,-871,1000,538,1000,415,1000,355,-103,-1000,-7,5,-608,381,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00902() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{729,344,-182,746,-1000,306,693,457,315,400,-915,-834,-675,-53,-275,-695,304,-929,-1000,385,400,-1000,1000,-305,-496,724,-370,346,618,-105,415,-627,-400,803,-16,636,954,470,-400,-166,-43,-799,-79,-237,-674,157,-488,460,-400,-275,-1000,269,-135,804,-260,-366,83,-62,-196,194,819,355,83,-429}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00903() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{1000,-1000,939,-457,-18,-801,171,297,1000,-397,497,-617,43,943,1000,-903,605,-212,1000,-1000,-685,59,756,425,1000,805,448,146,828,422,-884,-512,596,274,-735,-852,-1000,-1000,1000,-1000,-1000,-1000,743,115,142,948,199,63,685,393,-527,1000,35,532,-75,789,672,-957,-1000,-1000,616,-1000,304,-980}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00904() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{-811,-673,-535,346,-772,19,484,-945,273,426,480,887,529,-787,-116,226,-632,835,120,-20,255,-417,697,-327,-985,-598,-868,-507,-530,-952,-893,883,953,-467,531,600,819,688,558,-868,-302,153,-967,-158,-56,-851,-694,304,496,951,-59,-123,219,180,415,-192,646,-281,604,-143,42,-644,-410,782}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00905() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{446,1000,158,-125,1000,886,1000,907,854,-787,92,-694,-764,819,837,148,-667,209,-714,889,49,1000,162,-1000,527,790,-67,-535,778,-1000,1000,-996,639,238,-828,1000,1000,-159,1000,290,-1000,207,-319,782,-970,616,-33,-1000,-361,-1000,610,-673,599,797,-911,595,865,815,1000,996,-670,923,-578,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00906() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{-708,194,929,13,-1000,219,330,-92,-440,-467,-1000,247,-246,262,-145,-94,-602,123,698,-863,-359,603,-3,452,-1000,-291,524,695,583,-1000,1000,123,639,-738,-1000,1000,321,515,-1,202,1000,-167,-1000,-484,226,-622,-1000,-773,535,-1000,-995,923,-209,443,-439,94,225,579,-10,847,-336,1000,324,330}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00907() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{813,-1000,-406,350,-18,-639,-341,-519,354,35,421,138,-108,508,998,-565,-201,-83,698,-863,-151,48,789,-267,544,-32,448,660,1000,436,-929,-211,343,-831,-513,-1000,-98,-859,1000,-97,-808,-861,524,37,550,380,99,268,453,-602,39,923,-209,263,443,94,-207,-1000,-1000,-574,227,-80,-63,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00908() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{-994,341,441,-294,-409,898,-404,437,596,927,-634,55,-343,-550,653,484,-1000,684,-1000,413,645,-591,1000,-289,513,683,445,575,868,240,145,-814,-1000,-1000,224,-433,489,1000,-441,321,-95,1000,347,131,426,-269,1000,727,214,-222,765,421,868,618,170,-824,-154,607,521,-244,-1000,1000,-493,-200}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00909() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{1000,-917,-61,-538,527,866,998,-541,-102,-733,1000,-387,412,-452,92,-1000,-66,-1000,1000,471,1000,-636,587,297,-777,42,349,141,1000,192,28,508,595,1000,94,-25,400,-996,-1000,294,-562,-1000,795,-1000,-1000,273,-520,1000,9,400,62,591,-1000,1000,-336,1000,760,-603,-359,-189,1000,400,483,101}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00910() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{846,334,-987,-615,-1000,565,701,322,-407,-135,-831,-1000,-155,1000,1000,-1000,-471,407,-1000,655,-546,571,619,-1000,-399,1000,-345,321,507,980,394,-598,-237,-1000,-951,1000,1000,-1000,-794,1000,1000,2,266,-1000,-786,-1000,-35,932,1000,951,-223,1000,-192,-847,-1000,533,1000,662,-1000,-287,-1000,381,417,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00911() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setDirection(org.jfree.chart.util.Rotation):void",
+            new int[]{895,193,-222,930,-1000,305,1000,509,737,-96,-827,-905,-1000,876,11,-609,418,-1000,-1000,734,-400,231,567,-1000,-315,784,497,914,362,-156,243,-1000,143,855,-539,230,-400,326,1000,-294,-521,-218,-727,-1000,-508,-911,-1000,507,29,-1000,-1000,828,-805,1000,-1000,663,766,188,397,-101,-730,1000,-441,-429}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00912() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{843,-977,-191,-494,1000,-279,-222,1000,-296,626,354,564,-95,670,465,-857,36,-501,913,-502,156,-1000,-1000,-876,-348,-895,271,1000,-1000,-1000,113,-1000,765,-194,-901,-67,-750,1000,-881,-353,-478,-615,-268,-1000,-136,-1000,578,-1000,-625,-371,-1000,-754,50,-1000,170,393,788,1000,-1000,682,1000,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00913() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{131,914,309,-32,359,-1000,-876,-1000,-100,319,277,-771,909,-8,-1000,175,323,431,-416,805,-16,211,-112,1000,294,842,1000,224,356,-107,-244,1000,-1000,-884,-1000,-1000,490,542,-294,724,-382,1000,765,-794,841,884,-166,262,-556,-1000,628,557,-22,588,1000,109,-120,334,-667,825,902,1000,-64,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00914() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{1000,307,1000,-834,384,-96,606,408,-327,258,-962,-274,-505,1000,-410,46,1000,-97,343,-341,-553,-609,-69,644,-1000,478,789,1000,-767,341,-755,-509,546,1000,-1000,-888,-977,632,598,-535,-966,973,892,698,92,848,94,-147,-120,1000,-705,-754,-378,-867,-891,-524,594,-190,-1000,1000,947,-433,-765,116}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00915() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{677,-265,-66,85,738,-1000,-155,187,584,81,142,-85,628,806,-550,200,256,-83,691,408,29,-716,-368,441,676,480,819,746,-19,-49,-180,197,-21,-417,-822,-524,-120,799,46,102,-1000,319,251,-439,232,-259,17,-142,-746,0,-190,248,-535,-720,97,-307,1000,965,-102,1000,480,-33,-560,64}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00916() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{714,-891,-130,94,879,-143,-843,-1000,1000,178,-489,-1000,870,-77,162,751,-703,-61,1000,1000,-142,-185,534,1000,640,466,1000,951,91,246,-1000,1000,-349,114,-335,264,412,1000,1000,606,558,498,619,188,-271,409,-2,1000,-970,444,606,-395,-558,510,1000,-390,-900,1000,1000,1000,-1000,227,180,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00917() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{847,975,-83,-478,443,-1000,-871,-730,4,185,479,-1000,26,149,-1000,-252,653,608,627,51,48,211,-353,183,370,842,1000,147,-420,-165,95,847,-1000,-1000,-576,-51,397,572,-294,-427,-518,254,432,-367,949,884,302,262,-266,-716,380,1000,-300,-405,-33,378,942,926,-231,368,113,1000,-64,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00918() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{1000,994,649,27,521,-64,289,134,234,-231,-208,629,-1000,1000,-1000,1000,1000,-1000,170,1000,-571,241,1000,861,-215,1000,930,1000,406,1000,-116,-339,-109,747,-1000,-1000,-938,464,519,-979,466,1000,958,1000,62,1000,38,717,29,675,762,-1000,-412,-706,-1000,-1000,927,415,685,578,1000,574,464,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00919() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{-398,103,721,-860,288,-292,539,-431,-811,1000,352,723,-387,-1000,63,386,-37,-955,-908,-520,-843,-213,-484,88,681,-1000,64,-1000,239,-999,-675,60,946,-1000,-541,67,-681,1000,-1000,91,1000,279,183,-860,-404,-392,827,-1000,414,-1000,249,1000,440,804,748,132,-857,128,-265,-1000,-702,-494,-1000,943}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00920() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{811,1000,-496,-169,438,1000,-669,2,598,-1000,-320,-1000,437,127,-1000,674,1000,-602,303,30,711,-463,799,-137,550,684,-211,914,-951,583,223,-756,-713,1000,-742,-950,77,1000,1000,-1000,-263,885,1000,1000,1000,433,-1000,-825,-840,1000,-1000,-1000,-166,-1000,-966,-1000,907,-1000,-1000,387,706,133,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00921() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{706,-434,-242,500,104,-601,771,-986,606,815,130,127,495,363,-895,522,644,628,-119,623,561,1000,289,187,1000,281,901,-858,818,76,409,699,-990,63,65,1000,440,-1000,112,1000,1000,242,-344,-554,872,-1000,-140,1000,-674,-987,234,-395,117,20,-124,17,416,-382,709,-205,-1000,177,20,-800}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00922() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{591,-156,-296,-523,485,625,328,753,179,208,-388,405,-310,-543,236,45,295,-4,-850,-1000,173,-973,-1000,-1000,-318,-852,-841,-455,-1000,-1000,-469,-1000,197,-338,268,1000,-970,-135,-458,-793,1000,-861,-39,-159,-52,-920,245,-1000,-100,411,-1000,1000,1000,-564,-816,-758,899,983,-1000,-431,298,-998,-51,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00923() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{837,-658,474,568,300,-682,491,-385,468,126,344,-941,901,353,-886,973,772,-558,-636,443,-559,-301,702,780,-799,471,-368,-243,-294,-48,-842,320,900,656,-995,212,-635,456,632,199,-80,255,238,203,37,-110,-127,503,-833,-377,-532,-561,455,-267,-921,-482,433,-853,-999,706,-669,-231,-499,808}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00924() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{-539,1000,-631,-630,586,-517,-839,-161,-223,290,1000,175,298,405,-896,-1000,901,-176,1000,-397,-47,302,-421,-1000,-81,-621,1000,230,1000,-309,613,898,-1000,-1000,-432,646,-135,46,-431,-1000,6,-1000,-273,-348,803,782,1000,-339,28,-500,-256,305,368,-929,-1000,1000,1000,731,-464,1000,-1000,591,-15,288}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00925() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{963,478,-382,-883,626,-808,-918,-161,-612,567,627,-567,699,53,-761,-992,499,316,782,-40,137,12,-795,-739,-347,-121,801,324,804,-831,300,9,-525,-909,37,269,258,713,-324,-745,-153,-967,69,-760,692,366,694,-339,-181,-976,-187,762,155,-600,18,868,794,950,-860,146,664,382,-372,-146}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00926() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{-58,-953,52,-203,846,-279,679,439,-111,854,354,776,-539,670,329,-483,-183,-501,657,-69,-882,-580,-428,-666,-571,-414,480,-411,-240,-921,573,-350,765,-987,449,1000,-375,-955,-1000,3,1000,-1000,-648,-1000,-136,-1000,981,-406,140,-1000,-468,1000,313,-246,170,893,-459,1000,-1000,-174,-211,-1000,-913,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00927() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setExplodePercent(java.lang.Comparable,double):void",
+            new int[]{481,-912,-56,-749,984,-208,872,1000,-193,808,-387,1000,-1000,-92,1000,-161,66,-747,-911,-1000,-354,-1000,-1000,-1000,-1000,-1000,-1000,-455,-1000,-1000,-200,-1000,1000,-602,338,768,-1000,-135,-1000,-1000,674,-1000,-546,-300,-847,-1000,1000,-1000,163,217,-708,56,1000,-835,-948,-210,751,1000,-1000,-358,393,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00928() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{659,565,401,218,-998,-381,719,-606,609,340,250,70,-153,-309,705,840,-516,563,658,316,-928,-44,214,958,-165,982,766,-120,103,562,588,921,-236,205,-290,-663,-308,309,316,47,645,-947,-307,538,-239,-840,-303,232,-568,-476,-377,-565,-920,40,392,800,-826,847,-925,665,653,-382,-140,594}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00929() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{826,-567,286,662,-1000,-36,48,-254,-215,249,354,493,-1000,793,-256,671,-1000,188,115,28,452,92,-600,-249,120,-663,-193,-170,-569,452,55,198,-952,-354,-175,-592,-830,509,681,794,1000,-401,-1000,-107,-58,85,652,119,-819,110,-336,-397,56,807,397,434,-242,-361,265,91,-584,1000,-213,36}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00930() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{647,-968,-256,916,-1000,536,1000,-1000,-1000,-1000,-949,-233,-806,919,-1000,595,-816,5,-1000,-576,460,29,-1000,-1000,649,-1000,-803,286,-1000,-428,520,-186,482,-1000,-599,-545,-1000,1000,-747,596,663,-215,-813,262,-1000,838,1000,194,240,545,-294,-1000,228,174,377,-208,-80,-1000,19,-1000,-446,1000,533,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00931() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{872,-579,60,855,-926,655,599,-1000,-1000,-38,-1000,-521,-158,923,335,-153,-608,281,576,-679,-247,35,786,-491,761,1,-313,-239,-510,-119,701,478,464,-1000,810,-98,-1000,-950,-210,-386,165,302,-200,-31,-809,-188,249,853,608,238,-361,-1000,-52,428,844,-339,-249,-755,-1000,-61,407,427,53,-430}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00932() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{-1000,-277,-1000,1000,-161,94,-598,613,55,1000,-292,1000,958,-389,1000,115,1000,-1000,-159,-416,-103,-245,1000,760,182,-915,27,592,-208,-943,902,-513,1000,254,-1000,-1000,-846,-1000,281,-510,-419,-596,1000,599,1000,95,855,-304,-594,1000,-74,1000,347,-202,-498,891,1000,-955,529,1000,-1000,244,1000,-509}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00933() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{79,-278,729,930,-1000,726,942,-1000,-99,-105,179,744,-454,1000,-234,426,-348,-564,-565,-630,-1000,943,-1000,-922,-691,-1000,-81,1000,-892,-1000,1000,1000,-174,-1000,-931,-1000,-1000,736,-1000,167,747,-377,-174,1000,-931,-117,896,-1000,264,672,-828,-1000,-215,-782,368,35,-76,-514,1000,-525,-954,766,960,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00934() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{996,-899,465,1000,-861,-3,508,-1000,-211,103,-983,672,272,1000,821,417,-1000,52,-159,-1000,400,-754,800,-227,29,-500,-968,-317,-271,442,-257,916,-650,-659,784,-741,-1000,-248,1000,101,1000,-15,-634,-408,-7,54,855,563,331,415,693,-23,288,162,453,343,540,-947,960,109,-239,889,5,-705}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00935() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{589,-197,296,-1000,127,828,-335,-86,46,50,197,623,374,-449,1000,705,482,-1000,-1000,85,260,402,964,267,687,-441,-395,-448,240,-391,-132,379,1000,205,693,560,757,-973,379,-701,-126,33,1000,20,-115,533,-303,924,-3,1000,337,138,1000,-122,-28,-849,1000,-329,-925,120,48,-865,102,-294}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00936() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{-670,-709,-631,1000,-656,158,90,530,179,257,89,954,-135,-502,700,138,489,-1000,-350,-95,27,348,425,-184,356,-915,-184,245,-782,-237,611,-363,742,-219,-688,-759,-846,-640,436,-17,-505,-363,396,396,237,5,-34,-683,-570,726,-520,-260,450,620,-239,1000,839,-966,562,396,-905,1000,1000,-910}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00937() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{332,172,-367,-161,523,1000,-329,1000,-257,440,1000,-162,1000,401,52,185,337,161,115,-134,1000,-240,1000,932,-605,-587,-10,-136,230,111,-258,-1000,-792,719,797,396,707,58,-195,-691,-507,208,181,-697,-178,-343,303,402,-204,143,-123,-627,1000,-187,576,-112,415,-567,548,961,-561,59,24,249}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00938() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{826,-1000,398,993,-1000,214,1000,-874,-1000,-1000,-707,-100,-1000,1000,-1000,397,-1000,908,78,-301,1000,-226,-1000,-820,-19,-1000,-797,621,-1000,-212,56,-633,-983,-1000,-175,-1000,-1000,1000,-285,794,1000,-310,-1000,-51,-910,1000,652,-134,-693,-580,-395,-690,-202,1000,750,-25,815,-838,-363,-1000,-518,1000,-206,-670}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00939() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{526,-624,-11,-221,-1000,-209,1000,-1000,450,-743,-1000,1000,-806,1000,-180,493,-786,-981,-1000,-598,617,-500,-521,-543,645,-1000,-489,335,-1000,-570,768,596,457,-1000,-1000,-1000,-1000,-489,-1000,499,1000,-954,3,611,72,1000,-60,-1000,-867,1000,508,-839,-533,597,412,-618,540,-127,802,-608,-957,982,834,-613}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00940() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{-110,464,-601,681,131,606,-543,620,-810,309,1000,-329,797,-131,-883,379,367,354,48,428,885,-137,231,-888,-1000,-587,413,18,114,395,131,-1000,-61,369,303,236,122,903,313,486,420,288,-163,-337,-319,411,1000,736,69,102,-996,-503,828,-396,453,832,-359,-721,241,610,-178,448,-175,159}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00941() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{-194,-523,67,-786,-912,26,-623,338,-874,35,-141,-447,-8,-197,-567,-794,-451,692,540,-2,305,497,214,727,691,-172,142,-443,518,-153,683,-921,-175,228,526,-521,763,222,-584,729,-244,-592,-781,-152,-228,-172,504,-951,204,8,-260,806,608,-345,260,793,351,-297,198,987,-951,-167,760,-749}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00942() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{517,-695,-41,-523,-254,45,554,-360,809,-38,-325,1000,-272,829,335,139,-294,-1000,-717,-679,632,-373,192,-197,500,-1000,-460,444,-510,-691,249,239,327,-499,-295,-771,-163,-950,-973,650,410,-666,511,233,463,-77,-199,-1000,-970,1000,307,-656,105,217,204,-596,689,-178,1000,-61,-1000,210,828,-489}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00943() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreNullValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreNullValues(boolean):void",
+            new int[]{231,-1000,233,-957,-1000,-176,909,-1000,38,-445,-118,1000,-1000,-796,-1000,1000,-1000,-1000,-1000,633,-435,596,-1000,-1000,992,-428,-176,633,-1000,-2,459,1000,1000,-1000,-1000,-934,-44,119,222,1000,1000,-581,-447,698,89,1000,1000,-656,-672,1000,416,296,-446,362,-765,1000,-678,-180,1000,-1000,-665,1000,322,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00944() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{850,787,83,-186,-577,304,690,393,-85,-758,639,-378,-702,-164,350,831,1000,264,-748,910,1000,-200,-1000,-542,146,-880,1000,34,98,750,1000,-717,1000,1000,1000,1000,1000,586,-57,-1000,1000,-469,-10,1000,-281,-960,1000,646,-1000,309,-349,-186,-214,501,166,-38,-768,172,116,-133,-1000,-741,-1000,918}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00945() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{-106,-156,-566,-892,1000,392,-383,-1000,516,433,1000,666,462,-641,670,-863,-391,-1000,-986,477,-919,197,766,552,-111,109,43,-770,-565,78,-349,903,-252,-137,-34,-977,-359,621,242,607,-1000,585,141,-118,-856,-120,-620,-776,350,-321,468,-53,75,61,925,543,436,543,529,-256,1000,1000,-681,-252}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00946() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{1000,1000,129,929,-1000,-914,658,813,-1000,-1000,-795,-654,-1000,-569,-165,1000,635,-198,770,356,1000,-218,-1000,-1000,602,126,-309,-843,73,-113,1000,-1000,1000,1000,1000,1000,936,318,1000,-1000,1000,-938,-1000,747,-1000,-964,1000,314,-768,1000,473,1000,1000,865,600,649,-663,516,-1000,899,-686,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00947() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{67,514,-641,-146,-595,287,1000,1000,-1000,-648,-4,170,-872,737,21,601,-724,56,509,-440,-843,-186,620,-687,-535,771,-553,702,636,80,-10,197,-964,179,-16,-28,-679,296,-590,429,511,-976,-122,-70,455,639,-98,565,-93,-328,951,-101,-407,257,-428,-259,-47,-499,-393,-282,-719,-271,1000,797}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00948() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{686,787,-220,636,644,-874,-734,-333,-688,293,101,-23,-196,-87,867,-915,-716,72,327,910,640,319,-123,-393,741,218,-765,-97,-77,895,269,635,654,510,63,853,-986,873,-57,271,563,-469,-10,134,444,-430,791,612,195,87,-349,755,575,-144,-686,694,999,-956,-665,-664,-359,-994,-294,63}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00949() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{100,324,-106,-481,595,745,55,-354,537,1000,975,308,822,-734,-155,-354,-1000,-1000,-298,-1000,-1000,406,978,973,-1000,724,-409,-1000,192,-357,-780,273,-466,458,-217,-1000,-466,-665,-378,1000,-1000,1000,604,-1000,-190,551,-1000,-752,437,169,579,-1000,-558,-68,-1000,362,405,380,-70,245,1000,1000,331,-505}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00950() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{747,324,749,-710,-329,1000,1000,-354,13,19,1000,690,-369,-854,-28,138,1000,-1000,-1000,-1000,-430,1000,-575,1000,-1000,-1000,983,-435,1000,488,1000,-655,1000,919,751,-359,965,-1000,198,-1000,1000,91,1000,158,-190,-1000,1000,-1000,-1000,169,-1000,-700,-1000,207,-464,-1000,-1000,1000,1000,-603,948,1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00951() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{324,-150,-441,-71,153,216,32,283,-308,163,136,-64,-49,309,147,697,-954,-170,321,66,-1000,-251,701,-460,-393,1000,-819,-537,-130,98,-406,197,-811,117,-47,-254,675,447,-527,1000,-387,-84,81,-715,-584,587,-916,-76,852,147,1000,-16,-146,162,-317,539,604,-357,-81,120,-232,354,782,-80}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00952() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{523,-475,-220,-91,664,-208,-1000,-1000,171,390,247,-924,359,-705,-151,-868,-455,-1000,-1000,-269,-1000,375,471,-501,-827,42,858,-1000,261,521,58,-34,322,781,-574,-495,66,-448,403,414,-597,326,1000,134,-1000,-808,1000,-727,455,1000,601,-360,-372,-160,-618,-309,532,-956,698,-216,1000,1000,-1000,63}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00953() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{1000,818,369,97,-1000,428,1000,705,-699,-922,-14,-891,595,-148,-891,1000,1000,-1000,473,-1000,-1000,151,-1000,-440,-1000,-413,-121,-575,189,632,1000,-1000,337,1000,1000,1000,1000,331,706,-768,1000,930,-1000,-538,1000,-356,-232,405,-868,776,380,410,124,836,-944,-96,-327,1000,-976,1000,1000,-707,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00954() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{-474,792,-852,-1000,-69,492,1000,24,-473,-725,800,1000,-714,-30,489,-1000,-62,-676,-716,-917,83,289,651,228,-314,-351,424,1000,529,51,216,904,-471,-48,9,-654,-137,405,152,-292,283,-691,-148,803,628,-46,549,139,-1000,-1000,142,-1000,-298,197,768,-596,-493,340,83,-830,305,108,-371,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00955() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{-862,803,706,-284,-1000,744,1000,-86,476,75,495,1000,-6,-536,-562,686,475,19,-399,-893,784,1000,-291,667,-653,-1000,1000,-245,1000,301,1000,-332,945,1000,-187,51,588,-50,606,-634,1000,24,-417,-125,1000,-1000,1000,844,-1000,-592,-500,-82,528,623,-348,-630,-1000,-80,741,-308,-206,-400,-990,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00956() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{-307,514,-458,65,400,287,32,-612,-74,3,-282,766,317,467,-137,-221,-724,56,123,-41,-899,230,236,-687,-535,294,-232,-813,-829,-95,56,460,-1000,196,-16,-384,-272,-205,469,911,-1000,519,-201,-335,-299,-60,-682,565,-93,425,457,528,683,104,249,1000,92,680,-393,358,1000,400,-777,797}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00957() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{-106,-23,-754,-90,971,-506,-1000,-970,-29,518,10,1000,462,-284,878,298,-1000,-517,-335,264,1000,96,909,788,547,692,-821,-480,-365,-95,-708,833,-272,973,-34,-1000,-1000,-847,-139,1000,-1000,585,1000,854,-856,159,-712,-776,936,-83,277,66,432,-202,925,1000,-71,-232,-114,-692,1000,581,-336,-607}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00958() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{-282,136,-932,-728,484,-1000,-572,109,-1000,198,-952,893,417,752,912,1000,-873,-1000,424,1000,1000,890,600,-393,-575,14,-1000,810,-41,297,-577,326,-971,1000,866,-1000,-1000,33,77,-68,-1000,-223,513,1000,-1000,937,452,562,774,180,314,476,464,119,1000,113,-548,383,-818,-922,845,209,-702,858}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00959() {
+        org.junit.Assert.assertEquals("VOID|getIgnoreZeroValues=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setIgnoreZeroValues(boolean):void",
+            new int[]{-352,1000,188,-124,-1000,385,1000,1000,-568,-883,-705,654,-307,-401,-1000,1000,1000,-913,175,-1000,838,512,-1000,339,-978,-909,357,-609,-119,142,1000,-1000,-964,805,645,656,1000,-767,1000,-1000,1000,-14,-122,527,-438,-813,1000,1000,-1000,86,563,1000,367,257,-133,-516,-1000,-499,-393,1000,-90,-884,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00960() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{1000,1000,-36,687,844,-567,-755,-124,1000,-950,-1000,-697,-1000,646,1000,250,-282,1000,-47,-393,-402,896,-480,2,-260,471,-958,1000,-983,1000,-103,-1000,824,11,1000,-939,738,1000,-204,1000,-356,-1000,659,-621,321,1000,-870,-188,350,-886,449,142,1000,1000,-1000,-571,726,433,1000,353,-1000,263,946,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00961() {
+        org.junit.Assert.assertEquals("VOID|getInteriorGap=java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{-259,-116,-851,-744,-958,326,362,369,-989,92,23,213,473,-930,108,-643,-750,-551,302,-676,-400,228,-18,-455,909,-244,770,-941,976,-267,989,257,-453,-250,537,-311,148,-332,785,163,739,-73,-583,-797,202,-781,379,-687,274,847,484,-575,-821,-397,647,400,-94,-7,-800,544,854,255,-708,-293}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00962() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{475,-679,433,-232,68,901,84,-686,-856,421,610,1000,-23,315,-5,-62,-227,4,349,-1000,-160,129,-1000,-126,987,1000,36,-686,-521,-345,-383,818,-32,838,-144,-23,13,397,506,-164,-249,-1000,-853,327,-281,323,-141,-71,-810,1000,1000,-962,-517,-781,-829,572,-1000,172,-1000,858,-1000,-614,167,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00963() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{26,-88,-476,962,-445,-796,-568,-88,28,-486,-759,959,383,440,595,382,-732,461,-550,-782,-1000,53,-1000,368,539,839,-421,-466,-1000,206,-175,-851,627,861,426,-318,83,153,-144,141,-108,-619,615,-805,46,-331,349,-116,284,-105,571,-507,-21,193,-730,426,417,343,-175,965,-1000,432,820,168}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00964() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{-1000,-291,-307,-1000,-699,1000,482,539,-995,149,-58,1000,1000,-1000,-707,-461,-805,-773,-214,123,126,980,-1000,-710,1000,129,971,-1000,-654,-714,1000,-500,-260,-36,-588,-848,876,-1000,40,-79,191,-575,-208,19,-984,-1000,1000,37,-1000,1000,96,-106,768,974,1000,1000,-1000,-268,-1000,-607,577,582,-746,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00965() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{118,903,-39,-534,393,-66,-1000,-478,15,-186,-845,-1000,31,-705,376,-137,-232,-86,676,-670,17,356,207,-756,-324,-400,139,776,-566,1000,-110,-166,567,-675,676,-457,141,67,0,414,861,-505,716,-812,424,1000,-492,-215,-2,-758,88,-84,-274,1000,153,-259,630,185,-260,1000,298,-208,-250,589}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00966() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{-250,-141,-851,-933,-815,374,359,595,-992,-86,-759,295,475,-1000,-150,-773,-847,-686,399,-1000,-580,106,-351,-414,1000,-296,848,-966,1000,1000,1000,-1000,-522,-491,460,-433,191,-455,253,298,1000,-41,-547,-1000,83,1000,565,-731,442,893,-186,-702,886,-578,753,-45,-168,-89,660,681,1000,499,-803,-505}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00967() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{977,470,493,-389,733,859,1000,-313,-952,154,443,795,-1000,-467,1000,1000,-758,434,144,-502,201,185,-804,-853,54,1000,-1000,-367,-190,-64,129,739,764,1000,-209,395,891,1000,295,661,-564,113,-916,-241,-78,890,1000,327,-433,1000,479,-1000,-311,-687,694,-385,-902,-1000,-132,868,-1000,-944,-2,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00968() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{710,417,-349,-99,143,-466,909,830,-539,209,230,-1000,-28,-735,264,157,-334,-105,505,-975,-696,-84,909,-958,819,129,169,675,448,-167,910,-1000,417,69,1000,-627,145,711,156,-187,1000,-1000,-452,-964,380,789,-1000,-475,890,-332,-292,-1000,-893,775,-861,-259,1000,-325,355,706,1000,-909,-245,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00969() {
+        org.junit.Assert.assertEquals("VOID|getInteriorGap=java.lang.Double:TmFO", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{953,926,-877,-599,-370,-391,-429,258,127,-827,1000,67,43,896,1000,-4,-276,-36,-49,-456,-741,514,-1000,-156,1000,-569,1000,-200,0,260,312,-253,-435,-13,565,752,1000,922,1000,389,587,-162,-812,-1000,-397,152,246,0,-964,323,125,-555,0,-547,-648,-467,353,569,-1000,589,-789,593,-572,807}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00970() {
+        org.junit.Assert.assertEquals("VOID|getInteriorGap=java.lang.Double:TmFO", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{74,-31,45,-1000,467,-968,198,830,940,-884,-1000,349,163,-915,-710,157,-334,-795,393,1000,1000,-84,-200,-624,-799,129,724,-906,1000,-304,470,102,-554,-944,-1000,1000,-120,-1000,-343,-21,443,-372,-452,-499,-559,789,-1000,834,-882,-427,-607,-446,-354,407,-85,546,-272,584,-285,418,1000,308,-1000,972}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00971() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{1000,407,493,-600,752,338,946,253,246,-291,-546,1000,-1000,-1000,1000,1000,-1000,449,213,-464,836,-118,-1000,-752,472,537,-1000,-430,735,1000,1000,-494,593,1000,-402,1000,1000,300,-80,1000,-258,-670,-828,-1000,-518,128,1000,590,-1000,1000,-332,-710,1000,120,23,-6,-902,-1000,499,127,-666,-334,-237,311}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00972() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{375,187,-268,-1000,76,-1000,-896,1000,1000,-1000,-1000,321,-92,-1000,-432,-329,-776,-106,561,1000,1000,-376,-257,-592,-46,-1000,750,-424,1000,1000,1000,-1000,-741,-1000,-916,1000,-587,-1000,-475,604,732,371,-490,-199,-725,1000,-1000,889,-1000,-739,-218,321,537,1000,-1000,768,109,880,627,-654,1000,1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00973() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{-305,12,-851,-172,-792,1000,1000,-762,-1000,981,1000,-196,461,512,-422,5,-265,-1000,-184,-188,-1000,835,-475,-658,73,1000,377,-816,-874,-1000,-752,1000,-110,954,924,-1000,-70,1000,1000,-515,127,1000,-760,721,1000,-1000,1000,-1000,1000,1000,-133,-1000,-1000,-1000,1000,227,11,-805,216,1000,-165,-965,-237,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00974() {
+        org.junit.Assert.assertEquals("VOID|getInteriorGap=java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{-1000,124,-613,-170,-1000,740,-709,275,-467,-312,-376,919,1000,-142,-707,-986,-302,-387,-395,173,-741,-132,-1000,-182,924,83,1000,-1000,0,-714,574,582,-98,-729,394,-502,692,-1000,1000,-79,123,294,-507,284,-397,-831,688,-508,-964,680,643,490,-706,-1000,1000,1000,-188,735,-1000,-449,343,1000,83,-671}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00975() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setInteriorGap(double):void",
+            new int[]{498,1000,-833,-172,-1000,-94,-695,1000,1000,-1000,-1000,209,-335,-302,417,-851,-856,213,-177,1000,1000,-511,35,-658,621,1000,455,825,964,1000,1000,-1000,-479,-1000,-313,266,775,-1000,465,-515,168,-465,-758,141,-372,1000,-959,448,-1000,-340,-13,1000,997,153,1000,301,934,1000,652,-1000,999,1000,-161,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00976() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{-952,-533,1000,-1000,4,370,-1000,443,749,-292,-705,219,-796,-379,-622,-260,-721,406,-586,-1000,1000,-489,-947,-267,-1000,1000,-439,-147,675,-948,-1000,-168,487,113,1000,334,-861,-1000,-1000,-1000,-812,-1000,-55,-62,-405,1000,358,-4,-162,-201,1000,92,1000,-1000,-522,61,765,-362,-1000,977,-868,700,-712,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00977() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{348,1000,-332,968,-751,-884,92,-506,-1000,582,505,-731,-246,303,766,-393,1000,-403,1000,1000,-1000,-818,7,107,1000,22,176,110,-819,304,1000,-1000,-1000,235,383,163,1000,1000,-51,918,-316,1000,1000,1000,117,-901,863,-560,-407,473,-1000,-149,-162,1000,1000,-321,-147,934,-239,431,-869,506,-971,-466}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00978() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{-1000,-1000,449,-263,-345,891,-221,25,1000,-153,22,281,-353,-1000,-687,-134,-1000,-464,-299,-1000,1000,283,170,627,-1000,1000,-125,114,945,-957,-1000,1000,1000,-242,244,1000,-1000,-1000,-399,-520,133,-1000,-555,-1000,-697,1000,-235,-157,186,17,1000,124,1000,-1000,-1000,-191,1000,482,-144,28,-744,1000,-18,-14}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00979() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{707,-826,-351,-647,1000,843,-196,458,-626,475,-949,-1000,-967,-1000,672,1000,-1000,523,81,-1000,597,-193,308,-648,-1000,-517,-367,-727,1000,-538,-1000,1000,219,64,635,-221,-1000,-1000,-306,-539,-178,-1000,-977,-477,702,534,17,307,1000,-1000,808,880,1000,-1000,-1000,-741,985,-404,-556,-1000,-185,807,654,209}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00980() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{-866,83,57,-155,-882,-858,-262,305,463,-261,-365,-121,-65,-285,-415,513,496,-431,-36,187,867,-362,823,213,-946,1000,45,254,-612,-322,-813,-334,139,-280,279,381,655,-1000,-672,273,209,419,56,-89,-1000,1000,111,-473,65,23,-468,-141,848,117,-105,-169,84,144,1000,-10,-806,66,-122,239}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00981() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{-1000,-58,-746,-293,611,-1000,633,-632,1000,16,757,933,575,-1000,13,882,1000,523,1000,681,675,-410,1000,342,208,1000,909,-169,-1000,225,325,-82,482,-66,715,239,-142,-588,-276,336,769,435,-733,-467,-869,718,190,-1000,-94,684,201,-300,301,-1000,-621,-710,505,1000,-166,564,-913,357,-345,878}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00982() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{-558,-13,-938,-220,736,-884,814,-506,-228,514,128,245,-156,-97,260,-729,-630,600,108,411,-681,-818,-764,-631,588,420,89,-848,983,407,852,584,-954,409,204,-28,533,-818,-852,-305,-909,224,-972,-202,-666,770,863,-494,398,-792,-768,970,861,-987,40,-442,-147,329,-239,-495,186,880,-39,843}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00983() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{-1000,-810,-716,-851,-97,-1000,-449,-15,-1000,-1000,-1000,-285,-815,-1000,-1000,618,685,133,-176,-298,-782,-1000,-611,-1000,262,504,-321,-574,17,-1000,-580,589,-1000,-359,332,-1000,-779,-1000,-1000,-1000,-145,-1000,-542,719,-1000,-540,240,-480,-1000,-792,-623,-1000,-231,-607,-290,-1000,-145,-737,-22,1000,39,1000,380,-204}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00984() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{-775,280,303,-38,460,-1000,26,883,-1000,-273,-530,-286,-767,-650,657,-921,-1000,809,49,551,-642,-828,-30,549,-936,506,-1000,-1000,888,-535,-648,-238,-671,341,955,882,-603,-714,-1000,-565,-880,-1000,855,550,-1000,952,321,-825,-138,-332,354,756,1000,69,588,-784,150,866,58,722,-973,943,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00985() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{468,803,302,1000,574,-1000,563,-328,226,1000,-101,527,146,-665,936,-512,624,-327,1000,1000,-720,-157,1000,1000,-382,402,331,1000,98,-23,130,-1000,-41,89,-415,980,759,759,-721,1000,44,561,922,-257,-105,-332,-1000,-581,1000,260,-336,1000,140,1000,627,-592,-338,1000,933,-1000,-380,675,788,-980}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00986() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{-395,-1000,-6,416,-661,-747,-1000,489,-1000,-197,-1000,-545,-318,-969,462,-119,480,805,-712,-424,569,-1000,154,-281,-954,1000,95,-723,411,-1000,-1000,-745,-830,210,1000,513,-454,-1000,-1000,-1000,-880,-1000,-374,-158,1000,150,102,-298,-737,-365,913,-432,1000,-1000,-1000,-1000,-301,-467,-971,1000,-923,1000,-995,-963}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00987() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{-806,640,478,-788,272,-359,-982,329,-572,-1000,176,357,190,-668,-588,-1000,-1000,-648,-1000,-169,-446,-881,1000,1000,-927,898,375,-659,598,-466,239,-353,-758,575,425,1000,-765,445,-449,-299,-48,-628,1000,854,-1000,427,1000,-11,553,-341,200,150,901,-258,757,-242,-342,695,-799,-41,-1000,659,-785,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00988() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{741,881,-265,440,-388,238,234,-15,94,-447,-482,-266,-172,-612,-411,-99,273,-137,-722,6,-890,115,-222,-154,992,-867,-161,-326,-809,-522,416,564,-820,25,-624,144,849,51,-216,-433,686,739,220,879,-963,-493,608,-193,305,-595,123,-631,-145,311,865,704,288,623,225,-951,-255,-279,101,859}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00989() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{89,725,449,274,-68,-1000,34,697,-356,739,-403,-69,-353,99,1000,-1000,288,514,1000,1000,-667,-881,-58,592,426,732,-813,93,79,-562,614,-1000,-1000,-95,707,1000,1000,293,-1000,269,-1000,157,1000,1000,-304,-354,-72,-1000,94,-262,-908,234,1000,1000,1000,-194,-1000,774,501,495,-1000,364,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00990() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{525,290,-8,-805,939,-1000,-1000,345,-137,-628,-500,244,-322,-682,1000,-887,-1000,0,-36,94,-526,-649,564,1000,-946,241,55,-700,617,36,-456,-933,148,332,904,1000,-1000,-1000,361,1000,-900,-672,898,50,386,973,698,-1000,1000,-505,-334,1000,1000,114,411,-255,-171,1000,-1000,486,-981,761,453,-986}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00991() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelBackgroundPaint(java.awt.Paint):void",
+            new int[]{647,1000,589,811,-1000,1000,-1000,-15,-101,475,-198,653,-800,331,-1000,-910,1000,-137,81,-288,537,-471,-222,-406,1000,504,479,1000,-1000,-917,676,61,-820,-49,26,633,1000,891,-672,-283,-1000,359,1000,719,-200,-540,855,191,839,-697,-623,-631,731,1000,1000,848,-978,66,-1000,-300,-561,-397,380,721}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00992() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{-71,575,1000,-130,-257,-170,666,-660,-885,635,-367,1000,-85,970,-562,1000,-1000,-347,200,556,-1000,623,1000,414,908,-404,-220,-707,-319,-27,146,141,-116,821,617,675,1000,-750,-271,-779,-100,72,461,985,-1000,-617,-974,-1000,1000,651,-284,-554,158,-526,379,-326,-352,-1,-3,-109,-212,891,-733,-122}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00993() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{102,-1000,639,-186,-1000,-322,673,-804,-464,611,727,-1000,858,-1000,-1000,1000,1000,456,-1000,-1000,479,-65,1000,1000,352,1000,882,569,224,1000,-223,-1000,114,791,417,-1000,-576,668,233,294,134,-205,-1000,-1000,171,1000,1000,1000,-584,-1000,974,-1000,-695,315,76,347,53,1000,1000,-553,506,761,901,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00994() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{-863,-543,814,316,-1000,225,818,-414,69,927,62,-712,228,-640,-759,-328,1000,495,-439,-572,-41,627,-983,890,643,556,709,928,566,684,-477,559,-877,773,457,-1000,589,256,-828,188,822,1,-157,-404,-505,960,835,583,800,-38,248,968,100,196,-223,1000,-621,217,351,-325,-203,265,300,573}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00995() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{-196,206,344,448,-892,144,742,2,288,313,769,-17,670,-441,-694,1000,-318,532,-386,1000,71,780,388,791,255,119,813,742,783,633,52,-617,-915,372,408,-162,154,754,-1000,617,476,-84,-478,153,129,-372,-175,144,318,-583,742,-161,-703,20,-243,-355,93,726,642,-425,-170,715,624,768}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00996() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{509,112,314,-68,-566,421,377,-41,891,-120,769,-712,-1000,-1000,-694,713,-1000,628,-94,1000,847,-297,-1000,-631,75,-159,-1000,766,-554,420,52,1000,-1000,1000,1000,-1000,863,960,-542,-788,-101,190,213,622,31,765,-108,376,318,-203,74,-161,199,20,-622,-753,543,1000,642,-824,-170,400,1000,-30}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00997() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{374,988,-141,-769,920,-893,-41,-1000,-1000,108,-773,1000,211,1000,19,1000,-1000,-368,454,-652,-781,-209,1000,-61,750,-761,-1000,-1000,-1000,-1000,282,-604,756,-300,571,1000,-393,-943,132,230,-169,-153,-335,1000,-334,-1000,-1000,-1000,185,158,-181,-1000,105,-786,206,-1000,-294,-185,752,25,-177,-1000,-733,-233}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00998() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{-204,1000,519,567,296,150,1000,323,7,392,-355,1000,-360,844,-170,-245,1000,-635,1000,1000,-1000,136,1000,1000,474,-1000,25,-90,946,1000,72,398,-381,219,862,1000,1000,-225,-64,-143,752,164,111,945,-922,-1000,-929,-1000,-584,714,-185,-551,149,315,-35,130,-366,1000,-987,439,-582,318,-407,-296}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00999() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{-49,121,-891,-396,344,600,234,-146,-781,-104,-726,-695,360,424,-562,-526,652,13,200,-595,945,-602,-549,-107,359,55,377,515,-676,-301,94,-862,-116,821,136,675,-837,313,962,557,-741,-534,-117,627,290,-617,-21,-993,846,-794,941,825,-341,-516,-927,-326,-25,426,-843,124,-212,891,-642,-264}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01000() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{-149,-702,439,-281,-214,-563,212,-1000,-258,867,284,-1000,657,-979,-122,-400,1000,627,-765,-746,690,-100,1000,189,228,556,340,364,-252,529,-565,-403,-741,451,421,-772,-628,493,930,140,686,-90,-734,-989,171,732,982,1000,-584,-1000,758,-1000,-238,585,39,162,-363,381,705,-438,672,679,713,385}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01001() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{-596,-1000,694,433,-513,10,451,-804,471,805,-155,-712,858,-1000,-628,-1000,1000,647,121,-1000,-59,-235,-440,716,464,9,465,1000,566,684,-385,752,-727,444,286,-91,828,259,-662,54,134,-205,51,-275,-501,766,835,270,-584,31,88,-1000,468,-225,-362,1000,-642,-337,-99,-140,-28,-961,300,264}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01002() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{-1000,444,248,686,446,-1000,146,-1000,-966,700,-1000,-665,685,1000,260,1000,-523,940,101,1000,-654,-1000,572,-657,1000,-577,-1000,-1000,-667,902,-1000,236,695,555,243,-752,-66,-306,790,-1000,893,894,-238,-340,-1000,-714,-799,-1000,1000,893,656,-1000,709,-745,34,-1000,-819,-230,400,267,338,787,-307,21}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01003() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{567,974,233,170,-233,436,-36,66,1000,-881,622,-24,56,-609,-495,398,-1000,-829,640,906,332,-616,265,88,-139,-974,25,1000,163,921,528,-56,-790,-416,928,469,904,830,-435,221,228,17,461,155,459,-66,-930,-604,716,-496,221,-554,318,-857,-433,-294,195,255,252,-465,-79,-1000,737,197}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01004() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{766,251,572,-436,344,-175,3,-689,-462,-105,-206,513,-1000,578,-525,799,-1000,-690,668,368,-350,239,123,-640,660,-263,-1000,-690,-1000,-257,810,1000,-326,808,1000,-752,-213,532,350,-1000,-502,280,757,1000,-742,106,-927,-904,747,621,-590,-730,681,-1000,-28,-754,200,167,2,-334,607,-509,-469,-710}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01005() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{-245,-814,84,700,-502,-263,31,-361,329,-520,826,-1000,223,-1000,147,649,1000,1000,-284,-251,311,-380,-959,699,355,307,292,883,768,1000,-508,138,-611,-614,266,150,345,492,-277,378,1000,-13,-850,-905,337,790,1000,606,-560,-1000,1000,-290,-721,-108,-504,-160,528,652,359,-293,188,-565,1000,868}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01006() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{170,899,-116,-298,451,132,76,-608,158,-83,1,-4,-1000,9,-248,1000,-1000,666,81,765,480,-86,-594,-1000,240,-654,-1000,-537,-1000,-102,364,1000,142,787,1000,-931,117,-56,271,-925,-514,191,-702,1000,-203,723,-380,-137,298,185,-167,-299,371,-486,-638,-1000,118,813,309,-439,883,-976,-91,-806}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01007() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelDistributor(org.jfree.chart.plot.AbstractPieLabelDistributor):void",
+            new int[]{-240,-432,-156,358,561,-574,8,420,518,-1000,-759,-376,33,-693,-434,874,753,1000,567,170,-401,435,651,-650,-134,-876,1000,-226,-152,629,1000,896,-190,464,-594,236,345,678,290,-161,-541,172,655,-588,68,-1000,203,-646,-899,-541,59,-124,-1000,-485,-753,-1000,104,1000,-961,672,-1000,79,-459,300}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01008() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{-797,-17,631,775,597,-206,1000,-1000,-135,-6,774,-710,479,588,-1000,-563,41,-538,48,-240,502,-830,-311,57,-927,815,328,-670,-1000,-242,-780,-657,-314,-142,922,412,-506,465,610,494,194,886,-61,932,-437,-401,-835,241,2,897,-49,812,37,837,144,-466,-66,494,-357,689,-1000,589,778,594}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01009() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{5,-1000,-656,141,-351,508,1000,985,-700,18,605,1000,376,4,-806,639,965,1000,261,-1000,-430,-109,-1000,-583,203,-66,-79,290,411,1000,738,-1000,507,-762,828,-262,494,-1000,-596,-744,430,853,125,1000,-560,1000,543,-377,-120,-979,250,-648,833,598,-448,27,1000,-7,391,-656,1000,-101,572,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01010() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{-501,480,-51,757,-82,-1000,-1000,-1000,170,1000,145,-149,403,17,-445,-749,264,756,-752,78,1000,-1000,-1000,-338,-737,1000,-730,47,-621,-763,-1000,-1000,-1000,568,1000,90,140,442,344,275,-22,925,337,518,837,114,-191,97,158,123,-377,787,-600,-13,319,-210,-1000,758,-456,710,343,744,1000,722}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01011() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{1000,-292,459,81,-936,92,1000,1000,-135,-6,-595,1000,868,1000,415,-230,-1000,-168,-715,-924,-1000,-830,-1000,1000,-687,752,-766,1000,558,-145,987,-116,74,-1000,-181,-632,956,118,-415,494,145,501,-1000,-1000,-437,905,156,154,-550,-966,330,-867,1000,800,144,1000,1000,-517,402,-742,-1000,-1000,705,-866}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01012() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{1000,-167,-377,148,785,-113,-1000,-656,-353,569,-697,1000,1000,79,-1000,-295,-15,-1000,746,307,-1000,-811,-140,-567,-852,205,-1000,479,-109,-1000,450,-986,-1000,-7,1000,97,76,1000,550,266,736,987,-1000,-6,1000,667,-447,1000,297,-214,-607,-764,-1000,854,947,-51,-1000,-360,-724,1000,359,-599,619,828}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01013() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{965,-1000,-682,19,817,398,715,312,263,-479,-358,1000,570,-191,301,593,63,403,577,-590,-1000,954,-1000,772,507,-802,-669,1000,816,230,764,444,659,-1000,944,390,960,287,-1000,-1000,86,782,102,-1000,-247,546,743,-26,264,-1000,815,-1000,419,544,465,186,1000,-74,510,-718,-565,-620,-383,-467}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01014() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{123,-575,1000,-348,-501,988,253,1000,1000,-47,1000,-144,-724,1000,747,1000,345,493,-441,82,927,-398,-869,669,-249,-111,1000,-300,-735,1000,764,317,903,-1000,-566,-157,-332,-447,-661,322,-412,121,56,-219,-156,737,-181,164,-577,626,-218,619,913,290,-392,630,842,-601,1000,-503,-190,-354,989,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01015() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{839,-227,-836,414,1000,874,-814,-459,374,-917,336,939,795,-391,-1000,570,872,-728,1000,-1000,-587,456,49,15,-360,-1000,-276,617,-90,11,-656,-858,-351,153,1000,887,184,806,-280,-800,672,127,655,886,-799,589,386,471,-407,-349,539,-906,-303,-15,745,-520,-1000,77,-306,884,385,-502,-318,278}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01016() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{-1000,799,1000,151,-291,439,-1000,259,905,331,686,-288,-705,1000,1000,547,-264,-414,-555,836,882,-902,83,587,-1000,214,1000,-191,-1000,48,722,420,-643,-750,-1000,-374,-488,375,-3,1000,-490,-42,-401,-987,822,-118,-695,1000,-612,1000,-1000,510,-90,-138,569,464,-505,-656,656,409,-486,229,833,-606}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01017() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{322,-1000,-467,650,698,990,-155,188,604,-1000,879,-533,-1000,125,-556,517,128,-941,-79,-275,404,15,1000,295,-665,-980,827,-600,-715,773,1000,718,1000,-1000,-1000,46,-149,149,492,228,172,-959,1000,742,26,15,523,1000,-516,917,849,-264,356,-171,709,964,-347,-492,248,908,-601,656,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01018() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{165,888,-22,771,-219,-290,859,-246,49,291,385,431,1000,64,-564,-270,-379,372,-194,-825,1000,808,-1000,1000,-403,47,-306,739,-233,-33,-986,-783,-95,-478,1000,284,909,110,-948,-539,-437,-33,1000,1000,-114,580,-195,-545,178,854,629,-463,844,1000,378,-797,1000,571,92,-659,-1000,-36,555,-56}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01019() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{-365,275,240,1000,208,-122,-897,-1000,341,926,1000,-458,677,26,-1000,-456,-18,-680,123,-533,461,-621,-200,378,-1000,809,559,-256,-994,-489,-542,-599,-1000,-487,814,-5,-121,710,329,577,192,1000,149,1000,764,-652,-722,621,-245,854,-235,678,-42,841,1000,-849,-916,482,-82,1000,-360,389,652,447}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01020() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{-1000,480,-903,850,-1000,-271,34,499,196,1000,216,-1000,-951,-892,1000,-426,-266,172,-826,-1000,1000,-284,322,1000,-1000,-914,628,296,-755,528,-714,527,920,-538,-1000,-816,232,-1000,-608,253,-1000,-483,1000,846,-858,-146,-283,308,-465,470,-497,173,534,-972,354,-941,343,-963,780,-54,-682,275,-147,-236}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01021() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{123,-454,139,751,817,398,-181,161,1000,-570,1000,-533,-284,408,-767,365,63,-792,973,-257,404,164,1000,757,-562,-506,827,-479,-715,252,764,317,903,-1000,-566,133,-838,600,602,152,50,-620,1000,518,468,-1000,264,463,-367,1000,134,-321,-110,-49,720,774,-340,-232,-217,908,4,-354,-816,59}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01022() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{-893,-26,-316,609,-807,37,1000,486,-1000,700,810,455,348,56,-810,-3,1000,1000,-618,-1000,116,-498,-1000,-1000,244,1000,742,-143,58,1000,-247,-1000,507,-196,-748,-491,524,-1000,-484,-706,287,853,-150,1000,-866,615,-43,-684,-195,-868,8,230,1000,573,-751,399,1000,-581,346,-849,1000,681,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01023() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelFont(java.awt.Font):void",
+            new int[]{-454,555,1000,249,-246,813,-767,259,849,-373,757,-288,-244,1000,-922,-8,-313,-1000,-470,499,669,-783,83,587,-886,803,175,-191,-1000,-258,713,900,-416,-750,-427,-194,-519,657,407,1000,-395,-391,-763,-987,137,1000,234,1000,-606,1000,-835,-150,1000,-88,513,1000,-505,-455,251,590,-490,-52,626,-512}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01024() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{973,-983,99,330,-1000,437,294,1000,669,-922,549,-844,906,657,610,656,848,-342,-432,-287,625,960,1000,16,-1000,-86,-150,965,527,-396,852,-649,-788,1000,492,-230,-625,-1000,778,759,1000,-549,741,898,-336,-205,1000,598,873,238,-1000,-1000,-1000,1000,-380,-1000,-6,-391,-455,-883,97,-280,-885,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01025() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{347,-1000,879,-767,-816,985,-742,-459,277,230,165,-1000,-400,1000,-57,-804,-1000,-1000,68,-305,35,-456,639,-456,-126,-1000,-1000,-304,-655,-1000,850,385,-344,1000,451,-1000,-1000,-119,49,-66,863,-1000,466,1000,1000,961,-377,1000,286,837,975,-1000,-32,1000,-657,-1000,-597,-11,-753,1000,1000,-584,19,810}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01026() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:MS4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{188,559,73,-26,258,72,-63,-406,334,-641,542,1000,1000,-1000,583,-112,-87,932,257,-114,385,129,409,58,-661,145,-128,988,-762,-932,-1000,-1000,187,-1000,-981,151,1000,522,422,-83,-447,1000,644,-333,-1000,-285,755,-1000,1000,-1000,-617,1000,832,44,410,-509,1000,-1000,653,-311,-1000,-383,200,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01027() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:MTAwLjA=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{-633,-160,749,315,487,-747,273,169,407,-924,431,1000,1000,-278,583,-944,-363,-1000,-188,-363,-298,530,259,-139,907,487,-30,-756,-826,-655,-1000,-1000,862,237,-845,-44,-216,-878,753,593,8,-285,1000,-1000,-802,-285,-446,-674,616,-906,370,310,284,-6,564,-383,883,249,-379,966,-1000,-618,313,-467}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01028() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:LUluZmluaXR5", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{1000,-410,509,449,9,763,348,-189,439,-1000,967,1000,597,258,829,-644,-811,25,-219,-34,956,386,101,-387,-858,134,-604,1000,-836,-163,-582,-814,-956,-389,-936,-1000,613,497,789,757,-158,942,880,199,-182,565,-405,-669,1000,-1000,-779,535,820,628,266,346,964,-1000,239,-421,-1000,-1000,-454,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01029() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:LUluZmluaXR5", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{843,-1000,-401,515,-62,-5,710,686,465,-617,1000,1000,447,-238,1000,167,159,-203,-114,78,321,332,377,-1000,-86,528,-206,1000,-1000,950,-545,-435,98,1000,-883,-315,-644,-500,556,1000,1000,-265,824,239,-996,-50,102,606,819,-1000,-239,-622,-299,1000,252,-1000,586,-275,-112,-415,-244,-860,-495,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01030() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:LTkuMjIzMzcyMDM2ODU0Nzc2RTE4", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{938,293,-473,-346,-863,-720,-542,727,774,251,-875,-398,356,-496,-599,78,397,1000,764,-849,-922,-602,-183,-753,323,-73,772,262,-494,-27,619,18,659,672,-27,-782,-60,53,-583,463,751,-1000,49,-73,-452,141,-1000,115,-513,-758,134,-289,-973,592,484,845,-94,678,-871,-74,179,301,800,253}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01031() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{-713,-247,649,-190,309,-157,-839,792,894,46,-513,-1000,-161,513,-538,-576,890,-1000,241,-1000,602,-384,460,-1000,-409,-268,-279,-205,-347,342,410,-158,945,1000,-2,-1000,-1000,-1000,-166,374,1000,-1000,102,-748,506,798,-1000,662,493,-369,985,-780,-858,874,188,170,-63,304,-929,382,955,36,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01032() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:LUluZmluaXR5", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{-165,1000,729,780,750,279,-132,-76,-252,496,-1000,91,1000,-1000,-737,731,-146,-699,-395,-147,368,-94,844,452,840,554,861,-1000,717,-885,-692,-498,-331,-1000,-331,285,1000,319,-657,-9,625,1000,-630,-653,767,308,381,-663,726,565,501,1000,-751,-263,589,108,944,-969,574,-164,-1000,1000,330,-335}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01033() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:LTEwMDAuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{938,-866,403,125,215,1000,-300,455,774,-492,258,-1000,-937,979,-599,-896,-666,1000,-10,-251,1000,30,1000,-1000,-1000,-468,-439,768,-494,855,645,18,-793,513,-663,-598,-812,53,-150,261,572,-548,49,46,-452,978,-1000,320,1000,183,-200,-234,-626,1000,-593,-1000,885,-1000,364,-214,179,-293,116,351}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01034() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{-354,-467,1000,-447,-121,927,-469,-67,-405,-30,-184,259,-1000,1000,-953,-51,-1000,-1000,335,223,1000,352,132,-367,-5,-1000,-1000,-919,-1000,-687,1000,-205,-1000,-224,1000,-799,-647,332,-252,-316,-651,66,152,296,915,-178,-33,-191,585,1000,299,-1000,-55,1000,-60,-1000,-215,617,710,735,1000,492,-1000,58}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01035() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:LTEuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{286,282,33,-373,149,752,-491,-879,-68,-138,759,996,903,-990,782,-613,-644,-398,216,-101,1000,-176,720,397,-958,-174,-435,439,-648,-1000,-642,-596,506,-664,-1000,87,825,663,165,11,115,860,537,759,-321,77,871,-298,972,-832,-5,773,665,150,234,-555,799,-1000,791,79,-954,-456,428,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01036() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:MTAwLjA=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{178,-851,1000,-1000,-378,-301,610,-446,1000,-314,513,57,183,1000,-758,-857,-1000,-430,-4,10,648,-89,-424,-218,823,-1000,-1000,661,-1000,-209,141,-115,-339,681,-1000,-1000,-1000,-533,467,-358,-180,-1000,915,648,1000,249,-699,366,435,-6,843,-773,915,894,105,-953,373,98,-752,1000,1000,-1000,-209,940}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01037() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:MS4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{1000,-706,749,-926,-605,-344,-724,636,564,-639,508,-1000,1000,949,-621,42,-380,-1000,730,-684,1000,1000,921,746,-661,-1000,-883,637,-742,-1000,-17,-861,-1000,415,1000,-1000,-825,-1000,925,157,869,-995,1000,986,479,-390,484,-154,346,794,-1000,-283,-552,1000,938,-1000,1000,-126,-371,43,932,-636,-260,-817}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01038() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:LTIuMTQ3NDgzNjQ4RTk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{415,-1000,319,565,-282,-197,275,316,915,-375,9,-105,244,345,172,-867,129,-383,-341,-1000,-1000,-83,311,-1000,941,-501,-282,585,-812,-1000,-1000,-225,1000,-822,-332,-1000,-1000,-861,297,815,1000,-1000,583,-298,-616,1000,-1000,1000,-59,-715,-515,-1000,-263,-617,605,1000,-1000,1000,-1000,221,457,-521,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01039() {
+        org.junit.Assert.assertEquals("VOID|getLabelGap=java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGap(double):void",
+            new int[]{980,-88,-487,126,-283,-457,-657,298,450,-274,-100,216,1000,-1000,629,-340,67,796,358,-1000,-728,-628,699,-453,-645,573,307,1000,-341,-555,-781,-615,1000,797,-1000,-1000,-318,-60,158,156,1000,-885,481,-344,-1000,1000,-1000,90,324,-1000,60,86,-275,117,45,993,-94,678,-1000,-199,-1000,-679,1000,490}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01040() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-701,-823,615,723,319,987,36,-701,-524,492,-350,-802,726,258,144,582,265,224,873,-985,-352,-233,260,-896,340,893,436,-142,-560,-584,-820,327,244,-759,971,366,-640,-254,757,-721,132,-365,902,497,320,624,-290,-512,144,861,904,634,-914,-956,-531,939,191,-101,422,138,953,-121,-803,12}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01041() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-308,284,-641,-930,0,334,-1000,-77,245,449,50,290,8,468,-769,-671,-3,1000,-290,-525,515,196,-858,-825,803,-1000,492,1000,-391,-1000,928,-283,-805,-430,-298,1000,929,698,-569,-732,-1000,-1000,-180,1000,807,-192,-1000,324,-1000,-1000,251,1000,60,-370,242,782,711,610,158,-1000,78,-790,59,-535}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01042() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,-1000,34,357,-455,-13,595,-103,-788,326,-635,446,-1000,716,228,115,958,-382,-366,-945,-467,-618,-648,598,-972,1000,976,-1000,-981,1000,700,1000,-530,1000,375,192,-1000,-1000,-242,-34,1000,589,816,-1000,779,1000,-270,-231,679,878,690,162,-1000,85,895,36,-1000,-448,682,1000,-392,-797,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01043() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,-823,378,-835,306,987,1000,-476,-332,244,-998,717,-1000,1000,-376,-881,438,-1000,873,-1000,-1000,-942,-1000,-1000,495,1000,436,-308,-1000,449,1000,1000,244,1000,971,366,-1000,1000,3,-118,495,-291,1000,-357,1000,1000,-704,1000,-1000,486,1000,176,-1000,-1000,-531,884,-1000,457,-73,-261,-458,566,488,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01044() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,-627,545,1000,-466,-662,356,1000,-264,70,17,639,-1000,1000,-422,33,225,131,-1000,-156,216,608,-765,1000,-1000,-23,653,-1000,-60,1000,952,-186,-790,1000,-746,-1000,-266,419,-1000,-355,1000,38,540,-454,898,279,831,1000,1000,-48,-587,-552,-54,1000,1000,-648,-843,210,-182,561,-1000,1000,1000,-551}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01045() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-312,-174,359,-889,161,1000,560,791,-164,-9,971,261,706,112,-401,-484,-1000,-1000,893,-877,-1000,-396,-55,-585,299,381,270,-132,-692,-411,-340,-71,-14,426,272,588,-407,836,267,-1000,543,-531,541,592,94,-110,400,-525,797,650,611,-1000,-458,-1000,-512,420,58,590,-962,-328,755,-388,-864,826}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01046() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,-1000,449,-277,-256,395,-284,-451,-519,-332,-1000,-240,-704,811,640,-186,608,-51,200,-1000,-340,-694,-647,-1000,-69,794,1000,-223,-1000,353,1000,1000,-417,127,1000,1000,-714,23,410,653,650,-577,1000,-262,1000,1000,-1000,343,-1000,432,966,-91,-1000,-979,657,790,-589,625,531,190,291,-720,582,-833}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01047() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-684,799,945,-530,-31,-593,972,1000,-1000,977,782,-482,-1000,125,559,1000,-195,-890,-160,-945,157,527,-77,90,-253,68,1000,-1000,-1000,534,-302,-833,-788,1000,-256,-1000,-1000,466,-946,-1000,1000,-104,632,-1000,-70,681,1000,1000,1000,1000,623,-1000,-1000,-830,1000,301,-708,105,31,1000,-233,-510,1000,-854}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01048() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,-823,-234,723,-370,229,654,159,287,-1000,1000,1000,223,389,-721,-814,90,-201,-9,-401,162,-1000,411,488,-82,-563,436,526,-1000,162,133,-1000,-503,840,-642,14,-45,-1000,-967,68,132,283,768,67,1000,-609,-456,738,-509,-558,272,-229,652,-1000,470,-1000,20,-250,895,170,953,-1000,1000,-813}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01049() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,-860,309,-1000,569,165,-83,52,901,492,-669,-531,-518,1000,-715,-874,-1000,-527,-880,-822,-112,287,-1000,-1000,1000,854,631,453,-1000,-890,1000,1000,-554,1000,-68,1000,-938,823,-166,660,-1000,-1000,1000,497,574,573,-427,337,-179,-197,1000,-287,-1000,-1000,1000,768,191,1000,-447,-757,-518,-567,101,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01050() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,-943,544,-1000,399,264,478,169,369,-250,-598,357,-4,861,-834,-713,-694,-106,-1000,-770,363,-31,-1000,-4,-145,301,646,4,-1000,-153,1000,1000,-172,960,497,1000,-471,364,-729,893,-844,-1000,729,580,729,560,-251,395,-1000,-619,1000,-634,-966,-1000,622,-337,179,43,371,-90,-309,-252,477,-842}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01051() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{185,923,-546,-111,-763,697,-783,1000,159,-1000,1000,340,-285,-582,-218,-211,319,6,691,-142,299,-280,522,1000,-508,-1000,-456,35,-372,72,-86,-1000,-650,157,-435,-115,964,-1000,-1000,-965,319,-2,-981,878,303,-1000,-19,2,570,-346,-1000,-607,1000,-130,-227,-152,350,-355,-36,-186,-835,-615,907,425}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01052() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{888,-823,-497,31,319,987,-460,77,-507,61,1000,-161,-205,-1000,108,996,1000,-38,893,-659,-446,166,-55,-222,36,-586,219,-209,147,-243,-1000,327,-444,-167,-817,-812,-640,-191,39,-1000,1000,1000,-695,-426,-416,-334,-58,-25,797,566,904,-191,449,400,-349,851,265,1000,-749,537,953,-28,-131,865}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01053() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-514,-1000,714,-1000,307,-163,822,619,-1000,430,109,-765,-1000,1000,-1000,-211,174,-1000,-1000,-491,-629,769,-1000,-856,827,727,587,-704,-964,50,369,1000,-675,1000,-287,120,-1000,1000,-637,-610,759,-1000,1000,116,389,323,630,1000,-91,497,1000,-1000,-1000,-247,1000,1000,27,1000,-717,-405,-50,267,416,-892}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01054() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,-867,126,1000,-106,408,-216,-809,33,70,-1000,326,61,760,704,-501,940,680,-94,-1000,-283,-635,-402,-856,-487,1000,736,11,-627,10,432,566,-100,77,701,655,-263,614,333,652,-400,-10,998,-454,846,1000,-903,-197,-1000,-48,926,1000,-977,-956,-128,621,-335,210,723,-35,64,306,-144,-899}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01055() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{1000,689,402,347,-63,1000,249,353,0,420,-813,-1000,671,-1000,614,335,13,-379,1000,-688,-1000,320,1000,-882,192,-242,-55,-423,495,-523,-1000,-1000,98,-724,-259,-641,496,-443,-776,-1000,1000,-511,-434,-106,-933,-411,-843,-1000,1000,1000,-488,976,558,-609,-1000,1000,239,366,-1000,-301,1000,189,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01056() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:MS4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{-962,157,-666,-1000,28,-533,697,98,-921,-34,730,-574,301,251,-233,-50,-1000,173,-822,110,922,1000,-1000,54,-1000,-753,275,-47,1000,432,-117,-143,-464,642,-52,587,-400,898,715,154,-89,29,-2,103,89,-260,-208,578,-1000,1000,1000,-1000,58,-927,-306,1000,-1000,384,-69,297,476,-393,-1000,201}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01057() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{-326,-1000,439,779,-156,-167,1000,-87,-1000,-1000,834,-20,-516,-35,-1000,660,1000,453,-1000,1000,1000,-1000,1000,-461,-1000,-1000,-1000,54,960,-679,1000,540,-1000,-1000,-1000,-1000,-628,-286,1000,-25,-50,-704,1000,-470,-1000,-1000,-1000,146,653,1000,1000,121,1000,1000,1000,990,-364,463,-1000,-522,-977,-522,606,244}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01058() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:LTkuMjIzMzcyMDM2ODU0Nzc2RTE4", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{933,1000,-331,955,-1000,726,407,-290,-7,179,20,106,-1000,474,-12,508,-1000,-792,994,-51,-234,989,171,-1000,-455,-467,892,-42,-426,-304,-1000,-1000,-728,163,240,672,-254,93,-780,-574,-1000,-1000,208,905,-47,1000,591,-460,-691,1000,-614,-1000,-741,-114,-122,-575,-1000,-1000,-4,-515,-559,-394,-1000,-707}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01059() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{-248,-308,-241,816,935,-208,260,1000,-863,513,148,661,-306,944,-1000,406,931,1000,609,53,317,22,-47,32,396,33,743,-691,863,1000,45,-470,-323,-1000,230,775,-1000,-85,-582,610,1000,1000,-274,515,-349,485,-1000,195,741,-99,722,-357,89,-860,-614,738,986,281,1000,-429,-701,1000,1000,-74}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01060() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:LTEuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{-1000,-400,-401,-753,-750,-694,593,-501,-589,-535,325,91,254,-277,146,236,-430,422,-707,441,830,1000,-938,-79,-657,1000,693,120,925,547,-45,1000,-808,449,653,711,-862,999,816,963,139,-1000,519,455,-479,475,-712,228,-1000,1000,1000,308,-671,-748,-321,1000,-209,-219,169,768,278,-664,-972,117}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01061() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{-278,-192,-66,451,812,320,818,157,229,1000,737,581,-1000,1000,-1000,-210,989,1000,-714,1000,-307,196,-487,678,-1000,-761,-286,40,789,1000,1000,-144,-856,-588,359,-974,-1000,943,479,384,80,1000,-49,1000,-429,-1000,-767,103,-83,472,851,-1000,-484,-186,-1000,-530,1000,95,756,-721,-365,723,1000,-913}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01062() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{-1000,-1000,209,-171,400,-298,1000,-1000,-457,-682,-115,-211,-613,-399,-1000,688,-1000,1000,-400,409,454,505,-165,-572,-469,970,504,288,1000,-477,777,481,-275,-842,353,196,-639,26,542,-116,726,250,307,205,-294,570,-474,439,272,601,1000,843,-489,-324,-671,450,-137,-113,29,644,-1000,235,30,944}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01063() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:LTkuMjIzMzcyMDM2ODU0Nzc2RTE4", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{-1000,-696,-307,-22,-648,-1000,981,-846,-1000,-733,413,330,1000,769,-569,219,81,474,-379,118,1000,1000,-1000,-229,-813,1000,1000,-322,1000,837,-789,915,-726,634,1000,1000,-1000,660,407,284,706,-921,1000,221,-458,1000,-191,490,-509,255,1000,640,-868,244,-1000,890,-655,-474,-29,508,-603,-911,-739,567}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01064() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{175,-901,413,225,-219,-44,246,-361,-161,-131,1000,-4,-604,285,302,-610,-28,1000,-1000,913,289,-423,-11,1000,726,200,-840,635,927,-959,961,1000,-1000,-259,-1000,-1000,-1000,328,1000,693,-668,519,322,-364,-1000,1000,62,1000,-220,-344,-1000,-1000,676,-173,1000,900,634,528,-610,108,-728,-156,-780,-216}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01065() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:LTEuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{-1000,-400,64,-446,-210,-387,800,651,407,241,1000,172,-660,1000,-384,-245,-286,1000,-729,1000,200,1000,-398,563,-1000,-260,683,86,701,1000,943,857,-1000,1000,592,-1000,-1000,1000,1000,924,-342,913,485,790,-705,-154,259,-211,530,1000,1000,-1000,-836,-1000,532,1000,1000,-87,-146,-154,211,425,138,-837}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01066() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:SW5maW5pdHk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{1000,-1000,369,-233,-116,-983,770,-501,1000,-184,978,-1000,-433,-91,-1000,1000,-411,129,-885,127,1000,-43,-783,-208,-880,-1000,-1000,813,624,-439,-214,-1000,-611,-1000,-626,-724,-539,68,72,-352,163,-1000,882,-695,-203,298,-82,155,1000,-54,417,237,1000,380,330,865,-1000,-354,-1000,-622,-1000,98,659,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01067() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:TmFO", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{534,424,-437,97,-71,-600,239,-809,546,35,427,-21,375,-392,156,-81,62,230,783,218,365,-814,-326,-436,-352,-836,-116,-582,989,-733,178,915,554,706,-833,-961,226,-200,126,121,195,-520,127,-21,-813,907,558,18,-679,970,-235,-511,-794,-522,623,-231,820,-341,148,991,951,-781,928,652}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01068() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:Mi4xNDc0ODM2NDdFOQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{-1000,1000,-676,-885,-1000,-289,610,1000,-754,-1000,-1000,1000,658,-565,123,515,374,-652,219,150,-89,784,493,-441,824,993,1000,-403,1000,1000,-125,104,-1000,1000,1000,1000,-219,-186,-516,-394,143,-855,-366,1000,-209,1000,750,398,-547,131,442,1000,-1000,417,-1000,46,-643,-1000,1000,-636,178,268,1000,-263}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01069() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:MS4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{1000,400,-691,266,279,33,-267,1000,-188,839,-118,390,279,190,-268,491,1000,670,-203,1,-522,-590,511,43,-65,-661,608,-356,-735,311,-124,-4,7,-1000,498,587,1000,-903,-401,45,1000,702,-1000,180,-377,595,70,315,368,-652,-91,1000,-393,-549,-75,-201,972,169,1000,-306,-211,1000,729,443}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01070() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:LTIuMTQ3NDgzNjQ4RTk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{961,-529,-401,-1000,1000,1000,191,-458,504,313,325,-872,-1000,175,-620,-723,-430,58,-1000,735,-810,617,1000,196,-1000,-1000,693,1000,1000,-275,1000,187,546,902,135,-1000,538,-1000,1000,-190,-975,1000,-1000,-820,546,-1000,-712,1000,-1000,846,239,1000,-187,-846,1000,305,250,1000,-60,555,278,-8,-269,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01071() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinkMargin=java.lang.Double:LTEuMA==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkMargin(double):void",
+            new int[]{-719,-1000,244,-38,20,-169,520,1000,50,-346,463,96,-467,-111,-262,219,-129,365,-382,594,48,389,74,-135,-869,588,1000,-272,466,932,538,712,-366,-1000,726,-165,-1000,258,433,508,396,58,-130,142,-654,687,-1000,-14,15,239,502,262,-608,-627,-1000,1000,652,134,63,-362,-784,-205,-408,-65}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01072() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{-874,270,-346,265,858,416,111,-62,-697,-219,-550,-752,-186,850,912,-802,170,-130,17,-148,-229,-838,505,-295,-229,-64,530,-123,494,-667,524,-541,252,-116,1000,1000,50,-655,-638,-593,103,-471,-610,-599,400,-124,111,-473,116,-313,-584,-1000,-461,139,938,-493,288,-60,-881,-500,458,-110,-10,201}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01073() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{104,823,561,720,-1000,-952,251,-321,188,-530,-841,-295,-1000,135,366,-1000,1000,820,948,-152,-267,374,-293,-775,733,-33,391,-513,-41,-239,-93,122,-691,23,-152,88,-490,-351,-227,684,306,-100,30,16,814,-442,-245,-632,556,915,194,-606,43,563,-161,-397,672,706,-922,487,202,-1000,-181,615}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01074() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{-140,734,894,319,1000,-1000,112,1000,239,-688,-730,299,133,-658,-127,-1000,582,1000,1000,-259,96,-985,-1000,-165,-1000,14,137,-205,-1000,1000,-1000,-384,-211,-1000,-155,1000,-574,464,56,951,380,647,1000,-1000,829,-272,-938,680,-240,1000,-145,-704,-237,1000,-1000,-1000,-181,642,-871,1000,-519,-168,-494,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01075() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{291,876,74,256,1000,-1000,840,-388,-93,-203,-511,75,-510,120,1000,852,636,372,-231,-39,-970,902,1000,-590,454,354,127,-420,39,-1000,1000,325,-1000,776,1000,-178,-1000,-365,186,-629,1000,-302,-372,195,253,-965,363,89,-18,-1000,776,-1000,-632,758,1000,-751,1000,-24,-985,622,589,-584,503,-664}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01076() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{-422,744,474,515,278,-676,541,687,690,-541,-696,-195,-296,-384,286,-601,142,808,816,-256,-93,-547,-762,-285,467,639,-134,-546,-738,836,-792,-144,-87,-344,387,-122,205,112,-2,-82,752,17,655,-868,960,-325,-569,422,-548,790,-980,-920,-512,664,-972,-446,49,186,-926,-314,259,-168,-459,881}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01077() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{269,1000,694,265,1000,-854,-339,-251,-329,-656,-986,618,623,-1000,-202,-360,194,675,1000,-80,-727,130,-1000,1000,-542,289,479,-9,-811,1000,-803,-993,-724,-1000,-529,1000,-574,959,-148,1000,195,294,1000,204,763,585,111,-285,1000,839,798,-1000,336,662,-1000,-885,-283,82,-717,1000,-729,100,-695,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01078() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{-299,1000,389,-55,1000,-791,-266,-787,-1000,-432,-956,440,494,-496,-758,-86,133,417,1000,468,-1000,637,-596,-321,-63,263,662,-305,253,-588,-447,-1000,-775,-1000,-434,1000,-78,853,-447,976,-52,-580,-1000,784,690,776,-202,-602,116,770,945,-1000,455,392,-1000,-704,850,54,-1000,-500,-878,-34,-514,22}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01079() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{-90,-886,-857,-744,-6,-316,573,366,1000,-249,-198,-329,-661,-498,-369,-131,1000,1000,-525,574,1000,-855,-1000,873,-1000,-302,-21,987,-1000,731,652,1000,-1000,-1000,-57,168,-1000,-498,-615,-347,-114,1000,394,-550,-775,76,-442,413,133,482,1000,-566,-631,1000,-1000,-1000,-603,-122,258,1000,-1000,1000,88,477}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01080() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{163,-621,-132,621,-121,-1000,977,173,108,-791,-656,-468,-630,-905,-644,502,956,798,680,528,-562,1000,336,-424,344,490,314,-521,-32,-814,584,-162,-1000,-989,-149,534,-1000,196,-860,-157,186,-124,-590,1000,635,444,-862,-127,272,788,1000,-849,-217,634,-1000,-332,583,345,-19,512,-1000,-260,-203,284}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01081() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{-299,837,-39,1000,650,214,864,-883,-1000,-319,-792,-1000,-110,526,955,572,-215,-469,190,-148,-535,1000,970,-946,487,860,530,-1000,755,-588,619,-496,-513,1000,622,1000,623,-855,-310,-791,837,-1000,-1000,1000,1000,-517,283,-1000,116,-1000,-1000,-914,-350,-406,1000,1000,1000,54,-1000,-500,1000,-1000,-131,194}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01082() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{930,845,368,396,203,-659,1000,-321,-208,-320,-992,136,195,909,397,-645,-595,701,-310,1000,-320,-833,965,104,828,318,491,-473,-273,675,280,-345,-222,-5,1000,88,25,-444,853,250,-46,-572,-670,156,985,-519,-245,-214,101,954,-654,-873,-983,-243,-488,122,-143,1000,-1000,-951,642,-22,779,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01083() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{-874,270,-646,-941,528,-415,129,117,-697,232,41,-406,-646,-963,675,-299,170,292,79,-148,1000,-856,-1000,1000,-39,-221,-571,617,-184,1000,227,-924,-92,-871,176,1000,-1000,208,-1000,-220,103,888,1000,217,-716,820,-1000,-82,2,1000,1000,-726,-479,857,-540,-1000,-1000,-191,1000,620,-1000,897,-576,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01084() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{-1000,-603,-246,-1000,553,50,130,448,384,672,199,-1000,-557,-36,763,-1000,603,-93,-44,-1000,1000,-1000,-1000,1000,-443,-969,-568,586,-1000,1000,-201,-314,880,-440,255,104,-504,-470,-978,-948,-866,382,1000,-1000,-742,614,-1000,-323,-607,671,-160,-1000,-831,785,1000,-1000,-1000,-1000,397,-425,473,1000,-1000,453}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01085() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{853,292,-458,-221,-709,220,58,-1000,-1000,-403,-390,428,-199,1000,-1000,233,1000,740,341,839,-471,894,880,-1000,317,-906,-197,-303,755,-1000,638,-956,-705,-1000,-375,1000,-1000,388,183,986,-1000,456,-1000,1000,-248,-500,1000,-416,1000,419,1000,-718,484,-462,778,-292,969,-436,241,1000,-891,-1000,-228,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01086() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{223,119,-1000,-750,664,47,542,-1000,-1000,-867,-940,631,-37,562,-822,53,565,879,-3,-344,-1000,1000,656,1000,195,-645,1000,1000,1000,-1000,1000,-559,-851,-1000,538,1000,-801,509,-323,1000,-505,-1000,-1000,1000,-279,-239,1000,-400,1000,-77,1000,-1000,289,240,-43,-518,508,488,-903,1000,-365,655,924,205}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01087() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkPaint(java.awt.Paint):void",
+            new int[]{-534,1000,404,604,670,306,-168,-467,-1000,-300,-910,-625,-53,1000,761,-802,51,-221,456,-314,-743,-544,445,-474,-103,335,708,-892,914,-667,698,921,-162,-430,693,1000,-183,-828,59,-481,179,-1000,-692,-179,1000,96,204,-865,807,-338,-178,-1000,-42,-232,275,-335,569,260,-1000,-237,12,-993,368,136}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01088() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{921,35,838,1000,-886,932,-388,689,-290,1000,330,-363,873,-405,93,776,40,432,-109,211,-1000,-18,126,657,1000,359,-7,532,721,-674,1000,-1000,1000,-478,246,102,514,443,-1000,1000,-342,81,-1000,1000,-404,-316,784,-511,-874,-36,-581,-347,578,1000,-302,622,254,-1000,212,-1000,56,572,-474,444}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01089() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{-1000,-1000,909,293,764,-171,268,-1000,-772,-1000,-741,-959,-972,667,1000,397,-35,-1000,-225,470,1000,-534,-790,1000,-1000,-1000,-1000,432,969,364,-1000,448,-444,-219,1000,-1000,-44,749,1000,1000,-895,-892,-558,-1000,1000,509,-664,-1000,-38,-432,698,-168,1000,-1000,96,-844,211,755,-535,538,1000,-991,977,-724}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01090() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{-1000,-1000,539,451,303,439,-569,233,-585,898,-612,-812,487,-683,1000,-353,-444,551,-94,774,261,-312,-1000,532,454,-344,-1000,334,-493,-156,-5,907,238,-77,1000,-255,440,680,870,74,-1000,806,139,275,193,-445,350,349,-263,-404,92,-1000,-52,-506,-680,746,-386,358,541,683,-117,284,123,202}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01091() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{764,71,312,701,-566,1000,244,572,-332,-741,-1000,321,772,-968,-787,308,306,836,-288,-956,-820,-271,-409,-397,22,1000,-17,-174,-299,-655,1000,-465,787,46,-624,128,-143,343,-1000,-248,-143,-221,-424,993,-572,20,503,-95,-400,482,-854,-323,-306,721,387,256,-378,-327,499,-1000,1000,459,206,323}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01092() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{84,-234,-851,67,-564,1000,-352,905,759,-321,335,-35,233,-733,-1000,832,-1000,160,-1000,-956,-592,-1000,-161,-436,-1000,998,205,133,3,-265,684,935,151,-284,97,404,-1000,-672,-129,-340,112,-185,976,581,17,-625,378,-1000,1000,768,-1000,-20,690,673,828,-273,-859,435,1000,-405,620,485,513,-715}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01093() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{-669,-452,-662,-503,-249,525,671,582,558,290,-40,-35,109,196,-1000,819,-1000,-1000,-780,-262,-583,-1000,-59,805,-460,284,-646,580,-111,-150,11,1000,91,120,703,107,-355,1000,801,-180,-459,489,1000,411,-159,-990,224,-1000,1000,-204,-870,-567,1000,477,-144,-1000,357,88,892,377,1000,115,579,-759}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01094() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{-1000,-731,430,205,284,253,894,-888,776,400,-351,434,44,534,1000,-348,91,-27,-519,-436,-850,289,-667,945,735,-116,-999,-231,624,-439,-364,-220,58,77,-700,347,681,588,283,-851,-491,-162,-1000,-905,1000,-714,593,787,904,-1000,307,-666,-6,-341,-637,-1000,1000,-641,1000,-349,-373,1000,803,-241}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01095() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{651,78,-216,419,-696,79,-248,722,-140,-817,-492,525,544,-1000,-930,1000,-493,721,-993,-1000,-874,-651,-146,1000,-436,1000,288,-114,-892,-58,1000,120,106,181,-542,226,-889,-72,-1000,-243,16,-327,837,948,15,137,111,-526,405,769,-1000,-240,-236,656,719,-75,-627,70,1000,-961,992,-363,399,500}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01096() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{-467,13,-861,-1000,-636,-206,-557,466,759,211,-569,110,233,255,-241,1000,-955,-1000,7,76,-206,-889,-25,696,-1000,149,-134,344,3,-265,-624,351,151,78,571,231,-95,-687,1000,74,110,280,976,15,17,-1000,81,-1000,805,614,-812,84,1000,1000,-429,-582,-859,-30,571,249,822,-58,603,-715}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01097() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{-1000,-452,-456,-1000,-610,-1000,671,810,-1000,-831,-191,-640,109,-186,951,1000,-376,-1000,-392,360,550,-1000,-59,805,-1000,-196,466,-148,-207,-488,-1000,-836,-542,120,195,387,-1000,-297,1000,1000,579,-172,436,-1000,591,-1000,-144,-1000,32,-200,-1000,114,628,1000,-193,-1000,357,212,1000,-241,968,-418,397,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01098() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{334,-84,-227,255,-1000,-391,342,1000,-994,-998,-674,-91,160,160,740,1000,-351,-1000,-1000,584,-726,-904,299,432,-514,255,781,606,873,-453,153,-1000,-94,-557,1000,506,-1000,-992,234,-1000,959,-753,818,-174,446,-974,722,-1000,900,397,-1000,1000,1000,1000,-113,-945,-23,491,863,-1000,1000,446,224,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01099() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{-1000,-1000,-662,94,-249,525,-980,582,558,346,-310,-35,230,196,-1000,819,-1000,-104,-780,-262,-583,-1000,-603,917,-460,460,-646,778,-111,-150,11,1000,91,-470,703,107,-355,-451,954,-180,-459,611,1000,411,-159,-990,687,-1000,1000,184,-870,-567,1000,588,-280,-305,-780,88,892,377,1000,115,579,-759}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01100() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{589,706,812,176,-1000,203,-78,1000,200,-486,331,1000,-1000,-396,-963,1000,-375,612,-189,-184,-869,-797,1000,-707,-1000,1000,1000,-584,-1000,-113,-1000,750,-217,784,154,883,-853,67,-839,-237,-843,-840,1000,141,519,-767,-1000,-756,-535,1000,-495,860,-541,524,1000,-1000,-1000,784,-440,-497,767,41,14,531}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01101() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{-670,-553,98,114,-70,249,266,917,-205,490,-307,-311,-243,-911,1000,-32,-393,55,-223,826,-587,-401,-144,-732,-672,-481,246,-319,671,110,-482,1000,-461,720,922,187,-476,192,561,-957,-152,-27,1000,242,864,-364,-1000,119,427,-42,-364,94,-941,-292,460,-496,-576,1000,698,543,-384,1000,44,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01102() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{-94,528,37,-389,-1000,117,114,411,-1000,762,-413,-244,648,-678,506,776,-981,-382,-109,-488,-906,-1,-753,657,762,359,-394,34,297,-180,686,-1000,294,-483,1000,-50,-182,90,20,-403,-131,-132,62,266,-125,-197,762,-559,698,64,-1000,-319,578,1000,-713,789,275,-457,212,-1000,-349,416,-260,-169}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01103() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinkStroke(java.awt.Stroke):void",
+            new int[]{-66,-359,10,-1000,603,-15,671,295,-996,-399,-893,-1000,109,-1000,189,-439,-408,-730,-259,-90,308,-1000,-860,431,464,1000,-130,1000,-772,-1000,-27,829,234,-55,252,1000,-400,-394,711,332,579,-172,746,-1000,1000,201,550,-62,314,1000,-122,-141,-105,-460,-193,112,964,212,80,368,-232,-478,-371,66}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01104() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{-45,294,109,-830,-255,-31,-23,-1000,1000,-807,-931,395,47,1000,1000,617,-1000,-873,-690,96,-282,-1000,-448,-3,-148,-364,154,456,1000,-34,1000,429,-236,-547,-788,-47,375,672,822,-1000,29,-561,-562,457,733,-618,-48,1000,-556,290,-680,-84,-1000,-1000,553,-869,-344,797,776,200,-271,48,978,205}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01105() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{74,325,30,-870,-656,308,839,865,403,-385,-758,-169,490,1000,1000,238,145,-467,1000,-993,-178,-921,461,-82,680,-520,479,-363,737,563,827,1000,-794,143,956,1000,949,1000,-3,-1000,-825,-1000,141,-136,1000,420,665,1000,82,8,238,1000,1000,-305,-494,-475,-54,1000,1000,-218,-1000,-141,-290,-595}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01106() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{-727,709,-843,-407,-1000,-404,854,212,-364,911,-101,-767,-224,771,980,-344,591,186,-63,-306,-385,-230,1000,-795,1000,880,-863,-460,1000,-276,-4,1000,-1000,10,-172,1000,1000,473,-63,-321,95,-373,-105,19,-400,-92,1000,412,390,658,400,-234,1000,216,240,-1000,788,-129,173,-326,-1000,24,-504,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01107() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{-262,263,-1000,19,-306,-545,-37,1000,-507,-669,-1000,-1000,-34,-1000,-510,-540,-29,-672,-331,516,-915,170,981,-1000,1000,243,-1000,-613,445,-397,-1000,210,-173,974,449,749,962,805,-176,-43,-759,-65,352,-636,-197,924,-314,-1000,-317,-1000,272,-619,883,186,617,396,1000,-983,-144,337,818,-850,-228,172}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01108() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{-546,239,216,-932,1000,-811,-28,-1000,1000,193,-469,955,-394,-109,995,1000,-864,-877,-740,388,-224,-998,-223,72,180,-236,-74,573,1000,-1000,1000,-699,-414,-1000,-1000,-456,877,545,731,-401,1000,-226,-643,818,-106,-1000,200,17,-110,711,-1000,-868,-1000,-808,786,-1000,-487,455,-323,6,-457,709,1000,-216}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01109() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{-369,180,-982,-312,-4,-172,307,-419,538,-45,-628,375,-244,-429,-918,-48,-984,-1000,443,154,-629,95,-155,-219,761,-270,-528,-139,1000,450,-134,-945,-104,-294,-1000,267,698,1000,-142,-1000,-447,428,587,645,-935,-267,-753,487,-1000,-642,-401,-841,-757,-579,1000,-83,690,985,308,946,274,-568,599,712}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01110() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{-550,-422,159,-1000,959,-144,-73,-532,1000,109,-1000,628,214,573,1000,1000,-1000,-1000,963,175,-555,-901,-308,87,-949,-1000,-520,852,1000,-1000,1000,1000,158,-421,83,-669,56,-115,781,-1000,132,-869,-281,1000,917,-257,-209,971,257,-18,-520,418,-1000,-368,-996,-1000,-937,1000,1000,554,-472,-18,1000,40}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01111() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{-57,278,-597,-209,456,273,1000,835,166,319,559,652,-421,-672,-1000,-216,261,-998,-1000,-1000,-394,43,609,368,254,1000,-923,-1000,207,-779,172,-1000,-917,-9,-537,1000,626,1000,-803,-666,-817,-139,963,117,-450,104,-429,13,-1000,-516,-413,12,115,-531,979,411,1000,305,-346,186,-848,-318,154,159}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01112() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{387,512,-211,176,-576,-712,994,-546,-713,1000,842,158,-942,-333,-639,-1000,381,488,-1000,273,-289,22,1000,-881,1000,1000,-606,-426,819,-931,-520,-657,-446,128,-296,333,666,-407,-1000,1000,575,564,1000,-309,-1000,-554,852,-1000,-434,-151,222,-895,1000,-349,1000,-1000,1000,-1000,-1000,74,-273,-11,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01113() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{519,1000,-26,395,-1000,1000,1000,1000,231,-8,-236,-271,618,53,-328,-908,894,591,-649,-1000,238,-996,966,903,-37,1000,-235,-250,-626,1000,496,-740,-1000,679,1000,1000,-284,-664,-1000,-849,-1000,-759,1000,169,958,944,217,1000,-1000,-949,593,1000,592,-1000,-501,246,659,1000,907,109,-1000,-1000,-154,-234}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01114() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{572,-612,-527,331,-1000,-172,71,1000,-983,-285,-973,-1000,328,138,623,-1000,222,-481,764,-642,-230,61,454,-317,-221,-535,-922,-762,517,78,-1000,773,-802,1000,777,1000,560,167,245,-1000,-911,-1000,-107,-1000,651,1000,279,91,871,-403,-170,232,683,180,-368,236,-468,-344,1000,167,-815,-546,-380,135}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01115() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{553,892,358,-603,-516,-12,468,548,-148,-878,-650,-156,769,219,191,13,507,-234,1000,-652,-439,-1000,461,-153,957,-520,479,-257,-474,879,544,1000,-48,234,956,1000,949,1000,352,-279,-410,-689,-324,-654,1000,505,665,319,518,182,291,834,1000,-496,-1000,-845,-111,729,541,-579,-277,-196,-795,-595}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01116() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{1000,-236,934,-790,132,518,392,222,1000,-922,-594,483,-179,1000,-1000,564,-696,-1000,550,-831,420,-1000,-936,851,-1000,-1000,1000,-26,-945,1000,1000,-167,824,236,1000,64,-1000,888,-301,-1000,-1000,-1000,427,658,803,763,-1000,1000,-1000,-752,-493,1000,183,-1000,-844,175,-857,1000,1000,433,-39,-921,418,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01117() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{-738,17,-569,-46,-1000,-543,796,-546,-110,1000,622,-187,-1000,673,281,-678,184,-68,-1000,-18,214,-13,1000,-183,446,1000,-1000,-457,1000,-1000,-187,6,-1000,445,-1000,1000,1000,-81,-910,-30,407,-104,148,-260,-1000,-286,1000,-27,-123,752,-186,-762,237,-255,851,-1000,437,-614,-345,-110,-947,616,8,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01118() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{-138,-83,858,-670,-537,509,666,599,397,467,-1000,-182,127,24,46,69,-693,-1000,-45,-243,-396,-1000,-210,-104,-419,-856,1000,-109,-319,-562,800,-664,793,-531,-914,-712,-1000,546,-1000,-1000,-1000,-864,1000,1000,1000,414,-1000,1000,-693,384,131,1000,-962,-696,303,-1000,-70,1000,1000,691,-459,-1000,-205,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01119() {
+        org.junit.Assert.assertEquals("VOID|getLabelLinksVisible=java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelLinksVisible(boolean):void",
+            new int[]{1000,-34,-187,-101,310,31,1000,981,522,-416,-123,945,-1000,-405,-505,-1000,-220,-824,78,-889,1000,-288,-383,1000,-773,-770,191,-1000,-360,-445,1000,-753,805,466,1000,752,-853,1000,-1000,869,-467,-395,563,-95,1000,834,181,122,121,33,-178,1000,-362,-574,-72,332,352,1000,954,-1000,-394,-233,-677,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01120() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{460,-742,-202,-1000,-923,-609,1000,-470,799,-611,430,886,112,-434,-892,1,845,651,-415,1000,-488,-527,-794,-501,1000,353,41,309,939,-950,-156,588,-13,116,258,-676,923,-408,538,-660,-880,-518,828,-484,723,-243,1000,-444,-859,-824,-134,-411,-577,42,885,928,555,-920,1000,-833,4,298,151,769}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01121() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{-1000,861,-986,-1000,-78,788,1000,396,-236,238,466,430,-317,-155,-292,772,498,150,-1000,-266,183,1000,-306,-746,1000,-723,-307,-343,204,292,-239,-1000,-236,-1000,1000,429,-79,752,-1000,-514,-842,-930,361,-1000,163,1000,-1000,619,64,-283,1000,-183,-1000,-513,1000,770,-368,-473,649,-1000,244,634,1000,670}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01122() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{-1000,1000,-651,212,-987,1000,659,295,-1000,1000,476,-1000,-405,-304,-467,188,-1000,-867,-517,-1000,-797,215,1000,651,1000,-1000,-686,1000,-1000,-69,1000,-647,-364,109,1000,1000,141,723,-1000,-569,1000,-1000,1000,314,277,90,48,404,1000,709,1000,1000,196,-1000,-1000,382,-941,285,987,1000,-788,-1000,15,-225}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01123() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{1000,-1000,-661,-1000,-1000,-1000,1000,-606,1000,-931,966,1000,313,-434,-1000,-765,1000,987,-898,1000,-836,-595,-1000,-690,1000,-591,885,375,1000,-1000,199,1000,351,116,74,-1000,1000,-1000,1000,-781,-1000,-575,1000,-761,15,-1000,-1000,-1000,-1000,-1000,665,-1000,-479,619,1000,1000,1000,-1000,1000,-137,-656,-280,-418,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01124() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{605,-314,904,-41,-1000,-1000,513,-48,265,-77,804,128,-96,-1000,-460,256,-17,710,-302,600,-1000,-1000,121,-1000,45,1000,391,1000,237,-454,535,1000,319,382,-592,-1000,725,-1000,1000,-1000,134,-435,-939,-484,1000,-1000,1000,-742,-809,74,-134,416,-223,464,-306,259,1000,111,203,133,224,-846,-603,398}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01125() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{500,-660,-21,-938,-1000,-1000,828,-878,914,-151,601,-115,-324,-971,-956,-346,-186,594,288,862,-939,-1000,121,374,708,159,484,1000,97,-565,711,1000,573,726,-24,-537,949,-1000,944,-883,409,-491,991,-351,1000,-1000,1000,-848,-651,-425,-181,416,725,-449,-515,773,1000,-562,712,567,-770,-846,-647,418}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01126() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{209,-128,-302,-206,1000,523,17,525,-727,-1000,737,736,34,781,616,-1000,-580,537,-61,792,835,452,-516,327,362,58,844,-1000,252,267,32,928,-223,350,259,33,272,190,209,1000,-455,1000,-642,946,-618,-151,219,-759,-639,383,-1000,-859,118,-864,1000,-955,-296,-1000,859,-272,-491,1000,-954,-185}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01127() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{-602,-385,-588,212,-784,66,659,565,-1000,-119,717,-543,-603,-659,-364,1000,-57,280,-464,-343,-381,784,593,-746,304,-803,-565,393,35,564,75,-708,-579,400,965,1000,105,-455,-391,-1000,-508,-919,1000,-611,749,613,-1000,961,-70,293,812,841,-1000,21,-356,648,501,867,241,-255,36,-599,570,20}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01128() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{571,290,-406,688,-1000,732,-593,1000,-54,-756,635,121,689,-1000,689,112,-752,1000,-1000,-886,-1000,335,486,59,-1000,1000,536,1000,952,-635,-1000,1000,-1000,233,-1000,-686,1000,-511,1000,851,316,1000,372,-1000,41,204,-873,-422,357,1000,-3,78,-530,3,1000,-1000,1000,1000,755,934,-217,-272,1000,-737}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01129() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{-1000,1000,-636,-1000,-436,797,1000,-149,-627,959,168,74,-510,-6,-1000,433,-411,-384,-733,-981,230,984,761,-1000,1000,-885,-110,60,-256,1000,345,-1000,308,-1000,1000,1000,-167,232,-1000,-395,507,-1000,1000,178,-195,655,-309,365,697,-648,1000,500,-298,-513,517,746,-171,-943,1000,-278,-114,-32,395,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01130() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{-315,-103,-779,-911,-884,937,921,371,701,-761,547,-793,42,-987,547,-155,-344,-14,-876,609,-773,-859,-399,-531,535,-364,-395,889,-859,-911,696,620,-428,6,151,272,760,-503,16,-422,-222,-364,247,-899,561,-173,787,-199,202,349,-230,365,670,-94,-310,486,367,-554,325,381,-207,-232,509,-235}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01131() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{-1000,1000,-621,-729,73,1000,538,-633,-1000,1000,598,21,540,-102,-855,-191,-230,-276,-852,-1000,1000,901,-1000,-171,485,-692,-54,-1000,-499,-1000,535,-1000,979,-1000,1000,402,-722,11,-1000,129,-1000,-1000,235,-806,431,52,-525,459,-613,-157,1000,-68,-169,-1000,915,230,334,-698,809,-141,670,142,13,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01132() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{971,-869,-116,-1000,-78,-1000,1000,396,-32,-323,1000,379,-482,-946,-1000,-850,472,150,-299,1000,-1000,138,423,180,908,-638,1000,1000,232,-586,860,-1000,1000,729,350,-1000,1000,-1000,1000,-1000,243,-703,1000,-616,163,-1000,-79,-1000,-1000,-1000,765,411,352,553,-112,1000,1000,-217,649,700,-606,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01133() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{-707,357,-1000,-1000,103,797,1000,-52,1000,959,428,390,313,-404,-357,-221,267,-60,-995,-26,-195,541,-284,-1000,1000,-885,-327,-51,-760,-69,239,-647,-293,-1000,1000,65,259,723,-987,-82,-460,-798,-167,-947,163,675,402,-59,169,-338,606,-462,196,-513,1000,864,-171,-1000,987,-415,-209,761,713,765}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01134() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{761,-483,398,-790,-867,-952,-195,-626,822,338,374,929,-73,-371,-100,178,327,-172,-67,357,-227,-216,956,365,584,-441,891,-682,-568,535,458,691,364,774,-988,75,233,-542,863,-387,-34,-598,825,3,782,-342,726,-333,-657,-948,0,127,108,133,-922,935,697,-559,306,614,935,279,-646,-37}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01135() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlinePaint(java.awt.Paint):void",
+            new int[]{-270,-581,-633,887,-959,-486,513,-41,-1000,959,938,-1000,-83,894,-96,-221,-1000,-288,322,-1000,-812,541,1000,51,1000,-1000,-748,1000,-1000,-69,1000,-727,-1000,1000,1000,1000,258,-1000,-311,-1000,172,-1000,970,122,1000,115,-1000,823,163,-338,793,1000,655,-1000,-1000,864,-1000,1000,404,-415,-1000,-1000,713,-2}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01136() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{651,-735,379,946,-93,-93,221,-272,578,-1000,269,-277,-500,70,-779,-986,57,394,-897,8,1000,361,1000,-729,855,602,-275,-1000,1000,251,-80,1000,94,462,704,286,-987,-1000,-1000,531,1000,-852,1000,839,146,-700,220,-148,966,365,818,-262,-208,-183,586,460,871,418,-100,181,-981,315,358,389}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01137() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{660,302,-261,207,-538,-335,-260,85,-234,-939,-251,5,-826,590,-144,114,1000,-45,718,452,914,-275,298,-1000,-583,759,92,47,-1000,1000,-56,-1000,-814,-837,814,-243,-844,874,-757,277,-1000,-657,319,221,-1000,-589,-408,418,740,27,1000,415,-1000,1000,-608,161,60,132,782,88,-1000,-557,-75,393}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01138() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{967,-750,-77,-274,-299,-665,-129,-542,-292,-1000,-591,-886,-609,31,-327,-153,1000,1000,160,-494,1000,371,1000,-579,98,1000,496,-970,-557,868,-290,-998,1000,-17,727,-93,-663,-218,-705,230,-779,-877,671,221,-1000,-1000,-227,-136,1000,186,1000,-369,-1000,423,358,1000,589,137,39,448,-1000,-365,-196,320}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01139() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{397,-258,129,476,263,-7,-1000,219,-579,707,1000,-1000,267,-243,-575,260,-513,-1000,-1000,474,364,87,1000,-161,1000,-130,700,-614,1000,-953,523,1000,1000,471,-918,-44,920,-1000,-258,-565,-724,-148,706,-974,711,1000,-514,-396,481,349,-1000,553,1000,-1000,86,-2,160,-511,-148,328,321,302,159,-335}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01140() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{615,-1000,-11,845,453,-505,-146,-338,-782,-1000,-1000,-1000,-982,156,-486,-313,552,259,552,-662,651,-625,693,-1000,-408,1000,817,-332,-1000,541,-587,-1000,1000,637,52,-764,-140,181,108,1000,-1000,-1000,677,-12,-1000,-602,262,55,1000,-97,977,-444,-63,-84,385,262,1000,1000,182,770,-999,-712,74,153}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01141() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{-884,-750,-716,595,527,-665,193,-542,-636,-521,-429,-886,53,496,-670,-278,919,-573,-370,-494,350,-859,-180,324,2,-271,496,-970,-353,868,-290,-998,-652,653,194,698,-216,-551,-607,49,771,780,98,-905,-742,-582,505,398,-554,-538,645,-557,-954,423,-698,-519,-848,-862,-220,-877,725,-359,154,320}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01142() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{-165,-224,-236,218,-399,-594,367,-119,-418,-860,-309,79,388,1000,-469,-1000,1000,16,-724,194,60,-155,1000,-1000,-445,684,-629,-634,-273,361,1000,-937,-304,352,71,-193,-554,37,-1000,-814,1000,-655,474,-1000,-964,-475,-967,212,247,-425,654,-79,120,532,161,509,147,746,426,-1000,-703,414,-89,799}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01143() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{232,779,-960,-1000,613,451,333,508,-762,916,-461,-139,367,-1000,-573,-985,-544,1000,8,-331,792,1000,124,1000,670,-905,-8,88,160,253,-797,924,1000,875,1000,-379,-529,-358,-1000,-665,-224,1000,-158,799,577,-1000,58,-323,-197,-367,911,117,400,-439,-950,115,396,-769,-1000,706,-798,-237,46,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01144() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{84,734,373,383,-56,-5,-308,254,-762,1000,97,-579,19,-350,-644,-585,-699,605,422,-189,272,367,-14,101,616,-270,2,-217,400,-258,32,467,1000,1000,-6,-481,141,-865,226,580,-448,891,-99,-354,99,-777,684,-246,52,178,99,552,339,-717,-910,-43,441,65,-264,640,321,-476,577,-842}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01145() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{991,373,-351,-746,79,590,311,1000,572,-45,1000,-767,284,1000,-818,-671,460,1000,-425,1000,1000,590,936,253,759,-286,-429,-727,1000,-514,-44,1000,782,18,1000,702,-778,155,-1000,-229,896,62,-502,361,736,-1000,-871,321,169,-31,-197,150,384,98,-1000,768,354,-277,649,-329,-671,-556,584,83}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01146() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{-295,1000,-281,-933,-89,-148,624,490,-506,336,85,65,-322,915,-239,-541,1000,714,216,-480,-28,-157,333,69,-671,-133,-180,-32,-561,100,1000,-541,-742,165,127,-260,-56,206,-738,-987,525,619,-236,45,-819,-20,-1000,395,-382,-699,526,515,-432,672,-1000,437,-147,316,606,-969,-196,-197,1000,-1}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01147() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{-341,1000,514,283,600,-221,-943,-174,-1000,633,97,-1000,1000,-889,676,1000,-361,-161,827,365,216,-1000,-207,169,406,-153,1000,-4,-404,-867,-748,-69,1000,1000,-1000,-1000,1000,77,703,-532,-1000,574,-1000,-1000,-793,956,250,-215,236,336,-1000,671,400,-438,-451,-395,-834,-1000,-266,1000,-508,-1000,-890,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01148() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{67,878,-77,-573,319,-192,846,485,-87,1000,357,-886,33,-95,-323,-336,1000,912,239,167,12,604,-252,977,-346,1000,446,302,-557,251,24,769,-121,329,417,-138,-167,-379,-339,-271,-738,1000,-493,-677,284,-467,275,-35,-376,-169,249,415,-679,140,-550,447,523,137,-96,439,-705,13,292,-676}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01149() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{651,-735,-187,223,-332,-93,491,-272,179,-691,488,-6,-695,574,-1000,-986,483,931,135,751,1000,-335,188,-872,682,530,30,-1000,782,104,540,973,455,462,858,-47,-191,-333,-416,359,1000,-412,853,170,-46,-522,220,788,548,365,1000,619,-918,-183,-360,-154,-101,195,647,-438,-186,-254,657,-216}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01150() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{172,1000,369,-869,394,-54,904,708,62,1000,275,487,227,-281,-49,36,266,1000,440,209,462,445,-252,1000,141,-651,541,317,-200,187,34,770,-35,66,670,-43,-251,-83,-563,-181,250,1000,-655,-667,284,-681,302,91,-376,-260,426,683,-1000,483,-865,479,322,272,-357,169,-705,-206,-197,-676}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01151() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelOutlineStroke(java.awt.Stroke):void",
+            new int[]{6,464,533,730,271,-250,-131,335,-1000,258,216,-1000,388,-385,-85,55,-189,16,-1,194,274,-524,290,-214,304,158,863,-422,376,-369,-479,371,842,1000,-483,-963,605,-541,134,539,-758,135,-98,-1000,-406,400,413,-261,536,-100,-400,129,339,-535,161,-61,-14,-441,-44,892,-703,-427,-89,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01152() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{-1,-400,-941,-201,349,885,86,961,-489,548,450,608,70,-9,263,134,-15,377,-1000,253,-635,-906,-291,45,404,-767,151,661,267,411,626,670,488,72,-204,-1000,236,-743,773,416,958,-72,-232,-26,-781,1000,-257,20,334,-693,613,269,706,803,-872,-549,-175,735,-104,-137,383,-237,-1000,96}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01153() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{1000,45,214,178,808,-413,552,-195,854,22,651,328,-1000,285,1000,-1000,478,-377,1000,-649,1000,453,1000,1000,-1000,793,-1000,-1000,-906,-1000,-1000,-1000,2,-243,-800,244,786,62,257,-800,-194,-315,-1000,-420,189,1000,1000,-983,240,183,-1000,-375,-7,-346,818,1000,-1000,1000,938,850,-857,-1000,254,-503}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01154() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{430,-804,-216,369,-691,-1000,305,-61,-789,-732,518,321,-137,621,-570,-445,648,-272,-1000,834,168,139,-1000,-928,-296,-1000,-640,1000,181,-675,140,-27,-1000,750,808,208,-405,-431,949,-111,568,321,1000,622,-353,-208,-584,574,-176,-553,420,-360,-149,-1000,-1000,-108,758,-404,214,-953,-171,167,192,-567}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01155() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{400,-400,-811,920,584,1000,-27,752,-1000,-468,677,-114,-32,-525,-603,-800,27,680,47,113,-36,-1000,-1000,-1000,30,-1000,-51,1000,777,-116,274,808,151,592,373,-1000,-1000,-1000,-188,587,890,282,1000,1000,-1000,-427,-564,972,208,-1000,400,-178,-1000,-118,-1000,-37,-1000,-11,-200,-848,200,-186,-481,-328}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01156() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{-1000,977,-216,-939,622,-1000,206,231,144,533,242,-709,874,-1000,-1000,389,1000,-961,-353,834,936,140,-610,468,596,-1000,546,-875,-34,1000,140,816,-224,1000,488,1000,680,1000,766,733,-1000,944,-929,-743,-353,30,-1000,574,-186,353,420,1000,-1000,-1000,-86,-1000,-1000,-437,873,647,1000,1000,-50,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01157() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{1000,-1000,-941,-84,448,-673,86,245,-744,-767,537,-519,-49,885,-146,-1000,523,-382,-122,253,168,116,-967,-764,-621,-553,-1000,1000,102,-1000,-539,497,-1000,195,808,31,-246,-279,724,-993,1000,-76,-7,1000,-1000,-208,52,854,-606,-354,-803,-780,1000,-1000,-872,-689,533,-1000,-104,-953,383,-787,111,96}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01158() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{1000,-1000,-21,-251,662,34,1000,-137,-77,70,196,133,-685,1000,1000,-1000,-309,-124,1000,464,-36,467,-345,30,-1000,-15,-1000,-150,-332,-1000,-1000,-536,-1000,-652,356,-163,275,-895,168,1000,1000,-434,-902,124,-1000,428,1000,-610,-794,18,-823,-1000,769,-1000,-582,353,-263,127,272,-550,-1000,-1000,234,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01159() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{-1000,1000,469,621,-628,66,-1000,136,337,948,973,831,-716,-1000,-165,1000,935,-570,-254,-1000,1000,-177,953,766,-178,155,1000,-553,-151,1000,270,-713,1000,759,-1000,-418,411,367,929,1000,-826,368,439,-364,1000,1000,-342,-115,977,-326,747,1000,-919,1000,1000,1000,-555,1000,975,1000,1000,1000,-193,896}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01160() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{-354,-479,-400,135,-496,-569,-1000,1000,-999,1000,1000,-420,781,-705,-1000,312,927,-447,-409,-54,263,12,-957,73,-669,-648,231,1000,969,573,594,474,-809,722,-638,-59,491,-63,1000,200,1000,180,830,-95,-173,1000,-617,229,-508,-65,-427,305,588,763,-99,-688,851,78,820,78,502,1000,-181,-375}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01161() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{-1000,1000,-346,67,1000,47,-1000,1000,-703,1000,1000,654,474,-1000,-931,1000,995,767,-404,-1000,-399,-1000,1000,687,582,-473,1000,847,524,1000,1000,1000,1000,897,-1000,-956,794,282,-386,1000,182,-278,-886,-508,901,1000,-1000,-511,884,-601,-379,1000,755,1000,701,-1000,-876,862,-161,1000,1000,1000,-1000,597}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01162() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{-27,788,-418,-845,-62,-203,892,397,-1000,566,767,776,853,-968,128,991,478,-174,-1000,-270,837,-605,1000,-261,-596,-875,-924,-1000,727,-177,498,998,173,1000,507,-1000,1000,-229,-62,-444,-1000,-13,-150,-761,-843,1000,-1000,-619,-1000,145,1000,757,595,1000,-962,-723,-580,93,-399,693,1000,-442,-817,-497}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01163() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{-601,-815,-759,-724,-420,-276,-376,946,111,840,529,441,617,-422,99,612,330,1000,1000,365,857,-770,-541,71,256,-119,748,1000,641,773,202,644,1000,-309,-613,-1000,289,-1000,453,1000,1000,-727,-465,568,-199,465,109,489,-248,-600,-583,552,1000,542,1,-677,280,728,53,-414,320,183,-970,-192}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01164() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{-1000,1000,-717,1000,-863,1000,72,-1000,557,-1000,-70,859,-685,-48,-350,618,297,-1000,-1000,-25,1000,-856,-384,-1000,894,-1000,433,893,-692,-37,-621,-168,-64,1000,807,1000,275,553,-910,438,-1000,811,847,1000,36,-1000,1000,580,176,-1000,-728,831,-1000,-998,-1000,353,25,320,-66,-312,861,-638,786,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01165() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{639,680,262,227,1000,-1000,439,91,-22,626,196,-360,-960,-508,1000,-548,892,-654,-216,-1000,310,53,1000,1000,-1000,388,-1000,-1000,-407,-850,-766,-1000,-678,1000,-113,762,1000,978,54,-383,-816,714,-885,-693,528,-663,1000,-775,-225,710,-594,-852,-1000,-90,303,714,-1000,356,781,1000,126,-676,615,41}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01166() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{909,-652,713,73,-1000,885,-389,630,-1000,-875,724,673,960,705,-52,-429,-23,779,196,-142,-1000,-1000,89,509,609,-188,282,1000,383,1000,1000,705,63,-25,-614,-1000,-371,-1000,1000,225,1000,-996,1000,1000,-781,124,-410,712,413,-1000,63,1000,1000,-1000,-507,-323,1000,279,331,942,-815,216,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01167() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPadding(org.jfree.chart.util.RectangleInsets):void",
+            new int[]{1000,-785,1000,-332,634,442,618,270,-756,-88,-1000,-319,-883,872,-431,-1000,-331,-911,1000,525,1000,709,-960,446,-210,-80,848,843,-1000,-1000,-1000,451,-951,-22,-482,-1000,126,310,808,478,1000,808,883,1000,447,526,1000,1000,-368,-158,-657,-503,-418,-635,50,36,-347,983,106,301,-1000,-1000,688,-968}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01168() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-1000,-251,1000,8,693,-530,-17,-841,-428,-927,-252,-1000,408,424,420,515,278,-302,1000,1000,-187,409,-1000,-1000,-86,-624,-242,209,-845,1000,459,-1000,-81,624,-317,54,-475,-498,-113,-651,-482,272,121,-728,753,766,303,797,-254,473,831,-975,-794,-514,-1000,-770,360,-712,-576,488,-62,-469,-66,-122}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01169() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-308,-54,-176,-947,862,-1000,-418,-292,725,985,-249,-1000,-932,1000,-256,1000,-382,-18,-153,1000,496,210,-663,-926,886,225,490,-888,-1000,167,-756,-24,-538,-1000,418,-686,-181,886,504,-127,-1000,-332,-133,-221,-291,1000,-455,-787,1000,-297,-537,581,72,190,251,262,154,879,65,-49,-146,694,119,961}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01170() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-427,617,-417,-320,-231,989,-423,879,975,266,-829,447,809,-411,-1000,-967,206,516,1000,-908,971,238,747,-618,28,748,457,330,-665,-150,-923,-1000,1000,1000,-948,844,1000,75,624,36,724,139,1000,-1000,160,234,1000,1000,-497,-630,-893,-1000,-1000,-1000,1000,302,-408,1000,-454,283,-187,113,-72,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01171() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-841,511,-923,-176,-389,-834,-491,-689,440,545,653,-220,507,631,-61,277,750,-501,-184,882,357,-314,849,-277,243,-17,448,-553,-694,-984,-838,932,89,-891,-723,52,-605,-578,70,702,187,94,455,-47,-338,233,-980,-784,771,-11,-525,582,675,661,390,146,-391,804,-234,37,-531,654,-535,133}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01172() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-529,1000,654,773,-1000,-1000,-542,-973,41,-315,-893,1000,306,-1000,567,-1000,1000,89,1000,-1000,832,157,-1000,456,1000,1000,472,744,-842,-232,-697,-1000,870,910,-1000,764,1000,59,703,662,1000,499,1000,-1000,-559,54,1000,1000,-1000,-1000,-1000,-306,-1000,-1000,1000,-656,-751,351,-227,189,-291,-599,-544,411}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01173() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-1000,944,-136,74,-231,-65,469,-992,-1000,-578,33,-995,721,-708,1000,1000,1000,-545,1000,715,26,-205,1000,-618,-655,-985,152,803,-360,1000,62,-1000,1000,1000,248,224,564,-1000,-96,-520,-550,380,440,-424,-44,923,109,-718,-637,-368,888,-1000,-854,-1000,-1000,-1000,-198,-952,-906,279,-1000,113,60,-529}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01174() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-1000,-104,554,-456,544,-1000,-1000,-1000,687,122,-186,-1000,-203,1000,-261,982,-283,-191,1000,1000,393,243,-1000,-1000,924,278,-191,-622,281,925,102,-906,482,1000,-571,308,-944,-129,-1000,-119,-1000,77,361,-1000,1000,837,220,-151,810,530,358,-833,-863,-817,-496,132,646,672,-1000,636,829,-352,42,753}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01175() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{186,-963,1000,-946,704,-898,-1000,-1000,850,1000,1000,-488,1000,1000,-1000,-99,-444,717,-602,1000,799,23,860,-1000,1000,23,380,-456,-274,264,-862,1000,875,768,-414,500,-1000,0,-162,-172,255,41,-424,168,733,550,135,-857,582,1000,359,102,1000,943,356,883,-420,1000,-491,-28,-296,-156,169,-3}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01176() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-1000,122,688,679,364,-601,906,-352,-1000,-1000,-799,-1000,-420,288,778,1000,1000,-177,1000,1000,-971,595,-1000,-957,-378,-53,-515,30,-1000,1000,362,-1000,-1000,1000,-193,-460,-268,-588,174,-273,-1000,358,1000,-1000,-460,1000,-492,831,-477,43,539,-1000,-1000,-1000,-1000,-1000,689,-1000,-220,757,54,-373,-884,581}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01177() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-299,-226,-397,-143,-326,82,-1000,-1000,520,367,1000,-15,1000,-46,-203,-1000,523,349,205,-110,1000,-10,1000,348,-320,316,163,-242,-274,-134,-1000,1000,782,1000,-1000,1000,-401,-571,-445,617,1000,869,278,-56,-159,131,446,594,-413,1000,36,385,478,425,629,0,-1000,1000,-1000,-286,-826,-787,-504,-13}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01178() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-230,-1000,-136,-204,615,-759,-1000,-293,697,-558,-295,-163,-694,-752,-674,-877,-1000,-882,-196,-667,34,-504,1000,-432,-60,-145,568,-474,-702,-604,28,-516,-528,-303,820,834,-8,825,270,-1000,-943,-396,-839,24,62,-251,-97,91,1000,-1000,-976,986,-417,448,278,-170,-161,-218,-590,320,352,-213,-1000,-218}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01179() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-463,-570,319,-664,867,-169,246,205,822,184,-690,-558,-200,842,-758,205,-950,452,651,191,219,-118,-568,-686,684,230,655,-506,-823,-475,-571,-868,351,-68,3,-150,868,704,976,-504,-620,-88,-97,-933,315,67,804,187,776,-838,-850,131,-934,-657,722,932,361,486,-579,125,-152,-739,585,848}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01180() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-889,0,319,-44,-720,-1000,-628,-502,1000,-214,187,228,-314,1000,-293,-1000,-1000,589,27,994,1000,-263,-1000,-761,358,425,263,-847,-828,-929,370,352,-76,-597,-1000,197,-867,154,355,1000,-188,-136,-479,-277,794,-217,238,-970,1000,-155,-628,107,70,1000,806,-145,196,1000,-529,596,735,-621,-1000,342}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01181() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{1000,-462,-992,-100,-247,829,1000,142,1000,-1000,-12,226,82,-82,1000,-987,-1000,1000,613,-1000,662,-556,-1000,970,29,-1000,1000,168,-249,-1000,228,858,379,-14,1000,-448,1000,1000,39,-1000,960,-135,-1000,-1000,1000,-1000,1000,447,590,-1000,-729,1000,1000,1000,1000,1000,-961,863,93,-1000,-835,-853,1000,-980}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01182() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{-515,-52,-962,-301,417,-629,-727,-714,1000,881,528,120,-343,669,519,-131,160,559,238,747,1000,-330,20,-696,780,845,637,-842,-596,-450,-509,546,1000,726,-542,491,120,-138,756,1000,128,110,275,-660,-342,783,64,-985,463,-405,-651,288,42,-108,1000,-947,330,1000,-555,240,-305,-320,-216,973}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01183() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelPaint(java.awt.Paint):void",
+            new int[]{799,-279,483,-195,-80,23,-144,454,-703,443,-401,-343,-959,404,-866,271,463,-675,-277,207,-177,-927,-457,150,-981,-311,-790,-718,73,-880,-931,-841,-598,-133,368,-60,810,-143,30,542,898,-304,-855,966,-841,-507,551,-951,-588,-126,901,-810,-574,-496,-533,-774,-408,-522,-395,-446,-671,-755,-722,-142}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01184() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{-198,802,-181,-830,-873,201,499,556,486,-835,1000,-596,287,1000,-209,-593,1000,620,-46,-456,363,-452,58,832,-1000,-899,230,-1000,301,1000,-324,285,-546,99,-671,-388,656,-101,-666,-447,188,-1000,-876,-1000,-552,21,274,1000,217,-520,-626,-654,159,-11,-710,103,1000,427,231,-7,-601,-1000,-635,-402}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01185() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{-1000,-155,97,59,-119,73,239,359,-88,-1000,423,-604,-1000,-356,504,-445,326,791,-215,-576,801,629,-264,47,71,-1000,863,-346,1000,529,278,-705,-509,-296,-197,-959,152,617,-1000,-579,760,-902,103,-251,171,1000,-810,255,-599,-176,-236,-1000,1000,-1000,-710,-154,953,796,-436,-437,31,-1000,-826,-402}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01186() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{1000,510,-306,51,459,832,133,-13,-577,1000,650,178,-229,1000,614,-165,-528,308,275,831,-586,811,-818,134,195,968,-1000,173,1000,89,-1000,734,-1000,783,-1000,1000,-1000,-546,949,-581,-184,1000,-922,-879,-41,-1000,515,665,1000,613,-543,1000,-1000,1000,-684,-1000,-998,-1000,315,-753,-128,168,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01187() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{327,718,-266,-881,-120,368,861,92,-983,484,1000,-407,-1000,1000,214,-475,540,463,15,-48,260,957,-1000,333,-223,-476,-294,-1000,1000,1000,-729,165,-56,93,-464,263,48,-196,-236,-1000,324,109,-498,-1000,-181,-338,-53,1000,659,520,-293,472,-669,-893,-343,1000,367,59,117,242,-261,-1000,333,595}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01188() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{-727,688,453,-881,212,-281,-292,501,-1000,585,555,-697,-1000,-512,1000,134,-131,463,-265,589,661,1000,-562,635,239,289,138,401,-201,-1000,-1000,-361,638,152,655,-258,-1000,1000,-399,-1000,716,220,22,1000,1000,900,-1000,901,373,520,-349,730,609,-331,408,924,49,-531,-1000,1000,1000,-978,-89,125}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01189() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{204,293,954,-180,770,211,-44,131,-826,596,314,-131,-316,280,436,105,639,768,223,101,858,613,130,-39,-4,545,-224,97,-70,-763,-1000,-285,402,-86,33,-397,-1000,-15,-98,-969,-213,694,-192,319,-21,22,-439,583,88,544,-1000,826,542,329,65,839,109,-455,-301,857,677,-978,915,2}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01190() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{852,1000,-846,-993,-440,815,929,639,-389,116,1000,-1000,838,817,-494,-87,1000,838,-496,-402,413,-436,-480,332,-239,-1000,-622,-49,707,1000,442,-16,-1000,-760,-538,1000,735,-586,-664,-2,-166,-293,754,-761,-386,-124,-485,342,-521,95,-275,143,-553,-386,-727,-400,1000,-992,207,-500,-988,682,876,651}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01191() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{527,1000,-526,-788,-971,116,-218,814,297,722,773,568,1000,1000,-286,-604,1000,690,1000,1000,-912,-348,532,-286,-1000,772,-981,-529,-1000,628,-732,1000,925,1000,-411,595,1000,-1000,-295,52,-1000,924,1000,-409,-932,-1000,1000,274,-986,-1000,-919,-269,-1000,1000,-196,352,-1000,-147,1000,-753,453,887,-190,-420}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01192() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{-1000,247,-242,-1000,-1000,-1000,-606,928,57,-1000,-676,991,452,-1000,959,-765,-235,802,-551,922,-1000,98,679,-250,-250,1000,-106,-71,701,-1000,-110,488,1000,1000,474,-852,-689,357,-1000,332,-522,371,-614,1000,-1000,1000,-313,133,-787,283,-903,-1000,756,560,-296,-553,-1000,443,383,646,-24,146,-1000,-51}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01193() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{-438,350,-282,204,-405,-238,887,1000,569,-1000,693,-140,75,-80,-740,-170,1000,1000,-35,-975,72,-518,648,-312,-674,-1000,492,-1000,501,1000,1000,-185,-1000,-836,-565,-340,1000,-52,-1000,-23,-91,-902,-480,-974,-552,1000,-1000,-546,-950,448,-534,537,649,-792,-1000,-529,1000,-153,259,-532,-759,-280,-684,-223}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01194() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{876,-901,548,115,1000,761,-55,32,70,-263,1000,444,-1000,-291,-743,-57,1000,973,-40,-840,673,-353,-822,-138,49,-126,-684,654,1000,342,-30,-1000,-608,-519,-1000,312,-647,641,12,-470,1000,1000,201,-781,4,429,-1000,-915,-716,-383,-602,160,-405,-465,-179,-464,797,-122,117,-785,-912,-29,1000,578}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01195() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{1000,1000,-651,-366,-77,327,742,406,807,1000,881,173,838,683,-356,-177,702,576,-341,180,-878,-545,-151,176,-841,-97,-1000,-409,2,573,-521,415,-3,11,-841,1000,-281,-1000,122,-336,-583,460,-1000,-258,-588,-399,549,582,268,61,-546,1000,-1000,1000,1000,-565,1000,-1000,720,494,-862,-16,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01196() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{802,64,-797,447,960,290,649,156,-53,1000,332,1000,-329,-568,261,181,-425,1000,-672,307,-398,684,-727,-709,-731,587,-1000,981,1000,-234,1,61,168,-44,559,1000,-1000,762,-166,575,-840,1000,129,-202,-363,-471,-1000,-1000,-1000,186,-223,1000,-559,-380,1000,-897,808,-1000,534,181,-1000,-302,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01197() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{449,556,889,713,771,637,-872,381,-505,1000,1000,52,-127,163,969,70,-571,500,981,914,487,-399,-101,-343,158,1000,-622,940,476,-198,-1000,342,723,775,-1000,1000,-424,-1000,385,-1000,-61,1000,-484,214,-75,86,-774,1000,1000,104,-1000,520,-920,1000,542,-400,-960,-992,240,873,552,555,876,653}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01198() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{788,410,-477,115,95,290,742,655,933,-263,1000,-1000,1000,565,-743,-57,1000,973,-40,-875,-273,-874,261,-278,49,-1000,-1000,-290,581,1000,1000,-157,-1000,-803,-962,970,1000,-1000,-638,-199,-821,1000,763,-537,-154,429,-766,-915,-302,-383,-455,160,-827,209,-294,-1000,797,-1000,481,-232,-1000,1000,1000,502}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01199() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLabelShadowPaint(java.awt.Paint):void",
+            new int[]{-714,817,236,-939,-401,-541,278,689,423,-421,738,-606,963,-72,248,255,377,294,-677,-141,-550,-622,783,-721,-300,110,-293,-990,754,348,932,-669,-936,507,310,493,-309,348,-348,53,208,895,649,-270,-387,230,-110,-807,-478,-199,-413,-623,-65,782,557,-897,-657,24,-353,47,-908,174,846,448}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01200() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{481,-84,-966,-1000,1000,-497,690,610,513,-932,-550,575,-932,968,-94,-714,-84,731,-521,587,1000,-646,105,-133,118,-958,-371,-832,287,776,-172,12,1000,531,-560,-189,1000,-105,-810,-299,159,-335,-405,-451,1000,-1000,600,816,-390,160,-356,603,439,977,-1000,-503,-938,738,-167,758,-123,-779,-404,-774}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01201() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-1000,-73,-216,663,1000,1000,422,-186,674,264,693,-785,-508,435,-35,971,-84,-290,-672,690,738,497,-388,400,-280,-501,-79,-832,766,160,163,-196,451,-1000,792,729,-54,-746,376,-155,123,559,-234,345,1000,155,-708,742,-1000,422,-1000,-111,883,774,-668,-322,62,-539,-806,-1000,-358,335,-1000,-593}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01202() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{39,-892,859,23,-1000,-1000,-662,391,-103,1000,1000,1000,593,-322,-358,-1000,49,-1000,-421,-1000,505,-75,-1000,246,232,820,349,-575,-1000,-23,464,-1000,-1000,1000,1000,731,-1000,148,963,207,499,-613,-579,665,298,1000,1000,277,962,272,-974,225,1000,656,430,-998,743,-922,508,-274,737,-177,28,338}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01203() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-382,449,888,-820,1000,-1000,-106,329,191,607,-909,-347,-873,406,419,-442,-1000,310,269,1000,380,142,-977,1000,-40,-1000,-957,-726,1000,-53,-480,341,1000,512,1000,-26,1000,935,-578,191,-842,882,-492,-334,278,-1000,490,816,-1000,270,-1000,736,1000,799,-475,-888,-1000,543,-1000,101,-939,-592,-1000,-884}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01204() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-347,-1000,119,-848,978,413,1000,-321,779,-1000,-67,-24,150,136,-538,161,1000,-47,87,-625,461,479,711,79,-766,312,-1000,-274,-606,1000,26,-524,89,-409,-913,-163,-378,-496,-280,-1000,1000,-841,213,129,-113,356,850,1000,1000,918,1000,-400,-869,526,856,-109,1000,770,1000,514,920,-1000,1000,-214}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01205() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{481,-1000,843,-467,333,-497,1000,-388,513,1000,1000,609,378,331,-556,-1000,1000,-387,-1000,-1000,1000,272,-269,889,-307,497,-335,-239,-1000,1000,816,-1000,-146,133,725,688,-1000,-520,173,-1000,1000,-1000,39,692,1000,1000,600,1000,1000,754,1000,-1000,-1000,413,203,-343,1000,-605,-167,-530,1000,-596,-56,-710}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01206() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{310,-845,-364,-777,104,33,109,-356,553,-94,147,586,-870,919,-814,-695,356,-125,-961,-715,691,-624,434,-931,480,-540,33,-984,-870,943,845,-694,431,779,419,-423,-344,-698,-238,-794,949,-619,-464,-571,372,249,758,254,946,43,963,437,-944,942,-395,-347,633,-809,297,464,707,-724,462,-359}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01207() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-447,234,754,-792,153,-1000,570,-1000,-33,796,333,725,713,-1000,157,-729,167,-720,-167,-466,187,308,-810,655,-1000,246,-214,147,-1000,593,1000,-991,423,1000,-988,1000,-696,1000,1000,-287,-529,-786,-133,1000,658,310,-58,1000,-1000,833,701,-1000,472,1000,-151,-1000,1000,-898,-1000,-873,-571,584,-504,211}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01208() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-458,-1000,814,1000,208,-228,412,-885,-260,-992,1000,441,1000,113,834,-925,956,-225,-125,-895,1000,284,-216,220,-1000,593,649,86,-948,1000,463,-458,1000,-416,848,748,-273,-722,576,-804,-455,-438,199,1000,1000,593,-1000,-804,641,654,8,-1000,-382,133,-1000,-977,1000,-275,-1000,-1000,-553,1000,-786,-678}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01209() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-502,-84,-216,-664,699,-65,-513,1000,219,-932,-421,-339,-830,372,-85,-429,-1000,-290,-39,678,465,158,-746,871,213,-957,-675,-832,1000,64,232,-153,1000,686,1000,-189,665,520,-178,-155,-288,684,-533,-418,-162,-126,600,423,-1000,188,-601,619,1000,774,-52,-779,-215,-539,-806,758,-358,-553,-716,-593}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01210() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-164,-1000,-891,-1000,-514,-1000,-7,-473,-33,-884,-470,777,-813,528,546,-1000,-1000,173,152,1000,1000,-769,-1000,485,147,-928,-486,-715,962,121,296,-299,-496,1000,779,378,765,790,-661,292,-695,-136,-856,-77,1000,-648,661,680,-1000,-16,-1000,336,-1000,819,-1000,-1000,-1000,-236,-1000,588,-722,-466,-1000,-639}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01211() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-63,-892,-966,497,1000,484,-59,610,1000,-1000,-874,-739,-909,995,-870,814,-92,321,-973,55,145,219,624,37,-77,-1000,-1000,-989,-27,960,-172,260,1000,-278,-472,-981,1000,-581,-440,-299,895,480,-228,-997,-286,-948,925,512,1000,445,552,953,-173,960,223,-573,1000,764,508,976,737,-807,986,-841}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01212() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-794,-835,414,1000,-212,-396,-555,-273,894,-564,91,306,-391,438,-730,-598,549,-357,-1000,-1000,652,-384,-39,-398,428,-475,186,-854,-1000,211,820,-600,138,934,827,-405,-1000,-399,477,-650,914,-571,-464,692,549,-71,600,564,964,266,937,-1000,-1000,724,-69,-876,1000,-605,-546,394,1000,-531,455,-276}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01213() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-1000,-1000,614,-1000,-700,578,752,-1000,-1000,-1000,-273,656,1,-535,-1000,554,1000,508,546,148,587,-277,697,-11,172,-725,-1000,-758,-1000,380,361,-375,973,-190,-288,-1000,-1000,-212,335,-1000,1000,522,807,455,-474,-1000,-657,1000,1000,439,1000,223,1000,140,353,-1000,1000,1000,-254,907,-814,-1000,986,314}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01214() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-1000,-610,404,-437,761,-697,-210,114,484,-163,175,886,-315,-403,-360,-858,-549,-633,-291,-216,232,207,-723,-310,85,-372,-416,-590,269,-309,595,-737,491,555,482,65,-819,-263,289,-595,135,-29,-46,26,1000,-1000,585,929,-294,457,181,182,334,559,291,-660,497,-882,-213,-41,509,-140,-320,-438}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01215() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendItemShape(java.awt.Shape):void",
+            new int[]{-521,184,-227,562,870,-669,756,-1000,753,3,90,708,713,753,55,-434,851,943,-1000,230,1000,-1000,417,668,-234,-683,925,-870,-329,326,45,-56,588,122,-96,149,-286,-1000,-277,207,430,-724,-304,-453,1000,-1000,-161,618,-1000,-6,-661,734,-49,1000,986,-298,-294,-232,-448,-533,255,578,-247,-900}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01216() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{404,3,-1000,288,613,970,1000,730,136,15,-821,770,967,-1000,-116,688,726,-570,873,-746,498,-926,-506,1000,457,-51,-60,-1000,-1000,29,-931,-853,-1000,324,766,31,103,514,-417,1000,-133,339,261,82,-1000,-1000,-133,-1000,1000,-854,-614,-411,542,-1000,-1000,-66,-897,-645,-941,1000,-164,44,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01217() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{1000,-754,-961,-864,-639,248,-559,90,-1000,-31,844,-1000,-160,446,-1000,-1000,-373,857,782,1000,-61,-361,-552,-392,-795,1000,1000,-187,-1000,920,-161,-6,-135,736,-395,1000,956,1000,1000,904,-1000,-593,171,1000,1000,1000,-734,138,-498,294,-83,-353,25,8,-1000,-1000,-523,-1000,-870,225,-592,-128,105,-714}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01218() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-149,-113,-615,464,509,-535,-968,-831,372,-31,-1000,-793,-7,470,460,559,1000,-1000,-728,62,-474,202,773,1000,-196,-587,-1000,378,1000,-1000,-189,966,-378,-638,358,60,97,-235,551,-592,282,379,-179,-642,-243,838,785,591,-263,-711,262,-68,-9,891,1000,944,-1000,1000,609,-271,-164,-206,-775,523}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01219() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{1000,-294,469,-1000,1000,425,-877,495,-673,-752,1000,-842,-891,344,-1000,-505,-860,757,-640,1000,-98,-856,1000,-818,-856,1000,1000,382,-1000,1000,426,-439,59,1000,-1000,1000,1000,1000,1000,-676,-1000,-1000,-248,1000,1000,1000,-1000,-47,-1000,956,-688,-1000,-248,1000,-1000,-1000,-401,-1000,538,-160,-542,385,-77,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01220() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{400,-473,792,-1000,1000,-756,69,239,-672,-126,1000,196,-1000,-997,-1000,-346,-322,-496,-372,257,-430,-768,845,-665,-863,572,-307,753,209,1000,-716,-219,657,404,767,17,-385,-239,-754,-766,775,-890,-1000,330,260,733,790,-1000,-1000,1000,-787,-1000,-974,792,-866,-189,325,-1000,13,-892,-226,930,139,-166}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01221() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{1000,-1000,784,-671,-294,-99,-414,900,247,-1000,-43,-1000,-78,-1000,-1000,-103,-518,-158,-378,1000,-597,-305,-998,140,-1000,-542,-791,788,-178,-541,23,1000,31,-277,808,1000,598,272,475,33,-897,-532,-713,-186,1000,783,-34,-269,-622,335,-923,-479,-1000,398,-1000,-1000,66,75,-67,-601,401,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01222() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-437,-104,-546,-66,-565,1000,1000,1000,56,-403,409,733,1000,-958,-434,287,-24,385,475,-158,-4,-889,-406,43,218,-1000,975,-187,-428,254,-322,-1000,-842,963,767,614,-591,235,-960,432,637,-457,190,579,-305,555,-356,114,-194,-191,-677,-493,-346,-1000,-1000,-1000,-9,-188,-935,263,-124,783,-77,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01223() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{1000,-913,1000,-656,994,416,839,131,370,142,448,-252,121,555,-1000,-233,87,1000,1000,-115,1000,-660,-1000,-949,-320,715,1000,-78,-1000,717,-846,-969,-171,-514,-72,1000,64,567,828,839,-1000,35,19,410,-110,876,-50,881,-740,7,450,-404,-358,444,-1000,-955,-534,-1000,355,1000,564,-804,1000,-220}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01224() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{612,-2,699,-927,1000,77,-780,-983,1000,-3,-696,-772,60,-231,167,1000,154,-827,-475,1000,-458,-381,1000,814,198,524,-312,350,-400,159,535,1000,-969,-18,-707,1000,1000,11,1000,-863,-203,-760,62,381,204,1000,-480,335,-1000,-787,438,-1000,-250,407,-372,-424,-807,-400,1000,184,-83,412,-625,-693}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01225() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,1000,-996,53,926,45,-99,730,-209,155,522,891,-851,-1000,899,583,887,-1000,-587,-968,99,-570,1000,147,482,512,-1000,505,-1000,1000,266,-1000,-153,638,-367,-1000,-890,-376,-692,-682,537,-445,-1000,56,-1000,-733,-1000,-1000,-1000,333,-297,129,-165,-84,1000,-66,-302,-75,-504,-231,-809,-11,-884,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01226() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{485,43,585,221,-851,-268,-103,-422,184,736,448,-639,211,555,-270,-233,87,1000,761,413,-135,295,-330,140,-1000,-43,535,-827,-938,-637,-512,508,-128,-885,966,476,164,567,655,151,-780,49,1000,410,1000,876,774,881,-581,509,922,-478,-511,419,-902,-955,-757,1000,355,-325,1000,-192,1000,256}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01227() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{215,-889,-72,561,-730,-645,-119,223,-754,-191,104,-663,383,1,-270,-605,719,810,195,-395,-61,126,-527,-649,-307,-591,-185,-334,-276,-100,-916,-694,668,-885,636,572,-814,-34,-53,344,-784,342,-328,-990,554,336,713,-95,717,-605,964,680,107,659,-97,-354,-135,495,-23,521,464,-199,785,256}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01228() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-437,-294,-961,859,-521,-756,-1000,144,-203,-126,-230,-360,-640,-3,819,-197,1000,-1000,-640,-684,-1000,318,1000,1000,-1000,-1000,-1000,273,1000,-1000,-128,1000,59,-18,767,-919,-591,-3,-274,-676,775,565,-248,-740,204,-1000,790,867,-194,480,-358,-493,-44,1000,943,1000,-1000,1000,515,-892,-124,820,-77,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01229() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{816,-241,-472,677,-315,-262,248,354,-393,846,255,1000,8,-628,-1000,-917,358,724,961,-207,-809,-1000,-970,467,-884,429,1000,-315,-1000,-397,-1000,176,-55,-1000,1000,196,-94,911,-175,381,-1000,494,180,427,45,550,653,-171,603,803,579,190,427,690,152,-452,-546,-526,-507,-571,-1000,-203,1000,337}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01230() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,1000,-711,549,1000,-597,-1000,-1000,241,687,-821,-84,-858,1000,717,1000,1000,-639,-701,-1000,-52,945,1000,240,314,613,-1000,-126,-933,709,-131,-898,-164,431,-177,-1000,-724,-89,270,-853,507,34,261,82,-1000,550,-133,371,-514,-642,-16,-811,605,265,1000,1000,-899,-536,977,-1000,149,8,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01231() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{339,-360,152,112,-1000,-332,-498,253,696,568,954,-1000,-66,-596,-194,670,-115,129,-240,188,-1000,1000,-579,-698,-460,-454,535,132,-405,-578,-619,833,-128,-625,637,638,-356,539,1000,-320,-586,1000,258,-839,1000,876,774,179,-107,-249,-159,-60,-1000,419,-411,-1000,-32,1000,-1000,-308,950,288,774,-645}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01232() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{54,-1000,-356,790,297,203,1000,-198,261,-302,330,-197,385,974,-6,-71,-117,191,-808,202,-1000,302,177,1000,-403,-166,777,-215,-528,798,177,558,480,-412,595,-747,-688,-1000,437,82,444,142,-1000,-235,-621,650,-559,756,1000,-171,146,-410,-1000,-185,278,-781,807,801,-945,-490,340,-734,-734,982}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01233() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{533,753,-1000,-1000,119,65,4,1000,942,-461,-1000,-1000,606,1000,-292,1000,-1000,-354,504,-345,-1000,271,888,-1000,536,-1000,181,36,-1000,-742,-1000,497,1000,792,-251,-945,1000,9,-737,1000,-180,932,-999,714,-1000,-1000,546,459,1000,-1000,581,-573,-52,-1000,976,520,739,-1000,-912,1000,-366,220,-1000,779}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01234() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{1000,1000,-636,-671,-144,797,-274,474,-892,-1000,-1000,-795,6,1000,28,694,-1000,-604,350,1000,968,425,-1000,511,-848,-636,-1000,128,-44,156,-1000,833,-761,1000,-1000,-583,-68,-383,-1000,-500,-671,648,-131,-749,-741,1000,-74,529,115,-70,370,-116,1000,-176,-338,-463,-249,16,-570,699,-1000,-1000,851,269}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01235() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{1000,463,193,-111,-327,592,303,249,652,-1000,-1000,-351,-695,794,-2,94,-1000,-912,663,181,-663,1000,1000,-195,75,-1000,722,-6,230,937,-1000,925,338,334,-1000,1000,-526,85,126,103,935,-290,361,-689,600,-849,-365,848,-264,627,75,636,988,212,972,278,-1000,119,-399,151,44,861,-97,368}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01236() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{80,-1000,-876,553,-285,396,826,-171,-758,-1000,375,58,27,920,313,-1000,-124,-693,-785,1000,994,1000,652,1000,-1000,423,481,644,-311,926,-727,732,-747,58,-1000,1000,-925,-1000,-167,-947,416,111,-891,-1000,-253,1000,-768,708,-428,884,239,318,441,958,1000,394,-151,574,-882,-311,-88,-1000,-368,437}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01237() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-342,124,-636,871,355,-646,-289,121,-1000,-314,784,-265,1000,-5,572,-916,87,257,-458,-298,342,-74,-1000,511,572,142,-137,-1000,-917,613,682,251,-259,-92,229,-583,-601,392,890,-34,-635,590,-839,62,-1000,534,528,1000,371,-1000,-344,-580,-785,75,-446,-1000,149,-219,-1000,95,-484,-96,-652,307}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01238() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{737,983,-852,-958,494,446,-822,689,830,-977,-1000,-1000,83,961,-158,1000,-1000,-383,811,-457,-734,716,678,-1000,1000,-1000,-192,-694,-783,-301,-904,472,894,1000,1000,-1000,719,371,260,971,-510,911,-188,915,-1000,-663,684,790,970,-1000,708,-467,660,-959,820,579,330,-767,-897,972,-1000,658,-1000,718}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01239() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{54,-463,44,487,15,-209,1000,499,804,-546,-547,232,-1,833,-407,-1000,-360,-905,176,639,-929,198,1000,968,-1000,-480,777,798,13,658,-1000,1000,381,-412,-230,-810,-245,-440,771,-263,1000,142,-451,-1000,-621,-462,-785,531,-293,1000,-760,599,-387,-185,278,-184,-733,-114,-430,-490,1000,592,878,121}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01240() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{369,-384,339,1000,393,259,-330,-920,-1000,-1000,818,79,-211,331,-193,372,-41,-512,-41,992,1000,409,256,892,1000,710,667,-1000,-265,1000,-93,841,-966,376,-612,-594,-1000,-762,458,-1000,-103,190,572,-1000,-202,1000,-502,954,-10,-549,-412,-319,1000,506,-737,-1000,-476,896,-923,-1000,-537,-187,1000,330}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01241() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,248,109,-625,-664,770,739,1000,128,267,-42,-1000,644,341,1000,-975,51,-1000,-1000,-261,-1000,-139,-1000,954,1000,-992,-1000,-1000,-840,1000,930,49,-5,121,-795,1000,-590,762,1000,1000,935,1000,1000,12,-914,-849,1000,597,699,-1000,-44,680,-1000,213,-596,-695,1000,-860,-863,1000,-185,-1000,-97,139}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01242() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,-850,339,380,-470,675,556,131,26,141,-344,-177,291,-355,458,-1000,1000,-512,-1000,-480,-477,-120,-1000,1000,1000,-494,-510,-1000,-302,1000,1000,120,-226,-283,-387,647,-1000,537,1000,401,1000,366,-1000,-145,-202,-333,744,954,211,-549,-485,866,-931,789,-793,-1000,676,115,-990,-117,102,-514,788,68}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01243() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-1000,778,-646,574,37,322,1000,569,-876,-312,-137,-205,-66,190,718,-1000,806,-1000,-536,134,-1000,79,-658,1000,981,-362,-370,-43,-1000,1000,186,211,1000,222,-28,-186,-681,-19,939,1000,1000,402,-108,-1000,-243,-462,537,910,-809,-870,413,1000,-336,1000,-467,-682,-241,-1000,-926,764,698,721,-507,-505}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01244() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-516,-325,624,-17,-944,-93,-732,489,94,-207,646,883,606,-926,369,709,648,-472,80,390,84,-923,203,-936,255,83,-911,-605,230,743,-683,661,447,357,-820,697,-554,420,442,859,-879,-8,361,60,494,-399,649,175,-682,-947,553,-409,-978,954,-420,576,-532,-496,-501,-786,-214,-843,-781,208}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01245() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{597,753,-1000,-686,94,198,-193,689,-98,-607,120,-787,477,1000,38,1000,-1000,-67,-61,210,499,212,484,-502,274,-484,-701,-63,-816,-315,-449,437,194,845,-251,36,1000,9,-829,656,-396,936,-272,183,-1000,611,350,613,970,-1000,589,-595,785,-879,76,-158,742,-630,-933,1000,-1000,-645,-352,778}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01246() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{1000,-1000,869,127,35,322,546,490,1000,-673,-666,-504,-273,1000,-181,244,-1000,-67,158,-189,70,1000,1000,-802,-1000,-1000,1000,-24,99,690,-1000,1000,1000,-1000,-28,-1000,258,-786,332,901,1000,-696,-159,-792,591,-434,-1000,937,914,1000,414,263,-30,-941,1000,294,-641,883,-396,140,929,179,641,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01247() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelToolTipGenerator(org.jfree.chart.labels.PieSectionLabelGenerator):void",
+            new int[]{-931,-602,-572,711,884,-1000,-511,666,441,-67,266,-116,1000,297,-366,-614,-1000,163,-10,-552,-1000,-620,692,243,506,-804,427,-907,-1000,-361,638,461,845,1000,1000,455,627,426,1000,372,-357,615,-1000,1000,-581,-802,744,776,1000,-1000,-839,-978,-1000,-283,531,-548,1000,-1000,-1000,237,-678,818,-1000,395}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01248() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{466,660,359,910,-1000,-949,-72,30,588,-312,-1000,-541,-39,772,357,-1000,1000,901,821,-349,424,-618,1000,252,268,318,614,-571,1000,856,263,-789,-1000,-246,-1000,-282,-685,1000,205,933,-446,-362,13,-1,-815,-829,-1000,-58,426,-640,-644,1000,-644,347,1000,661,439,513,-313,762,51,716,697,-283}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01249() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{195,403,-506,-543,640,-16,651,-622,109,922,6,-644,-792,-272,201,373,-1000,-252,-1000,692,169,444,-284,-749,-820,524,105,182,-395,506,75,3,1000,-150,1000,-198,-115,-310,464,-74,451,167,-147,219,-9,773,-223,-2,1000,1000,429,-913,-434,-1000,-654,202,-271,588,23,-109,369,-224,-175,644}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01250() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{988,-1000,899,-221,1000,972,188,-109,-1000,1000,-121,-209,1000,-392,-161,-218,-360,-1000,186,60,870,1000,-125,-213,-890,-962,37,-389,967,112,-420,451,-258,-862,288,1000,531,-1000,-1000,-303,-153,-639,-905,576,-177,291,846,-1000,496,703,429,523,672,-1000,-661,1000,-1000,-822,1000,1000,-766,103,315,-402}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01251() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{-89,-285,566,199,436,884,-130,147,-874,-863,157,1000,169,369,-101,65,435,-931,1000,640,-325,-23,642,45,-758,4,-291,379,918,-781,377,-102,-843,-294,280,804,-1000,-110,-930,-366,600,-351,-314,-619,-113,516,636,-195,-628,-265,602,-657,-680,-484,-582,1000,-696,477,-567,1000,113,777,136,-199}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01252() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{509,435,-832,868,-749,-641,-938,-111,208,-751,-464,873,711,-842,624,464,135,-2,-365,-451,231,511,-739,819,259,39,-961,-270,452,880,-493,-663,526,65,-38,-821,414,-700,634,936,258,482,304,964,-243,756,919,-72,-551,-657,-407,777,218,555,-473,77,380,-669,866,310,89,-596,265,194}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01253() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{1000,763,1000,219,-521,-413,-32,619,874,611,-1000,-869,-1000,-452,-553,-849,-1000,471,120,-1000,764,-900,564,1000,812,724,361,683,1000,889,67,-1000,-1000,-538,-840,-1000,-168,1000,1000,1000,963,1000,-380,-318,-675,-33,-521,174,412,1000,-553,-770,377,1000,465,-314,1000,-341,26,-1000,289,680,820,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01254() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{-7,-957,-308,394,-1000,-1000,-16,154,-957,413,-205,-315,99,422,114,-685,129,1000,1000,-269,1000,791,858,918,-491,180,-249,-366,898,1000,499,-994,376,-673,-359,744,-554,173,-248,143,206,-1000,-495,999,-644,687,242,-908,423,-774,-164,718,-676,-722,-1,607,-596,187,-708,497,654,-755,466,39}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01255() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{1000,956,-506,-543,640,-146,189,-6,169,1000,-908,-1000,-1000,53,-337,-959,-1000,-252,-321,692,396,-49,336,403,812,666,1000,1000,591,1000,-67,-642,-170,-364,-1000,-1000,-880,242,1000,95,847,1000,-352,219,-547,1000,-549,471,640,918,-356,-1000,-263,1000,32,218,-271,588,365,-1000,369,1000,949,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01256() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{128,-1000,479,255,436,253,-14,419,-681,-149,-368,374,1000,132,164,70,316,-504,1000,-54,856,403,136,742,-758,-453,-444,7,918,-1000,599,-102,-960,-304,858,1000,335,-771,-1000,-203,390,-1000,-586,238,-179,-358,445,-924,-202,111,27,1000,282,-734,52,1000,-990,163,-116,1000,113,-239,547,-112}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01257() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{-514,-271,623,1000,-1000,-1000,-390,484,261,-744,-832,654,209,553,256,-689,1000,1000,833,502,1000,-748,1000,-99,-36,420,173,-452,1000,362,828,-1000,194,-150,-317,275,-1000,1000,-340,621,-136,-1000,-717,487,-1000,-49,-914,-951,-444,-340,-779,1000,-884,695,1000,737,-17,1000,-1000,-192,1000,-680,534,-459}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01258() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{-229,896,-466,871,-1000,-1000,-445,764,851,-1000,-1000,368,-823,993,-305,186,1000,1000,271,-351,88,-447,1000,890,-191,491,-250,-899,282,-588,-201,-497,-782,298,-760,-895,-413,1000,805,380,-367,-110,-106,-571,-735,-838,-361,-289,-1000,-1000,-621,1000,-675,1000,812,-543,1000,1000,-754,377,1000,90,571,511}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01259() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{128,404,479,-1000,1000,-1000,1000,-728,939,970,-108,-955,-378,86,57,-186,-692,1000,-1000,95,1000,-1000,-124,742,-1000,-453,1000,1000,1000,1000,-36,330,590,-289,858,22,335,129,918,1000,-126,1000,-1000,1000,-290,1000,-1000,-647,1000,996,27,91,-724,-1000,-17,-31,266,158,-116,20,1000,-1000,1000,990}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01260() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{271,-685,41,65,468,-113,371,-139,10,64,-488,-428,588,-275,665,-1000,74,-209,43,119,1000,922,-504,-470,-849,-169,-987,-39,737,28,831,-41,233,-208,1000,744,938,-769,-954,-425,608,-869,-118,649,-458,-218,-269,-390,61,659,-39,416,568,-1000,252,1000,-1000,452,244,530,-67,-1000,-172,-295}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01261() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{1000,1000,-796,-328,831,444,-381,38,1000,-244,-1000,-693,-1000,-1000,-649,208,-748,-244,217,-1000,-1000,-1000,-536,1000,781,959,-397,-611,1000,195,-1000,240,-121,321,-1000,-1000,499,302,1000,98,115,306,1000,-1000,-1000,-771,405,1000,-548,95,164,223,-842,784,244,-1000,-115,249,1000,-1000,-1000,1000,-171,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01262() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{600,-404,137,730,-484,-801,20,56,-122,345,-717,-1000,352,-758,250,-1000,57,409,821,-849,1000,-280,1000,94,591,-80,869,804,925,-685,500,-1000,-1000,-1000,-397,107,-1000,1000,455,1000,688,-362,-823,746,-675,158,-923,-225,851,382,-264,416,391,543,399,-298,-209,-682,245,-743,-20,1000,956,276}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01263() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setLegendLabelURLGenerator(org.jfree.chart.urls.PieURLGenerator):void",
+            new int[]{542,623,245,-991,669,-813,1000,-497,836,1000,-307,-1000,-1000,-548,-257,-214,-1000,777,-1000,166,1000,-565,-357,199,-516,1000,974,604,627,1000,-37,901,795,-307,380,-735,259,134,1000,1000,820,612,-720,629,-224,1000,-859,-76,1000,1000,-391,-1000,-304,-529,-452,-215,619,-36,-292,-744,1000,-352,705,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01264() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:LUluZmluaXR5", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-390,1000,374,-954,-1000,250,87,-581,-166,1000,-349,229,-578,873,697,-1000,1000,-1000,568,828,546,-1000,337,-987,717,242,400,-598,-497,-703,-964,660,947,-1000,-1000,-1000,-764,863,644,914,886,1000,553,-1000,-510,1000,-133,-616,198,-1000,1000,-941,835,952,792,1000,1000,1000,340,459,1000,-755,-718,252}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01265() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:LUluZmluaXR5", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{270,-273,-342,-82,-493,-15,32,934,417,-245,73,239,272,-341,206,-401,553,-60,22,806,-180,-543,-795,-390,-5,231,-365,440,-707,-621,516,279,-1000,-611,86,36,516,-492,-142,-267,949,192,356,-1000,-41,1000,-48,201,-537,-342,185,-1000,541,-106,85,-77,-298,-71,-45,-332,620,52,506,-221}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01266() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:LTIuMTQ3NDgzNjQ4RTk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{1000,256,-751,-629,62,583,190,1000,-1000,-162,-585,259,-336,-6,454,-96,696,957,-1000,-851,-24,-179,-1000,-124,1000,1000,-284,1000,-1000,906,806,59,-1000,-846,340,251,1000,581,-1000,534,-356,-1000,-122,-786,-417,236,1000,1000,-1000,184,-1000,1000,1000,-350,-398,-1000,783,-849,199,-371,27,1000,568,-274}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01267() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:LUluZmluaXR5", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{857,-409,-1000,-521,-101,-36,577,-430,-647,26,-1000,-159,-629,101,681,-20,78,418,-566,-454,343,332,-58,-741,-602,-238,-566,1000,-241,298,1000,590,-1000,43,-17,499,1000,-1000,-1000,648,330,-1000,-550,51,-109,111,799,1000,-1000,-391,-1000,1000,377,85,-597,-1000,297,-1000,-863,36,250,181,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01268() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:MS45", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-453,239,-528,-105,1000,-247,518,567,-298,669,-542,-588,-205,19,202,-210,-1000,187,594,-2,-291,37,-157,-722,-840,846,605,719,-238,-58,-814,498,433,589,464,-220,-487,-538,-1000,725,-1000,52,-809,520,-540,-503,-571,893,-779,-367,-759,-581,987,-976,-859,-332,402,-839,-1000,928,183,-85,100,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01269() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:MS4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{509,904,-381,-941,-1000,638,385,-1000,-976,647,49,-145,-182,1000,781,-766,1000,-1000,336,1000,45,-713,-141,-572,-618,-654,772,-1000,-249,-562,-997,880,-771,-213,-1000,-1000,-1000,1000,350,1000,436,1000,1000,-1000,-1000,1000,114,480,281,-921,-234,-374,667,1000,1000,1000,-3,1000,939,-21,1000,-263,-663,965}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01270() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:LTIuMTQ3NDgzNjQ4RTk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-385,1000,399,-924,-593,-163,506,308,-491,1000,-638,-459,-1000,1000,1000,-1000,-17,-1000,806,491,829,-816,526,-1000,-47,902,316,-691,-596,-532,-617,929,-785,-562,568,-1000,-1000,-271,-939,986,141,374,854,-9,-1000,700,62,1000,-1000,-1000,94,-1000,1000,509,178,998,563,929,-338,-3,1000,150,-519,-340}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01271() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:LTIuMTQ3NDgzNjQ4RTk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-724,1000,809,-1000,-828,-517,-128,-486,-889,1000,439,-313,-389,853,784,-446,1000,-1000,292,621,561,-792,5,-1000,1000,1000,552,-1000,-1000,-936,-253,496,387,-654,454,-1000,-771,479,85,148,554,1000,983,-1000,-970,536,-224,265,-562,-756,996,-989,1000,885,490,157,731,1000,699,-829,1000,116,-711,570}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01272() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:TmFO", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-1000,-118,-151,1000,130,1000,-7,-821,-1000,461,412,-808,-85,-647,173,818,732,-429,223,514,86,952,-35,384,515,98,1000,-568,576,-292,169,1,677,120,80,-755,222,314,-409,-1000,-785,449,-544,-1000,-736,-346,-675,-402,793,160,353,-1000,253,-341,559,975,-450,-486,771,-401,395,131,568,-435}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01273() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:Mi4xNDc0ODM2NDdFOQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-1000,1000,494,-110,-1000,573,150,1000,951,1000,-1000,167,-1000,-573,1000,-1000,519,-982,217,976,1000,-1000,27,-1000,853,-106,-835,458,-1000,-910,1,946,-324,-1000,605,-621,35,-1000,107,372,-900,110,-137,-313,144,1000,308,789,-1000,-866,276,-1000,637,967,187,654,1000,1000,-369,339,669,1000,-33,-689}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01274() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:TmFO", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-264,127,3,19,-1000,-194,104,714,-110,677,-195,487,-643,1000,523,-562,622,-1000,24,999,-77,-1000,-207,-737,-1000,1000,-448,-27,-60,-1000,-88,-344,-687,-359,1,-751,290,-165,522,19,1000,727,429,226,8,641,-410,-743,-163,-1000,693,1000,-175,1000,672,1000,1000,873,-5,41,39,-603,5,-73}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01275() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:Mi4xNDc0ODM2NDdFOQ==", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-76,690,358,-627,-692,-318,-85,313,604,839,-552,808,-1000,-164,759,-761,1000,-410,-157,20,268,-970,-572,-699,884,359,-441,217,-950,-255,451,769,-549,-1000,499,-829,517,-920,-122,-334,-776,-203,553,-752,-510,825,776,282,-762,-787,-60,-775,680,669,362,855,525,656,364,-411,523,180,39,29}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01276() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{1000,1000,477,-972,-271,934,410,-667,-885,703,449,372,-703,-551,233,621,661,224,776,-479,812,-162,23,-550,1000,1000,956,-656,-961,573,546,538,1000,-185,858,45,-225,-368,-555,-334,950,-1000,558,720,-899,266,110,976,-151,-55,-1000,1000,1000,811,296,-379,757,-406,1000,-904,291,1000,-111,-156}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01277() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:LTIuMTQ3NDgzNjQ4RTk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-214,1000,-136,128,576,-524,-376,610,-158,224,-1000,614,458,-1000,978,-626,1000,344,1000,574,967,-105,-495,-276,1000,1000,-305,462,-381,-950,1000,517,230,-597,289,-766,-520,909,-66,914,662,-747,125,-600,-416,-699,1000,-194,-767,-587,374,912,-229,668,230,491,-778,-273,-226,464,342,402,355,-125}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01278() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:MC4w", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-390,1000,374,-314,-530,564,153,655,1000,1000,-952,923,-1000,-871,994,-1000,578,-294,134,-586,-300,-1000,485,-512,258,269,-1000,52,-694,-703,402,824,-383,-1000,724,-1000,-160,-1000,298,21,35,-989,465,-292,253,1000,1000,780,-988,-951,-675,-400,501,-405,198,1000,1000,1000,326,-290,1000,95,348,22}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE01279() {
+        org.junit.Assert.assertEquals("VOID|getMaximumLabelWidth=java.lang.Double:LTIuMTQ3NDgzNjQ4RTk=", DEReplay.run(
+            "org.jfree.chart.plot.PiePlot", "org.jfree.chart.plot.PiePlot", "setMaximumLabelWidth(double):void",
+            new int[]{-1000,693,900,-82,-907,-845,-275,-1000,-1000,660,339,188,-429,1000,133,-325,982,-1000,-196,806,68,-724,708,-297,-94,199,-147,-1000,-139,-1000,-1000,-324,1000,-611,-442,-922,-1000,1000,848,-267,949,1000,428,-1000,-344,1000,-765,-1000,550,-833,1000,-1000,202,681,885,1000,414,1000,870,-494,620,-398,-956,1000}));
+    }
+}

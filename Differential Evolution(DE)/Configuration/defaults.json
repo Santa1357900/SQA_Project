@@ -1,0 +1,19 @@
+{
+  "runs": 1,
+  "workers": 4,
+  "population": 16,
+  "budget": 512,
+  "mutation": 0.7,
+  "crossover": 0.9,
+  "input_range": 1000,
+  "max_methods": 0,
+  "max_tests_per_method": 16,
+  "method_timeout": 300,
+  "job_timeout": 1500,
+  "validation_reserve": 180,
+  "test_timeout": 60,
+  "command_timeout": 600,
+  "candidate_timeout": 12,
+  "seed": 2026,
+  "heap": "512m"
+}

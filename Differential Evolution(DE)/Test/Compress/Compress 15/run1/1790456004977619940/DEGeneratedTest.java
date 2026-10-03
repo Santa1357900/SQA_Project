@@ -1,0 +1,2697 @@
+import java.lang.reflect.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+/** Deterministic test-program decoder. Used unchanged during search and JUnit replay. */
+final class DEReplay {
+    public static final int DIMENSIONS = 64;
+    /** Local generic bean used to create stable reflection Type and Field values. */
+    public static final class GenericInput {
+        public String text;
+        public java.util.List<String> names;
+        public java.util.Map<String, Integer> counts;
+        public java.util.List<java.util.Map<String, Long>> nested;
+        public int[] numbers;
+        public String[] words;
+    }
+    static final class Genes {
+        final int[] values; int at; Field lastField;
+        Object jacksonBean, jacksonProvider, jacksonGenerator;
+        StringWriter jacksonOutput;
+        Genes(int[] values) { this.values = values; }
+        int next() { return values[(at++) % values.length]; }
+        int pick(int n) { return Math.floorMod(next(), n); }
+    }
+    public static final class Observation {
+        public String token, error, generatedSource;
+        public boolean reachedTarget;
+        public int setupCalls, setupFailures, nullFallbacks;
+    }
+    public static String signature(Method m) {
+        StringJoiner params = new StringJoiner(",");
+        for (Class<?> t : m.getParameterTypes()) params.add(t.getTypeName());
+        return m.getName() + "(" + params + "):" + m.getReturnType().getTypeName();
+    }
+    static Class<?> load(String name) throws ClassNotFoundException {
+        return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+    }
+    static Method method(String target, String signature) throws Exception {
+        for (Method m : load(target).getDeclaredMethods())
+            if (signature(m).equals(signature)) {
+                // Public methods on package-private Defects4J classes (for
+                // example Gson's TypeInfoFactory) are not reflectively
+                // accessible until opened on the unnamed application module.
+                if (!m.isAccessible()) m.setAccessible(true);
+                return m;
+            }
+        throw new NoSuchMethodException(signature);
+    }
+    static List<Constructor<?>> constructors(Class<?> type) {
+        List<Constructor<?>> out = new ArrayList();
+        if (!Modifier.isAbstract(type.getModifiers()) && Modifier.isPublic(type.getModifiers()))
+            for (Constructor<?> c : type.getConstructors())
+                if (c.getParameterTypes().length <= 6) out.add(c);
+        Collections.sort(out, new Comparator<Constructor<?>>() {
+            public int compare(Constructor<?> a, Constructor<?> b) {
+                int byArity = a.getParameterTypes().length - b.getParameterTypes().length;
+                return byArity != 0 ? byArity : a.toString().compareTo(b.toString());
+            }
+        });
+        return out;
+    }
+    private static Object[] arguments(Class<?>[] types, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Object[] args = new Object[types.length];
+        for (int i = 0; i < types.length; i++) args[i] = value(types[i], g, depth, report);
+        return args;
+    }
+    private static Object[] arguments(Method method, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Class<?>[] types = method.getParameterTypes();
+        Object[] args = new Object[types.length];
+        boolean closureCompile = method.getDeclaringClass().getName().equals("com.google.javascript.jscomp.Compiler")
+            && method.getName().equals("compile");
+        Type[] generic = method.getGenericParameterTypes();
+        boolean jacksonSerialization = method.getDeclaringClass().getName().equals(
+            "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+            && method.getName().startsWith("serializeAs")
+            && types.length == 3 && types[0] == Object.class;
+        for (int i = 0; i < types.length; i++) {
+            if (jacksonSerialization && g.jacksonBean != null) {
+                if (i == 0) args[i] = g.jacksonBean;
+                else if (i == 1) args[i] = g.jacksonGenerator;
+                else args[i] = g.jacksonProvider;
+                continue;
+            }
+            if (closureCompile && (List.class.isAssignableFrom(types[i])
+                    || (types[i].isArray() && load("com.google.javascript.jscomp.SourceFile")
+                        .isAssignableFrom(types[i].getComponentType())))) {
+                // Compiler.compile takes externs and inputs in either Lists or
+                // arrays depending on Closure version. Keep externs empty and
+                // supply a nonempty, gene-selected input program.
+                if (i == 0) args[i] = types[i].isArray()
+                    ? Array.newInstance(types[i].getComponentType(), 0) : new ArrayList();
+                else {
+                    Object sourceFile = value(load("com.google.javascript.jscomp.SourceFile"),
+                        g, depth + 1, report);
+                    if (types[i].isArray()) {
+                        Object files = Array.newInstance(types[i].getComponentType(), 1);
+                        Array.set(files, 0, sourceFile); args[i] = files;
+                    } else args[i] = new ArrayList(Collections.singletonList(sourceFile));
+                }
+            } else args[i] = value(types[i], g, depth, report);
+        }
+        return args;
+    }
+    private static Number number(Genes g) {
+        int n = g.next();
+        switch (g.pick(12)) {
+            case 0: return 0; case 1: return 1; case 2: return -1;
+            case 3: return Integer.MAX_VALUE; case 4: return Integer.MIN_VALUE;
+            case 5: return Long.MAX_VALUE; case 6: return Long.MIN_VALUE;
+            case 7: return Double.NaN; case 8: return Double.POSITIVE_INFINITY;
+            case 9: return Double.NEGATIVE_INFINITY; case 10: return n / 10.0;
+            default: return n;
+        }
+    }
+    private static String string(Genes g) {
+        int mode = g.pick(16), n = g.next();
+        String digits = Long.toString(Math.abs((long)n));
+        String sign = new String[]{"", "-", "+", "--"}[g.pick(4)];
+        switch (mode) {
+            case 0: return null; case 1: return ""; case 2: return " ";
+            case 3: return Integer.toString(n);
+            case 4: return sign + digits;
+            case 5: return sign + digits + "." + g.pick(1000);
+            case 6: return sign + digits + "e" + g.next();
+            case 7: return sign + "0x" + Long.toHexString(Math.abs((long)n));
+            case 8: return sign + "0x8" + "0".repeat(g.pick(20));
+            case 9: return sign + digits + "fFdDlL".charAt(g.pick(6));
+            case 10: return " " + sign + digits + " ";
+            case 11: return new String[]{"true", "false", "null", "NaN", "Infinity"}[g.pick(5)];
+            case 12: return "a".repeat(g.pick(25));
+            default:
+                String alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-._ /\\\t\n";
+                StringBuilder s = new StringBuilder();
+                int length = g.pick(25);
+                for (int i = 0; i < length; i++) s.append(alphabet.charAt(g.pick(alphabet.length())));
+                return s.toString();
+        }
+    }
+    private static Object value(Class<?> t, Genes g, int depth, Observation report) throws Exception {
+        if (t == String.class || t == CharSequence.class) return string(g);
+        if (t == Comparable.class) return "key" + g.pick(5);
+        if (t == boolean.class || t == Boolean.class) return g.pick(2) == 0;
+        if (t == char.class || t == Character.class) return (char)g.pick(128);
+        if (t == byte.class || t == Byte.class) return number(g).byteValue();
+        if (t == short.class || t == Short.class) return number(g).shortValue();
+        if (t == int.class || t == Integer.class) return number(g).intValue();
+        if (t == long.class || t == Long.class) return number(g).longValue();
+        if (t == float.class || t == Float.class) return number(g).floatValue();
+        if (t == double.class || t == Double.class || t == Number.class) return number(g).doubleValue();
+        if (t.isEnum()) {
+            Object[] constants = t.getEnumConstants();
+            return constants.length == 0 ? null : constants[g.pick(constants.length)];
+        }
+        if (t == Object.class) return g.pick(3) == 0 ? null : "object" + g.pick(5);
+        if (depth >= 3) { report.nullFallbacks++; return null; }
+        if (t.isArray()) {
+            int length = g.pick(6);
+            Object array = Array.newInstance(t.getComponentType(), length);
+            for (int i = 0; i < length; i++) Array.set(array, i, value(t.getComponentType(), g, depth + 1, report));
+            return array;
+        }
+        if (t == List.class || t == Collection.class || t == Iterable.class || t == Set.class) {
+            Collection<Object> items = t == Set.class ? new LinkedHashSet() : new ArrayList();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.add("item" + g.pick(5));
+            return items;
+        }
+        if (t == Map.class) {
+            Map<Object, Object> items = new LinkedHashMap();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.put("key" + g.pick(5), number(g));
+            return items;
+        }
+        if (t == java.util.Date.class) return new java.util.Date(g.next() * 86400000L);
+        if (t == Class.class) return String.class;
+        if (t == java.lang.reflect.Field.class) {
+            Field[] fields = GenericInput.class.getFields();
+            g.lastField = fields[g.pick(fields.length)];
+            return g.lastField;
+        }
+        if (t == java.lang.reflect.Type.class) {
+            if (g.lastField != null && g.pick(3) == 0)
+                return g.lastField.getDeclaringClass();
+            Field[] fields = GenericInput.class.getFields();
+            return fields[g.pick(fields.length)].getGenericType();
+        }
+        if (t == java.io.Reader.class || t == java.io.BufferedReader.class
+                || t == java.io.StringReader.class) {
+            String content = "header,value\n" + string(g) + "," + number(g) + "\n"
+                + "alpha,beta\n";
+            StringReader reader = new StringReader(content);
+            return t == java.io.BufferedReader.class ? new BufferedReader(reader) : reader;
+        }
+        if (t.getName().equals("org.apache.commons.csv.CSVFormat")) {
+            Class<?> format = load("org.apache.commons.csv.CSVFormat");
+            for (String fieldName : new String[]{"DEFAULT", "RFC4180", "EXCEL"}) try {
+                Object result = format.getField(fieldName).get(null);
+                if (t.isInstance(result)) return result;
+            } catch (ReflectiveOperationException ignored) { }
+            for (Method factory : format.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getParameterTypes().length == 0
+                        && t.isAssignableFrom(factory.getReturnType())) try {
+                    return factory.invoke(null);
+                } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.SourceFile")) {
+            Class<?> source = load("com.google.javascript.jscomp.SourceFile");
+            for (Method factory : source.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals("fromCode")
+                        && factory.getParameterTypes().length == 2 && factory.getParameterTypes()[0] == String.class
+                        && factory.getParameterTypes()[1] == String.class) {
+                    String replaySource = System.getProperty("de.generated.source");
+                    if (replaySource != null) {
+                        try {
+                            report.generatedSource = replaySource;
+                            return factory.invoke(null, "de-input.js", replaySource);
+                        } catch (ReflectiveOperationException ignored) { }
+                    }
+                    String[] unusedParameterScripts = {
+                        "window.f = function(a) {};",
+                        "window.f = function(a, b) { return b; };",
+                        "window.f = function(a, b) { var used = b; return used; };",
+                        "window['f'] = function(unused) {};",
+                        "window.f = function(unused, value) { return value; };",
+                        "window['f'] = function(unused, value) { return value; };",
+                        "window.f = function(first, unused, last) { return last; };",
+                        "window.f = function(unused) { var local = 1; return local; };",
+                        "window.f = function(unused, value) { var alias = value; return alias; };",
+                        "window.f = function(unused, value) { if (value) { return 1; } return 2; };",
+                        "window.f = function(unused, value) { value = value + 1; return value; };",
+                        "window.f = function(unused, value) { return function() { return value; }; };",
+                        "window.f = function(unused) { function inner() { return 1; } return inner(); };",
+                        "window.f = function(a, b, unused) { return a + b; };",
+                        "window.f = function(a, unused, b, c) { return a + c; };"
+                    };
+                    String[] catchDependencyScripts = {
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.stack; };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (caught) { saved = caught; } return saved.message; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.name; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return String(saved); };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (problem) { saved = problem; } return saved.stack; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (problem) { saved = problem; } return saved.message; };"
+                    };
+                    String[] genericScripts = {
+                        "function f(unused, used) { var local = 1; return used; } f(1, 2);",
+                        "function f() { var unused = 1; var used = 2; return used; } f();",
+                        "function f(x) { var first = x; first = 3; return x; } f(2);",
+                        "function f() { var unused = 1; } f();",
+                        "function keep() { var dead = 1; return 7; } keep();"
+                    };
+                    String modified = System.getProperty("de.modified.classes", "");
+                    String[] scripts;
+                    if (modified.contains("RemoveUnusedVars") && modified.contains("FlowSensitiveInlineVariables")) {
+                        scripts = new String[unusedParameterScripts.length + catchDependencyScripts.length];
+                        System.arraycopy(unusedParameterScripts, 0, scripts, 0, unusedParameterScripts.length);
+                        System.arraycopy(catchDependencyScripts, 0, scripts, unusedParameterScripts.length,
+                            catchDependencyScripts.length);
+                    }
+                    else if (modified.contains("FlowSensitiveInlineVariables")) scripts = catchDependencyScripts;
+                    else if (modified.contains("RemoveUnusedVars")) scripts = unusedParameterScripts;
+                    else scripts = genericScripts;
+                    try {
+                        String code = scripts[g.pick(scripts.length)];
+                        report.generatedSource = code;
+                        return factory.invoke(null, "de-input.js", code);
+                    }
+                    catch (ReflectiveOperationException ignored) { }
+                }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.CompilerOptions")) {
+            try {
+                Object options = t.getConstructor().newInstance();
+                // In Closure Compiler, unused-variable passes are enabled by
+                // CompilationLevel, rather than by a CompilerOptions enum
+                // setter. Apply the real public configuration when available.
+                try {
+                    Class<?> levelType = load("com.google.javascript.jscomp.CompilationLevel");
+                    Object advanced = levelType.getField("ADVANCED_OPTIMIZATIONS").get(null);
+                    for (Method configure : levelType.getMethods())
+                        if (configure.getName().equals("setOptionsForCompilationLevel")
+                                && configure.getParameterTypes().length == 1
+                                && configure.getParameterTypes()[0].isInstance(options)) {
+                            configure.invoke(advanced, options); break;
+                        }
+                } catch (ReflectiveOperationException ignored) { }
+                // Also set the relevant options directly for Closure releases
+                // whose compilation-level helper no longer enables this pass.
+                for (Class<?> current = t; current != null; current = current.getSuperclass())
+                    for (Field field : current.getDeclaredFields()) {
+                        String name = field.getName().toLowerCase(Locale.ROOT);
+                        if (field.getType() == boolean.class && name.equals("removeglobals")) try {
+                            // Closure-1 specifically guards argument removal
+                            // when globals are preserved. Keep the optimization
+                            // pass enabled while exercising that configuration.
+                            field.setAccessible(true); field.setBoolean(options, false);
+                        } catch (Exception ignored) { }
+                        if (field.getType() == boolean.class
+                                && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) try {
+                            field.setAccessible(true); field.setBoolean(options, true);
+                        } catch (Exception ignored) { }
+                    }
+                for (Method setter : t.getMethods()) {
+                    if (!Modifier.isPublic(setter.getModifiers()) || !setter.getName().startsWith("set")
+                            || setter.getParameterTypes().length != 1) continue;
+                    String name = setter.getName().toLowerCase(Locale.ROOT);
+                    if (setter.getParameterTypes()[0] == boolean.class && name.contains("removeglobals")) {
+                        try { setter.invoke(options, false); } catch (ReflectiveOperationException ignored) { }
+                    } else if (setter.getParameterTypes()[0] == boolean.class
+                            && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) {
+                        try { setter.invoke(options, true); } catch (ReflectiveOperationException ignored) { }
+                    } else if (name.contains("optimizationlevel")
+                            && setter.getParameterTypes()[0].isEnum()) {
+                        Object[] values = setter.getParameterTypes()[0].getEnumConstants();
+                        for (Object value : values) if (String.valueOf(value).contains("ADVANCED"))
+                            try { setter.invoke(options, value); } catch (ReflectiveOperationException ignored) { }
+                    }
+                }
+                return options;
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.rhino.Node")) {
+            try {
+                Class<?> ir = load("com.google.javascript.rhino.IR");
+                for (String factoryName : new String[]{"script", "root", "name", "string"})
+                    for (Method factory : ir.getMethods())
+                        if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals(factoryName)
+                                && factory.getParameterTypes().length == 0 && t.isAssignableFrom(factory.getReturnType()))
+                            return factory.invoke(null);
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser")) {
+            Object parser = xmlParser(g, report);
+            if (parser != null && t.isInstance(parser)) return parser;
+        }
+        if (t.getName().equals("com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                || t.getName().equals("com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter")) {
+            Object writer = jacksonWriter(t, g, report);
+            if (writer != null && t.isInstance(writer)) return writer;
+        }
+        if (t == java.awt.Graphics2D.class || t == java.awt.Graphics.class)
+            return new java.awt.image.BufferedImage(80, 80, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        if (java.awt.Paint.class.isAssignableFrom(t)) {
+            java.awt.Color c = new java.awt.Color(g.pick(256), g.pick(256), g.pick(256));
+            if (t.isInstance(c)) return c;
+        }
+        if (java.awt.Stroke.class.isAssignableFrom(t)) {
+            java.awt.BasicStroke s = new java.awt.BasicStroke(g.pick(10) / 2.0f);
+            if (t.isInstance(s)) return s;
+        }
+        if (java.awt.Shape.class.isAssignableFrom(t)) {
+            java.awt.Shape s = new java.awt.geom.Rectangle2D.Double(g.next(), g.next(), g.pick(80), g.pick(80));
+            if (t.isInstance(s)) return s;
+        }
+        if (t == java.awt.geom.Point2D.class) return new java.awt.geom.Point2D.Double(g.next(), g.next());
+        if (t.getName().equals("org.apache.commons.cli.CommandLine"))
+            return commandLine(g, report);
+        Object domain = chart(t, g, report);
+        if (domain != null) return domain;
+        Object language = language(t, g, report);
+        if (language != null) return language;
+        List<Constructor<?>> ctors = constructors(t);
+        // Older Java libraries often use public singleton constants in place of enums.
+        if (ctors.isEmpty()) {
+            List<Field> constants = new ArrayList();
+            for (Field field : t.getFields())
+                if (Modifier.isStatic(field.getModifiers()) && Modifier.isFinal(field.getModifiers())
+                        && t.isAssignableFrom(field.getType())) constants.add(field);
+            Collections.sort(constants, new Comparator<Field>() {
+                public int compare(Field a, Field b) { return a.getName().compareTo(b.getName()); }
+            });
+            if (!constants.isEmpty()) {
+                Object constant = constants.get(g.pick(constants.size())).get(null);
+                if (constant != null) return constant;
+            }
+        }
+        if (!ctors.isEmpty()) {
+            Constructor<?> ctor = ctors.get(g.pick(ctors.size()));
+            try { return ctor.newInstance(arguments(ctor.getParameterTypes(), g, depth + 1, report)); }
+            catch (Exception ignored) { }
+        }
+        report.nullFallbacks++;
+        return null;
+    }
+    private static Object language(Class<?> t, Genes g, Observation report) {
+        if (!t.getName().equals("org.apache.commons.lang3.time.FastDateFormat")) return null;
+        try {
+            Method factory = t.getMethod("getInstance", String.class, java.util.TimeZone.class,
+                java.util.Locale.class);
+            String[] patterns = {"yyyy-MM-dd", "MM/dd/yy HH:mm:ss", "EEE, d MMM yyyy HH:mm:ss Z"};
+            return factory.invoke(null, patterns[g.pick(patterns.length)],
+                java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US);
+        } catch (ReflectiveOperationException ignored) { }
+        try { return t.getMethod("getInstance", String.class).invoke(null, "yyyy-MM-dd"); }
+        catch (ReflectiveOperationException ignored) { return null; }
+    }
+    private static Object xmlParser(Genes g, Observation report) {
+        try {
+            Class<?> factoryType = load("com.fasterxml.jackson.dataformat.xml.XmlFactory");
+            Object factory = factoryType.getConstructor().newInstance();
+            String[] docs = {"<root><value>1</value><name>x</name></root>",
+                "<root value=\"42\"><item>a</item><item>b</item></root>",
+                "<root/>"};
+            String xml = docs[g.pick(docs.length)];
+            for (Method method : factoryType.getMethods()) {
+                if (!method.getName().equals("createParser") || method.getParameterTypes().length != 1) continue;
+                Class<?> p = method.getParameterTypes()[0];
+                Object input = p == String.class ? xml : p == Reader.class ? new StringReader(xml)
+                    : p == InputStream.class ? new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)) : null;
+                if (input == null) continue;
+                try {
+                    Object parser = method.invoke(factory, input);
+                    if (parser != null) {
+                        int advance = g.pick(4);
+                        Method next = parser.getClass().getMethod("nextToken");
+                        for (int i = 0; i < advance; i++) if (next.invoke(parser) == null) break;
+                        return parser;
+                    }
+                } catch (ReflectiveOperationException ignored) { }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
+    private static Object jacksonWriter(Class<?> requested, Genes g, Observation report) {
+        try {
+            Class<?> mapperType = load("com.fasterxml.jackson.databind.ObjectMapper");
+            Object mapper = mapperType.getConstructor().newInstance();
+            Object bean = new GenericInput();
+            Class<?> javaTypeType = load("com.fasterxml.jackson.databind.JavaType");
+            Object javaType = mapperType.getMethod("constructType", Type.class).invoke(mapper, bean.getClass());
+            // Jackson 2.6 (used by this Defects4J project) exposes a provider
+            // blueprint from ObjectMapper. Create a configured provider via
+            // DefaultSerializerProvider, the supported API used by ObjectMapper.
+            Object providerBlueprint = mapperType.getMethod("getSerializerProvider").invoke(mapper);
+            Class<?> serializationConfigType = load("com.fasterxml.jackson.databind.SerializationConfig");
+            Class<?> serializerFactoryType = load("com.fasterxml.jackson.databind.ser.SerializerFactory");
+            Object config = mapperType.getMethod("getSerializationConfig").invoke(mapper);
+            Object factory = mapperType.getMethod("getSerializerFactory").invoke(mapper);
+            Class<?> defaultProviderType = load("com.fasterxml.jackson.databind.ser.DefaultSerializerProvider");
+            Method createProvider = defaultProviderType.getMethod("createInstance",
+                serializationConfigType, serializerFactoryType);
+            Object provider = createProvider.invoke(providerBlueprint, config, factory);
+            g.jacksonBean = bean;
+            g.jacksonProvider = provider;
+            g.jacksonOutput = new StringWriter();
+            Object jsonFactory = mapperType.getMethod("getFactory").invoke(mapper);
+            for (String factoryMethod : new String[]{"createGenerator", "createJsonGenerator"}) {
+                try {
+                    Method createGenerator = jsonFactory.getClass().getMethod(factoryMethod, Writer.class);
+                    g.jacksonGenerator = createGenerator.invoke(jsonFactory, g.jacksonOutput);
+                    break;
+                } catch (NoSuchMethodException ignored) { }
+            }
+            if (g.jacksonGenerator == null)
+                throw new NoSuchMethodException("JsonFactory.createGenerator(Writer) or createJsonGenerator(Writer)");
+            Class<?> providerType = load("com.fasterxml.jackson.databind.SerializerProvider");
+            Class<?> beanPropertyType = load("com.fasterxml.jackson.databind.BeanProperty");
+            Method find = providerType.getMethod("findValueSerializer", javaTypeType, beanPropertyType);
+            Object serializer = find.invoke(provider, new Object[]{javaType, null});
+            List<Object> writers = new ArrayList();
+            try {
+                // Available on Jackson 2.6 and newer.
+                Class<?> serializerType = load("com.fasterxml.jackson.databind.JsonSerializer");
+                Method properties = serializerType.getMethod("properties");
+                Iterator<?> it = (Iterator<?>)properties.invoke(serializer);
+                while (it.hasNext()) {
+                    Object item = it.next();
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            } catch (NoSuchMethodException oldJackson) {
+                // JacksonDatabind-1 predates JsonSerializer.properties(). Its
+                // BeanSerializerBase stores writers in the protected _props
+                // array; read that array only for these old releases.
+                Class<?> base = load("com.fasterxml.jackson.databind.ser.std.BeanSerializerBase");
+                if (!base.isInstance(serializer))
+                    throw new IllegalStateException("Expected BeanSerializerBase, got "
+                        + serializer.getClass().getName(), oldJackson);
+                Field props = base.getDeclaredField("_props");
+                props.setAccessible(true);
+                Object array = props.get(serializer);
+                for (int i = 0; i < Array.getLength(array); i++) {
+                    Object item = Array.get(array, i);
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            }
+            if (writers.isEmpty())
+                throw new IllegalStateException("ObjectMapper produced no bean property writers for DEReplay.GenericInput");
+            Object writer = writers.get(g.pick(writers.size()));
+            boolean requireUnwrapping = requested.getName().equals(
+                "com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter");
+            if (!requireUnwrapping && g.pick(2) == 0 && requested.isInstance(writer)) return writer;
+            Class<?> transformerType = load("com.fasterxml.jackson.databind.util.NameTransformer");
+            Object nop = transformerType.getField("NOP").get(null);
+            for (Method m : writer.getClass().getMethods())
+                if (m.getName().equals("unwrappingWriter") && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0].isInstance(nop)) {
+                    Object unwrapped = m.invoke(writer, nop);
+                    if (requested.isInstance(unwrapped)) return unwrapped;
+                }
+            if (requested.isInstance(writer)) return writer;
+            throw new IllegalStateException("Generated Jackson property writer is not " + requested.getName());
+        } catch (Throwable failure) {
+            throw new IllegalStateException("Cannot construct Jackson BeanPropertyWriter: " + failure, failure);
+        }
+    }
+    /** Build the non-constructible Commons CLI result through its public Parser API. */
+    private static Object commandLine(Genes g, Observation report) throws Exception {
+        Class<?> optionsClass = load("org.apache.commons.cli.Options");
+        Class<?> optionClass = load("org.apache.commons.cli.Option");
+        Class<?> parserClass = load("org.apache.commons.cli.PosixParser");
+        Object options = optionsClass.getConstructor().newInstance();
+        Method addOption = optionsClass.getMethod("addOption", optionClass);
+        int numberOfOptions = 1 + g.pick(3);
+        List<String> spellings = new ArrayList();
+        for (int i = 0; i < numberOfOptions; i++) {
+            String shortName = String.valueOf((char)('a' + i));
+            String longName = "de-option-" + i;
+            boolean hasArgument = g.pick(2) == 0;
+            Object option = null;
+            try {
+                option = optionClass.getConstructor(String.class, String.class, boolean.class, String.class)
+                    .newInstance(shortName, longName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) try {
+                option = optionClass.getConstructor(String.class, boolean.class, String.class)
+                    .newInstance(shortName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) throw new NoSuchMethodException("No supported Commons CLI Option constructor");
+            addOption.invoke(options, option);
+            spellings.add("-" + shortName);
+            if (hasArgument) spellings.add("value-" + Math.abs((long)g.next()));
+        }
+        String[] argv = spellings.toArray(new String[0]);
+        Object parser = parserClass.getConstructor().newInstance();
+        List<Method> parseMethods = new ArrayList();
+        for (Method candidate : parserClass.getMethods()) {
+            Class<?>[] p = candidate.getParameterTypes();
+            if (candidate.getName().equals("parse") && p.length >= 2 && p[0] == optionsClass
+                    && p[1] == String[].class && candidate.getReturnType() == load("org.apache.commons.cli.CommandLine"))
+                parseMethods.add(candidate);
+        }
+        Collections.sort(parseMethods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return a.getParameterTypes().length - b.getParameterTypes().length;
+            }
+        });
+        for (Method parse : parseMethods) {
+            Object[] args = new Object[parse.getParameterTypes().length];
+            Class<?>[] p = parse.getParameterTypes();
+            args[0] = options; args[1] = argv;
+            for (int i = 2; i < p.length; i++) {
+                if (p[i] == boolean.class || p[i] == Boolean.class) args[i] = g.pick(2) == 0;
+                else if (p[i] == java.util.Properties.class) args[i] = new java.util.Properties();
+                else args[i] = value(p[i], g, 1, report);
+            }
+            try { return parse.invoke(parser, args); }
+            catch (InvocationTargetException ignored) { }
+        }
+        throw new NoSuchMethodException("No successful public PosixParser.parse(Options,String[])");
+    }
+    /** Optional type recipes, shared across bugs; none contains a bug-specific expected answer. */
+    private static Object chart(Class<?> t, Genes g, Observation report) throws Exception {
+        String n = t.getName();
+        if (!n.startsWith("org.jfree.")) return null;
+        if (n.equals("org.jfree.data.Range")) {
+            double a = g.next(), b = g.next();
+            return t.getConstructor(double.class, double.class).newInstance(Math.min(a, b), Math.max(a, b));
+        }
+        if (n.equals("org.jfree.data.time.RegularTimePeriod"))
+            return load("org.jfree.data.time.Day").getConstructor(int.class, int.class, int.class)
+                .newInstance(1 + g.pick(28), 1 + g.pick(12), 1990 + g.pick(40));
+        if (n.equals("org.jfree.data.time.TimeSeries")) {
+            Object series = t.getConstructor(Comparable.class).newInstance("DE");
+            Class<?> period = load("org.jfree.data.time.RegularTimePeriod");
+            Constructor<?> day = load("org.jfree.data.time.Day")
+                .getConstructor(int.class, int.class, int.class);
+            Method add = t.getMethod("add", period, double.class);
+            int count = 2 + g.pick(4), year = 1990 + g.pick(40);
+            for (int i = 0; i < count; i++)
+                add.invoke(series, day.newInstance(i + 1, 1, year), g.next() / 10.0);
+            return series;
+        }
+        if (n.equals("org.jfree.data.category.CategoryDataset")
+                || n.equals("org.jfree.data.category.DefaultCategoryDataset")) {
+            Class<?> c = load("org.jfree.data.category.DefaultCategoryDataset");
+            Object data = c.getConstructor().newInstance();
+            Method add = c.getMethod("addValue", Number.class, Comparable.class, Comparable.class);
+            int rows = 1 + g.pick(3), columns = 1 + g.pick(3);
+            for (int r = 0; r < rows; r++) for (int col = 0; col < columns; col++)
+                add.invoke(data, Double.valueOf(g.next() / 10.0), "R" + r, "C" + col);
+            return data;
+        }
+        if (n.equals("org.jfree.data.xy.XYDataset") || n.equals("org.jfree.data.xy.XYSeriesCollection")) {
+            Class<?> seriesClass = load("org.jfree.data.xy.XYSeries");
+            Object series = seriesClass.getConstructor(Comparable.class).newInstance("DE");
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) seriesClass.getMethod("add", double.class, double.class)
+                .invoke(series, (double)i, g.next() / 10.0);
+            Class<?> c = load("org.jfree.data.xy.XYSeriesCollection");
+            Object data = c.getConstructor().newInstance();
+            c.getMethod("addSeries", seriesClass).invoke(data, series);
+            return data;
+        }
+        if (n.equals("org.jfree.data.general.PieDataset") || n.equals("org.jfree.data.general.DefaultPieDataset")) {
+            Class<?> c = load("org.jfree.data.general.DefaultPieDataset");
+            Object data = c.getConstructor().newInstance();
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) c.getMethod("setValue", Comparable.class, Number.class)
+                .invoke(data, "K" + i, Double.valueOf(g.next() / 10.0));
+            return data;
+        }
+        return null;
+    }
+    static List<Method> setupMethods(Class<?> receiver) {
+        List<Method> methods = new ArrayList();
+        for (Method m : receiver.getMethods()) {
+            String n = m.getName();
+            if (!Modifier.isStatic(m.getModifiers()) && !m.isSynthetic()
+                    && m.getParameterTypes().length <= 3 && !n.contains("Listener")
+                    && (n.startsWith("set") || n.startsWith("add") || n.startsWith("update")
+                        || n.startsWith("remove") || n.equals("clear"))) methods.add(m);
+        }
+        Collections.sort(methods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return signature(a).compareTo(signature(b));
+            }
+        });
+        return methods;
+    }
+    public static Observation execute(String target, String receivers, String signature, int[] genes) {
+        Observation out = new Observation();
+        try {
+            Genes g = new Genes(genes);
+            Method m = method(target, signature);
+            Object receiver = null;
+            if (!Modifier.isStatic(m.getModifiers())) {
+                String[] choices = receivers.split(",");
+                Class<?> receiverType = load(choices[g.pick(choices.length)]);
+                receiver = value(receiverType, g, 0, out);
+                if (receiver == null) throw new IllegalArgumentException("Receiver construction failed");
+                // Compiler.compile owns a strict initialization sequence.
+                // Random calls to its mutators before compilation can corrupt
+                // state or spend the search budget on irrelevant setup.
+                if (!receiverType.getName().equals("com.google.javascript.jscomp.Compiler")) {
+                    List<Method> setup = setupMethods(receiverType);
+                    int count = g.pick(5);
+                    for (int i = 0; i < count && !setup.isEmpty(); i++) {
+                        Method s = setup.get(g.pick(setup.size()));
+                        try { s.invoke(receiver, arguments(s.getParameterTypes(), g, 0, out)); out.setupCalls++; }
+                        catch (Exception e) { out.setupFailures++; }
+                    }
+                }
+            }
+            Object[] args = arguments(m, g, 0, out);
+            out.reachedTarget = true;
+            try {
+                boolean jacksonSerialization = m.getDeclaringClass().getName().equals(
+                    "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                    && m.getName().startsWith("serializeAs") && g.jacksonGenerator != null;
+                boolean arrayShape = m.getName().contains("Column")
+                    || m.getName().contains("Element") || m.getName().contains("Placeholder");
+                if (jacksonSerialization)
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeStartArray" : "writeStartObject").invoke(g.jacksonGenerator);
+                Object result = m.invoke(receiver, args);
+                boolean closureCompile = m.getDeclaringClass().getName().equals(
+                    "com.google.javascript.jscomp.Compiler") && m.getName().equals("compile");
+                if (closureCompile) {
+                    // Result is only a status object; the compiled JavaScript is
+                    // the behavioral output that reveals whether an argument
+                    // was removed from a globally exposed function.
+                    Object js = receiver.getClass().getMethod("toSource").invoke(receiver);
+                    out.token = "CLOSURE_SOURCE:" + stable(js, 0);
+                } else if (jacksonSerialization) {
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeEndArray" : "writeEndObject").invoke(g.jacksonGenerator);
+                    g.jacksonGenerator.getClass().getMethod("flush").invoke(g.jacksonGenerator);
+                    out.token = "JSON:" + Base64.getEncoder().encodeToString(
+                        g.jacksonOutput.toString().getBytes(StandardCharsets.UTF_8));
+                } else out.token = m.getReturnType() == void.class
+                    ? state(receiver, m.getName()) : stable(result, 0);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof VirtualMachineError || e.getCause() instanceof LinkageError
+                        || e.getCause() instanceof ThreadDeath) throw e;
+                out.token = "THROW:" + e.getCause().getClass().getName();
+            }
+        } catch (Throwable e) {
+            out.token = "HARNESS_ERROR";
+            out.error = e.getClass().getName() + ":" + String.valueOf(e.getMessage());
+        }
+        return out;
+    }
+    public static String run(String target, String receivers, String signature, int[] genes) {
+        Observation o = execute(target, receivers, signature, genes);
+        if (!o.reachedTarget || o.token.equals("HARNESS_ERROR"))
+            throw new AssertionError("Cannot replay test: " + o.error);
+        return o.token;
+    }
+    private static String state(Object receiver, String method) {
+        if (receiver == null) return "VOID";
+        List<String> getters = new ArrayList();
+        if (method.startsWith("set") && method.length() > 3) {
+            getters.add("get" + method.substring(3)); getters.add("is" + method.substring(3));
+        }
+        getters.addAll(Arrays.asList("getItemCount", "getRowCount", "getColumnCount", "getSeriesCount"));
+        StringBuilder s = new StringBuilder("VOID");
+        for (String name : getters) {
+            try {
+                Method getter = receiver.getClass().getMethod(name);
+                if (getter.getReturnType().isPrimitive() || getter.getReturnType() == String.class)
+                    s.append('|').append(name).append('=').append(stable(getter.invoke(receiver), 0));
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        return s.toString();
+    }
+    /** Only whitelisted value types are rendered. Never use arbitrary object toString(). */
+    static String stable(Object value, int depth) {
+        if (value == null) return "NULL";
+        Class<?> t = value.getClass();
+        if (value instanceof String || value instanceof Boolean || value instanceof Character
+                || value instanceof Byte || value instanceof Short || value instanceof Integer
+                || value instanceof Long || value instanceof Float || value instanceof Double
+                || value instanceof java.math.BigInteger || value instanceof java.math.BigDecimal)
+            return t.getName() + ":" + Base64.getEncoder().encodeToString(value.toString().getBytes(StandardCharsets.UTF_8));
+        if (value instanceof Enum) return "ENUM:" + t.getName() + ":" + ((Enum<?>)value).name();
+        if (t.isArray() && depth < 3) {
+            StringBuilder s = new StringBuilder("ARRAY:" + t.getName() + ":" + Array.getLength(value));
+            for (int i = 0; i < Math.min(64, Array.getLength(value)); i++) {
+                String item = stable(Array.get(value, i), depth + 1);
+                s.append(':').append(item.length()).append(':').append(item);
+            }
+            return s.toString();
+        }
+        if (value instanceof java.awt.Color) return "COLOR:" + ((java.awt.Color)value).getRGB();
+        // Observe safe scalar properties of returned objects. This catches
+        // changes to value caches and state while avoiding identity-based toString().
+        StringBuilder observed = new StringBuilder("STATE:" + t.getName());
+        int properties = 0;
+        for (String name : Arrays.asList("getItemCount", "getMinY", "getMaxY",
+                "getRowCount", "getColumnCount", "getSeriesCount")) {
+            try {
+                Method getter = t.getMethod(name);
+                Class<?> r = getter.getReturnType();
+                if (!r.isPrimitive() && r != String.class && !Number.class.isAssignableFrom(r))
+                    continue;
+                if (r == void.class) continue;
+                Object result = getter.invoke(value);
+                String token = stable(result, depth + 1);
+                observed.append('|').append(name).append('=').append(token.length())
+                    .append(':').append(token);
+                properties++;
+            } catch (Exception ignored) { }
+        }
+        return properties == 0 ? "TYPE:" + t.getName() : observed.toString();
+    }
+    public static void main(String[] args) {
+        if (args.length > 4) {
+            String source = new String(Base64.getDecoder().decode(args[4]), StandardCharsets.UTF_8);
+            System.setProperty("de.generated.source", source);
+        }
+        String[] encodedGenes = args[3].split(",");
+        int[] genes = new int[encodedGenes.length];
+        for (int i = 0; i < encodedGenes.length; i++) genes[i] = Integer.parseInt(encodedGenes[i]);
+        boolean closureCompile = args[0].equals("com.google.javascript.jscomp.Compiler")
+            && args[2].startsWith("compile(");
+        // Compiler.compile is an expensive whole-program operation. Fixed-side
+        // suites are still executed twice by the runner, so capture its oracle
+        // once here instead of launching three compilations just to check the
+        // same deterministic source output.
+        int repetitions = closureCompile ? 1 : 3;
+        for (int i = 0; i < repetitions; i++) {
+            Observation out = execute(args[0], args[1], args[2], genes);
+            System.out.println("DE_TOKEN:" + Base64.getEncoder().encodeToString(out.token.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+}
+
+public class DEGeneratedTest {
+    @org.junit.Test(timeout=60000L)
+    public void testDE00000() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addAsFirstExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{708,431,-418,860,129,-444,994,-226,-187,47,-1000,-915,-1000,-541,-681,-97,802,807,-439,264,-328,339,212,995,-132,693,823,102,-233,-602,-1000,-401,-202,375,-736,454,401,834,293,19,701,-431,89,-1000,290,-406,453,437,-819,102,-1000,-252,704,35,-133,200,-833,-298,155,1,933,538,744,-105}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00001() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addAsFirstExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{400,91,43,-973,227,-1000,193,83,-1000,1000,404,-187,-218,-16,953,593,-1000,-505,1000,-860,400,682,1000,-1000,-517,101,-1000,997,-295,179,490,503,1000,305,-1000,-1000,1000,-629,553,-712,-375,113,481,149,-1000,350,114,-1000,1000,1000,243,-633,-416,-1000,-98,-69,164,1000,206,166,711,337,38,98}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00002() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addAsFirstExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{-321,-1000,-853,-628,854,508,-842,142,1000,881,-526,483,-864,-291,-297,986,744,-823,-1000,-652,-529,-943,602,-819,-1000,185,-1000,-16,-1000,-816,387,-655,1000,-124,992,725,-971,-580,-266,-714,960,574,-886,1000,-762,-1000,-822,606,1000,371,-380,22,793,-1000,-1000,-160,-291,1000,-850,-300,-1000,-518,-841,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00003() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addAsFirstExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{1000,-141,-82,-272,-1000,-1000,1000,-1000,-122,1000,-768,41,380,268,1000,498,773,403,677,-699,1000,133,512,-1000,-345,153,-1000,1000,-1000,-844,958,239,883,-976,-725,-82,-54,-1000,1000,-1000,-731,751,-111,-1000,-295,1000,1000,-1000,1000,371,-176,-801,-796,-1000,-217,1000,-1000,832,-535,1000,-284,-593,1000,139}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00004() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addAsFirstExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{1000,-432,-194,-495,-242,-1000,309,-1000,-208,1000,-1000,-506,-557,-1000,675,967,-1000,-505,-412,-1000,1000,-874,180,-1000,-1000,320,-1000,1000,-1000,-1000,1000,-146,1000,-1000,-1000,-487,-1000,-1000,1000,-1000,-1000,-534,-1000,149,-1000,625,353,-1000,1000,205,-388,-1000,-1000,-1000,-98,1000,-1000,1000,903,1000,-1000,-656,1000,98}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00005() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addAsFirstExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{1000,-585,3,-429,-652,-656,579,-1000,-1000,1000,-271,-29,380,-572,878,438,-992,-408,677,-169,1000,-438,1000,-1000,-311,-1000,-739,1000,-1000,-823,829,42,1000,-313,-8,-587,-93,-958,981,-635,-1000,-153,-566,-216,-925,1000,1000,-1000,800,1000,186,-672,-1000,-1000,43,667,-1000,649,509,931,-690,-333,1000,110}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00006() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addAsFirstExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{1000,-585,-804,302,-810,-122,1000,-413,-76,-236,24,-348,338,46,1000,438,1000,620,556,191,1000,997,-180,-113,174,267,-42,534,-506,-166,149,42,-775,73,-1000,-196,937,-768,291,-583,95,777,902,-1000,555,867,1000,358,-488,-471,-326,668,-175,-389,460,-405,-583,649,-329,199,1000,178,1000,288}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00007() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addAsFirstExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{-566,307,418,1000,610,-212,1000,1000,-1000,89,-199,-838,-904,1000,-506,-683,581,-75,-198,1000,-1000,-225,871,1000,520,-1000,1000,-945,1000,1000,-1000,1000,-869,1000,-15,-176,892,387,-856,947,858,-222,-42,-1000,-441,-613,-295,1000,-1000,1000,-1000,692,1000,591,1000,-1000,1000,-1000,-255,-1000,932,1000,-108,665}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00008() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addAsFirstExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{-1000,-313,-740,-935,889,1000,-1000,517,1000,278,-750,264,-680,-1000,-41,1000,-229,-883,-1000,268,-1000,-1000,590,398,-1000,-762,146,-722,471,-1000,-618,-718,1000,52,1000,1000,-1000,200,-1000,-763,-1000,68,-1000,1000,-1000,-1000,-507,1000,948,102,-636,-106,-56,-876,-1000,658,-1000,1000,-801,-297,-1000,-293,-1000,-959}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00009() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{646,611,-156,89,-871,742,72,900,-112,-181,-111,125,-677,525,431,-843,468,-732,-832,-284,383,537,751,241,-718,-749,248,-1000,321,1000,-649,938,-1000,160,-1000,-660,-271,-488,-44,274,641,274,88,-1000,1000,-14,921,-593,-905,268,675,993,-119,-22,-246,-285,1000,82,-279,205,634,-2,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00010() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{-301,-480,-1000,-642,503,1000,454,1000,177,-1000,-628,-133,534,1000,1000,130,-1000,-890,698,-285,610,-998,451,-1000,-215,624,137,-176,-550,1000,-1000,-29,-1000,-1000,1000,-1000,1000,-41,65,727,-909,-169,-1000,85,1000,1000,335,533,-1000,1000,1000,845,-1000,1000,879,260,-561,1000,1000,-189,859,198,335,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00011() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{200,-733,1000,-36,548,-127,199,-252,-823,-1000,664,-357,966,276,-313,1000,-211,475,872,1000,-267,60,-33,-458,497,-1000,-793,877,1000,-192,340,16,-461,1000,1000,242,861,-1000,-1000,-400,-446,623,400,795,-130,650,-106,234,-556,-372,-560,-11,-421,0,-338,-1000,-1000,-80,486,-818,-400,240,-3,471}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00012() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{-1000,-441,-332,-902,670,-429,-545,989,1000,-991,-274,168,1000,207,735,440,-309,-1000,1000,999,358,-445,790,-1000,-487,761,-598,77,-1000,904,640,-931,-640,-1000,1000,-892,1000,538,448,-380,-1000,-886,-1000,1000,-346,197,-145,-102,53,-22,-780,887,-1000,1000,1000,-1000,-1000,176,35,-45,464,-446,1000,-63}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00013() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{-1000,1000,-854,-424,-140,-812,94,454,732,844,-91,54,933,-801,-1000,-400,806,-219,1000,826,119,514,1000,-893,-1000,-1000,-920,-1000,-711,552,-681,-279,-310,202,-333,59,-112,1000,574,-402,198,-1000,643,-1000,1000,-581,1000,-1000,1000,-167,-1000,451,-150,-509,-296,-534,-126,-1000,749,-53,256,-399,216,-249}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00014() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{288,923,170,185,-1000,983,-691,1000,-529,53,776,-227,-848,1000,-960,-1000,40,-694,-704,-137,1000,1000,815,-437,-1000,-1000,67,-1000,1000,144,1000,-472,-1000,-820,-1000,521,-211,-1000,-477,76,895,162,220,-1000,-834,-1000,623,316,-1000,-510,766,776,134,-639,-246,-412,1000,526,-1000,181,-232,-780,-1000,-399}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00015() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{-464,479,-1000,370,743,331,-601,1000,1000,627,-572,-314,921,-894,1000,-400,429,-1000,104,917,-1000,-398,366,580,-10,614,878,-531,-1000,1000,784,-1000,282,-1000,293,-863,136,477,24,-251,-1000,-87,812,-1000,566,-60,1000,-791,599,571,1000,1000,-1000,-102,1000,595,-992,284,1000,293,901,1000,95,52}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00016() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{660,-560,1000,-1000,114,316,734,577,-865,-227,-278,168,860,374,1000,1000,-620,718,1000,246,257,-761,279,386,855,-770,-914,-601,770,1000,-371,-233,-503,1000,942,-585,796,-292,-528,319,-902,-562,-701,208,1000,1000,520,-914,-52,1000,-1000,-1000,480,1000,-998,-1000,176,-632,579,-1000,172,792,724,487}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00017() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "addExtraField(org.apache.commons.compress.archivers.zip.ZipExtraField):void",
+            new int[]{259,303,-773,-135,30,-230,-400,344,116,368,-900,460,-979,23,1000,-1,536,-1000,-740,387,-65,119,1000,536,12,4,387,961,-345,1000,286,662,-480,601,-626,-1000,152,275,500,1000,-1000,222,241,-1000,696,-628,431,-1000,15,1000,-197,586,-446,605,-582,-303,338,-595,20,-1000,1000,443,-1000,564}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00018() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.ZipArchiveEntry", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "clone():java.lang.Object",
+            new int[]{718,-105,1000,1000,-323,1000,-24,-457,407,-428,-177,151,-335,643,-801,571,-589,991,-131,-496,-12,-656,124,-1000,-1000,-704,29,-298,552,-756,558,132,-539,-169,1000,882,621,-887,-225,-501,-1000,1000,-1000,-587,-442,-469,-731,1000,-56,-720,369,-391,653,603,-1000,1000,239,244,-309,-638,-96,-782,1000,231}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00019() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.ZipArchiveEntry", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "clone():java.lang.Object",
+            new int[]{1000,347,1000,-185,-1000,-311,479,1000,-786,-484,144,768,43,1000,-1000,602,432,124,-8,-685,-201,-1000,-561,61,441,-327,-647,623,-82,-553,-38,-1000,154,-696,824,122,520,-1000,65,831,-372,-463,-886,-1000,-1000,1000,-604,650,613,-46,738,811,797,1000,-638,319,583,1000,-119,310,-662,-789,529,-17}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00020() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.ZipArchiveEntry", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "clone():java.lang.Object",
+            new int[]{1000,459,82,-762,-531,-545,291,1000,219,1000,768,364,-267,736,1000,-148,204,-450,-711,-998,-647,288,-150,443,363,1000,-325,1000,461,654,25,-1000,1000,-893,348,-139,-642,619,457,1000,-996,-768,-821,-681,-683,988,21,858,-838,-88,202,1000,-755,-1000,-580,319,395,-6,106,1000,-1000,263,-95,-346}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00021() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.ZipArchiveEntry", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "clone():java.lang.Object",
+            new int[]{138,19,-432,-545,-274,-217,670,1000,-508,572,-173,119,124,819,631,-550,-217,-3,310,-579,30,-172,-34,456,227,-144,115,878,738,286,16,466,807,-10,737,68,63,-702,107,957,-84,-406,-524,-378,239,231,-17,713,-986,-445,285,1000,-656,-229,796,573,-951,-6,285,936,-129,-304,-312,-161}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00022() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.ZipArchiveEntry", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "clone():java.lang.Object",
+            new int[]{138,-85,654,-1000,-239,-996,511,353,490,1000,949,-230,435,1000,1000,354,1000,-535,-1000,-661,-1000,429,-315,62,66,1000,-366,-597,826,805,-659,930,1000,-744,844,-870,-1000,1000,753,289,-935,-281,568,-394,-616,1000,193,909,-462,-606,1000,979,-289,554,-465,415,-817,-628,-831,1000,-1000,345,19,112}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00023() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.ZipArchiveEntry", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "clone():java.lang.Object",
+            new int[]{1000,-589,-746,-15,-793,-885,716,717,-557,420,-218,1000,378,434,-1000,-230,-487,-646,108,-462,484,483,-101,1000,-752,-1000,51,721,-249,553,-147,-907,24,-966,68,369,775,-1000,111,1000,1000,-645,741,-998,178,448,249,609,177,-537,316,132,-1000,1000,1000,418,1000,1000,951,506,-346,-1000,-629,-226}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00024() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.ZipArchiveEntry", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "clone():java.lang.Object",
+            new int[]{-400,1000,1000,-1000,-1000,-782,388,997,-133,-240,295,-262,-627,1000,-737,-642,-483,-392,1000,-66,-440,-1000,-732,-658,-488,-757,-886,293,-656,-1000,-339,1000,-1000,-951,24,-643,1000,-766,-517,365,-315,-1000,-920,1000,-1000,1000,-1000,-489,545,-690,398,1000,346,-132,482,-510,-701,1000,-383,-193,-157,-1000,-620,773}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00025() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.ZipArchiveEntry", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "clone():java.lang.Object",
+            new int[]{138,-85,-1000,-310,998,-1000,627,557,490,723,949,119,-655,205,-43,-1000,-600,-321,-272,-227,471,501,-362,1000,-782,-736,1000,-174,384,805,569,930,998,-240,1000,667,-760,-1000,-17,83,321,-163,568,-303,297,-1000,1000,711,-66,-290,-258,-170,-1000,554,1000,1000,-29,1000,729,1000,-228,-568,317,-646}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00026() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "equals(java.lang.Object):boolean",
+            new int[]{1000,1000,436,-560,1000,999,-920,1000,885,1000,1000,1000,1000,760,-369,-675,-536,1000,-1000,-1000,-1000,1000,-566,1000,645,-1000,-1000,-708,-349,742,-1000,329,-620,-273,1000,371,816,1000,-693,-1000,333,-16,-1000,1000,1000,1000,-1000,1000,-301,409,-1000,882,-1000,-1000,-1000,-1000,-1000,1000,270,26,-1000,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00027() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "equals(java.lang.Object):boolean",
+            new int[]{-189,-25,-780,134,177,-136,529,1000,-532,-1000,-295,-751,129,524,-437,120,758,379,410,-239,-213,341,396,-393,857,825,-47,-1000,1000,-1000,-418,896,-520,1000,-72,-775,-574,164,-734,-1000,836,-512,-99,526,-731,-458,-1000,1000,984,308,-254,1000,1000,-1000,854,289,727,-658,-276,-1000,-391,-303,-855,-422}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00028() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "equals(java.lang.Object):boolean",
+            new int[]{1000,911,462,-82,516,586,-670,1000,442,-400,-380,291,1000,-226,-507,-587,-420,842,-592,-1000,-1000,1000,-414,416,-287,-158,-168,-1000,85,850,-887,1000,-1000,642,1000,-204,579,1000,-1000,-1000,540,-410,-1000,586,491,1000,961,1000,-195,551,-1000,1000,-893,-1000,34,-1000,-471,365,-44,-870,-1000,605,506,144}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00029() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "equals(java.lang.Object):boolean",
+            new int[]{-1000,-1000,-1000,-193,-1000,-494,-526,-866,99,1000,-917,675,-1000,-505,-818,254,1000,-439,-730,-57,782,256,-475,-209,-1000,433,-409,456,-166,-1000,-94,-700,-497,-1000,-115,208,1000,-861,349,674,305,-580,1000,853,-59,269,989,-1000,-405,-390,1000,-1000,1000,-284,494,1000,-683,127,504,499,1000,866,698,-136}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00030() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "equals(java.lang.Object):boolean",
+            new int[]{-855,-408,-162,326,69,-56,-661,-264,502,998,-215,603,-489,-269,-19,527,727,703,-447,-947,648,935,-309,200,-561,-167,-991,527,183,-992,-173,-371,220,-385,113,259,944,-889,348,130,220,-743,644,827,459,577,-384,-732,-704,-462,686,-355,817,-760,-230,918,-683,552,651,544,697,328,698,-610}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00031() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "equals(java.lang.Object):boolean",
+            new int[]{-487,-397,-705,-1000,-201,-879,-656,-1000,554,-256,-5,60,-332,106,-220,18,1000,-1000,410,446,87,-1000,100,-739,-339,186,466,305,-508,522,899,-702,-331,-665,502,-310,-189,528,-544,245,605,635,867,-189,-34,-708,1000,-1000,269,-554,729,-416,-981,763,857,-179,-244,93,208,111,347,204,294,174}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00032() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "equals(java.lang.Object):boolean",
+            new int[]{-430,-1000,436,830,323,-41,115,513,112,-233,-155,1000,1000,-36,-209,965,-28,1000,540,-881,1000,1000,138,-671,-740,494,-692,-708,1000,742,-1000,329,742,-194,-336,112,179,-1000,291,-395,691,-16,959,294,-219,-252,-1000,336,-380,-1000,1000,104,1000,-1000,257,1000,527,1000,1000,609,384,-584,-601,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00033() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "equals(java.lang.Object):boolean",
+            new int[]{-189,-552,79,-429,33,363,-1000,-535,932,1000,367,457,-785,-589,-106,-292,-76,311,-120,124,328,-655,-594,-830,-623,-503,-719,-318,1000,-266,20,-1000,-1000,-1000,563,-1000,443,102,769,126,785,581,-161,706,51,-26,1000,-181,-527,-1000,-40,1000,-917,850,688,-168,37,-292,682,824,-1000,633,-1000,671}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00034() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "equals(java.lang.Object):boolean",
+            new int[]{-1000,-829,276,1000,223,691,-660,265,-72,-650,-1000,609,-849,269,317,700,1000,-319,-1000,1000,-557,980,686,-483,-509,1000,159,179,942,-114,60,-761,-1000,-278,-1000,-1000,1000,-624,-936,-674,-490,-1000,1000,-1000,-1000,-1000,1000,-358,1000,-1000,1000,-499,597,-743,661,1000,-881,-405,-636,-223,423,163,-251,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00035() {
+        org.junit.Assert.assertEquals("ARRAY:[B:5:19:java.lang.Byte:MA==:19:java.lang.Byte:LTE=:19:java.lang.Byte:Mzc=:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{-675,1000,-131,-384,-444,-551,-173,162,143,1000,-194,646,-53,323,-35,-35,237,305,335,-17,-1000,-1000,1000,-1000,517,-309,-327,833,608,-1000,474,220,-1000,-644,-369,202,-1000,-536,635,242,822,-1000,-1000,371,-602,1000,-792,931,-929,-413,1000,117,550,-269,-136,276,-757,-1000,-1000,295,-257,577,-29,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00036() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{43,415,48,306,332,-1000,731,-1000,-3,103,-96,-411,-653,455,222,-318,-466,308,1000,503,716,400,-1000,-184,-186,-84,-998,1000,-327,771,-147,627,-573,-341,-178,-115,332,-563,185,40,55,1000,-199,-731,922,-21,220,402,-201,-204,687,-1000,-524,-922,281,657,-1000,-498,1000,-234,151,756,805,215}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00037() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{438,1000,-95,81,-765,-871,-185,-614,-40,-282,181,-992,443,-456,393,30,1000,232,862,234,-265,1000,347,-370,782,1000,-324,659,694,-85,-40,182,-158,297,554,391,-615,89,394,-735,-528,1000,144,-115,-187,-458,-1000,859,213,198,553,1000,-466,-157,-513,384,-1000,-283,502,-711,-1000,229,-256,-78}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00038() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{-1000,1000,322,-495,693,563,485,770,-304,494,-1000,197,1000,889,-716,-183,-108,889,-672,6,1000,-1000,32,-1000,1000,-1000,0,836,-213,-730,-1000,-1000,-1000,-786,-404,-975,-1000,-555,1000,108,1000,-454,-1000,41,1000,1000,44,-1000,-1000,-1000,687,-1000,-313,-1000,-1000,-1000,743,-1000,-948,929,-1000,-328,126,-102}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00039() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{400,319,-586,794,290,305,1000,-486,-928,-891,-226,246,385,-1000,554,-361,-659,-247,-686,948,-411,-916,190,-957,1000,13,1000,626,1000,1000,-483,441,52,-192,-452,400,43,273,960,-531,-786,-760,400,-389,1000,388,-1000,-603,-1000,202,-282,317,-1000,393,-264,256,-901,400,-1000,983,640,-58,-196,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00040() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{-1000,-173,-338,1000,1,1000,1000,-255,-263,-1000,511,18,24,1000,-85,-425,-658,-404,791,-1000,201,-1000,-608,1000,777,-827,-810,267,280,588,-76,-1000,1000,-439,-1000,-399,1000,1000,990,599,1000,-167,409,-1000,835,388,-1000,-1000,-138,-286,-282,148,-970,-557,-810,-609,-561,1000,659,1000,1000,-623,285,413}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00041() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{1000,-985,447,-282,460,562,983,-805,-1000,955,-381,-1000,-8,-1000,638,-446,746,901,-277,1000,469,1000,1000,-936,-299,1000,914,761,560,1000,28,-505,-724,1000,869,-572,1000,1000,670,-1000,-1000,1000,1000,-1000,-431,-1000,-27,901,1000,411,1000,212,-1000,159,-886,1000,666,-1000,1000,-1000,-393,-1000,687,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00042() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{-162,764,-398,-350,251,-11,707,872,-670,-1000,-460,-724,633,-273,-106,1,1000,414,-598,838,-276,71,547,-957,752,-793,1000,-110,772,349,-183,-336,-724,337,323,-591,-930,217,915,-43,-1000,327,371,-593,-407,-309,-818,270,-62,-96,361,-826,148,408,-250,-84,-117,-170,361,-30,-376,-385,300,-662}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00043() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{-1000,-173,638,158,1000,-26,-71,1000,-6,789,-709,21,24,740,115,-701,-809,350,-1000,-112,1000,-579,-566,-912,-1000,13,303,-402,-1000,-1000,-1000,-1000,-1000,-439,-1000,-1000,-1000,-1000,1000,1000,757,-666,-1000,1000,473,1000,-374,-906,-1000,-286,1000,-1000,1000,-210,452,-1000,982,-1000,-1000,628,877,-98,708,-890}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00044() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==:19:java.lang.Byte:LTE=:19:java.lang.Byte:LTEw", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{-1000,1000,1000,432,-361,-1000,-472,-1000,409,1000,148,1000,-637,1000,789,-1000,-522,467,1000,-421,1000,206,-1000,-1000,-1000,53,-667,880,-1000,-266,-874,-245,-439,-1000,-1000,-742,-816,-1000,-29,1000,791,1000,-1000,1000,233,958,-265,1000,-1000,-901,1000,1000,978,-713,561,-778,-996,-905,-833,-405,635,1000,919,-811}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00045() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{725,-232,358,-209,203,-214,-2,-715,-1000,1000,-672,-190,641,-1000,658,-266,851,705,-367,130,-813,400,1000,-1000,-107,631,1000,999,996,268,320,-834,-1000,756,586,472,-762,166,590,-1000,-578,-147,393,-56,-703,-106,-5,1000,265,475,1000,523,-231,543,-1000,1000,338,-1000,-342,-1000,-1000,-349,-24,306}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00046() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getCentralDirectoryExtra():byte[]",
+            new int[]{411,-205,187,699,217,304,-220,-35,-399,-910,289,-434,-802,592,336,-222,-128,534,278,-356,-786,-392,736,954,282,-344,-317,523,6,577,-320,866,776,777,-378,879,581,888,866,949,800,-319,-11,-999,233,643,-424,-521,-713,-503,411,-72,-629,-873,-730,-19,-498,817,59,853,874,-530,526,174}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00047() {
+        org.junit.Assert.assertEquals("java.lang.Long:MQ==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{920,275,203,-560,1000,863,-561,660,1000,-1000,-53,-1000,382,1000,-211,971,1000,1000,-217,-1000,668,24,26,-242,372,-379,90,390,380,231,434,-1000,1000,-1000,-173,297,-1000,1000,-11,-377,294,604,762,611,-132,-514,-479,123,627,884,-504,-999,844,-609,306,-140,-175,1000,-127,-297,405,579,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00048() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{279,480,916,-747,1000,-161,-504,535,256,-477,-376,-901,300,522,-200,-421,1000,-164,87,-812,603,-102,46,337,767,852,601,864,662,72,231,-1000,834,-286,497,571,-1000,757,1000,-398,1000,21,10,1000,290,31,597,776,627,765,137,-686,1000,-1000,-711,-401,-499,1000,21,-480,-263,1000,160,-586}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00049() {
+        org.junit.Assert.assertEquals("java.lang.Long:NDQ=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{475,159,136,-845,30,540,-188,-729,158,94,-815,-769,525,462,-223,-1000,747,-1000,-382,-1000,328,577,-138,445,586,212,1000,991,-586,999,10,-1000,701,-157,565,-244,-1000,1000,1000,-949,1000,-22,-1000,608,-116,472,-599,1000,457,474,-191,-463,1000,-179,-1000,-31,-255,712,-928,-665,-466,1000,506,-40}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00050() {
+        org.junit.Assert.assertEquals("java.lang.Long:LTY1NTM2", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{131,1000,205,149,795,-1000,713,1000,-375,81,734,-230,452,255,-1000,38,318,320,254,-1,1000,-186,840,35,-93,874,487,135,579,80,-319,400,715,-880,1000,451,-407,413,516,172,391,-7,-302,679,740,89,864,-240,899,972,364,894,-385,-1000,-864,-658,-1000,420,1000,-898,-311,-190,-165,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00051() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{382,1000,1000,-1000,1000,-177,764,-813,-497,141,-940,-666,315,587,-462,436,1000,32,-838,-1000,1000,-65,1000,-575,136,513,1000,204,-411,1000,-366,-1000,1000,-1000,753,358,-1000,1000,1000,-952,1000,1000,-638,956,-298,-165,-132,123,1000,961,-554,-13,1000,-1000,-206,-1000,-537,138,271,-456,-73,1000,71,252}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00052() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{726,1000,1000,-1000,1000,-678,772,403,-387,-209,-343,-1000,1000,1000,-1000,-809,1000,-562,-430,-1000,1000,24,1000,-89,605,322,1000,369,-411,1000,-13,-1000,1000,-1000,753,297,-1000,1000,1000,-1000,1000,1000,-1000,1000,-568,532,-479,843,1000,1000,680,81,1000,-1000,-864,-1000,-754,572,-78,-896,-531,1000,-50,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00053() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{-294,260,-230,733,-665,-297,-656,714,158,94,-815,553,189,-109,723,-850,-275,-162,632,577,-623,1000,-138,739,85,982,-355,645,334,-99,-925,388,-846,967,810,114,-82,597,444,-264,402,-1000,434,-106,424,-233,453,392,457,328,-84,-463,-777,-220,-702,383,-550,-148,-124,67,-288,266,506,-40}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00054() {
+        org.junit.Assert.assertEquals("java.lang.Long:MQ==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{246,196,-41,-410,1000,-186,-902,1000,1000,-1000,-169,-1000,307,168,-166,1000,1000,279,-175,-97,1000,-147,-149,-130,717,-55,133,456,884,-755,42,-223,616,-336,549,271,-39,-29,-412,390,486,-232,545,1000,773,-273,576,-590,347,303,-323,-372,631,-1000,-473,631,-318,1000,268,-998,373,67,34,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00055() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{-223,412,395,-858,321,-446,-876,718,1000,-44,-994,-1000,131,928,-456,-250,1000,-1000,-567,-1000,530,570,-797,-89,1000,776,1000,1000,-218,117,307,-1000,791,-410,954,231,-382,1000,-538,-1000,1000,-85,-553,756,745,-1,-504,-71,620,27,-423,-495,1000,-243,-1000,-322,-126,-232,-264,-1000,-493,1000,1000,-873}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00056() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{557,1000,1000,-1000,1000,-457,-16,920,779,-1000,-53,-1000,1000,1000,-1000,1000,1000,1000,-1000,-1000,1000,-1000,473,-1000,1000,423,1000,1000,676,939,1000,-1000,1000,-1000,-152,1000,-1000,1000,346,-804,1000,1000,-221,1000,87,-1000,1000,-1000,1000,967,-1000,-1000,1000,-1000,776,-1000,443,1000,1000,-770,1000,1000,-789,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00057() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExternalAttributes():long",
+            new int[]{279,431,242,-701,166,-161,-526,210,-765,-446,-376,-778,310,57,-1000,-258,372,73,870,-1000,1000,-1000,-844,-439,1000,590,932,864,311,96,844,-1000,1000,-1000,101,827,-178,209,568,-389,1000,21,10,1000,362,464,767,-1000,1000,765,621,-869,1000,-618,493,-373,772,1000,537,-1000,996,1000,364,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00058() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{697,-708,920,-760,953,-925,-91,-215,293,716,-131,-622,-500,676,26,-343,9,-71,-631,776,329,-100,-59,801,371,515,229,-693,776,-305,-32,-329,977,-698,-66,148,149,477,-552,625,-506,-386,191,202,348,788,-323,169,513,-650,-725,-175,884,627,5,641,-21,-808,527,-243,-723,-19,-306,498}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00059() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{1000,-1000,1000,-1000,944,-1000,14,1000,945,-1000,841,1000,-809,598,-32,5,-1000,83,427,1000,-1000,-1000,-658,-872,1000,-560,1000,-356,602,-717,266,-1000,567,-1000,405,-1000,714,-995,1000,-1000,-54,535,-765,122,1000,1000,-301,698,-474,-1000,1000,-818,-78,-1000,-687,-435,-1000,-502,1000,-1000,1000,-1000,-1000,-653}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00060() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{-523,-249,815,-658,-270,1000,215,-582,914,1000,-1000,-745,269,-1000,-439,-845,-184,-249,-542,-315,9,316,-1000,-68,71,112,550,430,-15,-1000,984,-165,1000,-74,292,323,605,-630,-842,763,793,950,795,-1000,264,461,397,-243,208,488,1000,-1000,1000,-1000,175,-111,-335,-813,280,543,-1000,101,689,-548}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00061() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{-419,-1000,698,-1000,92,-567,844,647,209,-1000,369,1000,395,1000,-568,47,-1000,-1000,288,-228,-579,-1000,-162,558,743,139,490,-780,-803,-1000,-825,-970,-1000,-1000,-1000,-1000,-226,-104,1000,-836,-360,-1000,-1000,195,1000,1000,-1000,1000,-803,-1000,-343,-1000,1000,-1000,276,296,-1000,-1000,1000,-1000,1000,-1000,-1000,-685}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00062() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{144,1000,748,737,-197,-81,189,-145,-332,-866,298,-147,426,-1000,607,649,944,1000,427,-256,-703,-590,-901,-199,-428,-931,247,-166,-328,1000,-1000,987,1000,759,374,267,-669,343,-171,-893,-1000,535,-540,-222,-1000,-1000,455,-1000,580,-293,-227,1000,-1000,1000,622,324,1000,1000,1000,-1000,1000,141,-477,-310}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00063() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{1000,-400,-583,263,1000,-970,343,661,94,-731,1000,-322,663,-382,-1000,1000,-4,401,-663,1000,-1000,-1000,-1000,-1000,-439,-553,28,-402,393,-716,-653,-764,1000,295,-481,-1000,641,-51,-258,339,-644,1000,-1000,201,400,340,-1000,189,1000,-356,295,-172,-1000,-400,-605,-1000,-1000,353,-870,-582,-281,-793,786,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00064() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{1000,-1000,-122,-1000,472,365,-237,844,1000,-1000,361,-88,-1000,-184,-222,427,-852,348,-14,297,-17,-20,-1000,-1000,1000,-615,1000,832,977,1000,876,-1000,1000,-1000,945,-948,1000,-1000,-1000,-20,-372,845,224,380,1000,186,1000,-735,533,-790,1000,-175,-1000,-1000,-1000,-912,-1000,61,976,-865,849,1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00065() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{1000,-1000,1000,-1000,-843,1000,-7,844,604,-941,-372,-88,-67,-870,-418,-148,-852,83,-225,1000,-1000,-20,-1000,-1000,1000,-560,1000,-356,831,1000,987,-1000,549,-1000,802,-823,970,-964,66,-20,24,535,-765,173,1000,-30,-301,-1000,587,-479,1000,307,-78,-1000,-1000,-435,-1000,292,-333,-113,849,1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00066() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{1000,-505,1000,-248,-794,-215,-660,834,650,-1000,683,745,607,-1000,-103,318,-823,-1000,-1000,-876,711,204,-435,-1000,1000,-1000,1000,316,196,-133,564,-1000,868,-946,1000,-1000,1000,-106,-227,119,-38,-1000,-464,-1000,-19,254,518,-1000,659,736,130,36,-1000,-361,-1000,796,-329,1000,323,-1000,1000,1000,-689,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00067() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{866,-1000,642,-978,-29,-681,-600,682,1000,-1000,409,1000,-671,-33,396,451,-354,-880,-762,-628,-251,1000,-47,-77,473,161,464,644,-302,-802,-90,-760,1000,-1000,726,-1000,830,-1000,96,564,-740,-228,-630,1000,1000,797,1000,-311,-556,-1000,116,-1000,-1000,-1000,-604,-1000,-1000,420,1000,-1000,1000,650,-1000,-31}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00068() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraField(org.apache.commons.compress.archivers.zip.ZipShort):org.apache.commons.compress.archivers.zip.ZipExtraField",
+            new int[]{-1000,91,-1000,-491,1000,1000,640,-387,1000,-39,-283,-1000,-386,-429,-860,802,99,1000,78,272,-499,-820,-643,-751,-815,159,-112,-153,-903,493,-977,413,233,438,113,-251,546,-1000,-1000,-219,-302,1000,167,-10,456,-387,791,-613,674,-335,1000,10,-828,88,72,-72,-273,-831,9,1000,-1000,16,1000,-575}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00069() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields():org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{-873,531,-28,-602,-887,-45,-847,-577,-248,-310,-822,-669,16,-291,589,823,405,650,-485,-331,329,668,-706,763,838,733,-878,-391,181,-847,738,-14,-64,372,79,-299,-481,-350,-446,-124,797,193,138,-36,164,446,834,857,-978,839,228,-145,876,-907,810,18,416,-667,-414,476,894,747,21,-357}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00070() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields():org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{-1000,1000,-616,-1000,-1000,-268,-956,-481,-876,408,-1000,-820,-259,120,1000,-211,1000,775,-1000,-457,1000,1000,-1000,469,649,1000,-537,-424,916,159,-390,-182,-136,786,-1000,-543,-278,-554,-162,-57,157,895,-408,435,643,-124,-55,1000,-659,710,842,-154,877,-1000,1000,30,251,-492,943,-633,506,648,-203,159}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00071() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:1:69:TYPE:org.apache.commons.compress.archivers.zip.UnrecognizedExtraField", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields():org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{-316,560,71,-1000,508,104,-63,1000,435,-25,-335,-389,485,1000,273,76,-16,-481,-267,-203,1000,464,-785,-512,438,-1000,65,1000,133,484,-196,744,625,-794,-1000,-745,483,1000,-30,346,-577,1000,-784,-383,304,205,254,536,-594,-970,1000,-241,291,295,875,358,269,1000,434,1000,-1000,430,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00072() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields():org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{-1000,1000,78,-542,-1000,-478,-56,-559,180,502,-301,-449,-514,738,811,1000,551,1000,-1000,-1000,1000,609,-398,624,-320,-818,-353,529,604,-361,786,1000,430,173,-1000,-599,321,-425,-159,-467,-913,243,-297,-694,1000,826,1000,1000,-627,27,958,283,1000,-1000,1000,881,1000,-41,-66,980,-1000,637,157,648}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00073() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields():org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{350,-869,-633,-751,-1000,212,-1000,31,-735,-420,-485,-616,234,-206,-42,234,-398,-160,353,465,83,300,-320,63,960,1000,-493,-1000,-474,-828,417,-651,499,-242,963,353,-329,-59,-622,743,1000,129,58,495,-487,-494,941,-59,-7,975,282,163,-299,298,-184,-546,174,74,26,-754,917,331,-787,195}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00074() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields():org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{-66,756,-427,-917,629,-213,-291,-552,416,-389,-1000,390,-277,835,77,-318,171,656,115,42,1000,251,939,24,572,-1000,725,1000,-484,690,-775,750,-116,-1000,-88,-1000,1000,114,1000,669,-334,1000,171,-722,190,580,350,602,-779,-1000,1000,-259,30,882,781,467,251,1000,-509,-454,-731,529,1000,288}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00075() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields():org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{-449,1000,491,-245,-945,-731,-222,-474,-93,114,-962,163,-224,-36,926,-307,1000,399,-660,194,-50,557,-353,-1000,805,-1000,-281,-810,-298,-1000,-1000,-1000,-247,1000,-228,-19,-486,-899,116,311,456,1000,1000,1000,-519,900,707,-24,1000,773,324,-287,782,-1000,1000,1000,627,-1000,1000,345,1000,-70,-1000,-288}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00076() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields():org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{-22,691,-616,-831,483,-268,-488,-23,192,-339,147,230,-277,890,-38,-341,-33,581,54,165,452,251,981,-58,649,-1000,704,1000,-238,498,-1000,711,-25,-998,30,-1000,1000,136,1000,-701,-1000,1000,212,-700,241,394,396,602,-736,-812,395,-186,-12,819,693,30,251,1000,640,-633,-756,-133,908,285}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00077() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:1:69:TYPE:org.apache.commons.compress.archivers.zip.UnrecognizedExtraField", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields():org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{-1000,-400,1000,-20,189,390,-766,25,1000,-1000,-1000,-1000,842,-449,1000,1000,1000,1000,-238,-1000,959,-446,-293,95,324,-280,-1000,438,894,-59,303,-52,-1000,-846,-715,-1000,-353,613,-863,-239,-940,195,-724,-951,-863,964,652,722,-1000,517,-513,80,438,-715,536,681,-1000,1000,-1000,401,662,1000,1000,-755}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00078() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields():org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{-1000,776,526,-668,-531,-107,491,1000,1000,-25,-1000,-884,968,1000,1000,124,299,218,-1000,-1000,1000,710,-785,26,684,-773,-1000,1000,554,388,-196,431,440,109,-1000,-776,-193,718,-1000,1000,-577,1000,-1000,-246,304,455,236,743,389,-189,1000,1000,988,-978,1000,1000,-125,601,343,1000,-1000,382,389,875}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00079() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:1:69:TYPE:org.apache.commons.compress.archivers.zip.UnrecognizedExtraField", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields(boolean):org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{288,775,48,10,1000,-97,1000,343,-524,-602,303,-248,1000,252,-645,559,-407,-63,-312,-569,-951,991,1000,1000,654,-1000,1000,-149,-820,-1000,1000,-275,184,-463,479,1000,-56,-1000,1000,377,1000,586,29,364,-34,1000,359,-354,-1000,27,249,152,598,-114,-1000,-88,1000,-337,22,192,129,-1000,-478,-498}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00080() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields(boolean):org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{277,1000,1000,156,593,-898,-948,863,-710,-510,829,-400,1000,-476,228,948,-300,-163,-560,-599,-1000,-243,1000,-1000,1000,400,-142,-461,-904,-749,745,481,-1000,-596,199,1000,-509,-816,508,1000,1000,160,291,-1000,160,1000,78,446,918,783,-400,1000,1000,927,-1000,942,933,492,548,-509,769,-491,633,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00081() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields(boolean):org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{308,864,753,-144,-305,-401,541,512,386,-32,-1000,-1000,1000,828,-114,1000,-568,-1000,-984,-529,-1000,810,1000,1000,1000,-362,61,-160,100,-478,411,-1000,-713,-1000,-623,1000,-96,-322,1000,1000,1000,532,-683,-1000,-80,1000,-318,1000,-569,-1000,-1000,495,327,426,-1000,979,1000,186,176,-1000,997,-513,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00082() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields(boolean):org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{1000,-477,-1000,-67,1000,935,1000,378,-1000,-863,-521,999,1000,-106,-464,-1000,-151,-794,-1000,-840,-1000,1000,1000,1000,-324,-165,322,32,-1000,-1000,252,256,1000,-833,-335,1000,-648,-635,1000,1000,1000,1000,-718,1000,-1000,1000,849,-1000,-1000,1000,933,444,-1000,-858,-1000,142,1000,-77,-1000,-406,-62,-1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00083() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields(boolean):org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{564,-473,487,-291,-423,1000,-1000,-367,1000,796,-868,199,-1000,878,81,-1000,403,254,343,1000,1000,-1000,-1000,-1000,-186,829,1000,-904,-525,-885,-1000,35,-379,1000,-40,-772,1000,-49,-1000,-118,-1000,-1000,971,-226,-263,-1000,1000,-1000,794,200,-967,802,57,-1000,-550,826,-1000,-1000,-1000,688,-426,1000,27,986}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00084() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:1:72:TYPE:org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields(boolean):org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{369,951,746,-456,841,-197,1000,146,-1000,343,-1000,1000,1000,709,-288,552,-86,643,-388,638,-641,1000,999,344,1000,1000,-820,212,-863,-555,635,-1000,-177,-462,68,983,655,-406,140,4,1000,-1000,943,-36,-107,1000,465,733,395,-1000,1000,1000,681,-1000,-699,-204,683,274,-605,99,-629,-133,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00085() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields(boolean):org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{1000,1000,-212,334,400,216,614,-336,-400,-416,-147,26,1000,493,-316,-224,-313,-925,-968,-1000,-832,563,1000,781,1000,1000,592,-466,-400,-574,1000,-551,-354,-462,656,811,-452,-549,1000,4,1000,946,-1000,64,-108,984,-174,-456,-1000,362,1000,745,955,-327,225,-163,978,674,-394,-520,693,-868,128,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00086() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields(boolean):org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{76,-9,286,236,678,365,1000,-1000,-716,650,1000,237,-600,50,320,213,-16,-884,-524,942,-365,73,-814,894,1000,1000,-835,789,-811,-675,1000,335,775,-355,7,358,486,-223,-419,-602,-65,-529,93,654,-431,289,470,1000,673,-324,1000,192,246,-808,-1000,-864,349,-379,-503,-318,-609,-208,1000,107}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00087() {
+        org.junit.Assert.assertEquals("ARRAY:[Lorg.apache.commons.compress.archivers.zip.ZipExtraField;:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getExtraFields(boolean):org.apache.commons.compress.archivers.zip.ZipExtraField[]",
+            new int[]{-1000,-1000,-238,-233,-1000,-632,541,-1000,-1000,314,1000,563,-807,895,-965,331,1000,1000,1000,-1000,158,347,244,-1000,170,818,-519,-889,13,261,415,-1000,364,1000,1000,-791,-1000,-342,221,-1000,731,233,-452,1000,843,-534,-335,890,-1000,-233,-754,-1000,-228,-1000,556,-1000,-324,736,906,1000,-1000,-1000,521,73}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00088() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.GeneralPurposeBit", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getGeneralPurposeBit():org.apache.commons.compress.archivers.zip.GeneralPurposeBit",
+            new int[]{-782,-1000,-1000,405,1000,91,-907,409,-516,-141,238,263,592,-97,-250,1000,713,-2,1000,-823,63,1000,591,924,1000,-877,1000,1000,1000,1000,-683,-74,1000,-953,192,-1000,-1000,84,204,-216,-554,54,-46,-569,-370,-1000,-55,42,622,-157,-1000,741,356,-893,1000,-101,1000,555,-436,-274,-1000,902,-597,326}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00089() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.GeneralPurposeBit", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getGeneralPurposeBit():org.apache.commons.compress.archivers.zip.GeneralPurposeBit",
+            new int[]{-317,-353,-710,43,-31,-553,75,-723,-670,-768,723,-747,1000,-745,-1000,-576,-1000,1000,193,739,21,311,-730,887,958,-6,361,254,1000,553,1000,400,416,-1000,-201,-13,-533,-1000,-904,59,62,-243,-84,-904,-492,-711,814,-255,-731,714,604,-201,1000,226,513,-128,-262,521,-1000,-781,535,-1000,772,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00090() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.GeneralPurposeBit", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getGeneralPurposeBit():org.apache.commons.compress.archivers.zip.GeneralPurposeBit",
+            new int[]{-305,-1000,1000,979,246,816,-776,1000,-750,-1000,-618,-772,526,444,110,1000,1000,-614,249,-924,63,271,591,1000,-37,-268,94,812,1000,1000,169,-57,1000,-651,929,365,207,538,204,-890,-1000,54,313,-537,-370,-1000,415,58,565,-1000,-1000,-432,-698,-319,556,-987,1000,215,-137,862,-622,185,-774,326}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00091() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.GeneralPurposeBit", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getGeneralPurposeBit():org.apache.commons.compress.archivers.zip.GeneralPurposeBit",
+            new int[]{-6,544,1000,251,-202,-289,-486,388,1000,-469,-19,322,7,-461,-422,358,-282,-95,-716,142,-458,-19,-271,-429,-1000,29,552,-2,18,-339,-140,432,330,489,1000,772,-726,429,-196,-107,523,773,-391,-518,775,476,368,860,565,11,-255,-452,-86,952,-983,958,750,-1000,367,842,-847,-91,-353,-562}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00092() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.GeneralPurposeBit", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getGeneralPurposeBit():org.apache.commons.compress.archivers.zip.GeneralPurposeBit",
+            new int[]{-230,-936,995,1000,653,639,-542,248,-175,-416,-471,-117,-25,259,-202,775,-499,-754,-150,-447,33,-232,35,1000,25,-330,242,-372,26,410,407,233,277,135,855,1000,-285,618,-16,-541,-400,435,-332,-328,329,113,608,235,160,-898,-1000,-546,-777,460,244,-27,1000,83,-85,340,28,-481,-73,-345}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00093() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.GeneralPurposeBit", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getGeneralPurposeBit():org.apache.commons.compress.archivers.zip.GeneralPurposeBit",
+            new int[]{-747,-100,207,-834,-985,-51,-601,1000,-823,-1000,631,-696,917,-418,-1000,15,1000,811,829,303,-1000,891,1000,26,532,124,-1000,1000,1000,742,234,-572,1000,1000,86,-302,858,857,-399,-267,-1000,1000,142,481,188,-1000,1000,371,-403,-1000,-515,844,-644,-960,1000,823,1000,-155,-628,-455,-1000,-35,10,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00094() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.GeneralPurposeBit", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getGeneralPurposeBit():org.apache.commons.compress.archivers.zip.GeneralPurposeBit",
+            new int[]{-199,-757,-1000,-491,1000,555,-375,-50,-254,872,341,-887,656,741,139,227,-693,6,15,-13,428,422,1000,595,549,-146,-742,239,537,-484,326,276,378,-83,-219,-948,-491,-311,754,-412,-680,-829,-579,36,358,-1000,-838,602,-52,-495,-1000,454,240,71,90,-909,479,-40,-498,463,778,614,133,435}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00095() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.GeneralPurposeBit", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getGeneralPurposeBit():org.apache.commons.compress.archivers.zip.GeneralPurposeBit",
+            new int[]{-269,1000,1000,686,-1000,-3,243,206,1000,-1000,-331,-461,-1000,1000,-68,443,-148,-543,-882,3,-865,-92,-795,-424,-1000,18,-209,846,-542,-421,-1000,438,600,-526,953,1000,-1000,-87,985,-473,1000,1000,92,1000,144,609,-118,992,1000,-273,223,-1000,422,1000,-1000,1000,958,-1000,518,-704,-1000,290,-315,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00096() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.GeneralPurposeBit", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getGeneralPurposeBit():org.apache.commons.compress.archivers.zip.GeneralPurposeBit",
+            new int[]{-441,124,-1000,-42,-309,-983,534,-1000,577,-842,-1000,-629,-640,396,321,876,-766,657,-1000,541,-633,-951,-1000,-10,207,-722,209,-582,580,-299,-947,691,903,-1000,110,-163,-1000,223,1000,-599,60,-211,-442,1000,145,113,-1000,1000,-114,1000,769,-489,1000,1000,-462,-305,-1000,-675,677,-307,766,492,728,-653}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00097() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.GeneralPurposeBit", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getGeneralPurposeBit():org.apache.commons.compress.archivers.zip.GeneralPurposeBit",
+            new int[]{-623,1000,-933,-567,-489,-950,728,-988,1000,-259,405,-29,-321,-82,-250,-1000,-1000,846,-653,1000,-218,-255,-1000,-123,-27,-217,149,66,-224,-44,-683,676,65,-255,-170,-1000,-850,-596,768,184,992,-250,-511,609,73,489,-1000,572,-20,954,1000,-622,852,816,-728,1000,-503,-794,1,-1000,-509,902,698,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00098() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTEwMDA=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{758,-969,-24,-115,-803,937,1000,-1000,-224,661,-1000,-91,-442,-538,-45,262,562,-1000,-19,-574,-853,-730,-852,-296,406,1000,-1000,-793,-1000,466,-544,1000,913,250,-214,801,-390,-1000,627,185,1000,538,624,75,629,-1000,-172,367,875,218,-158,-51,786,-294,-771,-241,29,-769,1000,-341,-831,632,-1000,-693}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00099() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{79,1000,-824,-275,-53,451,-238,-21,-431,586,-1000,954,375,-1000,760,-713,97,678,1000,-699,768,-958,820,931,1000,1000,-422,-180,1000,318,503,579,-482,810,1000,-148,920,1000,-346,1000,907,-534,448,340,1000,-342,-959,-469,63,430,-1000,-1000,2,980,-1000,-83,-659,-888,-1000,1000,72,632,-250,-82}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00100() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{126,-485,536,741,-42,556,722,-1000,900,318,-736,-261,414,226,569,566,-872,-894,-605,-360,-639,-770,-448,-463,23,-463,-579,-103,-1000,-1000,474,-1000,1000,-315,-7,374,-61,-1000,1000,636,360,-1000,-146,1000,-763,-348,-1000,239,-258,-1000,-834,206,1000,-135,-689,43,845,482,1000,-391,-16,-36,-729,605}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00101() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{8,1000,366,-1000,510,424,992,-1000,-6,161,-472,-10,-871,-154,-440,-830,1000,-1000,816,-1000,-462,-1000,-93,102,-619,1000,-330,-1000,178,-888,558,583,652,-71,401,1000,-470,1000,689,-252,371,932,251,-921,309,464,253,975,982,-217,-890,-1000,293,-824,-125,-199,-981,-1000,144,281,379,-3,-1000,323}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00102() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{1000,1000,-522,-1000,-368,445,-106,733,-1000,631,-585,-546,-568,-1000,-981,-934,1000,570,1000,-1000,931,-597,-78,139,429,1000,1000,-1000,1000,-960,-605,1000,-917,1000,757,226,837,1000,-1000,-469,1000,1000,1000,-1000,1000,-1,-806,1000,1000,408,-182,-1000,-996,975,-1000,76,-1000,-1000,-1000,-290,-1000,931,-487,224}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00103() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MjE0NzQ4MzY0Nw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{1000,-1000,-381,-668,-1000,-116,1000,-563,-496,-274,64,-85,-661,-514,-145,303,514,-496,195,-613,-1000,833,-1000,361,-243,249,-304,-1000,-550,-1000,-1000,-170,1000,1000,-1000,1000,-1000,-891,-340,-483,1000,1000,945,-896,1000,-859,-1000,452,680,-965,1000,-217,-687,111,784,688,-827,-1000,43,-42,-1000,730,-1000,-924}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00104() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{732,871,766,1000,574,-457,-283,625,577,206,-380,-1000,169,-756,-671,-35,-1000,-44,-662,-903,885,-762,-736,-1000,-1000,-586,1000,99,439,-771,632,518,83,218,941,-14,587,196,909,-184,414,93,-508,107,45,-84,-1000,-98,131,145,-872,-929,857,97,175,-624,-425,250,-811,-576,1000,-912,1000,849}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00105() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{1000,-1000,-859,988,-475,1000,509,-926,-1000,-21,-956,1000,-413,-900,736,631,26,45,-146,-1000,179,-1000,-348,959,324,-375,1000,58,-745,-636,-1000,86,1000,1000,192,-438,254,-592,485,435,1000,-954,804,835,381,-1000,-1000,721,299,-460,2,-698,-373,325,-948,1000,-420,-949,786,-1000,-1000,-468,-1000,-236}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00106() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{-756,-680,17,789,-916,669,-704,947,77,713,627,-470,-554,-406,-551,-857,-511,582,-264,592,240,738,985,-669,686,334,-147,494,609,514,442,-419,-627,848,465,298,727,-348,-623,-420,61,268,902,404,454,-151,326,-361,326,-392,455,892,534,995,-829,-935,350,808,164,176,-73,-160,602,902}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00107() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTIxNDc0ODM2NDg=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{-498,1000,-158,-1000,717,64,537,-321,-953,569,76,808,-549,-1000,-576,-1000,1000,-66,986,-697,491,-1000,870,1000,-175,1000,28,-971,463,-1000,683,1000,-481,159,796,1000,-29,1000,53,27,1000,395,1000,-797,517,196,-286,367,755,218,-924,-1000,-639,-60,-1000,-241,-1000,-1000,-557,-257,1000,678,-1000,-179}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00108() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getInternalAttributes():int",
+            new int[]{-754,-929,-310,663,-172,-907,-273,-166,136,-756,1000,880,-131,10,-1000,717,239,-186,659,380,-1000,1000,184,324,-719,353,-627,99,439,-64,-995,536,502,322,-242,-14,-648,-78,294,-201,-702,1000,-56,93,-685,724,1000,-1000,73,385,671,1000,-149,378,-173,-718,-294,643,165,112,1000,-632,532,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00109() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Date", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLastModifiedDate():java.util.Date",
+            new int[]{-1000,179,-1000,1000,-702,730,-1000,-72,-1000,1000,-829,949,524,833,42,545,245,-1000,952,-898,-472,-353,938,525,-602,560,-539,-1000,674,960,-957,866,-268,738,-855,1000,-286,436,914,645,675,-157,89,1000,732,140,-1000,525,-566,-965,-1000,-690,-70,-1000,1000,-848,-525,719,-598,-641,-1000,82,-75,-112}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00110() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Date", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLastModifiedDate():java.util.Date",
+            new int[]{85,424,-586,-1000,1000,-1000,604,-863,792,1000,-75,877,-711,-704,-517,-717,-568,682,-731,401,232,-914,-1000,535,1000,-1000,-412,-1000,-1000,-1000,1000,-19,-72,276,-389,-451,640,-805,998,-331,1000,-79,-231,851,-1000,632,-225,-207,-960,-384,337,-891,-522,-542,543,1000,628,456,-711,1000,568,933,502,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00111() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Date", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLastModifiedDate():java.util.Date",
+            new int[]{-956,76,-586,88,-465,-110,69,149,-1000,299,-621,368,511,62,1000,20,813,-318,175,-530,-259,355,-88,316,555,231,-280,400,261,314,-911,506,133,323,-1000,118,406,-207,-98,-218,542,159,-70,911,199,439,-819,-66,-422,-1000,417,-172,651,-812,-29,-385,-75,623,-88,-231,-50,267,-732,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00112() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Date", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLastModifiedDate():java.util.Date",
+            new int[]{105,355,-905,-1000,1000,-196,753,-820,1000,-1000,-583,-700,925,-1000,233,-580,127,-460,-1000,133,484,-1000,-1000,147,854,-1000,949,-1000,-938,-1000,697,-812,855,-1000,269,-281,77,-1000,794,-1000,-423,292,-1000,-549,400,975,1000,-411,-383,98,-1000,-389,-892,605,-1000,546,409,-298,-353,1000,93,502,499,-348}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00113() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Date", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLastModifiedDate():java.util.Date",
+            new int[]{-906,-1000,270,-952,1000,-87,1000,262,-600,-421,357,-767,909,-1000,-973,-646,1000,-206,-1000,388,-110,-953,938,-179,1000,-248,-1000,-448,-1000,-754,-313,727,630,118,-855,-1000,-111,-197,914,-1000,472,-144,-462,-831,732,-890,-632,551,247,16,-1000,-1000,-245,-341,-1000,-848,696,633,847,-117,-354,43,-75,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00114() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Date", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLastModifiedDate():java.util.Date",
+            new int[]{502,-861,-1000,1000,-944,-1000,607,89,-1000,-1000,-19,564,753,-1000,799,230,1000,-937,-676,-464,-380,1000,1000,-1000,-391,-330,-852,-921,-42,966,-1000,-657,1000,360,1000,-675,1000,652,-164,-17,172,-1000,-769,-1000,-928,-294,1000,-406,898,-1000,-1000,837,-224,-1000,-352,-1000,389,99,-335,385,-1000,353,-147,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00115() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Date", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLastModifiedDate():java.util.Date",
+            new int[]{-534,-320,-1000,-551,579,372,-556,-898,884,-1000,-850,75,1000,-761,614,-1000,-271,-1000,-589,-811,449,-353,-940,622,241,-889,715,-1000,266,-1000,366,43,425,-1000,-897,56,-286,-584,914,-59,-108,-372,-1000,-49,-730,1000,728,-604,-1000,-326,-1000,-398,-433,-120,-1000,795,-139,-415,-659,-319,-1000,82,-350,-437}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00116() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Date", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLastModifiedDate():java.util.Date",
+            new int[]{149,1000,-1000,-1000,1000,-615,164,-641,984,-256,-1000,269,521,-1000,-383,400,-4,388,-610,23,-87,-1000,-1000,138,58,-969,398,-1000,-998,-1000,239,-708,997,-1000,292,629,534,-1000,205,-804,546,536,-1000,96,-1000,1000,750,156,-1000,-130,-167,-349,-849,-385,-1000,185,411,522,-992,964,240,804,797,-834}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00117() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Date", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLastModifiedDate():java.util.Date",
+            new int[]{333,48,-1000,-1000,1000,-615,-319,-773,1000,-956,-492,699,256,-1000,-330,-227,-704,117,197,437,-269,-661,-1000,412,-748,-1000,878,-1000,-989,-1000,1000,-1000,838,-1000,232,81,548,-1000,582,-700,546,361,-1000,-1000,-1000,1000,1000,-350,-1000,-17,-867,-328,-597,281,-1000,816,573,-42,-1000,1000,207,669,364,-953}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00118() {
+        org.junit.Assert.assertEquals("TYPE:java.util.Date", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLastModifiedDate():java.util.Date",
+            new int[]{-674,-400,-706,400,-282,-189,-269,-43,-1000,984,-205,436,-619,1000,-643,281,1000,-324,388,1,-105,1000,518,144,113,1000,-428,513,202,540,-185,303,-871,376,-1000,375,362,920,-928,137,1000,368,-56,232,347,-162,-471,48,-152,-1000,1000,-500,1000,-765,660,-580,78,410,-598,-204,197,173,1000,471}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00119() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:LTE=:19:java.lang.Byte:LTE=:19:java.lang.Byte:MQ==:19:java.lang.Byte:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLocalFileDataExtra():byte[]",
+            new int[]{-739,484,940,103,663,-695,249,-1000,-129,-511,645,-389,-332,-1000,-1000,70,-394,-956,253,907,-322,88,208,515,-928,-741,1000,-730,-133,-983,-1000,1000,-1000,-324,768,-1000,-1000,-1000,-570,-700,-252,-1000,1000,-427,883,-1000,1000,-897,-826,378,-581,419,-1000,-701,1000,977,1000,401,824,56,-478,390,-899,84}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00120() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLocalFileDataExtra():byte[]",
+            new int[]{1000,351,531,399,559,1000,354,-677,479,-1000,435,429,294,207,1000,1000,316,-247,-1000,673,548,-363,-1000,-463,-1000,366,-400,251,632,400,-923,916,-316,416,-771,1000,83,-538,-510,-1000,462,621,209,-715,280,1000,-1000,325,-1000,127,1000,-187,-398,-849,-1000,134,-280,982,246,-1000,1000,-82,1000,808}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00121() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLocalFileDataExtra():byte[]",
+            new int[]{1000,-940,-1000,1000,758,-194,139,569,-390,-1000,1000,44,-1000,971,59,216,1000,-333,-504,-987,-691,-1000,518,251,1000,-1000,994,-1000,-1000,1000,1000,841,-1000,-1000,-1000,-852,1000,1000,255,782,469,-839,-1000,1000,-263,1000,-689,1000,-1000,-378,-481,-1000,-760,1000,-1000,-1000,1000,1000,-1000,1000,-1000,-1000,1000,-571}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00122() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:LTE=:19:java.lang.Byte:LTE=:19:java.lang.Byte:MTAw:19:java.lang.Byte:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLocalFileDataExtra():byte[]",
+            new int[]{-1000,484,350,714,-349,-297,957,101,163,-511,-122,-389,-578,-1000,-518,720,-394,340,-74,-494,-322,666,221,1000,-350,-265,1000,-65,-416,-1000,-701,750,287,-29,142,-1000,-1000,-1000,-480,1000,-252,-1000,1000,-499,1000,-888,1000,-925,-277,922,-182,453,-1000,-339,1000,225,1000,-595,633,-604,549,668,-744,388}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00123() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLocalFileDataExtra():byte[]",
+            new int[]{1000,-313,839,705,73,-929,557,-1000,1000,-1000,-218,671,-1000,1000,-791,1000,1000,-1000,247,98,73,-1000,1000,-1000,-1000,-1000,-374,-1000,-255,113,-14,1000,-755,-1000,1000,-609,-828,-1000,-458,-647,1000,-549,1000,-1000,1000,-1000,-1000,-1000,-451,-163,350,-894,1000,-1000,-1000,1000,-1000,1000,-1000,-513,-1000,546,-800,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00124() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLocalFileDataExtra():byte[]",
+            new int[]{-33,1000,23,308,1000,-111,73,-549,-788,-1000,543,-506,-497,-888,-530,70,741,-670,874,986,52,-266,635,-108,822,-1000,313,-1000,176,118,-689,721,-1000,-677,452,89,-277,-574,121,-86,-747,-1000,-134,-23,573,-180,-220,1000,-1000,549,-1000,-95,-400,-861,-521,427,355,149,249,-726,-618,-61,-154,-938}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00125() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLocalFileDataExtra():byte[]",
+            new int[]{-220,39,91,372,831,-934,188,-956,-78,-336,676,506,-724,83,59,349,91,-841,165,335,-964,-891,1000,661,210,-1000,400,-936,-577,-406,-542,1000,-886,-927,237,-1000,-729,-323,-699,-172,-90,-1000,-193,26,727,359,1000,-34,-1000,-218,-1000,-262,-1000,-488,400,337,-977,146,277,313,-1000,-27,-329,-681}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00126() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLocalFileDataExtra():byte[]",
+            new int[]{1000,1000,-823,1000,1000,-442,582,-904,-1000,-699,955,-836,-705,294,-1000,894,1000,-723,-352,-246,-1000,-1000,1000,-1000,1000,-1000,-1000,-942,-1000,1000,65,736,-121,-1000,-268,-271,1000,212,299,304,679,-1000,-1000,562,312,1000,-79,925,-1000,321,-1000,-278,654,-139,-1000,-1000,-971,1000,-764,722,-1000,-1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00127() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLocalFileDataExtra():byte[]",
+            new int[]{935,-1000,-1000,1000,92,-997,309,676,-882,-104,1000,-53,-1000,971,-485,1000,1000,-334,52,-1000,-1000,-1000,842,362,1000,590,-1000,-1000,-1000,1000,1000,441,426,-1000,1000,-1000,1000,-1000,255,865,429,-1000,-1000,1000,-12,1000,-144,1000,-1000,-167,-1000,-295,400,1000,-1000,-1000,-1000,872,-1000,1000,-825,-1000,550,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00128() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getLocalFileDataExtra():byte[]",
+            new int[]{482,1000,693,291,-468,409,73,-983,375,-353,313,513,-424,-378,-15,70,-370,105,-324,986,832,-510,53,1000,-158,-317,689,143,-223,-531,-373,999,-1,-171,452,-206,-74,511,-444,77,166,157,-64,-565,325,-142,-7,-347,-1000,4,8,-95,-337,-461,-521,315,124,-355,249,-390,-618,579,-124,49}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00129() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getMethod():int",
+            new int[]{-590,1000,-60,494,-1000,444,766,-481,-1000,818,288,1000,-788,-1000,-495,651,-678,-188,954,-447,-103,-291,844,587,-226,580,100,-463,1000,-769,577,-648,253,-1000,-733,-142,-653,-1000,1000,592,-1000,-319,125,-1000,1000,382,953,321,-1000,276,-1000,-1000,-394,436,-60,-316,-21,478,-731,-355,798,325,736,348}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00130() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getMethod():int",
+            new int[]{240,143,-1000,297,-928,37,212,857,303,864,620,-91,-43,748,658,210,-1000,391,-200,-1000,-1000,572,-1000,964,-426,47,-524,-445,-665,312,-606,293,273,-222,476,20,-674,1000,1000,-1000,-812,-1000,-198,469,-336,-270,400,-1000,1000,-165,-1000,879,304,-304,-802,1000,462,764,545,1000,1000,377,1000,699}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00131() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getMethod():int",
+            new int[]{272,968,-473,496,-1000,-626,1000,-143,-800,400,403,400,-364,399,-774,60,-400,-584,965,-641,-428,702,-677,587,329,-1000,-1000,-985,795,-540,-719,1000,616,-20,-378,-453,-899,1000,433,-906,-340,-987,-365,-79,-884,352,333,-385,424,710,-400,111,-574,354,1000,-493,-81,-663,-245,439,-270,176,833,520}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00132() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getMethod():int",
+            new int[]{1000,-933,-881,1000,596,-236,-336,1000,974,-1000,1000,-1000,571,-1000,370,634,720,-1000,1000,-509,-346,-101,-109,-1000,-104,-333,389,-1000,-268,661,54,474,181,712,807,177,89,1000,-1000,-1000,1000,-1000,-846,893,-1000,-893,-1000,-529,1000,-207,1000,915,553,-645,77,81,65,-468,1000,-1000,252,377,1000,929}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00133() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getMethod():int",
+            new int[]{-272,-301,-526,896,-20,-928,1000,1000,298,176,708,40,960,-352,1000,434,-231,-586,1000,-297,-341,575,16,-323,-406,1000,-650,-601,313,504,122,714,269,-1000,-144,132,-866,1000,444,-865,-389,-981,365,210,-1000,-385,-1000,-1000,177,-170,216,-22,915,-979,1000,9,-251,464,732,-114,476,464,799,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00134() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getMethod():int",
+            new int[]{1000,1000,-873,48,-72,-56,-208,-535,528,-528,-272,-770,51,-327,-242,1000,29,160,-460,-1000,-294,919,23,-869,-258,-1000,694,-15,311,-1000,354,-459,590,-400,-1000,425,-1000,1000,-886,-721,449,-27,-1000,57,-679,369,642,-432,916,526,821,-912,-960,669,560,87,473,657,1000,-964,1000,308,1000,419}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00135() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getMethod():int",
+            new int[]{1000,-432,-804,1000,-718,-928,954,-127,600,-1000,787,-1000,501,417,-774,1000,369,-1000,1000,-297,-1000,1000,-596,-813,-559,-1000,-1000,-1000,-605,60,-74,263,269,-1000,-144,-9,-866,1000,-837,-1000,951,-1000,-1000,815,-884,-219,-612,-385,1000,394,1000,827,-659,142,1000,-45,-251,1000,257,-948,1000,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00136() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getMethod():int",
+            new int[]{-1000,-1000,-1000,614,-372,-841,-177,941,668,-1000,1000,-1000,-241,970,911,-796,-564,-1000,-1000,-447,-19,1000,35,554,364,-1000,-660,-1000,298,890,-285,1000,-896,428,234,-184,1000,1000,819,-1000,1000,-973,750,775,-919,-653,-442,-1000,1000,902,64,532,718,-1000,1000,1000,157,59,-1000,893,1000,280,313,992}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00137() {
+        org.junit.Assert.assertEquals("java.lang.Integer:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getMethod():int",
+            new int[]{-1000,1000,317,-1000,483,489,-1000,1000,-380,-718,138,-41,-1000,1000,1000,107,-1000,1000,-567,-295,1000,280,871,269,1000,-1000,1000,1000,-129,-173,-1000,728,676,1000,208,-1000,1000,1000,-1000,8,1000,685,825,-838,-1000,-333,719,-991,1000,1000,-997,493,1000,-8,1000,-622,1000,263,-141,451,-391,-1000,1000,162}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00138() {
+        org.junit.Assert.assertEquals("java.lang.String:", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getName():java.lang.String",
+            new int[]{-1000,719,-244,-1000,-1000,262,-49,785,218,-311,976,-599,1000,-782,1000,-1000,-136,341,695,1000,1000,-833,-1000,-355,363,393,37,-244,-507,-270,355,167,-236,457,-541,358,234,-104,-1000,1000,784,267,80,-222,-516,-323,1000,879,-300,-1000,382,99,-820,-1000,-580,-963,315,180,8,-535,-196,284,1000,484}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00139() {
+        org.junit.Assert.assertEquals("java.lang.String:LTB4OA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getName():java.lang.String",
+            new int[]{-357,-1000,1000,-406,-719,-1000,137,-122,-714,-148,950,1000,-1000,-1000,260,-1000,918,1000,1000,425,-919,-852,-324,-92,-522,-287,-89,-467,53,22,369,-197,-1000,-1000,-301,-854,-974,-1000,-829,789,-1000,-616,400,-669,-1000,374,379,-1000,-210,-686,-92,-986,245,-887,-1000,-1000,204,-803,-281,-927,-239,-1000,237,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00140() {
+        org.junit.Assert.assertEquals("java.lang.String:KzB4ODAwMDA=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getName():java.lang.String",
+            new int[]{458,959,-96,-1000,-1000,-1000,194,1000,573,38,-496,-641,0,961,-300,-902,-256,-1000,-388,243,382,-1000,-51,-1000,877,1000,1000,603,1000,277,-178,443,-910,251,-95,900,-1000,473,1000,460,-296,1000,1000,1000,640,236,213,-1000,-676,-673,562,-353,-1000,-1000,373,280,-573,0,-1000,-1000,475,-35,-1000,672}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00141() {
+        org.junit.Assert.assertEquals("java.lang.String:L3FUXA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getName():java.lang.String",
+            new int[]{-23,959,-772,-778,-643,-603,-409,237,12,38,-496,-501,523,552,-145,-786,-256,-618,-590,43,543,-913,-105,-587,828,332,698,20,266,484,-149,127,-555,39,158,1000,-802,609,854,586,207,347,-241,281,1000,-67,441,-663,-174,-74,28,260,-699,-303,306,668,-401,738,-1000,-82,475,661,-249,-116}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00142() {
+        org.junit.Assert.assertEquals("java.lang.String:KzB4Yjk=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getName():java.lang.String",
+            new int[]{783,515,-553,-814,-803,-426,-15,-384,-436,887,185,198,419,149,332,-455,441,199,-205,161,549,-684,-478,68,569,-89,-72,-172,-115,-132,448,-289,-356,-144,-28,565,465,463,-298,679,-368,-261,162,-752,-62,-187,587,-75,36,-747,-581,-67,-290,519,-706,-227,22,275,-120,-111,78,276,681,337}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00143() {
+        org.junit.Assert.assertEquals("java.lang.String:Ni5PX19Ldmdfeks2OF9fX09lU19oXzZS", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getName():java.lang.String",
+            new int[]{542,163,-414,521,366,-1000,-444,-1000,-913,1000,1000,774,1000,-788,-163,-1000,-1000,259,244,-552,-1000,390,-380,1000,363,-1000,-1000,-1000,902,-270,-585,-1000,372,-1000,1000,195,129,778,-1000,976,837,-1000,1000,-794,-1000,-323,-218,-474,625,368,-1000,-547,-280,-414,586,-505,1000,1000,-197,-114,79,1000,172,273}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00144() {
+        org.junit.Assert.assertEquals("java.lang.String:KzB4ODAwMDAwMDAwMDAwMDA=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getName():java.lang.String",
+            new int[]{-570,764,-1000,82,-246,-47,68,382,917,128,1000,-960,665,-20,342,-1000,-761,-430,783,1000,1000,742,-1000,-1000,-219,419,357,-769,-106,-696,49,679,-19,697,-1000,330,1000,-532,-702,1000,1000,-876,743,-353,85,68,1000,814,-48,440,-178,1000,-939,-1000,-536,-1000,-656,1000,291,548,566,1000,108,-180}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00145() {
+        org.junit.Assert.assertEquals("java.lang.String:Nl9QREFfXysteWxQN18yd19TXw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getName():java.lang.String",
+            new int[]{123,-197,256,391,-179,-366,-370,695,693,544,1000,-1000,477,-600,36,-1000,-1000,-364,347,602,21,-91,-632,-1000,144,387,-1000,-230,207,-587,-1000,-504,926,-48,-1000,-243,-737,-475,626,774,1000,184,-69,1000,-1000,322,563,810,461,590,1000,80,-587,-1000,1000,-24,229,1000,353,-238,-88,1000,-985,-188}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00146() {
+        org.junit.Assert.assertEquals("java.lang.String:LTB4ODAwMDAwMDAwMDAwMDAwMDAwMA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getName():java.lang.String",
+            new int[]{-622,712,-424,-654,-803,-522,-248,-929,218,-65,-589,821,-223,-295,376,273,818,410,-1000,-432,273,-1000,-244,917,363,-568,-881,117,-100,814,741,-705,-236,-851,768,1000,232,1000,-1000,542,-1000,243,435,-1000,509,-323,786,879,274,-1000,-587,542,-820,322,-179,-122,37,-594,-498,-386,535,-193,1000,698}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00147() {
+        org.junit.Assert.assertEquals("java.lang.Integer:Mw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getPlatform():int",
+            new int[]{618,195,-838,-1000,-392,-753,612,-1000,-1000,-776,-585,-831,-6,389,-248,-901,136,998,701,-206,146,-1000,-959,278,1000,-11,-225,-816,1000,-1000,212,772,1000,755,-956,1000,-464,-339,-165,958,33,1000,403,-1000,-1000,746,-644,97,-273,1000,-862,608,-1000,211,490,-785,837,-143,-105,-1000,-201,-1000,-1000,57}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00148() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getPlatform():int",
+            new int[]{56,-385,-564,-1000,-657,-788,-548,-936,-871,753,-1000,74,311,177,845,319,154,-730,1000,-1000,1000,-366,-577,-566,647,-11,357,174,808,-1000,249,480,222,1000,-571,740,-429,98,496,376,1000,1000,-266,-1000,-798,367,-650,769,-1000,1000,-1000,1000,-520,81,509,-785,1000,3,-278,-83,791,-1000,-803,-922}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00149() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getPlatform():int",
+            new int[]{1000,319,1000,-365,340,-741,234,1000,-605,-626,168,-837,-591,506,895,-523,519,1000,706,1000,1000,1000,1000,-462,-154,1000,186,518,-223,705,672,-1000,925,-1000,-274,336,-259,270,-1000,1000,-958,918,814,287,-561,-1000,1000,-1000,-1000,-1000,1000,-1000,-1000,51,1000,-125,-389,1000,-1000,-1000,-842,174,-609,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00150() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getPlatform():int",
+            new int[]{-2,-340,-1000,-1000,-1000,-753,539,-132,-1000,-398,-382,-356,278,-88,-248,366,276,1000,613,-206,179,-745,-880,-108,1000,993,-1000,-434,-72,-1000,-321,266,1000,128,-824,1000,-398,-1000,-1000,957,-672,992,321,-1000,-1000,271,-102,812,-159,289,-425,608,-1000,-292,-400,-785,789,-700,-51,-893,478,-1000,-859,57}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00151() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getPlatform():int",
+            new int[]{1000,867,-533,-20,-727,-1000,-788,-124,-601,624,-211,139,-551,-637,-182,-428,770,1000,1000,-408,1000,339,-366,-516,193,-291,-650,584,226,-47,891,17,59,-148,296,-263,-89,275,659,-22,-507,9,136,-185,-182,-654,-113,303,-217,-119,-360,421,-321,299,1000,-634,1000,1000,-1000,-947,1000,14,-210,-838}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00152() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getPlatform():int",
+            new int[]{499,-1000,824,-365,451,-423,263,708,-467,-622,-278,-803,-932,571,895,-665,-881,1000,304,620,716,561,908,-361,-439,805,400,-90,200,1000,1000,-646,691,-264,-274,351,-154,903,50,931,-1000,870,402,612,-561,-742,633,-689,-580,-283,132,-440,-1000,134,440,-712,-600,384,-776,-749,-814,332,-847,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00153() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getPlatform():int",
+            new int[]{196,-1000,518,-365,-766,-1000,349,670,-605,-431,-290,-328,-1000,748,-477,546,-881,1000,1000,13,1000,497,1000,-666,174,1000,-1000,-94,-1000,468,1000,-646,1000,-560,-274,539,-259,315,-1000,1000,-1000,1000,1000,139,-561,-1000,1000,400,-417,-1000,480,-20,-1000,-431,20,1000,-550,1000,-1000,-1000,-150,-331,-853,765}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00154() {
+        org.junit.Assert.assertEquals("java.lang.Integer:Mw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getPlatform():int",
+            new int[]{-41,-448,-413,-1000,740,-176,-708,-400,-716,-270,734,-829,-647,747,1000,-996,-1000,-194,6,458,-291,-165,539,400,34,467,1000,-943,715,-214,386,400,559,872,-1000,448,-850,68,1000,670,-1000,647,145,-325,-1000,400,-356,-556,-1000,400,-216,400,-1000,326,-400,-634,-150,-293,400,-642,-245,46,-991,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00155() {
+        org.junit.Assert.assertEquals("java.lang.Integer:Mw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getPlatform():int",
+            new int[]{257,1000,-1000,-1000,-660,-1000,219,-400,-1000,-334,-674,-355,-235,95,1000,-682,-23,999,954,458,393,-466,-154,-167,1000,576,200,-475,-217,-1000,255,1000,1000,253,-846,1000,-821,-688,-387,929,-1000,826,870,-1000,-1000,95,-356,160,-224,-17,-236,400,-1000,-268,36,596,538,483,-298,-231,377,-1000,-855,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00156() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getPlatform():int",
+            new int[]{1000,-365,-1000,630,488,-75,-846,734,757,748,189,1000,-501,-45,-1000,1000,1000,-585,1000,-1000,1000,1000,930,-1000,28,-562,962,1000,-1000,-397,588,-1000,-167,985,-1000,-706,-1000,1000,986,818,604,-1000,1000,173,-457,-1000,-168,1000,148,-735,1000,758,869,-447,1000,-554,875,1000,-1000,-485,936,-263,-502,-159}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00157() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getRawName():byte[]",
+            new int[]{1000,1000,-1000,-590,311,1000,-331,829,1000,1000,-480,-547,-761,770,-1000,-84,-1000,463,-250,-998,-1000,874,-920,203,-1000,-592,227,585,-348,-561,-1000,1000,-1000,-1000,-1000,-1000,-1000,-830,-232,-937,680,951,-1000,444,847,-1000,-883,-304,722,-1000,-447,-1000,871,570,53,-342,-2,-1000,361,-1000,170,261,-626,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00158() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getRawName():byte[]",
+            new int[]{834,295,-393,-317,669,-820,109,-61,162,989,-200,-123,176,678,35,395,-202,284,570,-698,-660,28,79,1000,458,-678,359,-412,-608,67,-155,539,-1000,-400,-276,-341,1000,-991,114,-1000,-99,881,-1000,-138,737,-70,133,-818,1000,-548,-1000,-57,-563,918,-725,-739,-619,-662,-255,-737,146,49,-331,-133}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00159() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getRawName():byte[]",
+            new int[]{133,1000,888,-939,1000,1000,119,-765,-134,336,-344,-147,1000,865,833,496,193,434,-1000,-252,-276,-1000,506,-488,-88,880,181,683,37,-1000,213,-331,86,1000,144,-886,-434,508,1000,-1000,-1000,1000,264,-1000,-53,524,64,798,-415,-827,617,277,-1000,623,96,57,476,340,-86,234,452,-1000,-520,-609}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00160() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getRawName():byte[]",
+            new int[]{-199,739,1000,-339,101,-171,-61,-1000,-582,1000,-562,-1000,276,1000,810,-13,233,-1000,224,-437,657,-301,710,-969,544,-1000,-220,326,554,-305,1000,-812,702,-591,-1000,22,-584,-782,1000,189,-778,1000,504,-286,-1000,105,6,-558,545,24,-330,1000,-984,-183,212,-421,-233,1000,-1000,1000,-1000,-10,-1000,-405}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00161() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getRawName():byte[]",
+            new int[]{-808,627,888,-939,786,-168,749,-499,-741,313,-794,-147,-212,1000,-4,1000,543,983,-677,-569,1000,1000,-721,-297,-95,347,932,372,-248,-202,-240,-413,541,1000,-163,-513,-423,427,892,-74,-1000,427,914,-345,-777,960,-807,741,190,-917,179,560,-1000,1000,96,-549,1000,347,-86,357,1000,-476,-520,-432}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00162() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getRawName():byte[]",
+            new int[]{394,-1000,-1000,-766,-269,474,684,885,128,949,-221,-524,13,949,63,-166,-1000,-270,-216,-905,-1000,1000,-1000,338,200,41,-571,-413,172,-470,-1000,1000,-960,-1000,-1000,-1000,230,-1000,-210,-1000,412,997,-688,731,1000,-1000,-353,-155,-345,-1000,86,953,-398,786,681,-862,-624,-1000,849,-684,1000,-239,-227,174}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00163() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getRawName():byte[]",
+            new int[]{-143,848,380,-802,103,-520,618,668,-1000,-187,272,-1000,-1000,1000,-662,1000,490,509,-20,-484,542,383,-580,-1000,93,-142,100,1000,-386,-104,-818,-774,1000,18,-641,-620,-427,-44,356,-194,-714,23,339,-400,-1000,900,305,86,-617,-113,143,996,-303,640,663,-781,736,273,-1000,762,997,809,350,-802}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00164() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getRawName():byte[]",
+            new int[]{1000,1000,1000,574,1000,-1000,-153,-256,-285,1000,872,-214,-334,359,614,155,841,197,383,-252,730,-1000,1000,818,1000,-410,816,-699,-1000,-360,749,-1000,86,-1000,-756,-383,1000,1000,1000,1000,-203,171,-1000,-1000,-547,700,1000,-1000,861,240,-1000,1000,1000,1000,-123,-903,39,490,-941,234,-1000,-44,-634,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00165() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getRawName():byte[]",
+            new int[]{86,-353,20,-527,542,607,-932,-686,770,530,-833,-284,846,-383,646,-909,264,-446,330,-241,-840,159,312,1000,270,-264,-879,-671,385,-847,16,287,-877,787,409,163,640,149,635,533,602,769,-924,-81,1000,781,-504,171,416,-775,-509,-933,-745,177,-1000,-374,-232,44,-1000,-1000,-703,-639,-128,664}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00166() {
+        org.junit.Assert.assertEquals("java.lang.Long:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getSize():long",
+            new int[]{-1000,-49,1000,-1000,-1000,459,-384,-793,-1000,1000,-922,-378,-17,868,-507,560,338,-320,542,1000,-1000,442,-1000,32,-585,1000,808,-92,211,479,-55,1000,-1000,307,-273,-1000,-168,1000,1000,554,-298,7,101,-585,-204,-511,1000,-1000,1000,1000,-1000,897,655,-1000,1000,1000,-104,956,131,-745,705,-522,-742,-717}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00167() {
+        org.junit.Assert.assertEquals("java.lang.Long:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getSize():long",
+            new int[]{1000,860,-905,-654,235,-177,947,646,1000,-1000,-47,520,264,-494,-344,849,-133,551,-1000,-1000,943,-220,-212,-956,739,-268,410,1000,806,1000,-15,-1000,1000,-1000,664,-66,882,-1000,-1000,-650,1000,-453,-1000,1000,-248,1000,-687,-1000,-341,-1000,19,-1000,-404,1000,-1000,-1000,-227,-1000,287,-620,-1000,-478,820,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00168() {
+        org.junit.Assert.assertEquals("java.lang.Long:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getSize():long",
+            new int[]{-739,-49,1000,-6,-1000,772,-474,-1000,-884,-1000,-281,-564,-717,-1000,-216,503,325,-320,353,561,-872,442,-355,-174,-1000,835,808,577,431,-167,-281,987,931,-1000,-38,-542,-168,315,497,-178,-639,314,-75,-152,-687,-528,236,-914,-147,1000,-861,1000,676,-497,1000,1000,-52,956,-341,-570,705,-877,-742,-613}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00169() {
+        org.junit.Assert.assertEquals("java.lang.Long:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getSize():long",
+            new int[]{-103,411,-16,-389,1000,-666,33,297,-1000,-215,280,-761,1000,-944,756,247,-914,29,33,345,-395,442,-1000,414,1000,755,-1000,-812,-610,166,1000,-982,748,-225,-524,-999,-105,286,-111,302,-228,-20,-852,-461,787,657,267,877,315,-456,249,46,-1000,439,-605,-1000,502,-694,-210,-264,-403,-702,-452,730}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00170() {
+        org.junit.Assert.assertEquals("java.lang.Long:MjE0NzQ4MzY0Nw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getSize():long",
+            new int[]{-513,524,391,-605,19,-431,-251,-424,1000,-405,44,431,-602,974,-735,791,-45,-11,-558,603,100,495,269,-928,497,519,690,1000,-66,625,404,727,-872,315,471,43,109,-1000,-271,293,486,56,-74,-39,381,-496,572,1000,-689,-574,435,54,-16,112,167,-49,347,-17,-373,-944,-499,-637,-247,61}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00171() {
+        org.junit.Assert.assertEquals("java.lang.Long:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getSize():long",
+            new int[]{526,779,1000,-653,50,644,319,1000,-1000,121,-526,-398,848,1000,-1000,1000,1000,1000,-234,1000,444,1000,-1000,-52,1000,1000,235,3,276,1000,-330,-291,440,-662,494,-1000,1000,1000,-648,422,-902,-1000,460,13,-281,949,1000,-16,-1000,-1000,-126,-810,-335,121,-1000,-750,-1000,1000,485,-1000,-960,-452,1000,787}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00172() {
+        org.junit.Assert.assertEquals("java.lang.Long:LTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getSize():long",
+            new int[]{-474,1000,555,-1000,1000,247,723,514,-148,-1000,1000,-1000,-695,-391,400,607,-1000,227,1000,623,1000,1000,-1000,-381,-61,868,-33,596,714,513,627,-610,26,834,-401,-484,220,650,-531,-1000,-1000,400,-450,-707,-560,486,-340,837,841,-918,400,-50,-528,1000,167,-1000,384,1000,101,-567,-423,-1000,289,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00173() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnixMode():int",
+            new int[]{237,-569,834,-415,1000,-815,46,633,-1000,1000,-1000,963,-636,136,-901,1000,67,-986,782,575,17,-1000,926,-1000,1000,-995,-585,-1000,1000,772,120,592,344,1000,71,-673,502,-1000,254,-1000,919,23,345,-594,669,70,892,1000,-554,152,-750,-770,-211,590,834,552,527,-926,602,44,43,430,449,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00174() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnixMode():int",
+            new int[]{-151,-432,134,-145,486,270,508,294,969,-190,94,765,1000,-563,-42,862,-878,823,231,350,240,-617,927,1000,1000,398,217,-449,-436,-1000,558,834,412,-203,-1000,-1000,-405,166,531,1000,-388,1000,182,1000,1000,-382,-92,517,-343,-1000,691,-619,684,-104,927,-179,-1000,-642,-85,-458,545,-303,-790,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00175() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnixMode():int",
+            new int[]{-366,-249,418,-1000,613,736,686,737,926,-1000,-164,-1000,-19,-575,990,1000,-17,316,67,-788,1000,1000,1000,1000,865,-184,-1000,-672,-1000,127,1000,253,77,-378,-1000,-216,-1000,819,1000,1000,418,806,-748,722,500,-1000,1000,1000,-1000,-374,-586,763,1000,1000,949,305,-951,-297,-202,11,-58,1000,-94,753}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00176() {
+        org.junit.Assert.assertEquals("java.lang.Integer:NjU1MzU=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnixMode():int",
+            new int[]{171,-292,-1000,170,643,90,-466,871,450,-54,-260,1000,-64,181,-1000,285,-211,-286,255,392,-178,-840,-313,-115,319,-69,-622,-360,400,-871,1000,-110,502,-677,-467,45,862,613,1000,1000,620,688,590,1000,382,-499,847,546,-1000,53,406,-393,187,-222,-102,-572,-709,-1000,1000,-91,-666,1000,155,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00177() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnixMode():int",
+            new int[]{87,495,316,853,-392,601,-673,152,151,-647,-511,-652,752,-597,-935,-915,685,-94,-214,-174,287,648,-888,727,-849,312,-163,743,-237,-503,-766,-856,785,753,120,-487,949,515,-11,250,-232,-383,-333,-380,-845,-183,-191,469,409,-357,17,877,45,-189,-644,212,-582,414,586,-673,-740,-833,-403,958}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00178() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnixMode():int",
+            new int[]{196,211,659,-607,0,0,-623,-596,0,-1000,196,-422,322,-337,-764,964,1000,-609,-325,183,343,-1000,447,-369,0,-1000,614,797,-1000,-1000,161,248,-146,-1000,-112,652,468,-833,-1000,-153,-1000,0,0,92,285,0,0,-588,-127,425,-390,-3,-335,-15,16,1000,-255,-659,-35,503,-565,-1000,1000,915}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00179() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnixMode():int",
+            new int[]{1000,-1000,1000,-533,1000,-541,759,589,-1000,400,-838,1000,-653,-189,186,-535,-692,-573,689,1000,312,-547,402,-128,1000,-475,21,647,1000,-522,384,-241,66,122,801,-446,-252,-1000,-152,-64,-592,-1000,1000,-111,985,446,924,-448,-349,505,-345,-437,152,291,1000,833,1000,-1000,1000,-673,105,-814,44,51}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00180() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnixMode():int",
+            new int[]{-285,-744,719,-844,1000,-694,809,930,-1000,1000,-663,963,-636,-110,368,805,-128,-986,661,575,-923,-982,1000,-1000,1000,-951,-492,18,613,649,-714,1000,-196,528,71,-1000,502,-1000,227,-442,919,973,147,-438,1000,371,-342,933,260,125,-91,-1000,-677,-99,1000,849,407,-488,66,-74,1000,-862,-781,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00181() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnixMode():int",
+            new int[]{-366,-1000,540,-1000,1000,-304,89,737,-106,-1000,-1000,552,-628,736,-597,833,-17,372,1000,289,958,-428,878,1000,-292,-1000,-1000,-672,294,-1000,1000,-260,650,-270,-720,59,-1000,1000,1000,1000,1000,1000,-100,734,265,-205,1000,-86,-1000,-1000,-770,-529,556,1,626,305,-1000,-640,1000,11,-921,1000,427,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00182() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnixMode():int",
+            new int[]{-303,-704,-172,-1000,613,-41,315,351,37,-1000,-109,-1000,-333,-692,535,247,-68,-44,67,-382,456,1000,1000,922,-1000,-987,146,-672,-1000,127,-372,211,77,-140,-226,-258,-604,807,675,528,484,1000,-903,47,523,-689,-400,-313,400,262,-911,751,480,328,-426,1000,-1000,1000,-528,667,112,225,403,801}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00183() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{529,840,1000,737,89,1000,534,-636,-169,150,1000,949,1000,740,-396,535,78,-1000,109,-474,-1000,430,837,149,918,578,286,-79,776,1000,940,76,83,194,76,-499,-554,-1000,1000,-648,-202,-944,896,316,-948,1000,42,1000,245,-1000,1000,1000,611,49,1000,1000,752,726,-621,302,-61,601,-715,503}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00184() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{1000,-436,1000,1000,-1000,302,-301,-326,-64,1000,267,-387,-940,-227,220,-728,-288,-914,1000,559,-281,1000,1000,-1000,790,1000,1000,424,-931,-79,712,1000,-1000,1000,281,-144,-1000,-1000,-223,-1000,572,1000,-599,476,-405,1000,538,-721,264,-691,-1000,626,1000,-1000,465,306,841,528,-538,-178,-873,-618,-1000,-325}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00185() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{29,747,775,291,-606,-852,-258,1000,339,351,174,985,-17,120,419,-126,-320,957,275,254,323,767,652,524,-730,46,-614,1000,-467,1000,-952,-448,97,145,1000,-188,1000,-67,-266,-894,400,-391,198,520,-316,-38,499,-586,365,1000,-666,-438,-1000,-472,562,-425,97,-652,-688,-1000,-781,-90,-265,526}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00186() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{-638,840,1000,100,-962,-152,379,195,1000,240,-167,738,-169,-510,1000,-66,455,-1000,-243,245,-290,754,1000,-531,-1000,623,-650,561,59,1000,-962,-249,59,1000,877,-451,-363,268,-990,-922,-210,9,695,608,-1000,169,1000,-505,270,398,1000,-714,125,-1000,1000,-1000,493,-1000,-410,113,-596,74,-144,558}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00187() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{-541,1000,287,100,-575,308,371,38,773,535,8,-198,1000,67,402,-555,1000,21,346,-113,-1000,370,548,-209,-227,-56,1000,344,-20,893,179,-673,1000,1000,367,-940,702,-335,-223,446,-145,-114,-55,1000,-400,-386,-360,258,-39,70,-1000,626,24,-451,625,258,48,117,365,352,-213,413,-99,-486}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00188() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{-1000,-1000,-1000,-1000,-1000,302,-301,-326,-106,-1000,-336,104,-940,1000,220,-443,-710,1000,-1000,-1000,-744,1000,-1000,-1000,709,-1000,-1000,226,1000,-79,712,-796,427,-1000,-448,-91,884,1000,953,-257,-368,-1000,-594,-1000,1000,1000,538,-531,264,1000,-1000,-1000,-1000,607,-1000,-1000,-1000,-1000,489,-860,-873,-232,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00189() {
+        org.junit.Assert.assertEquals("TYPE:org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{327,847,698,554,70,137,318,626,633,-214,-688,916,699,272,570,417,374,-689,-272,-71,-698,528,400,-16,-967,218,-19,992,63,23,-430,-583,517,-793,942,-268,100,748,-98,-568,-355,441,865,-599,-643,-164,27,586,-320,-14,128,138,-397,-317,467,-133,183,-814,-436,-738,76,228,683,117}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00190() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{1000,-368,110,37,-873,1000,-301,-326,-1000,1000,267,1000,1000,-402,581,-223,331,369,1000,942,83,-472,253,-163,-855,1000,1000,586,162,173,33,-859,1000,0,1000,-1000,1000,1000,1000,-1000,-72,-340,1000,-458,-773,-909,393,-133,696,1000,-1000,535,-1000,-152,-40,-190,583,-1000,119,-13,-1000,1000,1000,280}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00191() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{157,-553,-398,-846,-196,-1000,448,1000,349,-214,-1000,1000,1000,637,424,-1000,-317,-541,-1000,-34,-409,-611,-414,1000,-1000,-453,-1000,1000,842,392,-1000,-1000,755,-1000,1000,18,1000,1000,941,-1000,-690,-959,1000,-1000,137,-264,267,772,246,701,128,-869,-633,307,218,-1000,-801,-1000,70,-1000,-40,-421,1000,-750}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00192() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{684,915,1000,921,-315,1000,889,-1000,-105,793,1000,-337,688,269,-257,-563,-103,-940,733,-247,874,478,825,-929,1000,935,786,-831,561,863,1000,723,-194,889,-495,-863,-1000,-1000,276,296,325,386,-29,856,-770,886,310,1000,-14,-1000,1000,1000,564,-323,877,992,745,948,243,1000,-31,323,-928,259}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00193() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{-1000,847,479,887,-447,566,92,-35,-959,1000,-237,1000,-130,58,-823,657,-29,398,-366,-603,-264,528,571,621,114,-337,310,-74,1000,515,-170,573,-18,-1000,608,788,-400,757,913,-205,-494,-461,-320,-1000,331,761,-1000,438,-1000,-306,229,162,-1000,-321,-1000,-258,-1000,811,-1000,-1000,-402,-464,1000,-560}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00194() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "getUnparseableExtraFieldData():org.apache.commons.compress.archivers.zip.UnparseableExtraFieldData",
+            new int[]{806,780,166,485,-807,-987,-271,222,513,863,-101,118,-670,-988,516,-725,83,-623,932,371,321,568,-335,-382,-931,647,391,962,-710,-633,-60,170,-955,933,291,-584,-449,-190,20,-543,70,160,-885,566,-684,41,633,-987,899,705,-716,-919,224,-984,702,-662,203,-679,-109,226,-815,-76,-855,-120}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00195() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "isDirectory():boolean",
+            new int[]{-1000,499,-198,-984,1000,-939,717,-1000,59,974,904,-1000,131,-742,-952,-911,589,-311,1000,-936,-894,-124,687,1000,-976,362,506,-144,612,98,1000,169,1000,-437,-1000,-385,686,154,-739,201,-1000,1000,670,440,-442,88,-2,-414,316,-1000,776,448,1000,283,1000,1000,474,-100,927,-884,1000,-1000,228,226}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00196() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "isDirectory():boolean",
+            new int[]{-584,-1000,1000,100,1000,706,554,-269,245,1000,660,-709,67,-602,-1000,354,-1000,565,1000,674,-1000,-302,23,1000,77,123,-774,1000,1000,-1000,1000,557,1000,-199,-1000,797,239,678,-863,148,-113,70,-631,-467,-676,1000,1000,1000,710,-400,1000,-393,-1000,1000,1000,-892,748,-78,39,-179,1000,329,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00197() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "isDirectory():boolean",
+            new int[]{221,1000,-686,-610,-1000,-366,-525,1000,-1000,-252,-605,-86,-407,-196,896,-1000,327,-51,63,1000,628,40,76,-1000,-74,80,466,-433,-726,98,-1000,-1000,-391,-368,533,-309,-140,-114,-32,2,1000,-298,569,1000,1000,-421,-318,-1000,-498,-786,-872,1000,988,-1000,-1000,-806,-64,-448,-61,377,-380,-289,-798,-322}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00198() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "isDirectory():boolean",
+            new int[]{-886,687,-960,-1000,291,-562,380,-436,-475,973,1000,222,290,-1000,-858,-872,59,-389,1000,-1000,198,-459,1000,-13,-430,326,-263,791,1000,-202,264,-588,-229,-280,37,554,309,-197,217,458,-703,973,-339,385,-686,866,-214,-349,497,-726,1000,225,97,136,814,569,-632,-355,-949,-583,-665,545,257,-82}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00199() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "isDirectory():boolean",
+            new int[]{-920,1000,-1000,-852,367,-1000,-386,613,-756,549,-257,-288,314,-891,788,-860,1000,-123,762,1000,-206,-821,1000,-1000,-1000,471,718,-1000,344,-181,-761,43,55,191,-243,-189,918,405,-744,409,380,301,1000,880,455,-916,-1000,-638,902,-1000,933,1000,1000,-46,-1000,20,-1000,-581,-516,807,-160,-952,-595,-960}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00200() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "isDirectory():boolean",
+            new int[]{-949,1000,1000,-1000,-1000,-1000,-41,344,-649,950,-150,-814,65,-173,291,-1000,1000,823,470,-226,-677,-318,931,-1000,-1000,114,1000,-857,-137,405,-786,-760,308,-269,-1000,-749,1000,121,201,288,1000,685,734,1000,445,-916,-1000,-1000,-91,-1000,623,1000,1000,-612,-735,809,-442,-1000,-319,-233,-869,-1000,-1000,-974}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00201() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "isDirectory():boolean",
+            new int[]{221,1000,-1000,-610,-1000,-1000,877,-416,-38,1000,687,-1000,573,-821,-216,-1000,1000,-1000,834,-762,-1000,-138,776,-400,-1000,121,1000,-1000,549,671,104,-501,896,-212,533,-980,1000,218,-560,331,-34,1000,1000,891,58,-1000,-644,-1000,654,-1000,800,1000,1000,-449,-43,1000,474,-1000,558,377,565,-1000,-889,-324}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00202() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "isDirectory():boolean",
+            new int[]{-825,1000,-1000,-1000,504,-1000,249,-823,-812,-1000,480,-478,-989,745,-1000,-1000,1000,-1000,-174,-155,2,43,452,-1000,-1000,-686,942,-1000,87,1000,821,-1000,887,-506,-914,-1000,1000,469,820,422,1000,1000,-4,9,43,-924,-1000,-1000,480,-594,-605,1000,1000,-1000,870,1000,46,-1000,-1000,-564,-1000,-614,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00203() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "isDirectory():boolean",
+            new int[]{365,-869,295,-549,550,536,-1000,-367,634,-595,83,431,-688,-43,-459,-22,155,509,-368,1000,-949,-858,256,61,270,689,-1000,917,-386,-127,248,-318,1000,-745,862,-647,871,951,-1000,147,-113,-302,1000,-235,-181,1000,1000,1000,-1000,554,-15,-669,-1000,-114,-518,-362,-657,1000,1000,135,202,886,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00204() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "isDirectory():boolean",
+            new int[]{408,527,-198,118,-504,93,-1000,-649,-826,-50,904,-330,-577,1000,-571,-82,589,562,211,400,88,-396,428,138,-608,273,506,23,-677,-151,916,888,1000,-148,-17,-434,-495,344,-501,-94,369,-839,432,201,287,577,-484,140,-648,-1000,-136,516,-427,212,707,-572,474,-854,927,-1000,344,-177,341,226}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00205() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeExtraField(org.apache.commons.compress.archivers.zip.ZipShort):void",
+            new int[]{-181,-905,974,1000,-562,124,-328,-779,-434,309,-1000,-1000,-14,-653,1000,-1000,-250,584,115,-370,-490,-239,-746,-298,-718,346,-666,866,-1000,529,-41,-288,-431,-390,-370,48,-1000,-420,808,1000,-1000,803,-657,-489,52,210,-80,216,553,637,-389,1000,1000,732,-317,338,513,807,1000,196,-62,0,487,-658}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00206() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeExtraField(org.apache.commons.compress.archivers.zip.ZipShort):void",
+            new int[]{-609,-1000,366,-190,384,-521,1000,256,-423,525,-413,419,294,-949,697,-588,-696,981,358,-647,225,-513,783,1000,-1000,-330,-1000,515,-1000,-1000,1000,420,690,-1000,1000,-1000,505,80,-957,1000,1000,-499,408,-860,-5,556,-841,-773,513,448,-1000,-840,981,-324,138,702,870,-1000,-656,-1000,350,711,-235,387}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00207() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeExtraField(org.apache.commons.compress.archivers.zip.ZipShort):void",
+            new int[]{-1000,155,-348,-1000,60,157,-785,-99,737,-1000,810,78,424,667,-507,1000,510,-1000,402,-75,894,-997,-928,-1000,-32,486,1000,-691,1000,-1000,1000,-915,1000,-829,758,-1000,-1000,-1000,222,-985,-2,330,1000,150,952,1000,20,1000,-329,32,1000,45,-501,-922,-384,992,-775,-549,-1000,-1000,-1000,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00208() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeExtraField(org.apache.commons.compress.archivers.zip.ZipShort):void",
+            new int[]{-284,-1000,38,1000,-745,1000,-96,-1000,-230,348,-751,508,-427,-1000,994,-1000,26,419,269,-1000,-77,-1000,-1000,-1000,-480,1000,-661,907,-720,915,-406,-1000,-1000,217,-1000,-1000,-1000,256,592,1000,-63,1000,-239,886,708,-330,-451,1000,1000,-1000,1000,1000,1000,1000,411,1000,569,1000,881,-1000,-223,1000,-581,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00209() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeExtraField(org.apache.commons.compress.archivers.zip.ZipShort):void",
+            new int[]{-419,-853,1000,830,90,-1000,228,149,-937,685,-799,-1000,294,-213,919,-646,-963,655,-289,-370,-911,-513,654,1000,-1000,-330,-1000,679,-1000,-792,385,659,436,-1000,1000,292,272,-523,-167,1000,-273,-597,408,-1000,-401,53,-524,-1000,-489,1000,-1000,-392,489,-311,-248,-288,330,-593,530,668,779,-809,262,698}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00210() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeExtraField(org.apache.commons.compress.archivers.zip.ZipShort):void",
+            new int[]{-254,-1000,242,973,-76,-42,-73,-858,-820,1000,-310,550,-124,-422,797,-964,-302,543,590,-1000,-49,-60,400,-672,-760,361,-243,262,-760,237,1000,-1000,-710,-549,1000,-829,-138,-421,-1,1000,59,330,282,-474,-169,-438,-453,7,-307,1000,1000,485,1000,270,-109,416,-542,100,907,-1000,59,434,-71,-524}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00211() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeExtraField(org.apache.commons.compress.archivers.zip.ZipShort):void",
+            new int[]{-495,-1000,-1000,-163,336,-1000,-427,-591,-204,1000,-551,-140,-30,-179,1000,902,-433,1000,590,-1000,-49,419,1000,50,-1000,-839,1000,229,-666,-1000,1000,1000,1000,-1000,1000,1000,585,-666,-438,335,-1000,-1000,527,-850,-1000,1000,-686,-1000,486,1000,620,-554,-202,-1000,590,-484,-375,-179,-1000,724,814,-575,1000,113}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00212() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeExtraField(org.apache.commons.compress.archivers.zip.ZipShort):void",
+            new int[]{-263,-857,-1000,-903,650,-806,-509,-697,-216,-33,98,794,-22,968,-20,314,36,631,356,911,441,1000,117,-395,-949,413,1000,328,289,-941,1000,997,55,-1000,538,514,816,-124,278,-1000,-668,-374,-451,-271,-1000,1000,-560,-489,1000,1000,457,143,183,-827,442,278,423,-228,-369,-669,-472,110,572,-284}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00213() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeExtraField(org.apache.commons.compress.archivers.zip.ZipShort):void",
+            new int[]{-19,-1000,-892,-136,325,-833,-536,16,-1000,1000,-382,584,531,-456,788,-377,-307,1000,1000,-1000,-570,365,-280,-251,33,106,339,1000,-1000,-452,-146,439,-411,-1000,204,-325,1000,-456,-370,223,400,-980,598,-1000,-578,1000,-364,-1000,623,349,801,-10,848,-809,-686,514,714,-376,1000,376,-132,168,573,-69}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00214() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeExtraField(org.apache.commons.compress.archivers.zip.ZipShort):void",
+            new int[]{-920,-1000,191,549,121,-992,945,589,-494,1000,177,852,409,990,697,-337,-376,1000,432,-1000,-1000,-904,1000,1000,-873,-918,-972,819,-147,-1000,1000,593,1000,-1000,1000,-778,1000,-886,-1000,1000,1000,-1000,1000,-306,-210,592,-762,-1000,231,448,-620,-1000,212,-1000,3,381,365,-1000,-776,-187,677,742,-235,737}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00215() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeUnparseableExtraFieldData():void",
+            new int[]{-557,27,-1000,-204,-1000,246,1000,-394,400,1000,998,-542,-167,-310,-627,-396,-668,-439,-879,543,721,-116,620,-201,66,952,-1000,-274,-951,654,41,-583,668,1000,532,-832,-892,735,-147,779,851,-718,-865,-417,-1000,913,238,1000,455,-445,99,-1000,-1000,-452,-384,1000,1000,400,316,600,1000,59,868,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00216() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeUnparseableExtraFieldData():void",
+            new int[]{-4,508,172,955,1000,-123,264,126,-313,938,-961,822,-1000,-350,-566,-937,-983,963,-992,916,331,532,-830,31,-924,62,-500,-277,-542,-166,-1000,284,1000,-1000,-43,-832,227,585,255,1000,445,490,-257,-1000,-671,193,844,-134,694,-217,-150,-50,-310,-232,-229,252,756,-399,-446,178,552,654,190,-361}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00217() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeUnparseableExtraFieldData():void",
+            new int[]{-1000,736,1000,-220,-1000,92,939,496,-1000,856,437,-1000,-615,-355,-24,-1000,678,-1000,-861,280,-1000,286,482,-1000,-40,422,-1000,-705,-475,204,-1000,470,-371,-1000,-704,568,-184,55,-230,779,-141,34,-1000,-1000,-1000,674,824,1000,383,-595,874,-1000,-899,-1000,154,743,100,-1000,-492,600,1000,406,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00218() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeUnparseableExtraFieldData():void",
+            new int[]{38,508,-718,955,-698,-41,598,-14,-259,1000,-704,518,125,-322,-926,-888,-859,530,-1000,1000,8,310,-606,-33,-1000,298,-591,-373,-560,188,-1000,-32,1000,-290,239,-832,-55,585,251,850,778,186,-296,-1000,-1000,320,1000,249,1000,-287,-339,-422,-649,-237,-192,497,848,-164,-117,514,552,497,355,13}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00219() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeUnparseableExtraFieldData():void",
+            new int[]{-708,1000,1000,-1000,-564,-195,-412,127,-988,1000,68,259,100,-271,-122,-661,-840,1000,-974,-1000,-163,-84,-65,-285,643,42,-1000,455,-487,-1000,51,720,735,-190,-533,974,-604,958,-341,261,153,440,-1000,400,-27,347,-1000,-84,-1000,173,1000,499,595,-529,71,849,-873,-516,-726,-358,720,364,121,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00220() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeUnparseableExtraFieldData():void",
+            new int[]{-766,159,-998,707,-568,1000,675,-959,-220,902,-409,-97,1000,-303,248,-379,-1000,1000,10,137,673,510,1000,-591,340,978,-1000,-1000,-138,1000,-1000,-561,1000,-31,-275,-1000,-964,646,729,831,692,-87,-246,-445,-578,487,481,-668,-467,-902,-512,-285,-574,877,239,19,1000,1000,1000,1000,159,85,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00221() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeUnparseableExtraFieldData():void",
+            new int[]{-593,-149,-237,447,255,-213,-1000,-260,-744,820,-1000,785,-1000,-337,1000,1000,262,1000,-490,323,-271,247,457,801,-857,-789,-577,-578,693,-522,-509,980,1000,-1000,-1000,381,-1000,1000,122,-744,882,210,862,974,340,-175,-149,-1000,233,-15,-823,649,-282,1000,286,-316,-1000,1000,448,501,-1000,24,533,-103}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00222() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeUnparseableExtraFieldData():void",
+            new int[]{-1000,1000,487,-174,1000,678,-93,-203,-815,-271,-8,-481,-1000,-1000,-114,-216,-465,703,-268,-408,1000,488,1000,-1000,-225,-11,-3,-115,648,-26,145,937,885,-394,-764,14,119,212,99,-553,306,541,819,413,1000,-504,-536,-1000,-591,-170,-330,1000,267,987,467,293,126,698,1000,-204,-502,1000,691,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00223() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeUnparseableExtraFieldData():void",
+            new int[]{-859,-1000,-1000,1000,565,-850,-441,-992,1000,83,-1000,-455,-132,-73,-557,1000,-1000,1000,289,323,1000,-268,745,1000,-1000,1000,464,513,-734,1000,510,-1000,1000,1000,1000,-1000,-1000,1000,-909,-614,-956,-1000,782,-224,-684,413,-818,533,-626,-834,-1000,358,-1000,1000,292,683,1000,1000,1000,20,603,282,743,-5}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00224() {
+        org.junit.Assert.assertEquals("THROW:java.util.NoSuchElementException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "removeUnparseableExtraFieldData():void",
+            new int[]{-1000,1000,902,-742,468,316,-692,-395,-983,-479,569,-695,-1000,-776,-114,-14,-406,256,-260,-178,800,845,1000,-1000,258,-124,101,367,475,10,795,1000,554,-865,-1000,-896,-37,-331,-168,-1000,-466,431,-246,-297,1000,-627,-1000,-1000,-895,572,-115,1000,720,1000,299,294,108,-59,1000,-611,-282,1000,369,-78}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00225() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{1000,-356,-1000,-897,-153,-952,383,889,-977,-8,808,1000,601,1000,70,1000,657,-1000,528,-506,420,1000,-1000,-1000,272,1000,1,1000,-380,28,-280,-141,-1000,-1000,-588,-488,553,-872,949,153,762,406,444,-1000,-1000,-864,566,1000,1000,1000,137,758,431,-973,-962,369,-170,-575,-1000,-993,1000,-635,1000,772}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00226() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{-131,943,-197,128,445,280,-73,99,-833,487,388,296,947,572,698,-803,-61,440,281,719,-263,428,480,-107,-448,338,742,-738,211,-345,-626,-245,-26,115,-624,810,153,-920,642,-437,56,-67,874,7,-26,-504,264,-726,7,-33,693,39,-483,481,-660,1000,-1000,44,-977,-18,741,-641,339,272}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00227() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{-169,-1000,-188,795,-708,524,-281,1000,-25,-152,747,165,823,407,657,969,793,458,-328,93,-214,852,-1000,-627,-994,1000,170,-139,610,75,-617,1000,-567,-181,-549,-375,129,760,-1000,-986,819,1000,333,-72,-83,-199,553,766,-925,431,-310,652,93,367,-873,-135,182,-132,-514,15,664,267,968,808}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00228() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{-1000,1000,-104,1000,531,1000,-778,-571,31,201,359,-683,-24,596,-253,-1000,-596,1000,-332,708,-686,325,155,-446,-614,146,-268,-904,759,-732,-449,-18,1000,619,-535,-901,-370,326,-891,-630,-1000,-511,24,83,481,-140,610,-1000,-720,-800,997,226,-1000,1000,-833,1000,-1000,801,-595,970,-589,-84,916,546}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00229() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{-15,-233,-784,170,-149,636,-330,443,-31,-312,213,67,1000,625,635,957,657,860,-1000,992,-397,696,268,-987,-695,507,1000,-967,476,-144,-860,231,-23,55,-991,-1000,7,-497,944,-1000,396,166,463,-1000,173,-500,297,420,-1000,-280,-40,1000,-837,-184,-1000,1000,-923,-473,-1000,-197,-182,-698,752,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00230() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{639,599,-117,526,-254,-836,96,-667,-143,646,-394,-268,1,-322,510,148,-584,29,-484,-48,1000,-213,-997,-487,-803,-307,615,-710,463,-732,857,-32,-792,178,-468,-990,-634,-641,774,-878,-297,-174,-434,-190,64,447,-533,422,-640,141,-633,920,65,-227,-579,89,739,550,-199,216,-241,398,43,469}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00231() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{-226,932,-425,732,-220,564,-437,-219,-262,-310,514,-87,671,562,423,-144,8,977,262,776,-60,214,-1000,-397,-815,6,1000,152,598,-134,-191,-647,703,-203,-1000,89,-978,76,-196,-738,-884,67,493,-83,158,-570,221,70,48,-701,-192,746,-492,1000,-1000,600,-574,644,-1000,-420,696,-220,832,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00232() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{1000,563,262,-691,527,-1000,611,-927,-541,1000,-453,487,-548,111,-1000,196,-1000,-760,-687,-1000,1000,652,660,-488,171,1000,-976,797,497,-1000,921,1000,723,1000,-345,-316,-314,-1000,918,250,-1000,-902,-1000,-167,-500,232,-445,1000,191,902,147,557,495,-212,884,-739,1000,-448,-14,-409,-57,1000,-476,-621}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00233() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{202,-208,1000,885,-840,44,-387,179,342,10,-693,-1000,-713,-1000,329,-630,-450,947,-766,-723,313,99,1000,223,-894,297,599,-1000,211,-629,237,78,-147,1000,-654,541,507,-342,-5,-1000,740,-400,324,1000,1000,1000,-887,498,-1000,34,-1000,92,-1000,618,211,-557,308,154,-920,227,741,718,-881,462}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00234() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{-146,1000,1000,1000,215,-44,-11,-857,-661,640,-540,-1000,-371,-926,1000,-1000,-462,324,-1000,51,109,-393,-1,914,-1000,74,215,-1000,1000,-924,245,703,1000,1000,-598,1000,-619,-247,-379,-1000,1000,-1000,-92,1000,1000,-155,-792,-698,-1000,-766,-357,-254,-1000,1000,-159,-68,-330,997,-856,984,-1000,807,-331,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00235() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{1000,95,328,-604,-1000,-1000,940,-559,-128,925,29,808,-1000,97,-1000,1000,-1000,-1000,789,-1000,931,619,994,-880,65,730,-969,1000,-770,-491,58,-328,-1000,10,-268,-810,-683,-1000,889,-288,-298,-34,-1000,234,-202,-125,-500,1000,49,604,-1000,356,342,-466,114,-1000,446,-242,-259,-940,139,827,561,443}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00236() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{160,-325,-717,-763,209,-865,-994,299,276,388,-209,873,-545,-252,-455,-753,559,-786,-889,542,-980,-393,567,-796,-588,760,-826,-935,-329,-503,363,464,868,-63,537,-425,-37,744,701,103,356,331,987,-197,219,-246,-27,-100,-347,48,-619,424,489,101,201,709,-785,809,591,-130,-49,-790,1000,941}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00237() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setCentralDirectoryExtra(byte[]):void",
+            new int[]{616,-336,637,-673,-1000,365,836,765,-152,315,492,-224,-591,-102,-400,990,-332,-420,1000,102,-273,845,713,-43,-1000,660,-594,91,42,386,-1000,307,703,646,-770,-859,1000,-574,-427,-876,1000,-330,-704,5,-234,-283,-513,715,-803,-24,-1000,566,-443,-248,3,-904,-366,-688,-390,-962,70,-327,246,351}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00238() {
+        org.junit.Assert.assertEquals("VOID|getExternalAttributes=java.lang.Long:OTIyMzM3MjAzNjg1NDc3NTgwNw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExternalAttributes(long):void",
+            new int[]{1000,-849,-1000,1000,-1000,1000,-1000,878,-1000,1000,-1000,799,-1000,25,1000,1000,192,1000,-346,-1000,857,-1000,1000,174,-31,179,-946,1000,1000,-1,-1000,-919,1000,-1000,1000,1000,-854,545,-1000,-1000,-1000,-1000,-1000,-1000,143,-1000,-1000,384,117,940,1000,1000,-131,773,-1000,960,501,-1000,-620,1000,1000,-91,1000,865}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00239() {
+        org.junit.Assert.assertEquals("VOID|getExternalAttributes=java.lang.Long:OTIyMzM3MjAzNjg1NDc3NTgwNw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExternalAttributes(long):void",
+            new int[]{-763,-657,1000,-146,1000,-821,1000,172,125,-1000,372,-331,928,-546,-1000,-179,217,-569,-108,1000,-1000,-1000,-894,-1000,-23,179,-1000,494,345,-809,1000,-937,-1000,594,-1000,165,-854,-510,643,-37,-317,-1000,1000,191,615,1000,1000,-942,895,100,-1000,-1000,1000,773,1000,-1000,192,1000,229,-1000,-859,40,-1000,667}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00240() {
+        org.junit.Assert.assertEquals("VOID|getExternalAttributes=java.lang.Long:OTIyMzM3MjAzNjg1NDc3NTgwNw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExternalAttributes(long):void",
+            new int[]{374,-25,91,893,-1000,1000,-688,146,365,1000,1000,1000,-1000,-689,-456,261,-1000,-314,-463,-308,-531,974,1000,-355,-659,118,506,-221,-274,403,1000,192,443,-771,689,298,1000,712,168,381,-694,119,-1000,612,-124,-511,-1000,-328,-547,-174,1000,1000,-1000,-397,-830,480,821,-910,-265,386,964,498,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00241() {
+        org.junit.Assert.assertEquals("VOID|getExternalAttributes=java.lang.Long:OTIyMzM3MjAzNjg1NDc3NTgwNw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExternalAttributes(long):void",
+            new int[]{-680,-788,-967,-1000,1000,-1000,-451,673,-550,-416,-47,-492,717,442,-799,329,1000,726,767,620,-295,-1000,-1000,424,-160,-54,-329,1000,1000,166,493,-1000,-801,196,-1000,562,-1000,303,-434,231,54,-484,86,1000,1000,1000,102,-688,-143,650,-648,-1000,-750,1000,1000,-979,1000,750,-515,-442,-1000,154,-1000,1}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00242() {
+        org.junit.Assert.assertEquals("VOID|getExternalAttributes=java.lang.Long:OTIyMzM3MjAzNjg1NDc3NTgwNw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExternalAttributes(long):void",
+            new int[]{-738,-16,1000,287,693,-81,604,-218,728,-400,79,-731,-181,-1000,-607,253,-193,-1000,412,752,-317,488,340,-189,-235,-143,-385,206,-192,-483,1000,-358,-1000,731,-1000,-477,-42,-34,1000,661,-859,-204,1000,696,2,401,-575,-1000,881,-1000,-831,87,605,-655,628,639,288,1000,1000,-1000,-568,241,-236,-68}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00243() {
+        org.junit.Assert.assertEquals("VOID|getExternalAttributes=java.lang.Long:NTE=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExternalAttributes(long):void",
+            new int[]{505,-64,-807,893,-1000,232,-441,-311,-475,1000,-912,-894,-1000,-159,675,711,784,746,39,-916,919,346,764,800,-20,-799,-1000,511,646,918,8,-168,581,-1000,1000,298,1000,974,-370,-339,-685,863,-1000,-38,644,-981,-1000,-724,-666,-105,1000,1000,-873,-111,-1000,953,702,-995,40,329,964,290,1000,-44}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00244() {
+        org.junit.Assert.assertEquals("VOID|getExternalAttributes=java.lang.Long:OTIyMzM3MjAzNjg1NDc3NTgwNw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExternalAttributes(long):void",
+            new int[]{310,-685,-480,142,928,176,-272,809,146,236,748,280,-1000,-183,-672,192,84,88,661,720,1000,226,209,1000,-1000,59,226,-175,284,165,934,-181,-720,-123,-258,787,167,196,595,-259,-473,-125,-139,-912,145,593,-641,-1000,-977,-47,844,-56,-1000,170,-389,-461,1000,-515,704,-841,1000,-168,268,-252}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00245() {
+        org.junit.Assert.assertEquals("VOID|getExternalAttributes=java.lang.Long:MjE0NzQ4MzY0Nw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExternalAttributes(long):void",
+            new int[]{97,8,-387,490,-1000,1000,-8,-284,-428,915,-1000,-514,-685,105,1000,814,1000,963,305,-827,1000,-105,796,25,376,-790,-1000,468,1000,1000,-1000,267,1000,-1000,773,107,167,1000,150,-259,-293,1000,-1000,-912,205,-795,-641,667,-977,-140,844,1000,-40,691,-1000,1000,-757,-1000,490,-108,1000,-82,1000,-540}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00246() {
+        org.junit.Assert.assertEquals("VOID|getExternalAttributes=java.lang.Long:LTIxNDc0ODM2NDg=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExternalAttributes(long):void",
+            new int[]{-929,-873,695,-1000,1000,-348,729,785,582,-1000,621,-1000,890,335,-777,-799,814,-536,573,-411,-75,-1000,-899,-158,-187,615,-64,-528,-1000,-41,937,1000,-570,1000,-1000,-1000,-937,154,999,103,810,-746,1000,232,1000,-405,1000,-888,548,-656,-1000,80,548,-1000,1000,-136,-265,703,1000,-1000,-150,293,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00247() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtra(byte[]):void",
+            new int[]{-744,-885,1000,577,16,-445,-355,356,602,1000,-6,846,-461,-1000,52,-916,1000,-668,-229,1000,276,-85,738,1000,1000,1000,-1000,350,1000,-103,-56,932,-618,1000,-1000,1000,518,1000,710,1000,999,43,-684,-1000,-179,-1000,-163,1000,729,349,-573,-595,-1000,-225,265,802,1000,-1000,-197,386,-825,-1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00248() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtra(byte[]):void",
+            new int[]{-609,843,38,-495,-344,-241,-260,845,-837,239,795,41,-67,-822,-598,-70,1000,255,329,-542,1000,-811,187,400,104,-20,-73,126,-97,496,-459,-535,725,454,-400,-322,-21,259,-471,770,999,156,841,-193,69,-479,-853,-918,414,-1000,578,-455,-239,-1000,1000,-218,304,-17,174,1000,261,580,307,-400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00249() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtra(byte[]):void",
+            new int[]{-431,1000,-293,387,-1000,-111,768,188,-572,793,631,458,-816,-550,155,1000,1000,241,325,-56,1000,-850,404,-1000,-46,-1000,1000,1000,-1000,1000,96,-1000,-1000,-1000,50,-1000,-382,-1000,-1000,336,1000,-1000,1000,66,152,1000,408,-826,1000,-716,-585,-1000,366,-1000,44,-822,932,-682,1000,-289,1000,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00250() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtra(byte[]):void",
+            new int[]{310,-905,1000,1000,-1000,-12,-682,-633,-837,239,-331,18,84,639,336,-341,934,-464,-703,738,207,-114,1000,296,1000,-1000,641,482,507,-330,459,-56,-651,-325,-951,675,30,1000,655,1000,1000,-131,1000,-1000,-214,-733,186,1000,1000,156,-256,-1000,-586,360,-225,889,941,-158,-119,-633,714,1000,-554,772}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00251() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtra(byte[]):void",
+            new int[]{205,-53,975,732,-866,-1000,-25,-625,-605,841,1000,-709,1000,-389,820,-93,-1000,914,71,697,-245,304,-409,-340,-317,508,-551,568,-507,234,287,625,1000,1000,-1000,1000,-617,245,166,-1000,1000,426,1000,-32,572,-947,464,113,1000,1000,556,549,-1000,1000,543,-941,364,195,-929,1000,619,1000,1000,-914}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00252() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtra(byte[]):void",
+            new int[]{1000,-1000,-684,-422,-1000,729,674,-403,557,-138,287,543,1000,-390,360,204,-1000,269,-1000,-1000,-177,-744,391,-1000,670,-1000,134,1000,-1000,-82,-487,-140,1000,-1000,1000,-462,214,-1000,1000,-1000,1000,-1000,-261,1000,1000,755,155,-1000,256,674,1000,80,1000,544,904,-1000,-1000,571,983,-614,11,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00253() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtra(byte[]):void",
+            new int[]{-373,-277,1000,40,-1000,335,82,-374,369,-626,84,944,-1000,-1000,972,-10,1000,-207,329,1000,1000,409,582,482,1000,1000,228,1000,-280,428,-129,72,-1000,-1000,-761,32,930,-46,684,1000,694,-132,538,-1000,328,40,-26,862,730,901,-530,-1000,-803,-1000,-423,132,15,-151,1000,-420,231,77,-52,339}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00254() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtra(byte[]):void",
+            new int[]{-688,-277,1000,55,-1000,-442,855,-397,194,-771,-125,1000,-1000,-1000,380,-10,1000,349,1000,1000,1000,-887,1000,248,958,1000,1000,-311,-1000,1000,-251,-1000,0,-1000,-1000,-936,1000,-1000,11,697,1000,-132,-36,-1000,-66,1000,-441,845,1000,1000,-1000,-1000,153,-1000,-570,257,708,437,1000,-1000,-1000,1000,613,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00255() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtra(byte[]):void",
+            new int[]{-239,1000,-1000,350,1000,1000,-32,-83,748,-129,-44,436,-495,505,1000,1000,-439,330,-1000,692,-1000,1000,-830,-1000,-344,-1000,422,138,321,-1000,-56,1000,933,-355,1000,-30,1000,613,-274,1000,-1000,-1000,-973,1000,1000,302,1000,-426,-506,-1000,1000,1000,-1000,-270,1000,-785,-610,-256,-127,-667,-159,-1000,281,-93}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00256() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtra(byte[]):void",
+            new int[]{1000,735,527,1000,-1000,960,-814,-221,-451,703,679,1000,1000,-691,479,907,-7,1000,-171,183,157,-114,816,-884,623,-400,1000,-311,-1000,-1000,246,1000,1000,-1000,1000,849,1000,-1000,728,-177,1000,-906,378,275,1000,1000,466,-62,1000,120,813,-652,813,-1000,1000,-814,-1000,1000,1000,-1000,-1000,400,759,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00257() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{-1000,315,-946,1000,1000,-839,-805,-294,141,-514,-1000,469,-298,783,687,-637,-1000,34,-1000,-1000,95,-894,862,679,-69,343,-597,-613,-796,876,-1000,-36,387,37,1000,-267,802,1000,-232,487,-354,614,-854,524,1000,-780,-1000,108,692,829,-347,-524,-403,797,-100,14,364,-249,-1000,191,-84,-994,1000,-68}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00258() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{-695,440,-946,-634,102,-461,850,190,-812,-962,214,190,267,424,-418,-852,147,-305,705,-624,-297,863,990,-249,-114,-519,907,-900,-961,362,-550,-893,489,692,1000,-993,539,-600,-427,468,33,-385,1000,-1000,-180,182,-324,-813,924,-234,760,463,425,996,479,784,-938,-86,-1000,288,677,533,719,-82}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00259() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{-1000,-1000,-1000,1000,-1000,96,24,-868,-41,184,78,-1000,-452,-1000,-1000,1000,-1000,926,652,766,-1000,1000,-645,-1000,-685,559,-1000,951,63,159,-1000,-1000,695,-243,-67,-184,468,-367,-947,-823,-1000,601,-138,1000,-1000,1000,-659,-753,-132,481,1000,-986,-394,-966,1000,833,982,365,679,-486,548,269,738,-298}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00260() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{47,175,1000,-741,228,-555,1000,-589,-228,-620,214,-448,33,363,-672,486,422,-613,-970,182,-734,1000,-1000,-154,-120,-364,934,-273,1000,-140,-417,-872,489,301,-24,-1000,-668,-981,404,-261,26,-333,745,-1000,-779,329,-1000,-573,496,-576,612,149,701,902,479,996,-30,411,492,231,582,753,-16,-367}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00261() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{596,1000,645,-737,209,1000,-6,-551,-1000,-27,1000,566,1000,1000,-608,-876,1000,-1000,-1000,-589,398,-1000,-1000,-311,1000,-1000,1000,373,-696,-236,-17,1000,-1000,1000,-102,241,-1000,-809,1000,-196,974,-1000,-138,20,-779,-558,-3,1000,472,-774,-1000,865,291,1000,-1000,-1000,-688,412,-1000,1000,-1000,-1000,-1000,4}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00262() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{1000,-825,-1000,1000,-1000,741,322,-1000,-691,-1000,88,-396,-1000,-248,109,146,-259,674,156,1000,-1000,326,-937,-175,-492,412,-892,428,-399,-1000,-883,-245,167,-1000,-464,-942,123,43,-323,-1000,-906,991,-156,-667,-400,1000,-761,-1000,270,756,-57,-1000,-994,-234,-230,1000,495,-570,1000,-1000,-488,-115,-699,-919}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00263() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{1000,-885,-97,869,692,26,667,-1000,613,-1000,-603,-319,-1000,1000,-231,-578,1000,-400,-1000,1000,-336,-753,9,1000,-259,232,-76,-540,-566,-1000,151,757,50,-1000,754,-898,-740,66,-387,-346,-426,-505,135,-1000,927,-158,-178,-1000,-66,621,-1000,-503,-125,489,-45,779,1000,-1000,1000,-640,-316,-549,-1000,713}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00264() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{1000,887,-742,11,727,-867,18,22,-641,-1000,-1000,1000,-1000,1000,555,-1000,-1000,34,-1000,-758,-22,-631,1000,1000,-83,280,-540,-1000,-436,-933,-609,-36,387,-1000,1000,-1000,-58,1000,-232,1000,-367,902,-496,-400,1000,-300,-348,-1000,1000,1000,-347,-507,-1000,685,-100,80,-802,-1000,-1000,-1000,-84,-947,-768,-826}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00265() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{-1000,-1000,-1000,1000,-1000,104,-67,-805,46,184,78,-1000,-452,-1000,-1000,1000,-1000,1000,1000,652,-677,1000,-645,-1000,-1000,1000,-1000,1000,346,727,-1000,-1000,1000,809,-67,198,777,-388,-1000,-993,-1000,670,83,941,-1000,1000,-611,-753,-491,481,1000,-979,-253,-1000,1000,1000,1000,365,-517,-486,1000,821,850,46}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00266() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{-1000,-1000,834,-1000,-984,-511,901,-402,141,-382,76,-1000,598,-1000,-915,1000,498,573,1000,-1000,-962,1000,222,-1000,-370,343,617,181,1000,727,-204,-1000,637,1000,-234,-214,-580,-1000,-280,-198,-688,493,930,646,-1000,927,-1000,522,-20,-619,1000,718,1000,-1000,1000,955,364,1000,-1000,300,1000,1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00267() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setExtraFields(org.apache.commons.compress.archivers.zip.ZipExtraField[]):void",
+            new int[]{783,-1000,-978,370,-253,96,24,113,-277,-1000,-1000,-358,-1000,-162,-778,602,-924,1000,652,-922,-1000,311,848,-311,-1000,1000,-1000,-222,271,-1000,136,-1000,1000,-1000,1000,-568,-835,688,-947,279,-1000,1000,-198,-485,361,1000,-397,-1000,28,811,822,-593,-684,-937,1000,1000,-324,365,-290,-1000,1000,157,738,-516}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00268() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setGeneralPurposeBit(org.apache.commons.compress.archivers.zip.GeneralPurposeBit):void",
+            new int[]{-535,971,-472,637,563,394,526,583,-277,477,-855,979,-612,923,-737,277,1000,-862,-904,25,-405,486,718,-1000,-698,274,-855,927,-174,-1000,-370,712,-795,-531,1000,-548,396,102,258,-1000,161,-1000,384,809,325,-126,106,-89,-1000,-641,819,727,17,2,1000,806,1000,-879,302,68,61,349,766,191}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00269() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setGeneralPurposeBit(org.apache.commons.compress.archivers.zip.GeneralPurposeBit):void",
+            new int[]{1000,-760,831,-1000,-874,-111,1000,186,1000,243,651,-1000,-1000,1000,140,-298,-1000,1000,1000,-1000,-701,-531,-818,934,1000,-85,1000,-1000,1000,101,-578,-1000,640,-943,-629,53,342,1000,502,666,441,512,-1000,-388,519,-701,-1000,-370,514,-1000,-1000,533,-479,62,-1000,-942,-1000,1000,311,586,-1000,-253,-1000,22}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00270() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setGeneralPurposeBit(org.apache.commons.compress.archivers.zip.GeneralPurposeBit):void",
+            new int[]{-461,1000,-99,-15,-1000,492,1000,696,855,-488,-65,-501,-1000,-137,-465,643,-595,-557,-137,645,-541,319,-1000,-562,38,-944,-458,21,927,253,-111,-664,-1000,-115,1000,-659,755,364,-40,1000,-1000,-1000,-299,886,-1000,1000,219,722,-49,86,-1000,400,-1000,-1000,413,642,-1000,657,-409,1000,-1000,-1000,-764,-305}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00271() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setGeneralPurposeBit(org.apache.commons.compress.archivers.zip.GeneralPurposeBit):void",
+            new int[]{-824,-1000,-925,972,881,-253,-838,109,190,-791,-542,1000,-1000,-378,299,-635,232,-632,-191,600,1000,-851,1000,1000,-163,-671,-475,-53,-522,-1000,-485,748,-188,638,279,743,178,-119,656,-1000,132,472,-165,-362,-183,514,1000,-1000,-79,-973,700,-1000,-113,-1000,-1000,-1000,-1000,-80,-113,-849,-456,906,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00272() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setGeneralPurposeBit(org.apache.commons.compress.archivers.zip.GeneralPurposeBit):void",
+            new int[]{-465,28,-382,-131,-626,454,188,45,-277,-605,-286,196,-1000,-1000,-60,-110,-285,814,-989,1000,711,119,-377,-217,-128,-52,-119,-724,463,101,-650,-306,643,153,364,616,-352,1000,208,-804,-86,193,-802,-869,-414,930,537,-130,-538,-601,-556,-769,-1000,-865,-716,-513,-618,1000,625,-213,-1000,-219,-362,-823}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00273() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setGeneralPurposeBit(org.apache.commons.compress.archivers.zip.GeneralPurposeBit):void",
+            new int[]{-252,799,-345,-317,-430,391,1000,899,-870,318,-597,915,-726,-477,-986,277,131,62,-904,25,125,680,-173,-1000,-75,-59,-263,504,316,-364,-20,-640,-562,-923,1000,-337,3,1000,-79,-1000,-139,350,-494,397,14,10,-97,457,-1000,-616,-102,462,-148,-127,370,520,184,-340,736,368,-403,-497,-312,-909}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00274() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setGeneralPurposeBit(org.apache.commons.compress.archivers.zip.GeneralPurposeBit):void",
+            new int[]{-267,615,-612,-317,-494,-85,591,216,-565,-836,-597,1000,-643,-791,-575,0,-938,252,-219,311,193,1000,-944,-885,-228,-60,-263,-343,451,-364,-20,-368,-388,-266,629,-191,-22,1000,-134,-658,-58,-222,-259,-377,-930,982,679,457,-903,277,-703,462,-643,-1000,633,611,-145,-65,-108,816,-595,-497,-558,-511}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00275() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setGeneralPurposeBit(org.apache.commons.compress.archivers.zip.GeneralPurposeBit):void",
+            new int[]{390,947,-809,883,1000,-436,-126,-427,-825,657,-940,-115,-17,-298,685,-1000,-652,-118,-275,-268,242,1000,856,-920,-759,-1000,1000,-1000,47,-1000,-902,-346,1000,-657,-840,1000,1000,965,-477,-1000,1000,802,-578,-1000,-175,-422,520,-1000,-1000,-1000,483,-207,72,240,-613,381,1000,-332,614,-716,244,991,854,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00276() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setGeneralPurposeBit(org.apache.commons.compress.archivers.zip.GeneralPurposeBit):void",
+            new int[]{-1000,-285,1000,683,109,-327,1000,18,794,754,789,-121,929,515,-491,692,1000,-319,-598,-44,559,-1000,185,-765,869,420,553,104,-5,-498,-485,-330,172,-438,1000,343,-1000,124,729,-893,303,954,-818,378,550,1000,-194,1000,807,-651,259,918,-5,944,937,-746,110,-175,-23,-183,1000,-210,-163,-217}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00277() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setGeneralPurposeBit(org.apache.commons.compress.archivers.zip.GeneralPurposeBit):void",
+            new int[]{-69,-617,428,-995,-508,-676,1000,1000,-546,34,-25,264,-761,189,-1000,-57,-1000,487,925,229,-236,261,242,-394,93,590,1000,-343,829,-15,50,-1000,398,-635,-161,547,-57,1000,239,-853,-123,272,-560,-1000,133,-168,496,898,-951,-522,-703,269,-380,-1000,633,-296,-145,-65,810,913,-595,-853,-1000,-296}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00278() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:LTEwMDA=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{-151,715,-1000,1000,657,1000,-948,402,-258,-1000,308,409,113,174,559,1000,-479,-1000,-1000,347,949,-336,1000,894,576,-716,-1000,-1000,-613,325,444,-330,-1000,-1000,1000,541,410,-1000,236,1000,606,-1000,-1000,-615,-351,-1000,1000,-1000,448,1000,-1000,193,-1000,-636,1000,109,-982,1000,462,-359,448,124,-337,-537}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00279() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:LTIxNDc0ODM2NDg=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{-914,1000,-139,762,-917,1000,-667,-83,574,-87,-434,-799,-141,470,-156,580,1000,-312,-74,173,687,100,353,-452,-167,-850,-891,132,-215,-586,-763,1000,-252,-141,618,493,822,-220,493,584,1000,-615,1000,-414,414,-1000,-566,400,247,214,953,1000,-279,-133,557,-302,1000,510,319,-399,126,1000,-1000,939}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00280() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:LTIxNDc0ODM2NDg=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{-121,1000,-514,976,590,1000,-806,-1000,-902,-725,239,-276,-550,1000,717,-332,-1000,-700,-587,498,-539,-1000,11,1000,-25,1000,-1000,-1000,-222,-515,-506,-1000,799,-691,727,-1000,-364,-955,493,1000,512,-804,-1000,-34,1000,-1000,-156,-229,-289,803,109,-691,-671,-1000,985,301,-1000,-45,1000,754,396,-169,-184,-697}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00281() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:LTkzMw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{-778,800,-760,1000,541,278,-831,109,250,-658,312,670,592,-218,266,1000,559,-671,122,95,1000,-535,745,-933,251,-1000,-269,210,-599,509,1000,736,-1000,-136,823,779,56,-387,812,1000,604,-648,155,-897,-1000,-1000,1000,-786,-484,330,-1000,547,-746,-284,1000,-1000,302,1000,-86,-919,131,-779,1000,845}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00282() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:LTIxNDc0ODM2NDg=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{1000,-1000,-1000,224,1000,96,-546,-781,-507,-1000,-11,-430,-906,1000,1000,-698,-1000,-585,-779,1000,655,18,1000,169,-171,638,-738,-1000,38,-238,-1000,-1000,-1000,-594,-369,-190,258,-815,1000,-510,1000,-167,-1000,63,621,-1000,1000,-1000,1000,172,-1000,592,-1000,-402,-518,234,-561,51,724,1000,448,-436,605,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00283() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:MQ==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{1000,1000,1000,-1000,671,-940,-731,327,-201,-465,-202,285,128,-77,929,1000,-273,626,241,101,-364,1000,-729,-867,-165,-698,409,-634,343,822,-929,409,1000,81,-1000,-300,534,635,83,-1000,781,564,-532,-306,980,-190,-79,-634,616,-996,-1000,1000,1000,1000,-1000,1000,-268,-497,604,158,95,-267,750,-785}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00284() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:MjE0NzQ4MzY0Nw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{-790,871,83,-1000,325,-817,-972,-83,574,-254,968,379,856,-1000,-505,-640,1000,-170,-74,-1000,70,393,-600,-280,552,-634,959,-254,722,1000,-763,1000,357,-351,604,-850,-63,346,-1000,-884,1000,-351,301,-414,142,75,-847,375,-868,-640,-179,1000,77,-733,16,696,340,459,-60,-1000,1000,-142,-617,939}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00285() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{-1000,1000,-819,98,715,-487,-646,139,-7,-678,730,453,1000,-1000,-376,-693,534,-142,-646,143,-49,-740,155,-141,986,-385,940,-686,-77,1000,278,485,-1000,-1000,1000,39,-614,139,-423,-541,661,-1000,-968,-731,713,-460,-302,-526,-339,24,-488,288,-284,94,-35,1000,-951,401,239,-1000,748,499,-1000,907}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00286() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:LTE3", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{-757,1000,-420,1000,494,278,-731,-873,-201,-465,263,190,128,360,376,1000,194,-461,411,200,94,-1000,53,-858,-170,-698,-269,210,-1000,-78,396,267,26,81,632,-300,-485,-356,83,414,538,-511,155,-490,-318,-1000,366,-246,-1000,192,338,-71,-516,-539,503,-945,289,343,-249,-140,95,-403,137,733}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00287() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:LTEwMDA=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{-776,127,-709,1000,255,406,-1000,-445,313,-1000,316,-304,1000,-915,274,760,1000,-1000,-1000,1000,351,-165,316,-56,552,-1000,405,-222,-360,1000,-485,1000,-1000,-805,1000,522,-90,-625,-412,343,1000,-1000,275,-537,-461,-772,744,-580,281,262,-298,369,-1000,-305,986,9,340,1000,-651,-1000,47,-384,-416,945}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00288() {
+        org.junit.Assert.assertEquals("VOID|getInternalAttributes=java.lang.Integer:MQ==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setInternalAttributes(int):void",
+            new int[]{1000,-1000,445,-127,715,-111,495,-161,-608,-448,157,-22,-227,201,1000,-724,-453,209,29,400,-398,25,-302,-570,-264,459,-52,-528,-186,290,-479,-727,1000,-755,-1000,-487,44,26,515,-510,696,231,-532,-178,706,-460,-516,-946,496,-404,-1000,288,1000,998,-1000,1000,-268,-456,388,468,92,-302,605,-872}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00289() {
+        org.junit.Assert.assertEquals("VOID|getMethod=java.lang.Integer:MTAw", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{1000,512,200,494,359,-1000,707,-263,197,-525,782,1000,-121,1000,210,-740,-1000,52,-543,808,652,-892,148,508,-770,1000,-165,-1000,775,1000,-638,1000,-310,-99,-679,1000,1000,1000,1000,506,1000,1000,768,-300,824,1000,-360,-491,-1000,455,-169,34,-241,-458,-777,981,929,-525,28,-792,-408,711,327,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00290() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{1000,843,-1000,1000,849,-1000,360,-934,287,138,959,-533,704,-1000,-986,231,-211,-234,-932,-148,1000,-182,345,-1000,-1000,1000,45,-1000,1000,813,-856,1000,-1000,1000,486,530,-556,1000,709,1000,622,301,-288,-1000,781,1000,-1000,-1000,-211,618,-343,495,235,-1000,-858,790,-290,-1000,890,-636,1000,1000,-356,-814}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00291() {
+        org.junit.Assert.assertEquals("VOID|getMethod=java.lang.Integer:MjE0NzQ4MzY0Nw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{-678,1000,-508,1000,-694,599,558,1000,863,-488,-38,226,175,1000,1000,-227,172,-1,-940,-755,-1000,1,-636,659,1000,-659,-808,12,472,457,385,-105,-397,-1000,-12,13,419,197,786,-1000,500,834,-9,-974,174,-392,402,-1,-1000,-326,1000,423,41,-614,1000,683,367,-1000,779,-184,-240,-385,-215,432}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00292() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{316,136,-262,1000,1000,-276,-293,-851,1000,-487,818,-533,704,-407,175,1000,-511,-832,-1000,-196,1000,-617,893,867,-716,519,-1000,-486,1000,962,-856,1000,-825,1000,954,530,88,1000,569,1000,778,1000,-422,-491,234,1000,-815,-1000,-216,1000,149,1000,-684,-536,-1000,371,-649,-60,1000,605,1000,427,447,-655}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00293() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{-120,-1000,-655,-99,-312,929,387,525,228,-42,325,-604,666,309,456,25,-208,-909,-79,35,-815,74,-603,-62,1000,354,394,-25,-341,23,626,1000,-729,-989,-169,-386,69,-975,491,-998,476,263,142,-954,-837,1000,400,418,-417,-257,992,-653,-1000,-450,-1000,203,-932,594,200,427,213,-431,-516,399}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00294() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{1000,136,-957,817,-5,-831,129,394,-380,169,466,918,540,-140,-235,171,-199,23,-1000,-314,-173,-285,-476,-813,-920,426,-163,-935,1000,1000,-794,1000,-875,169,-60,415,-369,552,1000,951,775,420,-142,-1000,166,995,-150,-704,-1000,455,245,348,-16,-283,-797,315,702,-819,314,-913,975,1000,-760,-350}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00295() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{597,915,-369,-1000,1000,-1000,-629,-331,-600,-689,1000,1000,-1000,-101,-13,533,1000,1000,-761,701,437,360,316,-1000,765,-351,19,-572,1000,-839,856,-1000,-1000,146,145,-753,-152,862,406,343,-296,120,-306,-563,1000,-594,-279,-783,-501,-296,-975,282,-813,-797,943,-1000,60,-1000,-770,-1000,519,633,-92,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00296() {
+        org.junit.Assert.assertEquals("VOID|getMethod=java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{22,1000,-679,1000,-289,-797,447,-347,-152,-69,1000,-550,-356,-42,212,300,726,673,-504,-858,429,540,-28,625,-595,338,-899,71,277,140,385,-105,-607,427,-244,-413,-771,1000,291,812,118,614,437,-477,-46,579,-1000,-1,115,1000,-253,867,-202,-249,-1000,436,-1000,-866,1000,1000,1000,593,594,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00297() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{141,-872,-538,734,-35,826,-251,356,429,-69,264,284,518,907,212,300,-860,-505,-731,-127,-848,-1000,-656,765,-270,-12,-400,950,277,1000,-1000,953,-537,-1000,-147,243,589,33,1000,-83,994,614,-225,-1000,-46,579,682,-619,-1000,1000,735,223,-120,45,-1000,261,992,735,471,-84,-107,-337,-1000,543}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00298() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{399,1000,-609,-1000,-427,178,757,-221,-1000,54,1000,-120,1000,542,-1000,-455,-599,813,-58,-126,-297,-306,-1000,-773,-487,1000,961,-949,-290,719,-905,270,-935,120,-1000,-424,19,-589,897,-487,529,10,135,-1000,642,1000,-1000,891,145,-1000,-302,-31,135,-543,748,514,948,-1000,-61,-663,1000,743,-1000,256}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00299() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setMethod(int):void",
+            new int[]{883,999,850,-300,1000,-764,-345,-1000,1000,-967,1000,673,30,-830,-1000,-740,-75,52,326,852,1000,-74,753,72,-1000,1000,523,-1000,1000,-331,-655,1000,-844,1000,-679,-529,14,552,-242,966,665,-96,-284,590,811,385,-745,-680,1000,455,-1000,-417,-1000,-785,-557,192,1000,1000,353,-877,1000,271,605,-239}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00300() {
+        org.junit.Assert.assertEquals("VOID|getSize=java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setSize(long):void",
+            new int[]{-1000,-533,503,-92,-505,378,1000,-272,-387,1000,-1000,-397,355,962,-686,293,-1000,88,339,-326,-1000,-731,-1000,-322,-1000,702,1000,-202,-1000,-48,-217,-591,-1000,792,-308,1000,-664,-470,-897,-893,-865,-429,1000,-290,-1000,677,85,-239,86,-907,-624,477,-158,-354,-1000,195,-859,266,-587,1000,-1000,-326,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00301() {
+        org.junit.Assert.assertEquals("VOID|getSize=java.lang.Long:MQ==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setSize(long):void",
+            new int[]{1000,1000,1000,1000,-65,-768,684,865,-895,1000,-1000,-23,1000,0,-399,-644,-332,-1000,-1000,-991,1000,697,-1000,493,760,1000,-70,-1000,664,897,-1000,-1000,-1000,-1000,-71,1000,-1000,-1000,1000,-442,-678,-422,-769,-1000,-1000,-101,-258,557,-697,-1000,-1000,-777,-1000,-861,216,-1000,-902,1000,-1000,1000,-1000,212,-498,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00302() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setSize(long):void",
+            new int[]{-837,203,470,-372,807,144,650,1000,-108,-391,1000,693,563,820,1000,449,-903,1000,-73,986,-437,-1000,-400,543,-184,24,-41,-194,-86,495,-530,978,-513,1000,1000,271,-619,-273,-361,-104,784,-1000,529,-64,-492,-222,-963,177,-301,-861,-641,182,-690,1000,-656,-1000,-1000,610,-115,138,-1000,77,-492,-632}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00303() {
+        org.junit.Assert.assertEquals("VOID|getSize=java.lang.Long:MQ==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setSize(long):void",
+            new int[]{1000,-53,-378,1000,-1000,-743,-26,522,236,1000,697,578,-451,988,1000,-968,754,-1000,354,-544,707,837,400,289,569,350,-159,390,366,-473,295,-1000,-1000,-1000,-341,-271,-508,273,813,137,455,1000,688,-1000,400,-1000,400,-531,197,-107,641,-929,400,148,314,-549,-187,-1000,-214,-1000,1000,158,1000,956}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00304() {
+        org.junit.Assert.assertEquals("VOID|getSize=java.lang.Long:MjE0NzQ4MzY0Nw==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setSize(long):void",
+            new int[]{329,1000,620,-1000,1000,-60,819,487,-752,-124,823,120,1000,524,198,1000,2,758,-1000,1000,963,-489,-988,859,977,378,-370,-553,978,1000,-1000,1000,-503,-263,1000,99,-746,629,1000,1000,790,-889,-640,-336,1000,357,419,1000,-1000,-301,558,-618,-1000,1000,-296,-1000,-1000,-328,-1000,1000,-1000,-1000,-901,607}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00305() {
+        org.junit.Assert.assertEquals("VOID|getSize=java.lang.Long:NQ==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setSize(long):void",
+            new int[]{746,-593,1000,-389,-10,-590,1000,425,-532,1000,-1000,-512,709,1000,149,-169,243,-191,-593,-854,924,59,-806,-215,622,788,-600,-964,679,338,-1000,-1000,-1000,-1000,123,986,-912,-442,1000,-756,1000,-138,-129,1000,-838,-166,-833,-141,81,-1000,1000,-280,-926,-268,-739,-1000,98,1000,176,665,-720,-670,-551,-155}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00306() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setSize(long):void",
+            new int[]{93,707,735,895,520,33,592,1000,1000,-24,-85,-1000,345,818,-1000,23,-315,628,-359,223,64,-1000,1000,681,-1000,392,-1000,469,-556,833,-1000,-128,1000,1000,463,-274,-881,-55,-899,-758,-241,-930,-788,-17,-1000,160,953,-223,-979,-705,-729,-1000,461,-1000,-1000,876,-166,433,17,1000,-102,-161,-375,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00307() {
+        org.junit.Assert.assertEquals("VOID|getSize=java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setSize(long):void",
+            new int[]{-992,312,-558,-3,-1000,-441,-400,-1000,360,-146,-51,335,-1000,-987,96,-1000,-1000,-158,1000,-1000,-1000,450,1000,577,-3,-144,1000,-1000,-720,-500,-670,455,-1000,727,-1000,467,-79,-582,-1000,-721,354,1000,1000,-857,400,205,1000,-691,413,469,-1000,1000,-1000,-47,-1000,962,1000,160,1000,914,-308,-583,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00308() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setSize(long):void",
+            new int[]{379,-281,-138,245,1000,-150,44,1000,-321,1000,200,-10,1000,-802,713,-772,-321,-156,-1000,351,903,987,-1000,448,1000,861,-400,-132,1000,942,1000,686,21,29,1000,1000,-461,-1000,1000,1000,1000,467,-23,-560,151,-893,32,1000,-1000,-15,691,-536,-689,1000,-46,-1000,-1000,1000,131,-63,-1000,436,406,822}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00309() {
+        org.junit.Assert.assertEquals("VOID|getUnixMode=java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setUnixMode(int):void",
+            new int[]{1000,267,782,527,-646,-166,-659,138,-657,935,-434,304,143,-420,349,84,-225,626,-1000,-389,-708,-205,902,-811,-626,4,-56,-672,-320,1000,-399,731,-673,509,-458,382,27,-83,-1000,-402,1000,-665,-1000,-433,530,-279,457,-371,889,-404,345,486,334,189,1000,-415,-307,309,-1000,1000,484,-588,-662,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00310() {
+        org.junit.Assert.assertEquals("VOID|getUnixMode=java.lang.Integer:MTAw", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setUnixMode(int):void",
+            new int[]{-1000,475,-1000,476,373,-446,-1000,109,1000,285,-258,1000,645,406,575,1000,-792,-877,-139,1000,259,-179,323,1000,-122,-1000,-701,-132,969,1000,1000,-155,275,1000,-206,937,211,-200,505,-307,-1000,1000,694,394,855,1000,-632,-902,-1000,513,243,890,-776,-861,-175,-798,340,-745,804,-1000,-1000,893,-497,674}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00311() {
+        org.junit.Assert.assertEquals("VOID|getUnixMode=java.lang.Integer:NjU1MzU=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setUnixMode(int):void",
+            new int[]{-340,-113,-262,46,-376,-88,271,831,225,394,1000,595,557,-1000,-172,1000,-1000,371,-210,927,51,-1000,-294,1000,-471,-1000,-256,-1000,936,1000,614,631,685,-321,-33,480,-1000,-1000,-642,576,-339,888,-1000,829,592,105,-226,-1000,251,259,1000,336,577,-677,1000,-487,-1000,-748,1000,-933,-788,35,-356,380}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00312() {
+        org.junit.Assert.assertEquals("VOID|getUnixMode=java.lang.Integer:NjU1MzU=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setUnixMode(int):void",
+            new int[]{642,-77,-1000,-397,1000,442,-386,-1000,1000,62,-881,801,569,1000,-230,-1000,1000,-66,1000,66,-1000,419,-851,725,355,689,-1000,1000,-114,-1000,-30,-64,-1000,-1000,1000,-208,-710,1000,1000,361,-1000,-584,-116,-981,-134,645,-1000,1000,-1000,990,-649,921,-411,1000,-1000,-687,1000,705,-1000,-806,833,-434,-1000,503}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00313() {
+        org.junit.Assert.assertEquals("VOID|getUnixMode=java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setUnixMode(int):void",
+            new int[]{-1000,1000,-468,-724,-1000,-159,894,-719,1000,1000,1000,487,-302,332,644,707,3,900,1000,653,-467,442,260,272,-1000,-441,39,697,15,207,941,47,932,789,-510,414,467,500,591,1000,-989,387,839,908,650,1000,-838,-432,-8,706,1000,1000,-1000,70,-313,-488,565,-183,401,-613,-1000,-252,-565,-392}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00314() {
+        org.junit.Assert.assertEquals("VOID|getUnixMode=java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setUnixMode(int):void",
+            new int[]{211,1000,-1000,-1000,736,766,-377,109,1000,-399,-258,-506,1000,772,-686,-152,-197,486,640,823,-650,71,323,523,-740,791,-473,-460,870,-617,95,1000,312,-1000,402,937,-1000,-1000,1000,1000,-1000,391,87,-215,1000,20,447,546,-1000,68,-589,-133,704,501,-76,-552,-456,-752,400,-1000,212,56,-660,589}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00315() {
+        org.junit.Assert.assertEquals("VOID|getUnixMode=java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setUnixMode(int):void",
+            new int[]{-1000,680,-417,-626,-646,-166,-659,-1000,1000,1000,341,1000,143,936,154,-411,818,594,1000,430,-1000,1000,-517,110,-1000,-19,-260,1000,-35,-1000,1000,136,295,-458,444,257,45,1000,1000,1000,-1000,-557,43,392,236,1000,-1000,795,248,952,468,1000,-1000,1000,-1000,-690,517,196,-496,-560,-886,-735,-1000,-462}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00316() {
+        org.junit.Assert.assertEquals("VOID|getUnixMode=java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setUnixMode(int):void",
+            new int[]{-410,679,-713,-156,14,38,-810,95,1000,685,1000,656,0,137,569,865,-500,-562,654,457,-89,-1000,-272,689,-524,-452,-573,86,433,1000,68,126,-89,1000,-362,252,117,-421,415,280,-644,1000,296,153,852,519,-474,-753,-1000,163,762,843,-579,-329,-19,-711,422,-161,282,-538,-714,400,-323,397}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00317() {
+        org.junit.Assert.assertEquals("VOID|getUnixMode=java.lang.Integer:NjU1MzU=", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setUnixMode(int):void",
+            new int[]{-1000,223,-72,1000,14,-22,-903,-285,1000,-23,-467,1000,447,324,567,106,33,-1000,-975,-71,-415,-1000,-348,482,203,-331,-1000,525,-1000,529,68,215,-415,768,-788,-1000,-818,247,659,-1000,447,-339,78,-1000,45,534,-441,-753,-1000,163,-866,1000,-823,-329,-782,-711,607,433,282,952,-240,-222,-1000,-722}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00318() {
+        org.junit.Assert.assertEquals("VOID|getUnixMode=java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "org.apache.commons.compress.archivers.zip.ZipArchiveEntry", "setUnixMode(int):void",
+            new int[]{1000,-85,-640,-17,-646,-166,-1000,-307,1000,216,-485,612,635,1000,140,-732,664,-1000,118,139,-851,-203,-423,305,349,150,-1000,519,1000,-109,216,-154,-1000,-456,1000,-273,-114,481,1000,-366,1000,-93,-1000,-585,655,407,-692,-371,-634,302,-59,562,279,1000,1000,-1000,550,379,-1000,-327,-104,-54,-944,297}));
+    }
+}

@@ -1,0 +1,3418 @@
+[
+  {
+    "project": "Chart",
+    "bug_id": "1"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "2"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "3"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "4"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "5"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "6"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "7"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "8"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "9"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "10"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "11"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "12"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "13"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "14"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "15"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "16"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "17"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "18"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "19"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "20"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "21"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "22"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "23"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "24"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "25"
+  },
+  {
+    "project": "Chart",
+    "bug_id": "26"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "1"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "2"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "3"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "4"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "5"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "7"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "8"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "9"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "10"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "11"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "12"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "13"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "14"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "15"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "16"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "17"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "18"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "19"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "20"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "21"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "22"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "23"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "24"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "25"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "26"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "27"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "28"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "29"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "30"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "31"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "32"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "33"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "34"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "35"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "36"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "37"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "38"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "39"
+  },
+  {
+    "project": "Cli",
+    "bug_id": "40"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "1"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "2"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "3"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "4"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "5"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "6"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "7"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "8"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "9"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "10"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "11"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "12"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "13"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "14"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "15"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "16"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "17"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "18"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "19"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "20"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "21"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "22"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "23"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "24"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "25"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "26"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "27"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "28"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "29"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "30"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "31"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "32"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "33"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "34"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "35"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "36"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "37"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "38"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "39"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "40"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "41"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "42"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "43"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "44"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "45"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "46"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "47"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "48"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "49"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "50"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "51"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "52"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "53"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "54"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "55"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "56"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "57"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "58"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "59"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "60"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "61"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "62"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "64"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "65"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "66"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "67"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "68"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "69"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "70"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "71"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "72"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "73"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "74"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "75"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "76"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "77"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "78"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "79"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "80"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "81"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "82"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "83"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "84"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "85"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "86"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "87"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "88"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "89"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "90"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "91"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "92"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "94"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "95"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "96"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "97"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "98"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "99"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "100"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "101"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "102"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "103"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "104"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "105"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "106"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "107"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "108"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "109"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "110"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "111"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "112"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "113"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "114"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "115"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "116"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "117"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "118"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "119"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "120"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "121"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "122"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "123"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "124"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "125"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "126"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "127"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "128"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "129"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "130"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "131"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "132"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "133"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "134"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "135"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "136"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "137"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "138"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "139"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "140"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "141"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "142"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "143"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "144"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "145"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "146"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "147"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "148"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "149"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "150"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "151"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "152"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "153"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "154"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "155"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "156"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "157"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "158"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "159"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "160"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "161"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "162"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "163"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "164"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "165"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "166"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "167"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "168"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "169"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "170"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "171"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "172"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "173"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "174"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "175"
+  },
+  {
+    "project": "Closure",
+    "bug_id": "176"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "1"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "2"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "3"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "4"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "5"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "6"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "7"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "8"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "9"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "10"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "11"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "12"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "13"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "14"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "15"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "16"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "17"
+  },
+  {
+    "project": "Codec",
+    "bug_id": "18"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "1"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "2"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "3"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "4"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "5"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "6"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "7"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "8"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "9"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "10"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "11"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "12"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "13"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "14"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "15"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "16"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "17"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "18"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "19"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "20"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "21"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "22"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "23"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "24"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "25"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "26"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "27"
+  },
+  {
+    "project": "Collections",
+    "bug_id": "28"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "1"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "2"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "3"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "4"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "5"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "6"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "7"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "8"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "9"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "10"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "11"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "12"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "13"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "14"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "15"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "16"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "17"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "18"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "19"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "20"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "21"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "22"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "23"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "24"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "25"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "26"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "27"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "28"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "29"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "30"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "31"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "32"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "33"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "34"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "35"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "36"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "37"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "38"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "39"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "40"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "41"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "42"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "43"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "44"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "45"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "46"
+  },
+  {
+    "project": "Compress",
+    "bug_id": "47"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "1"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "2"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "3"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "4"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "5"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "6"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "7"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "8"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "9"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "10"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "11"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "12"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "13"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "14"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "15"
+  },
+  {
+    "project": "Csv",
+    "bug_id": "16"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "1"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "2"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "3"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "4"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "5"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "6"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "7"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "8"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "9"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "10"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "11"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "12"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "13"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "14"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "15"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "16"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "17"
+  },
+  {
+    "project": "Gson",
+    "bug_id": "18"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "1"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "2"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "3"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "4"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "5"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "6"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "7"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "8"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "9"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "10"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "11"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "12"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "13"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "14"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "15"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "16"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "17"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "18"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "19"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "20"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "21"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "22"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "23"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "24"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "25"
+  },
+  {
+    "project": "JacksonCore",
+    "bug_id": "26"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "1"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "2"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "3"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "4"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "5"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "6"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "7"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "8"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "9"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "10"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "11"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "12"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "13"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "14"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "15"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "16"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "17"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "18"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "19"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "20"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "21"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "22"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "23"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "24"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "25"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "26"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "27"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "28"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "29"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "30"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "31"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "32"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "33"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "34"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "35"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "36"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "37"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "38"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "39"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "40"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "41"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "42"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "43"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "44"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "45"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "46"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "47"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "48"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "49"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "50"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "51"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "52"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "53"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "54"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "55"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "56"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "57"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "58"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "59"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "60"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "61"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "62"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "63"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "64"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "66"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "67"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "68"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "69"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "70"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "71"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "72"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "73"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "74"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "75"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "76"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "77"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "78"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "79"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "80"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "81"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "82"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "83"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "84"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "85"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "86"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "87"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "88"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "90"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "91"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "92"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "93"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "94"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "95"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "96"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "97"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "98"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "99"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "100"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "101"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "102"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "103"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "104"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "105"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "106"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "107"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "108"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "109"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "110"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "111"
+  },
+  {
+    "project": "JacksonDatabind",
+    "bug_id": "112"
+  },
+  {
+    "project": "JacksonXml",
+    "bug_id": "1"
+  },
+  {
+    "project": "JacksonXml",
+    "bug_id": "2"
+  },
+  {
+    "project": "JacksonXml",
+    "bug_id": "3"
+  },
+  {
+    "project": "JacksonXml",
+    "bug_id": "4"
+  },
+  {
+    "project": "JacksonXml",
+    "bug_id": "5"
+  },
+  {
+    "project": "JacksonXml",
+    "bug_id": "6"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "1"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "2"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "3"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "4"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "5"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "6"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "7"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "8"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "9"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "10"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "11"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "12"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "13"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "14"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "15"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "16"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "17"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "18"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "19"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "20"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "21"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "22"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "23"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "24"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "25"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "26"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "27"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "28"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "29"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "30"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "31"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "32"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "33"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "34"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "35"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "36"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "37"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "38"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "39"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "40"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "41"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "42"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "43"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "44"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "45"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "46"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "47"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "48"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "49"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "50"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "51"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "52"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "53"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "54"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "55"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "56"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "57"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "58"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "59"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "60"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "61"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "62"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "63"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "64"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "65"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "66"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "67"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "68"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "69"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "70"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "71"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "72"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "73"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "74"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "75"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "76"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "77"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "78"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "79"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "80"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "81"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "82"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "83"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "84"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "85"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "86"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "87"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "88"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "89"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "90"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "91"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "92"
+  },
+  {
+    "project": "Jsoup",
+    "bug_id": "93"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "1"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "2"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "3"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "4"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "5"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "6"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "7"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "8"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "9"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "10"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "11"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "12"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "13"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "14"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "15"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "16"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "17"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "18"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "19"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "20"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "21"
+  },
+  {
+    "project": "JxPath",
+    "bug_id": "22"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "1"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "3"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "4"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "5"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "6"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "7"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "8"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "9"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "10"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "11"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "12"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "13"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "14"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "15"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "16"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "17"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "19"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "20"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "21"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "22"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "23"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "24"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "26"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "27"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "28"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "29"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "30"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "31"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "32"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "33"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "34"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "35"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "36"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "37"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "38"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "39"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "40"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "41"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "42"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "43"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "44"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "45"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "46"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "47"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "49"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "50"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "51"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "52"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "53"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "54"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "55"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "56"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "57"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "58"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "59"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "60"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "61"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "62"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "63"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "64"
+  },
+  {
+    "project": "Lang",
+    "bug_id": "65"
+  },
+  {
+    "project": "Math",
+    "bug_id": "1"
+  },
+  {
+    "project": "Math",
+    "bug_id": "2"
+  },
+  {
+    "project": "Math",
+    "bug_id": "3"
+  },
+  {
+    "project": "Math",
+    "bug_id": "4"
+  },
+  {
+    "project": "Math",
+    "bug_id": "5"
+  },
+  {
+    "project": "Math",
+    "bug_id": "6"
+  },
+  {
+    "project": "Math",
+    "bug_id": "7"
+  },
+  {
+    "project": "Math",
+    "bug_id": "8"
+  },
+  {
+    "project": "Math",
+    "bug_id": "9"
+  },
+  {
+    "project": "Math",
+    "bug_id": "10"
+  },
+  {
+    "project": "Math",
+    "bug_id": "11"
+  },
+  {
+    "project": "Math",
+    "bug_id": "12"
+  },
+  {
+    "project": "Math",
+    "bug_id": "13"
+  },
+  {
+    "project": "Math",
+    "bug_id": "14"
+  },
+  {
+    "project": "Math",
+    "bug_id": "15"
+  },
+  {
+    "project": "Math",
+    "bug_id": "16"
+  },
+  {
+    "project": "Math",
+    "bug_id": "17"
+  },
+  {
+    "project": "Math",
+    "bug_id": "18"
+  },
+  {
+    "project": "Math",
+    "bug_id": "19"
+  },
+  {
+    "project": "Math",
+    "bug_id": "20"
+  },
+  {
+    "project": "Math",
+    "bug_id": "21"
+  },
+  {
+    "project": "Math",
+    "bug_id": "22"
+  },
+  {
+    "project": "Math",
+    "bug_id": "23"
+  },
+  {
+    "project": "Math",
+    "bug_id": "24"
+  },
+  {
+    "project": "Math",
+    "bug_id": "25"
+  },
+  {
+    "project": "Math",
+    "bug_id": "26"
+  },
+  {
+    "project": "Math",
+    "bug_id": "27"
+  },
+  {
+    "project": "Math",
+    "bug_id": "28"
+  },
+  {
+    "project": "Math",
+    "bug_id": "29"
+  },
+  {
+    "project": "Math",
+    "bug_id": "30"
+  },
+  {
+    "project": "Math",
+    "bug_id": "31"
+  },
+  {
+    "project": "Math",
+    "bug_id": "32"
+  },
+  {
+    "project": "Math",
+    "bug_id": "33"
+  },
+  {
+    "project": "Math",
+    "bug_id": "34"
+  },
+  {
+    "project": "Math",
+    "bug_id": "35"
+  },
+  {
+    "project": "Math",
+    "bug_id": "36"
+  },
+  {
+    "project": "Math",
+    "bug_id": "37"
+  },
+  {
+    "project": "Math",
+    "bug_id": "38"
+  },
+  {
+    "project": "Math",
+    "bug_id": "39"
+  },
+  {
+    "project": "Math",
+    "bug_id": "40"
+  },
+  {
+    "project": "Math",
+    "bug_id": "41"
+  },
+  {
+    "project": "Math",
+    "bug_id": "42"
+  },
+  {
+    "project": "Math",
+    "bug_id": "43"
+  },
+  {
+    "project": "Math",
+    "bug_id": "44"
+  },
+  {
+    "project": "Math",
+    "bug_id": "45"
+  },
+  {
+    "project": "Math",
+    "bug_id": "46"
+  },
+  {
+    "project": "Math",
+    "bug_id": "47"
+  },
+  {
+    "project": "Math",
+    "bug_id": "48"
+  },
+  {
+    "project": "Math",
+    "bug_id": "49"
+  },
+  {
+    "project": "Math",
+    "bug_id": "50"
+  },
+  {
+    "project": "Math",
+    "bug_id": "51"
+  },
+  {
+    "project": "Math",
+    "bug_id": "52"
+  },
+  {
+    "project": "Math",
+    "bug_id": "53"
+  },
+  {
+    "project": "Math",
+    "bug_id": "54"
+  },
+  {
+    "project": "Math",
+    "bug_id": "55"
+  },
+  {
+    "project": "Math",
+    "bug_id": "56"
+  },
+  {
+    "project": "Math",
+    "bug_id": "57"
+  },
+  {
+    "project": "Math",
+    "bug_id": "58"
+  },
+  {
+    "project": "Math",
+    "bug_id": "59"
+  },
+  {
+    "project": "Math",
+    "bug_id": "60"
+  },
+  {
+    "project": "Math",
+    "bug_id": "61"
+  },
+  {
+    "project": "Math",
+    "bug_id": "62"
+  },
+  {
+    "project": "Math",
+    "bug_id": "63"
+  },
+  {
+    "project": "Math",
+    "bug_id": "64"
+  },
+  {
+    "project": "Math",
+    "bug_id": "65"
+  },
+  {
+    "project": "Math",
+    "bug_id": "66"
+  },
+  {
+    "project": "Math",
+    "bug_id": "67"
+  },
+  {
+    "project": "Math",
+    "bug_id": "68"
+  },
+  {
+    "project": "Math",
+    "bug_id": "69"
+  },
+  {
+    "project": "Math",
+    "bug_id": "70"
+  },
+  {
+    "project": "Math",
+    "bug_id": "71"
+  },
+  {
+    "project": "Math",
+    "bug_id": "72"
+  },
+  {
+    "project": "Math",
+    "bug_id": "73"
+  },
+  {
+    "project": "Math",
+    "bug_id": "74"
+  },
+  {
+    "project": "Math",
+    "bug_id": "75"
+  },
+  {
+    "project": "Math",
+    "bug_id": "76"
+  },
+  {
+    "project": "Math",
+    "bug_id": "77"
+  },
+  {
+    "project": "Math",
+    "bug_id": "78"
+  },
+  {
+    "project": "Math",
+    "bug_id": "79"
+  },
+  {
+    "project": "Math",
+    "bug_id": "80"
+  },
+  {
+    "project": "Math",
+    "bug_id": "81"
+  },
+  {
+    "project": "Math",
+    "bug_id": "82"
+  },
+  {
+    "project": "Math",
+    "bug_id": "83"
+  },
+  {
+    "project": "Math",
+    "bug_id": "84"
+  },
+  {
+    "project": "Math",
+    "bug_id": "85"
+  },
+  {
+    "project": "Math",
+    "bug_id": "86"
+  },
+  {
+    "project": "Math",
+    "bug_id": "87"
+  },
+  {
+    "project": "Math",
+    "bug_id": "88"
+  },
+  {
+    "project": "Math",
+    "bug_id": "89"
+  },
+  {
+    "project": "Math",
+    "bug_id": "90"
+  },
+  {
+    "project": "Math",
+    "bug_id": "91"
+  },
+  {
+    "project": "Math",
+    "bug_id": "92"
+  },
+  {
+    "project": "Math",
+    "bug_id": "93"
+  },
+  {
+    "project": "Math",
+    "bug_id": "94"
+  },
+  {
+    "project": "Math",
+    "bug_id": "95"
+  },
+  {
+    "project": "Math",
+    "bug_id": "96"
+  },
+  {
+    "project": "Math",
+    "bug_id": "97"
+  },
+  {
+    "project": "Math",
+    "bug_id": "98"
+  },
+  {
+    "project": "Math",
+    "bug_id": "99"
+  },
+  {
+    "project": "Math",
+    "bug_id": "100"
+  },
+  {
+    "project": "Math",
+    "bug_id": "101"
+  },
+  {
+    "project": "Math",
+    "bug_id": "102"
+  },
+  {
+    "project": "Math",
+    "bug_id": "103"
+  },
+  {
+    "project": "Math",
+    "bug_id": "104"
+  },
+  {
+    "project": "Math",
+    "bug_id": "105"
+  },
+  {
+    "project": "Math",
+    "bug_id": "106"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "1"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "2"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "3"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "4"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "5"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "6"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "7"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "8"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "9"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "10"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "11"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "12"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "13"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "14"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "15"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "16"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "17"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "18"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "19"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "20"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "21"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "22"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "23"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "24"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "25"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "26"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "27"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "28"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "29"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "30"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "31"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "32"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "33"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "34"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "35"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "36"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "37"
+  },
+  {
+    "project": "Mockito",
+    "bug_id": "38"
+  },
+  {
+    "project": "Time",
+    "bug_id": "1"
+  },
+  {
+    "project": "Time",
+    "bug_id": "2"
+  },
+  {
+    "project": "Time",
+    "bug_id": "3"
+  },
+  {
+    "project": "Time",
+    "bug_id": "4"
+  },
+  {
+    "project": "Time",
+    "bug_id": "5"
+  },
+  {
+    "project": "Time",
+    "bug_id": "6"
+  },
+  {
+    "project": "Time",
+    "bug_id": "7"
+  },
+  {
+    "project": "Time",
+    "bug_id": "8"
+  },
+  {
+    "project": "Time",
+    "bug_id": "9"
+  },
+  {
+    "project": "Time",
+    "bug_id": "10"
+  },
+  {
+    "project": "Time",
+    "bug_id": "11"
+  },
+  {
+    "project": "Time",
+    "bug_id": "12"
+  },
+  {
+    "project": "Time",
+    "bug_id": "13"
+  },
+  {
+    "project": "Time",
+    "bug_id": "14"
+  },
+  {
+    "project": "Time",
+    "bug_id": "15"
+  },
+  {
+    "project": "Time",
+    "bug_id": "16"
+  },
+  {
+    "project": "Time",
+    "bug_id": "17"
+  },
+  {
+    "project": "Time",
+    "bug_id": "18"
+  },
+  {
+    "project": "Time",
+    "bug_id": "19"
+  },
+  {
+    "project": "Time",
+    "bug_id": "20"
+  },
+  {
+    "project": "Time",
+    "bug_id": "22"
+  },
+  {
+    "project": "Time",
+    "bug_id": "23"
+  },
+  {
+    "project": "Time",
+    "bug_id": "24"
+  },
+  {
+    "project": "Time",
+    "bug_id": "25"
+  },
+  {
+    "project": "Time",
+    "bug_id": "26"
+  },
+  {
+    "project": "Time",
+    "bug_id": "27"
+  }
+]

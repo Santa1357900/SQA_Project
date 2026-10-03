@@ -1,0 +1,7 @@
+work/
+Code/build/
+Code/.build.lock
+**/__pycache__/
+**/*.pyc
+**/.run.lock
+**/.job.lock
