@@ -115,7 +115,7 @@ Test/<experiment>/<Project>/<Project> <bug>/run<run>/<attempt>/
 ## วิธีอ่านตัวชี้วัด
 
 - **Test coverage**: สัดส่วนเมธอดใน modified classes ที่ test ซึ่งผ่าน validation เรียกถึง
-- **Code coverage ratio**: `line_ratio = lines_covered / lines_total`; `branch_ratio` เป็น coverage เงื่อนไข/branch ตามเครื่องมือและ field `branch_measure`
+- **Code coverage ratio**: `line_ratio = lines_covered / lines_total`; `Conditions_ratio` เป็น coverage เงื่อนไข/Conditions ตามเครื่องมือและ field `Conditions_measure`
 - **Fault detection**: `fault_detected=true` เมื่อ test เปิดเผยความต่างระหว่าง buggy กับ fixed revision ตามเกณฑ์ของ harness
 - **Fault detection rate (FDR)**: จำนวน bug ที่ตรวจพบหารด้วยจำนวน bug ที่ประเมินผลได้ ต้องรายงานจำนวนที่ประเมินไม่ได้ควบคู่กัน
 
@@ -131,7 +131,7 @@ snapshot นี้รวมผลจากหลาย algorithm versions ตา
 
 ตารางนี้สรุปผล 854 bugs จากไฟล์ `result.json` ที่แนบมา. FDR คำนวณจาก detected/evaluated; ค่า coverage เป็นค่าเฉลี่ยของ complete runs ใน modified classes. `—` หมายถึงไม่มีค่าเฉลี่ยที่นำมารายงานได้ โดยเฉพาะ Jsoup มีทั้ง Cobertura และ JaCoCo จึงไม่เฉลี่ย coverage ข้ามเครื่องมือ.
 
-| Project | Selected | Evaluated | Detected | Unknown | FDR | Test coverage | Line coverage | Branch/condition coverage |
+| Project | Selected | Evaluated | Detected | Unknown | FDR | Test coverage | Line coverage | Conditions coverage |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Chart | 26 | 26 | 14 | 0 | 53.85% | 88.69% | 63.38% | 46.07% |
 | Cli | 39 | 30 | 7 | 9 | 23.33% | 85.80% | 63.00% | 50.90% |
