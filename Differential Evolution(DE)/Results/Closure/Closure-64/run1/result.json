@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "experiment": "all-defects4j-v3110-full512-w4",
+  "algorithm": "DE",
+  "algorithm_version": "3.1.10-rebuild",
+  "project": "Closure",
+  "bug_id": 64,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "stage": "finished",
+  "error": null,
+  "modified_classes": [
+    "com.google.javascript.jscomp.Compiler"
+  ],
+  "tests_generated": 74,
+  "tests_validated": 74,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "covered_methods": 54,
+    "total_methods": 130,
+    "ratio": 0.4153846153846154
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 280,
+    "lines_total": 793,
+    "line_ratio": 0.3530895334174023,
+    "branch_measure": "condition",
+    "branches_covered": 88,
+    "branches_total": 320,
+    "branch_ratio": 0.275
+  },
+  "generation_seconds": 1097.893,
+  "total_seconds": 1215.049,
+  "configuration": {
+    "population": 16,
+    "budget": 512,
+    "mutation": 0.7,
+    "crossover": 0.9,
+    "input_range": 1000,
+    "max_methods": 0,
+    "max_tests_per_method": 16,
+    "method_timeout": 300,
+    "job_timeout": 1500,
+    "validation_reserve": 180,
+    "test_timeout": 60,
+    "command_timeout": 600,
+    "seed": 2026,
+    "heap": "512m"
+  },
+  "artifacts": {
+    "tests": "Test/Closure/Closure 64/run1/1790443111690781627",
+    "logs": null,
+    "legacy_result": null
+  }
+}

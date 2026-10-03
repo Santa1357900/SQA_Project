@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "experiment": "all-defects4j-v3110-full512-w4",
+  "algorithms": {
+    "DE": {
+      "selected_unique_bugs": 854,
+      "evaluated_unique_bugs": 701,
+      "detected_unique_bugs": 95,
+      "unknown_outcome_bugs": 153,
+      "fault_detection_rate": 0.1355206847360913,
+      "complete_runs": 701,
+      "coverage_tools": "Defects4J/Cobertura:698;JaCoCo:3",
+      "mixed_coverage_tools": true,
+      "mean_test_coverage_ratio": null,
+      "mean_line_coverage_ratio": null,
+      "mean_branch_coverage_ratio": null,
+      "mean_generation_seconds": 327.26540941512127,
+      "mean_total_seconds": 442.9903395149786
+    }
+  }
+}

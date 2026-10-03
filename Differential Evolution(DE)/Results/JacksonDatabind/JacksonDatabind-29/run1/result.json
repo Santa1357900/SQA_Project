@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "experiment": "all-defects4j-v3110-full512-w4",
+  "algorithm": "DE",
+  "algorithm_version": "3.1.10-rebuild",
+  "project": "JacksonDatabind",
+  "bug_id": 29,
+  "run": 1,
+  "status": "no_generated_tests",
+  "status_detail": "no_generated_tests",
+  "stage": "deserializeFromObject(com.fasterxml.jackson.core.JsonParser,com.fasterxml.jackson.databind.DeserializationContext):java.lang.Object",
+  "error": null,
+  "modified_classes": [
+    "com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandler"
+  ],
+  "tests_generated": 0,
+  "tests_validated": 0,
+  "fixed_failing_tests": null,
+  "buggy_failing_tests": null,
+  "fault_detected": null,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "covered_methods": null,
+    "total_methods": null,
+    "ratio": null,
+    "unavailable_reason": "run did not complete"
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": null,
+    "lines_total": null,
+    "line_ratio": null,
+    "branch_measure": "condition",
+    "branches_covered": null,
+    "branches_total": null,
+    "branch_ratio": null
+  },
+  "generation_seconds": 36.658,
+  "total_seconds": 86.093,
+  "configuration": {
+    "population": 16,
+    "budget": 512,
+    "mutation": 0.7,
+    "crossover": 0.9,
+    "input_range": 1000,
+    "max_methods": 0,
+    "max_tests_per_method": 16,
+    "method_timeout": 300,
+    "job_timeout": 1500,
+    "validation_reserve": 180,
+    "test_timeout": 60,
+    "command_timeout": 600,
+    "seed": 2026,
+    "heap": "512m"
+  },
+  "artifacts": {
+    "tests": null,
+    "logs": null,
+    "legacy_result": null
+  }
+}

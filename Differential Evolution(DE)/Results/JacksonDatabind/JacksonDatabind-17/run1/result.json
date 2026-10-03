@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "experiment": "all-defects4j-v3110-full512-w4",
+  "algorithm": "DE",
+  "algorithm_version": "3.1.10-rebuild",
+  "project": "JacksonDatabind",
+  "bug_id": 17,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "stage": "finished",
+  "error": null,
+  "modified_classes": [
+    "com.fasterxml.jackson.databind.ObjectMapper"
+  ],
+  "tests_generated": 328,
+  "tests_validated": 328,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "covered_methods": 73,
+    "total_methods": 183,
+    "ratio": 0.3989071038251366
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 214,
+    "lines_total": 638,
+    "line_ratio": 0.335423197492163,
+    "branch_measure": "condition",
+    "branches_covered": 31,
+    "branches_total": 192,
+    "branch_ratio": 0.16145833333333334
+  },
+  "generation_seconds": 1272.49,
+  "total_seconds": 1385.283,
+  "configuration": {
+    "population": 16,
+    "budget": 512,
+    "mutation": 0.7,
+    "crossover": 0.9,
+    "input_range": 1000,
+    "max_methods": 0,
+    "max_tests_per_method": 16,
+    "method_timeout": 300,
+    "job_timeout": 1500,
+    "validation_reserve": 180,
+    "test_timeout": 60,
+    "command_timeout": 600,
+    "seed": 2026,
+    "heap": "512m"
+  },
+  "artifacts": {
+    "tests": "Test/JacksonDatabind/JacksonDatabind 17/run1/1790462551365951831",
+    "logs": null,
+    "legacy_result": null
+  }
+}

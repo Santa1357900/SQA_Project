@@ -1,0 +1,26 @@
+{
+  "population": 16,
+  "budget": 512,
+  "mutation": 0.7,
+  "crossover": 0.9,
+  "input_range": 1000,
+  "max_methods": 0,
+  "max_tests_per_method": 16,
+  "method_timeout": 300,
+  "job_timeout": 1500,
+  "validation_reserve": 180,
+  "test_timeout": 60,
+  "command_timeout": 600,
+  "seed": 2026,
+  "heap": "512m",
+  "version": "3.1.10-rebuild",
+  "method": null,
+  "source_sha256": {
+    "DEReplay.java": "b47774cbfd5264e8aafde13dae61afea531549e3a23bb16158aca04cd52fa5f5",
+    "DifferentialEvolution.java": "64f7a727ea854de44a69d5a3c28d2840b19bd5525068d47d363b48332de33b63",
+    "MiniJson.java": "5306734dd701d22ab69e6bb9a24400aca3792274860c0ff4ca10cb5ed0831ce7",
+    "SearchMain.java": "dd160a8e75260eae3233cc91088f3c3a6945352dead16d769840cfa0d37ba5d6",
+    "runner.py": "1909776e51dc0bb03f55cb3ae770c5825bec49637a30116e4c5e16c4c14d78a9",
+    "setup.py": "07dcabab821d4f3f80fabbfccd9e20bcd4a2e7784de046e547b6f9b90a33fcda"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "package": "DE-rand-1-bin_v3.1.20-rebuild_w4",
+  "algorithm": "DE/rand/1/bin",
+  "code_version": "3.1.20-rebuild",
+  "experiment": "all-defects4j-v3120-full512-w4-r1",
+  "scope": "all active bugs discovered from installed Defects4J",
+  "method_filter": null,
+  "configuration": "Configuration/defaults.json"
+}

@@ -1,0 +1,1317 @@
+import java.lang.reflect.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+/** Deterministic test-program decoder. Used unchanged during search and JUnit replay. */
+final class DEReplay {
+    public static final int DIMENSIONS = 64;
+    /** Local generic bean used to create stable reflection Type and Field values. */
+    public static final class GenericInput {
+        public String text;
+        public java.util.List<String> names;
+        public java.util.Map<String, Integer> counts;
+        public java.util.List<java.util.Map<String, Long>> nested;
+        public int[] numbers;
+        public String[] words;
+    }
+    static final class Genes {
+        final int[] values; int at; Field lastField;
+        Object jacksonBean, jacksonProvider, jacksonGenerator;
+        StringWriter jacksonOutput;
+        Genes(int[] values) { this.values = values; }
+        int next() { return values[(at++) % values.length]; }
+        int pick(int n) { return Math.floorMod(next(), n); }
+    }
+    public static final class Observation {
+        public String token, error, generatedSource;
+        public boolean reachedTarget;
+        public int setupCalls, setupFailures, nullFallbacks;
+    }
+    public static String signature(Method m) {
+        StringJoiner params = new StringJoiner(",");
+        for (Class<?> t : m.getParameterTypes()) params.add(t.getTypeName());
+        return m.getName() + "(" + params + "):" + m.getReturnType().getTypeName();
+    }
+    static Class<?> load(String name) throws ClassNotFoundException {
+        return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+    }
+    static Method method(String target, String signature) throws Exception {
+        for (Method m : load(target).getDeclaredMethods())
+            if (signature(m).equals(signature)) {
+                // Public methods on package-private Defects4J classes (for
+                // example Gson's TypeInfoFactory) are not reflectively
+                // accessible until opened on the unnamed application module.
+                if (!m.isAccessible()) m.setAccessible(true);
+                return m;
+            }
+        throw new NoSuchMethodException(signature);
+    }
+    static List<Constructor<?>> constructors(Class<?> type) {
+        List<Constructor<?>> out = new ArrayList();
+        if (!Modifier.isAbstract(type.getModifiers()) && Modifier.isPublic(type.getModifiers()))
+            for (Constructor<?> c : type.getConstructors())
+                if (c.getParameterTypes().length <= 6) out.add(c);
+        Collections.sort(out, new Comparator<Constructor<?>>() {
+            public int compare(Constructor<?> a, Constructor<?> b) {
+                int byArity = a.getParameterTypes().length - b.getParameterTypes().length;
+                return byArity != 0 ? byArity : a.toString().compareTo(b.toString());
+            }
+        });
+        return out;
+    }
+    private static Object[] arguments(Class<?>[] types, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Object[] args = new Object[types.length];
+        for (int i = 0; i < types.length; i++) args[i] = value(types[i], g, depth, report);
+        return args;
+    }
+    private static Object[] arguments(Method method, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Class<?>[] types = method.getParameterTypes();
+        Object[] args = new Object[types.length];
+        boolean closureCompile = method.getDeclaringClass().getName().equals("com.google.javascript.jscomp.Compiler")
+            && method.getName().equals("compile");
+        Type[] generic = method.getGenericParameterTypes();
+        boolean jacksonSerialization = method.getDeclaringClass().getName().equals(
+            "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+            && method.getName().startsWith("serializeAs")
+            && types.length == 3 && types[0] == Object.class;
+        for (int i = 0; i < types.length; i++) {
+            if (jacksonSerialization && g.jacksonBean != null) {
+                if (i == 0) args[i] = g.jacksonBean;
+                else if (i == 1) args[i] = g.jacksonGenerator;
+                else args[i] = g.jacksonProvider;
+                continue;
+            }
+            if (closureCompile && (List.class.isAssignableFrom(types[i])
+                    || (types[i].isArray() && load("com.google.javascript.jscomp.SourceFile")
+                        .isAssignableFrom(types[i].getComponentType())))) {
+                // Compiler.compile takes externs and inputs in either Lists or
+                // arrays depending on Closure version. Keep externs empty and
+                // supply a nonempty, gene-selected input program.
+                if (i == 0) args[i] = types[i].isArray()
+                    ? Array.newInstance(types[i].getComponentType(), 0) : new ArrayList();
+                else {
+                    Object sourceFile = value(load("com.google.javascript.jscomp.SourceFile"),
+                        g, depth + 1, report);
+                    if (types[i].isArray()) {
+                        Object files = Array.newInstance(types[i].getComponentType(), 1);
+                        Array.set(files, 0, sourceFile); args[i] = files;
+                    } else args[i] = new ArrayList(Collections.singletonList(sourceFile));
+                }
+            } else args[i] = value(types[i], g, depth, report);
+        }
+        return args;
+    }
+    private static Number number(Genes g) {
+        int n = g.next();
+        switch (g.pick(12)) {
+            case 0: return 0; case 1: return 1; case 2: return -1;
+            case 3: return Integer.MAX_VALUE; case 4: return Integer.MIN_VALUE;
+            case 5: return Long.MAX_VALUE; case 6: return Long.MIN_VALUE;
+            case 7: return Double.NaN; case 8: return Double.POSITIVE_INFINITY;
+            case 9: return Double.NEGATIVE_INFINITY; case 10: return n / 10.0;
+            default: return n;
+        }
+    }
+    private static String string(Genes g) {
+        int mode = g.pick(16), n = g.next();
+        String digits = Long.toString(Math.abs((long)n));
+        String sign = new String[]{"", "-", "+", "--"}[g.pick(4)];
+        switch (mode) {
+            case 0: return null; case 1: return ""; case 2: return " ";
+            case 3: return Integer.toString(n);
+            case 4: return sign + digits;
+            case 5: return sign + digits + "." + g.pick(1000);
+            case 6: return sign + digits + "e" + g.next();
+            case 7: return sign + "0x" + Long.toHexString(Math.abs((long)n));
+            case 8: return sign + "0x8" + "0".repeat(g.pick(20));
+            case 9: return sign + digits + "fFdDlL".charAt(g.pick(6));
+            case 10: return " " + sign + digits + " ";
+            case 11: return new String[]{"true", "false", "null", "NaN", "Infinity"}[g.pick(5)];
+            case 12: return "a".repeat(g.pick(25));
+            default:
+                String alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-._ /\\\t\n";
+                StringBuilder s = new StringBuilder();
+                int length = g.pick(25);
+                for (int i = 0; i < length; i++) s.append(alphabet.charAt(g.pick(alphabet.length())));
+                return s.toString();
+        }
+    }
+    private static Object value(Class<?> t, Genes g, int depth, Observation report) throws Exception {
+        if (t == String.class || t == CharSequence.class) return string(g);
+        if (t == Comparable.class) return "key" + g.pick(5);
+        if (t == boolean.class || t == Boolean.class) return g.pick(2) == 0;
+        if (t == char.class || t == Character.class) return (char)g.pick(128);
+        if (t == byte.class || t == Byte.class) return number(g).byteValue();
+        if (t == short.class || t == Short.class) return number(g).shortValue();
+        if (t == int.class || t == Integer.class) return number(g).intValue();
+        if (t == long.class || t == Long.class) return number(g).longValue();
+        if (t == float.class || t == Float.class) return number(g).floatValue();
+        if (t == double.class || t == Double.class || t == Number.class) return number(g).doubleValue();
+        if (t.isEnum()) {
+            Object[] constants = t.getEnumConstants();
+            return constants.length == 0 ? null : constants[g.pick(constants.length)];
+        }
+        if (t == Object.class) return g.pick(3) == 0 ? null : "object" + g.pick(5);
+        if (depth >= 3) { report.nullFallbacks++; return null; }
+        if (t.isArray()) {
+            int length = g.pick(6);
+            Object array = Array.newInstance(t.getComponentType(), length);
+            for (int i = 0; i < length; i++) Array.set(array, i, value(t.getComponentType(), g, depth + 1, report));
+            return array;
+        }
+        if (t == List.class || t == Collection.class || t == Iterable.class || t == Set.class) {
+            Collection<Object> items = t == Set.class ? new LinkedHashSet() : new ArrayList();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.add("item" + g.pick(5));
+            return items;
+        }
+        if (t == Map.class) {
+            Map<Object, Object> items = new LinkedHashMap();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.put("key" + g.pick(5), number(g));
+            return items;
+        }
+        if (t == java.util.Date.class) return new java.util.Date(g.next() * 86400000L);
+        if (t == Class.class) return String.class;
+        if (t == java.lang.reflect.Field.class) {
+            Field[] fields = GenericInput.class.getFields();
+            g.lastField = fields[g.pick(fields.length)];
+            return g.lastField;
+        }
+        if (t == java.lang.reflect.Type.class) {
+            if (g.lastField != null && g.pick(3) == 0)
+                return g.lastField.getDeclaringClass();
+            Field[] fields = GenericInput.class.getFields();
+            return fields[g.pick(fields.length)].getGenericType();
+        }
+        if (t == java.io.Reader.class || t == java.io.BufferedReader.class
+                || t == java.io.StringReader.class) {
+            String content = "header,value\n" + string(g) + "," + number(g) + "\n"
+                + "alpha,beta\n";
+            StringReader reader = new StringReader(content);
+            return t == java.io.BufferedReader.class ? new BufferedReader(reader) : reader;
+        }
+        if (t.getName().equals("org.apache.commons.csv.CSVFormat")) {
+            Class<?> format = load("org.apache.commons.csv.CSVFormat");
+            for (String fieldName : new String[]{"DEFAULT", "RFC4180", "EXCEL"}) try {
+                Object result = format.getField(fieldName).get(null);
+                if (t.isInstance(result)) return result;
+            } catch (ReflectiveOperationException ignored) { }
+            for (Method factory : format.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getParameterTypes().length == 0
+                        && t.isAssignableFrom(factory.getReturnType())) try {
+                    return factory.invoke(null);
+                } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.SourceFile")) {
+            Class<?> source = load("com.google.javascript.jscomp.SourceFile");
+            for (Method factory : source.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals("fromCode")
+                        && factory.getParameterTypes().length == 2 && factory.getParameterTypes()[0] == String.class
+                        && factory.getParameterTypes()[1] == String.class) {
+                    String replaySource = System.getProperty("de.generated.source");
+                    if (replaySource != null) {
+                        try {
+                            report.generatedSource = replaySource;
+                            return factory.invoke(null, "de-input.js", replaySource);
+                        } catch (ReflectiveOperationException ignored) { }
+                    }
+                    String[] unusedParameterScripts = {
+                        "window.f = function(a) {};",
+                        "window.f = function(a, b) { return b; };",
+                        "window.f = function(a, b) { var used = b; return used; };",
+                        "window['f'] = function(unused) {};",
+                        "window.f = function(unused, value) { return value; };",
+                        "window['f'] = function(unused, value) { return value; };",
+                        "window.f = function(first, unused, last) { return last; };",
+                        "window.f = function(unused) { var local = 1; return local; };",
+                        "window.f = function(unused, value) { var alias = value; return alias; };",
+                        "window.f = function(unused, value) { if (value) { return 1; } return 2; };",
+                        "window.f = function(unused, value) { value = value + 1; return value; };",
+                        "window.f = function(unused, value) { return function() { return value; }; };",
+                        "window.f = function(unused) { function inner() { return 1; } return inner(); };",
+                        "window.f = function(a, b, unused) { return a + b; };",
+                        "window.f = function(a, unused, b, c) { return a + c; };"
+                    };
+                    String[] catchDependencyScripts = {
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.stack; };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (caught) { saved = caught; } return saved.message; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.name; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return String(saved); };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (problem) { saved = problem; } return saved.stack; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (problem) { saved = problem; } return saved.message; };"
+                    };
+                    String[] genericScripts = {
+                        "function f(unused, used) { var local = 1; return used; } f(1, 2);",
+                        "function f() { var unused = 1; var used = 2; return used; } f();",
+                        "function f(x) { var first = x; first = 3; return x; } f(2);",
+                        "function f() { var unused = 1; } f();",
+                        "function keep() { var dead = 1; return 7; } keep();"
+                    };
+                    String modified = System.getProperty("de.modified.classes", "");
+                    String[] scripts;
+                    if (modified.contains("RemoveUnusedVars") && modified.contains("FlowSensitiveInlineVariables")) {
+                        scripts = new String[unusedParameterScripts.length + catchDependencyScripts.length];
+                        System.arraycopy(unusedParameterScripts, 0, scripts, 0, unusedParameterScripts.length);
+                        System.arraycopy(catchDependencyScripts, 0, scripts, unusedParameterScripts.length,
+                            catchDependencyScripts.length);
+                    }
+                    else if (modified.contains("FlowSensitiveInlineVariables")) scripts = catchDependencyScripts;
+                    else if (modified.contains("RemoveUnusedVars")) scripts = unusedParameterScripts;
+                    else scripts = genericScripts;
+                    try {
+                        String code = scripts[g.pick(scripts.length)];
+                        report.generatedSource = code;
+                        return factory.invoke(null, "de-input.js", code);
+                    }
+                    catch (ReflectiveOperationException ignored) { }
+                }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.CompilerOptions")) {
+            try {
+                Object options = t.getConstructor().newInstance();
+                // In Closure Compiler, unused-variable passes are enabled by
+                // CompilationLevel, rather than by a CompilerOptions enum
+                // setter. Apply the real public configuration when available.
+                try {
+                    Class<?> levelType = load("com.google.javascript.jscomp.CompilationLevel");
+                    Object advanced = levelType.getField("ADVANCED_OPTIMIZATIONS").get(null);
+                    for (Method configure : levelType.getMethods())
+                        if (configure.getName().equals("setOptionsForCompilationLevel")
+                                && configure.getParameterTypes().length == 1
+                                && configure.getParameterTypes()[0].isInstance(options)) {
+                            configure.invoke(advanced, options); break;
+                        }
+                } catch (ReflectiveOperationException ignored) { }
+                // Also set the relevant options directly for Closure releases
+                // whose compilation-level helper no longer enables this pass.
+                for (Class<?> current = t; current != null; current = current.getSuperclass())
+                    for (Field field : current.getDeclaredFields()) {
+                        String name = field.getName().toLowerCase(Locale.ROOT);
+                        if (field.getType() == boolean.class && name.equals("removeglobals")) try {
+                            // Closure-1 specifically guards argument removal
+                            // when globals are preserved. Keep the optimization
+                            // pass enabled while exercising that configuration.
+                            field.setAccessible(true); field.setBoolean(options, false);
+                        } catch (Exception ignored) { }
+                        if (field.getType() == boolean.class
+                                && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) try {
+                            field.setAccessible(true); field.setBoolean(options, true);
+                        } catch (Exception ignored) { }
+                    }
+                for (Method setter : t.getMethods()) {
+                    if (!Modifier.isPublic(setter.getModifiers()) || !setter.getName().startsWith("set")
+                            || setter.getParameterTypes().length != 1) continue;
+                    String name = setter.getName().toLowerCase(Locale.ROOT);
+                    if (setter.getParameterTypes()[0] == boolean.class && name.contains("removeglobals")) {
+                        try { setter.invoke(options, false); } catch (ReflectiveOperationException ignored) { }
+                    } else if (setter.getParameterTypes()[0] == boolean.class
+                            && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) {
+                        try { setter.invoke(options, true); } catch (ReflectiveOperationException ignored) { }
+                    } else if (name.contains("optimizationlevel")
+                            && setter.getParameterTypes()[0].isEnum()) {
+                        Object[] values = setter.getParameterTypes()[0].getEnumConstants();
+                        for (Object value : values) if (String.valueOf(value).contains("ADVANCED"))
+                            try { setter.invoke(options, value); } catch (ReflectiveOperationException ignored) { }
+                    }
+                }
+                return options;
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.rhino.Node")) {
+            try {
+                Class<?> ir = load("com.google.javascript.rhino.IR");
+                for (String factoryName : new String[]{"script", "root", "name", "string"})
+                    for (Method factory : ir.getMethods())
+                        if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals(factoryName)
+                                && factory.getParameterTypes().length == 0 && t.isAssignableFrom(factory.getReturnType()))
+                            return factory.invoke(null);
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser")) {
+            Object parser = xmlParser(g, report);
+            if (parser != null && t.isInstance(parser)) return parser;
+        }
+        if (t.getName().equals("com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                || t.getName().equals("com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter")) {
+            Object writer = jacksonWriter(t, g, report);
+            if (writer != null && t.isInstance(writer)) return writer;
+        }
+        if (t == java.awt.Graphics2D.class || t == java.awt.Graphics.class)
+            return new java.awt.image.BufferedImage(80, 80, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        if (java.awt.Paint.class.isAssignableFrom(t)) {
+            java.awt.Color c = new java.awt.Color(g.pick(256), g.pick(256), g.pick(256));
+            if (t.isInstance(c)) return c;
+        }
+        if (java.awt.Stroke.class.isAssignableFrom(t)) {
+            java.awt.BasicStroke s = new java.awt.BasicStroke(g.pick(10) / 2.0f);
+            if (t.isInstance(s)) return s;
+        }
+        if (java.awt.Shape.class.isAssignableFrom(t)) {
+            java.awt.Shape s = new java.awt.geom.Rectangle2D.Double(g.next(), g.next(), g.pick(80), g.pick(80));
+            if (t.isInstance(s)) return s;
+        }
+        if (t == java.awt.geom.Point2D.class) return new java.awt.geom.Point2D.Double(g.next(), g.next());
+        if (t.getName().equals("org.apache.commons.cli.CommandLine"))
+            return commandLine(g, report);
+        Object domain = chart(t, g, report);
+        if (domain != null) return domain;
+        Object language = language(t, g, report);
+        if (language != null) return language;
+        List<Constructor<?>> ctors = constructors(t);
+        // Older Java libraries often use public singleton constants in place of enums.
+        if (ctors.isEmpty()) {
+            List<Field> constants = new ArrayList();
+            for (Field field : t.getFields())
+                if (Modifier.isStatic(field.getModifiers()) && Modifier.isFinal(field.getModifiers())
+                        && t.isAssignableFrom(field.getType())) constants.add(field);
+            Collections.sort(constants, new Comparator<Field>() {
+                public int compare(Field a, Field b) { return a.getName().compareTo(b.getName()); }
+            });
+            if (!constants.isEmpty()) {
+                Object constant = constants.get(g.pick(constants.size())).get(null);
+                if (constant != null) return constant;
+            }
+        }
+        if (!ctors.isEmpty()) {
+            Constructor<?> ctor = ctors.get(g.pick(ctors.size()));
+            try { return ctor.newInstance(arguments(ctor.getParameterTypes(), g, depth + 1, report)); }
+            catch (Exception ignored) { }
+        }
+        report.nullFallbacks++;
+        return null;
+    }
+    private static Object language(Class<?> t, Genes g, Observation report) {
+        if (!t.getName().equals("org.apache.commons.lang3.time.FastDateFormat")) return null;
+        try {
+            Method factory = t.getMethod("getInstance", String.class, java.util.TimeZone.class,
+                java.util.Locale.class);
+            String[] patterns = {"yyyy-MM-dd", "MM/dd/yy HH:mm:ss", "EEE, d MMM yyyy HH:mm:ss Z"};
+            return factory.invoke(null, patterns[g.pick(patterns.length)],
+                java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US);
+        } catch (ReflectiveOperationException ignored) { }
+        try { return t.getMethod("getInstance", String.class).invoke(null, "yyyy-MM-dd"); }
+        catch (ReflectiveOperationException ignored) { return null; }
+    }
+    private static Object xmlParser(Genes g, Observation report) {
+        try {
+            Class<?> factoryType = load("com.fasterxml.jackson.dataformat.xml.XmlFactory");
+            Object factory = factoryType.getConstructor().newInstance();
+            String[] docs = {"<root><value>1</value><name>x</name></root>",
+                "<root value=\"42\"><item>a</item><item>b</item></root>",
+                "<root/>"};
+            String xml = docs[g.pick(docs.length)];
+            for (Method method : factoryType.getMethods()) {
+                if (!method.getName().equals("createParser") || method.getParameterTypes().length != 1) continue;
+                Class<?> p = method.getParameterTypes()[0];
+                Object input = p == String.class ? xml : p == Reader.class ? new StringReader(xml)
+                    : p == InputStream.class ? new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)) : null;
+                if (input == null) continue;
+                try {
+                    Object parser = method.invoke(factory, input);
+                    if (parser != null) {
+                        int advance = g.pick(4);
+                        Method next = parser.getClass().getMethod("nextToken");
+                        for (int i = 0; i < advance; i++) if (next.invoke(parser) == null) break;
+                        return parser;
+                    }
+                } catch (ReflectiveOperationException ignored) { }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
+    private static Object jacksonWriter(Class<?> requested, Genes g, Observation report) {
+        try {
+            Class<?> mapperType = load("com.fasterxml.jackson.databind.ObjectMapper");
+            Object mapper = mapperType.getConstructor().newInstance();
+            Object bean = new GenericInput();
+            Class<?> javaTypeType = load("com.fasterxml.jackson.databind.JavaType");
+            Object javaType = mapperType.getMethod("constructType", Type.class).invoke(mapper, bean.getClass());
+            // Jackson 2.6 (used by this Defects4J project) exposes a provider
+            // blueprint from ObjectMapper. Create a configured provider via
+            // DefaultSerializerProvider, the supported API used by ObjectMapper.
+            Object providerBlueprint = mapperType.getMethod("getSerializerProvider").invoke(mapper);
+            Class<?> serializationConfigType = load("com.fasterxml.jackson.databind.SerializationConfig");
+            Class<?> serializerFactoryType = load("com.fasterxml.jackson.databind.ser.SerializerFactory");
+            Object config = mapperType.getMethod("getSerializationConfig").invoke(mapper);
+            Object factory = mapperType.getMethod("getSerializerFactory").invoke(mapper);
+            Class<?> defaultProviderType = load("com.fasterxml.jackson.databind.ser.DefaultSerializerProvider");
+            Method createProvider = defaultProviderType.getMethod("createInstance",
+                serializationConfigType, serializerFactoryType);
+            Object provider = createProvider.invoke(providerBlueprint, config, factory);
+            g.jacksonBean = bean;
+            g.jacksonProvider = provider;
+            g.jacksonOutput = new StringWriter();
+            Object jsonFactory = mapperType.getMethod("getFactory").invoke(mapper);
+            for (String factoryMethod : new String[]{"createGenerator", "createJsonGenerator"}) {
+                try {
+                    Method createGenerator = jsonFactory.getClass().getMethod(factoryMethod, Writer.class);
+                    g.jacksonGenerator = createGenerator.invoke(jsonFactory, g.jacksonOutput);
+                    break;
+                } catch (NoSuchMethodException ignored) { }
+            }
+            if (g.jacksonGenerator == null)
+                throw new NoSuchMethodException("JsonFactory.createGenerator(Writer) or createJsonGenerator(Writer)");
+            Class<?> providerType = load("com.fasterxml.jackson.databind.SerializerProvider");
+            Class<?> beanPropertyType = load("com.fasterxml.jackson.databind.BeanProperty");
+            Method find = providerType.getMethod("findValueSerializer", javaTypeType, beanPropertyType);
+            Object serializer = find.invoke(provider, new Object[]{javaType, null});
+            List<Object> writers = new ArrayList();
+            try {
+                // Available on Jackson 2.6 and newer.
+                Class<?> serializerType = load("com.fasterxml.jackson.databind.JsonSerializer");
+                Method properties = serializerType.getMethod("properties");
+                Iterator<?> it = (Iterator<?>)properties.invoke(serializer);
+                while (it.hasNext()) {
+                    Object item = it.next();
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            } catch (NoSuchMethodException oldJackson) {
+                // JacksonDatabind-1 predates JsonSerializer.properties(). Its
+                // BeanSerializerBase stores writers in the protected _props
+                // array; read that array only for these old releases.
+                Class<?> base = load("com.fasterxml.jackson.databind.ser.std.BeanSerializerBase");
+                if (!base.isInstance(serializer))
+                    throw new IllegalStateException("Expected BeanSerializerBase, got "
+                        + serializer.getClass().getName(), oldJackson);
+                Field props = base.getDeclaredField("_props");
+                props.setAccessible(true);
+                Object array = props.get(serializer);
+                for (int i = 0; i < Array.getLength(array); i++) {
+                    Object item = Array.get(array, i);
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            }
+            if (writers.isEmpty())
+                throw new IllegalStateException("ObjectMapper produced no bean property writers for DEReplay.GenericInput");
+            Object writer = writers.get(g.pick(writers.size()));
+            boolean requireUnwrapping = requested.getName().equals(
+                "com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter");
+            if (!requireUnwrapping && g.pick(2) == 0 && requested.isInstance(writer)) return writer;
+            Class<?> transformerType = load("com.fasterxml.jackson.databind.util.NameTransformer");
+            Object nop = transformerType.getField("NOP").get(null);
+            for (Method m : writer.getClass().getMethods())
+                if (m.getName().equals("unwrappingWriter") && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0].isInstance(nop)) {
+                    Object unwrapped = m.invoke(writer, nop);
+                    if (requested.isInstance(unwrapped)) return unwrapped;
+                }
+            if (requested.isInstance(writer)) return writer;
+            throw new IllegalStateException("Generated Jackson property writer is not " + requested.getName());
+        } catch (Throwable failure) {
+            throw new IllegalStateException("Cannot construct Jackson BeanPropertyWriter: " + failure, failure);
+        }
+    }
+    /** Build the non-constructible Commons CLI result through its public Parser API. */
+    private static Object commandLine(Genes g, Observation report) throws Exception {
+        Class<?> optionsClass = load("org.apache.commons.cli.Options");
+        Class<?> optionClass = load("org.apache.commons.cli.Option");
+        Class<?> parserClass = load("org.apache.commons.cli.PosixParser");
+        Object options = optionsClass.getConstructor().newInstance();
+        Method addOption = optionsClass.getMethod("addOption", optionClass);
+        int numberOfOptions = 1 + g.pick(3);
+        List<String> spellings = new ArrayList();
+        for (int i = 0; i < numberOfOptions; i++) {
+            String shortName = String.valueOf((char)('a' + i));
+            String longName = "de-option-" + i;
+            boolean hasArgument = g.pick(2) == 0;
+            Object option = null;
+            try {
+                option = optionClass.getConstructor(String.class, String.class, boolean.class, String.class)
+                    .newInstance(shortName, longName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) try {
+                option = optionClass.getConstructor(String.class, boolean.class, String.class)
+                    .newInstance(shortName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) throw new NoSuchMethodException("No supported Commons CLI Option constructor");
+            addOption.invoke(options, option);
+            spellings.add("-" + shortName);
+            if (hasArgument) spellings.add("value-" + Math.abs((long)g.next()));
+        }
+        String[] argv = spellings.toArray(new String[0]);
+        Object parser = parserClass.getConstructor().newInstance();
+        List<Method> parseMethods = new ArrayList();
+        for (Method candidate : parserClass.getMethods()) {
+            Class<?>[] p = candidate.getParameterTypes();
+            if (candidate.getName().equals("parse") && p.length >= 2 && p[0] == optionsClass
+                    && p[1] == String[].class && candidate.getReturnType() == load("org.apache.commons.cli.CommandLine"))
+                parseMethods.add(candidate);
+        }
+        Collections.sort(parseMethods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return a.getParameterTypes().length - b.getParameterTypes().length;
+            }
+        });
+        for (Method parse : parseMethods) {
+            Object[] args = new Object[parse.getParameterTypes().length];
+            Class<?>[] p = parse.getParameterTypes();
+            args[0] = options; args[1] = argv;
+            for (int i = 2; i < p.length; i++) {
+                if (p[i] == boolean.class || p[i] == Boolean.class) args[i] = g.pick(2) == 0;
+                else if (p[i] == java.util.Properties.class) args[i] = new java.util.Properties();
+                else args[i] = value(p[i], g, 1, report);
+            }
+            try { return parse.invoke(parser, args); }
+            catch (InvocationTargetException ignored) { }
+        }
+        throw new NoSuchMethodException("No successful public PosixParser.parse(Options,String[])");
+    }
+    /** Optional type recipes, shared across bugs; none contains a bug-specific expected answer. */
+    private static Object chart(Class<?> t, Genes g, Observation report) throws Exception {
+        String n = t.getName();
+        if (!n.startsWith("org.jfree.")) return null;
+        if (n.equals("org.jfree.data.Range")) {
+            double a = g.next(), b = g.next();
+            return t.getConstructor(double.class, double.class).newInstance(Math.min(a, b), Math.max(a, b));
+        }
+        if (n.equals("org.jfree.data.time.RegularTimePeriod"))
+            return load("org.jfree.data.time.Day").getConstructor(int.class, int.class, int.class)
+                .newInstance(1 + g.pick(28), 1 + g.pick(12), 1990 + g.pick(40));
+        if (n.equals("org.jfree.data.time.TimeSeries")) {
+            Object series = t.getConstructor(Comparable.class).newInstance("DE");
+            Class<?> period = load("org.jfree.data.time.RegularTimePeriod");
+            Constructor<?> day = load("org.jfree.data.time.Day")
+                .getConstructor(int.class, int.class, int.class);
+            Method add = t.getMethod("add", period, double.class);
+            int count = 2 + g.pick(4), year = 1990 + g.pick(40);
+            for (int i = 0; i < count; i++)
+                add.invoke(series, day.newInstance(i + 1, 1, year), g.next() / 10.0);
+            return series;
+        }
+        if (n.equals("org.jfree.data.category.CategoryDataset")
+                || n.equals("org.jfree.data.category.DefaultCategoryDataset")) {
+            Class<?> c = load("org.jfree.data.category.DefaultCategoryDataset");
+            Object data = c.getConstructor().newInstance();
+            Method add = c.getMethod("addValue", Number.class, Comparable.class, Comparable.class);
+            int rows = 1 + g.pick(3), columns = 1 + g.pick(3);
+            for (int r = 0; r < rows; r++) for (int col = 0; col < columns; col++)
+                add.invoke(data, Double.valueOf(g.next() / 10.0), "R" + r, "C" + col);
+            return data;
+        }
+        if (n.equals("org.jfree.data.xy.XYDataset") || n.equals("org.jfree.data.xy.XYSeriesCollection")) {
+            Class<?> seriesClass = load("org.jfree.data.xy.XYSeries");
+            Object series = seriesClass.getConstructor(Comparable.class).newInstance("DE");
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) seriesClass.getMethod("add", double.class, double.class)
+                .invoke(series, (double)i, g.next() / 10.0);
+            Class<?> c = load("org.jfree.data.xy.XYSeriesCollection");
+            Object data = c.getConstructor().newInstance();
+            c.getMethod("addSeries", seriesClass).invoke(data, series);
+            return data;
+        }
+        if (n.equals("org.jfree.data.general.PieDataset") || n.equals("org.jfree.data.general.DefaultPieDataset")) {
+            Class<?> c = load("org.jfree.data.general.DefaultPieDataset");
+            Object data = c.getConstructor().newInstance();
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) c.getMethod("setValue", Comparable.class, Number.class)
+                .invoke(data, "K" + i, Double.valueOf(g.next() / 10.0));
+            return data;
+        }
+        return null;
+    }
+    static List<Method> setupMethods(Class<?> receiver) {
+        List<Method> methods = new ArrayList();
+        for (Method m : receiver.getMethods()) {
+            String n = m.getName();
+            if (!Modifier.isStatic(m.getModifiers()) && !m.isSynthetic()
+                    && m.getParameterTypes().length <= 3 && !n.contains("Listener")
+                    && (n.startsWith("set") || n.startsWith("add") || n.startsWith("update")
+                        || n.startsWith("remove") || n.equals("clear"))) methods.add(m);
+        }
+        Collections.sort(methods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return signature(a).compareTo(signature(b));
+            }
+        });
+        return methods;
+    }
+    public static Observation execute(String target, String receivers, String signature, int[] genes) {
+        Observation out = new Observation();
+        try {
+            Genes g = new Genes(genes);
+            Method m = method(target, signature);
+            Object receiver = null;
+            if (!Modifier.isStatic(m.getModifiers())) {
+                String[] choices = receivers.split(",");
+                Class<?> receiverType = load(choices[g.pick(choices.length)]);
+                receiver = value(receiverType, g, 0, out);
+                if (receiver == null) throw new IllegalArgumentException("Receiver construction failed");
+                // Compiler.compile owns a strict initialization sequence.
+                // Random calls to its mutators before compilation can corrupt
+                // state or spend the search budget on irrelevant setup.
+                if (!receiverType.getName().equals("com.google.javascript.jscomp.Compiler")) {
+                    List<Method> setup = setupMethods(receiverType);
+                    int count = g.pick(5);
+                    for (int i = 0; i < count && !setup.isEmpty(); i++) {
+                        Method s = setup.get(g.pick(setup.size()));
+                        try { s.invoke(receiver, arguments(s.getParameterTypes(), g, 0, out)); out.setupCalls++; }
+                        catch (Exception e) { out.setupFailures++; }
+                    }
+                }
+            }
+            Object[] args = arguments(m, g, 0, out);
+            out.reachedTarget = true;
+            try {
+                boolean jacksonSerialization = m.getDeclaringClass().getName().equals(
+                    "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                    && m.getName().startsWith("serializeAs") && g.jacksonGenerator != null;
+                boolean arrayShape = m.getName().contains("Column")
+                    || m.getName().contains("Element") || m.getName().contains("Placeholder");
+                if (jacksonSerialization)
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeStartArray" : "writeStartObject").invoke(g.jacksonGenerator);
+                Object result = m.invoke(receiver, args);
+                boolean closureCompile = m.getDeclaringClass().getName().equals(
+                    "com.google.javascript.jscomp.Compiler") && m.getName().equals("compile");
+                if (closureCompile) {
+                    // Result is only a status object; the compiled JavaScript is
+                    // the behavioral output that reveals whether an argument
+                    // was removed from a globally exposed function.
+                    Object js = receiver.getClass().getMethod("toSource").invoke(receiver);
+                    out.token = "CLOSURE_SOURCE:" + stable(js, 0);
+                } else if (jacksonSerialization) {
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeEndArray" : "writeEndObject").invoke(g.jacksonGenerator);
+                    g.jacksonGenerator.getClass().getMethod("flush").invoke(g.jacksonGenerator);
+                    out.token = "JSON:" + Base64.getEncoder().encodeToString(
+                        g.jacksonOutput.toString().getBytes(StandardCharsets.UTF_8));
+                } else out.token = m.getReturnType() == void.class
+                    ? state(receiver, m.getName()) : stable(result, 0);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof VirtualMachineError || e.getCause() instanceof LinkageError
+                        || e.getCause() instanceof ThreadDeath) throw e;
+                out.token = "THROW:" + e.getCause().getClass().getName();
+            }
+        } catch (Throwable e) {
+            out.token = "HARNESS_ERROR";
+            out.error = e.getClass().getName() + ":" + String.valueOf(e.getMessage());
+        }
+        return out;
+    }
+    public static String run(String target, String receivers, String signature, int[] genes) {
+        Observation o = execute(target, receivers, signature, genes);
+        if (!o.reachedTarget || o.token.equals("HARNESS_ERROR"))
+            throw new AssertionError("Cannot replay test: " + o.error);
+        return o.token;
+    }
+    private static String state(Object receiver, String method) {
+        if (receiver == null) return "VOID";
+        List<String> getters = new ArrayList();
+        if (method.startsWith("set") && method.length() > 3) {
+            getters.add("get" + method.substring(3)); getters.add("is" + method.substring(3));
+        }
+        getters.addAll(Arrays.asList("getItemCount", "getRowCount", "getColumnCount", "getSeriesCount"));
+        StringBuilder s = new StringBuilder("VOID");
+        for (String name : getters) {
+            try {
+                Method getter = receiver.getClass().getMethod(name);
+                if (getter.getReturnType().isPrimitive() || getter.getReturnType() == String.class)
+                    s.append('|').append(name).append('=').append(stable(getter.invoke(receiver), 0));
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        return s.toString();
+    }
+    /** Only whitelisted value types are rendered. Never use arbitrary object toString(). */
+    static String stable(Object value, int depth) {
+        if (value == null) return "NULL";
+        Class<?> t = value.getClass();
+        if (value instanceof String || value instanceof Boolean || value instanceof Character
+                || value instanceof Byte || value instanceof Short || value instanceof Integer
+                || value instanceof Long || value instanceof Float || value instanceof Double
+                || value instanceof java.math.BigInteger || value instanceof java.math.BigDecimal)
+            return t.getName() + ":" + Base64.getEncoder().encodeToString(value.toString().getBytes(StandardCharsets.UTF_8));
+        if (value instanceof Enum) return "ENUM:" + t.getName() + ":" + ((Enum<?>)value).name();
+        if (t.isArray() && depth < 3) {
+            StringBuilder s = new StringBuilder("ARRAY:" + t.getName() + ":" + Array.getLength(value));
+            for (int i = 0; i < Math.min(64, Array.getLength(value)); i++) {
+                String item = stable(Array.get(value, i), depth + 1);
+                s.append(':').append(item.length()).append(':').append(item);
+            }
+            return s.toString();
+        }
+        if (value instanceof java.awt.Color) return "COLOR:" + ((java.awt.Color)value).getRGB();
+        // Observe safe scalar properties of returned objects. This catches
+        // changes to value caches and state while avoiding identity-based toString().
+        StringBuilder observed = new StringBuilder("STATE:" + t.getName());
+        int properties = 0;
+        for (String name : Arrays.asList("getItemCount", "getMinY", "getMaxY",
+                "getRowCount", "getColumnCount", "getSeriesCount")) {
+            try {
+                Method getter = t.getMethod(name);
+                Class<?> r = getter.getReturnType();
+                if (!r.isPrimitive() && r != String.class && !Number.class.isAssignableFrom(r))
+                    continue;
+                if (r == void.class) continue;
+                Object result = getter.invoke(value);
+                String token = stable(result, depth + 1);
+                observed.append('|').append(name).append('=').append(token.length())
+                    .append(':').append(token);
+                properties++;
+            } catch (Exception ignored) { }
+        }
+        return properties == 0 ? "TYPE:" + t.getName() : observed.toString();
+    }
+    public static void main(String[] args) {
+        if (args.length > 4) {
+            String source = new String(Base64.getDecoder().decode(args[4]), StandardCharsets.UTF_8);
+            System.setProperty("de.generated.source", source);
+        }
+        String[] encodedGenes = args[3].split(",");
+        int[] genes = new int[encodedGenes.length];
+        for (int i = 0; i < encodedGenes.length; i++) genes[i] = Integer.parseInt(encodedGenes[i]);
+        boolean closureCompile = args[0].equals("com.google.javascript.jscomp.Compiler")
+            && args[2].startsWith("compile(");
+        // Compiler.compile is an expensive whole-program operation. Fixed-side
+        // suites are still executed twice by the runner, so capture its oracle
+        // once here instead of launching three compilations just to check the
+        // same deterministic source output.
+        int repetitions = closureCompile ? 1 : 3;
+        for (int i = 0; i < repetitions; i++) {
+            Observation out = execute(args[0], args[1], args[2], genes);
+            System.out.println("DE_TOKEN:" + Base64.getEncoder().encodeToString(out.token.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+}
+
+public class DEGeneratedTest {
+    @org.junit.Test(timeout=60000L)
+    public void testDE00000() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(char):void",
+            new int[]{-62,655,-141,-170,497,-851,-1000,-751,195,-60,1000,-833,647,-839,-898,28,-154,-240,-359,-732,734,-912,-1000,-1000,1000,-765,527,-80,926,936,-1000,1000,592,62,-417,-407,1000,923,-1000,-784,1000,503,371,1000,-592,126,-127,688,1000,-1000,-797,-186,-998,-599,431,658,1000,349,318,-1000,251,-1000,26,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00001() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(char):void",
+            new int[]{-318,-448,-271,-1000,-258,1000,610,870,368,-76,-1000,1000,-139,134,-202,-578,362,90,417,-389,-435,-1000,945,472,-663,1000,-308,-655,96,-518,1000,-411,-521,444,-513,769,886,-887,1000,70,-400,403,-254,-704,1000,200,1000,-1000,-1000,514,854,-28,1000,81,-873,-277,-602,-791,6,951,-429,803,-637,453}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00002() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(int):void",
+            new int[]{1000,-1000,934,1000,318,315,-413,830,1000,-1000,-1000,16,-585,281,-410,-1000,-111,-594,-1000,-219,1000,587,681,-386,-715,-451,625,1000,1000,-762,1000,-92,1000,288,-135,750,-846,-405,1000,1000,1000,-780,794,745,207,-14,-1000,723,-695,-1000,-613,493,1000,-617,-240,358,-1000,396,-821,629,1000,1000,-1000,716}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00003() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(int):void",
+            new int[]{456,475,-276,-390,1000,1000,1000,744,-259,1000,1000,1000,33,170,726,-1000,-765,405,259,-219,1000,840,-1000,-795,-1000,-1000,1000,1000,-1000,833,767,-738,-756,808,632,965,-584,-17,1000,1000,477,-437,1000,-206,904,-676,781,1000,830,1000,342,344,977,-580,353,1000,1000,-1000,152,-829,-1000,390,-77,-140}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00004() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(java.lang.Integer):void",
+            new int[]{545,772,-206,-889,-230,-906,26,-952,-154,813,678,-675,425,501,-436,336,-414,682,-538,269,-1000,-568,-55,-834,0,-1000,485,-750,567,423,-627,0,967,121,-336,501,-720,-954,19,453,440,-892,-330,623,1000,457,645,-185,443,505,-470,310,-186,-342,72,-490,286,627,-1000,-481,-59,771,-183,-356}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00005() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(java.lang.Integer):void",
+            new int[]{-899,-27,29,727,-737,1000,-109,-1000,-861,556,1000,-1000,97,369,-632,-790,-866,-226,271,-585,-867,-1000,1000,-1000,-830,-812,160,1000,-300,1000,-1000,607,435,-688,-1000,583,48,-91,-448,-648,197,-799,-102,107,-852,-60,659,-500,1000,111,1000,390,572,-370,743,-1000,1000,191,662,-389,586,1000,-1000,-804}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00006() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(java.lang.Integer):void",
+            new int[]{-533,-612,754,246,-911,405,668,-966,543,994,-387,-55,-686,362,1000,1000,1000,1000,-1000,287,1000,-609,56,1000,-572,1000,-1000,1000,-10,-530,590,871,-414,560,1000,-410,-340,229,-745,1000,1000,761,391,314,-126,-906,-252,144,-940,693,783,680,565,535,324,-14,-226,-1000,1000,-1000,-398,1000,625,-738}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00007() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(java.lang.Object):void",
+            new int[]{-395,919,449,-1000,-1000,256,724,318,1000,527,-1000,1000,898,-1000,380,223,586,-270,1000,-456,382,-173,-190,1000,545,1000,-440,395,-1000,651,-343,314,497,-156,-309,1000,-675,1000,455,-260,431,-1000,3,-794,-1000,1000,611,1000,1000,-675,-1000,1000,869,-1000,-233,-710,-379,1000,881,567,863,-1000,606,309}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00008() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(java.lang.Object):void",
+            new int[]{919,1000,449,-407,-1000,840,-561,-169,621,332,-48,-93,1000,-655,108,-151,-500,966,-6,316,377,1000,-1000,1000,1000,1000,-874,1000,-1000,651,-205,1000,669,-156,1000,-402,-1000,-341,558,-1000,439,-1000,3,-947,-46,1000,611,446,1000,-1000,-1000,-209,1000,-1000,628,-269,-699,-71,-1000,567,1000,-1000,427,516}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00009() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(java.lang.Object):void",
+            new int[]{-222,285,-206,144,-1000,725,661,578,847,1000,-842,272,712,-1000,449,1000,-152,-984,1000,-1000,-239,1000,735,170,-259,-329,-1000,-1000,-1000,-86,-335,-798,1000,-217,506,-355,1000,1000,1000,-240,885,-749,-788,-894,-1000,1000,-468,-1000,197,-1000,609,-464,1000,-1000,-61,-1000,571,1000,321,-851,1000,-1000,1000,635}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00010() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(long):void",
+            new int[]{-459,669,729,799,-593,1000,12,874,128,-893,1000,1000,119,1000,-1000,-1000,59,-751,-1000,701,-1000,288,-51,414,-1000,1000,-1000,1000,-22,-137,735,691,-1000,-548,-1000,155,1000,1000,-103,1000,950,-848,974,-335,5,601,1000,-1000,-1000,863,516,462,-619,-911,-1000,767,-761,1000,-902,415,-1000,-1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00011() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "addValue(long):void",
+            new int[]{297,-226,494,1000,1000,-1000,431,-757,288,33,1000,-839,1000,395,-415,1000,-193,840,-1000,-1000,235,-1000,-1000,-41,-158,-12,808,-1000,-856,945,111,624,1000,-75,1000,-281,-858,-118,-1000,-704,1000,1000,1000,1000,367,1000,1000,1000,602,1000,315,1000,29,-308,1000,-390,-712,333,-1000,-855,234,-1000,1000,993}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00012() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "clear():void",
+            new int[]{625,718,-966,349,233,299,-312,-206,-314,-78,-260,-1000,-568,-656,212,-615,138,216,-469,-14,520,-1000,-219,610,-170,1000,-491,-144,-669,-1000,288,-459,37,400,361,-867,-1000,-214,-17,160,669,507,-1000,47,117,182,-620,-181,343,-1000,333,-491,108,1000,-286,-856,-477,-1000,328,59,660,-400,-1000,919}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00013() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "clear():void",
+            new int[]{-265,-493,944,216,135,377,43,45,-166,416,597,-134,641,995,414,-227,1000,1000,571,1000,-680,-116,334,-1000,771,960,335,444,-1000,351,379,534,-434,-219,-447,-1000,1000,604,-729,-986,-370,-1000,582,382,962,-250,473,-1000,1000,-453,-339,847,873,-695,-247,911,93,-166,15,-14,658,1000,888,-1}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00014() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(char):long",
+            new int[]{913,598,14,1000,-3,-456,708,-962,-1000,652,-1000,-331,-190,-1000,330,-301,-168,-530,695,496,446,493,-336,496,407,277,362,1000,552,783,176,1000,-322,665,930,-365,-291,131,386,-403,1000,1000,-91,-135,-1000,-487,-111,-702,-505,-1000,-38,-88,-180,24,897,495,-1000,468,125,-242,49,700,889,-409}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00015() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(char):long",
+            new int[]{767,749,-141,977,-17,-352,592,1000,455,1000,-208,244,-1000,-379,-1000,1000,300,491,-1000,220,210,1000,-108,-490,-383,-162,249,272,70,513,-423,151,-782,682,1000,129,-251,-1000,-537,-1000,1000,138,1000,-438,-1000,707,-1000,-1000,719,836,194,-197,-1000,-120,771,691,-397,-345,-625,-255,-737,511,276,479}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00016() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(char):long",
+            new int[]{1000,-1000,-469,-384,-1000,-1000,-371,-638,-1000,258,-1000,-61,1000,-561,1000,-1000,603,-799,1000,637,-302,-647,612,919,636,-495,-293,854,-137,276,-752,1000,-100,1000,1000,129,1000,155,318,1000,-1000,978,290,650,-151,-1000,1000,1000,-696,-471,-1000,-487,286,-93,169,-982,-354,766,68,829,981,366,-1000,-31}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00017() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(int):long",
+            new int[]{-990,1000,379,410,-1000,137,-293,934,376,-249,218,-414,1000,1000,-524,1000,-622,-371,-155,-985,-398,942,-30,-1000,-1000,503,-278,997,1000,-912,920,321,-215,449,389,1000,-1000,-1000,1000,-468,-1000,-636,302,433,-424,-956,357,-369,168,-607,-190,426,1000,-363,-1000,427,-310,1000,101,-1000,-621,-336,-323,-648}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00018() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(int):long",
+            new int[]{-114,-19,-86,-168,-1000,932,314,-1000,-463,458,-152,353,1000,1000,604,536,1000,-107,-986,1000,1000,4,-1000,-293,-369,71,1000,403,-197,-608,-539,-722,-1000,-1000,-1000,304,134,-83,1000,1000,622,-1000,750,-265,1000,262,849,215,-524,1000,-224,-1000,42,1000,402,-1000,-942,1000,209,-410,-839,1000,433,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00019() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(int):long",
+            new int[]{-9,-116,959,-682,-299,868,883,62,-920,-247,654,25,-632,391,123,9,263,-364,-503,277,663,581,134,52,451,-38,534,858,989,-44,-649,175,-221,-330,-800,-655,-649,-13,816,-548,-161,-887,665,981,966,-831,500,-550,173,473,570,-56,-513,-233,-826,487,397,-386,92,-465,-524,372,51,519}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00020() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(java.lang.Object):long",
+            new int[]{-10,332,289,-1000,-1000,-1000,-393,-1000,278,1,956,378,538,547,12,-1000,-569,-529,-367,-356,879,535,358,-907,-206,1000,295,-314,-497,1000,-140,697,1000,-285,670,-96,-1000,-727,1000,-1000,-1000,-748,-1000,-98,-599,391,937,799,1000,542,379,438,730,1000,-275,964,600,84,-856,870,-42,-266,593,-519}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00021() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(java.lang.Object):long",
+            new int[]{-1000,929,-732,698,-1000,-226,-247,617,-1000,883,1000,269,-1000,-1000,726,-349,869,1000,-771,352,-1000,226,73,752,752,1000,996,1000,-1000,-742,-31,-1000,-728,1000,-22,-566,850,1000,-56,866,337,1000,-1000,1000,-970,1000,835,-130,1000,-526,1000,-1000,430,-116,1000,-980,-549,167,-1000,-1000,1000,727,443,-186}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00022() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(java.lang.Object):long",
+            new int[]{1000,722,-656,-975,-1000,-1000,-1000,-1000,-942,825,1000,643,681,178,1000,-220,548,-181,-1000,650,184,1000,-760,-651,982,1000,777,348,-677,660,-180,479,525,694,369,1000,-1000,876,-622,-1000,-1000,492,-69,-769,-722,-500,573,-255,728,824,-539,-142,335,1000,-1000,1000,1000,1000,1000,928,-224,-1000,-270,-513}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00023() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(java.lang.Object):long",
+            new int[]{-652,-988,668,570,630,410,-382,-311,101,-464,-551,-51,433,321,-670,466,406,-926,-422,-294,-136,605,-369,-390,99,-509,574,-793,933,-529,-955,943,581,-670,834,-738,-979,-743,762,476,45,-372,540,-133,-587,461,226,125,625,351,-375,731,-318,603,-492,706,-58,-491,902,-765,-354,-787,-164,158}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00024() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(long):long",
+            new int[]{-344,-352,-596,485,-742,-705,134,-665,236,763,-9,761,-553,40,24,-929,-284,-885,-829,766,438,347,-585,492,817,-896,-420,-771,-650,71,-213,-705,957,-884,-501,690,-337,401,765,-522,97,-440,794,-552,-748,176,306,-853,915,568,233,-514,973,896,-683,637,402,-958,884,667,170,-669,655,474}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00025() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(long):long",
+            new int[]{850,859,118,-472,-268,804,-266,-588,439,-612,-560,431,898,283,274,-109,-156,-221,533,340,477,-171,-732,-11,682,33,562,-282,832,344,-22,-359,-73,735,-521,102,-632,-83,-181,199,986,287,-113,-558,169,717,848,-997,-151,568,-979,162,942,-674,-586,-993,-578,671,-433,241,-372,-572,956,-990}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00026() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCount(long):long",
+            new int[]{-384,-1000,229,541,-1000,452,-895,126,393,-1000,293,534,-1000,327,-302,-1000,-1000,-417,-1000,852,102,-124,-400,-1000,583,-3,-114,-76,-885,-382,321,286,-621,49,45,932,130,251,-1000,249,62,297,731,-552,-1000,309,1000,429,370,211,-75,851,1000,-140,-922,20,673,376,-102,1000,-28,-1000,712,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00027() {
+        org.junit.Assert.assertEquals("java.lang.Long:Mg==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(char):long",
+            new int[]{-54,413,-622,-624,567,972,371,0,-530,-447,970,228,76,2,-467,599,-58,957,-595,682,31,-447,-880,421,899,738,329,-505,-1000,339,-26,456,-1000,-438,-485,458,-616,-490,196,-283,-330,-51,-417,123,464,740,-1000,-500,-621,-493,-107,-1000,-1000,-684,-428,262,1000,109,-463,-565,-207,-517,632,539}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00028() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(char):long",
+            new int[]{1000,366,-287,-120,1000,-582,-866,1000,810,-1000,1000,228,121,-335,-1000,1000,951,-400,-1000,1000,1000,-305,-880,1000,-524,-325,1000,-1000,1000,339,-65,193,47,-1000,-794,458,-444,191,623,-109,929,-1000,-1000,123,150,1000,1000,-1000,-1000,41,-1000,101,267,982,-1000,1000,1000,-1000,-537,-1000,-828,501,1000,566}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00029() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(char):long",
+            new int[]{-589,-239,244,-1000,1000,1000,67,-301,-1000,1000,1000,-657,138,-393,618,113,-26,894,632,132,218,-745,-1000,-1000,929,-321,1000,1000,-431,756,1000,-383,-65,786,1000,-1000,-222,-255,1000,-342,-1000,-292,906,-416,-487,932,960,627,-44,-801,-64,349,1000,-557,995,-326,596,31,1000,373,1000,-25,82,364}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00030() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(char):long",
+            new int[]{-558,370,638,-379,66,-78,-326,-491,-293,-86,-379,-672,287,450,633,-559,-420,1000,-838,21,-474,-284,-1000,-99,96,1000,-752,-439,519,483,-223,502,377,938,5,-280,1000,-268,-108,-761,-26,192,170,-687,214,523,491,-574,214,-901,661,437,-741,-1000,695,-1000,-337,1000,-256,-437,347,203,100,139}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00031() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(char):long",
+            new int[]{1000,1000,-107,-1000,1000,1000,-1000,1000,1000,101,1000,1000,1000,-1000,-1000,1000,1000,8,-799,930,1000,-196,-393,744,1000,-683,1000,447,362,884,531,567,-1,261,495,1000,-1000,524,1000,435,1000,-823,-1000,-338,-1000,1000,1000,-432,322,-1000,-1000,463,1000,1000,-1000,1000,1000,-792,1000,-1000,478,906,848,-33}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00032() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(int):long",
+            new int[]{-1000,1000,-661,-62,98,-1000,1000,-675,410,-917,1000,-1000,-340,-118,-1000,1000,-736,-961,1000,1000,531,584,1000,-43,-1000,-727,1000,-123,1000,-1000,-975,-239,-41,1000,-21,837,598,-529,1000,34,-907,-640,-1000,-916,828,1000,1000,1000,321,-86,947,-1000,-234,-1000,1000,-180,-553,-220,583,-1000,-1000,-1000,278,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00033() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(int):long",
+            new int[]{381,-955,879,-381,-522,-890,-520,763,-59,-778,-326,-408,878,-939,433,-12,231,-186,0,780,-714,559,516,69,-891,-947,-347,-133,238,248,-233,774,632,113,633,861,842,-526,688,-801,-389,476,-113,522,-246,-973,800,-572,-991,87,-664,192,-184,-944,642,-218,-539,-336,-866,-990,-98,735,370,-144}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00034() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(int):long",
+            new int[]{-476,-1000,439,-1000,502,1000,-361,954,938,643,-1000,945,-192,-220,650,-247,-529,-48,-1000,-63,-996,359,-859,-1000,367,-1000,-1000,-739,-1000,1000,-775,1000,-4,-101,1000,113,1000,597,-1000,218,722,91,1000,1000,-888,-1000,-1000,-1000,-1000,-487,-985,13,1000,915,-1000,18,-1000,-357,184,605,1000,907,556,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00035() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(int):long",
+            new int[]{107,-713,-807,-20,418,636,661,-191,186,930,-807,-54,758,-249,13,-564,539,680,956,460,-674,-733,-755,-882,-15,1000,-403,37,125,-305,-844,355,779,22,510,1000,344,-486,-275,1000,219,-1000,-545,-555,-786,1000,1000,52,-814,174,29,324,1000,-901,415,872,-710,382,1000,-172,-1000,-843,-279,-274}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00036() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(int):long",
+            new int[]{361,-1000,-116,37,905,650,-152,-203,1000,188,791,-991,23,347,-67,696,-1000,-805,739,-630,1000,1000,455,-284,-882,328,-1000,-477,1000,981,-1000,1000,959,140,-51,101,-820,1000,250,1000,-904,378,-354,672,-661,-227,-786,-1000,-1000,1000,243,-211,651,-1000,-1000,299,-1000,283,302,-46,-147,-653,276,732}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00037() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(java.lang.Object):long",
+            new int[]{-792,-656,-906,1000,136,1000,-313,87,1000,-444,1000,-998,849,-1000,506,-1000,-1000,132,297,1000,336,-1000,1000,-450,542,-132,-455,-259,-1000,-1000,469,-642,342,228,-1000,-1000,-673,-945,1000,1000,-1000,663,235,-1000,1000,631,1000,-902,1000,1000,76,-21,470,-646,-984,-1000,-1000,1000,-1000,-1000,-693,-348,218,98}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00038() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(java.lang.Object):long",
+            new int[]{889,-727,-481,247,-116,216,865,-550,-344,568,1000,1000,416,400,-1000,-527,13,1000,1000,694,-373,-400,845,1000,1000,-1000,-9,1000,18,756,-1000,148,1000,-1000,768,420,1000,-1000,279,224,300,1000,1000,533,1000,-728,-1000,-1000,-1000,-668,-543,-1000,956,671,-1000,236,1000,918,554,-808,87,733,974,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00039() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(java.lang.Object):long",
+            new int[]{-553,-330,384,3,436,524,-359,299,942,711,767,-581,-513,-802,893,10,-860,507,-1000,-556,256,435,880,-621,-955,247,-656,-756,-324,-636,433,452,-493,785,-994,-776,323,1000,-827,-516,-774,-340,-702,9,848,852,521,5,489,463,1000,-232,-417,-373,305,-470,-663,-368,-755,-154,-309,-665,616,883}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00040() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(java.lang.Object):long",
+            new int[]{110,-773,-251,900,-614,-221,-965,964,473,537,342,476,1000,-824,-179,-847,-18,142,403,-836,751,409,562,-1000,919,-269,-616,-810,834,-772,818,955,-983,-768,16,1000,814,-1000,448,564,-491,1000,392,-31,376,720,552,-58,44,-877,-494,-293,267,1000,-898,-687,-260,1000,-205,90,142,782,872,-861}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00041() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(long):long",
+            new int[]{-1000,1000,384,935,-44,423,-1000,1000,-270,-1000,-508,1000,578,1000,864,9,-47,-380,348,768,608,244,-1000,-485,264,-1000,-1000,1000,880,1000,902,6,354,231,1000,-187,-605,1000,-452,166,-138,-551,-1000,387,1000,-1000,-1000,1000,1000,1000,-415,-377,1000,966,-335,-13,-1000,792,276,744,-510,1000,188,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00042() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(long):long",
+            new int[]{-1000,703,699,1000,776,-87,-968,1000,-824,-880,132,1000,-42,444,-76,244,256,-529,-757,1000,47,-127,-214,-1000,-651,-377,-822,-444,756,1000,65,-441,162,62,1000,1000,-1000,1000,-1000,-383,410,-815,-1000,-1000,523,21,-1000,583,378,1000,-182,-557,540,-56,-1000,1000,-892,1000,-281,197,-803,-242,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00043() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(long):long",
+            new int[]{-1000,-731,639,552,453,91,-1000,1000,-385,-437,422,323,-520,1000,-51,1000,-507,-299,669,1000,487,-84,-9,-448,-1000,-403,-1000,-917,-1000,333,-675,1000,444,11,9,1000,539,1000,-447,-1000,1000,-737,-671,-163,1000,11,-347,125,149,673,290,-631,-539,-669,-939,1000,393,1000,-80,639,-590,-666,-1000,-688}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00044() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(long):long",
+            new int[]{-1000,384,-342,-621,1000,-898,1000,-522,-400,621,505,-743,-1000,-763,711,-338,1000,-515,-736,-343,-357,197,23,-1000,-992,118,-822,396,1000,941,-1000,-832,162,-1000,522,-518,1000,-575,518,-185,-546,-815,-362,873,-1000,269,-918,165,-360,1000,-234,-1000,1000,-1000,-498,1000,1000,207,-1000,-1000,1000,534,-881,-483}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00045() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumFreq(long):long",
+            new int[]{-1000,658,254,-689,-234,-677,-936,667,394,-1000,528,299,412,636,-1000,-700,-1000,728,1000,-420,608,450,-1000,-1000,-1000,-1000,-364,-1000,-143,1000,749,-882,386,1000,274,6,419,284,1000,102,487,-551,-1000,-1000,1000,-831,-1000,1000,331,617,1000,-288,-1000,940,-403,-1000,-1000,1000,276,-756,-1000,1000,182,72}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00046() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(char):double",
+            new int[]{-442,-806,534,636,75,-114,-907,-29,-320,1000,0,-1000,-543,600,3,62,-1000,643,1000,600,387,-441,227,-657,-230,-1000,846,785,897,337,-626,309,604,-861,-207,362,339,-1000,1000,1000,-1000,27,479,-152,-1000,-450,308,470,997,-1000,355,-1000,810,-1000,220,314,-577,994,1000,-287,854,-1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00047() {
+        org.junit.Assert.assertEquals("java.lang.Double:TmFO", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(char):double",
+            new int[]{1000,325,154,-1000,-10,-422,-877,44,62,1000,1000,-1000,1000,166,351,9,516,301,811,597,-742,502,182,-1000,-1000,-503,174,985,-497,-29,626,753,80,280,-469,1000,586,1000,-574,-860,822,464,-1000,-135,-50,101,-476,945,211,-1000,1000,-500,750,-371,-1000,-13,-678,1000,1000,249,-629,-1000,-1000,-604}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00048() {
+        org.junit.Assert.assertEquals("java.lang.Double:TmFO", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(char):double",
+            new int[]{-924,170,-506,1000,592,299,-774,-1000,-193,-198,1000,1000,71,97,-308,-144,173,398,-289,-548,1000,730,769,-852,670,270,-201,-40,1000,-1000,-292,-897,93,179,-1000,439,1000,-435,962,-128,-984,457,-926,-4,-71,1000,424,117,211,265,23,-397,-1000,-203,825,-179,-494,-529,302,-24,197,321,-374,629}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00049() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(char):double",
+            new int[]{-960,398,-667,220,-965,158,67,-800,133,-487,69,255,284,-764,-478,820,718,677,-472,-981,-400,446,332,-269,1000,-601,-1000,-199,372,21,966,-643,-54,-946,-1000,-1000,430,-676,-870,-547,118,523,-403,225,-2,-273,995,1000,1000,-84,-1000,-250,85,45,397,290,-245,-76,327,-1000,28,1000,273,-17}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00050() {
+        org.junit.Assert.assertEquals("java.lang.Double:TmFO", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(char):double",
+            new int[]{-479,955,289,-634,-114,-796,1000,-339,577,-373,258,-361,916,-1000,-467,414,759,1000,-283,-310,-1000,374,-182,44,335,-622,-994,523,53,646,819,97,-39,-1000,-848,-367,-195,-107,-802,-925,614,1000,68,167,-31,-819,1000,-18,919,-446,-431,536,1000,-134,-868,361,-1000,1000,339,-303,-366,1000,-3,-121}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00051() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(int):double",
+            new int[]{481,-1000,-546,1000,694,1000,-294,1000,-1000,-1000,1000,-1000,1000,-218,-809,-708,-12,-1000,-83,823,-1000,717,-454,1000,-48,-382,-1000,-162,311,-468,-1000,160,-1000,-1000,640,1000,-400,-1000,-1000,-1000,160,-165,-865,1000,1000,-1000,-927,-41,-757,-797,-1000,460,1000,-1000,373,-1000,-1000,881,-1000,98,1000,-1000,560,-135}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00052() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(int):double",
+            new int[]{-1000,-581,-146,-400,475,-306,1000,476,795,538,29,-737,-353,723,81,62,-1000,-10,913,-1000,-1000,-1000,-1000,-501,-318,-152,518,1000,574,-1000,-1000,1000,-847,-1000,-583,651,1000,-397,807,-6,-187,-696,490,-1000,1000,-314,-387,-77,-97,912,1000,1000,38,-226,-557,93,-177,336,228,-1000,452,-820,-1000,-447}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00053() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4zMzMzMzMzMzMzMzMzMzMz", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(int):double",
+            new int[]{-1000,1000,-171,-1000,-167,-460,389,-726,260,1000,-263,148,498,312,-124,-288,-1000,-221,962,-1000,269,-628,-989,-1000,864,-513,-619,-106,1000,-1000,-669,-958,-236,-1000,490,-754,-182,746,383,581,-1000,-427,481,-1000,-51,439,1000,-1000,1000,1000,1000,-437,-370,67,-549,-1000,885,213,634,494,194,1000,383,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00054() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(int):double",
+            new int[]{634,-860,-126,64,793,739,452,803,-389,-638,-132,579,483,1000,-1000,-107,-495,-661,-174,-25,-1000,869,-683,705,-253,962,1000,414,-960,1000,-1000,554,-1000,507,-373,704,660,1000,473,643,788,-440,-554,319,-167,-1000,-51,-1000,-843,-373,-797,1000,-958,-879,1000,-71,-1000,-815,25,596,-488,370,455,-445}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00055() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(int):double",
+            new int[]{241,-346,314,964,-351,648,1000,-400,-612,-1000,328,-1000,-85,400,357,-95,-606,-626,-70,997,-378,-338,224,1000,-795,-614,-290,1,-1000,-1000,-1000,1000,-1000,-872,1000,897,821,1000,342,782,-39,684,-600,1,1000,-864,209,176,-620,-1000,369,369,349,-944,1000,430,-276,423,-872,352,-721,-868,656,504}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00056() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(java.lang.Object):double",
+            new int[]{820,-501,249,-147,467,-651,657,-1000,-1000,49,50,-923,423,-314,1000,-1000,-302,112,-354,-656,-254,-504,460,1000,247,-229,-1000,283,1000,1000,-392,-1000,839,-1000,-632,911,1000,-956,53,-984,396,836,-1000,59,437,1000,-300,-1000,-1000,-1000,-919,-433,77,-555,1000,858,-773,-1000,1000,-721,-1000,1000,-1000,-472}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00057() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(java.lang.Object):double",
+            new int[]{-184,1000,34,-1000,1000,-803,1000,-225,-224,-271,51,-1000,955,304,1000,1000,-330,452,-19,764,-117,284,550,1000,83,734,-372,-405,-47,-323,-1000,-635,781,414,-1000,1000,1000,-654,676,-1000,-923,-1000,-1000,419,324,166,6,817,-1000,86,-1000,-184,628,-990,1000,-348,-1000,-1000,35,-198,-1000,888,-781,712}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00058() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(java.lang.Object):double",
+            new int[]{-1000,-482,194,111,-36,-803,-1000,-513,47,-726,-182,428,1000,-1000,-1000,1000,-484,-671,-992,128,906,-139,-844,-1000,1000,-1000,371,-1000,-591,960,872,-488,376,1000,-989,-1000,-1000,1000,-479,-369,1000,1000,591,440,1000,-1000,1000,363,945,259,-522,-464,-1000,-522,-1000,-986,1000,1000,-527,-785,-1000,-416,1000,77}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00059() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(java.lang.Object):double",
+            new int[]{858,122,974,-73,795,-517,59,201,-1000,-372,80,-766,586,1000,1000,-1000,-939,834,-741,-91,-489,1000,-1000,1000,998,-642,-659,-619,818,425,-1000,-1000,1000,-1000,1000,1000,734,-1000,1000,-688,-813,-256,-685,784,331,-600,1000,-1000,-1000,-1000,-467,-394,1000,-432,1000,1000,-687,-1000,797,1000,364,1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00060() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(java.lang.Object):double",
+            new int[]{683,1000,459,-791,1000,-1000,146,-1000,318,-719,-85,-1000,-127,889,-657,1000,-653,656,-3,-636,142,590,400,-1000,1000,589,-70,-1000,-1000,443,-410,-1000,-443,1000,-1000,-371,120,365,-140,-814,438,-69,-896,445,1000,890,1000,817,637,253,217,-1000,-337,-585,718,-778,-425,686,-1000,-1000,227,-86,659,-548}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00061() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC41", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(long):double",
+            new int[]{-354,787,-781,1000,1000,-1000,289,404,801,-623,542,1000,960,724,963,312,656,-1000,741,-149,95,-860,3,522,1000,400,-186,1000,-803,694,-168,651,1000,1000,-261,147,-944,247,-1000,-52,-183,-1000,1000,904,678,180,546,-559,-83,278,440,-717,-392,-1000,-400,1000,1000,-411,400,1000,-816,632,574,-353}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00062() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC41", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(long):double",
+            new int[]{-301,1000,-246,173,1000,-1000,1000,-1000,63,-762,180,1000,1000,415,1000,1000,1000,-1000,-423,-1000,670,-1000,-660,398,-530,253,-1000,-1000,-1000,-678,-958,1000,1000,1000,1000,-1000,-766,1000,-1000,1000,1000,-385,219,-291,-1000,-27,1000,75,583,1000,1000,-1000,378,-20,-1000,1000,1000,1000,-1000,1000,190,1000,24,-478}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00063() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(long):double",
+            new int[]{-399,1000,259,684,-1000,-493,-239,-705,38,-767,518,-159,346,-414,-706,-727,-1000,422,971,391,-246,-571,232,-956,1000,1000,-301,-266,-86,331,-1000,-102,-987,489,53,131,-222,1000,537,572,629,587,-1000,-1000,1000,-168,1000,981,859,-1000,626,1000,388,-383,461,60,518,636,-482,-826,12,-1000,-1000,11}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00064() {
+        org.junit.Assert.assertEquals("java.lang.Double:TmFO", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(long):double",
+            new int[]{-802,695,-386,244,735,-1000,566,1000,798,-373,546,-113,-258,925,1000,937,-1000,-742,856,-677,84,-855,672,324,-196,194,134,-400,-939,-395,116,-821,998,163,-1000,257,-576,-9,-501,-603,203,-1000,769,1000,-149,63,878,-794,-675,208,-64,-881,-721,400,-588,643,980,-385,-248,153,-331,910,-314,-562}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00065() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getCumPct(long):double",
+            new int[]{-491,717,494,-8,-1000,662,-1000,-386,-742,-887,465,-875,-865,-1000,1000,-658,-876,1000,659,1000,617,-727,-667,-1000,285,-566,-1000,1000,920,-795,-709,-1000,390,1000,-1000,1000,1000,1000,1000,-1000,-931,-604,229,1000,1000,-1000,-720,213,-64,-1000,-1000,1000,-401,75,1000,-86,-416,20,1000,-205,-585,-1000,767,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00066() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(char):double",
+            new int[]{234,-297,114,-120,-1000,1000,-1000,351,1000,-1000,-115,396,-1000,-1000,484,-124,-805,907,-1000,-1000,580,111,-952,772,-284,649,-90,55,1000,1000,354,166,1000,1000,-325,1000,-55,-536,210,-333,52,-70,-1000,1000,318,230,223,-1000,-1000,1000,-543,1000,1000,-710,878,-1000,-511,-1000,-312,-893,203,1000,-1000,-339}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00067() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(char):double",
+            new int[]{1000,128,-141,-1000,1000,-478,1000,-690,-813,-595,697,0,938,6,499,-1000,531,-1000,-567,1000,-1000,-1000,-255,923,1000,677,297,1000,257,1000,-753,977,-787,-1000,-607,-1000,858,813,-107,110,-773,222,554,240,1000,-1000,-1000,1000,259,-1000,-477,-1000,-1000,652,-796,-79,334,859,-498,256,-597,624,763,-67}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00068() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC41", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(char):double",
+            new int[]{656,-207,484,252,-1000,490,-479,-493,230,-419,571,-264,-1000,6,1000,-622,-140,-918,-567,59,-1000,-1000,-629,601,1000,246,-266,1000,1000,1000,-229,287,1000,203,716,986,243,393,-44,-907,-694,640,-256,976,1000,-84,-415,153,-793,519,-372,-618,-852,-1000,737,-821,-1000,-47,-1000,-1000,-806,629,763,-54}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00069() {
+        org.junit.Assert.assertEquals("java.lang.Double:TmFO", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(char):double",
+            new int[]{-404,1000,58,-1000,-1000,1000,253,17,-15,-505,-538,41,-44,1000,-107,1000,215,-378,-145,983,1000,354,1000,877,-366,405,1000,647,-830,-225,-1000,263,-720,-1000,-43,331,-165,1000,836,-45,-1000,-894,235,258,1000,-182,-1000,1000,-1000,122,-522,1000,-1000,-1000,-84,250,639,323,-1000,1000,282,-247,-760,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00070() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4zMzMzMzMzMzMzMzMzMzMz", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(int):double",
+            new int[]{-1000,-368,-861,-149,-242,1000,38,-1000,568,-537,-407,-1000,484,-294,-292,-876,285,1000,459,-583,929,1000,561,562,-638,-878,577,-733,-886,-1000,-145,-810,-1000,-497,100,1,-289,332,-1000,-362,-83,-153,-375,-710,39,494,-429,-935,-200,-304,1000,899,-541,-195,-1000,-910,-1000,-1000,-671,1000,-1000,349,447,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00071() {
+        org.junit.Assert.assertEquals("java.lang.Double:TmFO", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(int):double",
+            new int[]{-1000,-881,319,816,517,1000,997,183,29,-104,-1000,-787,139,827,-402,-969,703,-242,674,700,745,1000,779,1000,-990,-349,373,-1000,-590,-1000,-199,-721,-706,216,-134,8,-1000,589,-1000,-304,574,-1000,348,-441,1000,916,503,-107,-61,-257,199,-686,-368,-685,-305,387,368,-1000,-231,364,-227,1000,62,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00072() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(int):double",
+            new int[]{282,-1000,-492,-445,-432,-6,-494,516,37,196,327,609,-385,1000,458,-975,400,-492,97,-336,-1000,-277,-38,-25,1000,164,196,396,-301,-295,870,525,472,-668,-354,257,-265,278,760,276,397,-730,369,748,1000,24,-1000,401,-443,-250,212,279,-1000,-170,54,749,-609,-724,-14,614,580,-268,814,-588}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00073() {
+        org.junit.Assert.assertEquals("java.lang.Double:TmFO", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(int):double",
+            new int[]{1000,184,-836,79,550,720,672,672,-400,-277,-56,-235,1000,-291,1000,-616,295,1000,-48,-427,-536,418,-192,720,160,-1000,-718,786,202,400,656,541,-64,375,-126,325,-845,344,-159,-307,726,601,-483,-213,-334,286,400,381,192,392,-400,-1000,-301,400,-116,985,-1000,96,1000,1000,-210,-1000,1000,-199}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00074() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(java.lang.Object):double",
+            new int[]{-586,-1000,464,1000,-1000,951,-791,-737,974,285,583,387,-1000,214,-1000,271,1000,-274,1000,519,-416,-1000,-387,-1000,-1000,-1000,-1000,1000,533,1000,-186,-1000,-1000,261,773,-574,771,1000,1000,-308,-1000,590,-980,-277,1000,-29,1000,821,59,628,163,-234,0,1000,1000,-436,-533,-238,56,-1000,305,0,442,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00075() {
+        org.junit.Assert.assertEquals("java.lang.Double:TmFO", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(java.lang.Object):double",
+            new int[]{-79,-111,-246,-516,-274,152,-375,-253,1000,1000,-369,-511,-199,-13,-490,-1000,172,-673,-362,1000,-545,-258,-754,-426,-1000,-404,-1000,664,1000,1000,-584,-696,-10,-302,1000,1000,605,112,-317,117,-381,519,-1000,-305,-366,-249,938,-492,147,407,-1000,-173,-89,292,-1000,-1000,376,-927,-333,-1000,79,-1000,-718,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00076() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(java.lang.Object):double",
+            new int[]{964,-900,983,-309,-335,1000,-843,-791,1000,1000,1000,-302,-700,-1000,-779,-665,623,-1000,-890,1000,-580,1000,305,-890,-852,-1000,-1000,405,1000,-122,-33,-141,1000,52,1000,1000,1000,-279,103,867,-1000,153,-488,-1000,470,-1000,-171,-1000,164,1000,-1000,-538,1000,-540,-331,-1000,228,-1000,-392,-827,719,-1000,-158,832}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00077() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(java.lang.Object):double",
+            new int[]{340,594,-637,-777,209,-1000,747,1000,-1000,-261,-264,-1000,578,902,-514,-653,-156,1000,-584,-1000,-1000,-1000,-684,5,-398,535,1000,-388,-1000,243,-278,1000,-984,-419,150,-1000,-1000,-769,-78,397,1000,-593,385,528,-1000,1000,1000,-929,-1000,-754,1000,-595,-1000,-973,-773,244,342,150,-1000,123,-423,560,-624,155}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00078() {
+        org.junit.Assert.assertEquals("java.lang.Double:MS4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(long):double",
+            new int[]{1000,-107,64,379,1000,-57,776,1000,-1000,1000,87,529,627,-665,-386,-1000,516,1000,-548,389,-1000,1000,192,-1000,-383,-820,1000,-70,-283,-1000,-2,702,-153,-141,-1000,578,1000,-328,-1000,-348,-1000,-1000,1000,35,857,384,-359,458,-23,-491,-420,-350,419,444,906,-515,645,-250,445,-570,792,5,-441,264}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00079() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(long):double",
+            new int[]{-124,-258,259,785,473,61,269,-329,960,-279,939,-84,-786,-991,18,-939,904,370,919,-150,492,-367,696,169,-383,-190,-172,-265,-340,-664,189,455,934,842,461,73,-416,278,-807,24,-950,-476,745,259,-274,519,415,200,298,-646,218,-28,-789,796,-41,-427,645,-737,-468,-240,482,-597,-303,-930}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00080() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(long):double",
+            new int[]{41,1000,-31,746,-299,-394,323,558,355,164,1000,-134,114,489,-693,-121,147,-562,-834,-923,152,-400,607,-339,20,205,-73,1000,114,-1000,138,826,-617,-61,48,-81,-656,293,379,1000,490,-468,574,-199,742,-20,256,657,-1000,562,258,-252,1000,793,260,86,1000,437,-535,-116,687,-700,404,252}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00081() {
+        org.junit.Assert.assertEquals("java.lang.Double:MC4w", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getPct(long):double",
+            new int[]{-1000,-1000,-831,139,-259,247,632,-568,991,-193,143,1000,174,-218,460,246,-415,-180,-839,122,53,507,325,186,-273,636,488,188,-95,-631,-143,840,-477,-5,-797,130,-193,12,-1000,253,176,-765,493,163,259,863,-303,325,-402,-688,39,1000,-189,-433,470,-250,929,-366,814,401,-565,905,-406,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00082() {
+        org.junit.Assert.assertEquals("java.lang.Long:MA==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getSumFreq():long",
+            new int[]{-569,215,-1,-143,598,1000,-1000,-695,-1000,1000,1000,1000,-942,1000,1000,-560,799,512,1000,-1000,678,315,1000,-1000,-966,1000,-591,157,669,-1000,1000,1000,-83,309,842,-1000,-1000,727,-1000,-1000,-1000,158,911,121,-1000,-983,1000,438,869,-1000,-1000,-1000,1000,1000,1000,1000,-1000,1000,788,460,-1000,-1000,-271,-793}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00083() {
+        org.junit.Assert.assertEquals("java.lang.Long:Mg==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "getSumFreq():long",
+            new int[]{-933,1000,-341,623,-198,75,-68,-1000,-475,442,1000,791,970,1000,-792,962,114,447,541,1000,-447,875,-682,-346,443,-194,1000,-1000,-1000,292,-211,749,300,1000,897,607,693,1000,-1000,-71,-1000,-149,-1000,159,-1000,67,1000,500,1000,472,-132,722,771,150,1000,248,-1000,292,625,-1000,-998,-938,-454,27}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00084() {
+        org.junit.Assert.assertEquals("java.lang.String:VmFsdWUgCSBGcmVxLiAJIFBjdC4gCSBDdW0gUGN0LiAKa2V5MgkxCTUwJQk1MCUKb2JqZWN0MQkxCTUwJQkxMDAlCg==", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "toString():java.lang.String",
+            new int[]{-6,638,-271,550,472,-319,-160,371,-200,408,572,-821,-704,-194,-595,259,-355,259,829,26,326,502,-910,195,3,53,25,-395,39,-219,462,264,-917,795,37,-570,99,-582,-837,-54,106,-353,373,452,-574,212,285,-426,-710,-883,34,-236,273,356,-823,-943,-752,-569,-210,685,-755,191,-232,-754}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00085() {
+        org.junit.Assert.assertEquals("java.lang.String:VmFsdWUgCSBGcmVxLiAJIFBjdC4gCSBDdW0gUGN0LiAKNjYyCTEJMzMlCTMzJQoyMTQ3NDgzNjQ3CTIJNjclCTEwMCUK", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "toString():java.lang.String",
+            new int[]{-1000,197,19,-205,662,695,-1000,661,-1000,896,1000,-1000,1000,-1000,-685,-52,1000,759,-881,100,908,655,-1000,861,96,-235,1000,-1000,-40,-1000,975,674,1000,1000,-1000,628,-889,-1000,12,-32,110,975,860,-921,1000,-1000,967,-1000,286,-46,638,541,-505,861,-208,-236,-327,-1000,-594,1000,584,576,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00086() {
+        org.junit.Assert.assertEquals("java.lang.String:VmFsdWUgCSBGcmVxLiAJIFBjdC4gCSBDdW0gUGN0LiAK", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "toString():java.lang.String",
+            new int[]{-1000,116,-536,-438,703,437,-1000,1000,-1000,1000,1000,-1000,1000,-1000,97,-1000,359,51,-1000,755,-548,1000,-1000,-733,-732,73,804,-1000,285,-1000,1000,895,-1000,1000,-1000,313,-1000,-977,729,834,-1000,1000,-519,683,1000,174,991,-1000,497,152,489,566,46,1000,-118,-1000,-510,946,-69,1000,293,-64,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00087() {
+        org.junit.Assert.assertEquals("TYPE:java.util.TreeMap$KeyIterator", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "valuesIterator():java.util.Iterator",
+            new int[]{-805,254,104,148,173,-416,-351,-1000,-353,1,-439,1000,-1000,-961,636,813,-926,81,209,-489,920,-540,-150,1000,-649,-1000,631,-243,1000,-65,1000,996,-386,-526,910,550,-326,385,308,754,-1000,49,523,-282,-853,-894,614,-819,525,421,750,579,-265,603,428,-50,1000,-30,-346,-976,-399,1000,556,-621}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00088() {
+        org.junit.Assert.assertEquals("TYPE:java.util.TreeMap$KeyIterator", DEReplay.run(
+            "org.apache.commons.math.stat.Frequency", "org.apache.commons.math.stat.Frequency", "valuesIterator():java.util.Iterator",
+            new int[]{501,-151,314,804,-337,161,224,13,938,-1000,-1000,-787,1000,1000,-212,-172,1000,390,-1000,-327,437,-664,1000,-761,-58,-324,-629,865,-1000,676,-480,-555,200,-524,-1000,285,-1000,-603,-686,940,500,394,695,-859,-431,-1000,-231,-40,557,421,-97,575,7,1000,649,-703,-592,846,415,931,-1000,-515,370,535}));
+    }
+}

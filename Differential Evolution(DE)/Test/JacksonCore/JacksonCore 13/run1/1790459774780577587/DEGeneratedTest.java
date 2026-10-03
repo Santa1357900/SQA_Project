@@ -1,0 +1,885 @@
+import java.lang.reflect.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+/** Deterministic test-program decoder. Used unchanged during search and JUnit replay. */
+final class DEReplay {
+    public static final int DIMENSIONS = 64;
+    /** Local generic bean used to create stable reflection Type and Field values. */
+    public static final class GenericInput {
+        public String text;
+        public java.util.List<String> names;
+        public java.util.Map<String, Integer> counts;
+        public java.util.List<java.util.Map<String, Long>> nested;
+        public int[] numbers;
+        public String[] words;
+    }
+    static final class Genes {
+        final int[] values; int at; Field lastField;
+        Object jacksonBean, jacksonProvider, jacksonGenerator;
+        StringWriter jacksonOutput;
+        Genes(int[] values) { this.values = values; }
+        int next() { return values[(at++) % values.length]; }
+        int pick(int n) { return Math.floorMod(next(), n); }
+    }
+    public static final class Observation {
+        public String token, error, generatedSource;
+        public boolean reachedTarget;
+        public int setupCalls, setupFailures, nullFallbacks;
+    }
+    public static String signature(Method m) {
+        StringJoiner params = new StringJoiner(",");
+        for (Class<?> t : m.getParameterTypes()) params.add(t.getTypeName());
+        return m.getName() + "(" + params + "):" + m.getReturnType().getTypeName();
+    }
+    static Class<?> load(String name) throws ClassNotFoundException {
+        return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+    }
+    static Method method(String target, String signature) throws Exception {
+        for (Method m : load(target).getDeclaredMethods())
+            if (signature(m).equals(signature)) {
+                // Public methods on package-private Defects4J classes (for
+                // example Gson's TypeInfoFactory) are not reflectively
+                // accessible until opened on the unnamed application module.
+                if (!m.isAccessible()) m.setAccessible(true);
+                return m;
+            }
+        throw new NoSuchMethodException(signature);
+    }
+    static List<Constructor<?>> constructors(Class<?> type) {
+        List<Constructor<?>> out = new ArrayList();
+        if (!Modifier.isAbstract(type.getModifiers()) && Modifier.isPublic(type.getModifiers()))
+            for (Constructor<?> c : type.getConstructors())
+                if (c.getParameterTypes().length <= 6) out.add(c);
+        Collections.sort(out, new Comparator<Constructor<?>>() {
+            public int compare(Constructor<?> a, Constructor<?> b) {
+                int byArity = a.getParameterTypes().length - b.getParameterTypes().length;
+                return byArity != 0 ? byArity : a.toString().compareTo(b.toString());
+            }
+        });
+        return out;
+    }
+    private static Object[] arguments(Class<?>[] types, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Object[] args = new Object[types.length];
+        for (int i = 0; i < types.length; i++) args[i] = value(types[i], g, depth, report);
+        return args;
+    }
+    private static Object[] arguments(Method method, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Class<?>[] types = method.getParameterTypes();
+        Object[] args = new Object[types.length];
+        boolean closureCompile = method.getDeclaringClass().getName().equals("com.google.javascript.jscomp.Compiler")
+            && method.getName().equals("compile");
+        Type[] generic = method.getGenericParameterTypes();
+        boolean jacksonSerialization = method.getDeclaringClass().getName().equals(
+            "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+            && method.getName().startsWith("serializeAs")
+            && types.length == 3 && types[0] == Object.class;
+        for (int i = 0; i < types.length; i++) {
+            if (jacksonSerialization && g.jacksonBean != null) {
+                if (i == 0) args[i] = g.jacksonBean;
+                else if (i == 1) args[i] = g.jacksonGenerator;
+                else args[i] = g.jacksonProvider;
+                continue;
+            }
+            if (closureCompile && (List.class.isAssignableFrom(types[i])
+                    || (types[i].isArray() && load("com.google.javascript.jscomp.SourceFile")
+                        .isAssignableFrom(types[i].getComponentType())))) {
+                // Compiler.compile takes externs and inputs in either Lists or
+                // arrays depending on Closure version. Keep externs empty and
+                // supply a nonempty, gene-selected input program.
+                if (i == 0) args[i] = types[i].isArray()
+                    ? Array.newInstance(types[i].getComponentType(), 0) : new ArrayList();
+                else {
+                    Object sourceFile = value(load("com.google.javascript.jscomp.SourceFile"),
+                        g, depth + 1, report);
+                    if (types[i].isArray()) {
+                        Object files = Array.newInstance(types[i].getComponentType(), 1);
+                        Array.set(files, 0, sourceFile); args[i] = files;
+                    } else args[i] = new ArrayList(Collections.singletonList(sourceFile));
+                }
+            } else args[i] = value(types[i], g, depth, report);
+        }
+        return args;
+    }
+    private static Number number(Genes g) {
+        int n = g.next();
+        switch (g.pick(12)) {
+            case 0: return 0; case 1: return 1; case 2: return -1;
+            case 3: return Integer.MAX_VALUE; case 4: return Integer.MIN_VALUE;
+            case 5: return Long.MAX_VALUE; case 6: return Long.MIN_VALUE;
+            case 7: return Double.NaN; case 8: return Double.POSITIVE_INFINITY;
+            case 9: return Double.NEGATIVE_INFINITY; case 10: return n / 10.0;
+            default: return n;
+        }
+    }
+    private static String string(Genes g) {
+        int mode = g.pick(16), n = g.next();
+        String digits = Long.toString(Math.abs((long)n));
+        String sign = new String[]{"", "-", "+", "--"}[g.pick(4)];
+        switch (mode) {
+            case 0: return null; case 1: return ""; case 2: return " ";
+            case 3: return Integer.toString(n);
+            case 4: return sign + digits;
+            case 5: return sign + digits + "." + g.pick(1000);
+            case 6: return sign + digits + "e" + g.next();
+            case 7: return sign + "0x" + Long.toHexString(Math.abs((long)n));
+            case 8: return sign + "0x8" + "0".repeat(g.pick(20));
+            case 9: return sign + digits + "fFdDlL".charAt(g.pick(6));
+            case 10: return " " + sign + digits + " ";
+            case 11: return new String[]{"true", "false", "null", "NaN", "Infinity"}[g.pick(5)];
+            case 12: return "a".repeat(g.pick(25));
+            default:
+                String alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-._ /\\\t\n";
+                StringBuilder s = new StringBuilder();
+                int length = g.pick(25);
+                for (int i = 0; i < length; i++) s.append(alphabet.charAt(g.pick(alphabet.length())));
+                return s.toString();
+        }
+    }
+    private static Object value(Class<?> t, Genes g, int depth, Observation report) throws Exception {
+        if (t == String.class || t == CharSequence.class) return string(g);
+        if (t == Comparable.class) return "key" + g.pick(5);
+        if (t == boolean.class || t == Boolean.class) return g.pick(2) == 0;
+        if (t == char.class || t == Character.class) return (char)g.pick(128);
+        if (t == byte.class || t == Byte.class) return number(g).byteValue();
+        if (t == short.class || t == Short.class) return number(g).shortValue();
+        if (t == int.class || t == Integer.class) return number(g).intValue();
+        if (t == long.class || t == Long.class) return number(g).longValue();
+        if (t == float.class || t == Float.class) return number(g).floatValue();
+        if (t == double.class || t == Double.class || t == Number.class) return number(g).doubleValue();
+        if (t.isEnum()) {
+            Object[] constants = t.getEnumConstants();
+            return constants.length == 0 ? null : constants[g.pick(constants.length)];
+        }
+        if (t == Object.class) return g.pick(3) == 0 ? null : "object" + g.pick(5);
+        if (depth >= 3) { report.nullFallbacks++; return null; }
+        if (t.isArray()) {
+            int length = g.pick(6);
+            Object array = Array.newInstance(t.getComponentType(), length);
+            for (int i = 0; i < length; i++) Array.set(array, i, value(t.getComponentType(), g, depth + 1, report));
+            return array;
+        }
+        if (t == List.class || t == Collection.class || t == Iterable.class || t == Set.class) {
+            Collection<Object> items = t == Set.class ? new LinkedHashSet() : new ArrayList();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.add("item" + g.pick(5));
+            return items;
+        }
+        if (t == Map.class) {
+            Map<Object, Object> items = new LinkedHashMap();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.put("key" + g.pick(5), number(g));
+            return items;
+        }
+        if (t == java.util.Date.class) return new java.util.Date(g.next() * 86400000L);
+        if (t == Class.class) return String.class;
+        if (t == java.lang.reflect.Field.class) {
+            Field[] fields = GenericInput.class.getFields();
+            g.lastField = fields[g.pick(fields.length)];
+            return g.lastField;
+        }
+        if (t == java.lang.reflect.Type.class) {
+            if (g.lastField != null && g.pick(3) == 0)
+                return g.lastField.getDeclaringClass();
+            Field[] fields = GenericInput.class.getFields();
+            return fields[g.pick(fields.length)].getGenericType();
+        }
+        if (t == java.io.Reader.class || t == java.io.BufferedReader.class
+                || t == java.io.StringReader.class) {
+            String content = "header,value\n" + string(g) + "," + number(g) + "\n"
+                + "alpha,beta\n";
+            StringReader reader = new StringReader(content);
+            return t == java.io.BufferedReader.class ? new BufferedReader(reader) : reader;
+        }
+        if (t.getName().equals("org.apache.commons.csv.CSVFormat")) {
+            Class<?> format = load("org.apache.commons.csv.CSVFormat");
+            for (String fieldName : new String[]{"DEFAULT", "RFC4180", "EXCEL"}) try {
+                Object result = format.getField(fieldName).get(null);
+                if (t.isInstance(result)) return result;
+            } catch (ReflectiveOperationException ignored) { }
+            for (Method factory : format.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getParameterTypes().length == 0
+                        && t.isAssignableFrom(factory.getReturnType())) try {
+                    return factory.invoke(null);
+                } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.SourceFile")) {
+            Class<?> source = load("com.google.javascript.jscomp.SourceFile");
+            for (Method factory : source.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals("fromCode")
+                        && factory.getParameterTypes().length == 2 && factory.getParameterTypes()[0] == String.class
+                        && factory.getParameterTypes()[1] == String.class) {
+                    String replaySource = System.getProperty("de.generated.source");
+                    if (replaySource != null) {
+                        try {
+                            report.generatedSource = replaySource;
+                            return factory.invoke(null, "de-input.js", replaySource);
+                        } catch (ReflectiveOperationException ignored) { }
+                    }
+                    String[] unusedParameterScripts = {
+                        "window.f = function(a) {};",
+                        "window.f = function(a, b) { return b; };",
+                        "window.f = function(a, b) { var used = b; return used; };",
+                        "window['f'] = function(unused) {};",
+                        "window.f = function(unused, value) { return value; };",
+                        "window['f'] = function(unused, value) { return value; };",
+                        "window.f = function(first, unused, last) { return last; };",
+                        "window.f = function(unused) { var local = 1; return local; };",
+                        "window.f = function(unused, value) { var alias = value; return alias; };",
+                        "window.f = function(unused, value) { if (value) { return 1; } return 2; };",
+                        "window.f = function(unused, value) { value = value + 1; return value; };",
+                        "window.f = function(unused, value) { return function() { return value; }; };",
+                        "window.f = function(unused) { function inner() { return 1; } return inner(); };",
+                        "window.f = function(a, b, unused) { return a + b; };",
+                        "window.f = function(a, unused, b, c) { return a + c; };"
+                    };
+                    String[] catchDependencyScripts = {
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.stack; };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (caught) { saved = caught; } return saved.message; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.name; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return String(saved); };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (problem) { saved = problem; } return saved.stack; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (problem) { saved = problem; } return saved.message; };"
+                    };
+                    String[] genericScripts = {
+                        "function f(unused, used) { var local = 1; return used; } f(1, 2);",
+                        "function f() { var unused = 1; var used = 2; return used; } f();",
+                        "function f(x) { var first = x; first = 3; return x; } f(2);",
+                        "function f() { var unused = 1; } f();",
+                        "function keep() { var dead = 1; return 7; } keep();"
+                    };
+                    String modified = System.getProperty("de.modified.classes", "");
+                    String[] scripts;
+                    if (modified.contains("RemoveUnusedVars") && modified.contains("FlowSensitiveInlineVariables")) {
+                        scripts = new String[unusedParameterScripts.length + catchDependencyScripts.length];
+                        System.arraycopy(unusedParameterScripts, 0, scripts, 0, unusedParameterScripts.length);
+                        System.arraycopy(catchDependencyScripts, 0, scripts, unusedParameterScripts.length,
+                            catchDependencyScripts.length);
+                    }
+                    else if (modified.contains("FlowSensitiveInlineVariables")) scripts = catchDependencyScripts;
+                    else if (modified.contains("RemoveUnusedVars")) scripts = unusedParameterScripts;
+                    else scripts = genericScripts;
+                    try {
+                        String code = scripts[g.pick(scripts.length)];
+                        report.generatedSource = code;
+                        return factory.invoke(null, "de-input.js", code);
+                    }
+                    catch (ReflectiveOperationException ignored) { }
+                }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.CompilerOptions")) {
+            try {
+                Object options = t.getConstructor().newInstance();
+                // In Closure Compiler, unused-variable passes are enabled by
+                // CompilationLevel, rather than by a CompilerOptions enum
+                // setter. Apply the real public configuration when available.
+                try {
+                    Class<?> levelType = load("com.google.javascript.jscomp.CompilationLevel");
+                    Object advanced = levelType.getField("ADVANCED_OPTIMIZATIONS").get(null);
+                    for (Method configure : levelType.getMethods())
+                        if (configure.getName().equals("setOptionsForCompilationLevel")
+                                && configure.getParameterTypes().length == 1
+                                && configure.getParameterTypes()[0].isInstance(options)) {
+                            configure.invoke(advanced, options); break;
+                        }
+                } catch (ReflectiveOperationException ignored) { }
+                // Also set the relevant options directly for Closure releases
+                // whose compilation-level helper no longer enables this pass.
+                for (Class<?> current = t; current != null; current = current.getSuperclass())
+                    for (Field field : current.getDeclaredFields()) {
+                        String name = field.getName().toLowerCase(Locale.ROOT);
+                        if (field.getType() == boolean.class && name.equals("removeglobals")) try {
+                            // Closure-1 specifically guards argument removal
+                            // when globals are preserved. Keep the optimization
+                            // pass enabled while exercising that configuration.
+                            field.setAccessible(true); field.setBoolean(options, false);
+                        } catch (Exception ignored) { }
+                        if (field.getType() == boolean.class
+                                && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) try {
+                            field.setAccessible(true); field.setBoolean(options, true);
+                        } catch (Exception ignored) { }
+                    }
+                for (Method setter : t.getMethods()) {
+                    if (!Modifier.isPublic(setter.getModifiers()) || !setter.getName().startsWith("set")
+                            || setter.getParameterTypes().length != 1) continue;
+                    String name = setter.getName().toLowerCase(Locale.ROOT);
+                    if (setter.getParameterTypes()[0] == boolean.class && name.contains("removeglobals")) {
+                        try { setter.invoke(options, false); } catch (ReflectiveOperationException ignored) { }
+                    } else if (setter.getParameterTypes()[0] == boolean.class
+                            && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) {
+                        try { setter.invoke(options, true); } catch (ReflectiveOperationException ignored) { }
+                    } else if (name.contains("optimizationlevel")
+                            && setter.getParameterTypes()[0].isEnum()) {
+                        Object[] values = setter.getParameterTypes()[0].getEnumConstants();
+                        for (Object value : values) if (String.valueOf(value).contains("ADVANCED"))
+                            try { setter.invoke(options, value); } catch (ReflectiveOperationException ignored) { }
+                    }
+                }
+                return options;
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.rhino.Node")) {
+            try {
+                Class<?> ir = load("com.google.javascript.rhino.IR");
+                for (String factoryName : new String[]{"script", "root", "name", "string"})
+                    for (Method factory : ir.getMethods())
+                        if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals(factoryName)
+                                && factory.getParameterTypes().length == 0 && t.isAssignableFrom(factory.getReturnType()))
+                            return factory.invoke(null);
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser")) {
+            Object parser = xmlParser(g, report);
+            if (parser != null && t.isInstance(parser)) return parser;
+        }
+        if (t.getName().equals("com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                || t.getName().equals("com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter")) {
+            Object writer = jacksonWriter(t, g, report);
+            if (writer != null && t.isInstance(writer)) return writer;
+        }
+        if (t == java.awt.Graphics2D.class || t == java.awt.Graphics.class)
+            return new java.awt.image.BufferedImage(80, 80, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        if (java.awt.Paint.class.isAssignableFrom(t)) {
+            java.awt.Color c = new java.awt.Color(g.pick(256), g.pick(256), g.pick(256));
+            if (t.isInstance(c)) return c;
+        }
+        if (java.awt.Stroke.class.isAssignableFrom(t)) {
+            java.awt.BasicStroke s = new java.awt.BasicStroke(g.pick(10) / 2.0f);
+            if (t.isInstance(s)) return s;
+        }
+        if (java.awt.Shape.class.isAssignableFrom(t)) {
+            java.awt.Shape s = new java.awt.geom.Rectangle2D.Double(g.next(), g.next(), g.pick(80), g.pick(80));
+            if (t.isInstance(s)) return s;
+        }
+        if (t == java.awt.geom.Point2D.class) return new java.awt.geom.Point2D.Double(g.next(), g.next());
+        if (t.getName().equals("org.apache.commons.cli.CommandLine"))
+            return commandLine(g, report);
+        Object domain = chart(t, g, report);
+        if (domain != null) return domain;
+        Object language = language(t, g, report);
+        if (language != null) return language;
+        List<Constructor<?>> ctors = constructors(t);
+        // Older Java libraries often use public singleton constants in place of enums.
+        if (ctors.isEmpty()) {
+            List<Field> constants = new ArrayList();
+            for (Field field : t.getFields())
+                if (Modifier.isStatic(field.getModifiers()) && Modifier.isFinal(field.getModifiers())
+                        && t.isAssignableFrom(field.getType())) constants.add(field);
+            Collections.sort(constants, new Comparator<Field>() {
+                public int compare(Field a, Field b) { return a.getName().compareTo(b.getName()); }
+            });
+            if (!constants.isEmpty()) {
+                Object constant = constants.get(g.pick(constants.size())).get(null);
+                if (constant != null) return constant;
+            }
+        }
+        if (!ctors.isEmpty()) {
+            Constructor<?> ctor = ctors.get(g.pick(ctors.size()));
+            try { return ctor.newInstance(arguments(ctor.getParameterTypes(), g, depth + 1, report)); }
+            catch (Exception ignored) { }
+        }
+        report.nullFallbacks++;
+        return null;
+    }
+    private static Object language(Class<?> t, Genes g, Observation report) {
+        if (!t.getName().equals("org.apache.commons.lang3.time.FastDateFormat")) return null;
+        try {
+            Method factory = t.getMethod("getInstance", String.class, java.util.TimeZone.class,
+                java.util.Locale.class);
+            String[] patterns = {"yyyy-MM-dd", "MM/dd/yy HH:mm:ss", "EEE, d MMM yyyy HH:mm:ss Z"};
+            return factory.invoke(null, patterns[g.pick(patterns.length)],
+                java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US);
+        } catch (ReflectiveOperationException ignored) { }
+        try { return t.getMethod("getInstance", String.class).invoke(null, "yyyy-MM-dd"); }
+        catch (ReflectiveOperationException ignored) { return null; }
+    }
+    private static Object xmlParser(Genes g, Observation report) {
+        try {
+            Class<?> factoryType = load("com.fasterxml.jackson.dataformat.xml.XmlFactory");
+            Object factory = factoryType.getConstructor().newInstance();
+            String[] docs = {"<root><value>1</value><name>x</name></root>",
+                "<root value=\"42\"><item>a</item><item>b</item></root>",
+                "<root/>"};
+            String xml = docs[g.pick(docs.length)];
+            for (Method method : factoryType.getMethods()) {
+                if (!method.getName().equals("createParser") || method.getParameterTypes().length != 1) continue;
+                Class<?> p = method.getParameterTypes()[0];
+                Object input = p == String.class ? xml : p == Reader.class ? new StringReader(xml)
+                    : p == InputStream.class ? new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)) : null;
+                if (input == null) continue;
+                try {
+                    Object parser = method.invoke(factory, input);
+                    if (parser != null) {
+                        int advance = g.pick(4);
+                        Method next = parser.getClass().getMethod("nextToken");
+                        for (int i = 0; i < advance; i++) if (next.invoke(parser) == null) break;
+                        return parser;
+                    }
+                } catch (ReflectiveOperationException ignored) { }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
+    private static Object jacksonWriter(Class<?> requested, Genes g, Observation report) {
+        try {
+            Class<?> mapperType = load("com.fasterxml.jackson.databind.ObjectMapper");
+            Object mapper = mapperType.getConstructor().newInstance();
+            Object bean = new GenericInput();
+            Class<?> javaTypeType = load("com.fasterxml.jackson.databind.JavaType");
+            Object javaType = mapperType.getMethod("constructType", Type.class).invoke(mapper, bean.getClass());
+            // Jackson 2.6 (used by this Defects4J project) exposes a provider
+            // blueprint from ObjectMapper. Create a configured provider via
+            // DefaultSerializerProvider, the supported API used by ObjectMapper.
+            Object providerBlueprint = mapperType.getMethod("getSerializerProvider").invoke(mapper);
+            Class<?> serializationConfigType = load("com.fasterxml.jackson.databind.SerializationConfig");
+            Class<?> serializerFactoryType = load("com.fasterxml.jackson.databind.ser.SerializerFactory");
+            Object config = mapperType.getMethod("getSerializationConfig").invoke(mapper);
+            Object factory = mapperType.getMethod("getSerializerFactory").invoke(mapper);
+            Class<?> defaultProviderType = load("com.fasterxml.jackson.databind.ser.DefaultSerializerProvider");
+            Method createProvider = defaultProviderType.getMethod("createInstance",
+                serializationConfigType, serializerFactoryType);
+            Object provider = createProvider.invoke(providerBlueprint, config, factory);
+            g.jacksonBean = bean;
+            g.jacksonProvider = provider;
+            g.jacksonOutput = new StringWriter();
+            Object jsonFactory = mapperType.getMethod("getFactory").invoke(mapper);
+            for (String factoryMethod : new String[]{"createGenerator", "createJsonGenerator"}) {
+                try {
+                    Method createGenerator = jsonFactory.getClass().getMethod(factoryMethod, Writer.class);
+                    g.jacksonGenerator = createGenerator.invoke(jsonFactory, g.jacksonOutput);
+                    break;
+                } catch (NoSuchMethodException ignored) { }
+            }
+            if (g.jacksonGenerator == null)
+                throw new NoSuchMethodException("JsonFactory.createGenerator(Writer) or createJsonGenerator(Writer)");
+            Class<?> providerType = load("com.fasterxml.jackson.databind.SerializerProvider");
+            Class<?> beanPropertyType = load("com.fasterxml.jackson.databind.BeanProperty");
+            Method find = providerType.getMethod("findValueSerializer", javaTypeType, beanPropertyType);
+            Object serializer = find.invoke(provider, new Object[]{javaType, null});
+            List<Object> writers = new ArrayList();
+            try {
+                // Available on Jackson 2.6 and newer.
+                Class<?> serializerType = load("com.fasterxml.jackson.databind.JsonSerializer");
+                Method properties = serializerType.getMethod("properties");
+                Iterator<?> it = (Iterator<?>)properties.invoke(serializer);
+                while (it.hasNext()) {
+                    Object item = it.next();
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            } catch (NoSuchMethodException oldJackson) {
+                // JacksonDatabind-1 predates JsonSerializer.properties(). Its
+                // BeanSerializerBase stores writers in the protected _props
+                // array; read that array only for these old releases.
+                Class<?> base = load("com.fasterxml.jackson.databind.ser.std.BeanSerializerBase");
+                if (!base.isInstance(serializer))
+                    throw new IllegalStateException("Expected BeanSerializerBase, got "
+                        + serializer.getClass().getName(), oldJackson);
+                Field props = base.getDeclaredField("_props");
+                props.setAccessible(true);
+                Object array = props.get(serializer);
+                for (int i = 0; i < Array.getLength(array); i++) {
+                    Object item = Array.get(array, i);
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            }
+            if (writers.isEmpty())
+                throw new IllegalStateException("ObjectMapper produced no bean property writers for DEReplay.GenericInput");
+            Object writer = writers.get(g.pick(writers.size()));
+            boolean requireUnwrapping = requested.getName().equals(
+                "com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter");
+            if (!requireUnwrapping && g.pick(2) == 0 && requested.isInstance(writer)) return writer;
+            Class<?> transformerType = load("com.fasterxml.jackson.databind.util.NameTransformer");
+            Object nop = transformerType.getField("NOP").get(null);
+            for (Method m : writer.getClass().getMethods())
+                if (m.getName().equals("unwrappingWriter") && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0].isInstance(nop)) {
+                    Object unwrapped = m.invoke(writer, nop);
+                    if (requested.isInstance(unwrapped)) return unwrapped;
+                }
+            if (requested.isInstance(writer)) return writer;
+            throw new IllegalStateException("Generated Jackson property writer is not " + requested.getName());
+        } catch (Throwable failure) {
+            throw new IllegalStateException("Cannot construct Jackson BeanPropertyWriter: " + failure, failure);
+        }
+    }
+    /** Build the non-constructible Commons CLI result through its public Parser API. */
+    private static Object commandLine(Genes g, Observation report) throws Exception {
+        Class<?> optionsClass = load("org.apache.commons.cli.Options");
+        Class<?> optionClass = load("org.apache.commons.cli.Option");
+        Class<?> parserClass = load("org.apache.commons.cli.PosixParser");
+        Object options = optionsClass.getConstructor().newInstance();
+        Method addOption = optionsClass.getMethod("addOption", optionClass);
+        int numberOfOptions = 1 + g.pick(3);
+        List<String> spellings = new ArrayList();
+        for (int i = 0; i < numberOfOptions; i++) {
+            String shortName = String.valueOf((char)('a' + i));
+            String longName = "de-option-" + i;
+            boolean hasArgument = g.pick(2) == 0;
+            Object option = null;
+            try {
+                option = optionClass.getConstructor(String.class, String.class, boolean.class, String.class)
+                    .newInstance(shortName, longName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) try {
+                option = optionClass.getConstructor(String.class, boolean.class, String.class)
+                    .newInstance(shortName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) throw new NoSuchMethodException("No supported Commons CLI Option constructor");
+            addOption.invoke(options, option);
+            spellings.add("-" + shortName);
+            if (hasArgument) spellings.add("value-" + Math.abs((long)g.next()));
+        }
+        String[] argv = spellings.toArray(new String[0]);
+        Object parser = parserClass.getConstructor().newInstance();
+        List<Method> parseMethods = new ArrayList();
+        for (Method candidate : parserClass.getMethods()) {
+            Class<?>[] p = candidate.getParameterTypes();
+            if (candidate.getName().equals("parse") && p.length >= 2 && p[0] == optionsClass
+                    && p[1] == String[].class && candidate.getReturnType() == load("org.apache.commons.cli.CommandLine"))
+                parseMethods.add(candidate);
+        }
+        Collections.sort(parseMethods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return a.getParameterTypes().length - b.getParameterTypes().length;
+            }
+        });
+        for (Method parse : parseMethods) {
+            Object[] args = new Object[parse.getParameterTypes().length];
+            Class<?>[] p = parse.getParameterTypes();
+            args[0] = options; args[1] = argv;
+            for (int i = 2; i < p.length; i++) {
+                if (p[i] == boolean.class || p[i] == Boolean.class) args[i] = g.pick(2) == 0;
+                else if (p[i] == java.util.Properties.class) args[i] = new java.util.Properties();
+                else args[i] = value(p[i], g, 1, report);
+            }
+            try { return parse.invoke(parser, args); }
+            catch (InvocationTargetException ignored) { }
+        }
+        throw new NoSuchMethodException("No successful public PosixParser.parse(Options,String[])");
+    }
+    /** Optional type recipes, shared across bugs; none contains a bug-specific expected answer. */
+    private static Object chart(Class<?> t, Genes g, Observation report) throws Exception {
+        String n = t.getName();
+        if (!n.startsWith("org.jfree.")) return null;
+        if (n.equals("org.jfree.data.Range")) {
+            double a = g.next(), b = g.next();
+            return t.getConstructor(double.class, double.class).newInstance(Math.min(a, b), Math.max(a, b));
+        }
+        if (n.equals("org.jfree.data.time.RegularTimePeriod"))
+            return load("org.jfree.data.time.Day").getConstructor(int.class, int.class, int.class)
+                .newInstance(1 + g.pick(28), 1 + g.pick(12), 1990 + g.pick(40));
+        if (n.equals("org.jfree.data.time.TimeSeries")) {
+            Object series = t.getConstructor(Comparable.class).newInstance("DE");
+            Class<?> period = load("org.jfree.data.time.RegularTimePeriod");
+            Constructor<?> day = load("org.jfree.data.time.Day")
+                .getConstructor(int.class, int.class, int.class);
+            Method add = t.getMethod("add", period, double.class);
+            int count = 2 + g.pick(4), year = 1990 + g.pick(40);
+            for (int i = 0; i < count; i++)
+                add.invoke(series, day.newInstance(i + 1, 1, year), g.next() / 10.0);
+            return series;
+        }
+        if (n.equals("org.jfree.data.category.CategoryDataset")
+                || n.equals("org.jfree.data.category.DefaultCategoryDataset")) {
+            Class<?> c = load("org.jfree.data.category.DefaultCategoryDataset");
+            Object data = c.getConstructor().newInstance();
+            Method add = c.getMethod("addValue", Number.class, Comparable.class, Comparable.class);
+            int rows = 1 + g.pick(3), columns = 1 + g.pick(3);
+            for (int r = 0; r < rows; r++) for (int col = 0; col < columns; col++)
+                add.invoke(data, Double.valueOf(g.next() / 10.0), "R" + r, "C" + col);
+            return data;
+        }
+        if (n.equals("org.jfree.data.xy.XYDataset") || n.equals("org.jfree.data.xy.XYSeriesCollection")) {
+            Class<?> seriesClass = load("org.jfree.data.xy.XYSeries");
+            Object series = seriesClass.getConstructor(Comparable.class).newInstance("DE");
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) seriesClass.getMethod("add", double.class, double.class)
+                .invoke(series, (double)i, g.next() / 10.0);
+            Class<?> c = load("org.jfree.data.xy.XYSeriesCollection");
+            Object data = c.getConstructor().newInstance();
+            c.getMethod("addSeries", seriesClass).invoke(data, series);
+            return data;
+        }
+        if (n.equals("org.jfree.data.general.PieDataset") || n.equals("org.jfree.data.general.DefaultPieDataset")) {
+            Class<?> c = load("org.jfree.data.general.DefaultPieDataset");
+            Object data = c.getConstructor().newInstance();
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) c.getMethod("setValue", Comparable.class, Number.class)
+                .invoke(data, "K" + i, Double.valueOf(g.next() / 10.0));
+            return data;
+        }
+        return null;
+    }
+    static List<Method> setupMethods(Class<?> receiver) {
+        List<Method> methods = new ArrayList();
+        for (Method m : receiver.getMethods()) {
+            String n = m.getName();
+            if (!Modifier.isStatic(m.getModifiers()) && !m.isSynthetic()
+                    && m.getParameterTypes().length <= 3 && !n.contains("Listener")
+                    && (n.startsWith("set") || n.startsWith("add") || n.startsWith("update")
+                        || n.startsWith("remove") || n.equals("clear"))) methods.add(m);
+        }
+        Collections.sort(methods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return signature(a).compareTo(signature(b));
+            }
+        });
+        return methods;
+    }
+    public static Observation execute(String target, String receivers, String signature, int[] genes) {
+        Observation out = new Observation();
+        try {
+            Genes g = new Genes(genes);
+            Method m = method(target, signature);
+            Object receiver = null;
+            if (!Modifier.isStatic(m.getModifiers())) {
+                String[] choices = receivers.split(",");
+                Class<?> receiverType = load(choices[g.pick(choices.length)]);
+                receiver = value(receiverType, g, 0, out);
+                if (receiver == null) throw new IllegalArgumentException("Receiver construction failed");
+                // Compiler.compile owns a strict initialization sequence.
+                // Random calls to its mutators before compilation can corrupt
+                // state or spend the search budget on irrelevant setup.
+                if (!receiverType.getName().equals("com.google.javascript.jscomp.Compiler")) {
+                    List<Method> setup = setupMethods(receiverType);
+                    int count = g.pick(5);
+                    for (int i = 0; i < count && !setup.isEmpty(); i++) {
+                        Method s = setup.get(g.pick(setup.size()));
+                        try { s.invoke(receiver, arguments(s.getParameterTypes(), g, 0, out)); out.setupCalls++; }
+                        catch (Exception e) { out.setupFailures++; }
+                    }
+                }
+            }
+            Object[] args = arguments(m, g, 0, out);
+            out.reachedTarget = true;
+            try {
+                boolean jacksonSerialization = m.getDeclaringClass().getName().equals(
+                    "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                    && m.getName().startsWith("serializeAs") && g.jacksonGenerator != null;
+                boolean arrayShape = m.getName().contains("Column")
+                    || m.getName().contains("Element") || m.getName().contains("Placeholder");
+                if (jacksonSerialization)
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeStartArray" : "writeStartObject").invoke(g.jacksonGenerator);
+                Object result = m.invoke(receiver, args);
+                boolean closureCompile = m.getDeclaringClass().getName().equals(
+                    "com.google.javascript.jscomp.Compiler") && m.getName().equals("compile");
+                if (closureCompile) {
+                    // Result is only a status object; the compiled JavaScript is
+                    // the behavioral output that reveals whether an argument
+                    // was removed from a globally exposed function.
+                    Object js = receiver.getClass().getMethod("toSource").invoke(receiver);
+                    out.token = "CLOSURE_SOURCE:" + stable(js, 0);
+                } else if (jacksonSerialization) {
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeEndArray" : "writeEndObject").invoke(g.jacksonGenerator);
+                    g.jacksonGenerator.getClass().getMethod("flush").invoke(g.jacksonGenerator);
+                    out.token = "JSON:" + Base64.getEncoder().encodeToString(
+                        g.jacksonOutput.toString().getBytes(StandardCharsets.UTF_8));
+                } else out.token = m.getReturnType() == void.class
+                    ? state(receiver, m.getName()) : stable(result, 0);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof VirtualMachineError || e.getCause() instanceof LinkageError
+                        || e.getCause() instanceof ThreadDeath) throw e;
+                out.token = "THROW:" + e.getCause().getClass().getName();
+            }
+        } catch (Throwable e) {
+            out.token = "HARNESS_ERROR";
+            out.error = e.getClass().getName() + ":" + String.valueOf(e.getMessage());
+        }
+        return out;
+    }
+    public static String run(String target, String receivers, String signature, int[] genes) {
+        Observation o = execute(target, receivers, signature, genes);
+        if (!o.reachedTarget || o.token.equals("HARNESS_ERROR"))
+            throw new AssertionError("Cannot replay test: " + o.error);
+        return o.token;
+    }
+    private static String state(Object receiver, String method) {
+        if (receiver == null) return "VOID";
+        List<String> getters = new ArrayList();
+        if (method.startsWith("set") && method.length() > 3) {
+            getters.add("get" + method.substring(3)); getters.add("is" + method.substring(3));
+        }
+        getters.addAll(Arrays.asList("getItemCount", "getRowCount", "getColumnCount", "getSeriesCount"));
+        StringBuilder s = new StringBuilder("VOID");
+        for (String name : getters) {
+            try {
+                Method getter = receiver.getClass().getMethod(name);
+                if (getter.getReturnType().isPrimitive() || getter.getReturnType() == String.class)
+                    s.append('|').append(name).append('=').append(stable(getter.invoke(receiver), 0));
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        return s.toString();
+    }
+    /** Only whitelisted value types are rendered. Never use arbitrary object toString(). */
+    static String stable(Object value, int depth) {
+        if (value == null) return "NULL";
+        Class<?> t = value.getClass();
+        if (value instanceof String || value instanceof Boolean || value instanceof Character
+                || value instanceof Byte || value instanceof Short || value instanceof Integer
+                || value instanceof Long || value instanceof Float || value instanceof Double
+                || value instanceof java.math.BigInteger || value instanceof java.math.BigDecimal)
+            return t.getName() + ":" + Base64.getEncoder().encodeToString(value.toString().getBytes(StandardCharsets.UTF_8));
+        if (value instanceof Enum) return "ENUM:" + t.getName() + ":" + ((Enum<?>)value).name();
+        if (t.isArray() && depth < 3) {
+            StringBuilder s = new StringBuilder("ARRAY:" + t.getName() + ":" + Array.getLength(value));
+            for (int i = 0; i < Math.min(64, Array.getLength(value)); i++) {
+                String item = stable(Array.get(value, i), depth + 1);
+                s.append(':').append(item.length()).append(':').append(item);
+            }
+            return s.toString();
+        }
+        if (value instanceof java.awt.Color) return "COLOR:" + ((java.awt.Color)value).getRGB();
+        // Observe safe scalar properties of returned objects. This catches
+        // changes to value caches and state while avoiding identity-based toString().
+        StringBuilder observed = new StringBuilder("STATE:" + t.getName());
+        int properties = 0;
+        for (String name : Arrays.asList("getItemCount", "getMinY", "getMaxY",
+                "getRowCount", "getColumnCount", "getSeriesCount")) {
+            try {
+                Method getter = t.getMethod(name);
+                Class<?> r = getter.getReturnType();
+                if (!r.isPrimitive() && r != String.class && !Number.class.isAssignableFrom(r))
+                    continue;
+                if (r == void.class) continue;
+                Object result = getter.invoke(value);
+                String token = stable(result, depth + 1);
+                observed.append('|').append(name).append('=').append(token.length())
+                    .append(':').append(token);
+                properties++;
+            } catch (Exception ignored) { }
+        }
+        return properties == 0 ? "TYPE:" + t.getName() : observed.toString();
+    }
+    public static void main(String[] args) {
+        if (args.length > 4) {
+            String source = new String(Base64.getDecoder().decode(args[4]), StandardCharsets.UTF_8);
+            System.setProperty("de.generated.source", source);
+        }
+        String[] encodedGenes = args[3].split(",");
+        int[] genes = new int[encodedGenes.length];
+        for (int i = 0; i < encodedGenes.length; i++) genes[i] = Integer.parseInt(encodedGenes[i]);
+        boolean closureCompile = args[0].equals("com.google.javascript.jscomp.Compiler")
+            && args[2].startsWith("compile(");
+        // Compiler.compile is an expensive whole-program operation. Fixed-side
+        // suites are still executed twice by the runner, so capture its oracle
+        // once here instead of launching three compilations just to check the
+        // same deterministic source output.
+        int repetitions = closureCompile ? 1 : 3;
+        for (int i = 0; i < repetitions; i++) {
+            Observation out = execute(args[0], args[1], args[2], genes);
+            System.out.println("DE_TOKEN:" + Base64.getEncoder().encodeToString(out.token.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+}
+
+public class DEGeneratedTest {
+    @org.junit.Test(timeout=60000L)
+    public void testDE00000() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "enable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{-985,-1000,28,1000,-992,-628,-666,1000,470,464,-640,107,-242,739,609,44,443,893,458,-1000,257,-11,110,-203,780,-890,-429,-98,-1000,-986,-678,-319,-927,-1000,1000,-241,367,328,270,1000,-1000,18,853,390,-483,-144,1000,109,-550,839,-563,-1000,-581,-217,448,524,-1000,405,-575,-1000,370,1000,-160,-184}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00001() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "enable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{-1000,1000,760,1000,-1000,-907,-1000,604,541,464,-432,476,611,-22,206,29,-187,180,-1000,-751,-1000,-388,-1000,-222,1000,-232,-424,809,-584,-158,-698,-1000,-845,599,-61,-79,-62,832,672,772,-273,104,-192,-443,-787,119,398,925,-849,448,-1000,-17,-504,-1000,-483,1000,-666,307,-523,-19,-721,965,-1000,890}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00002() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "enable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{876,-606,607,1000,-1000,-965,-885,1000,-236,-607,576,396,-1000,772,291,44,893,444,446,-1000,-1000,-1000,110,-637,290,-890,324,1000,-997,-749,-1000,-1000,-643,-388,554,-1000,491,-1000,-45,1000,-1000,-988,853,-1000,-1000,-932,1000,1000,286,1000,-689,-604,-660,-855,421,1000,619,405,358,1000,489,-487,-4,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00003() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getCharacterEscapes():com.fasterxml.jackson.core.io.CharacterEscapes",
+            new int[]{-1000,1000,24,-204,-85,-622,-1000,1000,723,-276,308,-705,-67,1000,651,-105,1000,-1000,-1000,-1000,246,1000,-246,-1,-657,534,780,-239,397,615,512,-417,708,1000,1000,-602,-698,-1000,-920,172,-248,1000,1000,-1000,-421,-1000,-849,1000,617,1000,1000,454,885,-123,636,-1000,9,-811,-1000,518,520,-1000,-750,-881}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00004() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getCharacterEscapes():com.fasterxml.jackson.core.io.CharacterEscapes",
+            new int[]{71,937,1000,754,285,172,-475,1000,243,38,-477,157,-170,-96,-357,-674,1000,-378,-456,-1000,1000,418,-1000,-324,-769,533,166,522,663,30,848,-627,1000,416,797,-655,-222,-1000,824,1000,-51,1000,-953,-590,-268,82,-510,165,-1,815,-565,-159,1000,-184,42,-442,-632,-169,794,-1000,-227,-582,-1000,671}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00005() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getHighestEscapedChar():int",
+            new int[]{-185,226,-493,-354,514,-1000,-1000,-286,267,74,572,-1000,-775,931,124,-242,-682,-1000,-1000,-621,-964,603,-520,-435,247,616,-606,158,-1000,998,116,-521,1000,-1000,-634,-375,895,-117,-757,1000,-559,418,294,-1000,-703,1000,1000,-128,225,547,931,26,620,195,1000,1000,-533,-1000,-554,-1000,330,234,-46,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00006() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MTI3", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getHighestEscapedChar():int",
+            new int[]{257,1000,640,-120,839,345,-62,-276,1000,879,523,-976,-179,-389,299,-309,-1000,-186,107,376,-405,-329,1000,505,189,219,-288,1000,698,835,-91,793,36,583,161,187,419,-1000,70,919,-146,751,1000,490,1000,-27,120,1000,462,258,1000,-659,-437,-624,526,61,377,-233,1000,-390,742,172,-379,5}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00007() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "setCharacterEscapes(com.fasterxml.jackson.core.io.CharacterEscapes):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{280,457,680,333,98,1000,689,-567,-1000,-12,-381,-574,1000,611,281,578,194,-1000,-321,881,-387,-400,-797,-353,956,121,-788,-224,963,423,-6,-1000,211,-214,-332,54,-196,236,-325,757,94,715,-129,633,165,691,-539,-843,-685,292,1000,156,-715,480,-414,-281,379,663,-273,499,190,-753,209,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00008() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "setCharacterEscapes(com.fasterxml.jackson.core.io.CharacterEscapes):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{-1000,93,396,32,-873,801,543,1000,-806,436,-532,897,372,40,-408,734,-431,284,-532,784,-148,973,-707,-617,451,-772,550,1000,-586,-948,-1000,-974,790,640,446,791,-967,570,-564,712,-383,512,366,-62,-404,1000,88,-1000,215,-1000,-115,506,-718,-463,836,-35,-900,-193,-855,621,864,424,1000,-689}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00009() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "setHighestNonEscapedChar(int):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{520,-864,393,845,358,480,964,-579,713,-181,-272,750,475,-18,-474,-722,-993,81,-666,-133,-324,-90,526,-121,-520,657,-918,854,139,203,545,888,209,-146,-444,-597,44,420,-175,111,-214,-778,-486,-338,912,-166,-821,742,366,-858,656,-836,796,-346,-420,906,-997,897,-428,969,-658,212,569,-562}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00010() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "setHighestNonEscapedChar(int):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{-1000,908,1000,-1000,-353,-415,-211,-636,1000,-381,-900,1000,325,-1000,1000,931,-604,-250,-317,-274,191,-1000,70,822,103,122,1000,-235,-1000,-766,198,-1000,1000,-666,-1000,-809,883,159,-992,1000,801,560,-10,-597,-1000,-498,1000,-568,-1000,-85,693,1000,261,1000,-901,929,-705,-1000,-1000,7,-728,-1000,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00011() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "setRootValueSeparator(com.fasterxml.jackson.core.SerializableString):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{1000,1000,-1000,320,-536,-958,-30,-963,303,924,-605,-17,-24,-391,1000,-676,-1000,617,1000,-1000,36,1000,-739,886,-743,230,-16,401,811,1000,154,559,-611,-372,-393,876,-753,59,-1000,282,1000,249,1000,-911,1000,-249,985,-942,1000,428,716,1000,91,-1000,1000,-754,847,-401,-32,-27,-290,-833,-740,961}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00012() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "setRootValueSeparator(com.fasterxml.jackson.core.SerializableString):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{285,-675,-1000,383,256,487,-118,-62,-216,-741,1000,835,225,113,-397,340,1000,-650,-1000,907,1000,1000,1000,1000,475,-675,422,1000,-150,-1000,349,917,-513,737,-1000,-283,-25,-1000,1000,-1000,-1000,-400,-870,420,1000,-807,-299,-770,-330,269,-600,-411,-694,-1000,-28,38,1000,-43,-317,362,193,614,1000,-953}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00013() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.Version", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "version():com.fasterxml.jackson.core.Version",
+            new int[]{1000,-1000,119,1000,1000,1000,-1000,60,770,-136,1000,355,-217,-126,881,19,125,-914,92,-1000,201,-1000,1000,-429,-771,125,-522,-157,-244,-1000,-691,220,-950,-507,-263,566,-720,438,627,879,-444,587,329,475,-93,-1000,-205,-53,-263,-732,539,-400,227,1000,258,-512,-1000,-544,1000,1000,271,744,-106,-959}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00014() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.Version", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "version():com.fasterxml.jackson.core.Version",
+            new int[]{1000,-953,383,232,226,783,30,60,565,-57,814,-52,95,-891,1000,313,-212,-621,-235,-1000,-159,96,-139,66,-958,-124,-66,-524,-471,-987,-784,1000,-365,-55,-119,542,-804,7,635,781,-11,-866,530,-289,235,-1000,156,-337,116,-636,77,-580,1000,328,-119,-58,-991,-593,1000,1000,490,65,-83,-371}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00015() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeStringField(java.lang.String,java.lang.String):void",
+            new int[]{400,-265,-749,64,1000,-914,1000,806,-836,-491,-717,46,-623,-837,-859,-1000,-108,-35,501,-408,17,-1000,992,-184,457,-370,1000,-1000,1000,-369,54,-566,-1000,-1000,1000,516,870,82,397,-1000,1000,1000,634,-1000,-1000,-285,570,371,-1000,1000,1000,-599,869,606,-429,-111,677,1000,-186,55,568,331,576,707}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00016() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeStringField(java.lang.String,java.lang.String):void",
+            new int[]{-30,269,-919,64,974,1000,-10,1000,-1000,-682,867,-445,-719,1000,830,1000,709,140,-776,1000,-316,-357,198,1000,1000,540,858,707,-958,-1000,194,-340,655,620,287,-301,-130,-842,-361,-106,-130,-840,1000,576,-41,680,-679,-760,94,-973,-929,-145,-244,-145,1000,117,-1000,-1000,-14,1000,-1000,176,1000,-1000}));
+    }
+}

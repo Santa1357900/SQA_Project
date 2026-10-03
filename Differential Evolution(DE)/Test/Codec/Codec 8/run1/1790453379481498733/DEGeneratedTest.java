@@ -1,0 +1,1611 @@
+import java.lang.reflect.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+/** Deterministic test-program decoder. Used unchanged during search and JUnit replay. */
+final class DEReplay {
+    public static final int DIMENSIONS = 64;
+    /** Local generic bean used to create stable reflection Type and Field values. */
+    public static final class GenericInput {
+        public String text;
+        public java.util.List<String> names;
+        public java.util.Map<String, Integer> counts;
+        public java.util.List<java.util.Map<String, Long>> nested;
+        public int[] numbers;
+        public String[] words;
+    }
+    static final class Genes {
+        final int[] values; int at; Field lastField;
+        Object jacksonBean, jacksonProvider, jacksonGenerator;
+        StringWriter jacksonOutput;
+        Genes(int[] values) { this.values = values; }
+        int next() { return values[(at++) % values.length]; }
+        int pick(int n) { return Math.floorMod(next(), n); }
+    }
+    public static final class Observation {
+        public String token, error, generatedSource;
+        public boolean reachedTarget;
+        public int setupCalls, setupFailures, nullFallbacks;
+    }
+    public static String signature(Method m) {
+        StringJoiner params = new StringJoiner(",");
+        for (Class<?> t : m.getParameterTypes()) params.add(t.getTypeName());
+        return m.getName() + "(" + params + "):" + m.getReturnType().getTypeName();
+    }
+    static Class<?> load(String name) throws ClassNotFoundException {
+        return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+    }
+    static Method method(String target, String signature) throws Exception {
+        for (Method m : load(target).getDeclaredMethods())
+            if (signature(m).equals(signature)) {
+                // Public methods on package-private Defects4J classes (for
+                // example Gson's TypeInfoFactory) are not reflectively
+                // accessible until opened on the unnamed application module.
+                if (!m.isAccessible()) m.setAccessible(true);
+                return m;
+            }
+        throw new NoSuchMethodException(signature);
+    }
+    static List<Constructor<?>> constructors(Class<?> type) {
+        List<Constructor<?>> out = new ArrayList();
+        if (!Modifier.isAbstract(type.getModifiers()) && Modifier.isPublic(type.getModifiers()))
+            for (Constructor<?> c : type.getConstructors())
+                if (c.getParameterTypes().length <= 6) out.add(c);
+        Collections.sort(out, new Comparator<Constructor<?>>() {
+            public int compare(Constructor<?> a, Constructor<?> b) {
+                int byArity = a.getParameterTypes().length - b.getParameterTypes().length;
+                return byArity != 0 ? byArity : a.toString().compareTo(b.toString());
+            }
+        });
+        return out;
+    }
+    private static Object[] arguments(Class<?>[] types, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Object[] args = new Object[types.length];
+        for (int i = 0; i < types.length; i++) args[i] = value(types[i], g, depth, report);
+        return args;
+    }
+    private static Object[] arguments(Method method, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Class<?>[] types = method.getParameterTypes();
+        Object[] args = new Object[types.length];
+        boolean closureCompile = method.getDeclaringClass().getName().equals("com.google.javascript.jscomp.Compiler")
+            && method.getName().equals("compile");
+        Type[] generic = method.getGenericParameterTypes();
+        boolean jacksonSerialization = method.getDeclaringClass().getName().equals(
+            "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+            && method.getName().startsWith("serializeAs")
+            && types.length == 3 && types[0] == Object.class;
+        for (int i = 0; i < types.length; i++) {
+            if (jacksonSerialization && g.jacksonBean != null) {
+                if (i == 0) args[i] = g.jacksonBean;
+                else if (i == 1) args[i] = g.jacksonGenerator;
+                else args[i] = g.jacksonProvider;
+                continue;
+            }
+            if (closureCompile && (List.class.isAssignableFrom(types[i])
+                    || (types[i].isArray() && load("com.google.javascript.jscomp.SourceFile")
+                        .isAssignableFrom(types[i].getComponentType())))) {
+                // Compiler.compile takes externs and inputs in either Lists or
+                // arrays depending on Closure version. Keep externs empty and
+                // supply a nonempty, gene-selected input program.
+                if (i == 0) args[i] = types[i].isArray()
+                    ? Array.newInstance(types[i].getComponentType(), 0) : new ArrayList();
+                else {
+                    Object sourceFile = value(load("com.google.javascript.jscomp.SourceFile"),
+                        g, depth + 1, report);
+                    if (types[i].isArray()) {
+                        Object files = Array.newInstance(types[i].getComponentType(), 1);
+                        Array.set(files, 0, sourceFile); args[i] = files;
+                    } else args[i] = new ArrayList(Collections.singletonList(sourceFile));
+                }
+            } else args[i] = value(types[i], g, depth, report);
+        }
+        return args;
+    }
+    private static Number number(Genes g) {
+        int n = g.next();
+        switch (g.pick(12)) {
+            case 0: return 0; case 1: return 1; case 2: return -1;
+            case 3: return Integer.MAX_VALUE; case 4: return Integer.MIN_VALUE;
+            case 5: return Long.MAX_VALUE; case 6: return Long.MIN_VALUE;
+            case 7: return Double.NaN; case 8: return Double.POSITIVE_INFINITY;
+            case 9: return Double.NEGATIVE_INFINITY; case 10: return n / 10.0;
+            default: return n;
+        }
+    }
+    private static String string(Genes g) {
+        int mode = g.pick(16), n = g.next();
+        String digits = Long.toString(Math.abs((long)n));
+        String sign = new String[]{"", "-", "+", "--"}[g.pick(4)];
+        switch (mode) {
+            case 0: return null; case 1: return ""; case 2: return " ";
+            case 3: return Integer.toString(n);
+            case 4: return sign + digits;
+            case 5: return sign + digits + "." + g.pick(1000);
+            case 6: return sign + digits + "e" + g.next();
+            case 7: return sign + "0x" + Long.toHexString(Math.abs((long)n));
+            case 8: return sign + "0x8" + "0".repeat(g.pick(20));
+            case 9: return sign + digits + "fFdDlL".charAt(g.pick(6));
+            case 10: return " " + sign + digits + " ";
+            case 11: return new String[]{"true", "false", "null", "NaN", "Infinity"}[g.pick(5)];
+            case 12: return "a".repeat(g.pick(25));
+            default:
+                String alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-._ /\\\t\n";
+                StringBuilder s = new StringBuilder();
+                int length = g.pick(25);
+                for (int i = 0; i < length; i++) s.append(alphabet.charAt(g.pick(alphabet.length())));
+                return s.toString();
+        }
+    }
+    private static Object value(Class<?> t, Genes g, int depth, Observation report) throws Exception {
+        if (t == String.class || t == CharSequence.class) return string(g);
+        if (t == Comparable.class) return "key" + g.pick(5);
+        if (t == boolean.class || t == Boolean.class) return g.pick(2) == 0;
+        if (t == char.class || t == Character.class) return (char)g.pick(128);
+        if (t == byte.class || t == Byte.class) return number(g).byteValue();
+        if (t == short.class || t == Short.class) return number(g).shortValue();
+        if (t == int.class || t == Integer.class) return number(g).intValue();
+        if (t == long.class || t == Long.class) return number(g).longValue();
+        if (t == float.class || t == Float.class) return number(g).floatValue();
+        if (t == double.class || t == Double.class || t == Number.class) return number(g).doubleValue();
+        if (t.isEnum()) {
+            Object[] constants = t.getEnumConstants();
+            return constants.length == 0 ? null : constants[g.pick(constants.length)];
+        }
+        if (t == Object.class) return g.pick(3) == 0 ? null : "object" + g.pick(5);
+        if (depth >= 3) { report.nullFallbacks++; return null; }
+        if (t.isArray()) {
+            int length = g.pick(6);
+            Object array = Array.newInstance(t.getComponentType(), length);
+            for (int i = 0; i < length; i++) Array.set(array, i, value(t.getComponentType(), g, depth + 1, report));
+            return array;
+        }
+        if (t == List.class || t == Collection.class || t == Iterable.class || t == Set.class) {
+            Collection<Object> items = t == Set.class ? new LinkedHashSet() : new ArrayList();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.add("item" + g.pick(5));
+            return items;
+        }
+        if (t == Map.class) {
+            Map<Object, Object> items = new LinkedHashMap();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.put("key" + g.pick(5), number(g));
+            return items;
+        }
+        if (t == java.util.Date.class) return new java.util.Date(g.next() * 86400000L);
+        if (t == Class.class) return String.class;
+        if (t == java.lang.reflect.Field.class) {
+            Field[] fields = GenericInput.class.getFields();
+            g.lastField = fields[g.pick(fields.length)];
+            return g.lastField;
+        }
+        if (t == java.lang.reflect.Type.class) {
+            if (g.lastField != null && g.pick(3) == 0)
+                return g.lastField.getDeclaringClass();
+            Field[] fields = GenericInput.class.getFields();
+            return fields[g.pick(fields.length)].getGenericType();
+        }
+        if (t == java.io.Reader.class || t == java.io.BufferedReader.class
+                || t == java.io.StringReader.class) {
+            String content = "header,value\n" + string(g) + "," + number(g) + "\n"
+                + "alpha,beta\n";
+            StringReader reader = new StringReader(content);
+            return t == java.io.BufferedReader.class ? new BufferedReader(reader) : reader;
+        }
+        if (t.getName().equals("org.apache.commons.csv.CSVFormat")) {
+            Class<?> format = load("org.apache.commons.csv.CSVFormat");
+            for (String fieldName : new String[]{"DEFAULT", "RFC4180", "EXCEL"}) try {
+                Object result = format.getField(fieldName).get(null);
+                if (t.isInstance(result)) return result;
+            } catch (ReflectiveOperationException ignored) { }
+            for (Method factory : format.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getParameterTypes().length == 0
+                        && t.isAssignableFrom(factory.getReturnType())) try {
+                    return factory.invoke(null);
+                } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.SourceFile")) {
+            Class<?> source = load("com.google.javascript.jscomp.SourceFile");
+            for (Method factory : source.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals("fromCode")
+                        && factory.getParameterTypes().length == 2 && factory.getParameterTypes()[0] == String.class
+                        && factory.getParameterTypes()[1] == String.class) {
+                    String replaySource = System.getProperty("de.generated.source");
+                    if (replaySource != null) {
+                        try {
+                            report.generatedSource = replaySource;
+                            return factory.invoke(null, "de-input.js", replaySource);
+                        } catch (ReflectiveOperationException ignored) { }
+                    }
+                    String[] unusedParameterScripts = {
+                        "window.f = function(a) {};",
+                        "window.f = function(a, b) { return b; };",
+                        "window.f = function(a, b) { var used = b; return used; };",
+                        "window['f'] = function(unused) {};",
+                        "window.f = function(unused, value) { return value; };",
+                        "window['f'] = function(unused, value) { return value; };",
+                        "window.f = function(first, unused, last) { return last; };",
+                        "window.f = function(unused) { var local = 1; return local; };",
+                        "window.f = function(unused, value) { var alias = value; return alias; };",
+                        "window.f = function(unused, value) { if (value) { return 1; } return 2; };",
+                        "window.f = function(unused, value) { value = value + 1; return value; };",
+                        "window.f = function(unused, value) { return function() { return value; }; };",
+                        "window.f = function(unused) { function inner() { return 1; } return inner(); };",
+                        "window.f = function(a, b, unused) { return a + b; };",
+                        "window.f = function(a, unused, b, c) { return a + c; };"
+                    };
+                    String[] catchDependencyScripts = {
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.stack; };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (caught) { saved = caught; } return saved.message; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.name; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return String(saved); };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (problem) { saved = problem; } return saved.stack; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (problem) { saved = problem; } return saved.message; };"
+                    };
+                    String[] genericScripts = {
+                        "function f(unused, used) { var local = 1; return used; } f(1, 2);",
+                        "function f() { var unused = 1; var used = 2; return used; } f();",
+                        "function f(x) { var first = x; first = 3; return x; } f(2);",
+                        "function f() { var unused = 1; } f();",
+                        "function keep() { var dead = 1; return 7; } keep();"
+                    };
+                    String modified = System.getProperty("de.modified.classes", "");
+                    String[] scripts;
+                    if (modified.contains("RemoveUnusedVars") && modified.contains("FlowSensitiveInlineVariables")) {
+                        scripts = new String[unusedParameterScripts.length + catchDependencyScripts.length];
+                        System.arraycopy(unusedParameterScripts, 0, scripts, 0, unusedParameterScripts.length);
+                        System.arraycopy(catchDependencyScripts, 0, scripts, unusedParameterScripts.length,
+                            catchDependencyScripts.length);
+                    }
+                    else if (modified.contains("FlowSensitiveInlineVariables")) scripts = catchDependencyScripts;
+                    else if (modified.contains("RemoveUnusedVars")) scripts = unusedParameterScripts;
+                    else scripts = genericScripts;
+                    try {
+                        String code = scripts[g.pick(scripts.length)];
+                        report.generatedSource = code;
+                        return factory.invoke(null, "de-input.js", code);
+                    }
+                    catch (ReflectiveOperationException ignored) { }
+                }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.CompilerOptions")) {
+            try {
+                Object options = t.getConstructor().newInstance();
+                // In Closure Compiler, unused-variable passes are enabled by
+                // CompilationLevel, rather than by a CompilerOptions enum
+                // setter. Apply the real public configuration when available.
+                try {
+                    Class<?> levelType = load("com.google.javascript.jscomp.CompilationLevel");
+                    Object advanced = levelType.getField("ADVANCED_OPTIMIZATIONS").get(null);
+                    for (Method configure : levelType.getMethods())
+                        if (configure.getName().equals("setOptionsForCompilationLevel")
+                                && configure.getParameterTypes().length == 1
+                                && configure.getParameterTypes()[0].isInstance(options)) {
+                            configure.invoke(advanced, options); break;
+                        }
+                } catch (ReflectiveOperationException ignored) { }
+                // Also set the relevant options directly for Closure releases
+                // whose compilation-level helper no longer enables this pass.
+                for (Class<?> current = t; current != null; current = current.getSuperclass())
+                    for (Field field : current.getDeclaredFields()) {
+                        String name = field.getName().toLowerCase(Locale.ROOT);
+                        if (field.getType() == boolean.class && name.equals("removeglobals")) try {
+                            // Closure-1 specifically guards argument removal
+                            // when globals are preserved. Keep the optimization
+                            // pass enabled while exercising that configuration.
+                            field.setAccessible(true); field.setBoolean(options, false);
+                        } catch (Exception ignored) { }
+                        if (field.getType() == boolean.class
+                                && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) try {
+                            field.setAccessible(true); field.setBoolean(options, true);
+                        } catch (Exception ignored) { }
+                    }
+                for (Method setter : t.getMethods()) {
+                    if (!Modifier.isPublic(setter.getModifiers()) || !setter.getName().startsWith("set")
+                            || setter.getParameterTypes().length != 1) continue;
+                    String name = setter.getName().toLowerCase(Locale.ROOT);
+                    if (setter.getParameterTypes()[0] == boolean.class && name.contains("removeglobals")) {
+                        try { setter.invoke(options, false); } catch (ReflectiveOperationException ignored) { }
+                    } else if (setter.getParameterTypes()[0] == boolean.class
+                            && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) {
+                        try { setter.invoke(options, true); } catch (ReflectiveOperationException ignored) { }
+                    } else if (name.contains("optimizationlevel")
+                            && setter.getParameterTypes()[0].isEnum()) {
+                        Object[] values = setter.getParameterTypes()[0].getEnumConstants();
+                        for (Object value : values) if (String.valueOf(value).contains("ADVANCED"))
+                            try { setter.invoke(options, value); } catch (ReflectiveOperationException ignored) { }
+                    }
+                }
+                return options;
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.rhino.Node")) {
+            try {
+                Class<?> ir = load("com.google.javascript.rhino.IR");
+                for (String factoryName : new String[]{"script", "root", "name", "string"})
+                    for (Method factory : ir.getMethods())
+                        if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals(factoryName)
+                                && factory.getParameterTypes().length == 0 && t.isAssignableFrom(factory.getReturnType()))
+                            return factory.invoke(null);
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser")) {
+            Object parser = xmlParser(g, report);
+            if (parser != null && t.isInstance(parser)) return parser;
+        }
+        if (t.getName().equals("com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                || t.getName().equals("com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter")) {
+            Object writer = jacksonWriter(t, g, report);
+            if (writer != null && t.isInstance(writer)) return writer;
+        }
+        if (t == java.awt.Graphics2D.class || t == java.awt.Graphics.class)
+            return new java.awt.image.BufferedImage(80, 80, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        if (java.awt.Paint.class.isAssignableFrom(t)) {
+            java.awt.Color c = new java.awt.Color(g.pick(256), g.pick(256), g.pick(256));
+            if (t.isInstance(c)) return c;
+        }
+        if (java.awt.Stroke.class.isAssignableFrom(t)) {
+            java.awt.BasicStroke s = new java.awt.BasicStroke(g.pick(10) / 2.0f);
+            if (t.isInstance(s)) return s;
+        }
+        if (java.awt.Shape.class.isAssignableFrom(t)) {
+            java.awt.Shape s = new java.awt.geom.Rectangle2D.Double(g.next(), g.next(), g.pick(80), g.pick(80));
+            if (t.isInstance(s)) return s;
+        }
+        if (t == java.awt.geom.Point2D.class) return new java.awt.geom.Point2D.Double(g.next(), g.next());
+        if (t.getName().equals("org.apache.commons.cli.CommandLine"))
+            return commandLine(g, report);
+        Object domain = chart(t, g, report);
+        if (domain != null) return domain;
+        Object language = language(t, g, report);
+        if (language != null) return language;
+        List<Constructor<?>> ctors = constructors(t);
+        // Older Java libraries often use public singleton constants in place of enums.
+        if (ctors.isEmpty()) {
+            List<Field> constants = new ArrayList();
+            for (Field field : t.getFields())
+                if (Modifier.isStatic(field.getModifiers()) && Modifier.isFinal(field.getModifiers())
+                        && t.isAssignableFrom(field.getType())) constants.add(field);
+            Collections.sort(constants, new Comparator<Field>() {
+                public int compare(Field a, Field b) { return a.getName().compareTo(b.getName()); }
+            });
+            if (!constants.isEmpty()) {
+                Object constant = constants.get(g.pick(constants.size())).get(null);
+                if (constant != null) return constant;
+            }
+        }
+        if (!ctors.isEmpty()) {
+            Constructor<?> ctor = ctors.get(g.pick(ctors.size()));
+            try { return ctor.newInstance(arguments(ctor.getParameterTypes(), g, depth + 1, report)); }
+            catch (Exception ignored) { }
+        }
+        report.nullFallbacks++;
+        return null;
+    }
+    private static Object language(Class<?> t, Genes g, Observation report) {
+        if (!t.getName().equals("org.apache.commons.lang3.time.FastDateFormat")) return null;
+        try {
+            Method factory = t.getMethod("getInstance", String.class, java.util.TimeZone.class,
+                java.util.Locale.class);
+            String[] patterns = {"yyyy-MM-dd", "MM/dd/yy HH:mm:ss", "EEE, d MMM yyyy HH:mm:ss Z"};
+            return factory.invoke(null, patterns[g.pick(patterns.length)],
+                java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US);
+        } catch (ReflectiveOperationException ignored) { }
+        try { return t.getMethod("getInstance", String.class).invoke(null, "yyyy-MM-dd"); }
+        catch (ReflectiveOperationException ignored) { return null; }
+    }
+    private static Object xmlParser(Genes g, Observation report) {
+        try {
+            Class<?> factoryType = load("com.fasterxml.jackson.dataformat.xml.XmlFactory");
+            Object factory = factoryType.getConstructor().newInstance();
+            String[] docs = {"<root><value>1</value><name>x</name></root>",
+                "<root value=\"42\"><item>a</item><item>b</item></root>",
+                "<root/>"};
+            String xml = docs[g.pick(docs.length)];
+            for (Method method : factoryType.getMethods()) {
+                if (!method.getName().equals("createParser") || method.getParameterTypes().length != 1) continue;
+                Class<?> p = method.getParameterTypes()[0];
+                Object input = p == String.class ? xml : p == Reader.class ? new StringReader(xml)
+                    : p == InputStream.class ? new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)) : null;
+                if (input == null) continue;
+                try {
+                    Object parser = method.invoke(factory, input);
+                    if (parser != null) {
+                        int advance = g.pick(4);
+                        Method next = parser.getClass().getMethod("nextToken");
+                        for (int i = 0; i < advance; i++) if (next.invoke(parser) == null) break;
+                        return parser;
+                    }
+                } catch (ReflectiveOperationException ignored) { }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
+    private static Object jacksonWriter(Class<?> requested, Genes g, Observation report) {
+        try {
+            Class<?> mapperType = load("com.fasterxml.jackson.databind.ObjectMapper");
+            Object mapper = mapperType.getConstructor().newInstance();
+            Object bean = new GenericInput();
+            Class<?> javaTypeType = load("com.fasterxml.jackson.databind.JavaType");
+            Object javaType = mapperType.getMethod("constructType", Type.class).invoke(mapper, bean.getClass());
+            // Jackson 2.6 (used by this Defects4J project) exposes a provider
+            // blueprint from ObjectMapper. Create a configured provider via
+            // DefaultSerializerProvider, the supported API used by ObjectMapper.
+            Object providerBlueprint = mapperType.getMethod("getSerializerProvider").invoke(mapper);
+            Class<?> serializationConfigType = load("com.fasterxml.jackson.databind.SerializationConfig");
+            Class<?> serializerFactoryType = load("com.fasterxml.jackson.databind.ser.SerializerFactory");
+            Object config = mapperType.getMethod("getSerializationConfig").invoke(mapper);
+            Object factory = mapperType.getMethod("getSerializerFactory").invoke(mapper);
+            Class<?> defaultProviderType = load("com.fasterxml.jackson.databind.ser.DefaultSerializerProvider");
+            Method createProvider = defaultProviderType.getMethod("createInstance",
+                serializationConfigType, serializerFactoryType);
+            Object provider = createProvider.invoke(providerBlueprint, config, factory);
+            g.jacksonBean = bean;
+            g.jacksonProvider = provider;
+            g.jacksonOutput = new StringWriter();
+            Object jsonFactory = mapperType.getMethod("getFactory").invoke(mapper);
+            for (String factoryMethod : new String[]{"createGenerator", "createJsonGenerator"}) {
+                try {
+                    Method createGenerator = jsonFactory.getClass().getMethod(factoryMethod, Writer.class);
+                    g.jacksonGenerator = createGenerator.invoke(jsonFactory, g.jacksonOutput);
+                    break;
+                } catch (NoSuchMethodException ignored) { }
+            }
+            if (g.jacksonGenerator == null)
+                throw new NoSuchMethodException("JsonFactory.createGenerator(Writer) or createJsonGenerator(Writer)");
+            Class<?> providerType = load("com.fasterxml.jackson.databind.SerializerProvider");
+            Class<?> beanPropertyType = load("com.fasterxml.jackson.databind.BeanProperty");
+            Method find = providerType.getMethod("findValueSerializer", javaTypeType, beanPropertyType);
+            Object serializer = find.invoke(provider, new Object[]{javaType, null});
+            List<Object> writers = new ArrayList();
+            try {
+                // Available on Jackson 2.6 and newer.
+                Class<?> serializerType = load("com.fasterxml.jackson.databind.JsonSerializer");
+                Method properties = serializerType.getMethod("properties");
+                Iterator<?> it = (Iterator<?>)properties.invoke(serializer);
+                while (it.hasNext()) {
+                    Object item = it.next();
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            } catch (NoSuchMethodException oldJackson) {
+                // JacksonDatabind-1 predates JsonSerializer.properties(). Its
+                // BeanSerializerBase stores writers in the protected _props
+                // array; read that array only for these old releases.
+                Class<?> base = load("com.fasterxml.jackson.databind.ser.std.BeanSerializerBase");
+                if (!base.isInstance(serializer))
+                    throw new IllegalStateException("Expected BeanSerializerBase, got "
+                        + serializer.getClass().getName(), oldJackson);
+                Field props = base.getDeclaredField("_props");
+                props.setAccessible(true);
+                Object array = props.get(serializer);
+                for (int i = 0; i < Array.getLength(array); i++) {
+                    Object item = Array.get(array, i);
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            }
+            if (writers.isEmpty())
+                throw new IllegalStateException("ObjectMapper produced no bean property writers for DEReplay.GenericInput");
+            Object writer = writers.get(g.pick(writers.size()));
+            boolean requireUnwrapping = requested.getName().equals(
+                "com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter");
+            if (!requireUnwrapping && g.pick(2) == 0 && requested.isInstance(writer)) return writer;
+            Class<?> transformerType = load("com.fasterxml.jackson.databind.util.NameTransformer");
+            Object nop = transformerType.getField("NOP").get(null);
+            for (Method m : writer.getClass().getMethods())
+                if (m.getName().equals("unwrappingWriter") && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0].isInstance(nop)) {
+                    Object unwrapped = m.invoke(writer, nop);
+                    if (requested.isInstance(unwrapped)) return unwrapped;
+                }
+            if (requested.isInstance(writer)) return writer;
+            throw new IllegalStateException("Generated Jackson property writer is not " + requested.getName());
+        } catch (Throwable failure) {
+            throw new IllegalStateException("Cannot construct Jackson BeanPropertyWriter: " + failure, failure);
+        }
+    }
+    /** Build the non-constructible Commons CLI result through its public Parser API. */
+    private static Object commandLine(Genes g, Observation report) throws Exception {
+        Class<?> optionsClass = load("org.apache.commons.cli.Options");
+        Class<?> optionClass = load("org.apache.commons.cli.Option");
+        Class<?> parserClass = load("org.apache.commons.cli.PosixParser");
+        Object options = optionsClass.getConstructor().newInstance();
+        Method addOption = optionsClass.getMethod("addOption", optionClass);
+        int numberOfOptions = 1 + g.pick(3);
+        List<String> spellings = new ArrayList();
+        for (int i = 0; i < numberOfOptions; i++) {
+            String shortName = String.valueOf((char)('a' + i));
+            String longName = "de-option-" + i;
+            boolean hasArgument = g.pick(2) == 0;
+            Object option = null;
+            try {
+                option = optionClass.getConstructor(String.class, String.class, boolean.class, String.class)
+                    .newInstance(shortName, longName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) try {
+                option = optionClass.getConstructor(String.class, boolean.class, String.class)
+                    .newInstance(shortName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) throw new NoSuchMethodException("No supported Commons CLI Option constructor");
+            addOption.invoke(options, option);
+            spellings.add("-" + shortName);
+            if (hasArgument) spellings.add("value-" + Math.abs((long)g.next()));
+        }
+        String[] argv = spellings.toArray(new String[0]);
+        Object parser = parserClass.getConstructor().newInstance();
+        List<Method> parseMethods = new ArrayList();
+        for (Method candidate : parserClass.getMethods()) {
+            Class<?>[] p = candidate.getParameterTypes();
+            if (candidate.getName().equals("parse") && p.length >= 2 && p[0] == optionsClass
+                    && p[1] == String[].class && candidate.getReturnType() == load("org.apache.commons.cli.CommandLine"))
+                parseMethods.add(candidate);
+        }
+        Collections.sort(parseMethods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return a.getParameterTypes().length - b.getParameterTypes().length;
+            }
+        });
+        for (Method parse : parseMethods) {
+            Object[] args = new Object[parse.getParameterTypes().length];
+            Class<?>[] p = parse.getParameterTypes();
+            args[0] = options; args[1] = argv;
+            for (int i = 2; i < p.length; i++) {
+                if (p[i] == boolean.class || p[i] == Boolean.class) args[i] = g.pick(2) == 0;
+                else if (p[i] == java.util.Properties.class) args[i] = new java.util.Properties();
+                else args[i] = value(p[i], g, 1, report);
+            }
+            try { return parse.invoke(parser, args); }
+            catch (InvocationTargetException ignored) { }
+        }
+        throw new NoSuchMethodException("No successful public PosixParser.parse(Options,String[])");
+    }
+    /** Optional type recipes, shared across bugs; none contains a bug-specific expected answer. */
+    private static Object chart(Class<?> t, Genes g, Observation report) throws Exception {
+        String n = t.getName();
+        if (!n.startsWith("org.jfree.")) return null;
+        if (n.equals("org.jfree.data.Range")) {
+            double a = g.next(), b = g.next();
+            return t.getConstructor(double.class, double.class).newInstance(Math.min(a, b), Math.max(a, b));
+        }
+        if (n.equals("org.jfree.data.time.RegularTimePeriod"))
+            return load("org.jfree.data.time.Day").getConstructor(int.class, int.class, int.class)
+                .newInstance(1 + g.pick(28), 1 + g.pick(12), 1990 + g.pick(40));
+        if (n.equals("org.jfree.data.time.TimeSeries")) {
+            Object series = t.getConstructor(Comparable.class).newInstance("DE");
+            Class<?> period = load("org.jfree.data.time.RegularTimePeriod");
+            Constructor<?> day = load("org.jfree.data.time.Day")
+                .getConstructor(int.class, int.class, int.class);
+            Method add = t.getMethod("add", period, double.class);
+            int count = 2 + g.pick(4), year = 1990 + g.pick(40);
+            for (int i = 0; i < count; i++)
+                add.invoke(series, day.newInstance(i + 1, 1, year), g.next() / 10.0);
+            return series;
+        }
+        if (n.equals("org.jfree.data.category.CategoryDataset")
+                || n.equals("org.jfree.data.category.DefaultCategoryDataset")) {
+            Class<?> c = load("org.jfree.data.category.DefaultCategoryDataset");
+            Object data = c.getConstructor().newInstance();
+            Method add = c.getMethod("addValue", Number.class, Comparable.class, Comparable.class);
+            int rows = 1 + g.pick(3), columns = 1 + g.pick(3);
+            for (int r = 0; r < rows; r++) for (int col = 0; col < columns; col++)
+                add.invoke(data, Double.valueOf(g.next() / 10.0), "R" + r, "C" + col);
+            return data;
+        }
+        if (n.equals("org.jfree.data.xy.XYDataset") || n.equals("org.jfree.data.xy.XYSeriesCollection")) {
+            Class<?> seriesClass = load("org.jfree.data.xy.XYSeries");
+            Object series = seriesClass.getConstructor(Comparable.class).newInstance("DE");
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) seriesClass.getMethod("add", double.class, double.class)
+                .invoke(series, (double)i, g.next() / 10.0);
+            Class<?> c = load("org.jfree.data.xy.XYSeriesCollection");
+            Object data = c.getConstructor().newInstance();
+            c.getMethod("addSeries", seriesClass).invoke(data, series);
+            return data;
+        }
+        if (n.equals("org.jfree.data.general.PieDataset") || n.equals("org.jfree.data.general.DefaultPieDataset")) {
+            Class<?> c = load("org.jfree.data.general.DefaultPieDataset");
+            Object data = c.getConstructor().newInstance();
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) c.getMethod("setValue", Comparable.class, Number.class)
+                .invoke(data, "K" + i, Double.valueOf(g.next() / 10.0));
+            return data;
+        }
+        return null;
+    }
+    static List<Method> setupMethods(Class<?> receiver) {
+        List<Method> methods = new ArrayList();
+        for (Method m : receiver.getMethods()) {
+            String n = m.getName();
+            if (!Modifier.isStatic(m.getModifiers()) && !m.isSynthetic()
+                    && m.getParameterTypes().length <= 3 && !n.contains("Listener")
+                    && (n.startsWith("set") || n.startsWith("add") || n.startsWith("update")
+                        || n.startsWith("remove") || n.equals("clear"))) methods.add(m);
+        }
+        Collections.sort(methods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return signature(a).compareTo(signature(b));
+            }
+        });
+        return methods;
+    }
+    public static Observation execute(String target, String receivers, String signature, int[] genes) {
+        Observation out = new Observation();
+        try {
+            Genes g = new Genes(genes);
+            Method m = method(target, signature);
+            Object receiver = null;
+            if (!Modifier.isStatic(m.getModifiers())) {
+                String[] choices = receivers.split(",");
+                Class<?> receiverType = load(choices[g.pick(choices.length)]);
+                receiver = value(receiverType, g, 0, out);
+                if (receiver == null) throw new IllegalArgumentException("Receiver construction failed");
+                // Compiler.compile owns a strict initialization sequence.
+                // Random calls to its mutators before compilation can corrupt
+                // state or spend the search budget on irrelevant setup.
+                if (!receiverType.getName().equals("com.google.javascript.jscomp.Compiler")) {
+                    List<Method> setup = setupMethods(receiverType);
+                    int count = g.pick(5);
+                    for (int i = 0; i < count && !setup.isEmpty(); i++) {
+                        Method s = setup.get(g.pick(setup.size()));
+                        try { s.invoke(receiver, arguments(s.getParameterTypes(), g, 0, out)); out.setupCalls++; }
+                        catch (Exception e) { out.setupFailures++; }
+                    }
+                }
+            }
+            Object[] args = arguments(m, g, 0, out);
+            out.reachedTarget = true;
+            try {
+                boolean jacksonSerialization = m.getDeclaringClass().getName().equals(
+                    "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                    && m.getName().startsWith("serializeAs") && g.jacksonGenerator != null;
+                boolean arrayShape = m.getName().contains("Column")
+                    || m.getName().contains("Element") || m.getName().contains("Placeholder");
+                if (jacksonSerialization)
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeStartArray" : "writeStartObject").invoke(g.jacksonGenerator);
+                Object result = m.invoke(receiver, args);
+                boolean closureCompile = m.getDeclaringClass().getName().equals(
+                    "com.google.javascript.jscomp.Compiler") && m.getName().equals("compile");
+                if (closureCompile) {
+                    // Result is only a status object; the compiled JavaScript is
+                    // the behavioral output that reveals whether an argument
+                    // was removed from a globally exposed function.
+                    Object js = receiver.getClass().getMethod("toSource").invoke(receiver);
+                    out.token = "CLOSURE_SOURCE:" + stable(js, 0);
+                } else if (jacksonSerialization) {
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeEndArray" : "writeEndObject").invoke(g.jacksonGenerator);
+                    g.jacksonGenerator.getClass().getMethod("flush").invoke(g.jacksonGenerator);
+                    out.token = "JSON:" + Base64.getEncoder().encodeToString(
+                        g.jacksonOutput.toString().getBytes(StandardCharsets.UTF_8));
+                } else out.token = m.getReturnType() == void.class
+                    ? state(receiver, m.getName()) : stable(result, 0);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof VirtualMachineError || e.getCause() instanceof LinkageError
+                        || e.getCause() instanceof ThreadDeath) throw e;
+                out.token = "THROW:" + e.getCause().getClass().getName();
+            }
+        } catch (Throwable e) {
+            out.token = "HARNESS_ERROR";
+            out.error = e.getClass().getName() + ":" + String.valueOf(e.getMessage());
+        }
+        return out;
+    }
+    public static String run(String target, String receivers, String signature, int[] genes) {
+        Observation o = execute(target, receivers, signature, genes);
+        if (!o.reachedTarget || o.token.equals("HARNESS_ERROR"))
+            throw new AssertionError("Cannot replay test: " + o.error);
+        return o.token;
+    }
+    private static String state(Object receiver, String method) {
+        if (receiver == null) return "VOID";
+        List<String> getters = new ArrayList();
+        if (method.startsWith("set") && method.length() > 3) {
+            getters.add("get" + method.substring(3)); getters.add("is" + method.substring(3));
+        }
+        getters.addAll(Arrays.asList("getItemCount", "getRowCount", "getColumnCount", "getSeriesCount"));
+        StringBuilder s = new StringBuilder("VOID");
+        for (String name : getters) {
+            try {
+                Method getter = receiver.getClass().getMethod(name);
+                if (getter.getReturnType().isPrimitive() || getter.getReturnType() == String.class)
+                    s.append('|').append(name).append('=').append(stable(getter.invoke(receiver), 0));
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        return s.toString();
+    }
+    /** Only whitelisted value types are rendered. Never use arbitrary object toString(). */
+    static String stable(Object value, int depth) {
+        if (value == null) return "NULL";
+        Class<?> t = value.getClass();
+        if (value instanceof String || value instanceof Boolean || value instanceof Character
+                || value instanceof Byte || value instanceof Short || value instanceof Integer
+                || value instanceof Long || value instanceof Float || value instanceof Double
+                || value instanceof java.math.BigInteger || value instanceof java.math.BigDecimal)
+            return t.getName() + ":" + Base64.getEncoder().encodeToString(value.toString().getBytes(StandardCharsets.UTF_8));
+        if (value instanceof Enum) return "ENUM:" + t.getName() + ":" + ((Enum<?>)value).name();
+        if (t.isArray() && depth < 3) {
+            StringBuilder s = new StringBuilder("ARRAY:" + t.getName() + ":" + Array.getLength(value));
+            for (int i = 0; i < Math.min(64, Array.getLength(value)); i++) {
+                String item = stable(Array.get(value, i), depth + 1);
+                s.append(':').append(item.length()).append(':').append(item);
+            }
+            return s.toString();
+        }
+        if (value instanceof java.awt.Color) return "COLOR:" + ((java.awt.Color)value).getRGB();
+        // Observe safe scalar properties of returned objects. This catches
+        // changes to value caches and state while avoiding identity-based toString().
+        StringBuilder observed = new StringBuilder("STATE:" + t.getName());
+        int properties = 0;
+        for (String name : Arrays.asList("getItemCount", "getMinY", "getMaxY",
+                "getRowCount", "getColumnCount", "getSeriesCount")) {
+            try {
+                Method getter = t.getMethod(name);
+                Class<?> r = getter.getReturnType();
+                if (!r.isPrimitive() && r != String.class && !Number.class.isAssignableFrom(r))
+                    continue;
+                if (r == void.class) continue;
+                Object result = getter.invoke(value);
+                String token = stable(result, depth + 1);
+                observed.append('|').append(name).append('=').append(token.length())
+                    .append(':').append(token);
+                properties++;
+            } catch (Exception ignored) { }
+        }
+        return properties == 0 ? "TYPE:" + t.getName() : observed.toString();
+    }
+    public static void main(String[] args) {
+        if (args.length > 4) {
+            String source = new String(Base64.getDecoder().decode(args[4]), StandardCharsets.UTF_8);
+            System.setProperty("de.generated.source", source);
+        }
+        String[] encodedGenes = args[3].split(",");
+        int[] genes = new int[encodedGenes.length];
+        for (int i = 0; i < encodedGenes.length; i++) genes[i] = Integer.parseInt(encodedGenes[i]);
+        boolean closureCompile = args[0].equals("com.google.javascript.jscomp.Compiler")
+            && args[2].startsWith("compile(");
+        // Compiler.compile is an expensive whole-program operation. Fixed-side
+        // suites are still executed twice by the runner, so capture its oracle
+        // once here instead of launching three compilations just to check the
+        // same deterministic source output.
+        int repetitions = closureCompile ? 1 : 3;
+        for (int i = 0; i < repetitions; i++) {
+            Observation out = execute(args[0], args[1], args[2], genes);
+            System.out.println("DE_TOKEN:" + Base64.getEncoder().encodeToString(out.token.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+}
+
+public class DEGeneratedTest {
+    @org.junit.Test(timeout=60000L)
+    public void testDE00000() {
+        org.junit.Assert.assertEquals("ARRAY:[B:1:19:java.lang.Byte:Mjk=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(byte[]):byte[]",
+            new int[]{89,1000,407,1000,-827,-811,729,-686,1000,658,928,1000,1000,1000,910,-1000,1000,1000,-1000,-34,-1000,667,-783,1000,-351,469,1000,288,-66,1000,1000,370,-536,-540,747,-1000,-964,1000,-34,-708,231,555,627,1000,-428,-41,1000,-972,1000,-1000,-56,250,1000,1000,-779,-627,-1000,497,1000,670,185,-1000,-223,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00001() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(byte[]):byte[]",
+            new int[]{-562,386,-74,596,84,601,85,534,-622,-460,800,-326,-98,-114,-666,658,302,442,-393,82,708,-967,533,332,825,-104,-136,-541,-827,-735,876,771,-269,974,363,-412,-727,-137,-107,-783,-949,527,30,-369,195,521,-667,542,-860,508,336,-375,-246,-931,-578,480,415,841,545,-400,-758,-451,59,-909}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00002() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(byte[]):byte[]",
+            new int[]{-681,-641,671,-703,41,234,-1000,-467,-590,264,-1000,-506,1000,-479,869,-239,1000,-1000,125,215,1000,713,805,1000,994,599,-361,1000,-515,-606,-1000,-286,977,-678,-827,1000,-15,259,-1000,-1000,-1000,-1000,956,937,1000,1000,-1000,363,-492,1000,1000,574,-632,-1000,-1000,444,-102,-625,1000,-1000,-388,-1000,965,959}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00003() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(byte[]):byte[]",
+            new int[]{-771,-660,-815,500,-279,-820,317,-181,1000,1000,91,590,379,695,477,-580,883,292,-911,276,-1000,-170,-600,-118,-189,-201,1000,108,125,109,1000,-289,496,-593,223,-719,63,607,-549,-1000,710,-529,955,682,-326,-167,636,-308,1000,-1000,-560,475,976,1000,-1000,283,-704,529,1000,300,-65,-517,-133,-400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00004() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(byte[]):byte[]",
+            new int[]{-832,-405,-1000,-207,-620,1000,566,502,582,-1000,-1000,218,583,-350,251,1000,99,-58,-811,-271,260,-494,250,-600,569,-299,-173,180,-87,151,36,-841,-233,-178,-975,-330,-1000,919,-1000,-581,1000,881,-24,421,-652,64,276,373,1000,-458,-621,-959,-620,-347,-58,30,582,694,-915,857,785,-358,-741,747}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00005() {
+        org.junit.Assert.assertEquals("ARRAY:[B:5:19:java.lang.Byte:LTk1:19:java.lang.Byte:LTcy:19:java.lang.Byte:LTM0:19:java.lang.Byte:MTE0:19:java.lang.Byte:LTM1", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(java.lang.Object):java.lang.Object",
+            new int[]{376,640,-350,-506,-558,-279,363,-969,775,-224,-723,-860,-174,-337,-657,-415,5,-883,119,430,-762,591,836,778,532,-347,-949,741,531,-95,-640,526,903,747,-419,174,931,-261,326,-820,-343,-208,-71,-999,564,982,337,-716,921,-627,772,540,-363,930,676,-50,-238,-677,-156,983,606,224,-564,-368}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00006() {
+        org.junit.Assert.assertEquals("THROW:org.apache.commons.codec.DecoderException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(java.lang.Object):java.lang.Object",
+            new int[]{95,-706,-509,572,1000,644,-1000,1000,491,-1000,863,-1000,-400,-474,983,-252,272,-557,186,-1000,787,408,-1000,761,580,-1000,1000,-389,-142,1000,685,-612,1000,1000,544,-196,199,-1000,1000,640,-443,-695,-65,76,219,-1000,-132,-23,-309,1000,400,162,824,-529,-965,-537,423,-208,643,1000,1000,996,765,-97}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00007() {
+        org.junit.Assert.assertEquals("ARRAY:[B:5:19:java.lang.Byte:LTk1:19:java.lang.Byte:LTcy:19:java.lang.Byte:LTM0:19:java.lang.Byte:MTE0:19:java.lang.Byte:LTM1", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(java.lang.Object):java.lang.Object",
+            new int[]{-777,671,108,562,-335,170,585,-595,397,-937,373,-758,547,-67,161,-390,879,459,694,265,-951,715,-703,-167,-669,-809,-555,516,-947,-936,659,764,-103,-459,-110,480,692,-411,-883,32,-662,789,886,-913,-863,652,197,151,917,-677,-691,561,-901,-743,-221,-354,-893,-775,-606,778,-617,781,500,-860}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00008() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:LTIx:19:java.lang.Byte:LTY2:19:java.lang.Byte:LTEx:19:java.lang.Byte:LTM3", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(java.lang.String):byte[]",
+            new int[]{-342,1000,-1000,885,677,1000,-875,1000,1000,229,677,34,-1000,-709,-590,106,-280,-552,-260,-150,1000,790,515,513,682,319,-1000,474,1000,-346,-619,-1000,584,-866,-744,673,-762,-1000,1000,-290,-1000,663,34,937,-649,-713,1000,-404,334,-616,-650,234,-1000,-1000,1000,688,101,-281,-1000,-153,-1000,783,925,-409}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00009() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(java.lang.String):byte[]",
+            new int[]{37,689,425,-434,179,-331,389,-397,967,497,18,-422,-735,-193,183,-530,518,830,-418,299,400,-1000,277,1000,-659,-604,-522,-659,-260,-1000,781,128,-854,-954,-391,191,-497,-302,355,-133,-489,777,-813,228,662,-400,-155,-574,-522,400,480,-1000,-1000,-695,-308,109,-647,1000,419,104,523,496,599,-578}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00010() {
+        org.junit.Assert.assertEquals("ARRAY:[B:9:19:java.lang.Byte:NzQ=:19:java.lang.Byte:NDc=:19:java.lang.Byte:LTY=:19:java.lang.Byte:LTkz:19:java.lang.Byte:NDg=:19:java.lang.Byte:NTg=:19:java.lang.Byte:LTIz:19:java.lang.Byte:Nzk=:19:java.lang.Byte:LTY1", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(java.lang.String):byte[]",
+            new int[]{932,836,-298,-251,-915,186,-411,-511,480,-621,-359,1000,-473,774,319,-106,1000,1000,482,275,-1000,-1000,-137,490,484,125,948,-1000,-1000,1000,158,417,-1000,-343,239,1000,540,1000,560,632,546,341,-420,48,-126,799,-337,-920,66,131,-209,-1000,1000,829,-1000,-343,-784,822,923,470,677,-1000,220,-782}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00011() {
+        org.junit.Assert.assertEquals("ARRAY:[B:5:19:java.lang.Byte:LTU=:19:java.lang.Byte:LTM1:19:java.lang.Byte:MTIx:19:java.lang.Byte:LTQx:19:java.lang.Byte:MTA5", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(java.lang.String):byte[]",
+            new int[]{1000,360,-786,885,-915,-370,-878,-879,1000,-117,806,728,-955,728,-418,1000,1000,-578,872,-836,-229,-409,-100,231,137,319,-117,-1000,1000,1000,-1000,-975,-10,-1000,239,1000,1000,1000,104,855,61,1000,154,-1000,-126,1000,-966,-234,1000,-460,-209,-673,1000,167,-901,61,-784,1000,1000,-117,-934,-215,220,669}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00012() {
+        org.junit.Assert.assertEquals("ARRAY:[B:3:19:java.lang.Byte:LTQx:19:java.lang.Byte:LTUx:19:java.lang.Byte:LTEy", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(java.lang.String):byte[]",
+            new int[]{-739,1000,-46,53,183,408,1000,-116,1000,-220,811,212,-815,-502,-674,732,-584,310,1000,-409,1000,206,564,370,-1000,28,406,88,458,1000,276,-1000,-554,-768,-1000,117,-92,17,721,991,-338,-691,-1000,-744,441,-722,1000,-1000,-1000,1000,1000,-739,-78,815,814,1000,-848,-711,54,-258,-945,690,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00013() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decode(java.lang.String):byte[]",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00014() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(byte[]):byte[]",
+            new int[]{761,822,-218,161,-1000,894,131,352,-156,107,-417,92,-1000,689,1000,-455,-1000,1000,12,179,-651,-397,-1000,1000,311,-1000,400,-291,317,469,-373,400,-400,-1000,406,-854,308,1000,-714,958,-1000,1000,400,896,159,496,-858,-1000,835,-1000,924,-1000,1000,-331,-1000,241,887,311,-400,498,209,400,400,-808}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00015() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(byte[]):byte[]",
+            new int[]{741,-904,796,-963,695,549,651,124,867,602,812,175,-753,78,105,-990,432,-130,373,-920,81,-613,663,-211,99,117,-428,473,822,380,904,168,955,-727,908,-851,235,112,-731,-576,-102,244,763,844,-97,-974,17,312,-458,952,178,-327,-383,451,-541,-678,-361,725,-496,-703,686,-876,313,-325}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00016() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(byte[]):byte[]",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00017() {
+        org.junit.Assert.assertEquals("ARRAY:[B:1:19:java.lang.Byte:NTM=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(byte[]):byte[]",
+            new int[]{1000,-442,-1000,-178,23,1000,778,-872,102,611,47,165,-533,935,1000,-1000,-852,105,-1000,1000,-689,-1000,-1000,1000,-1000,-1000,-1000,746,-1000,-931,975,-1000,1000,-1000,214,-123,-1000,-45,686,956,352,1000,-1000,708,-1000,-904,-1000,-926,749,-1000,849,-1000,1000,-678,-1000,-499,-513,-669,1000,-849,681,-1000,-1000,-516}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00018() {
+        org.junit.Assert.assertEquals("ARRAY:[B:2:19:java.lang.Byte:Njg=:19:java.lang.Byte:LTYz", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(byte[]):byte[]",
+            new int[]{761,822,-218,416,901,770,634,696,-434,-536,767,-1000,-1000,976,953,-47,-1000,990,-946,179,-1000,-599,-1000,1000,792,-1000,400,140,737,1000,-298,1000,-1000,-1000,730,1000,27,236,81,-147,1000,-700,400,-1000,1000,496,906,104,-1000,-930,-912,-1000,1000,-331,-980,-1000,887,1000,-1000,-377,-265,1000,-906,-639}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00019() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:23:java.lang.Byte:LTEwNw==:19:java.lang.Byte:MTE=:19:java.lang.Byte:LTU=:19:java.lang.Byte:LTMw", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(java.lang.String):byte[]",
+            new int[]{-385,-727,-343,807,-547,-374,-358,-395,362,-280,-620,333,-952,364,-798,816,186,-348,400,400,-70,-280,-311,299,-4,-833,341,39,-670,594,200,-529,972,583,82,-296,367,-59,570,-145,70,-958,634,-446,576,712,83,-217,-176,-750,-526,812,808,903,-242,-270,-279,404,-305,-571,14,10,-146,-282}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00020() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(java.lang.String):byte[]",
+            new int[]{177,-690,459,608,668,586,355,480,-434,-766,874,194,63,569,-781,514,474,-3,798,725,720,-18,-487,949,-913,-628,306,480,-218,739,-864,-676,-670,290,-129,-980,-431,389,-939,-649,626,729,-6,-386,-908,831,-982,732,407,-319,-284,-310,369,39,183,542,629,-757,-597,513,-926,-834,525,-364}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00021() {
+        org.junit.Assert.assertEquals("ARRAY:[B:5:19:java.lang.Byte:LTQx:19:java.lang.Byte:Nzc=:19:java.lang.Byte:NTI=:19:java.lang.Byte:LTM3:23:java.lang.Byte:LTExNA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(java.lang.String):byte[]",
+            new int[]{981,-1000,-500,-755,-470,-515,509,-493,514,14,-1000,388,-1000,1000,-207,770,1000,-362,1000,-360,375,-417,-179,-415,-1000,129,514,-488,-979,1000,-800,-720,161,-509,693,163,-619,249,725,461,628,938,1000,-847,-471,152,984,-597,-430,-482,102,17,744,-434,-1000,-586,-335,-33,-185,472,1000,-453,532,400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00022() {
+        org.junit.Assert.assertEquals("ARRAY:[B:15:19:java.lang.Byte:LTg5:19:java.lang.Byte:LTEy:19:java.lang.Byte:LTc=:19:java.lang.Byte:LTc0:19:java.lang.Byte:LTY1:23:java.lang.Byte:LTEyNA==:19:java.lang.Byte:LTE=:19:java.lang.Byte:LTkx:19:java.lang.Byte:MzE=:19:java.lang.Byte:NTc=:23:java.lang.Byte:LTEwMA==:19:java.lang.Byte:NzA=:19:java.lang.Byte:MTE=:19:java.lang.Byte:LTU=:19:java.lang.Byte:LTU1", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(java.lang.String):byte[]",
+            new int[]{-354,62,-500,-527,-756,-1000,126,147,29,453,-647,324,-1000,1000,281,908,441,476,984,175,681,-246,565,-1000,-608,400,365,-488,280,1000,-1000,-311,1000,31,226,-50,-1000,155,16,181,219,262,61,-142,-109,-402,543,452,643,42,794,1000,-456,-526,-731,671,210,57,-113,575,1000,739,-205,400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00023() {
+        org.junit.Assert.assertEquals("ARRAY:[B:9:23:java.lang.Byte:LTEwNg==:19:java.lang.Byte:Nzk=:19:java.lang.Byte:LTY=:19:java.lang.Byte:Mjg=:19:java.lang.Byte:NzA=:23:java.lang.Byte:LTEyMg==:23:java.lang.Byte:LTExMA==:19:java.lang.Byte:LTY1:19:java.lang.Byte:LTY=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(java.lang.String):byte[]",
+            new int[]{-354,-686,-309,-537,-547,20,-358,-1000,1000,-312,-528,-771,-952,-335,-612,-432,1000,293,501,-1000,218,-280,-1000,468,151,400,-1000,-405,-663,1000,250,-33,-51,31,136,-457,20,819,1000,713,70,-958,885,-140,-629,-422,135,-481,-178,-750,-1000,-213,808,-660,-168,-1000,-517,-286,973,1000,303,965,1000,644}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00024() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeBase64(java.lang.String):byte[]",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00025() {
+        org.junit.Assert.assertEquals("java.math.BigInteger:MA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeInteger(byte[]):java.math.BigInteger",
+            new int[]{-85,65,-961,-909,-392,240,-42,791,-510,-335,-724,-917,-356,-160,915,696,530,908,521,-916,-330,61,-50,564,-379,56,728,-124,280,862,766,-22,-526,631,-329,485,-477,718,891,-923,9,-770,-387,399,325,745,-140,-504,-236,253,545,-311,-142,-881,377,-85,-501,-69,-539,52,-42,-549,-804,492}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00026() {
+        org.junit.Assert.assertEquals("java.math.BigInteger:MA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeInteger(byte[]):java.math.BigInteger",
+            new int[]{645,475,719,842,1000,-132,875,369,1000,-1000,227,-131,-113,-468,22,-1000,-1000,71,-924,-1000,716,-466,1000,137,108,-9,-877,-300,1000,449,601,-409,580,-183,228,11,21,298,-613,528,-1000,407,392,841,462,-1000,749,390,-64,-423,-240,-42,-329,-920,1000,-358,-86,658,-290,423,-206,964,-629,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00027() {
+        org.junit.Assert.assertEquals("java.math.BigInteger:MA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "decodeInteger(byte[]):java.math.BigInteger",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00028() {
+        org.junit.Assert.assertEquals("ARRAY:[B:12:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjE=:19:java.lang.Byte:NjE=:19:java.lang.Byte:LTE=:19:java.lang.Byte:MQ==:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encode(byte[]):byte[]",
+            new int[]{754,438,793,759,1000,1000,-1000,-600,625,-223,1000,143,1000,-1000,1000,-842,1000,-1000,-1000,925,-1000,1000,-413,1000,-704,-769,-1000,-1000,176,-670,-1000,-323,-729,-530,-917,-1000,-1000,-1000,-623,-941,1000,-755,858,1000,-1000,-663,-1000,1000,1000,-728,1000,1000,-1000,-932,1000,1000,773,-1000,260,359,1000,-592,-1000,-649}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00029() {
+        org.junit.Assert.assertEquals("ARRAY:[B:8:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjE=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encode(byte[]):byte[]",
+            new int[]{162,1000,780,95,1000,657,1000,-526,660,288,972,-159,1000,163,507,-1000,1000,-1000,-1000,478,-1000,959,-511,1000,-1000,-985,-1000,-1000,-237,380,-417,-329,1000,-328,-1000,-80,-846,-1000,-1000,-1000,352,-411,377,1000,-605,-1000,-1000,1000,524,24,1000,1000,-643,925,-189,570,777,-340,-560,650,112,-711,-242,-250}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00030() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encode(byte[]):byte[]",
+            new int[]{350,-764,330,959,738,-608,-1000,-388,-41,559,185,-596,-243,425,55,-102,307,477,-996,-1000,143,-707,591,-739,-1000,1000,554,142,-198,480,-1000,-1000,-645,520,606,914,379,876,-281,989,-245,99,-471,900,286,1000,-410,-369,-482,572,1000,-440,208,-171,-696,-532,-553,237,273,-831,869,-1000,988,-263}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00031() {
+        org.junit.Assert.assertEquals("ARRAY:[B:11:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:Njg=:19:java.lang.Byte:OTU=:19:java.lang.Byte:OTA=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==:19:java.lang.Byte:LTE=:19:java.lang.Byte:LTE=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encode(byte[]):byte[]",
+            new int[]{999,-486,179,-1000,1000,1000,-915,-294,1000,456,-1000,1000,867,-1000,627,-589,1000,460,1000,-870,-1000,-873,1000,682,1000,907,-828,400,-561,479,-1000,714,-1000,1000,-319,718,1000,-1000,958,-1000,-1000,-1000,22,323,479,-131,-42,-267,751,-580,-707,-47,-621,-1000,1000,1000,1000,640,1000,-775,-266,1000,-808,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00032() {
+        org.junit.Assert.assertEquals("ARRAY:[B:10:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:OTU=:19:java.lang.Byte:OTU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:MA==:19:java.lang.Byte:MA==:19:java.lang.Byte:LTE=:19:java.lang.Byte:MA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encode(byte[]):byte[]",
+            new int[]{269,-986,948,-1000,1000,1000,-906,-748,1000,-104,-1000,1000,868,-960,254,1000,549,1000,948,-1000,-531,-1000,1000,621,518,1000,261,-974,-1000,1000,-1000,-371,-1000,885,-300,1000,888,-1000,419,-1000,-950,-809,1000,-236,479,1000,23,-1000,443,-1000,-1000,409,-1000,-1000,-78,819,1000,1000,1000,-1000,-266,714,-288,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00033() {
+        org.junit.Assert.assertEquals("ARRAY:[B:6:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NDc=:19:java.lang.Byte:LTE=:19:java.lang.Byte:MA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encode(byte[]):byte[]",
+            new int[]{-841,-622,1000,-698,338,-69,-475,538,-207,-529,-807,-251,-452,206,-1000,-646,521,-871,-884,-931,427,-894,-688,703,77,896,1000,-165,248,1000,302,-39,649,545,1000,455,-297,1000,-280,1000,-870,-438,-1000,536,1000,1000,-1000,-1000,-1000,-170,-1000,-1000,-1000,-251,-400,-650,288,590,1000,-1000,-388,709,1000,514}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00034() {
+        org.junit.Assert.assertEquals("THROW:org.apache.commons.codec.EncoderException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encode(java.lang.Object):java.lang.Object",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00035() {
+        org.junit.Assert.assertEquals("THROW:org.apache.commons.codec.EncoderException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encode(java.lang.Object):java.lang.Object",
+            new int[]{341,-286,1000,-1000,1000,-1000,212,117,1000,-111,-1000,118,-1000,-580,180,-213,714,799,741,-509,659,895,1000,-766,-711,1000,275,1000,-185,-485,455,-494,-353,-500,-987,-1000,-1000,-1000,-444,165,-1000,252,-1000,269,918,-1000,-1000,-1000,445,-1000,-212,-151,-188,224,-243,-902,-839,1000,1000,1000,412,416,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00036() {
+        org.junit.Assert.assertEquals("THROW:org.apache.commons.codec.EncoderException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encode(java.lang.Object):java.lang.Object",
+            new int[]{-909,-284,504,610,-759,34,-901,-993,-888,418,319,-458,30,474,871,738,216,-825,105,211,-357,501,97,-297,-950,335,308,151,601,-493,187,-476,246,560,568,70,769,-622,-475,-684,-306,-824,474,657,-240,-511,-279,705,-479,795,-574,-301,-251,216,-7,219,-182,-710,-735,228,993,-710,594,999}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00037() {
+        org.junit.Assert.assertEquals("ARRAY:[B:8:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:Njg=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NTU=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjE=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[]):byte[]",
+            new int[]{-253,401,-519,-891,688,-319,-273,-178,202,-123,-463,-747,806,-301,727,-366,456,-844,881,461,-313,-338,413,678,790,420,222,-711,720,580,-192,96,-112,-189,655,-846,980,-873,-739,-432,-487,-906,258,-758,970,-157,731,-634,46,730,81,545,-230,944,-458,-237,115,-147,-182,623,-947,-513,197,-298}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00038() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NDc=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[]):byte[]",
+            new int[]{-111,303,-824,654,-532,-661,531,244,189,794,-422,-559,-892,526,-701,-429,-346,624,321,-104,888,-899,891,864,433,-257,-62,264,-9,304,-727,-333,741,375,-79,-562,-13,-558,-852,616,-58,962,827,988,667,-442,425,791,-110,-123,-852,682,675,-925,-451,805,-294,431,-762,-877,368,-836,255,-476}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00039() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[]):byte[]",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00040() {
+        org.junit.Assert.assertEquals("ARRAY:[B:8:19:java.lang.Byte:NDc=:19:java.lang.Byte:MTE5:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NDc=:19:java.lang.Byte:MTE5:19:java.lang.Byte:NjE=:19:java.lang.Byte:NjE=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[]):byte[]",
+            new int[]{-296,-830,-850,-364,856,-897,804,782,656,-15,-320,38,-342,380,-708,989,-914,-977,450,-570,-61,799,-914,-987,-203,-72,-659,-368,750,350,968,203,-682,-601,113,-594,230,-911,-955,966,475,-408,-494,87,216,-191,12,747,772,359,-331,-227,-799,726,-179,820,-218,842,225,-316,-919,-22,341,-240}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00041() {
+        org.junit.Assert.assertEquals("ARRAY:[B:10:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjE=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean):byte[]",
+            new int[]{839,-930,-48,-819,390,-577,727,-419,-248,280,554,-270,251,947,-967,-435,117,406,-253,637,-74,782,331,-610,316,-567,179,-423,-359,366,893,761,318,89,369,298,-255,-41,421,197,899,646,-247,-172,969,418,-804,553,-293,-393,211,-935,605,837,830,469,-585,386,-540,-64,86,394,264,-833}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00042() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:NDc=:19:java.lang.Byte:MTE5:19:java.lang.Byte:Njc=:19:java.lang.Byte:MTEz", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean):byte[]",
+            new int[]{315,-1000,-705,-439,532,-342,275,-359,-797,-126,-340,-595,298,32,-863,-380,-928,-349,-242,654,243,-557,-130,-454,-667,877,-445,74,387,-639,-970,-633,-195,-330,-556,740,520,-665,-1000,-433,-452,-1000,409,916,39,-812,-838,890,448,815,112,-309,-686,-691,-606,101,-555,974,-366,798,53,434,-456,-188}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00043() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean):byte[]",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00044() {
+        org.junit.Assert.assertEquals("ARRAY:[B:10:19:java.lang.Byte:NDc=:19:java.lang.Byte:MTE5:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NzE=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjE=:19:java.lang.Byte:NjE=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean):byte[]",
+            new int[]{256,-930,-1000,-770,924,-577,727,-1000,-973,128,-601,-270,-95,20,-1000,82,-1000,-749,-437,637,-795,-106,-953,-485,214,421,-40,431,679,-357,-518,-551,12,-613,128,-275,602,-887,-1000,79,-479,108,1000,580,372,-1000,123,1000,642,719,211,-1000,401,-566,246,-392,-241,1000,4,1000,-527,1000,264,-230}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00045() {
+        org.junit.Assert.assertEquals("ARRAY:[B:10:19:java.lang.Byte:NDc=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjE=:19:java.lang.Byte:NjE=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean):byte[]",
+            new int[]{538,-328,-1000,1000,-1000,-1000,496,-12,1000,-1000,-359,-574,-1000,-337,0,212,593,776,1000,0,-706,-1000,-669,0,716,-1000,-173,516,125,540,378,-451,1000,-315,688,-313,0,462,-234,0,283,-573,622,-851,556,-376,-135,-903,855,-140,0,763,-225,0,-310,538,318,-723,-248,1000,920,-177,-156,-866}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00046() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:OTU=:19:java.lang.Byte:OTU=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjU=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean):byte[]",
+            new int[]{-225,920,-436,314,650,-416,1000,983,612,-109,-488,-1000,-112,234,86,-822,-152,263,-76,1000,-613,-1000,1000,112,370,-646,186,1000,-419,-65,1000,-1000,1000,772,257,-306,1000,-879,-909,780,820,-925,663,-1000,-202,-1000,374,-644,-231,-1000,-1000,1000,-647,-1000,-686,-419,470,-1000,1000,225,998,900,432,220}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00047() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean):byte[]",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00048() {
+        org.junit.Assert.assertEquals("ARRAY:[B:10:19:java.lang.Byte:NDc=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjE=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean):byte[]",
+            new int[]{-751,-1000,170,1000,65,1000,-138,-35,254,-13,554,-378,729,-1000,289,808,491,1000,34,1000,725,-1000,-629,-27,429,-14,-1000,-559,375,1000,1000,-1000,62,888,835,-273,-1000,-731,120,-1000,-130,15,351,-908,-939,746,506,-858,699,685,-258,-851,818,135,546,-688,-57,469,247,1000,-476,598,89,726}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00049() {
+        org.junit.Assert.assertEquals("ARRAY:[B:9:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:NTc=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:NTY=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean):byte[]",
+            new int[]{527,-414,-536,1000,-1000,-192,203,-1000,1000,-1000,542,472,-1000,413,373,72,710,-1000,1000,-1000,1000,1000,-1000,-266,1000,-327,-30,-1000,-1000,-226,-805,1000,-663,-1000,388,-453,-1000,-1000,1000,-1000,-1000,-969,794,1000,881,1000,-1000,-1000,1000,1000,139,-1000,-253,-81,387,-471,17,324,151,1000,-435,-737,817,-719}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00050() {
+        org.junit.Assert.assertEquals("ARRAY:[B:8:19:java.lang.Byte:OTU=:19:java.lang.Byte:MTE5:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean):byte[]",
+            new int[]{472,-777,-652,329,-284,-681,198,-901,888,-48,-108,455,117,-553,-734,-813,-160,-259,-326,279,892,263,-798,995,-533,-352,-920,-681,749,-168,919,-325,-152,-362,785,-808,-963,-495,1,-894,236,-315,-943,344,-815,915,21,-202,816,-641,474,358,-45,416,104,-618,-315,923,-140,962,-557,203,816,-947}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00051() {
+        org.junit.Assert.assertEquals("ARRAY:[B:10:19:java.lang.Byte:NjU=:19:java.lang.Byte:NzY=:19:java.lang.Byte:NTI=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NDc=:19:java.lang.Byte:MTIw:19:java.lang.Byte:NDg=:19:java.lang.Byte:NjE=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean,int):byte[]",
+            new int[]{-811,-608,948,190,635,-1000,-75,304,221,294,382,120,-881,-521,-717,-249,322,88,-817,-526,-51,-260,-890,401,-129,-134,-1000,971,527,1000,-116,-434,645,478,251,483,-495,-1000,-1000,-440,-483,1000,1000,353,-794,-59,46,1000,1000,-1000,-1000,470,-1000,1000,-462,-103,-434,1000,1000,1000,-908,761,1000,-492}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00052() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:NzE=:19:java.lang.Byte:NjU=:19:java.lang.Byte:Njg=:19:java.lang.Byte:OTU=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean,int):byte[]",
+            new int[]{501,-1000,935,-635,355,280,770,689,-1000,423,-1000,1000,-89,-1000,734,1000,-368,1000,20,-534,-359,268,314,356,741,-1000,795,423,-1000,-196,-1000,225,566,-797,-972,419,-561,-848,-1000,627,-206,4,-1000,-274,177,-411,-1000,298,1000,204,327,1000,1000,-781,1,-1000,190,244,212,-1000,-377,526,492,381}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00053() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean,int):byte[]",
+            new int[]{-887,953,415,519,-866,-580,-278,-40,-378,279,427,-501,-881,102,211,-485,500,-875,832,-530,984,510,-454,773,-573,498,-790,21,-201,-422,-755,191,-995,-455,-506,988,165,308,-316,484,-656,-317,660,429,305,-973,-139,-836,347,-442,634,954,533,445,841,708,-332,394,-992,587,-678,-706,-242,-223}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00054() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean,int):byte[]",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00055() {
+        org.junit.Assert.assertEquals("ARRAY:[B:10:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:Njg=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NTM=:19:java.lang.Byte:ODE=:19:java.lang.Byte:NjE=:19:java.lang.Byte:NjE=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean,int):byte[]",
+            new int[]{178,505,873,420,355,-242,-1000,-279,694,1000,667,204,-928,-1000,-1000,-676,638,-1000,-293,-974,-855,268,314,82,-488,-383,-581,36,-80,-802,-514,636,-362,70,630,-90,-652,-414,-1000,627,-661,-539,-1000,-1000,-1000,-77,1000,-1000,-635,-589,662,1000,-30,970,-268,1000,-684,-1000,130,1000,661,389,492,-269}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00056() {
+        org.junit.Assert.assertEquals("ARRAY:[B:9:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODE=:19:java.lang.Byte:Njg=:19:java.lang.Byte:OTU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean,int):byte[]",
+            new int[]{-673,-787,937,89,556,-87,194,294,-303,-942,-60,330,-234,-873,-232,146,-69,504,-714,-472,394,-401,-487,648,899,-199,-554,416,-223,122,-576,435,622,118,-192,992,-281,-326,-869,-566,-863,591,389,520,83,-426,-615,915,497,-847,-809,-158,195,378,-321,-899,-118,689,801,151,-716,289,860,-231}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00057() {
+        org.junit.Assert.assertEquals("ARRAY:[B:8:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:Njg=:19:java.lang.Byte:OTU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64(byte[],boolean,boolean,int):byte[]",
+            new int[]{1000,-761,-222,0,0,-782,-592,-30,-240,-778,1000,52,908,0,807,-381,0,444,-1000,269,466,0,-792,226,-721,-971,-104,-583,0,-324,567,180,-447,478,-732,-689,-216,-1000,1000,715,35,-1000,0,-245,385,0,-969,547,710,421,-154,-1000,-1000,-908,0,-722,608,-711,809,-280,-485,-261,1000,588}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00058() {
+        org.junit.Assert.assertEquals("ARRAY:[B:10:19:java.lang.Byte:NjU=:19:java.lang.Byte:Nzk=:19:java.lang.Byte:MTA3:19:java.lang.Byte:MTE3:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjE=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64Chunked(byte[]):byte[]",
+            new int[]{-961,467,846,-236,838,460,-986,-351,873,-703,-250,-703,-768,-380,144,102,-327,41,-907,260,980,850,673,-530,-634,-746,107,67,-91,-430,358,337,-254,-259,-331,514,86,-445,-786,-258,-50,35,-567,-827,10,-388,-393,258,-100,889,-275,317,910,84,849,-516,142,-448,-216,266,-140,204,111,-904}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00059() {
+        org.junit.Assert.assertEquals("ARRAY:[B:6:19:java.lang.Byte:NDc=:19:java.lang.Byte:MTE5:19:java.lang.Byte:Njk=:19:java.lang.Byte:NjY=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64Chunked(byte[]):byte[]",
+            new int[]{-963,-931,428,538,913,-210,-35,-940,751,387,-317,677,-74,-687,-610,-821,-24,-506,491,-844,-701,816,-447,569,-152,384,25,-773,-701,719,190,227,-11,-929,705,-896,-818,-5,902,302,126,440,-513,362,-202,-249,188,220,-770,167,475,938,-120,688,-454,275,632,488,451,-395,710,-518,438,-158}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00060() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64Chunked(byte[]):byte[]",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00061() {
+        org.junit.Assert.assertEquals("ARRAY:[B:10:19:java.lang.Byte:MTEx:19:java.lang.Byte:MTAz:19:java.lang.Byte:Njg=:19:java.lang.Byte:NDc=:19:java.lang.Byte:NDc=:19:java.lang.Byte:MTE5:19:java.lang.Byte:NjE=:19:java.lang.Byte:NjE=:19:java.lang.Byte:MTM=:19:java.lang.Byte:MTA=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64Chunked(byte[]):byte[]",
+            new int[]{34,-940,-626,-677,354,-430,471,-174,-105,674,428,-673,-832,359,-417,-513,107,90,694,348,767,-637,-419,283,-572,731,-4,-153,-847,282,827,-160,600,511,16,648,-811,515,418,-290,615,551,237,841,135,133,655,-972,57,-971,-223,-643,418,814,-857,714,-20,947,697,77,346,-261,322,-658}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00062() {
+        org.junit.Assert.assertEquals("java.lang.String:L3dFQUFBPT0=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64String(byte[]):java.lang.String",
+            new int[]{-254,563,-225,742,-179,667,-809,142,388,-241,-780,-740,-113,-391,-508,202,361,506,988,437,-223,-635,600,-621,-730,-420,298,-763,710,-509,-396,-562,720,-559,292,749,-624,377,635,806,-865,-326,-663,-817,245,456,351,-648,904,-924,-800,954,-306,-414,-880,607,484,86,-624,-805,-110,-402,441,27}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00063() {
+        org.junit.Assert.assertEquals("java.lang.String:QU85cA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64String(byte[]):java.lang.String",
+            new int[]{-333,786,-545,-17,-337,617,-409,403,173,421,375,-617,202,-442,-841,-871,386,-937,-645,-731,-847,-841,-164,557,-414,167,648,307,991,38,-145,695,919,-173,-504,911,410,387,87,699,-345,-667,907,268,896,876,-664,-222,426,538,989,638,-183,-75,-972,721,148,-221,123,260,-56,322,-177,655}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00064() {
+        org.junit.Assert.assertEquals("java.lang.String:", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64String(byte[]):java.lang.String",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00065() {
+        org.junit.Assert.assertEquals("java.lang.String:QVAvL0FQOD0=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64String(byte[]):java.lang.String",
+            new int[]{-841,-912,-161,-13,737,-477,459,-450,-464,768,32,-93,260,-703,717,189,-72,41,-130,253,-763,-990,816,513,-773,-761,-703,-556,-713,-187,-531,-550,309,-132,505,-347,-149,-579,288,689,533,609,496,72,575,538,-576,878,375,277,-677,-434,-656,-229,-270,580,828,-564,-702,78,-137,15,-36,577}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00066() {
+        org.junit.Assert.assertEquals("ARRAY:[B:7:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:OTU=:19:java.lang.Byte:MTE5:19:java.lang.Byte:NjU=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64URLSafe(byte[]):byte[]",
+            new int[]{-745,728,1000,-1000,-27,1000,-636,-1000,-1000,310,-245,-1000,999,670,889,608,-719,257,-76,867,-436,769,-1000,641,-121,594,503,81,1000,6,896,1000,799,423,-463,-262,-1000,512,-573,699,314,582,-1000,824,774,531,1000,989,-579,1000,-9,-1000,1000,-491,429,73,537,1000,1000,377,1000,1000,870,-737}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00067() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:OTU=:19:java.lang.Byte:OTU=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjU=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64URLSafe(byte[]):byte[]",
+            new int[]{-897,-712,-1000,-14,26,-1000,492,-738,-1000,-297,-1000,-705,983,290,779,-806,-192,-1000,-1000,1000,-771,11,-971,1000,-1000,366,1000,-12,949,-818,-1000,1000,-288,176,-197,-1000,918,-618,22,-1000,641,780,1000,-271,-1000,-512,1000,69,1000,960,-51,-986,-400,-1000,1000,54,-10,-838,-567,701,490,1000,-891,164}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00068() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64URLSafe(byte[]):byte[]",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00069() {
+        org.junit.Assert.assertEquals("ARRAY:[B:6:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64URLSafe(byte[]):byte[]",
+            new int[]{-482,-372,546,273,80,80,-822,33,261,471,-240,946,974,9,105,630,688,-699,-226,386,-466,-173,590,-33,933,776,333,-7,-569,-787,184,439,-871,400,-799,-391,-886,736,956,-156,641,300,758,-157,-531,-773,439,926,-291,282,-484,-176,826,911,770,-346,-979,-249,737,-377,115,-846,-558,711}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00070() {
+        org.junit.Assert.assertEquals("java.lang.String:QUFBQUFmOA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64URLSafeString(byte[]):java.lang.String",
+            new int[]{563,-249,570,-724,892,228,420,-867,781,-228,593,-40,570,607,-964,385,-876,-678,843,676,-737,435,-709,-138,451,-220,218,-97,-950,601,199,350,614,846,-845,-207,-581,820,-214,-603,-300,101,-469,795,914,-586,-374,-275,-219,-966,306,-79,764,186,-862,972,262,-75,-901,-848,-176,-981,105,-480}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00071() {
+        org.junit.Assert.assertEquals("java.lang.String:QUFEXw==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64URLSafeString(byte[]):java.lang.String",
+            new int[]{-405,808,67,926,172,915,-46,246,264,576,-169,-996,565,-502,640,958,840,-632,-753,-16,696,-551,-698,-688,-460,611,267,317,-221,450,784,31,-504,-288,783,-555,-464,950,471,-367,-769,56,-354,-269,836,125,-320,-103,-841,958,926,-475,-176,433,333,161,-828,-23,-399,-115,852,-605,-662,-794}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00072() {
+        org.junit.Assert.assertEquals("java.lang.String:", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64URLSafeString(byte[]):java.lang.String",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00073() {
+        org.junit.Assert.assertEquals("java.lang.String:X3dEX0FB", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeBase64URLSafeString(byte[]):java.lang.String",
+            new int[]{-740,-121,399,368,153,-820,639,-288,355,767,962,-121,803,898,792,-992,385,482,427,-31,726,-125,-758,-459,280,622,742,335,184,-577,-437,-206,-485,226,708,498,-714,9,87,-38,827,568,-314,109,-984,411,639,711,256,-276,849,-788,-945,-700,857,-435,-415,-688,187,962,-269,-150,548,-294}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00074() {
+        org.junit.Assert.assertEquals("ARRAY:[B:8:19:java.lang.Byte:NjU=:19:java.lang.Byte:ODA=:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjY=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjU=:19:java.lang.Byte:NjE=:19:java.lang.Byte:NjE=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeInteger(java.math.BigInteger):byte[]",
+            new int[]{-1000,569,457,-1000,-1000,957,-1000,-592,-1000,-227,-135,583,60,-1000,-1000,399,1000,442,580,269,1000,1000,1000,502,-1000,748,1000,-755,507,1000,1000,1000,1000,967,1000,1000,-945,-570,-1000,78,-1000,867,518,-1000,421,-94,-1000,-638,-771,649,493,497,319,-1000,284,463,733,1000,-89,1000,-168,-542,529,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00075() {
+        org.junit.Assert.assertEquals("ARRAY:[B:4:19:java.lang.Byte:NjU=:19:java.lang.Byte:MTAy:19:java.lang.Byte:NDc=:19:java.lang.Byte:NDc=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeInteger(java.math.BigInteger):byte[]",
+            new int[]{-1000,-915,941,-395,199,-1000,-41,596,-824,617,392,1000,-738,-965,-964,-918,-143,-1000,278,-215,644,40,1000,-1000,-18,-162,-947,289,-463,-715,-1000,-602,972,-352,-142,355,1000,-873,183,-1000,366,-1000,921,-124,1000,16,704,284,1000,-756,-802,-1000,1000,730,-1000,1000,-415,971,1000,212,153,-995,78,-102}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00076() {
+        org.junit.Assert.assertEquals("ARRAY:[B:0", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeInteger(java.math.BigInteger):byte[]",
+            new int[]{1000,481,11,-883,-974,-587,310,-77,342,863,-399,-980,550,78,-691,655,-974,198,779,-653,683,-87,476,345,-466,108,-714,859,-770,-584,-884,-592,-342,-7,-87,-699,-829,-785,-266,938,-963,522,-421,419,287,-858,-717,752,-671,79,-996,855,-622,389,556,510,65,-464,171,423,-589,379,-853,-349}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00077() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeInteger(java.math.BigInteger):byte[]",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00078() {
+        org.junit.Assert.assertEquals("ARRAY:[B:8:19:java.lang.Byte:NjU=:19:java.lang.Byte:MTAy:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjU=:19:java.lang.Byte:MTE3:19:java.lang.Byte:MTAy:19:java.lang.Byte:NTY=:19:java.lang.Byte:NjE=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeInteger(java.math.BigInteger):byte[]",
+            new int[]{-1000,629,373,-863,-837,-664,-497,-63,-719,-614,538,797,-1000,-1000,-1000,327,-124,-617,1000,-887,1000,837,1000,-282,-1000,457,634,-1000,-601,-901,-1000,1000,1000,365,864,1000,-1000,-1000,-826,1000,-1000,440,1000,-1000,1000,369,-1000,-786,-356,-1000,-774,-363,-81,-903,329,1000,-1000,1000,1000,1000,-1000,-508,-405,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00079() {
+        org.junit.Assert.assertEquals("java.lang.String:QVA4QS93PT0A77+977+9", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeToString(byte[]):java.lang.String",
+            new int[]{489,-672,275,-1000,75,-561,1000,-150,214,1000,459,-1000,994,332,28,80,-826,-1000,1000,-435,-1000,-250,1,-55,639,878,-469,566,864,-657,-1000,-654,-1000,459,868,-978,-334,-238,-595,-746,-206,-237,-942,-698,-311,1000,-386,-259,-854,1000,-76,941,455,-840,-762,-72,471,-436,343,-600,707,-1000,-609,-689}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00080() {
+        org.junit.Assert.assertEquals("java.lang.String:QUFBQi93QT0=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeToString(byte[]):java.lang.String",
+            new int[]{992,-870,-218,551,618,-677,-982,760,872,-347,661,98,473,858,791,-448,-76,18,-180,461,-597,-860,-753,-289,366,-463,668,790,-448,-385,438,-399,627,-22,452,-64,831,58,-786,674,-301,905,-454,889,155,-814,74,333,-884,4,-986,-970,-905,688,628,-901,264,381,-754,318,-104,929,745,477}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00081() {
+        org.junit.Assert.assertEquals("java.lang.String:", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeToString(byte[]):java.lang.String",
+            new int[]{1000,-729,-174,517,-732,-792,-1000,1000,1000,-283,1000,-150,1000,214,468,-745,-443,127,124,620,-816,-1000,-1000,250,1000,-1000,782,-179,-858,-164,432,-1000,912,234,-91,-1,-5,501,-854,651,-1000,587,-784,748,-487,-1000,-402,905,-651,-18,-1000,-1000,-439,705,508,-568,-460,149,-1000,329,900,-510,788,424}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00082() {
+        org.junit.Assert.assertEquals("java.lang.String:L3dBQS8vOD0Afg==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeToString(byte[]):java.lang.String",
+            new int[]{-587,-142,-444,-1000,-1000,-1000,-260,894,983,-544,197,97,-1000,-563,256,353,1000,179,-1000,713,-400,593,-132,-906,-914,-567,903,-1000,16,-849,323,-798,530,-97,-54,-523,-324,-426,1000,1000,-169,45,-285,-901,-22,-925,-1000,-876,398,21,-391,-159,-1000,381,-1000,-1000,-176,-611,-183,366,-1000,-500,679,-236}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00083() {
+        org.junit.Assert.assertEquals("java.lang.String:X3dFQUFBAO+/ve+/ve+/vQ==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeToString(byte[]):java.lang.String",
+            new int[]{489,389,275,-1000,-776,-561,1000,-668,-562,1000,890,-255,698,332,-865,1000,-955,-1000,492,-11,-1000,126,1000,-663,1000,1000,-637,281,1000,-419,-1000,354,-1000,-529,-97,-741,30,-608,114,-276,227,-1000,-1000,-386,-83,300,-520,1000,-495,-10,371,219,1000,-953,-702,1000,1000,-484,343,-600,893,-1000,-568,-323}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00084() {
+        org.junit.Assert.assertEquals("java.lang.String:X3dBWV8tZw0K", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeToString(byte[]):java.lang.String",
+            new int[]{-421,-689,198,553,5,-1000,-1000,-251,532,-1000,-205,1000,473,-245,358,-1000,225,1000,-1000,573,1000,-129,-732,-343,754,-1000,1000,-194,-1000,404,1000,-1000,1000,-406,269,335,380,19,-151,674,-214,-91,606,729,-311,-889,565,-6,-266,-257,-95,-1000,-1000,1000,1000,-1000,-212,817,-127,998,-485,705,1000,-41}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00085() {
+        org.junit.Assert.assertEquals("java.lang.String:QVAvLwDvv70=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "encodeToString(byte[]):java.lang.String",
+            new int[]{714,653,508,-1000,-1000,-519,69,94,519,234,675,893,-594,197,-190,383,-1000,-11,-86,-58,30,26,61,-652,792,331,1000,-1000,576,-146,856,-305,55,-850,-1000,-783,255,390,-7,-113,-308,-930,-1000,977,-1000,-163,97,438,-267,-222,44,27,685,1000,772,1000,1000,243,450,-583,175,-934,1000,-834}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00086() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "isArrayByteBase64(byte[]):boolean",
+            new int[]{693,-392,-241,-35,686,710,343,241,-904,673,822,-212,952,386,-713,750,-264,-486,-475,-730,-894,865,233,823,861,-523,-71,980,204,777,516,706,-537,-431,-637,744,-423,-411,-350,649,822,-110,-253,575,579,-583,407,67,210,791,-289,-201,-445,542,-181,-576,-6,-183,888,-437,-474,926,-265,286}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00087() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "isArrayByteBase64(byte[]):boolean",
+            new int[]{1000,321,-266,882,381,-505,-1000,-411,-737,887,559,-462,-37,-378,786,400,-240,-1000,-138,-386,363,-1000,1000,922,-1000,-1000,-1000,544,-267,1000,274,400,-1000,1000,1000,68,-180,-726,-1000,627,-1000,72,-270,-625,261,-37,1000,-756,-149,254,-811,-336,920,536,79,-188,-1000,-1000,1000,1000,-757,1000,17,-300}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00088() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "isArrayByteBase64(byte[]):boolean",
+            new int[]{841,681,-38,-408,180,-1000,164,-388,302,-661,-130,387,-590,102,-64,-409,-628,111,710,811,504,957,-451,-754,-795,-68,417,-836,10,287,259,-1000,153,-618,-597,671,46,-714,455,-333,250,5,-900,1,-74,-46,-764,979,-259,-3,-870,-211,-1000,1000,-369,-585,414,289,504,-400,564,662,43,-207}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00089() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "isBase64(byte):boolean",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00090() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "isBase64(byte):boolean",
+            new int[]{516,574,-319,968,-141,-690,-218,-572,-309,327,-239,-191,-1000,57,-732,-507,682,-1000,-794,475,1000,-830,824,678,126,895,-955,-451,869,826,1000,456,-731,223,812,-240,181,1000,-294,589,888,-1000,-540,523,-314,-109,-602,-139,-370,563,1000,589,601,-957,741,7,1000,814,136,-615,441,-714,-399,-481}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00091() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "isBase64(byte):boolean",
+            new int[]{-644,203,-686,-789,-265,582,787,539,465,-954,-553,-887,-1000,-351,-70,-507,-900,-1000,-690,-193,-669,1000,-287,33,-1000,-284,223,-278,-825,561,579,456,7,1000,-415,376,-333,272,662,759,439,-1000,1000,-718,275,746,-602,822,41,973,1000,-445,148,-886,309,-90,13,814,136,-916,448,-34,-254,437}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00092() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "isBase64(byte):boolean",
+            new int[]{585,305,-457,262,-88,-646,-256,941,-812,-916,595,71,822,-141,-101,-712,-576,-685,-323,47,-314,870,758,886,116,164,-708,473,23,150,-609,247,-570,990,-110,680,-648,447,-436,517,-683,31,50,679,-109,-194,-815,-34,512,464,-479,165,969,-946,-658,-272,526,566,708,-214,-162,-531,743,-55}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00093() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "isUrlSafe():boolean",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00094() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "isUrlSafe():boolean",
+            new int[]{-1000,234,-282,-1000,3,-831,918,-1000,-1000,448,1000,-1000,-840,231,-442,-1000,505,534,-712,-518,-1000,48,-108,-1000,-757,258,281,390,555,504,-29,-146,-210,236,-34,1000,55,1000,-27,1000,-839,944,1000,553,712,-903,731,-1000,970,794,34,-375,864,21,254,909,996,-259,931,-696,-861,61,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00095() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64", "org.apache.commons.codec.binary.Base64", "isUrlSafe():boolean",
+            new int[]{-876,-844,987,-779,189,866,801,-512,-147,90,419,-868,-664,-894,-739,720,340,-33,-462,-443,-907,526,201,-93,323,-279,763,-810,537,858,-660,479,453,349,-106,686,-394,-669,5,-754,235,897,711,-212,376,325,-32,-637,-217,-437,-900,65,751,531,-765,607,-772,327,195,307,-319,-715,-470,-731}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00096() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read():int",
+            new int[]{-671,-532,-177,-167,-927,-529,-751,805,-484,301,-111,-941,-153,46,125,239,637,-523,876,-671,648,34,274,581,716,-828,-809,56,32,676,-318,111,-865,128,671,246,-8,-165,-459,398,614,-786,692,982,-110,-121,558,772,-508,-500,-872,-962,59,863,564,293,191,530,170,455,-775,952,-330,262}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00097() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read():int",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00098() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read():int",
+            new int[]{-592,668,270,953,-293,446,-310,-270,-240,-403,323,-930,288,68,329,877,447,739,-440,-672,-122,-72,353,-299,992,497,-215,-356,984,-423,138,-898,-960,492,-470,-759,-740,-395,52,-649,-71,-517,101,-58,936,36,-899,24,-613,-895,266,905,747,-664,684,-249,-782,-866,-370,-365,477,-23,-297,814}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00099() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{-40,-1000,512,150,965,-471,-906,469,206,44,-193,-591,-922,-1000,20,-317,157,103,-269,-264,516,-371,246,575,12,-446,592,512,901,-1000,-1000,1000,-94,-231,-1000,-51,-680,-169,443,-1000,-178,-181,371,701,1000,889,382,1000,1000,-1000,408,-384,1000,369,-459,396,-922,-177,-844,1000,-397,610,456,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00100() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{410,513,271,705,-871,883,863,-155,-200,976,-332,-396,327,3,-693,877,-255,-610,-744,965,-721,227,779,-733,-724,-112,-299,-509,607,834,-8,-160,81,265,641,48,-108,961,315,635,-778,-540,903,-728,-282,-480,187,-201,-245,716,-369,-922,-827,-13,-468,-384,456,-59,642,-311,227,-166,766,-436}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00101() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{1000,-1000,1000,881,1000,-1000,1000,427,-898,371,-1000,428,1000,-1000,826,1000,-1000,-552,580,546,-615,761,-413,286,-1000,-1000,-532,687,75,-861,-1000,769,-1000,1000,-1000,382,572,-795,1000,648,-703,1000,-275,1000,-483,971,-1000,1000,914,1000,794,-88,-903,-1000,113,447,526,-133,1000,-1000,1000,826,-41,319}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00102() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{-881,-106,200,150,863,-394,619,469,-884,430,-66,-591,-771,433,618,-607,-625,28,123,150,516,-55,246,668,-705,-493,-347,334,-497,-229,606,-736,735,-231,449,-724,-680,-239,379,-594,699,-805,693,-530,37,889,804,-274,-944,861,75,420,-188,-845,-213,-312,481,-928,-596,127,56,249,-286,-832}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00103() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{-100,-664,287,779,-551,-1000,439,363,-1000,537,-1000,755,-363,-825,-584,-1000,96,-1000,-1000,-1000,-1000,260,645,-407,-1000,-861,1000,1000,144,775,-1000,1000,36,28,-251,-217,-739,708,91,-1000,-399,1000,95,929,417,1000,573,867,1000,-885,-1000,-1000,-238,-1000,1000,1000,-1000,1000,-545,-1000,-43,-958,-135,386}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00104() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{999,-1000,-687,846,-623,1000,-579,368,-336,1000,-41,-531,52,-127,501,-1000,169,238,-283,-837,-945,-1000,-580,636,728,-816,-384,28,817,1000,-687,-423,-1000,1000,-17,659,-496,1000,-424,-153,-1000,-830,1000,1000,525,-278,748,27,675,79,610,-416,387,-864,619,416,98,-259,738,1000,562,904,-430,-50}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00105() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{529,-514,227,-556,-644,-394,811,569,959,285,952,-484,594,-269,433,-474,-422,-32,211,-6,752,-955,-672,-860,974,-200,-376,-807,418,870,-543,-805,-609,-695,-930,23,-81,-180,302,643,-642,-488,-88,223,976,675,976,-706,-403,266,500,852,-834,504,-291,-977,-588,-888,289,689,657,-194,-707,386}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00106() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "close():void",
+            new int[]{-568,-433,-662,-56,-369,-850,885,-600,643,890,469,-482,943,-828,-647,224,-639,349,233,542,939,-335,299,-284,822,31,-546,831,481,983,524,832,-867,-56,-954,-861,549,-949,660,-509,-356,-777,520,570,183,895,-770,46,752,-95,-224,180,742,-616,-322,897,-499,179,171,298,55,-656,-414,-968}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00107() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "close():void",
+            new int[]{778,901,257,-323,-674,26,-155,580,-503,-373,-408,622,662,-883,-636,40,287,-316,643,390,971,175,767,152,-236,-691,939,-966,542,-246,823,-392,-227,412,264,162,347,-599,134,158,-702,-395,-304,-466,-739,-529,944,-772,253,-273,-629,776,11,100,-643,-389,-497,796,950,-245,-522,-526,-820,-961}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00108() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "close():void",
+            new int[]{-337,11,64,-481,468,939,-1000,1000,-22,-501,752,-268,-1000,1000,1000,576,506,523,-1000,-434,-380,1000,-684,670,246,1000,-1000,398,-1000,640,1000,-729,925,313,980,190,-1000,0,-948,-361,-1000,1000,-64,0,595,-416,-529,859,32,-920,-164,841,-1000,1000,1000,970,-440,678,897,588,918,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00109() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "close():void",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00110() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "flush():void",
+            new int[]{-908,359,4,35,-485,-1000,-932,204,-74,82,1000,-1000,1000,148,326,36,-548,231,-318,574,-551,-590,-1000,170,-336,-359,220,500,146,-978,304,492,568,76,438,-1000,-1000,-36,299,965,957,-1000,827,-633,-208,1000,872,-280,40,-951,-175,-197,-297,663,-892,615,-47,498,490,536,1000,-419,611,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00111() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "flush():void",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00112() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(byte[],int,int):void",
+            new int[]{326,-1000,493,-1000,-455,-704,733,-166,-825,1000,802,-64,-440,-234,-903,-1000,1000,199,-379,768,684,906,-594,-179,-895,561,487,-817,973,192,1000,1000,348,-733,378,743,400,38,-1000,1000,-277,284,-733,-228,-764,-722,1000,-556,-121,563,221,58,-375,1000,-1000,652,1000,657,-302,-794,-1000,-492,-735,-170}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00113() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(byte[],int,int):void",
+            new int[]{795,186,738,718,0,383,236,1000,-218,8,-170,-570,-817,-299,-794,-1000,718,-201,167,872,-1000,572,413,254,-373,688,-19,148,660,-1000,961,567,-16,767,-53,594,133,355,-859,571,266,-627,21,108,-519,-124,-276,-251,266,-613,-738,-50,-482,405,-824,956,336,824,347,329,-326,-532,8,-338}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00114() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(byte[],int,int):void",
+            new int[]{745,-1000,-1000,-28,1000,594,333,1000,-715,-1000,-1000,-652,1000,397,-638,98,371,-341,-163,-167,-327,-1000,-92,-357,1000,-993,210,1000,839,-1000,429,665,-1000,60,494,153,330,-183,944,-239,736,240,-443,525,1000,-703,1000,208,-1000,-533,-454,429,1000,225,582,-1000,-421,-81,644,1000,-87,289,901,517}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00115() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(byte[],int,int):void",
+            new int[]{440,-665,837,-1000,-595,-249,973,1000,-645,612,575,-402,-603,-96,937,-1000,613,-1000,-1000,844,684,244,598,97,1000,592,270,-153,-158,-1000,-851,68,760,-113,-139,-1000,581,115,-872,1000,1000,529,63,1000,491,174,180,1000,-673,-1000,-777,-1000,-105,-1000,-759,1000,-1000,-348,-67,1000,-74,-128,410,416}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00116() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(byte[],int,int):void",
+            new int[]{-1000,-1000,222,-176,351,1000,304,1000,219,722,-1000,-1000,124,-577,-417,-353,1000,1000,1000,1000,-425,652,-26,-188,30,-1000,-873,973,1000,-1000,258,127,-223,-682,-1000,981,-1000,1000,-193,726,1000,-147,1000,-590,457,150,93,1000,-1000,353,-1000,212,-709,637,-467,353,1000,12,-43,1000,559,1000,1000,-536}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00117() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(byte[],int,int):void",
+            new int[]{-526,-1000,12,-176,68,-46,43,677,311,129,481,-75,1000,318,-943,-1000,514,424,483,802,-867,-168,-591,-1000,-612,-29,-1000,962,761,-1000,-177,-118,262,550,-1000,112,-935,215,682,987,1000,-200,766,494,272,-1000,296,-1,-494,752,-1000,207,-1000,-159,677,391,-438,914,11,1000,128,477,1000,23}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00118() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(byte[],int,int):void",
+            new int[]{404,626,969,404,123,-31,215,-225,-525,416,177,-733,-623,373,252,-931,966,-281,498,653,534,451,323,233,-568,126,0,881,228,-835,329,-234,343,437,-308,-356,845,-39,-740,440,-873,-933,174,-503,-227,884,-853,-56,91,-348,-876,-524,-493,22,-610,848,-715,-764,829,348,916,-95,912,-358}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00119() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(byte[],int,int):void",
+            new int[]{-201,-586,1000,-554,-1000,975,961,1000,-747,-374,579,913,-1000,674,4,860,-1000,-450,170,168,751,-413,1000,111,1000,790,1000,16,-167,-695,756,-525,-1000,1000,-1000,-589,660,1000,932,-1000,1000,-1000,-1000,1000,1000,435,400,1000,227,-638,121,-551,-63,-895,-918,859,-59,-778,-931,-109,-499,-1000,-494,-879}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00120() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(byte[],int,int):void",
+            new int[]{76,833,1000,150,760,410,17,102,233,-1000,960,1000,73,863,-751,-336,-938,-114,-156,98,320,595,720,659,-976,1000,-14,-279,317,-103,697,-340,-495,206,-939,223,-192,-547,-425,-443,-1000,-1000,599,-591,571,195,451,569,-370,-1000,400,65,539,-502,321,529,-459,-251,43,-916,-655,-801,280,-385}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00121() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(int):void",
+            new int[]{697,-1000,247,729,130,-181,379,-217,-779,1000,-145,-235,49,-348,1000,-1000,-1000,1000,-1000,659,45,-215,611,-5,-153,500,-466,-754,1000,-525,-308,452,-1000,497,432,785,466,-232,453,978,161,84,716,-1000,280,268,-726,455,1000,-1000,135,385,-545,99,400,518,319,-624,-1000,828,-922,350,-27,-244}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00122() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(int):void",
+            new int[]{-967,-336,-941,-818,-88,-926,949,788,-409,416,774,673,-242,618,-676,-556,-439,-795,674,461,-376,-402,-749,-330,-96,746,34,87,655,-695,737,800,498,940,876,-891,-621,-853,678,-86,-923,-524,939,373,-161,12,-847,413,704,-447,-517,778,-866,-970,491,-72,667,-575,933,-643,-494,686,371,-346}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00123() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(int):void",
+            new int[]{1000,-253,183,-47,-847,202,-153,-636,-1000,-74,-155,-586,482,-10,1000,-208,311,-328,-400,1000,-905,73,-1000,-192,364,847,627,-619,304,-838,-1000,-274,-619,-325,281,-274,439,-657,-161,81,-184,1000,523,-672,-184,319,-230,664,543,322,-127,-529,72,177,-865,-115,620,-718,271,-55,-710,-1000,-94,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00124() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(int):void",
+            new int[]{-1000,-121,-829,-1000,194,-1000,1000,1000,-58,-622,1000,226,0,0,-595,-606,-1000,-1000,882,304,-348,-829,-637,788,522,8,-113,362,-34,-42,1000,0,1000,0,1000,-886,-561,-107,913,-523,-1000,-742,0,793,0,-364,-940,164,-554,81,-1000,1000,-519,-935,729,521,267,-1000,1000,0,-451,1000,779,-583}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00125() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64OutputStream", "org.apache.commons.codec.binary.Base64OutputStream", "write(int):void",
+            new int[]{43,-1000,-102,393,-446,987,-910,-1000,-1000,1000,124,131,631,-143,1000,-627,530,1000,-282,735,-60,1000,36,-199,522,1000,-464,-790,987,-1000,-1000,-289,-539,-527,537,-37,166,-792,527,641,87,-742,427,793,-731,-364,-772,-421,1000,115,-851,-206,-412,39,-1000,-628,-70,-82,-839,-361,-1000,-625,-53,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00126() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "markSupported():boolean",
+            new int[]{-106,-1000,660,1000,-151,227,-184,321,1000,-564,-18,647,1000,-1000,381,707,-1000,-704,910,1000,-976,-722,-657,1000,-1000,397,1000,135,706,731,-736,-1000,-801,1000,710,627,870,-1000,-1000,685,-554,899,77,-542,-21,413,-251,-812,603,-1000,-1000,243,911,-1000,662,-60,-493,1000,1000,1000,-363,1000,-141,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00127() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "markSupported():boolean",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00128() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read():int",
+            new int[]{-671,-532,-177,-167,-927,-529,-751,805,-484,301,-111,-941,-153,46,125,239,637,-523,876,-671,648,34,274,581,716,-828,-809,56,32,676,-318,111,-865,128,671,246,-8,-165,-459,398,614,-786,692,982,-110,-121,558,772,-508,-500,-872,-962,59,863,564,293,191,530,170,455,-775,952,-330,262}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00129() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read():int",
+            new int[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00130() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read():int",
+            new int[]{-592,668,270,953,-293,446,-310,-270,-240,-403,323,-930,288,68,329,877,447,739,-440,-672,-122,-72,353,-299,992,497,-215,-356,984,-423,138,-898,-960,492,-470,-759,-740,-395,52,-649,-71,-517,101,-58,936,36,-899,24,-613,-895,266,905,747,-664,684,-249,-782,-866,-370,-365,477,-23,-297,814}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00131() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{-40,-1000,512,150,965,-471,-906,469,206,44,-193,-591,-922,-1000,20,-317,157,103,-269,-264,516,-371,246,575,12,-446,592,512,901,-1000,-1000,1000,-94,-231,-1000,-51,-680,-169,443,-1000,-178,-181,371,701,1000,889,382,1000,1000,-1000,408,-384,1000,369,-459,396,-922,-177,-844,1000,-397,610,456,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00132() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{410,513,271,705,-871,883,863,-155,-200,976,-332,-396,327,3,-693,877,-255,-610,-744,965,-721,227,779,-733,-724,-112,-299,-509,607,834,-8,-160,81,265,641,48,-108,961,315,635,-778,-540,903,-728,-282,-480,187,-201,-245,716,-369,-922,-827,-13,-468,-384,456,-59,642,-311,227,-166,766,-436}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00133() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{1000,-1000,1000,881,1000,-1000,1000,427,-898,371,-1000,428,1000,-1000,826,1000,-1000,-552,580,546,-615,761,-413,286,-1000,-1000,-532,687,75,-861,-1000,769,-1000,1000,-1000,382,572,-795,1000,648,-703,1000,-275,1000,-483,971,-1000,1000,914,1000,794,-88,-903,-1000,113,447,526,-133,1000,-1000,1000,826,-41,319}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00134() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{-881,-106,200,150,863,-394,619,469,-884,430,-66,-591,-771,433,618,-607,-625,28,123,150,516,-55,246,668,-705,-493,-347,334,-497,-229,606,-736,735,-231,449,-724,-680,-239,379,-594,699,-805,693,-530,37,889,804,-274,-944,861,75,420,-188,-845,-213,-312,481,-928,-596,127,56,249,-286,-832}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00135() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{-100,-664,287,779,-551,-1000,439,363,-1000,537,-1000,755,-363,-825,-584,-1000,96,-1000,-1000,-1000,-1000,260,645,-407,-1000,-861,1000,1000,144,775,-1000,1000,36,28,-251,-217,-739,708,91,-1000,-399,1000,95,929,417,1000,573,867,1000,-885,-1000,-1000,-238,-1000,1000,1000,-1000,1000,-545,-1000,-43,-958,-135,386}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00136() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{999,-1000,-687,846,-623,1000,-579,368,-336,1000,-41,-531,52,-127,501,-1000,169,238,-283,-837,-945,-1000,-580,636,728,-816,-384,28,817,1000,-687,-423,-1000,1000,-17,659,-496,1000,-424,-153,-1000,-830,1000,1000,525,-278,748,27,675,79,610,-416,387,-864,619,416,98,-259,738,1000,562,904,-430,-50}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00137() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IndexOutOfBoundsException", DEReplay.run(
+            "org.apache.commons.codec.binary.Base64InputStream", "org.apache.commons.codec.binary.Base64InputStream", "read(byte[],int,int):int",
+            new int[]{529,-514,227,-556,-644,-394,811,569,959,285,952,-484,594,-269,433,-474,-422,-32,211,-6,752,-955,-672,-860,974,-200,-376,-807,418,870,-543,-805,-609,-695,-930,23,-81,-180,302,643,-642,-488,-88,223,976,675,976,-706,-403,266,500,852,-834,504,-291,-977,-588,-888,289,689,657,-194,-707,386}));
+    }
+}

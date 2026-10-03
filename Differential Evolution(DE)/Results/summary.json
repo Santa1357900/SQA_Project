@@ -1,0 +1,579 @@
+{
+  "Chart": {
+    "selected_bugs": 26,
+    "evaluated_bugs": 26,
+    "detected_unique_bugs": 14,
+    "recorded_runs": 26,
+    "complete_runs": 26,
+    "detected_runs": 14,
+    "unknown_outcome_bugs": 0,
+    "fault_detection_evaluation_complete": true,
+    "fault_detection_rate_all_selected_bugs": 0.5384615384615384,
+    "fault_detection_rate_evaluated_bugs": 0.5384615384615384,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 26
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 63.38267967517946,
+    "mean_branch_coverage_percent_complete_runs": 46.07273772740934,
+    "mean_generation_seconds_complete_runs": 396.0495769230769,
+    "mean_total_seconds_complete_runs": 503.43261538461536,
+    "status_groups_by_run": {
+      "pass": 26,
+      "no run": 0,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 26,
+      "no run": 0,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 26
+    }
+  },
+  "Cli": {
+    "selected_bugs": 39,
+    "evaluated_bugs": 30,
+    "detected_unique_bugs": 7,
+    "recorded_runs": 39,
+    "complete_runs": 30,
+    "detected_runs": 7,
+    "unknown_outcome_bugs": 9,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.1794871794871795,
+    "fault_detection_rate_evaluated_bugs": 0.23333333333333334,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 30
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 63.00332774493416,
+    "mean_branch_coverage_percent_complete_runs": 50.901162171014356,
+    "mean_generation_seconds_complete_runs": 363.45070000000004,
+    "mean_total_seconds_complete_runs": 422.2867,
+    "status_groups_by_run": {
+      "pass": 30,
+      "no run": 9,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 30,
+      "no run": 9,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 30,
+      "no_generated_tests": 9
+    }
+  },
+  "Closure": {
+    "selected_bugs": 174,
+    "evaluated_bugs": 82,
+    "detected_unique_bugs": 5,
+    "recorded_runs": 174,
+    "complete_runs": 82,
+    "detected_runs": 5,
+    "unknown_outcome_bugs": 92,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.028735632183908046,
+    "fault_detection_rate_evaluated_bugs": 0.06097560975609756,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 82
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 20.88539417165318,
+    "mean_branch_coverage_percent_complete_runs": 13.835974670842125,
+    "mean_generation_seconds_complete_runs": 454.17165853658537,
+    "mean_total_seconds_complete_runs": 578.3851463414635,
+    "status_groups_by_run": {
+      "pass": 82,
+      "no run": 92,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 82,
+      "no run": 92,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 82,
+      "no_generated_tests": 92
+    }
+  },
+  "Codec": {
+    "selected_bugs": 18,
+    "evaluated_bugs": 18,
+    "detected_unique_bugs": 5,
+    "recorded_runs": 18,
+    "complete_runs": 18,
+    "detected_runs": 5,
+    "unknown_outcome_bugs": 0,
+    "fault_detection_evaluation_complete": true,
+    "fault_detection_rate_all_selected_bugs": 0.2777777777777778,
+    "fault_detection_rate_evaluated_bugs": 0.2777777777777778,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 18
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 80.77488067905438,
+    "mean_branch_coverage_percent_complete_runs": 72.83809930456472,
+    "mean_generation_seconds_complete_runs": 172.72400000000002,
+    "mean_total_seconds_complete_runs": 240.31022222222222,
+    "status_groups_by_run": {
+      "pass": 18,
+      "no run": 0,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 18,
+      "no run": 0,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 18
+    }
+  },
+  "Collections": {
+    "selected_bugs": 28,
+    "evaluated_bugs": 27,
+    "detected_unique_bugs": 3,
+    "recorded_runs": 28,
+    "complete_runs": 27,
+    "detected_runs": 3,
+    "unknown_outcome_bugs": 1,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.10714285714285714,
+    "fault_detection_rate_evaluated_bugs": 0.1111111111111111,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 27
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 53.63175417319479,
+    "mean_branch_coverage_percent_complete_runs": 52.66812209457981,
+    "mean_generation_seconds_complete_runs": 169.34388888888887,
+    "mean_total_seconds_complete_runs": 264.24003703703704,
+    "status_groups_by_run": {
+      "pass": 27,
+      "no run": 1,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 27,
+      "no run": 1,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 27,
+      "no_generated_tests": 1
+    }
+  },
+  "Compress": {
+    "selected_bugs": 47,
+    "evaluated_bugs": 46,
+    "detected_unique_bugs": 9,
+    "recorded_runs": 47,
+    "complete_runs": 46,
+    "detected_runs": 9,
+    "unknown_outcome_bugs": 1,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.19148936170212766,
+    "fault_detection_rate_evaluated_bugs": 0.1956521739130435,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 46
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 41.43536755206919,
+    "mean_branch_coverage_percent_complete_runs": 33.857309129183115,
+    "mean_generation_seconds_complete_runs": 123.31495652173913,
+    "mean_total_seconds_complete_runs": 202.49889130434784,
+    "status_groups_by_run": {
+      "pass": 46,
+      "no run": 1,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 46,
+      "no run": 1,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 46,
+      "no_generated_tests": 1
+    }
+  },
+  "Csv": {
+    "selected_bugs": 16,
+    "evaluated_bugs": 11,
+    "detected_unique_bugs": 2,
+    "recorded_runs": 16,
+    "complete_runs": 11,
+    "detected_runs": 2,
+    "unknown_outcome_bugs": 5,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.125,
+    "fault_detection_rate_evaluated_bugs": 0.18181818181818182,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 11
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 34.8183266009018,
+    "mean_branch_coverage_percent_complete_runs": 18.702936746086294,
+    "mean_generation_seconds_complete_runs": 59.94863636363637,
+    "mean_total_seconds_complete_runs": 123.20172727272728,
+    "status_groups_by_run": {
+      "pass": 11,
+      "no run": 5,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 11,
+      "no run": 5,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 11,
+      "no_generated_tests": 5
+    }
+  },
+  "Gson": {
+    "selected_bugs": 18,
+    "evaluated_bugs": 17,
+    "detected_unique_bugs": 1,
+    "recorded_runs": 18,
+    "complete_runs": 17,
+    "detected_runs": 1,
+    "unknown_outcome_bugs": 1,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.05555555555555555,
+    "fault_detection_rate_evaluated_bugs": 0.058823529411764705,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 17
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 30.038022823992954,
+    "mean_branch_coverage_percent_complete_runs": 18.78571416979216,
+    "mean_generation_seconds_complete_runs": 144.63276470588235,
+    "mean_total_seconds_complete_runs": 218.82635294117648,
+    "status_groups_by_run": {
+      "pass": 17,
+      "no run": 1,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 17,
+      "no run": 1,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 17,
+      "no_generated_tests": 1
+    }
+  },
+  "JacksonCore": {
+    "selected_bugs": 26,
+    "evaluated_bugs": 24,
+    "detected_unique_bugs": 2,
+    "recorded_runs": 26,
+    "complete_runs": 24,
+    "detected_runs": 2,
+    "unknown_outcome_bugs": 2,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.07692307692307693,
+    "fault_detection_rate_evaluated_bugs": 0.08333333333333333,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 24
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 31.293495910080207,
+    "mean_branch_coverage_percent_complete_runs": 21.1883519935613,
+    "mean_generation_seconds_complete_runs": 259.32175,
+    "mean_total_seconds_complete_runs": 336.1759583333333,
+    "status_groups_by_run": {
+      "pass": 24,
+      "no run": 2,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 24,
+      "no run": 2,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 24,
+      "no_generated_tests": 2
+    }
+  },
+  "JacksonDatabind": {
+    "selected_bugs": 110,
+    "evaluated_bugs": 89,
+    "detected_unique_bugs": 4,
+    "recorded_runs": 110,
+    "complete_runs": 89,
+    "detected_runs": 4,
+    "unknown_outcome_bugs": 21,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.03636363636363636,
+    "fault_detection_rate_evaluated_bugs": 0.0449438202247191,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 89
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 30.509759903125317,
+    "mean_branch_coverage_percent_complete_runs": 17.08983041158776,
+    "mean_generation_seconds_complete_runs": 376.84550561797755,
+    "mean_total_seconds_complete_runs": 487.35704494382026,
+    "status_groups_by_run": {
+      "pass": 89,
+      "no run": 21,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 89,
+      "no run": 21,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 89,
+      "no_generated_tests": 21
+    }
+  },
+  "JacksonXml": {
+    "selected_bugs": 6,
+    "evaluated_bugs": 5,
+    "detected_unique_bugs": 1,
+    "recorded_runs": 6,
+    "complete_runs": 5,
+    "detected_runs": 1,
+    "unknown_outcome_bugs": 1,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.16666666666666666,
+    "fault_detection_rate_evaluated_bugs": 0.2,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 5
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 44.588066582565226,
+    "mean_branch_coverage_percent_complete_runs": 35.89779198434958,
+    "mean_generation_seconds_complete_runs": 172.905,
+    "mean_total_seconds_complete_runs": 248.15900000000002,
+    "status_groups_by_run": {
+      "pass": 5,
+      "no run": 1,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 5,
+      "no run": 1,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 5,
+      "no_generated_tests": 1
+    }
+  },
+  "Jsoup": {
+    "selected_bugs": 93,
+    "evaluated_bugs": 90,
+    "detected_unique_bugs": 9,
+    "recorded_runs": 93,
+    "complete_runs": 90,
+    "detected_runs": 9,
+    "unknown_outcome_bugs": 3,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.0967741935483871,
+    "fault_detection_rate_evaluated_bugs": 0.1,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 87,
+      "JaCoCo": 3
+    },
+    "mixed_coverage_tools": true,
+    "mean_line_coverage_percent_complete_runs": null,
+    "mean_branch_coverage_percent_complete_runs": null,
+    "mean_generation_seconds_complete_runs": 306.9284333333334,
+    "mean_total_seconds_complete_runs": 381.74654444444445,
+    "status_groups_by_run": {
+      "pass": 90,
+      "no run": 3,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 90,
+      "no run": 3,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 90,
+      "no_generated_tests": 3
+    }
+  },
+  "JxPath": {
+    "selected_bugs": 22,
+    "evaluated_bugs": 19,
+    "detected_unique_bugs": 1,
+    "recorded_runs": 22,
+    "complete_runs": 19,
+    "detected_runs": 1,
+    "unknown_outcome_bugs": 3,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.045454545454545456,
+    "fault_detection_rate_evaluated_bugs": 0.05263157894736842,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 19
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 31.950021205671007,
+    "mean_branch_coverage_percent_complete_runs": 17.204662487987367,
+    "mean_generation_seconds_complete_runs": 190.69652631578947,
+    "mean_total_seconds_complete_runs": 265.77084210526317,
+    "status_groups_by_run": {
+      "pass": 19,
+      "no run": 3,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 19,
+      "no run": 3,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 19,
+      "no_generated_tests": 3
+    }
+  },
+  "Lang": {
+    "selected_bugs": 61,
+    "evaluated_bugs": 60,
+    "detected_unique_bugs": 8,
+    "recorded_runs": 61,
+    "complete_runs": 60,
+    "detected_runs": 8,
+    "unknown_outcome_bugs": 1,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.13114754098360656,
+    "fault_detection_rate_evaluated_bugs": 0.13333333333333333,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 60
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 70.44169129103311,
+    "mean_branch_coverage_percent_complete_runs": 61.1269791904097,
+    "mean_generation_seconds_complete_runs": 385.92768333333333,
+    "mean_total_seconds_complete_runs": 491.46565,
+    "status_groups_by_run": {
+      "pass": 60,
+      "no run": 1,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 60,
+      "no run": 1,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 60,
+      "no_generated_tests": 1
+    }
+  },
+  "Math": {
+    "selected_bugs": 106,
+    "evaluated_bugs": 96,
+    "detected_unique_bugs": 17,
+    "recorded_runs": 106,
+    "complete_runs": 96,
+    "detected_runs": 17,
+    "unknown_outcome_bugs": 10,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.16037735849056603,
+    "fault_detection_rate_evaluated_bugs": 0.17708333333333334,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 96
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 53.23543534195241,
+    "mean_branch_coverage_percent_complete_runs": 43.0020053750579,
+    "mean_generation_seconds_complete_runs": 440.2405833333333,
+    "mean_total_seconds_complete_runs": 599.0528020833333,
+    "status_groups_by_run": {
+      "pass": 96,
+      "no run": 10,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 96,
+      "no run": 10,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 96,
+      "no_generated_tests": 10
+    }
+  },
+  "Mockito": {
+    "selected_bugs": 38,
+    "evaluated_bugs": 36,
+    "detected_unique_bugs": 2,
+    "recorded_runs": 38,
+    "complete_runs": 36,
+    "detected_runs": 2,
+    "unknown_outcome_bugs": 2,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.05263157894736842,
+    "fault_detection_rate_evaluated_bugs": 0.05555555555555555,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 36
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 48.010284490251614,
+    "mean_branch_coverage_percent_complete_runs": 29.400208346716106,
+    "mean_generation_seconds_complete_runs": 141.88266666666667,
+    "mean_total_seconds_complete_runs": 469.14475,
+    "status_groups_by_run": {
+      "pass": 36,
+      "no run": 2,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 36,
+      "no run": 2,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 36,
+      "no_generated_tests": 2
+    }
+  },
+  "Time": {
+    "selected_bugs": 26,
+    "evaluated_bugs": 25,
+    "detected_unique_bugs": 5,
+    "recorded_runs": 26,
+    "complete_runs": 25,
+    "detected_runs": 5,
+    "unknown_outcome_bugs": 1,
+    "fault_detection_evaluation_complete": false,
+    "fault_detection_rate_all_selected_bugs": 0.19230769230769232,
+    "fault_detection_rate_evaluated_bugs": 0.2,
+    "coverage_tool_counts": {
+      "Defects4J/Cobertura": 25
+    },
+    "mixed_coverage_tools": false,
+    "mean_line_coverage_percent_complete_runs": 53.12651285364723,
+    "mean_branch_coverage_percent_complete_runs": 38.97496756825126,
+    "mean_generation_seconds_complete_runs": 483.89383999999995,
+    "mean_total_seconds_complete_runs": 620.94668,
+    "status_groups_by_run": {
+      "pass": 25,
+      "no run": 1,
+      "fail": 0
+    },
+    "status_groups_by_bug": {
+      "pass": 25,
+      "no run": 1,
+      "fail": 0
+    },
+    "statuses": {
+      "complete": 25,
+      "no_generated_tests": 1
+    }
+  }
+}

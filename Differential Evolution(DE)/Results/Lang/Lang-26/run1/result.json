@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "experiment": "all-defects4j-v3110-full512-w4",
+  "algorithm": "DE",
+  "algorithm_version": "3.1.10-rebuild",
+  "project": "Lang",
+  "bug_id": 26,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "stage": "finished",
+  "error": null,
+  "modified_classes": [
+    "org.apache.commons.lang3.time.FastDateFormat"
+  ],
+  "tests_generated": 269,
+  "tests_validated": 249,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "covered_methods": 41,
+    "total_methods": 42,
+    "ratio": 0.9761904761904762
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 414,
+    "lines_total": 465,
+    "line_ratio": 0.8903225806451613,
+    "branch_measure": "condition",
+    "branches_covered": 172,
+    "branches_total": 228,
+    "branch_ratio": 0.7543859649122807
+  },
+  "generation_seconds": 502.597,
+  "total_seconds": 667.061,
+  "configuration": {
+    "population": 16,
+    "budget": 512,
+    "mutation": 0.7,
+    "crossover": 0.9,
+    "input_range": 1000,
+    "max_methods": 0,
+    "max_tests_per_method": 16,
+    "method_timeout": 300,
+    "job_timeout": 1500,
+    "validation_reserve": 180,
+    "test_timeout": 60,
+    "command_timeout": 600,
+    "seed": 2026,
+    "heap": "512m"
+  },
+  "artifacts": {
+    "tests": "Test/Lang/Lang 26/run1/1790510400698241060",
+    "logs": null,
+    "legacy_result": null
+  }
+}

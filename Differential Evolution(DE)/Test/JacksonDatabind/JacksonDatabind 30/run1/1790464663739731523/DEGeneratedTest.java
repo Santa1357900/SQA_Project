@@ -1,0 +1,2505 @@
+import java.lang.reflect.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+/** Deterministic test-program decoder. Used unchanged during search and JUnit replay. */
+final class DEReplay {
+    public static final int DIMENSIONS = 64;
+    /** Local generic bean used to create stable reflection Type and Field values. */
+    public static final class GenericInput {
+        public String text;
+        public java.util.List<String> names;
+        public java.util.Map<String, Integer> counts;
+        public java.util.List<java.util.Map<String, Long>> nested;
+        public int[] numbers;
+        public String[] words;
+    }
+    static final class Genes {
+        final int[] values; int at; Field lastField;
+        Object jacksonBean, jacksonProvider, jacksonGenerator;
+        StringWriter jacksonOutput;
+        Genes(int[] values) { this.values = values; }
+        int next() { return values[(at++) % values.length]; }
+        int pick(int n) { return Math.floorMod(next(), n); }
+    }
+    public static final class Observation {
+        public String token, error, generatedSource;
+        public boolean reachedTarget;
+        public int setupCalls, setupFailures, nullFallbacks;
+    }
+    public static String signature(Method m) {
+        StringJoiner params = new StringJoiner(",");
+        for (Class<?> t : m.getParameterTypes()) params.add(t.getTypeName());
+        return m.getName() + "(" + params + "):" + m.getReturnType().getTypeName();
+    }
+    static Class<?> load(String name) throws ClassNotFoundException {
+        return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+    }
+    static Method method(String target, String signature) throws Exception {
+        for (Method m : load(target).getDeclaredMethods())
+            if (signature(m).equals(signature)) {
+                // Public methods on package-private Defects4J classes (for
+                // example Gson's TypeInfoFactory) are not reflectively
+                // accessible until opened on the unnamed application module.
+                if (!m.isAccessible()) m.setAccessible(true);
+                return m;
+            }
+        throw new NoSuchMethodException(signature);
+    }
+    static List<Constructor<?>> constructors(Class<?> type) {
+        List<Constructor<?>> out = new ArrayList();
+        if (!Modifier.isAbstract(type.getModifiers()) && Modifier.isPublic(type.getModifiers()))
+            for (Constructor<?> c : type.getConstructors())
+                if (c.getParameterTypes().length <= 6) out.add(c);
+        Collections.sort(out, new Comparator<Constructor<?>>() {
+            public int compare(Constructor<?> a, Constructor<?> b) {
+                int byArity = a.getParameterTypes().length - b.getParameterTypes().length;
+                return byArity != 0 ? byArity : a.toString().compareTo(b.toString());
+            }
+        });
+        return out;
+    }
+    private static Object[] arguments(Class<?>[] types, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Object[] args = new Object[types.length];
+        for (int i = 0; i < types.length; i++) args[i] = value(types[i], g, depth, report);
+        return args;
+    }
+    private static Object[] arguments(Method method, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Class<?>[] types = method.getParameterTypes();
+        Object[] args = new Object[types.length];
+        boolean closureCompile = method.getDeclaringClass().getName().equals("com.google.javascript.jscomp.Compiler")
+            && method.getName().equals("compile");
+        Type[] generic = method.getGenericParameterTypes();
+        boolean jacksonSerialization = method.getDeclaringClass().getName().equals(
+            "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+            && method.getName().startsWith("serializeAs")
+            && types.length == 3 && types[0] == Object.class;
+        for (int i = 0; i < types.length; i++) {
+            if (jacksonSerialization && g.jacksonBean != null) {
+                if (i == 0) args[i] = g.jacksonBean;
+                else if (i == 1) args[i] = g.jacksonGenerator;
+                else args[i] = g.jacksonProvider;
+                continue;
+            }
+            if (closureCompile && (List.class.isAssignableFrom(types[i])
+                    || (types[i].isArray() && load("com.google.javascript.jscomp.SourceFile")
+                        .isAssignableFrom(types[i].getComponentType())))) {
+                // Compiler.compile takes externs and inputs in either Lists or
+                // arrays depending on Closure version. Keep externs empty and
+                // supply a nonempty, gene-selected input program.
+                if (i == 0) args[i] = types[i].isArray()
+                    ? Array.newInstance(types[i].getComponentType(), 0) : new ArrayList();
+                else {
+                    Object sourceFile = value(load("com.google.javascript.jscomp.SourceFile"),
+                        g, depth + 1, report);
+                    if (types[i].isArray()) {
+                        Object files = Array.newInstance(types[i].getComponentType(), 1);
+                        Array.set(files, 0, sourceFile); args[i] = files;
+                    } else args[i] = new ArrayList(Collections.singletonList(sourceFile));
+                }
+            } else args[i] = value(types[i], g, depth, report);
+        }
+        return args;
+    }
+    private static Number number(Genes g) {
+        int n = g.next();
+        switch (g.pick(12)) {
+            case 0: return 0; case 1: return 1; case 2: return -1;
+            case 3: return Integer.MAX_VALUE; case 4: return Integer.MIN_VALUE;
+            case 5: return Long.MAX_VALUE; case 6: return Long.MIN_VALUE;
+            case 7: return Double.NaN; case 8: return Double.POSITIVE_INFINITY;
+            case 9: return Double.NEGATIVE_INFINITY; case 10: return n / 10.0;
+            default: return n;
+        }
+    }
+    private static String string(Genes g) {
+        int mode = g.pick(16), n = g.next();
+        String digits = Long.toString(Math.abs((long)n));
+        String sign = new String[]{"", "-", "+", "--"}[g.pick(4)];
+        switch (mode) {
+            case 0: return null; case 1: return ""; case 2: return " ";
+            case 3: return Integer.toString(n);
+            case 4: return sign + digits;
+            case 5: return sign + digits + "." + g.pick(1000);
+            case 6: return sign + digits + "e" + g.next();
+            case 7: return sign + "0x" + Long.toHexString(Math.abs((long)n));
+            case 8: return sign + "0x8" + "0".repeat(g.pick(20));
+            case 9: return sign + digits + "fFdDlL".charAt(g.pick(6));
+            case 10: return " " + sign + digits + " ";
+            case 11: return new String[]{"true", "false", "null", "NaN", "Infinity"}[g.pick(5)];
+            case 12: return "a".repeat(g.pick(25));
+            default:
+                String alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-._ /\\\t\n";
+                StringBuilder s = new StringBuilder();
+                int length = g.pick(25);
+                for (int i = 0; i < length; i++) s.append(alphabet.charAt(g.pick(alphabet.length())));
+                return s.toString();
+        }
+    }
+    private static Object value(Class<?> t, Genes g, int depth, Observation report) throws Exception {
+        if (t == String.class || t == CharSequence.class) return string(g);
+        if (t == Comparable.class) return "key" + g.pick(5);
+        if (t == boolean.class || t == Boolean.class) return g.pick(2) == 0;
+        if (t == char.class || t == Character.class) return (char)g.pick(128);
+        if (t == byte.class || t == Byte.class) return number(g).byteValue();
+        if (t == short.class || t == Short.class) return number(g).shortValue();
+        if (t == int.class || t == Integer.class) return number(g).intValue();
+        if (t == long.class || t == Long.class) return number(g).longValue();
+        if (t == float.class || t == Float.class) return number(g).floatValue();
+        if (t == double.class || t == Double.class || t == Number.class) return number(g).doubleValue();
+        if (t.isEnum()) {
+            Object[] constants = t.getEnumConstants();
+            return constants.length == 0 ? null : constants[g.pick(constants.length)];
+        }
+        if (t == Object.class) return g.pick(3) == 0 ? null : "object" + g.pick(5);
+        if (depth >= 3) { report.nullFallbacks++; return null; }
+        if (t.isArray()) {
+            int length = g.pick(6);
+            Object array = Array.newInstance(t.getComponentType(), length);
+            for (int i = 0; i < length; i++) Array.set(array, i, value(t.getComponentType(), g, depth + 1, report));
+            return array;
+        }
+        if (t == List.class || t == Collection.class || t == Iterable.class || t == Set.class) {
+            Collection<Object> items = t == Set.class ? new LinkedHashSet() : new ArrayList();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.add("item" + g.pick(5));
+            return items;
+        }
+        if (t == Map.class) {
+            Map<Object, Object> items = new LinkedHashMap();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.put("key" + g.pick(5), number(g));
+            return items;
+        }
+        if (t == java.util.Date.class) return new java.util.Date(g.next() * 86400000L);
+        if (t == Class.class) return String.class;
+        if (t == java.lang.reflect.Field.class) {
+            Field[] fields = GenericInput.class.getFields();
+            g.lastField = fields[g.pick(fields.length)];
+            return g.lastField;
+        }
+        if (t == java.lang.reflect.Type.class) {
+            if (g.lastField != null && g.pick(3) == 0)
+                return g.lastField.getDeclaringClass();
+            Field[] fields = GenericInput.class.getFields();
+            return fields[g.pick(fields.length)].getGenericType();
+        }
+        if (t == java.io.Reader.class || t == java.io.BufferedReader.class
+                || t == java.io.StringReader.class) {
+            String content = "header,value\n" + string(g) + "," + number(g) + "\n"
+                + "alpha,beta\n";
+            StringReader reader = new StringReader(content);
+            return t == java.io.BufferedReader.class ? new BufferedReader(reader) : reader;
+        }
+        if (t.getName().equals("org.apache.commons.csv.CSVFormat")) {
+            Class<?> format = load("org.apache.commons.csv.CSVFormat");
+            for (String fieldName : new String[]{"DEFAULT", "RFC4180", "EXCEL"}) try {
+                Object result = format.getField(fieldName).get(null);
+                if (t.isInstance(result)) return result;
+            } catch (ReflectiveOperationException ignored) { }
+            for (Method factory : format.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getParameterTypes().length == 0
+                        && t.isAssignableFrom(factory.getReturnType())) try {
+                    return factory.invoke(null);
+                } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.SourceFile")) {
+            Class<?> source = load("com.google.javascript.jscomp.SourceFile");
+            for (Method factory : source.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals("fromCode")
+                        && factory.getParameterTypes().length == 2 && factory.getParameterTypes()[0] == String.class
+                        && factory.getParameterTypes()[1] == String.class) {
+                    String replaySource = System.getProperty("de.generated.source");
+                    if (replaySource != null) {
+                        try {
+                            report.generatedSource = replaySource;
+                            return factory.invoke(null, "de-input.js", replaySource);
+                        } catch (ReflectiveOperationException ignored) { }
+                    }
+                    String[] unusedParameterScripts = {
+                        "window.f = function(a) {};",
+                        "window.f = function(a, b) { return b; };",
+                        "window.f = function(a, b) { var used = b; return used; };",
+                        "window['f'] = function(unused) {};",
+                        "window.f = function(unused, value) { return value; };",
+                        "window['f'] = function(unused, value) { return value; };",
+                        "window.f = function(first, unused, last) { return last; };",
+                        "window.f = function(unused) { var local = 1; return local; };",
+                        "window.f = function(unused, value) { var alias = value; return alias; };",
+                        "window.f = function(unused, value) { if (value) { return 1; } return 2; };",
+                        "window.f = function(unused, value) { value = value + 1; return value; };",
+                        "window.f = function(unused, value) { return function() { return value; }; };",
+                        "window.f = function(unused) { function inner() { return 1; } return inner(); };",
+                        "window.f = function(a, b, unused) { return a + b; };",
+                        "window.f = function(a, unused, b, c) { return a + c; };"
+                    };
+                    String[] catchDependencyScripts = {
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.stack; };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (caught) { saved = caught; } return saved.message; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.name; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return String(saved); };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (problem) { saved = problem; } return saved.stack; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (problem) { saved = problem; } return saved.message; };"
+                    };
+                    String[] genericScripts = {
+                        "function f(unused, used) { var local = 1; return used; } f(1, 2);",
+                        "function f() { var unused = 1; var used = 2; return used; } f();",
+                        "function f(x) { var first = x; first = 3; return x; } f(2);",
+                        "function f() { var unused = 1; } f();",
+                        "function keep() { var dead = 1; return 7; } keep();"
+                    };
+                    String modified = System.getProperty("de.modified.classes", "");
+                    String[] scripts;
+                    if (modified.contains("RemoveUnusedVars") && modified.contains("FlowSensitiveInlineVariables")) {
+                        scripts = new String[unusedParameterScripts.length + catchDependencyScripts.length];
+                        System.arraycopy(unusedParameterScripts, 0, scripts, 0, unusedParameterScripts.length);
+                        System.arraycopy(catchDependencyScripts, 0, scripts, unusedParameterScripts.length,
+                            catchDependencyScripts.length);
+                    }
+                    else if (modified.contains("FlowSensitiveInlineVariables")) scripts = catchDependencyScripts;
+                    else if (modified.contains("RemoveUnusedVars")) scripts = unusedParameterScripts;
+                    else scripts = genericScripts;
+                    try {
+                        String code = scripts[g.pick(scripts.length)];
+                        report.generatedSource = code;
+                        return factory.invoke(null, "de-input.js", code);
+                    }
+                    catch (ReflectiveOperationException ignored) { }
+                }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.CompilerOptions")) {
+            try {
+                Object options = t.getConstructor().newInstance();
+                // In Closure Compiler, unused-variable passes are enabled by
+                // CompilationLevel, rather than by a CompilerOptions enum
+                // setter. Apply the real public configuration when available.
+                try {
+                    Class<?> levelType = load("com.google.javascript.jscomp.CompilationLevel");
+                    Object advanced = levelType.getField("ADVANCED_OPTIMIZATIONS").get(null);
+                    for (Method configure : levelType.getMethods())
+                        if (configure.getName().equals("setOptionsForCompilationLevel")
+                                && configure.getParameterTypes().length == 1
+                                && configure.getParameterTypes()[0].isInstance(options)) {
+                            configure.invoke(advanced, options); break;
+                        }
+                } catch (ReflectiveOperationException ignored) { }
+                // Also set the relevant options directly for Closure releases
+                // whose compilation-level helper no longer enables this pass.
+                for (Class<?> current = t; current != null; current = current.getSuperclass())
+                    for (Field field : current.getDeclaredFields()) {
+                        String name = field.getName().toLowerCase(Locale.ROOT);
+                        if (field.getType() == boolean.class && name.equals("removeglobals")) try {
+                            // Closure-1 specifically guards argument removal
+                            // when globals are preserved. Keep the optimization
+                            // pass enabled while exercising that configuration.
+                            field.setAccessible(true); field.setBoolean(options, false);
+                        } catch (Exception ignored) { }
+                        if (field.getType() == boolean.class
+                                && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) try {
+                            field.setAccessible(true); field.setBoolean(options, true);
+                        } catch (Exception ignored) { }
+                    }
+                for (Method setter : t.getMethods()) {
+                    if (!Modifier.isPublic(setter.getModifiers()) || !setter.getName().startsWith("set")
+                            || setter.getParameterTypes().length != 1) continue;
+                    String name = setter.getName().toLowerCase(Locale.ROOT);
+                    if (setter.getParameterTypes()[0] == boolean.class && name.contains("removeglobals")) {
+                        try { setter.invoke(options, false); } catch (ReflectiveOperationException ignored) { }
+                    } else if (setter.getParameterTypes()[0] == boolean.class
+                            && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) {
+                        try { setter.invoke(options, true); } catch (ReflectiveOperationException ignored) { }
+                    } else if (name.contains("optimizationlevel")
+                            && setter.getParameterTypes()[0].isEnum()) {
+                        Object[] values = setter.getParameterTypes()[0].getEnumConstants();
+                        for (Object value : values) if (String.valueOf(value).contains("ADVANCED"))
+                            try { setter.invoke(options, value); } catch (ReflectiveOperationException ignored) { }
+                    }
+                }
+                return options;
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.rhino.Node")) {
+            try {
+                Class<?> ir = load("com.google.javascript.rhino.IR");
+                for (String factoryName : new String[]{"script", "root", "name", "string"})
+                    for (Method factory : ir.getMethods())
+                        if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals(factoryName)
+                                && factory.getParameterTypes().length == 0 && t.isAssignableFrom(factory.getReturnType()))
+                            return factory.invoke(null);
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser")) {
+            Object parser = xmlParser(g, report);
+            if (parser != null && t.isInstance(parser)) return parser;
+        }
+        if (t.getName().equals("com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                || t.getName().equals("com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter")) {
+            Object writer = jacksonWriter(t, g, report);
+            if (writer != null && t.isInstance(writer)) return writer;
+        }
+        if (t == java.awt.Graphics2D.class || t == java.awt.Graphics.class)
+            return new java.awt.image.BufferedImage(80, 80, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        if (java.awt.Paint.class.isAssignableFrom(t)) {
+            java.awt.Color c = new java.awt.Color(g.pick(256), g.pick(256), g.pick(256));
+            if (t.isInstance(c)) return c;
+        }
+        if (java.awt.Stroke.class.isAssignableFrom(t)) {
+            java.awt.BasicStroke s = new java.awt.BasicStroke(g.pick(10) / 2.0f);
+            if (t.isInstance(s)) return s;
+        }
+        if (java.awt.Shape.class.isAssignableFrom(t)) {
+            java.awt.Shape s = new java.awt.geom.Rectangle2D.Double(g.next(), g.next(), g.pick(80), g.pick(80));
+            if (t.isInstance(s)) return s;
+        }
+        if (t == java.awt.geom.Point2D.class) return new java.awt.geom.Point2D.Double(g.next(), g.next());
+        if (t.getName().equals("org.apache.commons.cli.CommandLine"))
+            return commandLine(g, report);
+        Object domain = chart(t, g, report);
+        if (domain != null) return domain;
+        Object language = language(t, g, report);
+        if (language != null) return language;
+        List<Constructor<?>> ctors = constructors(t);
+        // Older Java libraries often use public singleton constants in place of enums.
+        if (ctors.isEmpty()) {
+            List<Field> constants = new ArrayList();
+            for (Field field : t.getFields())
+                if (Modifier.isStatic(field.getModifiers()) && Modifier.isFinal(field.getModifiers())
+                        && t.isAssignableFrom(field.getType())) constants.add(field);
+            Collections.sort(constants, new Comparator<Field>() {
+                public int compare(Field a, Field b) { return a.getName().compareTo(b.getName()); }
+            });
+            if (!constants.isEmpty()) {
+                Object constant = constants.get(g.pick(constants.size())).get(null);
+                if (constant != null) return constant;
+            }
+        }
+        if (!ctors.isEmpty()) {
+            Constructor<?> ctor = ctors.get(g.pick(ctors.size()));
+            try { return ctor.newInstance(arguments(ctor.getParameterTypes(), g, depth + 1, report)); }
+            catch (Exception ignored) { }
+        }
+        report.nullFallbacks++;
+        return null;
+    }
+    private static Object language(Class<?> t, Genes g, Observation report) {
+        if (!t.getName().equals("org.apache.commons.lang3.time.FastDateFormat")) return null;
+        try {
+            Method factory = t.getMethod("getInstance", String.class, java.util.TimeZone.class,
+                java.util.Locale.class);
+            String[] patterns = {"yyyy-MM-dd", "MM/dd/yy HH:mm:ss", "EEE, d MMM yyyy HH:mm:ss Z"};
+            return factory.invoke(null, patterns[g.pick(patterns.length)],
+                java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US);
+        } catch (ReflectiveOperationException ignored) { }
+        try { return t.getMethod("getInstance", String.class).invoke(null, "yyyy-MM-dd"); }
+        catch (ReflectiveOperationException ignored) { return null; }
+    }
+    private static Object xmlParser(Genes g, Observation report) {
+        try {
+            Class<?> factoryType = load("com.fasterxml.jackson.dataformat.xml.XmlFactory");
+            Object factory = factoryType.getConstructor().newInstance();
+            String[] docs = {"<root><value>1</value><name>x</name></root>",
+                "<root value=\"42\"><item>a</item><item>b</item></root>",
+                "<root/>"};
+            String xml = docs[g.pick(docs.length)];
+            for (Method method : factoryType.getMethods()) {
+                if (!method.getName().equals("createParser") || method.getParameterTypes().length != 1) continue;
+                Class<?> p = method.getParameterTypes()[0];
+                Object input = p == String.class ? xml : p == Reader.class ? new StringReader(xml)
+                    : p == InputStream.class ? new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)) : null;
+                if (input == null) continue;
+                try {
+                    Object parser = method.invoke(factory, input);
+                    if (parser != null) {
+                        int advance = g.pick(4);
+                        Method next = parser.getClass().getMethod("nextToken");
+                        for (int i = 0; i < advance; i++) if (next.invoke(parser) == null) break;
+                        return parser;
+                    }
+                } catch (ReflectiveOperationException ignored) { }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
+    private static Object jacksonWriter(Class<?> requested, Genes g, Observation report) {
+        try {
+            Class<?> mapperType = load("com.fasterxml.jackson.databind.ObjectMapper");
+            Object mapper = mapperType.getConstructor().newInstance();
+            Object bean = new GenericInput();
+            Class<?> javaTypeType = load("com.fasterxml.jackson.databind.JavaType");
+            Object javaType = mapperType.getMethod("constructType", Type.class).invoke(mapper, bean.getClass());
+            // Jackson 2.6 (used by this Defects4J project) exposes a provider
+            // blueprint from ObjectMapper. Create a configured provider via
+            // DefaultSerializerProvider, the supported API used by ObjectMapper.
+            Object providerBlueprint = mapperType.getMethod("getSerializerProvider").invoke(mapper);
+            Class<?> serializationConfigType = load("com.fasterxml.jackson.databind.SerializationConfig");
+            Class<?> serializerFactoryType = load("com.fasterxml.jackson.databind.ser.SerializerFactory");
+            Object config = mapperType.getMethod("getSerializationConfig").invoke(mapper);
+            Object factory = mapperType.getMethod("getSerializerFactory").invoke(mapper);
+            Class<?> defaultProviderType = load("com.fasterxml.jackson.databind.ser.DefaultSerializerProvider");
+            Method createProvider = defaultProviderType.getMethod("createInstance",
+                serializationConfigType, serializerFactoryType);
+            Object provider = createProvider.invoke(providerBlueprint, config, factory);
+            g.jacksonBean = bean;
+            g.jacksonProvider = provider;
+            g.jacksonOutput = new StringWriter();
+            Object jsonFactory = mapperType.getMethod("getFactory").invoke(mapper);
+            for (String factoryMethod : new String[]{"createGenerator", "createJsonGenerator"}) {
+                try {
+                    Method createGenerator = jsonFactory.getClass().getMethod(factoryMethod, Writer.class);
+                    g.jacksonGenerator = createGenerator.invoke(jsonFactory, g.jacksonOutput);
+                    break;
+                } catch (NoSuchMethodException ignored) { }
+            }
+            if (g.jacksonGenerator == null)
+                throw new NoSuchMethodException("JsonFactory.createGenerator(Writer) or createJsonGenerator(Writer)");
+            Class<?> providerType = load("com.fasterxml.jackson.databind.SerializerProvider");
+            Class<?> beanPropertyType = load("com.fasterxml.jackson.databind.BeanProperty");
+            Method find = providerType.getMethod("findValueSerializer", javaTypeType, beanPropertyType);
+            Object serializer = find.invoke(provider, new Object[]{javaType, null});
+            List<Object> writers = new ArrayList();
+            try {
+                // Available on Jackson 2.6 and newer.
+                Class<?> serializerType = load("com.fasterxml.jackson.databind.JsonSerializer");
+                Method properties = serializerType.getMethod("properties");
+                Iterator<?> it = (Iterator<?>)properties.invoke(serializer);
+                while (it.hasNext()) {
+                    Object item = it.next();
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            } catch (NoSuchMethodException oldJackson) {
+                // JacksonDatabind-1 predates JsonSerializer.properties(). Its
+                // BeanSerializerBase stores writers in the protected _props
+                // array; read that array only for these old releases.
+                Class<?> base = load("com.fasterxml.jackson.databind.ser.std.BeanSerializerBase");
+                if (!base.isInstance(serializer))
+                    throw new IllegalStateException("Expected BeanSerializerBase, got "
+                        + serializer.getClass().getName(), oldJackson);
+                Field props = base.getDeclaredField("_props");
+                props.setAccessible(true);
+                Object array = props.get(serializer);
+                for (int i = 0; i < Array.getLength(array); i++) {
+                    Object item = Array.get(array, i);
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            }
+            if (writers.isEmpty())
+                throw new IllegalStateException("ObjectMapper produced no bean property writers for DEReplay.GenericInput");
+            Object writer = writers.get(g.pick(writers.size()));
+            boolean requireUnwrapping = requested.getName().equals(
+                "com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter");
+            if (!requireUnwrapping && g.pick(2) == 0 && requested.isInstance(writer)) return writer;
+            Class<?> transformerType = load("com.fasterxml.jackson.databind.util.NameTransformer");
+            Object nop = transformerType.getField("NOP").get(null);
+            for (Method m : writer.getClass().getMethods())
+                if (m.getName().equals("unwrappingWriter") && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0].isInstance(nop)) {
+                    Object unwrapped = m.invoke(writer, nop);
+                    if (requested.isInstance(unwrapped)) return unwrapped;
+                }
+            if (requested.isInstance(writer)) return writer;
+            throw new IllegalStateException("Generated Jackson property writer is not " + requested.getName());
+        } catch (Throwable failure) {
+            throw new IllegalStateException("Cannot construct Jackson BeanPropertyWriter: " + failure, failure);
+        }
+    }
+    /** Build the non-constructible Commons CLI result through its public Parser API. */
+    private static Object commandLine(Genes g, Observation report) throws Exception {
+        Class<?> optionsClass = load("org.apache.commons.cli.Options");
+        Class<?> optionClass = load("org.apache.commons.cli.Option");
+        Class<?> parserClass = load("org.apache.commons.cli.PosixParser");
+        Object options = optionsClass.getConstructor().newInstance();
+        Method addOption = optionsClass.getMethod("addOption", optionClass);
+        int numberOfOptions = 1 + g.pick(3);
+        List<String> spellings = new ArrayList();
+        for (int i = 0; i < numberOfOptions; i++) {
+            String shortName = String.valueOf((char)('a' + i));
+            String longName = "de-option-" + i;
+            boolean hasArgument = g.pick(2) == 0;
+            Object option = null;
+            try {
+                option = optionClass.getConstructor(String.class, String.class, boolean.class, String.class)
+                    .newInstance(shortName, longName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) try {
+                option = optionClass.getConstructor(String.class, boolean.class, String.class)
+                    .newInstance(shortName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) throw new NoSuchMethodException("No supported Commons CLI Option constructor");
+            addOption.invoke(options, option);
+            spellings.add("-" + shortName);
+            if (hasArgument) spellings.add("value-" + Math.abs((long)g.next()));
+        }
+        String[] argv = spellings.toArray(new String[0]);
+        Object parser = parserClass.getConstructor().newInstance();
+        List<Method> parseMethods = new ArrayList();
+        for (Method candidate : parserClass.getMethods()) {
+            Class<?>[] p = candidate.getParameterTypes();
+            if (candidate.getName().equals("parse") && p.length >= 2 && p[0] == optionsClass
+                    && p[1] == String[].class && candidate.getReturnType() == load("org.apache.commons.cli.CommandLine"))
+                parseMethods.add(candidate);
+        }
+        Collections.sort(parseMethods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return a.getParameterTypes().length - b.getParameterTypes().length;
+            }
+        });
+        for (Method parse : parseMethods) {
+            Object[] args = new Object[parse.getParameterTypes().length];
+            Class<?>[] p = parse.getParameterTypes();
+            args[0] = options; args[1] = argv;
+            for (int i = 2; i < p.length; i++) {
+                if (p[i] == boolean.class || p[i] == Boolean.class) args[i] = g.pick(2) == 0;
+                else if (p[i] == java.util.Properties.class) args[i] = new java.util.Properties();
+                else args[i] = value(p[i], g, 1, report);
+            }
+            try { return parse.invoke(parser, args); }
+            catch (InvocationTargetException ignored) { }
+        }
+        throw new NoSuchMethodException("No successful public PosixParser.parse(Options,String[])");
+    }
+    /** Optional type recipes, shared across bugs; none contains a bug-specific expected answer. */
+    private static Object chart(Class<?> t, Genes g, Observation report) throws Exception {
+        String n = t.getName();
+        if (!n.startsWith("org.jfree.")) return null;
+        if (n.equals("org.jfree.data.Range")) {
+            double a = g.next(), b = g.next();
+            return t.getConstructor(double.class, double.class).newInstance(Math.min(a, b), Math.max(a, b));
+        }
+        if (n.equals("org.jfree.data.time.RegularTimePeriod"))
+            return load("org.jfree.data.time.Day").getConstructor(int.class, int.class, int.class)
+                .newInstance(1 + g.pick(28), 1 + g.pick(12), 1990 + g.pick(40));
+        if (n.equals("org.jfree.data.time.TimeSeries")) {
+            Object series = t.getConstructor(Comparable.class).newInstance("DE");
+            Class<?> period = load("org.jfree.data.time.RegularTimePeriod");
+            Constructor<?> day = load("org.jfree.data.time.Day")
+                .getConstructor(int.class, int.class, int.class);
+            Method add = t.getMethod("add", period, double.class);
+            int count = 2 + g.pick(4), year = 1990 + g.pick(40);
+            for (int i = 0; i < count; i++)
+                add.invoke(series, day.newInstance(i + 1, 1, year), g.next() / 10.0);
+            return series;
+        }
+        if (n.equals("org.jfree.data.category.CategoryDataset")
+                || n.equals("org.jfree.data.category.DefaultCategoryDataset")) {
+            Class<?> c = load("org.jfree.data.category.DefaultCategoryDataset");
+            Object data = c.getConstructor().newInstance();
+            Method add = c.getMethod("addValue", Number.class, Comparable.class, Comparable.class);
+            int rows = 1 + g.pick(3), columns = 1 + g.pick(3);
+            for (int r = 0; r < rows; r++) for (int col = 0; col < columns; col++)
+                add.invoke(data, Double.valueOf(g.next() / 10.0), "R" + r, "C" + col);
+            return data;
+        }
+        if (n.equals("org.jfree.data.xy.XYDataset") || n.equals("org.jfree.data.xy.XYSeriesCollection")) {
+            Class<?> seriesClass = load("org.jfree.data.xy.XYSeries");
+            Object series = seriesClass.getConstructor(Comparable.class).newInstance("DE");
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) seriesClass.getMethod("add", double.class, double.class)
+                .invoke(series, (double)i, g.next() / 10.0);
+            Class<?> c = load("org.jfree.data.xy.XYSeriesCollection");
+            Object data = c.getConstructor().newInstance();
+            c.getMethod("addSeries", seriesClass).invoke(data, series);
+            return data;
+        }
+        if (n.equals("org.jfree.data.general.PieDataset") || n.equals("org.jfree.data.general.DefaultPieDataset")) {
+            Class<?> c = load("org.jfree.data.general.DefaultPieDataset");
+            Object data = c.getConstructor().newInstance();
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) c.getMethod("setValue", Comparable.class, Number.class)
+                .invoke(data, "K" + i, Double.valueOf(g.next() / 10.0));
+            return data;
+        }
+        return null;
+    }
+    static List<Method> setupMethods(Class<?> receiver) {
+        List<Method> methods = new ArrayList();
+        for (Method m : receiver.getMethods()) {
+            String n = m.getName();
+            if (!Modifier.isStatic(m.getModifiers()) && !m.isSynthetic()
+                    && m.getParameterTypes().length <= 3 && !n.contains("Listener")
+                    && (n.startsWith("set") || n.startsWith("add") || n.startsWith("update")
+                        || n.startsWith("remove") || n.equals("clear"))) methods.add(m);
+        }
+        Collections.sort(methods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return signature(a).compareTo(signature(b));
+            }
+        });
+        return methods;
+    }
+    public static Observation execute(String target, String receivers, String signature, int[] genes) {
+        Observation out = new Observation();
+        try {
+            Genes g = new Genes(genes);
+            Method m = method(target, signature);
+            Object receiver = null;
+            if (!Modifier.isStatic(m.getModifiers())) {
+                String[] choices = receivers.split(",");
+                Class<?> receiverType = load(choices[g.pick(choices.length)]);
+                receiver = value(receiverType, g, 0, out);
+                if (receiver == null) throw new IllegalArgumentException("Receiver construction failed");
+                // Compiler.compile owns a strict initialization sequence.
+                // Random calls to its mutators before compilation can corrupt
+                // state or spend the search budget on irrelevant setup.
+                if (!receiverType.getName().equals("com.google.javascript.jscomp.Compiler")) {
+                    List<Method> setup = setupMethods(receiverType);
+                    int count = g.pick(5);
+                    for (int i = 0; i < count && !setup.isEmpty(); i++) {
+                        Method s = setup.get(g.pick(setup.size()));
+                        try { s.invoke(receiver, arguments(s.getParameterTypes(), g, 0, out)); out.setupCalls++; }
+                        catch (Exception e) { out.setupFailures++; }
+                    }
+                }
+            }
+            Object[] args = arguments(m, g, 0, out);
+            out.reachedTarget = true;
+            try {
+                boolean jacksonSerialization = m.getDeclaringClass().getName().equals(
+                    "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                    && m.getName().startsWith("serializeAs") && g.jacksonGenerator != null;
+                boolean arrayShape = m.getName().contains("Column")
+                    || m.getName().contains("Element") || m.getName().contains("Placeholder");
+                if (jacksonSerialization)
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeStartArray" : "writeStartObject").invoke(g.jacksonGenerator);
+                Object result = m.invoke(receiver, args);
+                boolean closureCompile = m.getDeclaringClass().getName().equals(
+                    "com.google.javascript.jscomp.Compiler") && m.getName().equals("compile");
+                if (closureCompile) {
+                    // Result is only a status object; the compiled JavaScript is
+                    // the behavioral output that reveals whether an argument
+                    // was removed from a globally exposed function.
+                    Object js = receiver.getClass().getMethod("toSource").invoke(receiver);
+                    out.token = "CLOSURE_SOURCE:" + stable(js, 0);
+                } else if (jacksonSerialization) {
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeEndArray" : "writeEndObject").invoke(g.jacksonGenerator);
+                    g.jacksonGenerator.getClass().getMethod("flush").invoke(g.jacksonGenerator);
+                    out.token = "JSON:" + Base64.getEncoder().encodeToString(
+                        g.jacksonOutput.toString().getBytes(StandardCharsets.UTF_8));
+                } else out.token = m.getReturnType() == void.class
+                    ? state(receiver, m.getName()) : stable(result, 0);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof VirtualMachineError || e.getCause() instanceof LinkageError
+                        || e.getCause() instanceof ThreadDeath) throw e;
+                out.token = "THROW:" + e.getCause().getClass().getName();
+            }
+        } catch (Throwable e) {
+            out.token = "HARNESS_ERROR";
+            out.error = e.getClass().getName() + ":" + String.valueOf(e.getMessage());
+        }
+        return out;
+    }
+    public static String run(String target, String receivers, String signature, int[] genes) {
+        Observation o = execute(target, receivers, signature, genes);
+        if (!o.reachedTarget || o.token.equals("HARNESS_ERROR"))
+            throw new AssertionError("Cannot replay test: " + o.error);
+        return o.token;
+    }
+    private static String state(Object receiver, String method) {
+        if (receiver == null) return "VOID";
+        List<String> getters = new ArrayList();
+        if (method.startsWith("set") && method.length() > 3) {
+            getters.add("get" + method.substring(3)); getters.add("is" + method.substring(3));
+        }
+        getters.addAll(Arrays.asList("getItemCount", "getRowCount", "getColumnCount", "getSeriesCount"));
+        StringBuilder s = new StringBuilder("VOID");
+        for (String name : getters) {
+            try {
+                Method getter = receiver.getClass().getMethod(name);
+                if (getter.getReturnType().isPrimitive() || getter.getReturnType() == String.class)
+                    s.append('|').append(name).append('=').append(stable(getter.invoke(receiver), 0));
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        return s.toString();
+    }
+    /** Only whitelisted value types are rendered. Never use arbitrary object toString(). */
+    static String stable(Object value, int depth) {
+        if (value == null) return "NULL";
+        Class<?> t = value.getClass();
+        if (value instanceof String || value instanceof Boolean || value instanceof Character
+                || value instanceof Byte || value instanceof Short || value instanceof Integer
+                || value instanceof Long || value instanceof Float || value instanceof Double
+                || value instanceof java.math.BigInteger || value instanceof java.math.BigDecimal)
+            return t.getName() + ":" + Base64.getEncoder().encodeToString(value.toString().getBytes(StandardCharsets.UTF_8));
+        if (value instanceof Enum) return "ENUM:" + t.getName() + ":" + ((Enum<?>)value).name();
+        if (t.isArray() && depth < 3) {
+            StringBuilder s = new StringBuilder("ARRAY:" + t.getName() + ":" + Array.getLength(value));
+            for (int i = 0; i < Math.min(64, Array.getLength(value)); i++) {
+                String item = stable(Array.get(value, i), depth + 1);
+                s.append(':').append(item.length()).append(':').append(item);
+            }
+            return s.toString();
+        }
+        if (value instanceof java.awt.Color) return "COLOR:" + ((java.awt.Color)value).getRGB();
+        // Observe safe scalar properties of returned objects. This catches
+        // changes to value caches and state while avoiding identity-based toString().
+        StringBuilder observed = new StringBuilder("STATE:" + t.getName());
+        int properties = 0;
+        for (String name : Arrays.asList("getItemCount", "getMinY", "getMaxY",
+                "getRowCount", "getColumnCount", "getSeriesCount")) {
+            try {
+                Method getter = t.getMethod(name);
+                Class<?> r = getter.getReturnType();
+                if (!r.isPrimitive() && r != String.class && !Number.class.isAssignableFrom(r))
+                    continue;
+                if (r == void.class) continue;
+                Object result = getter.invoke(value);
+                String token = stable(result, depth + 1);
+                observed.append('|').append(name).append('=').append(token.length())
+                    .append(':').append(token);
+                properties++;
+            } catch (Exception ignored) { }
+        }
+        return properties == 0 ? "TYPE:" + t.getName() : observed.toString();
+    }
+    public static void main(String[] args) {
+        if (args.length > 4) {
+            String source = new String(Base64.getDecoder().decode(args[4]), StandardCharsets.UTF_8);
+            System.setProperty("de.generated.source", source);
+        }
+        String[] encodedGenes = args[3].split(",");
+        int[] genes = new int[encodedGenes.length];
+        for (int i = 0; i < encodedGenes.length; i++) genes[i] = Integer.parseInt(encodedGenes[i]);
+        boolean closureCompile = args[0].equals("com.google.javascript.jscomp.Compiler")
+            && args[2].startsWith("compile(");
+        // Compiler.compile is an expensive whole-program operation. Fixed-side
+        // suites are still executed twice by the runner, so capture its oracle
+        // once here instead of launching three compilations just to check the
+        // same deterministic source output.
+        int repetitions = closureCompile ? 1 : 3;
+        for (int i = 0; i < repetitions; i++) {
+            Observation out = execute(args[0], args[1], args[2], genes);
+            System.out.println("DE_TOKEN:" + Base64.getEncoder().encodeToString(out.token.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+}
+
+public class DEGeneratedTest {
+    @org.junit.Test(timeout=60000L)
+    public void testDE00000() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{-324,1000,-1000,719,-858,587,-996,-1000,-83,-286,975,39,1000,1000,31,-808,802,1000,907,-33,1000,1000,-51,-311,-883,-454,1000,-568,630,-575,771,-345,-463,325,28,478,1000,-388,-100,1000,721,305,288,457,-234,-876,155,-1000,780,-458,37,1000,267,-107,-212,497,-503,-1000,-592,728,45,-844,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00001() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{-937,120,-71,-393,552,-1000,1000,706,940,-598,-1000,-172,15,-603,1000,722,1000,1000,257,1000,-991,-354,971,-973,-30,-647,-400,354,666,1000,-1000,-233,922,-1000,173,746,-1000,-1000,-686,1000,1000,-314,1000,-650,740,-400,1000,729,-701,-1000,504,-1000,1000,131,-43,-1000,1000,1000,1000,-1000,-1000,-598,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00002() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{-1000,487,-713,724,-301,-94,997,-397,-307,100,382,-186,440,137,859,-1000,1000,1000,1000,1000,352,211,-169,-1000,-414,-684,1000,42,160,-103,-1000,-16,-1000,875,75,29,-330,-1000,-480,-262,297,1000,1000,-205,136,1000,386,-718,-185,-1000,-590,-672,1000,194,428,-1000,1000,28,-114,210,-1000,1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00003() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{-1000,557,1000,739,-1000,-1000,574,-347,-217,1000,-1000,-1000,-381,520,510,-447,-1000,258,376,-88,-871,-438,658,93,583,360,687,-1000,-416,1000,375,1000,1000,971,194,233,268,179,-1000,-1000,-1000,-801,-824,-616,1000,1000,1000,1000,53,-56,216,-929,-87,-1000,-511,43,810,251,1000,-1000,667,-826,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00004() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{786,1000,-221,59,-1000,345,-375,-56,587,-327,315,-79,831,269,1000,76,144,573,580,-743,1000,734,-759,-853,-530,856,885,-185,-413,-1000,883,621,-1000,719,721,90,-1000,-657,-465,1,288,-106,-1000,-135,1000,-764,65,74,-230,1000,-379,478,-1000,819,294,48,-337,-457,1000,310,-459,-556,843,-289}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00005() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{1000,-41,321,-316,1000,-600,455,-305,-168,1000,-1000,-1000,888,-349,789,-1000,839,1000,870,-24,973,312,106,418,1000,-534,944,-1000,-527,940,-1000,1000,-1000,1000,522,1000,987,-1000,-1000,1000,-926,1000,1000,-946,1000,1000,1000,-108,-480,-613,336,700,517,694,1000,-632,305,193,-1000,-1000,-863,1000,-1000,255}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00006() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{363,751,-341,-173,499,191,18,-592,-297,725,20,-761,-566,-168,455,-1000,1000,329,883,-311,981,101,-889,275,398,-21,1000,-681,-828,1000,-588,1000,-1000,1000,1000,-524,1000,1000,-1000,394,38,1000,1000,-408,836,-1000,214,63,-131,-392,215,866,615,1000,249,630,-59,-304,-20,-400,-1000,1000,839,-483}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00007() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{971,1000,20,434,-1000,764,-375,-519,688,-1000,760,489,401,123,1000,-106,144,174,1000,-1000,1000,602,-876,-844,-1000,529,1000,216,-527,-1000,-1000,305,-1000,1000,1000,-450,-1000,-657,437,1,785,675,1000,555,839,-313,-423,400,-389,57,-338,478,-183,1000,257,229,-337,-335,476,1000,-255,-567,843,-435}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00008() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{-324,1000,125,284,1000,-669,-50,-26,-673,-38,-670,-735,998,-68,491,25,-876,1000,-12,429,530,-889,-51,-517,1000,76,889,-556,641,1000,1000,713,-848,821,-1000,991,907,88,-837,1000,-657,887,-194,-140,-599,648,155,-477,311,-126,279,-168,-303,-967,922,-639,-503,-361,996,-725,-473,1000,-397,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00009() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{-653,1000,-1000,193,1000,587,-856,-1000,-103,-41,975,-191,777,721,-5,-1000,828,1000,907,-33,1000,-400,-171,-164,398,-128,1000,-1000,-182,-575,106,56,-1000,689,445,607,994,-565,-478,394,1000,1000,945,120,319,-142,664,-888,200,10,-689,1000,124,-1000,-693,334,-503,-959,-592,-21,-423,447,839,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00010() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(com.fasterxml.jackson.databind.JavaType,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{728,1000,-1000,829,-274,876,37,-1000,607,864,-30,-1000,-6,403,-1000,-612,149,-296,392,-1000,458,246,552,-809,146,-770,779,-710,6,-750,1000,318,804,877,1000,-1000,28,54,326,747,211,-711,-210,29,601,-59,-233,684,357,1000,337,380,-2,-1000,1000,661,-754,-420,-185,150,338,-1000,1000,-848}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00011() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(java.lang.Class,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{954,-8,-1000,394,227,-1000,-371,627,-707,840,504,1000,939,1000,-526,1000,675,1000,-466,-525,743,745,585,-699,288,-610,383,1000,-821,-1000,793,-623,-567,-201,-367,-757,1000,1000,-631,483,-1000,-513,816,448,1000,749,-1000,676,-986,-1000,-631,66,-668,-114,1000,960,-74,1000,-1000,1000,-753,-624,91,-570}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00012() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(java.lang.Class,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{-1000,-123,-311,-108,896,-764,-595,-688,-891,453,-379,828,993,-1000,266,-65,855,185,12,-646,-1000,594,30,-227,-1000,-3,390,205,347,-502,1000,372,802,507,-131,1000,744,-264,-125,-299,-554,600,163,-58,-850,-637,-376,1000,-504,-613,-603,-511,-753,-87,1000,-269,-709,17,-764,85,66,1000,265,-211}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00013() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(java.lang.Class,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{367,-721,631,-631,599,73,-26,400,-256,400,400,863,400,400,-263,250,230,1000,-623,-732,1000,400,602,-60,-39,-400,1000,400,-400,-1000,246,-400,-400,-384,-1000,258,635,370,1000,-106,-400,58,-1000,-134,400,461,-400,389,-1000,-400,-376,1000,-786,-272,552,400,-546,400,1000,400,-269,453,-400,362}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00014() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(java.lang.Class,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{-750,910,1000,-631,352,932,243,615,-1000,-15,-976,669,-267,-1000,644,370,796,-794,-205,-807,-900,-750,180,459,773,948,-639,-779,866,661,-831,1000,1000,1000,843,1000,-595,-789,1000,466,1000,130,-359,-967,-1000,-1000,1000,841,-717,1000,-321,-1000,-202,-319,617,-189,-1000,-1000,1000,-745,-947,434,441,-557}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00015() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(java.lang.Class,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{528,-884,-701,-46,789,-679,338,1000,-143,1000,1000,626,1000,304,249,-772,1000,385,-1000,-469,-257,1000,588,-1000,-529,-1000,883,1000,-1000,-814,507,134,-400,-716,-54,257,-34,429,482,-1000,-1000,351,653,213,1000,198,-110,20,-871,-710,-1000,-705,-1000,-889,850,415,-1000,299,-549,1000,273,1000,-1000,946}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00016() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(java.lang.Class,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{-413,791,705,-46,449,683,524,245,-1000,-1000,-1000,883,-287,-1000,321,392,454,-1000,-1000,-806,-277,-911,46,-14,400,-431,-193,-662,-165,174,971,-623,1000,831,236,580,1000,-309,811,211,1000,670,-400,-980,-1000,534,1000,889,-121,751,-140,-851,-34,-38,-855,-207,-465,-256,-1000,-1000,-1000,58,91,126}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00017() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(java.lang.Class,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{7,-1000,-685,-261,816,944,1000,734,-143,317,876,-109,-31,231,271,74,841,-1000,-1000,399,-309,583,426,-720,-529,-821,75,-8,-1000,-726,633,134,-400,16,132,363,-941,304,482,-626,-196,10,821,-952,1000,-513,133,151,-1000,101,-802,709,-967,-477,-62,25,-978,106,227,875,22,879,-1000,874}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00018() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "acceptJsonFormatVisitor(java.lang.Class,com.fasterxml.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper):void",
+            new int[]{124,896,-987,-937,949,-1000,67,-270,-453,858,-236,883,935,-916,653,418,688,128,-1000,-1000,-1000,677,456,-1000,-933,-639,-10,413,-400,-1000,339,461,708,-165,-73,-78,265,-236,-631,20,-895,970,263,-226,-1000,319,157,670,83,-96,-433,-1000,-946,-792,336,-198,-1000,53,-185,-75,-207,1000,-228,141}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00019() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addHandler(com.fasterxml.jackson.databind.deser.DeserializationProblemHandler):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-794,316,1000,-236,-611,-1000,-459,54,1000,-973,146,116,-1000,619,361,901,-1000,182,-484,-981,-1000,78,491,412,1000,-863,603,61,-232,437,230,99,1000,219,456,-97,-421,-43,-779,-539,270,209,-893,40,-887,15,-1000,59,-549,428,-1000,283,-857,-634,601,-410,-181,377,-1000,-375,-126,360,955,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00020() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addHandler(com.fasterxml.jackson.databind.deser.DeserializationProblemHandler):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,-444,-586,-386,553,-481,480,-262,-355,-46,511,-518,323,523,-639,348,280,1000,-736,-307,717,-1000,464,-637,-390,1000,-807,-640,205,883,-815,-140,1000,108,-1000,276,-414,171,1000,287,984,806,322,349,1000,-1000,-181,479,1000,77,390,467,-679,5,180,-495,842,-651,246,37,1000,-209,-259,411}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00021() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addHandler(com.fasterxml.jackson.databind.deser.DeserializationProblemHandler):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{929,-95,-753,-326,405,-86,464,789,221,1000,-741,-1000,1000,926,733,-1000,248,-41,1000,1000,400,-1000,333,-781,-1000,1000,332,424,77,883,388,1000,-840,388,-291,44,-1000,1000,1000,1000,693,925,-755,-1000,-499,-571,400,179,-716,69,455,397,1000,436,904,-866,-1000,-1000,1000,-403,96,-949,194,372}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00022() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addHandler(com.fasterxml.jackson.databind.deser.DeserializationProblemHandler):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,-518,-762,-531,903,297,-13,-381,-116,246,987,245,-448,-847,-1000,1000,880,1000,801,817,1000,405,-81,-813,-149,505,-702,299,1000,309,-916,-997,178,-492,520,-282,219,-1000,777,749,843,1000,373,1000,540,-1000,-1000,1000,538,-467,1000,1000,-1000,-1000,-1000,135,690,-283,649,-107,34,766,-505,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00023() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addHandler(com.fasterxml.jackson.databind.deser.DeserializationProblemHandler):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{352,-1000,1000,-476,673,-775,-793,618,-30,812,-883,-651,449,-102,740,-610,1000,1000,-643,-836,659,-1000,926,307,357,-783,994,-1000,1000,-916,1000,-318,1000,-1000,540,44,-1000,1000,-282,1000,978,-268,-584,-412,-349,-991,-1000,-863,-504,-418,346,-139,-326,-313,23,-525,-803,-545,-529,-1000,-218,-944,714,-412}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00024() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addHandler(com.fasterxml.jackson.databind.deser.DeserializationProblemHandler):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-772,1000,348,-21,-712,974,1000,-1000,93,596,1000,-1000,174,1000,1000,560,1000,323,623,1000,330,219,1000,288,-75,1000,-1000,-1000,1000,42,-499,162,866,-1000,-770,1000,-683,514,797,1000,-458,-182,-723,-701,672,-1000,1000,-142,1000,1000,-495,-1000,-258,-44,614,-881,502,-533,225,842,907,-738,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00025() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addHandler(com.fasterxml.jackson.databind.deser.DeserializationProblemHandler):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-431,1000,-388,-56,999,-528,292,-122,-112,237,265,-908,464,864,1000,-1000,1000,320,-102,915,100,250,508,-1000,-210,1000,570,1000,-1000,-1000,1000,907,-787,318,1000,-357,-1000,-222,534,186,843,-1000,-658,-1000,-1000,137,-240,206,-1000,396,-167,1000,1000,-13,759,-1000,-901,-788,708,-484,-1000,-220,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00026() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addHandler(com.fasterxml.jackson.databind.deser.DeserializationProblemHandler):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-851,-67,720,-96,-751,-1000,-1000,76,1000,-645,309,-497,-153,1000,400,-30,-1000,1000,-355,-1000,-40,-935,1000,1000,778,-307,-73,-659,-562,-740,-267,486,1000,239,-1000,1000,-592,663,-1000,-142,151,113,-1000,-719,-887,-179,505,-109,-633,1000,-1000,310,255,54,1000,-734,-111,1000,-651,-541,791,-24,538,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00027() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addHandler(com.fasterxml.jackson.databind.deser.DeserializationProblemHandler):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,580,133,-651,51,-1000,-877,-906,1000,643,-1000,-837,1000,-400,1000,-1000,707,-1000,660,1000,-493,-1000,374,-436,322,-561,1000,1000,-1000,78,1000,1000,708,1000,1000,-1000,-1000,429,-61,1000,-386,-400,-1000,-760,-1000,-765,-1000,-216,-1000,-1000,-256,-667,409,174,431,-658,-1000,-1000,553,-1000,-1000,-681,1000,-845}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00028() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addHandler(com.fasterxml.jackson.databind.deser.DeserializationProblemHandler):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,610,519,-651,253,701,397,-1000,-181,-440,29,-529,-529,239,-1000,1000,-635,862,430,-1000,929,-195,311,-908,451,-331,-477,-1000,138,911,-1000,-120,285,-419,-258,969,-213,-252,785,411,-202,1000,-1000,692,1000,-867,-207,-261,1000,-843,-162,252,-869,74,206,209,1000,541,466,1000,753,118,-533,-545}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00029() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixIn(java.lang.Class,java.lang.Class):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,673,-877,164,-1000,-1000,-987,-703,744,-534,-1000,-441,-144,-867,432,1000,-678,1000,-652,-1000,-682,514,-91,-599,742,-1000,635,1000,47,1000,-1000,-974,1000,-998,-633,276,1000,651,-1000,-576,712,160,1000,-1000,1000,-329,822,875,-154,-8,1000,118,1000,361,-1000,1000,1000,421,-428,1000,-1000,436,-1000,-333}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00030() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixIn(java.lang.Class,java.lang.Class):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-454,-711,-66,-176,-902,351,-588,-505,-440,-631,-809,91,-202,-87,370,-830,195,815,300,94,-61,-13,-140,-400,857,-117,530,-958,814,130,-538,-288,452,-418,501,-440,285,-262,420,-319,-946,299,515,-18,622,-517,141,638,-323,643,777,-910,44,723,758,-354,-516,-860,-32,75,-449,-231,438,949}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00031() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixIn(java.lang.Class,java.lang.Class):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,1000,1000,414,256,20,1000,1000,86,-523,-841,1000,1000,-938,1000,474,-438,481,-1000,-1000,1000,239,198,-535,1000,-239,894,813,-1000,-338,-644,-600,698,162,-836,1000,-1000,-1000,34,-595,-330,896,1000,-1000,1000,1000,871,143,1000,1000,-65,-1000,372,-630,-444,-51,317,-1000,-1000,1000,-464,181,132,-533}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00032() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixIn(java.lang.Class,java.lang.Class):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,673,-784,-996,-52,-405,-1000,-1000,-140,17,740,-1000,-1000,421,432,420,-261,847,-19,-63,-1000,-1000,311,89,-885,-577,796,-148,1000,1000,-633,-1000,590,47,-402,-1000,1000,1000,-1000,-1000,712,-953,1000,522,1000,-868,822,1000,-154,-8,1000,600,946,1000,-272,1000,1000,1000,1000,-457,-228,436,-1000,-114}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00033() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixIn(java.lang.Class,java.lang.Class):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{975,979,349,-561,-47,-766,655,272,646,-453,960,380,385,221,270,534,-832,-212,-265,-863,339,910,-8,839,642,93,-414,971,564,-359,541,-970,598,955,910,-548,336,15,-565,885,-845,678,355,276,-338,-706,798,-772,39,-938,-771,-716,950,528,980,54,792,-307,-1,-549,-297,-712,676,683}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00034() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixIn(java.lang.Class,java.lang.Class):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-729,1000,1000,-587,489,-251,1000,1000,269,-1000,654,758,684,-1000,796,-241,-289,-1000,-784,474,65,-1000,-89,1000,-337,887,495,-378,53,-1000,403,206,-1000,979,-1000,1000,-400,-759,1000,797,-714,-56,-208,876,-810,423,702,1000,796,1000,-1000,-440,-601,139,1000,-457,-829,-340,-1000,-182,-240,467,1000,-296}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00035() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixIn(java.lang.Class,java.lang.Class):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{601,280,498,3,-289,-713,-1000,-1000,417,-37,-129,1000,1000,-837,432,474,-422,3,-372,-1000,-1000,370,338,-250,549,332,601,544,47,1000,-1000,-1000,1000,308,-526,-220,1000,747,-1000,-1000,-688,-64,1000,-470,1000,-794,693,875,-185,230,1000,118,1000,890,-1000,-125,1000,326,-335,569,-1000,821,64,-80}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00036() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixIn(java.lang.Class,java.lang.Class):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{76,26,-119,-106,-543,-720,582,-303,1000,-159,-684,-250,67,-309,0,1000,-100,753,-871,-958,1000,445,-336,-100,163,-734,775,328,-1000,1000,-1000,-708,1000,-752,-1000,-26,-293,-212,-518,-1000,-153,-281,421,-1000,23,795,998,663,-247,1000,781,-312,415,-734,-979,-51,1000,400,-241,773,936,437,-613,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00037() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixIn(java.lang.Class,java.lang.Class):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-493,375,-122,-409,592,162,301,650,259,-954,-119,816,675,1000,577,711,34,-677,-783,-121,415,-1000,59,-1000,-779,1000,767,-503,-1000,-763,-644,-354,17,-120,-248,308,-466,13,-775,60,-330,896,-90,-977,725,1000,927,1000,-673,1000,-65,80,-84,-742,380,-244,-782,-875,893,281,-464,181,132,280}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00038() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixInAnnotations(java.lang.Class,java.lang.Class):void",
+            new int[]{-845,1000,-1000,324,116,1000,-703,-1000,353,797,920,-850,39,-977,335,896,1000,299,-1000,-1000,-1000,-1000,357,1000,244,-18,668,192,-194,921,-15,597,27,-214,512,169,510,341,133,1000,-473,-667,-25,594,-622,585,1000,-509,757,181,1000,322,151,-1000,353,-634,820,-152,-263,559,-1000,409,-1000,60}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00039() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixInAnnotations(java.lang.Class,java.lang.Class):void",
+            new int[]{-635,765,563,694,-117,-876,-888,409,149,-276,610,-475,-669,148,349,758,511,-684,-847,-168,-701,-258,770,908,136,-472,640,685,-408,625,-881,29,-94,122,255,571,739,768,-843,623,642,-210,645,-37,111,-865,-580,589,-751,-238,-725,339,-950,-730,40,465,100,297,-118,699,103,411,-666,106}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00040() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixInAnnotations(java.lang.Class,java.lang.Class):void",
+            new int[]{-812,578,1000,-496,-992,-977,1000,-405,-1000,-370,461,-1000,1000,1000,-757,450,-1000,263,-1000,-201,1000,1000,-763,-989,327,-420,454,1000,1000,-726,-697,436,481,844,-401,-292,-710,858,-920,-1000,1000,594,-1000,-1000,588,-18,919,834,-1000,-246,-1000,524,-464,1000,-198,740,-1000,-67,700,-1000,-43,844,-178,701}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00041() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixInAnnotations(java.lang.Class,java.lang.Class):void",
+            new int[]{633,541,624,103,-273,-294,1000,-85,774,194,136,-871,1000,444,-754,560,-1000,-53,439,-488,431,1000,86,166,513,-1000,1000,478,1000,-666,50,154,1000,848,534,562,1000,-1000,-1000,-1000,989,305,-431,-839,92,1000,422,194,-1000,1000,-1000,1000,-425,-85,1000,49,-1000,-536,1000,-684,-977,777,303,980}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00042() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixInAnnotations(java.lang.Class,java.lang.Class):void",
+            new int[]{-317,904,223,359,-826,-38,792,411,-285,271,-207,-595,370,1000,327,337,-1000,246,-400,-1000,-663,1000,1000,170,637,-1000,-633,1000,151,445,-1000,1000,713,-213,758,-150,-1000,889,-99,49,1000,-14,-163,173,-260,658,-291,-400,-1000,112,-1000,63,-718,695,-748,876,156,927,-94,-452,-175,827,193,-307}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00043() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixInAnnotations(java.lang.Class,java.lang.Class):void",
+            new int[]{-454,650,-628,789,-321,906,-1000,-268,-393,-270,377,1000,-733,-204,1000,1000,1000,-1000,-1000,471,-833,-1000,1000,984,-696,301,-651,-10,-869,755,-413,102,-357,-1000,691,501,-304,1000,294,1000,-659,-419,1000,677,-1000,-1000,-1000,-447,912,-1000,1000,-308,-52,-262,-1000,984,1000,754,-1000,-826,617,274,-470,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00044() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixInAnnotations(java.lang.Class,java.lang.Class):void",
+            new int[]{-1000,61,-1000,448,1000,-494,-1000,-781,1000,701,1000,-823,327,-1000,-1000,1000,650,-1000,94,-1000,163,-666,640,-132,1000,-446,1000,-1000,-523,445,400,798,-1000,1000,682,-187,1000,-1000,-1000,1000,-1000,835,1000,1000,-215,709,1000,1000,835,1000,1000,-999,-1000,-1000,674,-1000,-1000,-1000,-13,221,-1000,-207,-872,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00045() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixInAnnotations(java.lang.Class,java.lang.Class):void",
+            new int[]{-153,-596,1000,-411,799,-939,-945,38,-701,-383,-137,-1000,-1000,-970,292,-640,-1000,600,327,993,175,1000,-1000,-248,-966,172,-1000,-311,-813,-1000,-705,699,-554,1000,-493,-104,1000,749,-962,-1000,-130,997,-282,1000,1000,25,-1000,1000,-612,-875,272,1000,-842,22,-1000,919,-48,526,792,27,401,427,313,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00046() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixInAnnotations(java.lang.Class,java.lang.Class):void",
+            new int[]{-240,1000,-1000,557,-817,547,81,-254,944,1000,450,1000,1000,941,1000,1000,1000,-918,-1000,-823,-1000,-1000,1000,1000,527,-1000,939,-169,146,1000,-592,-1000,172,712,474,-165,-631,-553,991,1000,847,-621,-663,-935,-1000,-1000,388,-1000,283,485,55,-1000,80,-486,1000,660,-358,-345,-116,-124,-1000,1000,-910,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00047() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "addMixInAnnotations(java.lang.Class,java.lang.Class):void",
+            new int[]{-747,1000,411,799,-1000,1000,153,851,-733,890,240,1000,-1000,-1000,1000,-355,1000,-543,-1000,196,-1000,-70,910,1000,654,-728,-1000,1000,-217,668,-1000,962,-1000,-1000,-15,-455,-1000,1000,508,801,1000,-1000,1000,672,-1000,-1000,-1000,-709,55,-1000,-229,-888,974,1000,-561,601,820,1000,-1000,1000,-386,365,54,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00048() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{842,-938,590,-906,1000,80,-1000,692,-703,872,-370,821,1000,-399,-264,88,1000,270,-724,-50,-1000,1000,-414,-1000,1000,-1000,-161,-546,114,-457,-488,-1000,-1000,484,-586,-459,-1000,-1000,759,1000,95,-764,96,-103,770,12,1000,604,1000,1000,103,-1000,-723,-582,903,-747,-539,590,-598,-1000,-1000,-129,-1000,331}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00049() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{-6,633,-806,-634,-43,-765,-901,-1000,271,-795,459,-1000,491,198,586,-147,174,560,-1000,633,-952,1000,-1000,284,819,317,1000,153,26,235,-416,107,-1000,307,894,-7,-315,-1000,1000,1000,1000,-890,443,-1000,-623,725,-1000,-494,1000,-155,-170,1000,-390,990,16,717,42,688,-1000,-704,-367,8,-70,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00050() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{-354,1000,-412,213,-816,-811,454,-706,1000,-1000,615,-901,-1000,-49,119,-516,-1000,86,-1000,544,1000,-699,-353,292,-875,1000,150,913,1000,143,1000,1000,1000,-1000,-158,-259,1000,402,-650,216,-1000,477,229,9,-737,-539,44,1000,-6,-1000,1000,580,-610,416,-327,222,1000,-595,68,631,761,1000,1000,-98}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00051() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{-242,-1000,160,-166,976,-1000,-562,1000,-1000,1000,-368,463,1000,971,544,-17,675,-23,828,666,-1000,1000,179,-652,1000,-761,133,-1000,443,-347,-1000,-1000,-976,-765,778,-175,-533,-145,500,1000,1000,-1000,-720,613,1000,-254,-847,163,1000,1000,165,1000,785,-414,1000,-745,-219,1000,-159,-237,-1000,-475,-985,-237}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00052() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{-189,997,-1000,-516,-660,-977,-1000,-1000,547,-836,987,-1000,-12,484,645,-1000,-84,743,-1000,812,291,1000,-1000,1000,693,1000,893,60,1000,1000,-498,-583,-1000,298,1000,-530,-1000,-1000,1000,1000,1000,-725,893,-443,-1000,1000,-1000,-737,1000,-851,-845,1000,-1,1000,640,1000,771,438,-698,-450,-691,-258,216,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00053() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{-445,1000,-927,-821,-339,1000,-205,-1000,1000,-1000,923,1000,440,-1000,1000,1000,1000,762,443,-62,931,746,-1000,-1000,688,-1000,1000,718,-1000,-1000,-844,1000,261,1000,1000,-912,969,372,-258,-262,-98,-350,-1000,357,-1000,802,1000,-1000,-1000,-234,1000,-973,-1000,1000,-128,1000,-1000,-828,-1000,-1000,1000,-1000,-323,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00054() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{-166,-400,523,-287,1000,-483,-220,400,-907,1000,-480,363,811,701,681,-885,740,-62,-61,567,-1000,1000,333,-39,349,-1000,894,-1000,1000,-457,-112,-393,-916,-324,-1000,-319,-757,-1000,1000,1000,398,-1000,53,644,910,-434,-919,166,1000,82,-300,221,327,-223,465,-772,787,791,-411,-255,-400,266,-633,134}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00055() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{329,103,217,498,-256,-1000,-299,-708,1000,-889,1000,77,692,-715,-680,88,375,895,-1000,-328,-784,877,-40,-839,1000,-99,-602,-878,73,-322,842,357,-1000,765,1000,-530,-1000,-149,-41,546,423,698,535,767,770,-1000,-121,49,395,-173,-565,-953,-672,1000,674,255,400,-1000,676,-1000,-1000,244,-299,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00056() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{-134,331,-430,533,109,1000,1000,-322,671,-413,857,-718,-1000,-1000,431,794,-123,121,-228,-419,1000,-194,843,26,379,1000,55,-72,282,-393,622,1000,1000,-31,-104,-332,1000,1000,-1000,-486,-1000,104,-1000,-10,736,-807,400,646,-1000,-756,3,-1000,1000,-219,886,610,1000,-1000,927,201,148,-400,918,44}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00057() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{-159,1000,-1000,194,-514,-144,1000,-1000,912,-909,1000,77,497,-1000,498,235,-993,328,-1000,1000,-169,-736,-49,-187,844,-971,1000,-607,532,-31,1000,1000,-676,-1000,-100,-328,893,-32,-818,740,28,-296,-399,-933,158,-1000,-342,49,565,-1000,352,-1000,530,521,674,-540,1000,-847,-366,486,-788,60,1000,692}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00058() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{-877,-1000,391,802,-343,369,1000,597,-718,820,-1000,440,-955,949,-858,1000,-427,-585,1000,-730,-298,-96,26,-603,57,1000,-1000,-705,-659,-836,-462,245,11,256,-784,-478,413,614,-905,-559,-303,-1000,-424,439,552,-771,991,291,-404,-763,-803,1000,-526,-131,971,-592,-407,695,622,1000,-478,546,-397,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00059() {
+        org.junit.Assert.assertEquals("THROW:java.lang.IllegalArgumentException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType):boolean",
+            new int[]{418,-1000,96,-481,965,-1000,-1000,1000,-863,467,-698,1000,1000,1000,778,548,701,-47,618,14,-940,782,-1000,-355,331,-270,350,-468,-321,-658,-1000,-802,-691,292,-399,-250,89,-206,1000,-120,1000,-388,-691,-1000,677,-13,1000,608,1000,1000,1000,421,-617,154,636,628,-1000,335,-660,-834,-1000,-754,-346,462}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00060() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{1000,239,439,79,324,239,587,-680,-778,30,-140,1000,-273,956,287,3,710,-1000,691,817,-296,674,-828,1000,-661,98,169,374,-818,245,-1000,-1000,136,-706,-222,-602,-1000,489,524,1000,39,35,498,282,-1000,86,-1000,-466,-523,1000,-1000,942,841,81,-1000,50,-1000,-1000,-655,-1000,-1000,-1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00061() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{305,384,218,-478,495,382,-143,-470,-791,-145,844,-327,489,230,1000,-348,-1000,1000,-338,-956,1000,-660,-214,-104,585,280,-738,-934,214,723,308,40,1000,1000,-561,780,247,1000,-431,-723,-559,-1000,-1000,-985,870,1000,1000,933,459,-748,825,-671,-1000,949,1000,-646,-512,557,-185,821,-87,886,-37,498}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00062() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{1000,-1000,439,604,-206,687,1000,510,16,135,-147,1000,-72,956,-79,227,1000,618,1000,-667,624,806,-753,-467,-1000,-1000,169,374,-444,1000,-485,-1000,-714,716,26,1000,1000,-344,-1000,1000,-214,707,-1000,630,1000,979,518,-255,-146,-1000,-831,-423,590,81,-1000,12,0,1000,-655,-1000,577,1000,126,288}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00063() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{1000,1000,804,79,-922,53,-1000,636,-379,631,-140,754,-906,439,362,-789,972,820,-698,298,880,674,-228,-230,617,1000,-309,374,978,298,-732,1000,992,435,676,811,616,-370,-972,-300,-373,-392,-37,-1000,1000,1000,417,1000,-517,127,1000,-380,-1000,934,-830,661,57,-12,-546,49,1000,-238,-117,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00064() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{715,670,434,384,-94,5,-34,-1000,-662,455,1000,-24,-487,1000,-642,-390,-385,-26,823,-527,420,873,-649,-113,-859,397,-531,781,915,-1000,-245,273,1000,-671,1000,226,560,146,480,512,-44,181,188,601,-1000,-1000,416,-194,-422,-81,903,-146,620,23,1000,-149,-996,1000,-306,-552,-57,-889,-642,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00065() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{65,1000,-967,-526,1000,-43,-711,666,1000,-394,208,-831,-58,1000,-100,-1000,-430,109,-271,-1000,-139,-85,-253,-756,1000,1000,-85,-595,840,-1000,171,746,970,-1000,437,149,541,563,529,-697,407,-313,820,-602,633,-458,613,441,-713,-193,1000,-600,-590,593,1000,-197,633,158,1000,531,412,467,-65,869}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00066() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{119,-911,291,834,-676,572,692,169,767,527,-95,811,-612,-896,-79,-738,554,-651,679,226,-738,-642,-129,428,-859,-250,790,-435,-605,922,332,963,-815,817,-335,-866,858,-671,0,14,-119,-135,-590,425,397,81,-287,30,908,363,-961,-96,729,237,-81,715,607,-458,467,499,167,971,-450,981}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00067() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{220,-194,-999,-407,141,1000,712,-28,85,898,-93,-666,37,-330,1000,-602,1000,-965,-340,-105,1000,581,-265,513,-858,-1000,-863,190,-1000,1000,-976,127,-174,240,-444,1000,733,725,-1000,88,-724,-485,-1000,875,423,874,1000,469,-84,-1000,-947,-764,342,-88,486,-45,-36,648,-1000,-972,-445,784,-705,-457}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00068() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{589,1000,-878,559,-793,-172,1000,-113,-280,30,1000,895,479,435,-706,-1000,369,-466,924,-520,804,1000,-1000,-837,-1000,138,-398,374,1000,-652,-158,-99,136,-1000,381,856,-92,489,645,-214,142,1000,368,-441,-429,-429,275,-437,-291,-379,915,219,841,81,30,50,365,562,1000,-712,438,834,42,-6}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00069() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canDeserialize(com.fasterxml.jackson.databind.JavaType,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{1000,1000,883,-436,-348,-394,-806,-213,-994,1000,1000,820,-566,-622,-160,-1000,97,670,-346,789,-254,622,-850,-914,131,1000,-795,116,760,-501,-572,295,829,263,811,568,-400,-562,-805,348,-317,167,-363,-84,536,507,791,503,-1000,-727,488,-904,-1000,-215,-805,642,-819,586,-750,-152,-362,-1000,-381,20}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00070() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class):boolean",
+            new int[]{410,1000,-1000,-736,-1000,935,114,-58,557,95,105,1000,-622,-1000,794,-426,-1000,527,597,-1000,-582,-363,765,83,-508,-436,54,-145,-230,736,-75,-976,-1000,-1000,-629,-537,-498,-1000,-726,973,188,512,469,538,729,5,-908,728,1000,-263,519,-330,-667,780,484,-714,-415,-734,935,-728,-686,-1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00071() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class):boolean",
+            new int[]{1000,746,-381,844,-424,1000,-243,1000,1000,539,560,-121,-1000,1000,803,794,772,-1000,-566,-1000,-1000,383,909,-1000,-1000,1000,1000,1000,1000,1000,1000,-971,-322,1000,58,-271,1000,-1000,1000,940,797,1000,1000,-103,-1000,-1000,-341,-1000,772,-889,-79,-1000,1000,-1000,-1000,1000,1000,-436,-1000,1000,351,-979,-1000,680}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00072() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class):boolean",
+            new int[]{780,-180,139,934,-106,-621,96,1000,407,-261,198,-172,-283,-320,-558,386,256,638,388,295,561,595,-497,-111,866,1000,367,-727,388,481,667,-70,788,-728,-31,517,800,866,-88,1000,360,356,-97,612,896,-905,1000,-1000,-188,-949,674,-107,826,-435,388,-229,-250,323,-465,-198,5,-305,1000,-727}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00073() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class):boolean",
+            new int[]{1000,1000,404,494,-232,-947,-953,-136,169,-1000,321,476,-1000,-963,-671,187,-901,-179,-766,1000,-80,-643,1000,-304,1000,158,1000,242,885,1000,876,289,-1000,-534,-578,-892,-203,888,1000,-123,321,769,860,206,-286,-450,1000,-1000,141,-577,619,-172,-667,-1000,741,-838,748,792,651,-1000,-97,-528,-156,-333}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00074() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class):boolean",
+            new int[]{1000,637,-1000,-491,-585,1000,-34,26,154,691,130,436,-803,-653,523,385,-802,-68,1000,-130,-796,794,1000,141,-975,164,-446,458,-319,889,975,-786,-64,521,-356,-439,444,369,-1000,1000,86,406,421,1000,695,-334,-1000,1000,747,-183,1000,881,-743,-321,-139,1000,658,-608,162,-242,909,-1000,63,97}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00075() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class):boolean",
+            new int[]{661,-5,-957,-588,-477,916,-350,609,-281,554,558,795,642,269,986,863,-22,308,370,-680,-535,376,-29,-90,243,-435,-694,115,315,115,179,-941,103,-324,-269,-982,387,322,355,644,19,-550,603,361,694,-155,-726,909,842,-289,752,964,180,276,-623,939,870,674,115,-371,368,-732,154,165}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00076() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class):boolean",
+            new int[]{-719,-211,-1000,-376,-613,472,383,792,-482,-194,147,-590,372,-62,-493,-1000,629,-179,252,-906,1000,349,-1000,213,-426,691,-1000,1000,306,-281,-400,-1000,-1000,-88,-739,938,-206,-817,1000,346,115,-611,481,780,-331,-68,-254,-1000,-1000,-276,-518,-807,622,786,48,-769,-255,-289,682,702,-934,-982,-417,-796}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00077() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class):boolean",
+            new int[]{819,1000,-1000,529,-811,857,38,395,774,285,252,1000,-787,-561,856,-118,-711,413,229,-743,-980,-55,963,-261,-768,30,551,320,249,865,291,-977,-981,-267,-655,-264,752,-353,-63,1000,436,732,516,1000,356,-514,-843,1000,949,-521,533,-58,-417,-471,-243,-268,438,-716,322,-248,-169,-1000,40,841}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00078() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class):boolean",
+            new int[]{-1000,-730,-891,-321,-613,343,900,1000,-1000,181,-120,-83,-924,1000,-665,-513,-239,-33,154,-1000,-37,1000,-1000,999,-976,1000,-322,1000,521,-380,245,-1000,-225,1000,346,1000,-154,-388,1000,592,1000,-1000,652,-1000,-737,-555,-335,-1000,-1000,537,-493,-1000,162,1000,-593,1000,-1000,-846,132,993,-711,-913,-791,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00079() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{454,-812,924,-131,1000,-1000,918,-304,664,-726,1000,-269,160,-400,-508,-958,-613,-780,-55,495,-300,-324,-922,1000,129,-101,-512,1000,356,920,895,400,-974,1000,505,709,52,-331,-98,107,693,-467,-19,23,-232,-577,-414,1000,-105,-723,-131,364,-1000,717,901,681,-170,1000,-295,85,923,401,377,-386}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00080() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{341,0,559,499,-904,215,269,-137,966,-62,433,429,527,1000,-352,-287,-805,-302,518,315,1000,-191,-942,1000,633,389,21,343,560,-40,985,-863,-988,465,890,560,-404,-1000,136,328,-292,-613,57,-119,-346,-552,-627,-248,429,220,-817,25,-37,777,-141,-721,-764,45,928,-1000,-409,549,-7,-87}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00081() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{713,-1000,334,588,-673,354,-255,-1000,223,-1000,1000,163,-256,-438,482,-223,-939,612,-1000,-566,-993,-77,-1000,-1000,211,-355,1000,-713,-999,577,524,1000,-1000,1000,-180,136,1000,-561,-260,296,137,20,704,487,-463,-648,300,-571,1000,139,705,1000,1000,-311,477,148,-432,594,1000,-58,62,-737,-167,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00082() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{681,-273,-246,-978,759,63,938,1000,-294,1000,726,-86,1000,981,181,-810,-1000,-1000,-716,1000,39,-191,72,440,34,113,-534,-798,189,39,162,856,928,408,-153,553,1000,472,-144,-333,-126,-854,-853,-257,-476,-349,10,-916,-439,-57,-523,-929,-142,775,-479,251,335,-552,-381,-1000,265,1000,-704,390}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00083() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{376,569,-35,-496,635,-370,-197,-427,-898,945,-619,-862,476,-497,-791,-739,841,-457,928,651,673,602,-927,-141,-793,-809,-3,-657,-437,-190,465,596,869,704,-322,-97,-277,-754,-5,-574,761,-798,-533,329,860,-775,-577,-588,-451,896,860,357,-424,-621,103,-914,254,339,-654,-35,211,-853,-957,-367}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00084() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{1000,-448,-135,-341,-463,-843,1000,-635,113,11,284,400,463,373,-1000,-1000,-168,-253,1000,-534,-175,-513,-1000,-404,-1000,828,568,30,217,820,1000,0,-1000,1000,1000,175,181,-282,702,470,308,799,115,-1000,323,-264,-1000,544,1000,40,-21,988,-558,1000,57,1000,-153,488,-133,-74,-247,-574,653,-835}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00085() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{1000,-1000,371,-751,-980,-750,22,374,1000,-1000,1000,1000,1000,951,-1000,-1000,260,24,509,-724,-1000,-342,-295,533,-1000,1000,-444,115,191,1000,1000,1000,-769,640,-381,1000,-59,362,-952,89,-958,428,227,-874,207,-1000,618,-219,832,-1000,1000,-1000,-1000,260,-1000,1000,950,876,-1000,-374,-740,-1000,-656,-182}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00086() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:ZmFsc2U=", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{944,911,514,904,-863,199,491,-551,618,-660,625,-493,648,487,-992,-586,-573,122,322,609,877,115,-425,836,884,58,-121,545,730,691,648,-727,-678,896,802,158,867,-738,93,897,-854,-447,511,430,-777,-475,857,431,529,504,-925,-702,-399,887,654,-265,451,311,-448,-753,-478,590,460,-71}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00087() {
+        org.junit.Assert.assertEquals("java.lang.Boolean:dHJ1ZQ==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "canSerialize(java.lang.Class,java.util.concurrent.atomic.AtomicReference):boolean",
+            new int[]{1000,1000,734,-756,-971,-21,456,226,1000,-940,726,1000,792,-343,-560,439,346,-146,298,-606,-736,-583,-165,588,-1000,1000,175,-943,256,1000,833,428,-1000,-169,174,-473,59,322,-773,-252,-594,-430,-216,-560,-121,-1000,709,-726,288,-1000,1000,178,-765,561,-1000,762,822,829,-1000,-1000,-989,-1000,-739,-193}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00088() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "clearProblemHandlers():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-150,400,28,489,-103,-721,-735,1000,1000,232,1000,-361,161,-277,161,-1000,-1000,1000,-18,643,-470,1000,808,1000,-8,176,-224,-101,-193,-796,604,895,649,-433,-379,1000,199,375,-632,1000,-1000,262,-1000,681,924,-207,-458,-317,636,258,861,1000,-860,-27,-992,-222,-271,7,416,134,193,684,-1000,177}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00089() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "clearProblemHandlers():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{667,960,-281,744,703,-1,250,1000,1000,-702,852,-1000,811,698,752,-868,-393,1000,-827,1000,-692,903,1000,1000,-1000,499,779,1000,597,-1000,1000,979,1000,-582,-1000,584,669,-1000,-1000,1000,86,770,-860,1000,1000,-1000,-854,-207,1000,481,903,1000,320,711,-1000,-133,-1000,819,1000,-535,445,779,-1000,-8}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00090() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "clearProblemHandlers():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,1000,1000,869,662,-813,381,1000,863,-85,1000,-1000,-92,-118,484,-1000,-25,656,-1000,-1000,-1000,-1000,1000,1000,-963,-231,350,-669,916,-1000,913,525,-829,-1000,-1000,-126,1000,-433,-133,1000,-252,-417,-1000,1000,176,-317,-1000,-1000,1000,-1000,763,1000,53,-1000,-191,-1000,-969,-333,-635,-12,-405,-1000,813,265}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00091() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "clearProblemHandlers():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,1000,-5,394,-244,-1000,-846,364,-1000,-357,-1000,165,678,1000,395,-803,400,579,1000,1000,164,-1000,918,926,-1000,332,280,1000,1000,580,-265,750,435,-415,-1000,641,1000,-1000,-1000,633,423,-1000,1000,1000,-1000,1000,-391,-1000,452,-1000,-645,-1000,821,-395,994,-1000,-1000,1000,1000,272,1000,-1000,82,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00092() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "clearProblemHandlers():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,1000,1000,299,-134,30,729,685,-117,-381,-691,-1000,178,-1000,-258,-518,809,-116,-836,206,-470,-1000,652,1000,-1000,-91,403,-758,1000,-473,792,-304,-730,15,-42,-135,373,16,549,-281,-1000,-1000,-824,676,553,-718,-214,-1000,670,-763,256,718,1000,-1000,-250,-136,-1000,-78,-864,-493,-1000,-999,1000,920}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00093() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "clearProblemHandlers():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-403,-1000,-377,394,188,-743,-812,284,1000,722,-821,607,-444,-940,-46,-481,-1000,420,-34,-328,-909,1000,1000,274,955,-339,-180,-1000,-1000,-864,-90,685,-192,-134,-131,194,-660,749,-550,665,-804,398,-567,322,-1000,-1000,-320,-389,-362,299,1000,1000,-1000,-606,-992,43,382,-1000,657,0,-493,245,-994,-617}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00094() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "clearProblemHandlers():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-678,580,1000,779,-1000,-482,-838,232,-324,713,999,-78,-644,-1000,-1000,-1000,-455,1000,1000,800,139,-936,-74,1000,107,-154,-766,-347,-96,-181,-1000,352,-743,-466,677,1000,-393,461,-141,-554,97,-737,-432,-266,-266,-1000,878,-567,-1000,-1000,-593,422,-20,-815,-340,-1000,873,-341,-674,248,-677,-1000,-201,877}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00095() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "clearProblemHandlers():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,160,716,344,-658,-279,-931,281,-1000,1000,-141,-1000,-793,-1000,-1000,-243,-481,423,1000,-587,1000,43,-1000,484,314,-671,-1000,-620,-267,1000,400,-131,-777,577,1000,684,-1000,1000,438,-1000,97,-880,616,-1000,-170,-1000,1000,3,-1000,-767,-1000,269,-500,-712,795,812,1000,-669,1000,125,-513,358,-276,269}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00096() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "clearProblemHandlers():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{928,1000,1000,569,-526,-1000,-1000,1000,342,715,702,79,-740,-405,-499,-1000,-1000,1000,962,739,-91,88,325,455,1000,-460,-1000,327,2,-252,-79,1000,-390,-614,-544,1000,-1000,375,-632,948,-1000,-496,-68,826,924,425,348,-618,636,-590,562,764,-694,-624,-992,-817,-28,206,-629,344,157,244,-762,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00097() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "clearProblemHandlers():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,1000,122,834,-1000,-906,-818,1000,60,-24,-1000,647,-459,1000,1000,-493,-213,-35,767,1000,-401,1000,328,-1000,-424,-513,339,1000,825,226,-265,412,1000,298,846,660,1000,-216,-1000,926,-439,-569,1000,1000,47,1000,-6,-594,1000,-20,-1000,-67,-456,-197,1000,-1000,-143,-58,436,186,1000,-192,-1000,-140}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00098() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{693,1000,1000,-961,-943,183,-1000,854,1000,-1000,1000,-400,55,954,1000,-392,1000,358,97,-400,-575,-186,225,-562,-199,127,1000,1000,-633,-612,53,-1000,-617,-1000,814,-190,-400,-163,-1000,400,562,319,-409,-1000,363,1000,1000,-917,894,595,1000,-785,-570,-1000,-918,-1000,323,214,-1000,675,1000,400,-137,-983}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00099() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,-666,959,604,-1000,49,998,-482,1000,-1000,56,-1000,-1000,720,1000,201,38,-1000,-829,-352,-38,809,851,1000,324,-123,-435,289,-11,983,1000,-1000,940,-173,-527,-414,-1000,109,10,1000,1000,-873,170,-324,-1000,1000,-203,1000,-1000,576,1000,-366,67,995,-389,38,-797,908,-721,1000,-1000,1000,1000,896}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00100() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-815,1000,523,-566,476,31,-675,-75,1000,-1000,1000,-203,-23,894,341,791,761,10,687,-132,-1000,-699,-161,655,706,-67,502,1000,-126,-1000,677,-306,-888,-1000,458,438,272,-1000,-869,-783,925,-287,-663,-900,569,-1000,278,-890,400,1000,1000,-768,549,-1000,-1000,-1000,-520,-84,-793,178,572,-1000,-566,-487}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00101() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{271,1000,-182,-196,23,-275,-306,-453,773,-1000,683,847,-403,318,961,1000,952,543,137,-398,-953,40,76,-218,679,-644,1000,507,612,-607,-61,962,-786,-870,525,-209,1000,-1000,-82,-520,478,721,-1000,-1000,917,-1000,883,-1000,400,694,440,1000,-52,-1000,-492,-1000,76,118,-882,192,1000,1000,-1000,355}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00102() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{607,-964,256,-607,-300,-587,432,249,-890,437,-792,-107,304,313,-360,-361,-629,-414,-57,-432,351,282,-792,412,-745,-821,332,-657,52,771,215,352,175,983,-887,117,854,178,-651,-402,-965,-387,500,-85,513,-890,-336,526,470,-574,-585,175,-379,591,677,656,-160,-722,901,42,297,194,-381,-314}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00103() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{598,-1000,-1000,-401,346,-538,-520,-1000,-1000,1000,-1000,489,119,-28,641,-1000,1000,1000,1000,1000,-1000,1000,-1000,231,1000,486,179,-1000,-1000,-1000,-208,1000,-1000,142,-1000,-1000,1000,259,-1000,-705,286,1000,620,163,-762,14,-1000,-1000,-29,606,-1000,-1000,-1000,468,362,784,-34,-1000,-122,-1000,629,-1000,-1000,604}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00104() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,224,1000,329,-849,1000,-185,-344,1000,-1000,-244,210,-1000,720,1000,-516,1000,-1000,534,-673,1000,1000,-1000,719,-399,-795,-1000,1000,954,957,251,-1000,1000,-544,-328,137,-1000,303,370,621,1000,-1000,715,931,-1000,1000,536,1000,-1000,12,671,149,108,1000,-353,696,105,1000,-1000,1000,-1000,739,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00105() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-306,-776,-865,213,-943,1000,-145,-1000,-1000,113,1000,-1000,-1000,276,-1000,1000,-710,-1000,-1000,-1000,-155,-809,1000,895,-199,785,-425,248,1000,-589,1000,873,1000,1000,-654,828,-915,-595,1000,914,810,-1000,-678,1000,-765,766,-991,1000,-779,-1000,605,766,-570,1000,-301,700,-1000,744,701,675,-1000,457,188,203}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00106() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{626,-158,-981,-781,666,481,-672,-524,-76,209,-807,-337,695,757,843,-307,961,845,203,-7,-368,857,-600,68,434,-277,501,-735,-862,-750,467,570,58,-393,114,-492,579,163,-820,528,830,482,-464,596,-421,910,-963,150,913,897,-457,-927,-658,-46,236,-140,-422,-999,-483,-206,-551,720,-509,597}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00107() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-176,641,1000,-278,-248,799,-408,307,1000,-1000,477,-945,-1000,1000,-406,864,355,-1000,-721,-1000,-110,-961,1000,1000,-650,765,1000,1000,978,803,1000,-286,1000,-982,-62,915,-922,-575,512,1000,1000,-1000,409,202,-1000,1000,267,606,-626,1000,1000,315,1000,201,-175,-1000,-1000,734,-550,1000,-721,1000,-849,-960}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00108() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonGenerator$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{408,556,-338,449,574,26,-1000,1000,-81,-774,-60,-814,308,-387,161,768,1000,1000,-443,55,605,-1000,-84,-907,-1000,1000,-327,-170,-629,-1000,-394,-366,-550,1000,-304,41,-563,-124,-624,617,-758,1000,1000,-339,615,-410,760,-813,1000,71,-628,881,650,-1000,-1000,-1000,664,1000,-1000,-349,116,-289,-73,-210}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00109() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonParser$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{260,577,1000,279,-721,-1000,1000,107,1000,1000,-428,926,399,-254,514,1000,315,760,788,-766,-928,306,-299,129,210,992,-898,241,711,1000,59,-273,1000,79,-608,-538,-252,-310,727,-315,-217,-120,333,-1000,1000,1000,-484,-1000,1000,1000,130,599,-579,-1000,341,247,-400,899,-249,1000,-165,-1000,-371,-482}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00110() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonParser$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{252,-867,-47,152,334,-735,1000,-540,-257,121,-300,286,-152,345,310,-925,447,858,176,311,226,1000,-560,473,-98,-513,583,658,-767,16,620,-184,767,213,-176,695,331,153,225,-246,75,-878,-766,40,525,400,973,-636,78,88,517,996,-157,-1000,1000,-20,-187,-1000,-807,149,485,-960,-1000,272}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00111() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonParser$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{179,-566,-149,109,-524,-210,-186,943,-23,690,-973,-363,164,817,-530,-749,1000,-1000,-331,1000,-31,842,-48,202,-121,115,1000,1000,-680,-606,234,785,964,-342,523,1000,-783,396,620,-210,-1000,-1000,-385,798,-240,389,644,-659,-537,-812,74,-908,-394,-833,30,-399,-299,-687,-876,-790,336,337,269,622}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00112() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonParser$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{288,-142,-814,944,79,1000,-55,-123,-794,-427,-232,-593,-719,-310,315,-233,747,-333,-135,-504,956,19,402,294,-192,-97,-89,1000,-222,-918,-793,-266,264,316,-584,-320,839,578,-595,-224,708,-937,-80,375,-850,-84,-370,-50,-501,-372,88,384,-183,329,-91,-549,-453,142,-737,-1000,-485,736,714,-166}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00113() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonParser$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-98,-28,1000,239,-544,-1000,-130,816,1000,1000,224,-255,391,-113,453,783,1000,-351,1000,-259,-240,73,-586,447,235,-1000,880,112,-1000,183,609,-246,1000,-392,522,585,437,893,410,-943,-293,-1000,384,-944,-526,934,-883,-1000,-1000,-248,56,1000,233,98,140,801,-1000,33,-841,-260,884,-822,-510,873}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00114() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonParser$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{146,-544,-721,709,-988,-829,95,906,39,-109,-1000,-546,-311,922,-218,-815,1000,-687,-1000,-174,256,473,-753,523,128,746,-46,359,-38,-692,-481,364,232,-220,-152,683,-159,-248,851,-124,233,-49,-397,375,-354,-415,390,208,50,-398,596,-916,-458,-429,-6,-760,9,-244,-978,-252,-784,861,1000,316}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00115() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonParser$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,55,-543,-16,-506,999,540,-218,558,655,616,-959,-883,342,317,641,338,-930,-763,-526,472,154,534,-891,415,166,-228,471,389,-360,313,-753,805,731,-453,460,-350,-471,427,1000,477,250,-806,-575,-773,1000,-403,-247,187,-822,144,-424,904,-728,-442,-1000,-300,-753,173,612,-1000,746,-179,-142}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00116() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonParser$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-657,275,610,523,-526,929,213,764,635,883,1000,-1000,-1000,-249,-233,738,1000,-1000,-1000,-1000,1000,536,44,-1000,-1000,-859,157,821,-12,-438,870,-256,-282,1000,-249,1000,-571,396,617,1000,1000,-627,-818,-730,-853,-1000,-1000,1000,95,-358,181,-769,1000,-655,-493,-549,46,-1000,-852,28,-765,-16,120,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00117() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonParser$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-730,920,-159,-681,-638,-618,21,548,384,-991,-538,-555,881,421,-842,-363,-417,-190,-150,532,208,251,-143,-462,705,5,55,-517,815,-918,261,-739,-873,-450,955,582,-571,-937,320,-641,72,928,916,781,-664,-359,934,359,316,290,-19,-620,728,-527,569,94,224,450,118,-298,274,133,152,748}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00118() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.core.JsonParser$Feature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{8,-443,204,-26,119,-556,1000,173,33,-812,-480,-732,-81,309,1000,-548,338,175,514,1000,378,516,-4,-102,92,-111,-228,448,-510,-451,-771,165,1000,917,293,100,-884,63,108,183,596,-123,-735,442,-393,1000,541,-87,-512,-398,342,556,-788,-955,834,-284,-300,1000,-557,-170,81,-186,-303,-499}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00119() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.DeserializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{353,688,117,389,444,-56,212,377,950,-1000,-543,-870,1000,400,-899,-933,-1000,241,493,-191,-1000,-1000,754,-1000,-473,-355,-414,-1000,238,1000,641,-126,-976,182,223,-298,-20,196,1000,-673,-113,-1000,-536,-583,-20,1000,-884,707,-794,443,-172,-262,-991,-382,-798,-1000,-19,908,901,-750,-522,176,1000,935}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00120() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.DeserializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-826,306,-271,1000,-51,299,-1000,-600,203,67,-894,-592,155,-171,-185,-399,-227,-413,1000,-265,71,1000,736,59,565,-594,20,529,131,-839,-185,1000,-84,995,-190,665,-978,-932,-400,-1000,1000,-499,-746,29,-1000,-787,209,-825,-387,987,215,-971,988,225,1000,-436,-318,349,-627,-1000,-277,620,203,535}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00121() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.DeserializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-144,1000,937,194,-257,221,-76,596,343,178,651,-1000,-350,214,-1000,-295,-1000,-1000,-365,385,-1000,-1000,828,-1000,579,-298,375,645,935,-1000,-406,1000,-1000,597,456,177,-376,161,287,-171,1000,-990,-553,-717,-1000,-913,-200,1000,-85,49,1000,-358,-994,1000,1000,104,-936,-584,930,-523,-208,-547,455,528}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00122() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.DeserializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-603,-905,-1000,659,-777,1000,-522,-1000,-895,-1000,-1000,1000,1000,-1000,937,-264,1000,-278,908,1000,-1000,1000,-356,666,-277,564,-396,935,-1000,873,-121,1000,-1000,145,-251,1000,-1000,-744,-69,1000,1000,1000,487,1000,-535,47,379,-1000,-343,49,286,-686,767,-428,822,701,896,-387,-1000,-530,518,435,957,-411}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00123() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.DeserializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,859,88,4,1000,687,-302,-635,-675,-518,289,106,340,-1000,-1000,-250,-1000,-1000,-154,1000,1000,215,12,-477,-569,-383,-20,364,-591,-1000,-964,1000,-1000,688,65,-796,-1000,522,-1000,-1000,1000,316,318,527,-1000,-292,1000,-530,-121,611,570,891,1000,-202,922,-365,1000,770,-114,-1000,-454,529,1000,846}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00124() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.DeserializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-113,1000,-918,139,338,330,-1000,-255,-787,-126,802,824,-829,-1000,-300,-330,-776,-666,-1000,1000,-1000,-109,200,-477,-650,-1000,1000,1000,-292,1000,-949,1000,-1000,747,242,505,20,792,892,-906,1000,1000,945,938,-1000,-1000,179,1000,463,741,938,112,392,477,1000,-1000,-417,-517,1000,495,486,517,370,516}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00125() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.DeserializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-520,290,-1000,-886,217,534,-1000,-837,-518,-78,-848,891,-427,-1000,296,-207,85,-136,-759,1000,132,259,444,143,-321,-269,226,720,723,-86,21,1000,348,-400,684,1000,-1000,-219,367,400,1000,1000,759,748,-1000,-242,-571,-1000,1000,440,386,-690,1000,-328,1000,568,-184,-1000,-507,198,556,365,-461,-355}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00126() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.DeserializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-3,505,-1000,-576,-494,1000,469,-739,677,-59,-1000,-400,1000,-229,851,-954,1000,1000,334,-27,-1000,-74,1000,-345,-519,-300,-697,-219,144,1000,798,13,1000,545,1000,331,-715,-192,-241,1000,33,1000,-476,-98,711,1000,-1000,-395,-234,508,-1000,-1000,155,-1000,27,-1000,166,-134,-400,329,177,561,-810,-935}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00127() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.DeserializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,400,-1000,-91,1000,-459,-1000,-832,864,-40,-551,857,-1000,-1000,-1000,268,-1000,-1000,1000,1000,1000,889,-441,-345,649,-502,530,1000,-687,-1000,-43,663,-1000,651,-192,1000,-1000,62,414,-912,-474,1000,1000,660,-1000,-676,325,-1000,1000,803,-758,-538,1000,515,-100,-103,-1000,-1000,-769,802,791,-655,525,892}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00128() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.DeserializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-39,1000,-382,-967,-850,339,-448,-564,667,1000,386,670,982,-580,781,217,1000,823,-744,434,-171,-74,1000,-345,-387,214,590,431,-448,93,163,388,1000,-428,1000,509,-286,-638,-893,771,379,1000,391,423,-543,-524,919,-559,856,898,958,-1000,994,-75,858,516,313,-115,159,-522,-693,344,-400,-889}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00129() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.MapperFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{753,-161,-167,-26,735,407,-206,-263,-664,-1000,-1000,625,-292,21,434,-1000,58,-242,1000,257,462,-1000,-1000,412,-878,441,679,1000,1000,-607,-1000,-1000,1000,214,-803,-763,157,-707,-1000,-47,394,-393,-850,33,-632,-299,-1000,-532,523,-984,607,-265,1000,-96,709,-354,-1000,1000,-1000,47,-404,261,-1000,-362}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00130() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.MapperFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-574,51,814,-30,-1000,-1000,662,552,-944,-279,207,1000,912,-946,-1000,-1000,1000,644,-250,1000,575,1000,1000,-116,703,1000,1000,-1000,754,973,-356,259,140,-238,-728,-410,-1000,-1000,1000,-1000,-1000,1000,-447,1000,347,-199,-354,430,-1000,337,857,-1000,606,23,44,-709,81,805,1000,-968,-557,1000,-1000,-107}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00131() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.MapperFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{636,1000,-190,-251,-802,-834,50,529,751,684,79,1000,-968,-329,-621,231,727,-549,-950,-935,-269,347,-637,-326,-635,779,441,-800,136,1000,-465,-190,0,159,1000,680,-870,1000,654,149,-466,402,1000,1000,-518,523,292,612,536,-71,-1000,580,147,-689,397,-1000,-510,672,-463,-177,-678,505,-843,-484}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00132() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.MapperFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{728,610,365,-366,674,454,-181,-567,375,438,-413,934,-117,675,931,-630,-965,916,302,76,-31,-634,-890,394,-302,819,920,748,707,-65,-328,-798,-229,530,-59,201,259,-11,-589,908,-997,-393,782,-413,-507,515,-874,-189,662,-825,-635,-82,768,-98,966,-873,-972,810,-778,-44,-453,-279,579,-771}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00133() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.MapperFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,982,-307,-26,-955,-1000,491,1000,-109,693,129,1000,-1000,604,15,-724,819,296,-1000,-1000,640,1000,-1000,-411,-810,679,-482,221,721,1000,363,-252,-864,284,90,1000,-1000,1000,161,632,-1000,1000,-850,469,-1000,729,-254,1000,-1000,-568,-902,-98,-539,-1000,1000,-1000,-1000,1000,-949,47,-404,-147,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00134() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.MapperFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-155,262,180,219,172,-273,-1000,-1000,375,663,-152,-408,-1000,-317,111,403,-168,475,-107,353,186,184,245,-466,-1000,-203,1000,-610,569,-214,-243,-62,-471,-428,-2,-497,-356,-642,889,1000,109,25,-84,292,30,810,-502,-198,-164,552,73,-60,357,547,966,-1000,-980,-728,-1000,-496,-596,576,-384,-266}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00135() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.MapperFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-795,833,335,859,-330,343,736,355,1000,817,431,-594,651,557,-410,456,-32,-86,-1000,340,-438,-693,979,-284,-124,280,-326,-1000,-1000,-508,-375,1000,-1000,1000,162,604,-508,168,-275,-733,100,-851,1000,-586,1000,715,1000,-147,-340,817,13,370,194,-870,-1000,1000,1000,-1000,-306,-464,1000,-982,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00136() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.MapperFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{32,-415,986,94,999,-127,77,1000,826,1000,214,-268,153,921,-617,-53,-134,951,308,-75,73,1000,-687,255,400,453,1000,-43,334,-1000,615,526,98,-405,-530,764,-346,168,-417,1000,-46,-339,-214,643,-624,-483,-557,-250,589,-401,13,-1000,1000,-772,93,202,-311,761,-43,166,-287,-1000,-1000,-821}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00137() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.MapperFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,610,245,334,727,570,554,-897,731,514,19,1000,-755,777,1000,-945,-1000,1000,-325,-348,-27,-1000,-1000,473,-749,1000,528,888,317,-65,-486,-1000,-584,1000,300,484,224,543,-831,1000,-1000,-844,1000,-413,-169,571,-909,260,401,-869,-543,282,499,-238,798,-873,-629,1000,-306,288,-487,-626,689,-435}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00138() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.SerializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,1000,771,-291,-994,-868,624,527,-1000,221,-915,-360,977,-541,-825,913,991,1000,97,201,15,-289,976,376,495,1000,785,945,612,1000,-795,-83,982,421,1000,676,193,502,-800,1000,-248,470,-1000,-219,592,-640,-366,-452,-485,-866,469,563,-376,609,-257,928,132,523,501,-328,316,-496,685,-103}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00139() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.SerializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-123,366,9,-56,29,-175,1000,-770,301,1000,-86,-1000,193,-878,350,572,1000,46,590,-123,-732,471,1000,-909,116,990,-186,931,-731,1000,-128,965,217,-366,-124,-724,-510,1000,-1000,-344,158,926,84,954,636,169,-639,175,621,84,1000,835,676,-671,597,426,-376,941,-109,538,1000,-173,1000,778}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00140() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.SerializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-754,1000,-646,169,-555,1000,550,23,333,787,-846,-358,1000,-592,-1000,-452,566,-736,-1000,-1000,81,1000,324,257,-103,-592,566,138,1000,1000,490,-457,166,-899,-606,477,1000,-56,-385,1000,500,-911,445,-883,-1000,-385,704,-430,313,-212,-53,-1000,476,-447,695,64,370,1000,40,1000,-281,885,754,91}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00141() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.SerializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,505,-469,-731,-810,-398,969,-257,-99,360,-1000,-1000,1000,-572,848,1000,800,1000,1000,407,142,105,810,165,334,1000,1000,-969,-891,102,-1000,-179,-128,-508,794,-997,-1000,92,-1000,-294,-582,1000,171,295,-234,-993,-1000,-562,-591,-331,1000,286,394,-1000,-558,1000,-118,-406,471,-958,758,-930,283,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00142() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.SerializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-58,94,-306,-256,45,-101,36,705,-94,593,183,-84,-948,-93,35,472,547,-7,-49,-292,146,239,258,214,-243,550,1000,626,286,818,254,-278,123,423,-103,147,-638,-99,-927,-429,-794,410,-864,852,584,-1,-1000,-1000,-332,271,-23,794,-743,-444,-938,267,-166,-573,509,353,937,-729,-1000,777}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00143() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.SerializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-275,-419,375,803,233,333,-811,-557,172,-593,-971,786,1000,-617,-304,146,1000,-521,999,192,819,-639,1000,-22,-478,-224,843,298,25,793,-995,11,-744,-912,-97,-83,1000,891,639,-276,918,121,-487,-708,-557,373,-196,72,1000,1000,143,-632,123,-830,963,-49,865,682,-2,-708,-1000,-488,-867,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00144() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.SerializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,589,-88,-397,1000,586,1000,-853,815,1000,400,-564,-1000,-1000,-80,-16,1000,-400,190,-834,-1000,1000,951,-179,37,621,-516,238,-170,1000,720,717,309,-338,-1000,59,-726,202,-48,168,-227,1000,-411,1000,1000,257,-423,905,869,-30,82,-29,299,-1000,-492,-131,-301,-364,-193,1000,1000,-594,78,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00145() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.SerializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{253,94,-88,-166,462,-9,1000,-853,859,828,183,-873,-120,-748,1000,513,944,-363,993,-642,-595,87,761,-835,37,729,-388,-194,-919,571,-47,614,-423,-1000,-606,-1000,-1000,369,-1000,-953,191,1000,760,1000,104,265,-796,257,580,358,1000,456,830,-1000,-50,283,-474,-1000,40,237,1000,-523,693,258}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00146() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.SerializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{253,-131,-88,124,334,465,-44,-50,-191,270,183,198,-120,476,275,513,454,-363,832,-694,-80,87,551,-436,-536,205,-388,1000,-1000,-59,-47,7,-969,-92,-606,-262,-540,1000,-594,-1000,669,600,347,718,-296,554,-796,164,351,1000,541,-740,258,-353,311,494,-313,-1000,84,32,366,-523,-298,357}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00147() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "configure(com.fasterxml.jackson.databind.SerializationFeature,boolean):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{65,-131,-434,294,-1000,-702,-652,-24,-191,294,-128,872,283,316,-172,109,-1000,-523,98,-150,1000,-616,383,429,452,594,652,1000,-948,673,-179,-1000,1000,1000,189,1000,-900,-1000,790,-1000,57,252,992,-1000,-118,-220,-1000,-1000,-749,1000,-1000,-1000,-1000,1000,1000,836,-869,-899,-423,345,-107,288,-299,150}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00148() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.type.MapType", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "constructType(java.lang.reflect.Type):com.fasterxml.jackson.databind.JavaType",
+            new int[]{1000,749,328,4,853,827,762,-781,-676,-44,561,-812,1000,1000,-117,1000,679,-390,956,-1000,-1000,697,1000,-254,114,1000,400,-1000,-594,816,-412,-740,-369,-496,248,-309,-956,-1000,245,-493,-1000,1000,-139,842,672,1000,87,-297,223,-1000,1000,-1000,1000,1000,-1000,-801,-1000,188,840,-224,-313,687,617,71}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00149() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.type.CollectionType", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "constructType(java.lang.reflect.Type):com.fasterxml.jackson.databind.JavaType",
+            new int[]{1000,927,184,526,-1000,1000,-742,542,295,78,376,-460,-752,-401,1000,926,40,-1000,-957,1000,443,-689,-199,-1000,-1000,1000,-243,-756,599,691,-171,1000,496,1000,-170,1000,-560,-866,564,-559,-17,801,-1000,-873,-398,992,-855,1000,183,-131,-705,-1000,242,1000,-696,-900,-919,-829,721,198,271,812,-478,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00150() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "constructType(java.lang.reflect.Type):com.fasterxml.jackson.databind.JavaType",
+            new int[]{1000,1000,-83,79,624,894,146,-1000,-498,-576,185,-742,400,550,30,1000,-1000,594,-191,-482,-1000,717,-224,327,-947,1000,-1000,-967,-1000,537,-776,-1000,192,436,-273,-293,-532,-670,-185,-679,-725,629,-553,73,1000,1000,539,-421,-546,788,377,478,1000,1000,78,-1000,-256,1000,695,-410,-551,-316,1000,955}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00151() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.type.ArrayType", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "constructType(java.lang.reflect.Type):com.fasterxml.jackson.databind.JavaType",
+            new int[]{-150,916,-355,74,-881,830,564,753,343,975,536,753,-703,-704,466,-332,398,-621,-181,185,359,-217,248,-899,73,755,458,-34,838,356,-939,-750,311,-582,-286,833,-30,-332,551,-891,-747,-120,-456,-990,75,955,-745,-142,915,492,245,-887,330,555,301,-199,-606,-854,598,-308,-693,159,-62,-848}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00152() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.type.ArrayType", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "constructType(java.lang.reflect.Type):com.fasterxml.jackson.databind.JavaType",
+            new int[]{-558,779,125,-451,635,-817,-1000,-287,1000,-562,-1000,-1000,-1000,-7,50,490,-1000,916,304,-98,-430,113,527,1000,-913,-790,-1000,-516,292,771,1000,-792,-1000,1000,-12,-785,-112,603,-51,-341,-98,-1000,517,-227,581,42,1000,-807,53,651,-983,661,-360,-1000,1000,189,-794,22,-296,1000,-1000,-1000,639,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00153() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.type.SimpleType", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "constructType(java.lang.reflect.Type):com.fasterxml.jackson.databind.JavaType",
+            new int[]{-307,-599,599,-761,51,-128,300,-889,-143,-475,-339,989,708,-683,-788,-371,813,-608,-420,-157,185,-193,-387,-384,666,591,455,642,577,374,962,384,-925,172,-498,632,-328,-139,777,-959,-201,-610,35,137,-242,821,797,898,-3,938,63,-849,202,-671,835,776,-575,-371,-222,-51,-834,-107,-173,-443}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00154() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.type.MapType", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "constructType(java.lang.reflect.Type):com.fasterxml.jackson.databind.JavaType",
+            new int[]{-184,914,344,-396,-513,1000,147,-787,-620,-44,772,-1000,135,541,1000,1000,-151,-1000,-1000,540,-1000,880,334,-169,893,1000,-1000,-751,-1000,1000,-363,-1000,-420,106,-1000,650,-1000,-893,1000,-1000,-309,-283,-1000,-1000,672,1000,773,-193,1000,1000,1000,-282,349,176,-575,-808,903,1000,1000,-524,-533,-784,-94,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00155() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.type.MapType", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "constructType(java.lang.reflect.Type):com.fasterxml.jackson.databind.JavaType",
+            new int[]{628,674,-150,-176,69,255,89,107,29,-1000,1000,-464,1000,1000,989,851,-295,-68,-742,-402,-1000,711,868,506,368,824,-511,-1000,-969,1000,-1000,-424,99,-287,665,-851,-914,-1000,86,-1000,-676,550,-591,-637,772,955,385,1000,910,44,999,-1000,524,835,-50,-896,1000,828,1000,-1000,58,234,-329,-198}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00156() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.type.MapType", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "constructType(java.lang.reflect.Type):com.fasterxml.jackson.databind.JavaType",
+            new int[]{-451,841,-189,419,-1000,122,-570,516,-1000,1000,-824,-892,-118,-265,89,-590,273,-639,1000,-562,853,-358,-755,548,-556,-427,1000,-164,228,895,955,-914,-286,183,-322,337,144,542,385,-134,56,-300,528,946,273,978,41,-289,736,10,-77,-1000,324,-503,848,110,-1000,796,-637,1000,-149,-868,663,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00157() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.core.type.TypeReference):java.lang.Object",
+            new int[]{-91,625,-262,-331,227,-20,596,275,1000,-811,549,-846,-1000,-486,207,400,-252,-230,-989,-857,500,161,-60,1000,-294,-467,-1000,-1000,1000,220,980,1000,-663,-387,-92,1000,-527,-632,-793,-510,723,390,897,-7,-1000,-253,-491,-697,-600,468,1000,-473,-899,922,1000,-465,552,-97,-1000,1000,-566,236,870,-963}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00158() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.core.type.TypeReference):java.lang.Object",
+            new int[]{-698,285,-121,419,-412,-1000,-48,32,-1000,-436,-23,-966,-1000,-451,340,-1000,-1,-1000,552,-1000,-624,1000,-96,98,-159,584,410,114,-66,-533,990,1000,-811,955,563,490,-144,46,-1000,-317,-60,-322,-96,322,1000,-15,-364,-53,-44,-100,-249,82,1000,-291,825,-465,444,356,-77,-1000,-147,108,667,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00159() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.core.type.TypeReference):java.lang.Object",
+            new int[]{-477,812,-129,269,-225,1000,-1000,1000,-400,-973,-1000,-561,-1000,-78,753,-813,1000,-731,-253,-636,667,-366,-199,744,111,857,-1000,-712,501,-887,1000,424,-558,493,-1000,46,1000,-1000,64,-1000,-691,436,1000,255,1000,-436,495,1000,71,52,335,1000,674,-899,432,-496,-44,-1000,-649,1000,982,850,143,252}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00160() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.core.type.TypeReference):java.lang.Object",
+            new int[]{-531,584,-244,-46,-66,-189,-213,10,-24,-826,-1000,-604,-918,-291,68,371,208,-639,-218,-735,56,358,-659,630,-177,273,-832,-443,506,-233,911,753,-771,328,878,591,-109,-521,855,-232,197,301,-309,177,771,-34,-1000,45,-355,67,246,1000,703,260,714,738,418,43,-648,-112,6,88,395,-529}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00161() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.core.type.TypeReference):java.lang.Object",
+            new int[]{-226,1000,309,-317,-416,-661,103,254,1000,-1000,311,-846,-728,-1000,999,764,154,-578,-1000,-1000,1000,817,-117,1000,308,-738,-869,-1000,1000,290,980,1000,-1000,553,643,1000,-530,-586,-1000,-719,1000,478,491,-220,-1000,-208,-604,-509,-998,103,1000,-115,-76,665,1000,-385,884,-386,-1000,1000,-837,716,-882,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00162() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.core.type.TypeReference):java.lang.Object",
+            new int[]{156,283,-1000,-196,-358,-14,-370,-25,-760,-1000,-1000,-968,-738,-885,-41,371,403,-321,93,-673,-326,82,-304,546,38,-16,-1000,522,583,-1000,1000,968,-911,614,242,1000,826,-1000,-1000,-515,250,133,-1000,-339,691,-798,407,1000,-125,291,714,404,544,-612,915,-611,721,-949,-1000,-281,524,520,820,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00163() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.core.type.TypeReference):java.lang.Object",
+            new int[]{1000,-710,1000,-441,-690,254,1000,-833,-694,636,1000,936,960,-104,-359,-1000,972,120,-642,1000,-1000,-72,922,-888,742,-887,395,1000,-845,98,-1000,192,826,147,532,-311,-214,933,-780,1000,130,-1000,-1000,599,-713,745,-20,-123,-1000,267,-449,-710,15,-819,-88,109,-63,-399,1000,-686,-290,-1000,774,369}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00164() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.core.type.TypeReference):java.lang.Object",
+            new int[]{-458,317,-1000,734,791,197,-311,562,1000,-195,-1000,-746,-612,1000,-1000,-259,594,72,691,-791,1000,-250,-1000,45,-1000,418,-153,-1000,-181,950,802,-389,502,-1000,-1000,-1000,1000,-241,-208,-1000,-1000,1000,1000,-441,-107,-887,-240,-1000,1000,229,580,-492,-1000,-359,-173,-871,-7,-516,-1000,632,1000,156,885,-37}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00165() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.core.type.TypeReference):java.lang.Object",
+            new int[]{-1000,1000,-365,479,-1000,-1000,653,492,153,-635,84,-842,-935,20,525,-1000,342,-1000,479,-579,37,1000,-404,-606,-142,-27,688,-1000,-202,-1000,986,1000,-586,1000,150,424,284,433,-729,-4,158,366,1000,854,1000,273,-891,-1000,-3,-518,-277,-1000,1000,-394,622,-626,1000,626,192,-1000,615,276,837,-823}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00166() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.core.type.TypeReference):java.lang.Object",
+            new int[]{-1000,295,-913,419,-158,-838,609,1000,1000,156,-761,-469,-1000,242,106,-1000,423,1000,523,-938,963,674,-1000,-747,-121,-790,181,202,141,-581,139,476,-424,423,-816,183,1000,-34,-1000,-611,588,-1000,1000,752,-419,-454,-1000,-1000,-101,-44,645,-185,-405,-635,440,-1000,1000,-665,427,69,976,963,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00167() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.databind.JavaType):java.lang.Object",
+            new int[]{412,1000,-1000,89,-362,915,-1000,194,1000,-661,-1000,-971,-622,1000,-1000,-759,-309,1000,-66,587,-500,501,-1000,-1000,-677,-776,-1000,-1000,-1000,-37,-1000,62,80,-1000,-1000,1000,84,1000,-1000,-204,592,958,1000,-1000,1000,-552,252,1000,-515,971,87,-383,1000,-808,526,-465,-1000,-1000,-1000,851,1000,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00168() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.databind.JavaType):java.lang.Object",
+            new int[]{-213,276,-11,1000,-208,-207,-934,458,67,-245,-708,1000,-64,-981,-119,-106,481,226,157,-459,984,706,506,837,-968,728,239,-636,-226,-161,67,596,-293,-562,-1000,-165,672,459,729,650,-664,30,271,-270,-224,-198,-23,-100,781,1000,858,-119,685,849,1000,-360,421,-715,-1000,178,-420,-1000,-648,-62}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00169() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.databind.JavaType):java.lang.Object",
+            new int[]{-1000,454,15,-951,-986,-595,647,-637,-898,1000,-67,162,-628,1000,-207,356,-638,342,-1000,-584,-63,634,-1000,-504,-1000,-1000,-1000,-1000,-1000,-233,-1000,-1000,933,-973,-19,1000,1000,1000,-1000,-697,398,1000,90,-1000,-505,1000,979,1000,742,441,1000,1000,-364,-55,-351,998,1000,-1000,322,1000,-188,-548,823,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00170() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.databind.JavaType):java.lang.Object",
+            new int[]{769,-1000,-135,-821,1000,-961,577,102,412,-1000,-344,1000,858,-280,-556,-1000,-478,-611,1000,1000,719,-239,1000,1000,292,1000,1000,-218,418,818,622,570,-802,1000,579,-1000,1000,-1000,1000,952,-1000,-1000,-425,1000,-520,-780,-281,176,1000,-1000,311,-1000,-827,1000,176,-1000,-1000,1000,1000,-616,-1000,-1000,632,-938}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00171() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.databind.JavaType):java.lang.Object",
+            new int[]{1000,-755,71,-87,282,-878,164,306,822,-1000,-1000,777,305,988,3,-899,1000,891,369,914,195,-279,548,654,1000,780,963,1000,788,525,1000,-42,78,1000,-755,-1000,964,-1000,907,48,-122,-512,406,1000,477,-146,-800,430,401,171,-1000,-680,38,1000,17,-1000,-1000,957,-353,-447,-292,659,-557,9}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00172() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.databind.JavaType):java.lang.Object",
+            new int[]{102,739,-345,-571,-252,-564,-1000,-16,6,780,313,-1000,-666,997,281,1000,427,1000,-1000,-142,-837,923,-1000,-1000,598,339,-1000,-1000,-1000,-1000,-248,-595,117,-1000,-628,1000,686,1000,-996,-1000,1000,1000,654,-1000,308,1000,1000,904,-1000,-722,-44,1000,13,-842,-978,1000,-224,-896,1000,855,616,320,154,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00173() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.databind.JavaType):java.lang.Object",
+            new int[]{1000,-1000,-693,-167,341,-1000,325,-742,1000,-1000,-1000,1000,-411,-193,-1000,-1000,1000,-184,1000,1000,-583,952,326,1000,1000,996,1000,-112,-1000,746,476,-1000,-765,1000,-867,-1000,224,-1000,1000,209,-800,-1000,652,1000,438,-673,388,769,485,-1000,1000,-1000,28,-358,-420,513,-1000,325,-107,201,631,-1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00174() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.databind.JavaType):java.lang.Object",
+            new int[]{-340,1000,-5,889,-621,-671,-288,-754,393,42,-1000,-1000,-673,223,-197,-433,1000,1000,-39,-1000,-658,215,-834,-534,-651,-281,242,-1000,-972,664,-72,-1000,667,-158,-547,1000,636,774,-857,-1000,686,1000,331,-583,535,1000,1000,880,1000,74,462,897,388,-390,1000,1000,485,-677,-520,527,407,488,785,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00175() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.databind.JavaType):java.lang.Object",
+            new int[]{1000,503,-1000,782,-7,291,-971,-223,1000,-1000,-1000,-96,-668,560,-1000,-1000,981,-286,842,996,-1000,23,-1000,-788,300,-547,263,-466,-424,17,-922,-328,-218,-60,-1000,450,-692,301,-532,-702,792,121,1000,-43,1000,-722,494,769,-819,174,87,-726,776,-1000,-125,182,-1000,-1000,-1000,986,1000,-683,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00176() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,com.fasterxml.jackson.databind.JavaType):java.lang.Object",
+            new int[]{-1000,1000,-926,-666,-1000,-518,-703,6,-382,1000,313,487,-682,992,358,760,-257,-246,-499,-477,360,1000,1000,-806,-1000,-1000,-1000,-290,-1000,-319,-1000,-409,-92,-1000,-1000,466,1000,1000,-1000,48,-1000,1000,1000,-1000,-212,1000,680,1000,807,1000,1000,-695,334,-879,506,-1000,1000,-726,-1000,1000,1000,-327,1000,-265}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00177() {
+        org.junit.Assert.assertEquals("java.lang.String:b2JqZWN0NA==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{171,1000,511,554,467,-536,-816,-1000,120,-388,-311,366,35,777,-266,1000,826,-964,-1000,-1000,744,-1000,-1000,508,-456,1000,-919,1000,594,-291,1000,590,1000,-309,-300,409,-1000,1000,126,-115,-1000,1000,-301,-556,696,-651,543,391,384,-1000,378,1000,1000,-469,1000,324,966,-1000,354,-883,11,302,1000,-90}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00178() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{-789,255,664,-394,-661,-287,138,-1000,202,1000,-1000,849,-238,1000,491,249,202,865,1000,-42,1000,147,1000,-1000,-1000,-1000,140,8,1000,1000,-506,394,499,1000,-1000,1000,523,373,125,45,269,396,-627,-43,1000,344,-1000,-857,1000,-1000,-418,1000,1000,-243,-288,591,687,607,1000,1000,1000,1000,-727,-573}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00179() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{-984,214,899,-346,1000,975,130,1000,1000,315,-988,-210,1000,584,326,840,873,-56,-585,-1000,-626,-780,1000,-1000,-761,687,863,1000,520,-1000,-1000,-1000,-321,-11,-1000,-172,1000,-134,1000,-772,395,837,1000,873,596,956,-1000,366,-43,648,45,-680,653,1000,-216,490,1000,-215,-919,-279,680,99,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00180() {
+        org.junit.Assert.assertEquals("java.lang.String:b2JqZWN0Mw==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{-690,1000,1000,504,705,-1000,-1000,943,1000,1000,-792,253,98,1000,955,1000,1000,275,-557,-625,1000,-1000,484,-1000,-1000,-2,517,875,284,68,-834,574,1000,1000,-1000,1000,-1000,463,789,-445,-2,1000,-1000,-122,1000,1000,-287,1000,1000,-1000,-118,767,328,35,811,534,1000,392,-1000,-492,1000,1000,1000,860}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00181() {
+        org.junit.Assert.assertEquals("java.lang.String:b2JqZWN0Mw==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{425,1000,1000,574,8,327,-1000,664,1000,-1000,-989,-329,-892,-475,646,1000,1000,-1000,-985,85,-444,15,1000,-1000,1000,-109,-1000,535,-3,296,-1000,-1000,383,-68,-1000,1000,126,493,-749,-875,1000,154,-299,-1000,331,1000,1000,1000,1000,-293,-274,-317,-411,1000,-1000,-39,-768,403,1000,-1000,1000,1000,-859,171}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00182() {
+        org.junit.Assert.assertEquals("java.lang.String:b2JqZWN0MA==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{-232,-1000,-904,-271,884,-288,442,-165,307,1000,307,-129,-649,1000,965,-132,-127,1000,1000,1000,1000,290,1000,-1000,-385,-1000,1000,-443,1000,-1000,-111,472,-415,1000,-408,-458,-253,-645,-457,-31,970,151,-91,1000,415,142,-1000,-1000,921,77,422,299,694,332,-705,143,-892,472,536,1000,-840,-727,-90,559}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00183() {
+        org.junit.Assert.assertEquals("java.lang.String:b2JqZWN0MA==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{-336,1000,-710,-261,-361,-148,-699,-1000,-173,-822,-311,-716,35,-890,-249,1000,911,-1000,-1000,-500,-748,-434,-387,-698,127,1000,-447,1000,206,400,-490,302,1000,-309,-680,409,955,440,960,-135,211,-56,-102,-556,646,692,1000,764,229,387,-73,-168,357,933,920,640,-356,-867,-1000,-797,11,78,609,-681}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00184() {
+        org.junit.Assert.assertEquals("java.lang.String:b2JqZWN0MA==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{-201,1000,894,-211,-619,469,-1000,-216,1000,-1000,-1000,265,1000,-354,-139,1000,1000,-1000,-1000,-1000,-972,-718,-1000,361,-59,1000,-1000,1000,220,1000,208,1000,1000,-1000,-713,441,268,1000,1000,-1000,-1000,-269,-914,-1000,1000,-235,1000,1000,-73,-1000,-288,-82,-72,776,1000,1000,1000,-1000,869,-1000,257,290,1000,-580}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00185() {
+        org.junit.Assert.assertEquals("java.lang.String:b2JqZWN0MQ==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{-375,-431,-84,764,448,23,699,-1000,-173,1000,-519,-562,-1000,1000,467,397,1000,1000,1000,1000,612,1000,734,-1000,-613,-1000,1000,1000,1000,-164,-866,611,1000,1000,-795,1000,1000,-1000,-1000,368,1000,-141,-188,929,1000,1000,-1000,-1000,921,37,-633,1000,1000,45,-1000,-50,-1000,1000,1000,1000,420,64,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00186() {
+        org.junit.Assert.assertEquals("java.lang.String:b2JqZWN0Mw==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{-628,1000,1000,554,-87,297,163,121,178,930,-797,-52,182,945,414,1000,300,1000,18,-5,139,350,304,-1000,-863,-460,597,81,1000,424,-1000,-177,681,907,-1000,826,45,-883,126,-21,1000,881,-1000,458,980,1000,-1000,-858,1000,-421,378,-121,1000,201,191,324,586,1000,1000,565,502,747,371,771}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00187() {
+        org.junit.Assert.assertEquals("java.lang.String:b2JqZWN0Mg==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{702,1000,-356,359,-186,-400,551,-136,-84,-884,389,269,-919,672,218,-1000,598,-1000,896,-542,1000,-1000,1000,336,413,-233,-598,385,-122,-1000,-390,-1000,28,1000,900,206,-1000,1000,345,148,-1000,231,1000,369,27,-977,459,981,21,-1000,622,1000,-691,-929,234,-255,-191,-947,-1000,269,-594,427,483,990}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00188() {
+        org.junit.Assert.assertEquals("java.lang.String:b2JqZWN0MA==", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "convertValue(java.lang.Object,java.lang.Class):java.lang.Object",
+            new int[]{653,1000,1000,544,-674,-675,-1000,1000,1000,-1000,-560,-688,1000,-1000,-1000,1000,1000,-1000,-1000,-1000,-1000,1000,-250,1000,1000,1000,-1000,1000,-225,-467,-899,-630,726,-1000,-1000,282,1000,1000,1000,-1000,-57,290,-1000,-1000,333,895,1000,1000,-868,1000,-717,-1000,48,-257,193,1000,823,335,-1000,-1000,1000,1000,834,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00189() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "copy():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{690,168,-6,-1000,517,-525,-491,-834,52,410,1000,-499,379,486,739,-1000,-286,748,916,454,-93,580,1000,-797,124,-511,174,940,342,59,1000,-94,-735,196,1000,1000,370,-105,929,504,-276,-453,-1000,1000,545,431,-500,-848,501,-183,280,1000,-1000,-258,-615,788,-709,-242,340,646,-63,-221,277,698}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00190() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "copy():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-398,-16,-93,-801,-217,-214,-494,-1000,365,-209,385,-1000,-428,-422,1000,-1000,-85,301,-236,1000,-134,-1000,322,-655,795,873,750,42,619,-591,696,-663,-1000,1000,1000,795,40,897,53,392,-1000,-805,-136,1000,123,134,312,-562,542,304,-639,1000,-267,904,-108,1000,-1000,-617,-531,267,343,-296,445,131}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00191() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "copy():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-928,348,-292,493,-149,737,-851,-827,584,204,-180,-490,-987,-759,326,-345,-390,-461,-831,453,67,-999,-927,379,9,801,41,49,328,-707,-476,103,-958,663,861,-175,102,834,-4,40,-783,-681,-676,548,-578,-519,536,-376,834,956,-710,972,-116,893,-340,-69,-873,-914,-565,-312,-313,85,548,-200}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00192() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "copy():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{374,934,185,-586,537,318,-539,239,-128,-426,-78,-464,-469,289,-381,-815,-856,-981,-21,-776,-338,-962,315,-822,270,-49,436,-58,-927,549,-480,-958,-277,287,-783,677,-301,461,721,-890,596,-718,-502,-306,415,-144,-725,98,597,356,933,-840,353,-445,15,175,-307,351,711,-570,476,877,381,-697}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00193() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "copy():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{730,-368,-866,999,-736,1000,-896,-267,-518,723,174,-1000,388,-1000,1000,-381,-1000,-1000,-569,-512,-1000,-399,-1000,-174,60,261,-280,899,765,-1000,-1000,-1000,-1000,1000,1000,992,840,508,402,1000,-1000,-1000,-1000,-1000,-1000,-1000,-830,-1000,-193,1000,-183,1000,915,1000,1000,642,538,-1000,30,472,-230,-870,728,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00194() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "copy():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-184,-375,-636,-842,219,-622,-854,-354,290,388,153,316,-375,-759,837,-811,115,-621,-574,-593,-761,-402,-196,-613,251,-883,-123,-75,-665,-801,-512,221,-691,424,-249,378,27,-713,454,111,-809,19,-877,107,4,-722,264,-250,-180,645,311,795,717,770,932,967,833,-561,427,439,170,-182,205,-336}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00195() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "copy():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,-468,54,-769,-688,-894,670,-1000,-395,572,322,-659,-391,293,-910,998,947,1000,-1000,1000,740,-400,-648,1000,756,-901,933,-501,54,330,996,1000,188,687,1000,-1000,-533,82,998,-714,-694,119,-962,1000,-265,370,862,-424,-77,644,-915,1000,-1000,-463,-938,231,691,52,-383,632,-107,267,380,142}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00196() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "copy():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,249,119,-46,-1000,1000,561,-276,240,-24,-1000,-1000,-1000,399,211,-1000,58,963,-975,264,515,-1000,558,1000,-17,769,-309,664,-719,-957,-752,607,694,-674,181,950,-18,1000,-224,-509,-59,736,-456,-453,93,-1000,856,-233,117,1000,88,-126,574,991,-541,-1000,109,-1000,-197,-1000,521,-950,92,985}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00197() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "copy():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{191,159,-988,997,-289,291,-686,-671,707,-498,-551,251,0,73,592,241,-369,98,912,594,-974,122,-927,-39,119,362,831,-730,-617,88,-830,95,-827,848,153,120,377,812,521,531,936,734,944,-148,508,742,792,-934,260,-468,318,-333,591,-638,221,-267,424,-271,680,-946,-333,-413,199,901}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00198() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "copy():com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,570,-93,-673,612,-214,-468,451,665,-429,349,-151,-382,-283,-1000,1000,366,311,394,-505,332,-399,-1000,-324,275,301,613,-187,430,53,1000,661,-640,893,1000,-1000,-71,-279,475,-421,-781,219,-136,1000,-376,286,239,-655,1000,-712,-1000,1000,-1000,-516,-1000,150,-1000,125,-470,327,-519,530,1000,-440}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00199() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ArrayNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createArrayNode():com.fasterxml.jackson.databind.node.ArrayNode",
+            new int[]{-1000,1000,1000,594,-75,-285,392,-315,-1000,400,1000,1000,857,678,1000,1000,279,-1000,-1000,1000,1000,848,428,-1000,-1000,771,-1000,-1000,-103,920,574,-1000,24,-1000,-1000,-646,1000,1000,-740,1000,-465,-1000,335,-1000,-902,-1000,-1000,266,100,1000,-103,1000,-995,1000,1000,-896,1000,933,1000,-1000,-1000,1000,-18,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00200() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ArrayNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createArrayNode():com.fasterxml.jackson.databind.node.ArrayNode",
+            new int[]{-840,-78,49,544,-280,400,-388,-224,1000,-1000,-64,-1000,1000,293,56,-64,-561,1000,1000,788,1000,353,1000,577,259,869,-64,1000,1000,1000,1000,-1000,-1000,80,-685,-285,-1000,-625,-1000,873,-833,710,-246,-729,-400,76,146,1000,1000,1000,-350,1000,-30,1000,1000,-438,-1000,1000,-1000,1000,1000,-1000,-1000,-400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00201() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ArrayNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createArrayNode():com.fasterxml.jackson.databind.node.ArrayNode",
+            new int[]{-157,218,839,-732,-366,809,-698,-446,-833,-118,-613,-830,774,840,-788,-435,614,349,782,706,624,-197,878,-29,-201,-39,-917,-933,-268,787,593,-971,60,-504,962,438,224,-553,467,608,783,664,-600,-282,414,-511,266,-448,-321,161,586,-98,-326,949,842,502,742,-119,-92,828,-437,92,-715,115}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00202() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ArrayNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createArrayNode():com.fasterxml.jackson.databind.node.ArrayNode",
+            new int[]{583,-431,-746,389,428,1000,-63,397,1000,783,-344,-602,801,798,-645,415,88,557,-273,1000,-1000,145,545,361,-939,-1000,-53,1000,1000,433,-999,-860,-713,421,297,-76,91,230,605,544,-768,832,-505,-200,656,816,-184,83,-874,904,994,481,1000,-470,311,-820,98,515,611,113,123,-142,542,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00203() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ArrayNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createArrayNode():com.fasterxml.jackson.databind.node.ArrayNode",
+            new int[]{-1000,1000,1000,409,-1000,-1000,289,-1000,-1000,763,776,1000,-151,-420,1000,626,191,-1000,-17,-346,-578,778,181,-725,-298,987,-1000,-1000,-1000,958,1000,302,-260,-389,-187,-554,1000,1000,-640,1000,-1000,-1000,1000,-837,-731,-423,-1000,-415,128,208,-405,58,-1000,1000,37,-1000,1000,517,1000,-1000,-166,1000,-403,-589}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00204() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ArrayNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createArrayNode():com.fasterxml.jackson.databind.node.ArrayNode",
+            new int[]{318,-200,-222,484,210,552,261,985,437,-98,-173,-267,297,540,-560,-387,403,730,625,939,-282,185,-172,494,-943,-874,-338,545,968,217,-827,-860,-388,-850,-271,-984,-3,201,695,116,-201,283,-335,-125,853,700,-304,195,-621,131,731,345,15,-827,185,905,803,221,531,-712,435,419,-327,413}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00205() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ArrayNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createArrayNode():com.fasterxml.jackson.databind.node.ArrayNode",
+            new int[]{68,271,252,794,-946,83,99,-343,303,-8,-644,-252,15,-1000,-862,-508,276,504,368,457,-102,-379,301,332,-325,-663,537,469,35,-745,-176,163,-249,878,724,-448,897,-193,660,686,-166,288,402,-837,1000,132,-707,-10,-385,-253,490,336,763,-385,-397,-79,341,33,1000,-481,-166,-374,-548,987}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00206() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ArrayNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createArrayNode():com.fasterxml.jackson.databind.node.ArrayNode",
+            new int[]{-1000,670,-453,583,-355,1000,96,26,1000,176,-912,-850,120,1000,-991,-678,641,177,1000,484,-1000,178,1000,-1000,108,174,-399,194,1000,870,106,-3,-356,-522,-694,-742,-844,-532,-559,1000,-1000,632,234,395,-262,-199,-734,651,-532,1000,493,30,-183,1000,-920,304,364,-801,89,-109,64,-1000,1000,203}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00207() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ArrayNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createArrayNode():com.fasterxml.jackson.databind.node.ArrayNode",
+            new int[]{113,426,74,-654,-457,-473,442,1000,-610,-338,-623,1000,1000,80,-1000,-560,144,-357,-331,320,-701,1000,208,1000,457,-175,-489,-61,524,701,-991,-920,-58,-1000,-405,-1000,1000,-394,-529,116,-187,169,-399,1000,1000,-386,-284,659,-476,988,1000,345,-743,-827,682,716,1000,1000,-16,-867,234,17,845,272}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00208() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ObjectNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createObjectNode():com.fasterxml.jackson.databind.node.ObjectNode",
+            new int[]{-432,-826,-267,-511,-793,-914,1000,1000,329,1000,1000,1000,997,-1000,-1000,-1000,-33,-648,-1000,-135,365,-1000,-795,1000,-1000,1000,-1000,-1000,-106,-1000,1000,1000,-561,1000,-932,-598,445,-678,1000,-134,-88,686,-144,234,-1000,655,825,-1000,1000,1000,475,-922,1000,696,1000,-1000,61,-497,1000,441,-1000,-1000,660,720}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00209() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ObjectNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createObjectNode():com.fasterxml.jackson.databind.node.ObjectNode",
+            new int[]{-132,177,-131,-45,675,-275,261,215,1000,844,368,234,582,-1000,3,-414,342,-711,138,187,388,-507,-136,588,410,189,-1000,865,865,937,964,-976,-310,146,36,197,23,299,300,200,-67,290,217,367,197,-233,294,-59,136,-459,-513,290,-355,739,700,-347,-804,-684,-299,565,744,-388,-99,-363}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00210() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ObjectNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createObjectNode():com.fasterxml.jackson.databind.node.ObjectNode",
+            new int[]{-112,-821,-955,64,-937,31,-25,1000,-493,1000,1000,445,707,100,302,-426,-403,24,-981,-593,13,-274,-354,704,-382,591,-1000,-666,1000,-1000,832,1000,776,188,577,698,-938,885,1000,-512,-750,-491,402,580,-47,1000,849,-434,-609,-129,-595,-893,1000,-594,729,-1000,462,1000,1000,330,-1000,-222,-104,995}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00211() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ObjectNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createObjectNode():com.fasterxml.jackson.databind.node.ObjectNode",
+            new int[]{-650,-68,1000,-256,33,129,-618,-1000,114,-1000,-533,-37,-977,1000,-260,-154,72,-211,-49,1000,-708,-1000,238,320,523,739,616,-691,-686,830,-204,994,-417,-249,-844,-1000,496,299,83,-116,-303,-249,-1000,-814,-659,494,323,-306,334,380,918,30,516,-634,102,698,276,-666,-623,-286,409,29,199,-582}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00212() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ObjectNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createObjectNode():com.fasterxml.jackson.databind.node.ObjectNode",
+            new int[]{-140,12,-82,223,357,718,-527,-200,215,-265,-3,-726,-977,359,418,330,479,-876,146,1000,233,335,239,532,-137,-244,657,559,365,856,-672,-369,307,-301,314,419,1000,-331,-238,-629,1000,370,-61,778,-273,-106,419,771,-426,-614,-1000,-367,-1000,-83,249,1000,273,-244,-714,306,995,1000,-661,-387}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00213() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ObjectNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createObjectNode():com.fasterxml.jackson.databind.node.ObjectNode",
+            new int[]{-35,-79,-841,189,542,-608,444,-249,309,-221,318,-900,485,-472,-7,-1000,625,-912,-1000,-1000,-204,1000,-653,1000,-1000,-1000,-915,-416,-356,-1000,1000,275,881,813,620,960,1000,-343,876,-713,654,1000,605,-1000,-93,934,1000,1000,-487,-1000,-1000,274,303,979,389,973,1000,-1000,-505,592,-748,675,-645,-961}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00214() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ObjectNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createObjectNode():com.fasterxml.jackson.databind.node.ObjectNode",
+            new int[]{166,-318,-176,-80,-703,-384,-171,-1000,1000,41,1000,-638,682,-969,239,-865,-315,-461,-1000,-1000,332,645,-469,1000,41,-829,-1000,-1000,-525,-1000,1000,1000,367,818,-866,257,274,100,1000,-379,-133,939,-332,-989,-660,-337,425,518,-162,-284,-743,-1000,435,-1000,-13,160,1000,-1000,-306,48,-1000,-496,46,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00215() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ObjectNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createObjectNode():com.fasterxml.jackson.databind.node.ObjectNode",
+            new int[]{-1000,-950,-40,-533,277,-1000,1000,-28,134,669,795,833,16,-476,-133,128,588,382,-832,673,-587,-705,-155,704,314,660,-544,-522,906,-706,-133,-1000,-1000,887,298,5,-664,105,271,-1000,-791,963,224,-471,206,543,727,-1000,-555,484,346,922,1000,258,-828,-463,-568,375,752,426,-279,-658,-137,126}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00216() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.node.ObjectNode", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "createObjectNode():com.fasterxml.jackson.databind.node.ObjectNode",
+            new int[]{-910,-511,-1000,-53,-240,889,-245,1000,-1000,-634,-1000,1000,1000,-335,-38,1000,669,612,902,1000,474,1000,-12,484,523,844,-957,207,160,-1000,499,-596,-185,211,760,539,-311,-1000,-1000,-1000,438,-252,710,154,217,1000,-1000,-1000,-359,86,485,781,-589,-539,217,-629,-391,195,1000,735,-729,115,-607,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00217() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,403,266,-746,1000,-1000,-745,-103,-953,-934,-1000,732,1000,-603,-1000,1000,1000,-320,1000,-1000,287,-377,1000,-1000,-1000,-1000,-848,1000,-506,-1000,143,1000,-1000,-1000,23,899,-853,-859,-631,20,-812,-414,1000,-550,1000,231,743,1000,-390,99,-253,1000,1000,1000,272,1000,1000,-1000,385,535,-1000,965,550,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00218() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{141,-546,923,478,973,84,-1000,50,1000,1000,298,768,155,-1000,-1000,699,1000,-791,452,429,154,-621,-1000,-1000,-710,413,-848,170,259,-1000,143,974,482,832,394,-1000,256,531,-750,232,72,-600,-1000,-925,1000,-736,-307,700,-390,-33,-507,-2,877,1000,-928,-407,-1000,-1000,-1000,535,-1000,990,1000,787}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00219() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,38,-161,908,992,-814,273,1000,288,-739,-1000,-309,213,63,-788,399,417,279,283,-396,-189,124,-390,708,-507,-1000,-972,-867,-285,618,-1000,552,233,-324,-853,690,-90,-749,25,647,-540,-954,256,-866,-959,384,1000,103,532,3,-891,808,-447,559,236,264,628,229,479,-217,246,111,-124,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00220() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,-1000,542,74,-963,786,1000,549,-319,921,958,898,-428,-30,365,-1000,416,660,-1000,1000,-281,904,760,-2,463,911,-94,-955,-1000,713,1000,-633,-299,383,380,-946,624,1000,1000,491,1000,21,-764,-1000,-1000,-990,-511,-533,-1000,1000,1000,-550,-1000,-446,10,-17,105,996,-238,1000,-131,1000,1000,-64}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00221() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-728,1000,42,-571,-434,1000,844,-302,1000,-905,1000,-1000,140,934,1000,-590,-1000,432,-888,1000,131,1000,1000,921,248,393,-690,-1000,-876,1000,-31,-1000,1000,-982,-617,431,238,824,1000,248,-932,-491,884,-1000,-1000,-61,331,-429,500,800,-228,-368,-1000,-61,92,-351,-938,675,874,46,1000,-203,-887,-884}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00222() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-283,1000,122,-577,-295,-302,-117,16,122,128,144,-256,213,-677,-562,-815,-647,-511,319,-396,1000,161,-76,-1000,-1000,-307,820,-867,492,-804,756,-178,-128,-1000,-225,58,-661,-1000,25,-1000,197,722,822,-1000,-315,-596,-815,103,1000,1000,1000,-635,394,559,-974,-508,-688,-176,396,-534,-425,1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00223() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,-1000,33,-477,285,-916,920,-629,1000,627,1000,-1000,1000,1000,-338,-1000,-51,-353,71,1000,213,1000,1000,-1000,425,383,-629,-513,-512,477,1000,-1000,-515,-1000,-790,893,-941,443,1000,-742,1000,968,-387,-589,-1000,274,294,-864,-1000,971,-590,-877,-395,-410,782,1000,-100,-114,-836,-692,1000,98,838,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00224() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{22,-346,-727,-231,947,-76,829,304,797,-1000,-293,-1000,105,688,-93,198,-402,-145,-368,-330,726,531,-1000,915,-996,-665,-752,478,-234,727,-463,695,-256,-1000,-1000,616,-993,-738,987,-341,-418,-730,757,-56,-1000,117,581,-367,763,283,-415,320,-718,807,-291,621,-315,-395,542,-477,1000,-866,-871,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00225() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{979,379,436,168,-608,-360,-1000,-378,-524,344,-922,1000,1000,346,-305,139,1000,-384,847,-729,-204,-1000,1000,-1000,-593,-1000,489,156,1000,-1000,-335,86,699,-385,1000,-574,627,942,-1000,-1000,395,-60,1000,-484,-1000,-607,778,577,-622,364,669,-1000,1000,174,92,459,1000,-1000,-1000,-723,-1000,31,1000,-223}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00226() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,-883,334,603,-1000,786,-451,587,1000,874,958,-54,-428,274,1000,-1000,-984,184,-1000,1000,-69,501,-116,19,711,911,-200,-955,-385,713,674,-990,1000,383,23,-875,526,1000,1000,311,1000,-185,-764,-807,-757,-452,-331,-533,-1000,634,160,-746,-1000,-446,-76,-877,-541,996,-379,710,1000,1000,404,-575}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00227() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{865,1000,-898,-343,-427,-643,496,-876,1000,954,-1000,899,-619,-327,-878,-268,950,-720,702,-971,362,-1000,-1000,-379,543,-812,-202,307,1000,-1000,-915,-405,938,955,-1000,-570,-498,-968,-216,833,-1000,-938,-764,-183,387,738,305,668,914,-1000,-1000,610,1000,1000,86,1000,-892,-1000,-939,-704,731,-776,-105,-911}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00228() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonParser$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,929,-1000,539,588,1000,264,-31,806,1000,-476,-162,-682,-29,-1000,-232,-968,885,-164,382,859,544,-568,-186,-586,-491,448,-772,787,-477,1000,-1000,1000,147,-1000,-890,73,-1000,7,746,1000,1000,-169,583,336,1000,242,1000,1000,-218,-374,-99,-202,1000,-643,1000,-293,829,-1000,1000,887,77,778,519}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00229() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonParser$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{964,951,409,-1000,-1000,1000,-798,707,-24,-1000,33,478,341,422,289,607,-812,-708,87,246,-634,1000,-708,-402,181,599,651,-36,-300,363,1000,582,747,658,447,-794,827,-1000,1000,-689,-658,-112,671,764,-762,-301,-1000,-271,-346,469,385,1000,549,1000,771,-1000,716,-1000,-168,677,600,-1000,1000,-929}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00230() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonParser$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-891,-671,-1000,39,-765,-1000,12,-67,-1000,-760,639,1000,-319,521,-200,-874,58,284,207,333,-19,-589,-963,796,1000,1000,-872,-382,-996,664,1000,-1000,-567,874,1000,211,-1000,471,422,810,-26,432,-1000,-275,323,1000,1000,-856,241,1000,439,-597,-1000,-112,-1000,218,-1000,713,39,315,-135,1000,-828,-179}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00231() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonParser$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-930,-14,-367,-346,-1000,-1000,98,575,-1000,-618,1000,633,-1000,728,456,-1000,729,259,313,787,-25,-171,-1000,1000,1000,1000,-103,1000,-1000,1000,1000,1000,-493,1000,340,-995,-1000,983,126,737,-95,-488,-1000,-198,1000,1000,1000,-567,-1000,281,759,477,-766,-1000,-1000,46,-1000,846,1000,598,-1000,-357,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00232() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonParser$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{454,796,-762,-477,-873,1000,702,-617,-964,447,1000,340,-934,824,576,1000,170,-79,6,139,-287,-526,1000,-1000,-1000,-150,-539,1000,1000,-814,-1000,397,296,149,-1000,982,1000,-892,200,-521,-48,-328,1000,-92,-119,-760,-1000,661,-256,-1000,-626,1000,-778,974,-218,-1000,489,306,82,1000,-165,26,1000,-518}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00233() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonParser$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,1000,-1000,203,139,520,-1000,194,303,188,221,-153,-738,136,-1000,167,-480,-198,703,-559,1000,-1000,578,204,-274,-286,-1000,-915,249,878,48,-577,1000,666,-1000,1000,-1000,796,368,725,1000,-461,-490,-1000,314,1000,425,548,288,1000,56,395,-1000,1000,-937,1000,-516,728,-1000,290,-1000,-485,1000,-36}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00234() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonParser$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{805,1000,-682,-117,-464,1000,227,311,-144,1000,646,-1000,-374,233,742,1000,-244,-141,-318,-21,844,53,575,-1000,-843,-1000,637,1000,1000,-1000,-614,147,1000,-383,-1000,-1000,1000,-960,-297,-1000,1000,-476,1000,9,310,-1000,-1000,1000,896,-1000,-1000,734,-256,1000,590,-1000,1000,-633,-899,503,1000,-49,1000,77}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00235() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonParser$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,-1000,-977,552,877,-929,-302,1000,923,376,-1000,-769,-365,-679,-415,-612,-134,571,311,513,891,-112,-327,-51,225,-323,549,-1000,-910,-81,1000,179,-168,-1000,167,935,68,-243,-461,745,373,-215,-948,-163,946,-1000,-84,297,-48,1000,-127,32,-49,-1000,79,780,280,-290,351,-1000,-1000,722,-1000,520}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00236() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonParser$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{892,365,542,-956,-860,952,-450,426,-84,-222,-21,660,33,597,-223,-637,265,-299,918,-170,-996,934,-160,-691,476,822,128,842,-28,-437,960,829,523,996,745,-862,-118,-926,916,-731,-288,-149,-145,858,497,566,-373,-357,-179,982,302,884,408,854,484,-786,-431,-907,-91,891,-406,-976,889,-482}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00237() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.core.JsonParser$Feature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,-176,-70,83,-468,-897,201,723,-925,88,-227,283,-130,879,276,-788,415,-515,-135,-44,-44,-90,-467,-378,1000,144,1000,380,-1000,557,1000,454,-706,320,535,-919,-434,10,-422,360,-14,213,-682,903,667,-1000,1000,-1000,-586,610,165,-98,347,-1000,-485,-362,-485,3,586,231,-77,1000,184,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00238() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,-203,-21,-661,838,-716,1000,587,846,-196,-1000,-725,-844,-765,362,-1000,-513,-199,-239,-619,838,1000,877,724,-168,100,1000,919,103,-1000,-681,125,-466,-1000,-119,389,79,938,1000,-710,-705,844,233,-459,759,714,-346,-471,-401,-623,-454,-264,1000,563,993,-829,-739,1000,-482,76,-1000,-390,1000,-521}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00239() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{354,-978,409,-183,103,1000,-664,-1000,-1000,104,1000,362,1000,691,1000,262,68,977,1000,785,-821,-549,351,-1000,1000,-377,-882,-233,1000,216,925,1000,79,296,-1000,1000,-922,-620,-1000,660,-480,-434,-336,-384,130,-1000,-212,1000,383,-170,-635,-1000,1000,-541,74,819,831,-1000,1000,89,-913,714,-653,744}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00240() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,1000,-1000,284,248,201,-653,-996,-504,-729,1000,611,331,796,-28,218,1000,502,276,-359,-310,44,-1000,639,1000,50,-81,-324,202,219,391,294,-1000,1000,1000,-173,-134,-796,-596,-700,-65,70,-311,366,-114,-848,853,549,-274,-869,-371,-667,873,-246,-268,574,-213,-342,-1000,-1000,-36,705,-431,174}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00241() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{824,1000,1000,-111,532,-75,-857,-1000,-640,-122,438,-292,1000,84,1000,95,1000,1000,-29,-1000,404,-249,-1000,-34,1000,-647,342,-215,257,625,-897,549,-125,832,1000,108,336,-628,-29,-836,-30,209,873,-381,-170,-1000,928,-629,331,-213,-870,-360,1000,-376,-132,474,-217,391,1000,-449,419,493,136,-193}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00242() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{524,-42,348,-887,779,-148,827,-488,605,-9,-384,-433,-1000,-291,425,-1000,-79,-407,-728,-1000,262,1000,-800,689,676,-52,686,-197,309,315,-284,746,459,-42,-1000,-283,954,1000,1000,69,-1000,-41,226,-27,-484,-1000,-764,-102,-802,991,-701,-24,-193,-1000,-299,258,1000,-168,33,-532,1000,196,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00243() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,882,-216,-297,-350,-967,469,916,455,502,229,882,-583,-1000,-1000,-1000,598,-515,-1000,-635,1000,9,-180,371,327,-1000,-708,-934,-1000,449,119,1000,963,-818,-1000,-463,1000,626,831,835,-1000,1000,1000,-1000,-1000,192,1000,-1000,-915,-322,1000,1000,846,258,144,1000,1000,-131,-134,-898,-954,-144,-400,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00244() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,1000,-556,-976,-13,185,-1000,-1000,550,181,842,879,1000,-53,945,357,572,46,-759,1000,458,1000,536,-102,1000,860,378,-284,-33,-115,-128,1000,429,-414,137,115,543,-1000,-1000,491,-413,767,630,-1000,471,180,1000,-936,992,-757,-143,-40,1000,-425,312,1000,422,-768,577,759,-1000,547,-912,-104}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00245() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-150,882,-246,77,550,-1000,147,916,455,-18,-675,-261,-210,-1000,-249,-1000,409,111,-1000,-89,1000,1000,329,1000,-1000,-1000,1000,24,-1000,-417,-1000,277,433,-826,1000,-1000,1000,405,894,-7,-522,1000,1000,-1000,-241,1000,1000,-1000,176,271,917,1000,-637,1000,603,113,1000,1000,-1000,504,-279,158,1000,-798}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00246() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-71,1000,-695,-266,270,-1000,875,539,1000,-838,-1000,-970,-768,-697,-206,-159,534,153,-1000,-498,1000,6,-17,1000,-1000,-735,862,140,-1000,-1000,-1000,-578,-573,-1000,1000,-1000,1000,-66,1000,-902,-145,1000,486,-478,179,1000,1000,-1000,-315,-129,133,1000,-724,1000,680,-837,408,1000,-1000,468,570,942,1000,-905}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00247() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{592,361,-132,-381,-276,-1000,208,102,12,-684,-287,-345,-461,-257,811,636,-69,1000,-645,-280,876,-480,199,1000,596,-1000,1000,733,-327,-750,-625,299,-753,-447,1000,-552,1000,-416,17,-473,-158,1000,94,-1000,67,1000,1000,-1000,-606,-888,-388,282,1000,553,772,-597,523,491,-1000,-151,-1000,399,1000,-679}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00248() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature,com.fasterxml.jackson.databind.DeserializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,339,-56,-553,515,71,1000,-292,1000,441,518,-1000,-1000,128,233,1000,-1000,328,-61,-756,-952,-1000,951,14,-131,1000,-1000,1000,-1000,424,-782,1000,-1000,-1000,-1000,694,-1000,-1000,680,1000,-1000,-1000,901,-1000,949,460,925,414,1000,1000,385,837,-220,42,-605,-550,-1000,-510,237,-822,1000,-1000,750,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00249() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature,com.fasterxml.jackson.databind.DeserializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-638,211,42,204,992,116,1000,-300,146,-606,805,-243,-80,-808,-250,934,1000,-328,1000,-510,-374,476,302,-49,-213,220,-388,496,467,-603,102,-260,348,-401,-725,961,-15,1000,-427,276,-739,-808,616,-179,508,-923,651,-41,608,-1000,-1000,-35,561,-304,237,-669,515,-38,228,238,1000,-368,348,288}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00250() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature,com.fasterxml.jackson.databind.DeserializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-694,92,373,749,854,-116,-22,-1000,550,-44,-156,42,-234,-163,250,916,-1000,413,7,617,-1000,-246,-437,441,1000,498,-677,27,24,-122,1000,73,-274,-83,23,-509,15,302,413,-37,184,-191,352,-287,-174,-799,-380,-179,229,1000,-689,155,394,-557,889,-202,-417,399,-184,-1000,610,-1000,1000,438}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00251() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature,com.fasterxml.jackson.databind.DeserializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{132,211,-359,-336,57,-1000,-748,-387,157,-407,142,1000,75,-1000,-196,526,400,1000,-352,944,-1000,1000,-1000,5,865,-1000,566,-351,1000,-1000,-1000,-592,1000,-985,186,-904,1000,1000,-427,-1000,-1000,628,616,363,-1000,-1000,-293,-41,-1000,-699,-1000,-402,-156,-1000,1000,-84,-1000,-38,-146,-859,-545,1000,929,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00252() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature,com.fasterxml.jackson.databind.DeserializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-886,437,706,-656,462,973,1000,-307,592,246,323,-966,-80,-806,564,1000,352,-350,546,77,-1000,-657,1000,156,695,288,-1000,-537,259,-233,266,882,-445,-644,-725,971,-544,1000,-363,-6,-368,-828,1000,-215,452,-277,668,385,170,400,-1000,339,223,-390,78,-453,1000,-143,-534,740,1000,-178,416,520}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00253() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature,com.fasterxml.jackson.databind.DeserializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-739,-556,-10,-951,78,1000,-878,-195,-43,525,-1000,100,717,-612,944,102,526,-205,-258,-227,-1000,1000,-202,-608,776,1000,1000,-725,-529,718,1000,120,-1000,634,-253,-273,-529,346,1000,211,1000,-1000,819,960,-526,-120,-1000,612,-602,1000,692,-1000,39,-457,-546,1000,1000,-6,-243,-279,-143,-16,250,694}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00254() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature,com.fasterxml.jackson.databind.DeserializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,922,314,449,-309,-319,-111,-864,846,-176,28,26,-906,-960,43,1000,-1000,1000,-990,-774,-1000,423,-79,-7,680,251,27,588,699,-181,1000,670,5,-18,-1000,-1000,306,706,12,-653,351,-292,24,-1000,-204,-617,-52,746,-594,905,-1000,-317,591,-863,647,-272,1000,-395,-239,109,-35,-1000,1000,339}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00255() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature,com.fasterxml.jackson.databind.DeserializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-625,1000,253,314,347,-311,-45,-530,-77,482,238,356,-1000,-1000,245,1000,398,-214,-563,868,-1000,1000,946,-189,490,1000,-1000,1000,1000,-1000,1000,1000,422,-797,-1000,1000,935,-1000,-1000,-1000,-188,126,574,-595,-645,-429,115,1000,-1000,732,-926,-375,1000,-1000,1000,-478,1000,-843,-1000,-1000,316,406,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00256() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.DeserializationFeature,com.fasterxml.jackson.databind.DeserializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,676,667,-76,62,-829,-184,-1000,1000,-494,-910,-105,1000,239,-1000,-1000,-701,-930,1000,19,1000,-242,-1000,-460,462,1000,163,-455,19,434,366,-428,502,377,1000,-1000,35,1000,1000,-598,-368,87,-264,226,-983,-838,977,391,1000,-524,-689,-325,503,-461,266,632,-520,593,1000,814,188,112,902,-173}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00257() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.MapperFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,1000,-1000,-541,-1000,919,-562,-853,-216,-1000,74,1000,-1000,-473,-1000,1000,-960,-599,-332,469,1000,-1000,861,-1000,-1000,1000,-650,-956,834,-1000,-1000,-215,-1000,-1000,1000,1000,1000,596,-117,554,-51,-1000,1000,1000,-57,-1000,-466,1000,240,309,0,-1000,539,1000,1000,-853,420,949,-214,1000,316,1000,-705,-46}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00258() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.MapperFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-388,-1000,419,-221,220,266,-538,-61,-552,-541,-976,225,-344,161,525,-362,603,-396,-884,-767,411,-819,751,1000,715,7,59,-638,-341,106,468,334,1000,1000,-825,-1000,-174,-1000,466,-552,509,255,141,622,-309,-240,-315,-214,-797,6,25,-935,-1000,-1000,648,607,1000,940,1000,-33,-275,-742,893,-351}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00259() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.MapperFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{258,-30,659,-287,1000,-726,-543,837,984,-597,163,-487,-1000,-975,-591,665,-60,-44,670,46,42,-311,847,86,328,1000,-911,-739,706,1000,-1000,492,552,1000,-318,-48,-119,1000,-219,1000,-432,-369,-530,34,-730,502,348,1000,-860,-165,837,-1000,400,217,614,-923,-127,-268,876,1000,-639,1000,-1000,-624}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00260() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.MapperFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{548,-128,-489,229,-1000,1000,-405,-815,-1000,-763,-1000,-264,-1000,-601,711,1000,-261,786,-304,-574,1000,-1000,1000,-248,-850,1000,-458,-934,1000,-852,-80,-1000,-371,-580,632,-567,204,-122,-301,1000,458,-474,1000,1000,507,-621,-623,625,-878,-40,125,-548,-448,87,1000,-1000,311,518,-507,1000,-518,665,-787,29}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00261() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.MapperFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-302,-250,260,-2,-865,256,-52,156,852,-832,306,-127,663,-101,27,-819,233,-131,-1000,-192,-834,1000,-1000,-23,248,-31,-927,166,-873,303,1000,-391,-971,361,168,-251,602,-1000,65,-598,-346,-365,-308,-510,-382,702,-534,-598,-614,1000,-436,-761,-1000,-99,215,675,530,883,401,-46,-346,-497,756,567}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00262() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.MapperFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{319,742,-190,-226,844,-8,-433,-601,-154,-687,-344,1000,85,-277,-687,231,12,116,-843,625,263,-962,855,-447,-190,379,-228,-954,-628,-1000,-400,767,-77,-400,361,-147,440,-210,1000,-88,367,-348,1000,915,-84,-54,238,-401,-819,831,-512,418,-260,175,478,27,-408,777,707,942,324,488,-887,54}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00263() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.MapperFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{688,400,-1000,449,1000,-907,462,-229,172,-791,-331,124,1000,-471,118,-1000,-713,1000,-787,957,-133,1000,456,-364,-909,-846,-568,-759,-799,-386,-1000,934,-400,25,543,-575,136,-464,382,-1000,-652,-457,1000,-544,-688,702,-1000,137,-837,1000,-1000,-400,400,1000,710,-1000,1000,1000,113,492,-181,-921,-160,585}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00264() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.MapperFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{649,1000,-382,-221,-556,943,228,-1000,-1000,-1000,-851,1000,-344,-541,-37,793,133,-279,-1000,-699,573,-1000,1000,-1000,-1000,1000,-853,-901,-165,-1000,-400,-633,-77,-400,1000,1000,765,-1000,1000,-203,1000,-639,1000,1000,264,-987,-315,-214,125,1000,-1000,-199,-614,662,774,581,-455,940,-44,330,91,553,893,475}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00265() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.MapperFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-97,-728,136,-42,-549,-694,-439,930,299,-1000,462,983,-308,-15,383,404,-508,85,-293,535,-4,-80,-98,-1000,-673,1000,-1000,-1000,-814,-1000,120,-1000,-1000,-807,1000,1000,1000,48,674,686,493,228,767,178,619,-318,374,-120,887,1000,-927,-386,1000,-862,517,954,-897,838,537,663,456,703,693,283}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00266() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.MapperFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{384,563,375,248,-23,-120,377,-1000,-761,-663,-735,652,313,775,-93,1000,-4,1000,-1000,447,1000,-1000,1000,-162,-621,499,1000,-1000,-1,-1000,481,-34,-549,607,813,7,-441,-1000,113,-1000,1000,-1000,1000,311,714,822,-1000,259,-1000,1000,-1000,-1000,334,-1000,278,637,-1000,1000,144,355,170,16,750,667}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00267() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-748,1000,308,554,407,764,-795,882,-976,306,620,389,336,554,1000,224,14,1000,432,-210,-1000,97,-856,104,530,891,-15,886,-192,-939,-84,-430,418,790,1000,26,1000,450,-253,-1000,1000,944,474,-481,-1000,284,-865,357,326,1000,318,1000,-447,29,362,-229,-668,-359,461,742,-1000,-790,261,819}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00268() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-62,210,389,-314,260,679,409,-106,-40,-1000,1000,1000,1000,582,-460,135,-163,294,121,1000,-721,-25,795,462,-1000,913,-1000,-312,391,-846,-1000,-942,-166,394,779,-1000,-639,852,-452,-218,-363,305,-1000,-9,-1000,-1000,-1000,1000,1000,912,195,975,30,-916,1000,-426,-1000,-1000,443,-41,-1000,-1000,195,-414}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00269() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{647,899,-974,219,90,62,424,-657,-331,-950,-564,-714,58,-620,141,-440,-180,27,108,360,-68,-77,86,414,-29,-55,425,700,-134,559,-961,269,102,-208,-357,-239,400,129,161,646,-8,1000,-771,-235,-131,807,-393,829,316,-192,539,-736,-683,158,-32,-544,-403,-162,-99,99,477,-622,-607,716}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00270() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1000,271,128,479,-784,455,-1000,135,-119,-345,-24,553,250,320,768,-53,-1000,-68,-220,242,-349,-512,-1000,1000,-432,-63,529,376,198,431,-1000,-515,-1000,1000,-303,-513,-1000,-917,-120,-32,272,-1000,472,764,605,131,-1000,53,54,231,-371,-138,209,-14,-1000,299,144,-11,1000,-347,-422,373,-809,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00271() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-347,-263,-5,159,-100,1000,-202,-798,-144,-339,279,-385,533,-186,251,-1000,-635,131,-386,276,111,-1000,-537,-22,101,-444,65,99,3,19,-560,27,456,-441,-169,-612,-1000,-609,407,-96,502,-456,-156,509,-1000,-526,167,68,90,-65,362,345,-472,-18,869,-286,1000,-14,856,-496,-1000,-560,-475,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00272() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{654,481,-679,903,-1000,161,-183,-1000,-506,-47,13,-602,747,-850,1000,-216,1000,-1000,-1000,1000,-337,-1000,-1000,977,-744,-1000,814,-1000,59,878,-814,624,1000,-1000,-882,-1000,-1000,-1000,293,625,-78,-1000,-404,1000,-893,1000,-545,-83,-161,882,-1000,754,-561,1000,354,-1000,851,-1000,423,-1000,393,-523,-1000,-606}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00273() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-338,-7,-923,118,742,1000,204,-103,15,448,-1000,443,-285,469,457,-501,-482,1000,-387,342,374,202,1000,225,-1000,17,-1000,400,-1000,-135,614,-511,16,107,-758,845,256,-315,76,-651,903,180,-87,764,507,-661,-766,586,-34,1000,330,529,-226,-266,189,106,818,400,-344,546,-543,-1000,-968,-355}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00274() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{158,1000,-457,-826,-792,776,-283,-1000,-965,53,-279,570,-151,623,-572,-525,-41,627,1000,-228,-118,582,1000,-463,1000,400,-1000,-1000,-134,-462,-566,-882,-224,400,672,-204,243,1000,-90,-80,916,111,55,-636,147,1000,-1000,-545,143,398,-1000,983,742,1000,415,-547,165,-292,131,400,-1000,-914,-296,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00275() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-1,220,-839,-266,426,755,-321,-16,-733,-323,-253,1000,707,495,1000,-252,245,1000,465,877,98,-18,801,175,273,91,365,593,-857,-139,12,-291,968,140,133,-528,935,44,232,-878,-201,128,-545,-227,-780,-781,-79,716,120,-1000,49,102,-298,20,714,-607,-403,5,427,322,-373,-1000,-520,579}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00276() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-631,1000,-938,-266,-1000,560,-266,729,-449,1000,-1000,-611,-620,-123,391,-450,-1000,-1000,-583,-190,332,-318,500,1000,1000,-1000,-1000,421,-590,935,-290,-986,25,-1000,-1000,-183,-1000,-865,911,-676,595,-618,155,764,963,681,-1000,27,-1000,-792,-332,-173,-411,1000,-159,1000,1000,510,-8,-1000,-945,-1000,-1000,227}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00277() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature,com.fasterxml.jackson.databind.SerializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-344,1000,135,309,-1000,1000,197,-6,56,1000,432,572,-1000,-292,-241,-199,-1000,-535,-431,1000,809,95,1000,520,31,-424,-141,140,1000,-22,10,-882,-98,-109,-113,175,-1000,115,-460,-57,19,321,567,-230,625,-1000,-737,-245,1000,1000,141,946,-1000,-510,1000,1000,-1000,-507,-535,1000,173,-106,1000,432}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00278() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature,com.fasterxml.jackson.databind.SerializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,165,-881,103,356,-31,123,-663,42,77,-1000,449,227,-376,396,369,-848,819,250,656,-1000,-67,990,-230,668,-468,-136,238,62,1000,256,500,12,-164,-547,584,-557,38,244,-1000,-37,501,982,-547,340,296,-111,-5,-324,-264,-1000,-1000,3,-382,991,-441,-293,-13,-183,-188,483,-700,-70,140}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00279() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature,com.fasterxml.jackson.databind.SerializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,-299,-881,-576,-385,-501,1000,-663,-1000,-1000,-834,-489,-31,104,526,-356,593,674,-1000,-235,1000,-1000,990,-284,197,-256,-136,604,990,259,256,-445,12,-1000,-118,691,-557,-1000,167,56,1000,-190,204,275,435,-95,80,1000,1000,1000,-514,-469,-532,1000,-792,1000,-1000,469,-684,-1000,638,645,-70,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00280() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature,com.fasterxml.jackson.databind.SerializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{379,1000,799,-231,-273,-271,857,352,-386,-321,1000,1000,196,-644,223,123,423,203,-1000,1000,646,1000,-48,1000,445,118,173,422,-472,-1000,662,521,-931,-1000,279,735,851,1000,23,-506,-439,665,-250,-1000,786,-1000,-1000,500,220,1000,685,-697,-247,-1000,1000,1000,29,-473,-24,1000,-1000,524,-154,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00281() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature,com.fasterxml.jackson.databind.SerializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-129,-422,494,-401,-648,-1000,400,255,-1000,-1000,-959,2,714,1000,668,-483,-136,-441,642,-308,-328,984,-499,-1000,-818,742,246,-88,-131,-564,-805,750,641,1000,146,776,97,-854,959,63,201,-591,924,407,-164,1000,1000,119,-457,-565,-398,-178,-1000,182,-1000,479,-400,628,-779,-749,641,-210,-1000,-357}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00282() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature,com.fasterxml.jackson.databind.SerializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,266,-617,-576,219,-11,-1000,-44,-870,-16,15,699,-18,-403,903,669,-1000,595,-247,1000,33,-133,117,-163,454,-941,-67,289,-683,-285,106,920,-515,-641,-605,567,-410,-63,-50,-650,-618,295,-165,-154,81,-580,80,-95,-312,5,-202,371,1000,1000,608,-212,-400,257,-1000,-699,-518,645,-70,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00283() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature,com.fasterxml.jackson.databind.SerializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{630,-973,-706,-376,-303,-871,1000,868,-1000,-1000,-944,-375,-556,-1000,164,-892,974,-320,-150,32,-25,-974,376,-425,-683,79,1000,-302,1000,-119,1000,-1000,-764,-889,468,303,275,-605,417,784,826,-1000,891,-372,-242,233,-88,-6,20,1000,-554,-1000,-673,-219,1000,1000,-1000,-487,-75,-885,465,217,-682,-50}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00284() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature,com.fasterxml.jackson.databind.SerializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-832,886,-124,193,-1000,-121,97,522,266,47,-37,236,-1000,-277,-191,113,587,1000,-129,925,429,699,1000,-398,972,-523,-566,882,356,-447,636,451,-227,-1000,-1000,1000,-1000,-688,766,-1000,636,-800,200,121,1000,1000,1000,1000,1000,-437,956,-173,719,752,899,-300,236,461,252,-779,374,-269,1000,657}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00285() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature,com.fasterxml.jackson.databind.SerializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{1000,-85,-1000,-981,672,-578,857,-969,-487,-1000,-447,650,-15,148,-16,-435,-49,277,-691,546,414,-618,282,-849,84,-532,173,-74,-713,21,-150,135,-200,-589,323,279,-208,-518,-128,-499,486,5,-915,-501,120,252,562,317,299,788,-318,-821,-18,725,368,441,-1000,201,-627,-594,-681,-74,-413,537}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00286() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.databind.ObjectMapper", DEReplay.run(
+            "com.fasterxml.jackson.databind.ObjectMapper", "com.fasterxml.jackson.databind.ObjectMapper", "disable(com.fasterxml.jackson.databind.SerializationFeature,com.fasterxml.jackson.databind.SerializationFeature[]):com.fasterxml.jackson.databind.ObjectMapper",
+            new int[]{-496,-620,-491,-236,279,366,-969,995,-139,-660,599,-909,198,29,668,-909,873,994,361,-921,152,370,990,-643,197,-394,-381,283,-688,-656,-949,886,327,864,545,563,327,-916,284,-351,782,43,186,-539,867,979,-42,530,243,643,511,-818,910,-656,781,-653,868,340,837,566,-730,704,-267,505}));
+    }
+}

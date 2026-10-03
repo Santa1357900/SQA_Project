@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "experiment": "all-defects4j-v3110-full512-w4",
+  "algorithm": "DE",
+  "algorithm_version": "3.1.10-rebuild",
+  "project": "Chart",
+  "bug_id": 24,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "stage": "finished",
+  "error": null,
+  "modified_classes": [
+    "org.jfree.chart.renderer.GrayPaintScale"
+  ],
+  "tests_generated": 5,
+  "tests_validated": 5,
+  "fixed_failing_tests": 0,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "covered_methods": 7,
+    "total_methods": 7,
+    "ratio": 1.0
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 17,
+    "lines_total": 25,
+    "line_ratio": 0.68,
+    "branch_measure": "condition",
+    "branches_covered": 3,
+    "branches_total": 10,
+    "branch_ratio": 0.3
+  },
+  "generation_seconds": 15.173,
+  "total_seconds": 112.457,
+  "configuration": {
+    "population": 16,
+    "budget": 512,
+    "mutation": 0.7,
+    "crossover": 0.9,
+    "input_range": 1000,
+    "max_methods": 0,
+    "max_tests_per_method": 16,
+    "method_timeout": 300,
+    "job_timeout": 1500,
+    "validation_reserve": 180,
+    "test_timeout": 60,
+    "command_timeout": 600,
+    "seed": 2026,
+    "heap": "512m"
+  },
+  "artifacts": {
+    "tests": "Test/Chart/Chart 24/run1/1790434889044562712",
+    "logs": null,
+    "legacy_result": null
+  }
+}

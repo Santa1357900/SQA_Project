@@ -1,0 +1,2601 @@
+import java.lang.reflect.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+/** Deterministic test-program decoder. Used unchanged during search and JUnit replay. */
+final class DEReplay {
+    public static final int DIMENSIONS = 64;
+    /** Local generic bean used to create stable reflection Type and Field values. */
+    public static final class GenericInput {
+        public String text;
+        public java.util.List<String> names;
+        public java.util.Map<String, Integer> counts;
+        public java.util.List<java.util.Map<String, Long>> nested;
+        public int[] numbers;
+        public String[] words;
+    }
+    static final class Genes {
+        final int[] values; int at; Field lastField;
+        Object jacksonBean, jacksonProvider, jacksonGenerator;
+        StringWriter jacksonOutput;
+        Genes(int[] values) { this.values = values; }
+        int next() { return values[(at++) % values.length]; }
+        int pick(int n) { return Math.floorMod(next(), n); }
+    }
+    public static final class Observation {
+        public String token, error, generatedSource;
+        public boolean reachedTarget;
+        public int setupCalls, setupFailures, nullFallbacks;
+    }
+    public static String signature(Method m) {
+        StringJoiner params = new StringJoiner(",");
+        for (Class<?> t : m.getParameterTypes()) params.add(t.getTypeName());
+        return m.getName() + "(" + params + "):" + m.getReturnType().getTypeName();
+    }
+    static Class<?> load(String name) throws ClassNotFoundException {
+        return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+    }
+    static Method method(String target, String signature) throws Exception {
+        for (Method m : load(target).getDeclaredMethods())
+            if (signature(m).equals(signature)) {
+                // Public methods on package-private Defects4J classes (for
+                // example Gson's TypeInfoFactory) are not reflectively
+                // accessible until opened on the unnamed application module.
+                if (!m.isAccessible()) m.setAccessible(true);
+                return m;
+            }
+        throw new NoSuchMethodException(signature);
+    }
+    static List<Constructor<?>> constructors(Class<?> type) {
+        List<Constructor<?>> out = new ArrayList();
+        if (!Modifier.isAbstract(type.getModifiers()) && Modifier.isPublic(type.getModifiers()))
+            for (Constructor<?> c : type.getConstructors())
+                if (c.getParameterTypes().length <= 6) out.add(c);
+        Collections.sort(out, new Comparator<Constructor<?>>() {
+            public int compare(Constructor<?> a, Constructor<?> b) {
+                int byArity = a.getParameterTypes().length - b.getParameterTypes().length;
+                return byArity != 0 ? byArity : a.toString().compareTo(b.toString());
+            }
+        });
+        return out;
+    }
+    private static Object[] arguments(Class<?>[] types, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Object[] args = new Object[types.length];
+        for (int i = 0; i < types.length; i++) args[i] = value(types[i], g, depth, report);
+        return args;
+    }
+    private static Object[] arguments(Method method, Genes g, int depth,
+                                      Observation report) throws Exception {
+        Class<?>[] types = method.getParameterTypes();
+        Object[] args = new Object[types.length];
+        boolean closureCompile = method.getDeclaringClass().getName().equals("com.google.javascript.jscomp.Compiler")
+            && method.getName().equals("compile");
+        Type[] generic = method.getGenericParameterTypes();
+        boolean jacksonSerialization = method.getDeclaringClass().getName().equals(
+            "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+            && method.getName().startsWith("serializeAs")
+            && types.length == 3 && types[0] == Object.class;
+        for (int i = 0; i < types.length; i++) {
+            if (jacksonSerialization && g.jacksonBean != null) {
+                if (i == 0) args[i] = g.jacksonBean;
+                else if (i == 1) args[i] = g.jacksonGenerator;
+                else args[i] = g.jacksonProvider;
+                continue;
+            }
+            if (closureCompile && (List.class.isAssignableFrom(types[i])
+                    || (types[i].isArray() && load("com.google.javascript.jscomp.SourceFile")
+                        .isAssignableFrom(types[i].getComponentType())))) {
+                // Compiler.compile takes externs and inputs in either Lists or
+                // arrays depending on Closure version. Keep externs empty and
+                // supply a nonempty, gene-selected input program.
+                if (i == 0) args[i] = types[i].isArray()
+                    ? Array.newInstance(types[i].getComponentType(), 0) : new ArrayList();
+                else {
+                    Object sourceFile = value(load("com.google.javascript.jscomp.SourceFile"),
+                        g, depth + 1, report);
+                    if (types[i].isArray()) {
+                        Object files = Array.newInstance(types[i].getComponentType(), 1);
+                        Array.set(files, 0, sourceFile); args[i] = files;
+                    } else args[i] = new ArrayList(Collections.singletonList(sourceFile));
+                }
+            } else args[i] = value(types[i], g, depth, report);
+        }
+        return args;
+    }
+    private static Number number(Genes g) {
+        int n = g.next();
+        switch (g.pick(12)) {
+            case 0: return 0; case 1: return 1; case 2: return -1;
+            case 3: return Integer.MAX_VALUE; case 4: return Integer.MIN_VALUE;
+            case 5: return Long.MAX_VALUE; case 6: return Long.MIN_VALUE;
+            case 7: return Double.NaN; case 8: return Double.POSITIVE_INFINITY;
+            case 9: return Double.NEGATIVE_INFINITY; case 10: return n / 10.0;
+            default: return n;
+        }
+    }
+    private static String string(Genes g) {
+        int mode = g.pick(16), n = g.next();
+        String digits = Long.toString(Math.abs((long)n));
+        String sign = new String[]{"", "-", "+", "--"}[g.pick(4)];
+        switch (mode) {
+            case 0: return null; case 1: return ""; case 2: return " ";
+            case 3: return Integer.toString(n);
+            case 4: return sign + digits;
+            case 5: return sign + digits + "." + g.pick(1000);
+            case 6: return sign + digits + "e" + g.next();
+            case 7: return sign + "0x" + Long.toHexString(Math.abs((long)n));
+            case 8: return sign + "0x8" + "0".repeat(g.pick(20));
+            case 9: return sign + digits + "fFdDlL".charAt(g.pick(6));
+            case 10: return " " + sign + digits + " ";
+            case 11: return new String[]{"true", "false", "null", "NaN", "Infinity"}[g.pick(5)];
+            case 12: return "a".repeat(g.pick(25));
+            default:
+                String alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-._ /\\\t\n";
+                StringBuilder s = new StringBuilder();
+                int length = g.pick(25);
+                for (int i = 0; i < length; i++) s.append(alphabet.charAt(g.pick(alphabet.length())));
+                return s.toString();
+        }
+    }
+    private static Object value(Class<?> t, Genes g, int depth, Observation report) throws Exception {
+        if (t == String.class || t == CharSequence.class) return string(g);
+        if (t == Comparable.class) return "key" + g.pick(5);
+        if (t == boolean.class || t == Boolean.class) return g.pick(2) == 0;
+        if (t == char.class || t == Character.class) return (char)g.pick(128);
+        if (t == byte.class || t == Byte.class) return number(g).byteValue();
+        if (t == short.class || t == Short.class) return number(g).shortValue();
+        if (t == int.class || t == Integer.class) return number(g).intValue();
+        if (t == long.class || t == Long.class) return number(g).longValue();
+        if (t == float.class || t == Float.class) return number(g).floatValue();
+        if (t == double.class || t == Double.class || t == Number.class) return number(g).doubleValue();
+        if (t.isEnum()) {
+            Object[] constants = t.getEnumConstants();
+            return constants.length == 0 ? null : constants[g.pick(constants.length)];
+        }
+        if (t == Object.class) return g.pick(3) == 0 ? null : "object" + g.pick(5);
+        if (depth >= 3) { report.nullFallbacks++; return null; }
+        if (t.isArray()) {
+            int length = g.pick(6);
+            Object array = Array.newInstance(t.getComponentType(), length);
+            for (int i = 0; i < length; i++) Array.set(array, i, value(t.getComponentType(), g, depth + 1, report));
+            return array;
+        }
+        if (t == List.class || t == Collection.class || t == Iterable.class || t == Set.class) {
+            Collection<Object> items = t == Set.class ? new LinkedHashSet() : new ArrayList();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.add("item" + g.pick(5));
+            return items;
+        }
+        if (t == Map.class) {
+            Map<Object, Object> items = new LinkedHashMap();
+            int size = g.pick(5);
+            for (int i = 0; i < size; i++) items.put("key" + g.pick(5), number(g));
+            return items;
+        }
+        if (t == java.util.Date.class) return new java.util.Date(g.next() * 86400000L);
+        if (t == Class.class) return String.class;
+        if (t == java.lang.reflect.Field.class) {
+            Field[] fields = GenericInput.class.getFields();
+            g.lastField = fields[g.pick(fields.length)];
+            return g.lastField;
+        }
+        if (t == java.lang.reflect.Type.class) {
+            if (g.lastField != null && g.pick(3) == 0)
+                return g.lastField.getDeclaringClass();
+            Field[] fields = GenericInput.class.getFields();
+            return fields[g.pick(fields.length)].getGenericType();
+        }
+        if (t == java.io.Reader.class || t == java.io.BufferedReader.class
+                || t == java.io.StringReader.class) {
+            String content = "header,value\n" + string(g) + "," + number(g) + "\n"
+                + "alpha,beta\n";
+            StringReader reader = new StringReader(content);
+            return t == java.io.BufferedReader.class ? new BufferedReader(reader) : reader;
+        }
+        if (t.getName().equals("org.apache.commons.csv.CSVFormat")) {
+            Class<?> format = load("org.apache.commons.csv.CSVFormat");
+            for (String fieldName : new String[]{"DEFAULT", "RFC4180", "EXCEL"}) try {
+                Object result = format.getField(fieldName).get(null);
+                if (t.isInstance(result)) return result;
+            } catch (ReflectiveOperationException ignored) { }
+            for (Method factory : format.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getParameterTypes().length == 0
+                        && t.isAssignableFrom(factory.getReturnType())) try {
+                    return factory.invoke(null);
+                } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.SourceFile")) {
+            Class<?> source = load("com.google.javascript.jscomp.SourceFile");
+            for (Method factory : source.getMethods())
+                if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals("fromCode")
+                        && factory.getParameterTypes().length == 2 && factory.getParameterTypes()[0] == String.class
+                        && factory.getParameterTypes()[1] == String.class) {
+                    String replaySource = System.getProperty("de.generated.source");
+                    if (replaySource != null) {
+                        try {
+                            report.generatedSource = replaySource;
+                            return factory.invoke(null, "de-input.js", replaySource);
+                        } catch (ReflectiveOperationException ignored) { }
+                    }
+                    String[] unusedParameterScripts = {
+                        "window.f = function(a) {};",
+                        "window.f = function(a, b) { return b; };",
+                        "window.f = function(a, b) { var used = b; return used; };",
+                        "window['f'] = function(unused) {};",
+                        "window.f = function(unused, value) { return value; };",
+                        "window['f'] = function(unused, value) { return value; };",
+                        "window.f = function(first, unused, last) { return last; };",
+                        "window.f = function(unused) { var local = 1; return local; };",
+                        "window.f = function(unused, value) { var alias = value; return alias; };",
+                        "window.f = function(unused, value) { if (value) { return 1; } return 2; };",
+                        "window.f = function(unused, value) { value = value + 1; return value; };",
+                        "window.f = function(unused, value) { return function() { return value; }; };",
+                        "window.f = function(unused) { function inner() { return 1; } return inner(); };",
+                        "window.f = function(a, b, unused) { return a + b; };",
+                        "window.f = function(a, unused, b, c) { return a + c; };"
+                    };
+                    String[] catchDependencyScripts = {
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.stack; };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (caught) { saved = caught; } return saved.message; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return saved.name; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (caught) { saved = caught; } return String(saved); };",
+                        "window.f = function(flag) { var saved; try { if (flag) throw Error('x'); } catch (problem) { saved = problem; } return saved.stack; };",
+                        "window.f = function() { var saved; try { throw Error('x'); } catch (problem) { saved = problem; } return saved.message; };"
+                    };
+                    String[] genericScripts = {
+                        "function f(unused, used) { var local = 1; return used; } f(1, 2);",
+                        "function f() { var unused = 1; var used = 2; return used; } f();",
+                        "function f(x) { var first = x; first = 3; return x; } f(2);",
+                        "function f() { var unused = 1; } f();",
+                        "function keep() { var dead = 1; return 7; } keep();"
+                    };
+                    String modified = System.getProperty("de.modified.classes", "");
+                    String[] scripts;
+                    if (modified.contains("RemoveUnusedVars") && modified.contains("FlowSensitiveInlineVariables")) {
+                        scripts = new String[unusedParameterScripts.length + catchDependencyScripts.length];
+                        System.arraycopy(unusedParameterScripts, 0, scripts, 0, unusedParameterScripts.length);
+                        System.arraycopy(catchDependencyScripts, 0, scripts, unusedParameterScripts.length,
+                            catchDependencyScripts.length);
+                    }
+                    else if (modified.contains("FlowSensitiveInlineVariables")) scripts = catchDependencyScripts;
+                    else if (modified.contains("RemoveUnusedVars")) scripts = unusedParameterScripts;
+                    else scripts = genericScripts;
+                    try {
+                        String code = scripts[g.pick(scripts.length)];
+                        report.generatedSource = code;
+                        return factory.invoke(null, "de-input.js", code);
+                    }
+                    catch (ReflectiveOperationException ignored) { }
+                }
+        }
+        if (t.getName().equals("com.google.javascript.jscomp.CompilerOptions")) {
+            try {
+                Object options = t.getConstructor().newInstance();
+                // In Closure Compiler, unused-variable passes are enabled by
+                // CompilationLevel, rather than by a CompilerOptions enum
+                // setter. Apply the real public configuration when available.
+                try {
+                    Class<?> levelType = load("com.google.javascript.jscomp.CompilationLevel");
+                    Object advanced = levelType.getField("ADVANCED_OPTIMIZATIONS").get(null);
+                    for (Method configure : levelType.getMethods())
+                        if (configure.getName().equals("setOptionsForCompilationLevel")
+                                && configure.getParameterTypes().length == 1
+                                && configure.getParameterTypes()[0].isInstance(options)) {
+                            configure.invoke(advanced, options); break;
+                        }
+                } catch (ReflectiveOperationException ignored) { }
+                // Also set the relevant options directly for Closure releases
+                // whose compilation-level helper no longer enables this pass.
+                for (Class<?> current = t; current != null; current = current.getSuperclass())
+                    for (Field field : current.getDeclaredFields()) {
+                        String name = field.getName().toLowerCase(Locale.ROOT);
+                        if (field.getType() == boolean.class && name.equals("removeglobals")) try {
+                            // Closure-1 specifically guards argument removal
+                            // when globals are preserved. Keep the optimization
+                            // pass enabled while exercising that configuration.
+                            field.setAccessible(true); field.setBoolean(options, false);
+                        } catch (Exception ignored) { }
+                        if (field.getType() == boolean.class
+                                && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) try {
+                            field.setAccessible(true); field.setBoolean(options, true);
+                        } catch (Exception ignored) { }
+                    }
+                for (Method setter : t.getMethods()) {
+                    if (!Modifier.isPublic(setter.getModifiers()) || !setter.getName().startsWith("set")
+                            || setter.getParameterTypes().length != 1) continue;
+                    String name = setter.getName().toLowerCase(Locale.ROOT);
+                    if (setter.getParameterTypes()[0] == boolean.class && name.contains("removeglobals")) {
+                        try { setter.invoke(options, false); } catch (ReflectiveOperationException ignored) { }
+                    } else if (setter.getParameterTypes()[0] == boolean.class
+                            && (name.contains("removeunusedvar") || name.contains("removeunusedlocal"))) {
+                        try { setter.invoke(options, true); } catch (ReflectiveOperationException ignored) { }
+                    } else if (name.contains("optimizationlevel")
+                            && setter.getParameterTypes()[0].isEnum()) {
+                        Object[] values = setter.getParameterTypes()[0].getEnumConstants();
+                        for (Object value : values) if (String.valueOf(value).contains("ADVANCED"))
+                            try { setter.invoke(options, value); } catch (ReflectiveOperationException ignored) { }
+                    }
+                }
+                return options;
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.google.javascript.rhino.Node")) {
+            try {
+                Class<?> ir = load("com.google.javascript.rhino.IR");
+                for (String factoryName : new String[]{"script", "root", "name", "string"})
+                    for (Method factory : ir.getMethods())
+                        if (Modifier.isStatic(factory.getModifiers()) && factory.getName().equals(factoryName)
+                                && factory.getParameterTypes().length == 0 && t.isAssignableFrom(factory.getReturnType()))
+                            return factory.invoke(null);
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        if (t.getName().equals("com.fasterxml.jackson.dataformat.xml.deser.FromXmlParser")) {
+            Object parser = xmlParser(g, report);
+            if (parser != null && t.isInstance(parser)) return parser;
+        }
+        if (t.getName().equals("com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                || t.getName().equals("com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter")) {
+            Object writer = jacksonWriter(t, g, report);
+            if (writer != null && t.isInstance(writer)) return writer;
+        }
+        if (t == java.awt.Graphics2D.class || t == java.awt.Graphics.class)
+            return new java.awt.image.BufferedImage(80, 80, java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        if (java.awt.Paint.class.isAssignableFrom(t)) {
+            java.awt.Color c = new java.awt.Color(g.pick(256), g.pick(256), g.pick(256));
+            if (t.isInstance(c)) return c;
+        }
+        if (java.awt.Stroke.class.isAssignableFrom(t)) {
+            java.awt.BasicStroke s = new java.awt.BasicStroke(g.pick(10) / 2.0f);
+            if (t.isInstance(s)) return s;
+        }
+        if (java.awt.Shape.class.isAssignableFrom(t)) {
+            java.awt.Shape s = new java.awt.geom.Rectangle2D.Double(g.next(), g.next(), g.pick(80), g.pick(80));
+            if (t.isInstance(s)) return s;
+        }
+        if (t == java.awt.geom.Point2D.class) return new java.awt.geom.Point2D.Double(g.next(), g.next());
+        if (t.getName().equals("org.apache.commons.cli.CommandLine"))
+            return commandLine(g, report);
+        Object domain = chart(t, g, report);
+        if (domain != null) return domain;
+        Object language = language(t, g, report);
+        if (language != null) return language;
+        List<Constructor<?>> ctors = constructors(t);
+        // Older Java libraries often use public singleton constants in place of enums.
+        if (ctors.isEmpty()) {
+            List<Field> constants = new ArrayList();
+            for (Field field : t.getFields())
+                if (Modifier.isStatic(field.getModifiers()) && Modifier.isFinal(field.getModifiers())
+                        && t.isAssignableFrom(field.getType())) constants.add(field);
+            Collections.sort(constants, new Comparator<Field>() {
+                public int compare(Field a, Field b) { return a.getName().compareTo(b.getName()); }
+            });
+            if (!constants.isEmpty()) {
+                Object constant = constants.get(g.pick(constants.size())).get(null);
+                if (constant != null) return constant;
+            }
+        }
+        if (!ctors.isEmpty()) {
+            Constructor<?> ctor = ctors.get(g.pick(ctors.size()));
+            try { return ctor.newInstance(arguments(ctor.getParameterTypes(), g, depth + 1, report)); }
+            catch (Exception ignored) { }
+        }
+        report.nullFallbacks++;
+        return null;
+    }
+    private static Object language(Class<?> t, Genes g, Observation report) {
+        if (!t.getName().equals("org.apache.commons.lang3.time.FastDateFormat")) return null;
+        try {
+            Method factory = t.getMethod("getInstance", String.class, java.util.TimeZone.class,
+                java.util.Locale.class);
+            String[] patterns = {"yyyy-MM-dd", "MM/dd/yy HH:mm:ss", "EEE, d MMM yyyy HH:mm:ss Z"};
+            return factory.invoke(null, patterns[g.pick(patterns.length)],
+                java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US);
+        } catch (ReflectiveOperationException ignored) { }
+        try { return t.getMethod("getInstance", String.class).invoke(null, "yyyy-MM-dd"); }
+        catch (ReflectiveOperationException ignored) { return null; }
+    }
+    private static Object xmlParser(Genes g, Observation report) {
+        try {
+            Class<?> factoryType = load("com.fasterxml.jackson.dataformat.xml.XmlFactory");
+            Object factory = factoryType.getConstructor().newInstance();
+            String[] docs = {"<root><value>1</value><name>x</name></root>",
+                "<root value=\"42\"><item>a</item><item>b</item></root>",
+                "<root/>"};
+            String xml = docs[g.pick(docs.length)];
+            for (Method method : factoryType.getMethods()) {
+                if (!method.getName().equals("createParser") || method.getParameterTypes().length != 1) continue;
+                Class<?> p = method.getParameterTypes()[0];
+                Object input = p == String.class ? xml : p == Reader.class ? new StringReader(xml)
+                    : p == InputStream.class ? new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)) : null;
+                if (input == null) continue;
+                try {
+                    Object parser = method.invoke(factory, input);
+                    if (parser != null) {
+                        int advance = g.pick(4);
+                        Method next = parser.getClass().getMethod("nextToken");
+                        for (int i = 0; i < advance; i++) if (next.invoke(parser) == null) break;
+                        return parser;
+                    }
+                } catch (ReflectiveOperationException ignored) { }
+            }
+        } catch (Throwable ignored) { }
+        return null;
+    }
+    private static Object jacksonWriter(Class<?> requested, Genes g, Observation report) {
+        try {
+            Class<?> mapperType = load("com.fasterxml.jackson.databind.ObjectMapper");
+            Object mapper = mapperType.getConstructor().newInstance();
+            Object bean = new GenericInput();
+            Class<?> javaTypeType = load("com.fasterxml.jackson.databind.JavaType");
+            Object javaType = mapperType.getMethod("constructType", Type.class).invoke(mapper, bean.getClass());
+            // Jackson 2.6 (used by this Defects4J project) exposes a provider
+            // blueprint from ObjectMapper. Create a configured provider via
+            // DefaultSerializerProvider, the supported API used by ObjectMapper.
+            Object providerBlueprint = mapperType.getMethod("getSerializerProvider").invoke(mapper);
+            Class<?> serializationConfigType = load("com.fasterxml.jackson.databind.SerializationConfig");
+            Class<?> serializerFactoryType = load("com.fasterxml.jackson.databind.ser.SerializerFactory");
+            Object config = mapperType.getMethod("getSerializationConfig").invoke(mapper);
+            Object factory = mapperType.getMethod("getSerializerFactory").invoke(mapper);
+            Class<?> defaultProviderType = load("com.fasterxml.jackson.databind.ser.DefaultSerializerProvider");
+            Method createProvider = defaultProviderType.getMethod("createInstance",
+                serializationConfigType, serializerFactoryType);
+            Object provider = createProvider.invoke(providerBlueprint, config, factory);
+            g.jacksonBean = bean;
+            g.jacksonProvider = provider;
+            g.jacksonOutput = new StringWriter();
+            Object jsonFactory = mapperType.getMethod("getFactory").invoke(mapper);
+            for (String factoryMethod : new String[]{"createGenerator", "createJsonGenerator"}) {
+                try {
+                    Method createGenerator = jsonFactory.getClass().getMethod(factoryMethod, Writer.class);
+                    g.jacksonGenerator = createGenerator.invoke(jsonFactory, g.jacksonOutput);
+                    break;
+                } catch (NoSuchMethodException ignored) { }
+            }
+            if (g.jacksonGenerator == null)
+                throw new NoSuchMethodException("JsonFactory.createGenerator(Writer) or createJsonGenerator(Writer)");
+            Class<?> providerType = load("com.fasterxml.jackson.databind.SerializerProvider");
+            Class<?> beanPropertyType = load("com.fasterxml.jackson.databind.BeanProperty");
+            Method find = providerType.getMethod("findValueSerializer", javaTypeType, beanPropertyType);
+            Object serializer = find.invoke(provider, new Object[]{javaType, null});
+            List<Object> writers = new ArrayList();
+            try {
+                // Available on Jackson 2.6 and newer.
+                Class<?> serializerType = load("com.fasterxml.jackson.databind.JsonSerializer");
+                Method properties = serializerType.getMethod("properties");
+                Iterator<?> it = (Iterator<?>)properties.invoke(serializer);
+                while (it.hasNext()) {
+                    Object item = it.next();
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            } catch (NoSuchMethodException oldJackson) {
+                // JacksonDatabind-1 predates JsonSerializer.properties(). Its
+                // BeanSerializerBase stores writers in the protected _props
+                // array; read that array only for these old releases.
+                Class<?> base = load("com.fasterxml.jackson.databind.ser.std.BeanSerializerBase");
+                if (!base.isInstance(serializer))
+                    throw new IllegalStateException("Expected BeanSerializerBase, got "
+                        + serializer.getClass().getName(), oldJackson);
+                Field props = base.getDeclaredField("_props");
+                props.setAccessible(true);
+                Object array = props.get(serializer);
+                for (int i = 0; i < Array.getLength(array); i++) {
+                    Object item = Array.get(array, i);
+                    if (item != null && item.getClass().getName().endsWith("BeanPropertyWriter"))
+                        writers.add(item);
+                }
+            }
+            if (writers.isEmpty())
+                throw new IllegalStateException("ObjectMapper produced no bean property writers for DEReplay.GenericInput");
+            Object writer = writers.get(g.pick(writers.size()));
+            boolean requireUnwrapping = requested.getName().equals(
+                "com.fasterxml.jackson.databind.ser.impl.UnwrappingBeanPropertyWriter");
+            if (!requireUnwrapping && g.pick(2) == 0 && requested.isInstance(writer)) return writer;
+            Class<?> transformerType = load("com.fasterxml.jackson.databind.util.NameTransformer");
+            Object nop = transformerType.getField("NOP").get(null);
+            for (Method m : writer.getClass().getMethods())
+                if (m.getName().equals("unwrappingWriter") && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0].isInstance(nop)) {
+                    Object unwrapped = m.invoke(writer, nop);
+                    if (requested.isInstance(unwrapped)) return unwrapped;
+                }
+            if (requested.isInstance(writer)) return writer;
+            throw new IllegalStateException("Generated Jackson property writer is not " + requested.getName());
+        } catch (Throwable failure) {
+            throw new IllegalStateException("Cannot construct Jackson BeanPropertyWriter: " + failure, failure);
+        }
+    }
+    /** Build the non-constructible Commons CLI result through its public Parser API. */
+    private static Object commandLine(Genes g, Observation report) throws Exception {
+        Class<?> optionsClass = load("org.apache.commons.cli.Options");
+        Class<?> optionClass = load("org.apache.commons.cli.Option");
+        Class<?> parserClass = load("org.apache.commons.cli.PosixParser");
+        Object options = optionsClass.getConstructor().newInstance();
+        Method addOption = optionsClass.getMethod("addOption", optionClass);
+        int numberOfOptions = 1 + g.pick(3);
+        List<String> spellings = new ArrayList();
+        for (int i = 0; i < numberOfOptions; i++) {
+            String shortName = String.valueOf((char)('a' + i));
+            String longName = "de-option-" + i;
+            boolean hasArgument = g.pick(2) == 0;
+            Object option = null;
+            try {
+                option = optionClass.getConstructor(String.class, String.class, boolean.class, String.class)
+                    .newInstance(shortName, longName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) try {
+                option = optionClass.getConstructor(String.class, boolean.class, String.class)
+                    .newInstance(shortName, hasArgument, "DE-generated option");
+            } catch (NoSuchMethodException ignored) { }
+            if (option == null) throw new NoSuchMethodException("No supported Commons CLI Option constructor");
+            addOption.invoke(options, option);
+            spellings.add("-" + shortName);
+            if (hasArgument) spellings.add("value-" + Math.abs((long)g.next()));
+        }
+        String[] argv = spellings.toArray(new String[0]);
+        Object parser = parserClass.getConstructor().newInstance();
+        List<Method> parseMethods = new ArrayList();
+        for (Method candidate : parserClass.getMethods()) {
+            Class<?>[] p = candidate.getParameterTypes();
+            if (candidate.getName().equals("parse") && p.length >= 2 && p[0] == optionsClass
+                    && p[1] == String[].class && candidate.getReturnType() == load("org.apache.commons.cli.CommandLine"))
+                parseMethods.add(candidate);
+        }
+        Collections.sort(parseMethods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return a.getParameterTypes().length - b.getParameterTypes().length;
+            }
+        });
+        for (Method parse : parseMethods) {
+            Object[] args = new Object[parse.getParameterTypes().length];
+            Class<?>[] p = parse.getParameterTypes();
+            args[0] = options; args[1] = argv;
+            for (int i = 2; i < p.length; i++) {
+                if (p[i] == boolean.class || p[i] == Boolean.class) args[i] = g.pick(2) == 0;
+                else if (p[i] == java.util.Properties.class) args[i] = new java.util.Properties();
+                else args[i] = value(p[i], g, 1, report);
+            }
+            try { return parse.invoke(parser, args); }
+            catch (InvocationTargetException ignored) { }
+        }
+        throw new NoSuchMethodException("No successful public PosixParser.parse(Options,String[])");
+    }
+    /** Optional type recipes, shared across bugs; none contains a bug-specific expected answer. */
+    private static Object chart(Class<?> t, Genes g, Observation report) throws Exception {
+        String n = t.getName();
+        if (!n.startsWith("org.jfree.")) return null;
+        if (n.equals("org.jfree.data.Range")) {
+            double a = g.next(), b = g.next();
+            return t.getConstructor(double.class, double.class).newInstance(Math.min(a, b), Math.max(a, b));
+        }
+        if (n.equals("org.jfree.data.time.RegularTimePeriod"))
+            return load("org.jfree.data.time.Day").getConstructor(int.class, int.class, int.class)
+                .newInstance(1 + g.pick(28), 1 + g.pick(12), 1990 + g.pick(40));
+        if (n.equals("org.jfree.data.time.TimeSeries")) {
+            Object series = t.getConstructor(Comparable.class).newInstance("DE");
+            Class<?> period = load("org.jfree.data.time.RegularTimePeriod");
+            Constructor<?> day = load("org.jfree.data.time.Day")
+                .getConstructor(int.class, int.class, int.class);
+            Method add = t.getMethod("add", period, double.class);
+            int count = 2 + g.pick(4), year = 1990 + g.pick(40);
+            for (int i = 0; i < count; i++)
+                add.invoke(series, day.newInstance(i + 1, 1, year), g.next() / 10.0);
+            return series;
+        }
+        if (n.equals("org.jfree.data.category.CategoryDataset")
+                || n.equals("org.jfree.data.category.DefaultCategoryDataset")) {
+            Class<?> c = load("org.jfree.data.category.DefaultCategoryDataset");
+            Object data = c.getConstructor().newInstance();
+            Method add = c.getMethod("addValue", Number.class, Comparable.class, Comparable.class);
+            int rows = 1 + g.pick(3), columns = 1 + g.pick(3);
+            for (int r = 0; r < rows; r++) for (int col = 0; col < columns; col++)
+                add.invoke(data, Double.valueOf(g.next() / 10.0), "R" + r, "C" + col);
+            return data;
+        }
+        if (n.equals("org.jfree.data.xy.XYDataset") || n.equals("org.jfree.data.xy.XYSeriesCollection")) {
+            Class<?> seriesClass = load("org.jfree.data.xy.XYSeries");
+            Object series = seriesClass.getConstructor(Comparable.class).newInstance("DE");
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) seriesClass.getMethod("add", double.class, double.class)
+                .invoke(series, (double)i, g.next() / 10.0);
+            Class<?> c = load("org.jfree.data.xy.XYSeriesCollection");
+            Object data = c.getConstructor().newInstance();
+            c.getMethod("addSeries", seriesClass).invoke(data, series);
+            return data;
+        }
+        if (n.equals("org.jfree.data.general.PieDataset") || n.equals("org.jfree.data.general.DefaultPieDataset")) {
+            Class<?> c = load("org.jfree.data.general.DefaultPieDataset");
+            Object data = c.getConstructor().newInstance();
+            int count = 1 + g.pick(5);
+            for (int i = 0; i < count; i++) c.getMethod("setValue", Comparable.class, Number.class)
+                .invoke(data, "K" + i, Double.valueOf(g.next() / 10.0));
+            return data;
+        }
+        return null;
+    }
+    static List<Method> setupMethods(Class<?> receiver) {
+        List<Method> methods = new ArrayList();
+        for (Method m : receiver.getMethods()) {
+            String n = m.getName();
+            if (!Modifier.isStatic(m.getModifiers()) && !m.isSynthetic()
+                    && m.getParameterTypes().length <= 3 && !n.contains("Listener")
+                    && (n.startsWith("set") || n.startsWith("add") || n.startsWith("update")
+                        || n.startsWith("remove") || n.equals("clear"))) methods.add(m);
+        }
+        Collections.sort(methods, new Comparator<Method>() {
+            public int compare(Method a, Method b) {
+                return signature(a).compareTo(signature(b));
+            }
+        });
+        return methods;
+    }
+    public static Observation execute(String target, String receivers, String signature, int[] genes) {
+        Observation out = new Observation();
+        try {
+            Genes g = new Genes(genes);
+            Method m = method(target, signature);
+            Object receiver = null;
+            if (!Modifier.isStatic(m.getModifiers())) {
+                String[] choices = receivers.split(",");
+                Class<?> receiverType = load(choices[g.pick(choices.length)]);
+                receiver = value(receiverType, g, 0, out);
+                if (receiver == null) throw new IllegalArgumentException("Receiver construction failed");
+                // Compiler.compile owns a strict initialization sequence.
+                // Random calls to its mutators before compilation can corrupt
+                // state or spend the search budget on irrelevant setup.
+                if (!receiverType.getName().equals("com.google.javascript.jscomp.Compiler")) {
+                    List<Method> setup = setupMethods(receiverType);
+                    int count = g.pick(5);
+                    for (int i = 0; i < count && !setup.isEmpty(); i++) {
+                        Method s = setup.get(g.pick(setup.size()));
+                        try { s.invoke(receiver, arguments(s.getParameterTypes(), g, 0, out)); out.setupCalls++; }
+                        catch (Exception e) { out.setupFailures++; }
+                    }
+                }
+            }
+            Object[] args = arguments(m, g, 0, out);
+            out.reachedTarget = true;
+            try {
+                boolean jacksonSerialization = m.getDeclaringClass().getName().equals(
+                    "com.fasterxml.jackson.databind.ser.BeanPropertyWriter")
+                    && m.getName().startsWith("serializeAs") && g.jacksonGenerator != null;
+                boolean arrayShape = m.getName().contains("Column")
+                    || m.getName().contains("Element") || m.getName().contains("Placeholder");
+                if (jacksonSerialization)
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeStartArray" : "writeStartObject").invoke(g.jacksonGenerator);
+                Object result = m.invoke(receiver, args);
+                boolean closureCompile = m.getDeclaringClass().getName().equals(
+                    "com.google.javascript.jscomp.Compiler") && m.getName().equals("compile");
+                if (closureCompile) {
+                    // Result is only a status object; the compiled JavaScript is
+                    // the behavioral output that reveals whether an argument
+                    // was removed from a globally exposed function.
+                    Object js = receiver.getClass().getMethod("toSource").invoke(receiver);
+                    out.token = "CLOSURE_SOURCE:" + stable(js, 0);
+                } else if (jacksonSerialization) {
+                    g.jacksonGenerator.getClass().getMethod(arrayShape
+                        ? "writeEndArray" : "writeEndObject").invoke(g.jacksonGenerator);
+                    g.jacksonGenerator.getClass().getMethod("flush").invoke(g.jacksonGenerator);
+                    out.token = "JSON:" + Base64.getEncoder().encodeToString(
+                        g.jacksonOutput.toString().getBytes(StandardCharsets.UTF_8));
+                } else out.token = m.getReturnType() == void.class
+                    ? state(receiver, m.getName()) : stable(result, 0);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof VirtualMachineError || e.getCause() instanceof LinkageError
+                        || e.getCause() instanceof ThreadDeath) throw e;
+                out.token = "THROW:" + e.getCause().getClass().getName();
+            }
+        } catch (Throwable e) {
+            out.token = "HARNESS_ERROR";
+            out.error = e.getClass().getName() + ":" + String.valueOf(e.getMessage());
+        }
+        return out;
+    }
+    public static String run(String target, String receivers, String signature, int[] genes) {
+        Observation o = execute(target, receivers, signature, genes);
+        if (!o.reachedTarget || o.token.equals("HARNESS_ERROR"))
+            throw new AssertionError("Cannot replay test: " + o.error);
+        return o.token;
+    }
+    private static String state(Object receiver, String method) {
+        if (receiver == null) return "VOID";
+        List<String> getters = new ArrayList();
+        if (method.startsWith("set") && method.length() > 3) {
+            getters.add("get" + method.substring(3)); getters.add("is" + method.substring(3));
+        }
+        getters.addAll(Arrays.asList("getItemCount", "getRowCount", "getColumnCount", "getSeriesCount"));
+        StringBuilder s = new StringBuilder("VOID");
+        for (String name : getters) {
+            try {
+                Method getter = receiver.getClass().getMethod(name);
+                if (getter.getReturnType().isPrimitive() || getter.getReturnType() == String.class)
+                    s.append('|').append(name).append('=').append(stable(getter.invoke(receiver), 0));
+            } catch (ReflectiveOperationException ignored) { }
+        }
+        return s.toString();
+    }
+    /** Only whitelisted value types are rendered. Never use arbitrary object toString(). */
+    static String stable(Object value, int depth) {
+        if (value == null) return "NULL";
+        Class<?> t = value.getClass();
+        if (value instanceof String || value instanceof Boolean || value instanceof Character
+                || value instanceof Byte || value instanceof Short || value instanceof Integer
+                || value instanceof Long || value instanceof Float || value instanceof Double
+                || value instanceof java.math.BigInteger || value instanceof java.math.BigDecimal)
+            return t.getName() + ":" + Base64.getEncoder().encodeToString(value.toString().getBytes(StandardCharsets.UTF_8));
+        if (value instanceof Enum) return "ENUM:" + t.getName() + ":" + ((Enum<?>)value).name();
+        if (t.isArray() && depth < 3) {
+            StringBuilder s = new StringBuilder("ARRAY:" + t.getName() + ":" + Array.getLength(value));
+            for (int i = 0; i < Math.min(64, Array.getLength(value)); i++) {
+                String item = stable(Array.get(value, i), depth + 1);
+                s.append(':').append(item.length()).append(':').append(item);
+            }
+            return s.toString();
+        }
+        if (value instanceof java.awt.Color) return "COLOR:" + ((java.awt.Color)value).getRGB();
+        // Observe safe scalar properties of returned objects. This catches
+        // changes to value caches and state while avoiding identity-based toString().
+        StringBuilder observed = new StringBuilder("STATE:" + t.getName());
+        int properties = 0;
+        for (String name : Arrays.asList("getItemCount", "getMinY", "getMaxY",
+                "getRowCount", "getColumnCount", "getSeriesCount")) {
+            try {
+                Method getter = t.getMethod(name);
+                Class<?> r = getter.getReturnType();
+                if (!r.isPrimitive() && r != String.class && !Number.class.isAssignableFrom(r))
+                    continue;
+                if (r == void.class) continue;
+                Object result = getter.invoke(value);
+                String token = stable(result, depth + 1);
+                observed.append('|').append(name).append('=').append(token.length())
+                    .append(':').append(token);
+                properties++;
+            } catch (Exception ignored) { }
+        }
+        return properties == 0 ? "TYPE:" + t.getName() : observed.toString();
+    }
+    public static void main(String[] args) {
+        if (args.length > 4) {
+            String source = new String(Base64.getDecoder().decode(args[4]), StandardCharsets.UTF_8);
+            System.setProperty("de.generated.source", source);
+        }
+        String[] encodedGenes = args[3].split(",");
+        int[] genes = new int[encodedGenes.length];
+        for (int i = 0; i < encodedGenes.length; i++) genes[i] = Integer.parseInt(encodedGenes[i]);
+        boolean closureCompile = args[0].equals("com.google.javascript.jscomp.Compiler")
+            && args[2].startsWith("compile(");
+        // Compiler.compile is an expensive whole-program operation. Fixed-side
+        // suites are still executed twice by the runner, so capture its oracle
+        // once here instead of launching three compilations just to check the
+        // same deterministic source output.
+        int repetitions = closureCompile ? 1 : 3;
+        for (int i = 0; i < repetitions; i++) {
+            Observation out = execute(args[0], args[1], args[2], genes);
+            System.out.println("DE_TOKEN:" + Base64.getEncoder().encodeToString(out.token.getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+}
+
+public class DEGeneratedTest {
+    @org.junit.Test(timeout=60000L)
+    public void testDE00000() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{-682,-1000,-481,-423,246,63,-88,1000,727,483,257,-1000,-965,502,-1000,217,57,787,-1000,58,530,-1000,-470,319,-1000,1000,599,919,1000,18,800,-218,584,747,-551,-374,1000,-320,498,449,392,628,-419,744,109,-1000,1000,1000,339,120,-907,357,-1000,1000,764,437,-873,-737,-371,658,-357,246,-577,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00001() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{923,-91,121,-797,-1000,-865,-113,287,296,339,413,779,-522,1000,194,-823,850,971,701,498,763,82,348,6,371,-126,686,318,-462,584,-674,140,350,-546,66,-548,53,-737,-1000,17,828,-484,-424,1000,815,351,-222,809,369,-807,766,-263,371,-372,-302,-436,-98,1000,624,1000,79,567,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00002() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{1000,1000,30,-617,-703,-434,723,-381,-1000,517,601,-853,418,-565,68,167,81,993,350,-520,864,-1000,676,-977,998,1000,-1000,-615,1000,1000,-907,-724,-815,1000,1000,-30,-910,-1000,429,496,722,599,-589,743,-374,1000,-1000,718,872,228,957,-429,1000,204,-291,85,1000,-147,-69,-1000,-841,1000,1000,-45}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00003() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{-640,45,143,-577,-1000,-65,723,631,-802,752,-1000,-69,-566,-565,-973,1000,-735,351,-1000,399,-208,-1000,-119,-143,-711,1000,1000,1000,1000,1000,729,-724,-123,-967,636,713,161,-1000,-14,496,-265,463,250,-991,1000,-1000,286,1000,125,531,-197,130,-931,204,1000,923,-1000,-147,-352,220,781,81,1000,-995}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00004() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "disable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{510,1000,-657,81,56,-1000,397,-1000,179,553,1000,-205,663,794,1000,-255,473,-811,641,-964,156,1000,1000,-1000,1000,-1000,-668,-1000,-400,612,-743,1000,-93,1000,925,-955,-31,-845,-835,-916,1000,859,-1000,-222,-1000,1000,-130,-1000,1000,288,425,-974,1000,-1000,-1000,-420,1000,1000,1000,261,-1000,349,-184,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00005() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "enable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{354,751,-400,-1000,-1000,-784,-453,-1000,601,729,403,-429,413,-927,41,-1000,278,521,-686,857,-875,-11,-750,-356,-827,35,147,-925,1000,377,208,-827,-236,-660,1000,-1000,13,-400,-258,-99,1000,-1000,-1000,-1000,1000,-1000,-1000,324,-497,589,258,1000,225,-107,-112,-986,-39,910,-275,1000,421,-602,187,523}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00006() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "enable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{-27,1000,387,1000,-347,-509,1000,308,368,-777,-477,-1000,-148,-725,470,-938,-1000,407,-719,-1000,1000,415,-257,604,-315,-690,444,-719,1000,1000,-38,-61,346,423,-898,501,1000,1000,-321,90,416,768,-887,1000,-552,-1000,-618,488,-1000,616,256,1000,1000,-1000,1000,1000,464,-380,-356,715,1000,-1000,-701,244}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00007() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "enable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{-562,1000,53,-339,1000,-812,587,720,-921,-471,-14,1000,-148,-725,-1000,-938,464,-594,-150,-29,844,497,-257,-617,787,333,444,-719,1000,-703,896,-407,683,1000,157,396,-521,37,-649,767,416,22,-497,1000,1000,1000,761,166,1000,-432,1000,-187,-195,-297,-319,791,-852,-546,968,715,-511,368,-401,387}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00008() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "enable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{-528,-730,321,957,191,391,817,644,-308,93,-517,-615,234,-509,266,88,258,346,-331,358,1000,-1000,-181,-1000,-121,-1000,-872,815,-424,257,382,-536,-515,-690,-83,-739,-11,1000,-632,452,602,296,213,1000,-359,-400,566,-404,159,130,-805,279,-911,347,1000,-524,118,-110,597,-175,-306,104,-352,-856}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00009() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.json.UTF8JsonGenerator", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "enable(com.fasterxml.jackson.core.JsonGenerator$Feature):com.fasterxml.jackson.core.JsonGenerator",
+            new int[]{-1000,-1000,842,53,-1000,602,-983,-623,-411,228,-1000,-901,-811,-45,1000,295,1000,-564,1000,1000,-554,-1000,94,-1000,1000,-490,-1000,655,-1000,-1000,392,1000,564,-1000,1000,-10,400,436,-624,-736,-1000,-81,477,122,-904,-1000,1000,-1000,1000,-1000,-101,-1000,-1000,1000,-1000,1000,-601,-1000,1000,720,-1000,1000,-557,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00010() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.Version", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "version():com.fasterxml.jackson.core.Version",
+            new int[]{254,-75,5,-895,1000,-951,345,890,1000,-896,-688,-623,379,693,99,88,132,-190,-455,666,-285,209,212,-242,176,830,1000,1000,-469,803,-123,892,1000,160,-226,-978,559,601,102,28,-584,12,-767,-323,522,1000,-704,-76,863,-23,-31,-396,104,186,67,245,-762,472,-408,308,426,293,363,-349}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00011() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.Version", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "version():com.fasterxml.jackson.core.Version",
+            new int[]{437,-994,-1000,-371,10,-225,-102,-580,-88,-747,-853,-1000,-592,507,951,888,834,-886,412,1000,-1000,666,-213,310,1000,-792,-901,-1000,-1000,-1000,1000,1000,469,1000,1000,67,215,700,-145,493,63,544,1000,-1000,-903,-873,274,1000,-259,-688,-68,1000,-240,407,-154,-1000,-217,669,-1000,672,201,196,975,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00012() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.Version", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "version():com.fasterxml.jackson.core.Version",
+            new int[]{756,-35,593,-511,787,292,926,475,-757,584,459,551,74,169,-379,-251,-524,925,1000,-801,1000,-342,-1000,-615,548,326,-539,-330,1000,422,-1000,16,29,-1000,-128,404,-642,591,-131,67,446,1000,-197,644,-1000,484,253,-379,1000,-242,-1000,-951,-109,-871,-685,790,6,-1000,-66,252,-740,1000,1000,-450}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00013() {
+        org.junit.Assert.assertEquals("TYPE:com.fasterxml.jackson.core.Version", DEReplay.run(
+            "com.fasterxml.jackson.core.json.JsonGeneratorImpl", "com.fasterxml.jackson.core.json.UTF8JsonGenerator,com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "version():com.fasterxml.jackson.core.Version",
+            new int[]{-742,-507,-67,1000,1000,522,-547,916,878,939,485,-853,1000,284,386,693,201,393,-301,1000,-1000,1000,946,-406,-350,-832,770,246,383,-1000,907,-291,291,665,-951,-169,558,-958,-493,1000,816,1000,59,652,-367,-341,-653,1000,-992,-1000,1000,704,-242,818,-439,-730,353,250,-783,-612,844,-1000,-1000,-265}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00014() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "close():void",
+            new int[]{680,727,973,374,-99,-921,-26,-185,324,-382,216,-109,-400,826,-13,890,149,-155,886,-543,256,-178,1000,187,-139,323,-694,152,-139,1000,139,593,-970,712,1000,386,400,-421,-813,-628,468,-741,714,303,478,-705,315,-33,649,-829,1000,50,28,-23,1000,75,-636,-437,80,-667,-507,-913,-374,904}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00015() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "close():void",
+            new int[]{-1000,1000,57,535,826,1000,-127,-1000,-1000,-632,531,-1000,-1000,379,-246,1000,-300,183,1000,354,25,-1000,417,-681,-454,148,1000,901,998,1000,329,-1000,-781,1000,-464,-1000,-747,-1000,-105,1000,495,267,1000,249,911,-767,-209,-1000,1000,1000,655,-67,-489,-102,-1000,-214,624,-307,-689,-1000,-321,-299,912,17}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00016() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "close():void",
+            new int[]{614,429,870,260,-99,-879,868,1000,324,545,454,743,-709,142,91,856,-317,749,966,-880,79,146,565,-629,417,105,-694,357,299,1000,139,530,-711,632,940,760,-1000,-711,-813,-494,562,-724,-314,303,387,-13,1000,364,198,-1000,1000,-144,-1000,-217,605,75,-884,-437,663,118,-865,-1000,-28,904}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00017() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "flush():void",
+            new int[]{1000,-997,199,-282,591,-1000,-228,1000,834,1000,299,-120,-417,-781,-475,-1000,354,856,1000,140,-291,1000,513,-1000,-928,-471,131,-1000,449,-854,-660,-735,-161,1000,899,-700,-567,-681,-526,-17,1000,151,-127,1000,-497,107,-183,-1000,995,41,-599,-565,-316,83,1000,-190,-45,784,-906,-137,-979,-1000,-231,373}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00018() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "flush():void",
+            new int[]{311,-478,4,-474,870,-256,347,-525,314,-23,-173,908,1000,-1000,-563,91,1000,981,-504,442,214,768,1000,1000,-753,350,-545,-783,-151,42,-379,85,379,997,407,-551,543,1000,-1000,-1000,626,646,704,-212,687,736,-1000,-494,755,-403,-1000,-1000,273,-1000,581,-1000,834,593,-888,-774,-323,625,-632,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00019() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "flush():void",
+            new int[]{1000,216,655,-460,1000,-1000,977,460,-421,-457,-1000,995,813,-1000,-645,-225,418,-198,156,-194,653,-263,1000,1000,657,402,671,-596,3,461,465,798,699,767,-615,-384,461,1000,-1000,807,260,-800,969,609,-351,143,-1000,-640,194,339,-983,-653,451,-1000,515,-28,1000,30,-1000,-1000,-1000,1000,-653,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00020() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "getOutputBuffered():int",
+            new int[]{482,-1000,959,-605,19,817,1000,-1000,442,-546,-85,-178,-126,-83,339,-1000,74,969,1000,-1000,-1000,43,-614,892,41,139,864,573,115,-638,-879,-51,-1000,92,962,335,-1000,642,12,-146,-486,-106,748,257,372,-507,-713,-1000,811,-683,15,-960,-523,675,-147,772,-1000,277,544,-480,-302,-190,-813,-258}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00021() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "getOutputBuffered():int",
+            new int[]{324,-786,390,70,-1000,-1000,-220,-681,-107,278,19,1000,-744,-1000,667,569,131,-508,-838,403,-100,-1000,1000,-369,-548,-515,1000,689,822,-834,-178,-1000,-851,574,-76,-1000,492,311,52,-1000,-916,970,473,-1000,760,28,-1000,1000,-399,630,-372,216,1000,777,187,703,-739,396,441,656,-126,-1000,270,-322}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00022() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "getOutputBuffered():int",
+            new int[]{36,-1000,1000,-1000,823,1000,838,-1000,-273,-361,-551,-982,-746,943,891,34,-1000,-320,224,-636,-564,1000,269,1000,291,1000,1000,948,254,300,-1000,464,-1000,449,708,1000,-1000,-477,-544,56,26,1000,110,1000,760,-505,461,-1000,956,-285,157,-1000,-1000,706,-344,953,-738,-211,1000,-1000,-776,-751,-534,-785}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00023() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "getOutputTarget():java.lang.Object",
+            new int[]{7,716,-770,479,-295,7,678,206,-660,564,467,-1000,-355,-1000,1000,-773,1000,-978,242,-1000,-741,-320,395,-232,377,-1000,-1000,-634,-467,742,-562,-420,1000,433,-33,-174,162,766,-164,880,-1000,335,1000,247,612,652,1000,-239,1000,720,234,1000,9,13,849,-1000,110,457,80,225,-1000,1000,624,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00024() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "getOutputTarget():java.lang.Object",
+            new int[]{-1000,415,548,-373,724,-849,-1000,-51,591,-117,-501,459,-181,152,-1000,1000,-322,-899,-731,1000,-1000,400,311,-1000,458,159,1000,523,-86,-1000,197,652,-726,1000,239,554,357,133,-116,-1000,28,95,508,748,-1000,1000,-597,98,-1,1000,175,-1000,-311,445,18,1000,1000,-407,-471,665,713,-1000,384,-422}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00025() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "getOutputTarget():java.lang.Object",
+            new int[]{-165,830,661,-339,1000,-606,-587,400,1000,-401,-359,459,-789,709,-148,926,-698,-798,483,1000,622,-1000,-156,663,484,-230,-70,924,-250,88,-214,-1000,-411,-305,-801,-1000,1000,445,-276,-68,407,-1000,559,-209,322,686,141,42,1000,833,-480,61,174,97,870,457,19,-384,-659,76,-554,-167,169,-197}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00026() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "getOutputTarget():java.lang.Object",
+            new int[]{687,306,113,479,-245,-556,881,938,46,564,467,-315,881,698,901,757,235,-592,-706,670,804,-320,331,1000,736,382,472,-46,110,1000,-118,-1000,1000,-412,473,-65,-165,-28,12,471,-72,-1000,-210,770,443,-506,175,583,1000,720,1000,722,910,-273,849,-1000,1000,1000,-382,-290,-1000,1000,624,-623}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00027() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,byte[],int,int):void",
+            new int[]{-259,361,590,-590,-802,537,-669,700,446,-516,947,891,775,-900,948,-872,873,-893,419,964,-654,-14,805,-637,24,365,-688,-531,-679,-630,-348,-736,-65,-85,-709,-682,-533,23,-963,644,167,354,-143,375,941,874,-851,435,993,284,317,679,47,251,-496,-936,947,739,-434,-634,624,819,6,-371}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00028() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,byte[],int,int):void",
+            new int[]{909,35,467,-924,-783,512,-169,679,-163,-438,-726,739,709,-369,259,-1000,-114,-1000,-393,464,-1000,-504,1000,325,1000,384,-1000,-854,392,-728,1000,-52,287,-669,-1000,294,-546,-873,1000,864,-807,75,749,1000,1000,125,-1000,403,264,-292,1000,733,234,-153,90,-1000,1000,28,-585,-689,924,-376,407,889}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00029() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,byte[],int,int):void",
+            new int[]{1000,-206,344,-853,-171,553,420,-232,538,-797,-264,471,-69,-563,562,1000,917,446,44,428,49,387,-113,-762,326,-271,182,-569,175,-57,75,-406,-832,115,908,263,153,-45,374,136,-44,887,15,1000,-658,935,758,531,85,249,450,-682,1000,293,527,236,441,1000,-903,1000,1000,-213,1000,429}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00030() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,java.io.InputStream,int):int",
+            new int[]{120,1000,-169,-1000,787,-745,227,444,-261,-6,-13,-964,393,172,455,-42,339,268,435,-291,-1000,377,1000,422,-1000,-535,392,-525,-419,1000,924,319,-1000,168,1000,999,812,1000,-1000,-1000,-637,-422,233,557,-591,-96,634,1000,779,-921,638,1000,-1000,-1000,971,1000,261,-251,1000,-1000,1000,-1000,540,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00031() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,java.io.InputStream,int):int",
+            new int[]{-955,825,-928,1000,-1000,-663,16,111,1000,-317,697,304,427,-141,-625,-834,1000,844,-1000,-109,555,-1000,177,1000,1000,535,287,737,1000,-1000,-1000,-724,-71,-726,-802,-474,599,-671,-1000,-742,-6,-563,1000,-773,722,-1000,698,-1000,-457,1000,-628,-1000,309,398,-1000,-900,-416,1000,-1000,-517,703,-330,-244,116}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00032() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,java.io.InputStream,int):int",
+            new int[]{373,514,-560,230,351,-1000,-99,-586,-252,819,-925,-712,51,-985,-32,-38,-1000,-534,466,-618,-877,143,473,1000,1000,359,257,191,-381,310,-79,334,-1000,-433,307,-395,-86,-1000,-335,-592,-743,-217,1000,-318,-5,-981,261,-605,740,638,-11,-117,-832,896,-485,605,-15,251,-630,-697,1000,-202,-188,356}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00033() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,java.io.InputStream,int):int",
+            new int[]{373,468,-429,230,976,1000,-1000,-1000,-252,144,-925,1000,51,1000,-605,-347,-1000,-1000,-335,1000,-1000,47,-112,-1000,-246,1000,257,384,751,1000,-238,-415,322,-308,-1000,-254,-1000,-31,-1000,1000,-696,-438,-1000,-1000,-5,-41,1000,545,477,689,-1000,1000,-832,562,595,-506,1000,1000,70,-697,-986,569,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00034() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,java.io.InputStream,int):int",
+            new int[]{631,268,-50,74,273,559,-1000,-799,304,-1000,1000,1000,-421,820,-721,-661,-580,-497,-124,1000,-955,-584,-507,-803,-871,961,-415,120,1000,158,-433,-416,596,105,-1000,22,-922,400,-645,833,-670,208,-1000,-592,-217,-45,458,183,168,288,-1000,1000,66,410,140,-361,222,583,126,-501,-1000,426,-1000,-650}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00035() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBoolean(boolean):void",
+            new int[]{-1000,-712,1000,-959,-714,-800,1000,458,-622,-173,131,718,467,511,422,889,702,203,-408,421,223,678,-163,117,170,1000,342,601,-1000,588,307,943,317,-875,802,-302,-825,-195,1000,-969,14,903,393,902,-433,-352,503,26,-294,-693,1000,-894,798,431,-20,86,463,-1000,421,472,1000,-420,-46,-864}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00036() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBoolean(boolean):void",
+            new int[]{-983,-85,981,-959,878,673,781,507,214,422,859,718,-92,1000,289,889,631,232,-343,-197,793,-187,-1000,-584,170,789,-460,-218,268,988,259,67,-29,43,551,68,-825,387,362,189,225,395,477,131,165,875,-517,-556,414,-558,943,-720,-84,431,129,352,-305,-468,239,-88,1000,-420,168,-411}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00037() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBoolean(boolean):void",
+            new int[]{-1000,-1000,-116,-516,1000,148,1000,1000,-388,219,554,630,639,419,1000,1000,235,268,1000,161,-1000,858,-291,384,-98,1000,620,-603,-816,680,634,1000,-142,-962,186,548,-1000,753,1000,285,-169,987,370,1000,601,-380,-185,-27,-325,645,772,76,1000,-259,-806,164,-824,-1000,327,-664,1000,-678,882,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00038() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeBoolean(boolean):void",
+            new int[]{-972,407,790,-959,1000,-834,940,283,-216,194,464,968,435,449,1000,923,702,15,-278,421,-485,678,1000,-390,170,-521,-189,-152,-870,82,984,-561,144,-95,551,775,-825,-219,843,-544,-85,505,411,902,-562,-162,-315,26,-430,-693,1000,-631,658,431,183,562,463,-1000,716,20,1000,-420,-119,-831}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00039() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeEndArray():void",
+            new int[]{554,-151,-1000,-20,-160,-123,244,-145,-489,-481,-853,796,718,-1000,499,-620,-1000,-531,804,465,1000,-594,486,-162,-296,-84,-1000,993,-840,-1000,-163,-1000,86,-728,-1000,-942,127,75,-200,-546,1000,-412,493,-591,-243,1000,164,-531,-676,290,1000,-959,187,-212,189,-913,410,-923,813,1000,-1000,1000,312,-62}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00040() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeEndArray():void",
+            new int[]{649,544,-693,-820,-64,226,457,-612,-642,139,-237,1000,1000,-727,-621,-509,-1000,-357,1000,380,1000,-116,-222,666,-884,127,-781,1000,-1000,-1000,-740,-405,929,213,-704,-712,-493,1000,-202,-918,1000,191,338,-1000,-272,452,261,-694,-1000,904,1000,-1000,-110,648,432,-973,41,-1000,1000,800,-1000,1000,695,139}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00041() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeEndArray():void",
+            new int[]{-248,-1000,176,-37,21,-504,680,-373,134,-438,-377,-587,127,931,192,-466,923,514,-438,130,-147,416,199,-93,800,318,365,-1000,1000,1000,529,-1000,76,-440,-81,-431,-1000,267,902,-108,1000,-1000,-400,-60,-1000,763,749,823,1000,-298,-838,994,-469,936,317,697,-1000,1000,518,-313,-338,-1000,21,781}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00042() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeEndArray():void",
+            new int[]{-428,-1000,-301,-679,-656,-627,399,1000,970,637,-573,-172,-203,-45,698,-1000,747,989,-609,-160,-1000,1000,514,-697,462,1000,607,-1000,1000,1000,9,-137,-598,-1000,-869,-1000,-740,2,1000,623,223,1000,-44,-474,-1000,1000,826,-202,1000,-806,-567,165,-174,1000,-168,224,-1000,1000,-426,1000,434,-1000,-623,-363}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00043() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeEndObject():void",
+            new int[]{-555,222,824,1000,-728,1000,-692,1000,-266,-361,475,-593,-765,-980,837,-338,-221,-304,1000,262,1000,163,-913,1000,1000,208,1000,-1000,78,1000,711,585,330,270,1000,-437,460,908,646,-497,467,780,-752,-428,-265,-727,267,913,1000,-750,-26,-802,-951,1000,1000,-396,-521,1000,-266,140,-471,368,1000,-610}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00044() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeEndObject():void",
+            new int[]{-46,-170,1000,-61,-532,-861,-559,972,675,894,-829,1000,-1000,578,425,35,-823,1000,-1000,12,-108,352,-70,-1000,1000,689,-48,687,838,151,109,310,694,-1000,1000,-863,1000,113,135,-1000,-540,1000,-49,162,730,204,154,720,1000,-987,-301,1000,-199,-601,783,30,-1000,-42,243,-1000,-1000,-446,-618,887}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00045() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeEndObject():void",
+            new int[]{1000,-646,825,88,-391,1000,-1000,919,204,-436,1000,-501,-735,-865,-69,-1000,104,71,-540,-71,414,421,367,1000,952,-397,-862,-828,-36,-612,66,840,-284,92,-813,-514,1000,-309,-1000,-773,506,12,-866,-4,-669,-1000,370,1000,708,-535,-1000,-880,-935,447,-185,-1000,1000,362,146,-264,499,-203,352,-443}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00046() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeEndObject():void",
+            new int[]{1000,673,268,-593,538,397,-1000,866,-278,-386,675,-763,-299,668,-353,-1000,169,-845,-1000,-259,-994,398,-232,623,704,-1000,-1000,1,-535,-936,341,626,292,-408,133,-530,-17,-605,-40,-1000,-56,-578,-1000,334,314,-314,-627,784,657,-756,-630,-282,-1000,1000,-653,-705,-851,1000,188,-25,-1000,-470,399,-690}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00047() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeFieldName(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-148,-533,45,175,211,503,-372,-320,272,298,-197,-535,1000,1000,267,-1000,-1000,766,-934,-1000,-745,-958,-964,1000,-103,530,-230,-734,942,-847,-1000,123,44,624,472,-877,-839,-1000,-1000,1000,-1000,552,-500,1,449,753,1000,-1000,-389,-1000,-1000,-1000,-940,-989,-1000,-724,832,-300,-1000,1000,-568,-175,1000,192}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00048() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeFieldName(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-663,-655,-644,-1000,-579,15,-1000,-687,-756,907,743,-1000,-741,1000,267,-1000,-895,-216,-380,661,1000,-1000,621,957,240,1000,-230,435,-296,-520,-674,-118,1000,-600,470,-877,-1000,367,-365,1000,-190,1000,-500,905,-1000,833,1000,598,187,-1000,-1000,363,-766,-1000,1000,722,-45,-300,-175,-1000,-801,-175,-1000,746}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00049() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeFieldName(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-1000,-958,-1000,-1000,-469,281,-287,-952,-1000,79,733,483,-1000,286,312,256,-54,170,26,1000,-330,-885,1000,-246,578,1000,649,1000,-175,-635,-238,-863,360,-1000,1000,-385,-1000,294,1000,149,29,877,95,1000,-1000,1000,712,227,-631,417,-1000,831,-855,-1000,25,-346,199,710,-512,-1000,-848,727,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00050() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeFieldName(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-878,-1000,-1000,312,-943,742,842,-1000,-343,354,-885,-677,-645,-510,166,911,-1000,-154,196,-483,434,-1000,1000,-476,351,1000,-190,788,1000,-853,-73,-677,491,-1000,1000,-1000,-927,153,620,695,-337,-815,-465,-270,243,1000,56,171,-304,569,649,1000,208,219,1000,980,984,1000,-1000,-684,-65,-867,-858,-163}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00051() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{535,946,-686,1000,-1000,361,-969,1000,-574,653,-69,-413,-372,971,939,-1000,-1000,-546,-639,24,814,-191,-43,882,-1000,-161,-1000,430,-700,356,-925,-896,-1000,-475,-293,-872,-704,37,322,382,244,-802,-1000,-102,749,-263,795,10,1000,267,-27,-863,-1000,-434,402,472,-1000,-442,-1000,-378,494,784,155,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00052() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{64,862,-567,658,-506,143,273,391,-420,611,-38,-995,-67,623,554,-87,140,425,-933,-332,198,-382,215,330,-898,-566,-426,499,529,-173,-652,-340,-406,-630,365,-918,-973,-338,-287,-58,814,-443,-510,-446,316,-102,581,-358,216,636,49,438,-764,-770,-215,-942,-491,26,-628,83,748,990,-211,569}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00053() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{-198,-665,-1000,-947,261,31,-969,-637,199,653,-869,1000,-923,-127,1000,-823,-469,-1000,-1000,-222,-444,1000,-272,648,-462,-42,1000,542,631,414,-839,-2,1000,-581,-293,-1000,610,-404,1000,-1000,-1000,-100,227,-440,-1000,-394,1000,10,1000,-1000,-442,-1000,-1000,1000,-368,862,-1000,-1000,-494,474,-664,-1000,-957,-351}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00054() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{163,-845,-686,-408,-352,112,41,-492,-199,408,-869,1000,-1000,474,706,525,-1000,-546,-891,529,-667,-612,-1000,676,-75,-144,1000,-240,-700,-454,-1000,-896,737,-475,-1000,-897,1000,15,322,-11,-1000,-802,-925,-871,-1000,-505,713,-761,339,-796,-1000,851,-1000,1000,1000,560,-883,-895,1000,-26,-593,-1000,-272,580}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00055() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{265,1000,-900,126,-1000,-342,-616,0,-387,728,-348,335,-1000,1000,243,-903,-987,-819,-1000,1000,221,-688,-543,1000,177,-645,709,271,-461,966,-1000,-493,229,-1000,-217,-1000,514,-401,510,196,-15,-912,-1000,-700,-878,-1000,1000,-886,705,46,-559,-114,-1000,982,1000,570,-1000,-1000,193,21,589,-710,-688,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00056() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNull():void",
+            new int[]{1000,-1000,-729,821,-987,390,150,-412,-606,-128,-1000,-477,590,1000,419,-1000,542,301,-87,832,1000,-732,340,637,-286,1000,-255,-429,1000,1000,396,209,1000,-1000,934,400,1000,296,264,809,-927,1,-591,877,400,784,-1000,475,1000,-1000,528,-567,703,469,374,-104,-1000,-1000,-106,-121,-1000,291,477,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00057() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNull():void",
+            new int[]{-1000,860,668,-160,-774,382,193,-804,639,795,332,1000,451,-236,-639,-1000,-133,-965,428,1000,-1000,1000,1000,-1000,809,-1000,236,-153,-400,-542,-774,-1000,-1000,-34,968,-1000,-318,1000,1000,-1000,1000,-709,-342,-55,622,853,-471,-664,-400,-491,-721,910,-464,-231,-1000,-203,-187,-1000,30,1000,1000,-1000,327,-528}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00058() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNull():void",
+            new int[]{291,-597,368,-647,-394,-753,-487,-364,596,399,251,-572,238,273,800,398,-255,-959,268,230,715,-808,307,426,530,-313,398,-1000,1000,270,393,-407,634,63,188,53,1000,958,388,1000,902,88,215,559,-962,265,-1000,-1000,1000,-1000,1000,-286,970,574,95,-361,-1000,162,405,679,-296,0,-367,287}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00059() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNull():void",
+            new int[]{424,-296,-240,-72,-774,561,-270,1000,-172,827,289,302,315,-575,-639,-142,-610,1000,811,1000,762,257,-1000,702,-1000,1000,-772,47,1000,1000,-124,1000,1000,881,-1000,116,294,299,-1000,1000,-1000,281,-1000,-289,-880,-1000,1000,506,-79,-1000,12,-881,33,123,-1000,135,524,1000,-1000,728,714,1000,327,-528}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00060() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(double):void",
+            new int[]{-370,-1000,-224,1000,-297,-384,349,-911,967,-509,1000,824,-877,1000,385,783,-592,1000,347,-206,-715,-926,1000,774,-776,1000,744,-659,229,-178,186,573,398,976,-222,-793,1000,489,429,-1000,1000,110,-962,-610,986,-39,-48,-881,1000,934,-78,1000,459,-1000,1000,-478,-1000,-475,-1000,-960,39,74,-461,135}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00061() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(double):void",
+            new int[]{-61,-719,-47,447,1000,519,257,415,707,584,443,1000,449,716,756,312,-1000,-73,-1000,-745,168,-44,894,-147,-748,-653,246,-1000,-986,1000,-261,772,-981,511,1000,644,247,-95,-521,697,48,-849,-1000,401,-482,193,-289,348,879,677,1000,-360,16,-216,957,537,400,576,-778,-247,638,998,400,400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00062() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(double):void",
+            new int[]{-331,-1000,25,-57,-696,-120,-728,7,-786,-159,178,-328,204,1000,-269,395,-8,595,887,-122,-1000,660,1000,1000,725,-298,1000,-514,564,-47,320,-370,441,65,-442,279,875,78,-564,-1000,118,-390,-1000,1000,-1000,545,-801,-739,-826,1000,507,-692,-705,-259,-849,-567,102,546,747,325,-439,-78,-1000,-857}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00063() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(double):void",
+            new int[]{-49,-961,139,-984,-456,-467,409,-481,490,-1000,-737,-381,-295,381,-1000,571,549,-650,1000,891,-845,500,27,60,45,-206,1000,-270,-1000,169,698,-1000,-478,-248,-33,-679,765,593,-255,-898,-798,-317,185,871,6,-25,496,-681,-785,-706,-1000,-707,-970,219,-1000,-672,-125,81,616,967,1000,74,-1000,-382}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00064() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(double):void",
+            new int[]{-116,-376,661,511,-167,-143,-149,-780,971,54,331,1000,-1000,927,700,1000,-1000,955,-724,620,-210,-664,783,-226,-1000,340,-418,-1000,-587,1000,186,-132,641,766,155,-605,711,-121,140,-780,-129,671,-670,-451,-15,-233,-194,-1000,676,568,217,471,62,-1000,833,-936,-1000,356,-784,-1000,798,-519,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00065() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(float):void",
+            new int[]{-329,963,1000,1000,985,644,-88,-1000,-482,198,-94,-1000,893,315,-183,1000,-517,563,-124,1000,258,1000,-1000,840,-956,-229,139,-971,-1000,-466,-821,95,1000,374,-439,-232,-552,-151,-444,263,-1000,455,-894,405,-1000,1000,817,-685,1000,-371,-1000,-329,-1000,-391,-686,-313,132,-807,-1000,-607,-248,-159,661,-615}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00066() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(float):void",
+            new int[]{-141,996,1000,-507,946,-523,-725,-504,-425,83,859,1000,1000,1000,745,441,-256,-250,1000,1000,1000,1000,-1000,1000,-1000,-1000,-1000,-1000,-1000,-837,-1000,448,1000,431,-431,-854,326,289,79,-698,-497,-619,-31,-37,-1000,-1000,1000,-1000,-735,-1000,378,-1000,-637,176,973,-810,747,-1000,-913,219,-1000,-202,1000,-238}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00067() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(float):void",
+            new int[]{76,1000,-22,802,-415,130,-38,574,-397,974,1000,-938,1000,595,-323,-944,671,1000,-1000,709,-1000,301,842,1000,-530,67,1000,-384,-832,-224,452,-474,744,401,-492,512,-501,-874,-730,1000,1000,1000,572,898,859,-400,1000,610,-179,1000,-341,165,163,-835,-1000,1000,-1000,384,270,1000,938,-1000,626,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00068() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(float):void",
+            new int[]{-202,321,638,-649,-704,449,493,-1000,623,-606,1000,-591,-218,49,427,535,550,-836,-949,57,181,65,-733,-313,926,835,1000,1000,-128,536,439,198,-276,561,689,-260,-919,-623,10,-318,-107,-250,298,996,-469,-98,-354,-20,531,789,-186,-104,55,378,287,531,835,745,-671,-908,1000,-433,-1000,103}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00069() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(float):void",
+            new int[]{-884,-602,-760,-529,-1000,-199,808,-502,-752,863,917,-773,-382,871,-821,523,115,954,89,-284,-477,440,975,-1000,-695,-254,1000,1000,-449,925,-273,337,440,675,-789,-412,218,-1000,-356,526,-132,197,-425,662,1000,1000,-146,990,-539,-1000,-254,-1000,-668,1000,-808,631,-943,402,112,-928,1000,-916,56,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00070() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(int):void",
+            new int[]{-147,827,134,-296,-1000,-496,686,-81,-165,599,-89,-653,-1000,-473,1000,-221,-972,-1000,828,-332,-361,-983,-396,-1000,47,38,-849,-709,601,-673,-590,-59,868,827,-1000,-95,1000,990,606,-704,-874,-1000,184,-1000,-1000,-910,-567,1000,-626,1000,-362,334,565,-257,-254,-687,363,-1000,659,484,477,-912,-1000,398}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00071() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(int):void",
+            new int[]{579,-625,145,245,-1000,-48,1000,944,342,98,-1000,-645,569,-289,210,-97,-486,-58,411,-1000,493,-1000,185,-952,-770,463,-940,239,52,-830,241,-32,-445,312,-922,-284,392,429,966,-655,263,175,-1000,-1000,-1000,-1000,938,1000,-1000,81,-651,185,14,330,-297,-736,260,-3,-146,606,1000,-159,488,213}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00072() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(int):void",
+            new int[]{843,949,-924,111,394,1000,-640,107,139,314,-55,-426,827,-48,1000,175,370,-1000,-50,-918,935,-834,-847,-1000,1000,876,-1000,-1000,702,817,620,778,-1000,364,-1000,-204,581,683,-730,-1000,1000,-181,-784,-79,-1000,1000,-787,712,931,1000,-661,1000,-336,-1000,738,918,-736,-1000,1000,186,809,1000,377,-452}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00073() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(int):void",
+            new int[]{-751,928,-189,49,870,-1000,-678,-484,-203,-55,755,110,-1000,-804,1000,-25,-648,-639,-117,26,-196,47,-188,59,381,19,-1000,-796,33,81,1000,-253,-508,329,-1000,-278,231,1000,-272,-723,431,-707,1000,-920,-1000,-72,-523,327,1000,702,-295,599,270,-80,29,-154,-472,-303,1000,1000,159,-1000,120,137}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00074() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.lang.String):void",
+            new int[]{74,-721,769,-71,521,620,978,-164,575,-62,-357,-380,193,-456,243,-211,404,-339,731,-684,207,840,515,216,96,96,561,650,559,489,472,29,390,328,791,657,-499,87,-332,586,87,56,-595,1000,-545,985,990,-739,-468,241,694,-802,-27,242,-479,-185,1000,218,-4,-643,-569,-871,957,746}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00075() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.lang.String):void",
+            new int[]{-502,1000,-182,537,-152,-11,-827,-492,-496,264,889,-597,-1000,1000,-748,-482,-1000,-134,244,27,-82,584,-621,589,424,159,478,-696,-611,-1000,338,-231,-919,-801,4,-984,159,-654,-280,-782,-1000,-179,903,-221,527,-1000,-967,1000,49,-1000,1000,172,-1000,-1000,-394,-13,273,-434,500,-887,14,1000,-1000,-529}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00076() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.lang.String):void",
+            new int[]{313,-661,918,-922,1000,-32,4,-450,-492,-886,68,396,206,378,924,-253,777,-326,723,-382,422,-81,-320,77,758,-876,19,284,652,-159,944,631,455,613,-234,1000,180,-136,723,404,-124,-316,-76,306,319,1000,748,-1000,-710,-299,-738,-554,341,549,-795,-467,675,-395,-72,-512,-185,-547,143,28}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00077() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.lang.String):void",
+            new int[]{-82,-128,199,-273,1000,1000,1000,-270,-763,-562,-609,-688,211,359,-322,236,844,-26,1000,-413,664,361,-224,-481,169,-789,-183,464,502,-215,727,-176,-44,-292,-828,-470,-540,78,562,-193,-261,-552,-142,514,338,389,281,-177,-291,-399,-400,-426,3,-217,-801,-164,503,-175,-430,-69,-154,-1000,-18,12}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00078() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.lang.String):void",
+            new int[]{276,-255,358,-1000,1000,533,-908,-644,-459,-602,531,176,-409,1000,-789,416,777,-557,946,-763,745,-252,-728,503,805,-1000,238,-557,561,-1000,1000,262,-140,211,-240,-176,761,-670,751,380,-1000,-960,98,-549,-228,-88,163,-530,-728,-305,-1000,154,-109,67,-551,559,16,-883,-1000,-791,195,-341,-395,-626}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00079() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{-299,-972,915,-450,-846,-609,-83,-267,-941,635,-641,299,888,-685,865,135,227,-63,941,-431,264,-981,432,196,513,-184,947,-488,280,241,176,-280,445,516,-277,-6,914,-592,-472,735,752,610,266,922,-552,-285,-810,-492,-973,-423,-169,-990,-218,-604,-341,-77,-687,775,395,413,-784,226,970,844}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00080() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{1000,-169,-415,-78,957,99,-774,-454,-101,946,244,-191,-237,400,-351,-1000,1000,-1000,-447,-182,-867,1000,652,-4,-20,399,-1000,761,381,400,655,-183,252,-1000,-1000,-537,-463,-712,-143,418,-623,-1000,938,-937,669,1000,-219,-485,983,-585,-661,774,-1000,1000,425,994,1000,-338,-22,585,1000,52,-1000,-719}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00081() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{-812,-1000,1000,33,-1000,-632,-506,690,-824,924,-671,-1000,1000,-685,1000,1000,-459,665,926,684,296,-1000,-968,898,-103,-128,1000,-1000,-954,-618,1000,-117,-24,1000,-653,-548,1000,-447,-109,819,1000,1000,107,1000,-1000,-1000,-1000,-878,1000,-1000,194,1000,442,-1000,-124,-1000,-1000,-390,692,398,-1000,-1000,1000,-48}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00082() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{-1000,877,486,591,-209,1000,-793,524,-433,262,1000,-581,-685,-61,485,1000,-1000,-53,358,291,-381,-1000,-1000,513,-375,-74,1000,-1000,-1000,-1000,1000,1000,-1000,1000,1000,-687,1000,-623,106,1000,1000,1000,23,720,-1000,-666,-1000,156,-620,155,480,-412,631,-1000,634,-1000,-1000,-1000,430,43,-1000,-1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00083() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{-202,-283,285,-1000,-938,-126,-358,-149,-918,798,-934,-254,-685,-1000,243,302,767,-344,358,193,-115,-1000,234,-341,615,-259,1000,-57,-103,1000,424,-1000,687,8,-736,-687,-704,-623,106,1000,-73,-276,23,1000,-1000,-203,-265,-950,-381,-169,-676,-412,-452,-40,-32,-207,-128,243,1000,1000,-542,-142,25,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00084() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.math.BigInteger):void",
+            new int[]{-740,-392,537,72,-837,1000,-400,349,449,679,-829,1000,584,-701,-1000,182,209,1000,29,-1000,670,197,850,-1000,1000,-1000,673,-1000,-211,1000,-1000,116,999,277,-818,677,-477,-140,1000,-81,201,-1000,-1000,-682,1000,628,-1000,-1000,-400,-1000,665,-1000,268,-1000,678,-494,-1000,1000,-321,1000,-1000,-477,-1000,-153}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00085() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.math.BigInteger):void",
+            new int[]{1000,-1000,-34,52,1000,-624,1000,-1000,-62,-36,635,-1000,-76,458,1000,972,-341,-147,-1000,488,-108,-1000,-745,765,-1000,438,201,1000,1000,-1000,-1000,669,-1000,1000,-124,-1000,1000,1000,-789,-598,490,1000,1000,-1000,1000,-413,205,740,1000,1000,326,934,-381,803,-654,1000,243,-870,1000,-412,298,1000,76,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00086() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(java.math.BigInteger):void",
+            new int[]{-667,272,173,-203,-49,1000,-26,-1000,-777,374,-174,-749,-317,-375,725,387,-1000,-317,-1000,335,-195,1000,-78,-1000,-108,-1000,-1000,-6,419,-438,-211,597,1000,-479,232,1000,-955,-1000,-239,955,271,-1000,-1000,979,1000,389,1000,-222,66,-412,173,755,-1000,-1000,-488,1000,181,-1000,1000,1000,264,38,505,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00087() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(long):void",
+            new int[]{339,-833,1000,108,1000,-299,181,732,-549,-161,-71,388,1000,1000,531,604,805,-997,-1000,-871,1000,-213,-36,1000,258,-1000,277,697,276,729,783,648,355,-1000,977,671,1000,40,-994,1000,409,-1000,-1000,577,269,-1000,-1000,-108,-1000,-339,1000,1000,78,1000,-445,-374,-269,1000,35,676,-1000,-658,-438,236}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00088() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(long):void",
+            new int[]{-1000,-672,1000,-99,215,20,949,326,-518,53,-713,315,866,895,508,476,-99,-250,159,-1000,439,1000,642,1000,252,-666,434,-539,461,1000,-1,439,-801,-1000,952,1000,-179,241,-989,1000,1000,716,-1000,-1000,-317,595,-1000,-2,-1000,866,854,1000,-777,913,-1000,-1000,444,350,1000,1000,-1000,-711,-96,301}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00089() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(long):void",
+            new int[]{-442,373,-904,1000,-1000,182,-159,634,1000,-451,731,-295,699,422,-622,-976,-1000,-477,991,-832,-414,1000,952,1000,413,760,650,-703,1000,327,-302,-731,-1000,346,-787,-913,243,1000,80,1000,-336,1000,466,-1000,-63,489,1000,-1000,1000,398,271,-391,-1000,-1000,-1000,-522,639,-504,-1000,-340,282,933,1000,637}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00090() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(long):void",
+            new int[]{-313,-355,-346,-475,79,441,753,1000,480,-426,116,1000,-1000,803,342,-321,-205,707,-259,-276,1000,207,400,742,1000,-486,-28,-254,1000,-449,542,1000,-406,-428,-643,-435,146,-10,51,483,-779,48,197,10,-927,-1000,997,-154,-221,-214,654,797,-199,352,106,-543,1000,-222,-871,-298,743,-820,604,373}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00091() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(short):void",
+            new int[]{-464,-613,141,1000,184,992,955,-136,838,463,787,1000,-20,-349,-599,-946,1000,970,-876,-58,417,882,600,-1000,709,862,781,-1000,-1000,1000,-930,525,1000,-69,-1000,1000,-1000,-82,-211,-861,-665,1000,-899,235,175,987,361,-281,-586,-307,323,-212,-579,-1000,705,524,-108,-286,-1000,-695,701,-1000,692,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00092() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(short):void",
+            new int[]{-878,279,-100,641,738,1000,485,-386,258,827,717,685,-438,56,-936,-1000,1000,674,-1000,1000,-400,916,-124,1000,1000,852,1000,-430,-334,83,-133,1000,684,-1000,29,403,1000,-524,1000,-743,370,1000,236,-272,646,967,199,-522,-190,-484,570,-279,48,1000,-91,-220,-910,26,-1000,332,10,-1000,44,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00093() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(short):void",
+            new int[]{-171,-608,559,295,-253,-581,660,-945,-33,143,-813,-277,-406,103,-551,-227,433,298,980,-129,-134,1000,-896,-743,544,668,-194,1000,518,-321,145,410,1000,185,353,1000,-1000,442,-1000,-105,-1000,223,-1000,-1000,-161,298,-387,48,463,390,748,-194,-462,-400,952,-1000,817,355,-841,-916,-67,67,-296,-779}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00094() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeNumber(short):void",
+            new int[]{-494,-1000,351,499,-35,-938,-780,-720,1000,23,-813,627,855,-467,979,683,-609,-301,-379,-585,1000,926,-154,-1000,-189,1000,-1000,-1000,-383,997,101,-536,-779,289,-1000,748,-642,-265,-1000,-1000,-1000,-1000,-463,-918,872,178,702,154,-716,386,401,-170,-955,-1000,464,773,-381,-277,539,-1000,17,56,-936,212}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00095() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(char):void",
+            new int[]{-138,172,-1000,-919,-292,135,-909,-665,1000,614,-189,-272,824,-81,-669,70,-119,1000,-395,832,1000,1000,707,304,654,134,309,763,1000,-29,-1000,-508,1000,-768,331,804,902,-1000,-988,1000,-1000,902,-952,-630,785,569,-485,860,-189,989,-81,184,1000,743,736,-1000,-769,-415,-601,-943,-793,-153,989,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00096() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(char):void",
+            new int[]{-158,610,-310,-253,-179,490,-1000,-601,710,-157,273,-525,212,-292,-37,-311,-131,401,-459,1000,624,472,360,-149,-545,-144,1000,338,1000,-304,-864,560,1000,-255,311,923,408,-911,-643,970,-557,509,-1000,-550,218,283,29,247,-157,605,-748,-212,321,407,99,-299,-764,-518,-660,-988,-690,-30,209,-518}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00097() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(char):void",
+            new int[]{439,-222,150,61,403,419,337,-601,1000,-211,883,-665,395,-230,830,-275,693,-120,-1000,979,406,-319,786,519,-401,282,1000,649,660,12,-486,667,258,-908,-1000,1000,1000,-905,-708,1000,-969,1000,-690,-790,-922,-720,-398,469,-403,415,920,428,686,792,692,-656,-822,-85,-1000,-718,-1000,213,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00098() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(char):void",
+            new int[]{-168,707,-978,562,-1000,-104,455,352,781,153,-389,157,263,254,963,-836,-150,467,-302,784,904,456,1000,467,-397,54,-452,831,610,804,-176,223,400,-365,-750,525,531,345,-471,-855,-400,292,-298,-325,189,-59,-270,498,-426,935,447,214,718,650,753,-543,-667,67,354,955,-887,331,580,-659}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00099() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(char):void",
+            new int[]{906,598,-209,-541,-911,-849,206,635,315,544,-843,378,-108,615,-29,139,-88,404,-520,541,734,-214,663,616,500,943,-853,652,-542,-549,-718,-139,239,-294,-883,-495,647,-82,-661,175,7,-42,983,510,-327,977,551,-220,904,903,-900,518,995,678,-229,-376,-728,390,276,-755,377,380,942,131}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00100() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(char[],int,int):void",
+            new int[]{631,336,-604,297,-948,-968,86,1000,554,-401,-805,-1000,-1000,-645,-335,1000,73,147,-887,-1000,-776,145,-497,-854,-1000,-832,-660,-622,201,786,280,-512,545,-495,226,-1000,41,-693,898,382,-791,-90,666,628,1000,26,64,-801,3,-215,5,594,-464,1000,-790,-21,1000,1000,234,-681,-536,957,-208,828}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00101() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(char[],int,int):void",
+            new int[]{301,20,-124,116,-1000,-533,498,-126,-28,188,386,-463,-625,171,-242,686,891,-391,-991,-640,-497,561,-348,-672,-538,-685,-926,799,-427,1000,1000,-939,909,-908,110,-803,386,-270,1000,715,619,169,206,186,643,627,-184,-417,871,761,-992,24,-728,-262,-622,40,745,1000,-755,-499,991,-45,-947,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00102() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(char[],int,int):void",
+            new int[]{980,-379,-96,-214,-344,-1000,-161,152,150,-303,-563,-605,-916,623,-335,-557,337,-201,-419,-1000,-190,585,179,45,-833,-620,-901,50,-114,363,-406,-608,204,436,91,19,-1,-315,516,651,-791,-26,-693,434,560,-380,264,-751,756,166,-1000,523,-845,1000,-638,1000,369,29,234,-498,304,1000,70,931}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00103() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(char[],int,int):void",
+            new int[]{761,-492,-847,-600,-836,-901,-77,133,-257,219,207,-232,-469,671,-285,-655,844,-805,-987,-148,-634,808,-594,629,-85,-463,-894,-500,130,378,-671,-547,870,-319,234,-953,674,-970,29,-326,278,183,927,327,-88,-320,-806,-455,816,-721,-988,869,-688,607,-461,330,602,-954,-793,216,449,-745,-982,707}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00104() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(char[],int,int):void",
+            new int[]{769,791,977,1000,-438,-82,-148,282,-548,536,-173,176,-996,-831,658,-1000,476,-401,-155,163,-515,-84,-183,-1000,68,339,-335,320,-5,1000,-155,-343,986,-697,31,-45,970,1000,478,987,-466,-659,-713,-549,1000,556,1000,717,1000,442,-581,-768,-947,-916,-244,403,181,400,1000,-1000,1000,1000,-378,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00105() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-567,-310,565,194,328,17,-662,323,449,624,623,923,-656,-935,635,-637,934,-605,446,-150,-326,-651,337,228,697,251,969,151,205,-228,55,468,-154,354,258,-841,-82,918,-377,-306,830,267,21,-689,470,-492,-210,-634,864,-233,63,-323,822,494,84,-464,175,721,-736,-37,-409,792,663,693}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00106() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{401,-944,-842,-979,385,-596,-776,1000,70,-611,596,-940,-1000,-586,-491,363,-537,-468,923,-533,-433,-172,691,626,-422,360,-592,868,702,192,504,661,-1000,-427,-1000,-1000,1000,148,-24,1,-1000,1000,1000,-103,646,1000,270,890,-619,154,1000,-1000,840,-256,737,-266,-905,466,-1000,703,-498,1000,-203,472}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00107() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-406,-1000,882,-85,1000,-520,393,487,566,264,-29,444,816,-1000,-525,892,306,-511,839,52,-816,-1000,-1000,529,942,-139,1000,1000,531,98,131,520,-293,923,-1000,-896,-17,157,-944,1000,-473,126,83,558,316,451,671,252,-284,-405,-562,63,1000,-82,-473,-161,249,1000,-705,1000,210,75,36,-2}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00108() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{574,-762,-182,-796,638,-70,395,353,951,-656,-762,-69,555,-931,162,426,-786,-799,299,533,-927,-254,-330,156,-504,-360,129,421,-189,753,344,-737,-825,-101,-522,-365,866,-309,879,942,-99,871,199,904,98,658,119,731,-562,-393,113,-766,892,-502,549,-718,-226,825,-175,895,97,641,-795,-837}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00109() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(java.lang.String):void",
+            new int[]{850,619,-936,-438,604,-321,-1000,147,-1000,679,-272,851,1000,67,1000,-629,-1000,-1000,171,-1000,834,1000,-678,1000,-906,374,71,1000,-44,732,-826,50,-1000,-1000,342,1000,688,-1000,932,801,-254,-215,898,932,-826,-415,-322,305,-805,29,-1000,-714,137,-928,-176,320,476,-447,801,-1000,211,-835,-724,-655}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00110() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(java.lang.String):void",
+            new int[]{533,-590,-521,-1000,896,1000,-494,-577,1000,104,-663,379,136,1000,-832,714,282,391,819,1000,-1000,702,-756,721,-1000,-1000,1000,-1000,548,-1000,588,-1000,-212,-1000,1000,-91,336,-228,1000,-1000,-1000,478,1000,1000,-843,785,893,1000,1000,704,1000,1000,688,608,1000,1000,1000,1000,494,96,1000,121,1000,762}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00111() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(java.lang.String):void",
+            new int[]{716,812,1000,-475,110,1000,-184,270,806,438,-454,-71,-329,371,-1000,634,976,136,117,-1000,-1000,393,-672,431,-1000,-854,-121,-575,725,-876,-686,-1000,-1000,-1000,-27,-426,-243,27,1000,-1000,-171,113,1000,1000,-257,282,876,1000,1000,1000,993,-575,1000,854,548,353,910,934,1000,816,1000,-961,-803,-152}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00112() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(java.lang.String):void",
+            new int[]{-800,-1000,214,-938,539,1000,-804,-806,238,-813,-829,-515,971,88,-959,-28,-372,-692,-1000,-1000,887,411,-1000,739,-80,-429,1000,-25,346,1000,1000,-374,-1000,-691,1000,1000,-811,302,706,609,-102,-254,1000,-911,-953,-1000,-973,60,189,-727,-1000,-1000,-1000,-386,1000,392,-1000,-177,1000,-129,1000,1000,492,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00113() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(java.lang.String,int,int):void",
+            new int[]{-694,102,289,1000,-550,-884,87,289,230,784,507,-337,917,305,-877,577,256,1000,244,1000,-975,773,421,-657,-684,498,-645,-282,703,738,186,-546,47,156,-548,-876,781,-754,827,905,242,387,-19,-592,483,-218,455,-298,1000,-769,354,233,-13,-266,-313,692,573,6,589,720,1000,-636,-809,842}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00114() {
+        org.junit.Assert.assertEquals("THROW:java.lang.StringIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(java.lang.String,int,int):void",
+            new int[]{1000,-142,1000,1000,862,-301,-1000,-293,189,-592,187,820,254,1000,-101,-539,164,-1000,-315,-532,-583,966,-1000,-1000,644,-837,176,-1000,55,1000,1000,13,-858,-1000,-856,1000,795,-616,922,-1000,601,-156,575,-1000,186,-263,748,-7,402,450,-1000,-1000,1000,1000,757,-449,-1000,659,-943,1000,-1000,-152,947,-18}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00115() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(java.lang.String,int,int):void",
+            new int[]{-901,972,785,801,-258,-1000,131,-899,-116,87,-237,960,-164,258,80,294,-2,239,82,-157,-827,165,315,-944,628,-475,719,-1000,709,289,748,-1000,-1000,761,798,-528,1000,449,361,-501,493,122,4,-1000,-874,480,1000,-707,-259,-904,173,-1000,1000,1000,-554,1000,-894,-567,352,1000,781,739,540,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00116() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRaw(java.lang.String,int,int):void",
+            new int[]{-551,-644,-23,299,-400,-1000,-81,499,154,-529,-37,230,636,803,1000,-1000,-1000,744,288,648,-619,-571,511,-405,-1000,-19,1000,-322,-523,513,-793,820,112,654,154,-745,-648,-239,417,887,723,298,-1000,1000,936,-970,-1000,1000,-826,1000,176,697,46,-169,777,-46,434,374,660,-400,-1000,452,-145,43}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00117() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRawUTF8String(byte[],int,int):void",
+            new int[]{-314,-181,-61,-236,-465,849,588,-11,-766,-429,724,151,-69,401,536,-706,-422,777,1000,-235,-1000,142,588,124,-347,468,-11,57,294,-510,-18,1000,825,169,258,909,-792,937,94,992,374,-476,-351,448,473,70,165,910,643,382,-224,-548,-148,1000,-671,-556,-348,191,203,328,-1000,253,-661,-497}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00118() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRawUTF8String(byte[],int,int):void",
+            new int[]{778,-15,-359,-1000,215,989,-1000,-413,-62,873,643,1000,539,531,-23,-356,-167,558,-11,-270,-364,-676,110,333,-300,1000,-1000,-49,-67,-817,1000,-657,-41,-1000,128,332,214,327,-101,58,-388,101,-636,1000,88,96,383,-158,13,110,-545,-841,-535,1000,-544,-994,-1000,-562,-584,-184,-622,276,-300,763}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00119() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRawUTF8String(byte[],int,int):void",
+            new int[]{-1000,335,283,284,-1000,-930,-340,-524,178,423,1000,451,-58,462,219,-921,-564,402,-502,-205,24,-272,196,582,-109,558,-1000,1000,326,-780,-191,-945,-554,132,521,-932,-754,-685,234,-161,1000,-744,-404,839,458,1000,457,1000,-97,38,-873,1000,771,896,-967,-131,-188,-313,1000,1000,315,660,136,615}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00120() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRawValue(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{1000,1000,341,1000,1000,-1000,-918,1000,972,324,-547,-781,120,-1000,-935,59,168,1000,-1000,1000,-470,-214,1000,-1000,773,405,942,88,483,555,-319,-848,604,935,-106,1000,-1000,734,-493,1000,950,-552,-1000,-563,328,-199,361,1000,815,1000,-409,124,342,-1000,142,-107,1000,-1000,-889,618,567,-149,-486,243}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00121() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRawValue(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-303,-44,608,426,1000,-369,1000,-511,514,-567,-109,327,575,-902,211,1,564,-202,-420,-115,73,-68,152,445,-289,-852,1000,207,996,621,715,125,-860,585,461,581,304,-876,-616,-281,-125,-1000,728,-1000,-612,563,127,402,11,1000,159,-167,-504,-888,968,-500,1000,-484,177,102,-75,537,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00122() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRawValue(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-1000,952,-480,1000,1000,-1000,1000,1000,485,-431,611,-446,-316,-971,371,1000,711,1000,-573,62,434,-662,384,1000,-518,-601,649,821,1000,102,1000,1000,-864,1000,79,1000,834,-1000,-1000,-310,-524,-1000,1000,-347,-847,-200,-375,143,198,-251,453,-674,911,-1000,1000,-1000,1000,51,-199,1000,-48,1000,465,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00123() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeRawValue(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-1000,944,1000,1000,1000,-801,-882,541,718,-353,939,-618,972,-303,-672,-1000,1000,1000,-1000,975,-1000,1000,50,1000,156,1000,1000,-669,1000,1000,528,-1000,412,1000,1000,381,836,9,134,-711,-664,-377,-128,-1000,-616,321,1000,832,57,17,-263,1000,-59,189,758,-134,844,727,-163,1000,650,-1000,-501,175}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00124() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeStartArray():void",
+            new int[]{-1000,194,-1000,1000,20,-1000,-1000,-188,-1000,-207,419,-332,-548,1000,-397,-1000,-1000,-633,-1000,1000,354,-215,-476,84,-40,592,-688,1000,-908,-964,160,-78,566,-7,-721,-1000,320,211,1000,71,40,1000,1000,-1000,-1000,-1000,401,11,-1000,783,-158,-327,-694,-146,-876,1000,-260,747,-359,-297,1000,-216,-1000,304}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00125() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeStartArray():void",
+            new int[]{-725,-249,195,575,-61,205,-114,-890,313,244,-277,927,-61,-13,1000,-1000,-276,-400,-652,553,-851,510,-897,-91,-752,852,-934,1000,-1000,355,942,19,799,1000,-1000,-1000,64,123,-857,543,1000,136,76,-241,-759,-780,780,1000,-777,56,-1000,697,-731,220,-750,-64,-588,731,1000,-788,-1000,-1000,-115,19}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00126() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeStartArray():void",
+            new int[]{512,-439,-164,349,1000,21,-447,-617,-381,239,451,-71,-377,994,609,83,-1000,-528,-669,840,-996,521,-517,-421,-44,480,-421,1000,-756,-524,905,-441,1000,320,-710,-591,-326,-38,-396,-235,1000,1000,-202,-1000,-1000,-473,660,-211,-895,187,-909,-129,-799,-462,-738,1000,-1000,545,849,-408,-400,-1000,-731,686}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00127() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeStartArray():void",
+            new int[]{-156,-1000,-1000,829,190,-221,-34,-724,268,-116,747,-28,362,1000,-397,-1000,-1000,-434,309,1000,-1000,1000,-1000,84,7,-548,-1000,596,-1000,-964,1000,-1000,1000,1000,-721,-1000,520,-748,-94,1000,1000,-224,867,-1000,-1000,-1000,1000,11,-1000,783,-1000,20,-846,-580,-268,1000,-260,429,1000,-620,-1000,-1000,373,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00128() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeStartObject():void",
+            new int[]{1000,-577,-196,306,415,1000,-174,169,-1000,119,107,244,-626,-309,-603,578,1000,-335,-528,74,-68,-43,-291,947,-615,-6,-650,559,-194,-223,-631,1000,736,-974,-734,527,126,-1000,1000,769,1000,-1000,562,218,-314,1000,-1000,-667,-202,-176,-1000,-1000,1000,-109,109,1000,798,1000,-1000,1000,1000,-257,-1000,-321}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00129() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeStartObject():void",
+            new int[]{-180,-179,84,-368,-341,251,776,-879,-60,-387,-53,403,106,56,-286,1000,708,48,-83,703,-603,809,-341,813,810,479,-885,899,-289,-178,1000,14,557,659,-1000,-222,509,-827,-187,-861,-921,337,838,1000,15,795,-845,411,627,241,346,309,256,-121,667,-418,-1000,850,578,673,670,-17,-1000,-208}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00130() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeStartObject():void",
+            new int[]{-405,-402,-412,-34,-771,562,875,-948,-701,-349,226,1000,129,334,-101,-92,1000,-982,210,1000,109,974,-254,1000,552,1000,-1000,941,-640,702,400,29,639,908,-324,-1000,-42,-720,-513,-62,-552,838,901,1000,92,708,-300,571,-374,-321,-524,430,33,446,42,-1000,-1000,275,-281,1000,543,-1000,-759,-35}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00131() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(char[],int,int):void",
+            new int[]{-573,1000,649,-1000,303,178,-733,290,333,-5,455,679,299,-690,1000,-497,-1000,-453,-115,1000,865,582,-683,400,245,-1000,221,-335,-476,-273,186,-134,211,101,234,-1000,-592,-626,-951,-443,-22,-166,-701,-1000,755,-128,-1000,-1000,377,-837,-870,-466,-173,-696,-248,-25,188,249,-12,580,608,385,-711,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00132() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(char[],int,int):void",
+            new int[]{-1000,73,-82,-495,-332,266,495,-302,-312,-401,138,1000,-314,-909,-130,-1000,-1000,268,1000,259,1000,717,-1000,1000,1000,1000,276,831,-729,443,1000,775,168,-1000,-1000,510,-1000,-924,-1000,626,224,216,728,847,-1000,-758,-1000,333,878,-268,-116,627,623,-780,-1000,648,-1000,1000,346,-293,-46,853,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00133() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(char[],int,int):void",
+            new int[]{1000,-767,-711,-964,141,461,-905,-280,-980,38,21,793,-606,828,-363,-35,1000,-747,1000,526,-640,1000,678,-115,541,428,305,85,1000,286,-443,560,-121,889,25,750,580,338,1000,-235,-290,592,-449,342,-887,388,300,517,-48,347,-291,-281,-478,-36,1000,-561,-19,-544,-687,-481,-892,-242,-318,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00134() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(char[],int,int):void",
+            new int[]{-1000,1000,82,-1000,1000,883,287,142,473,544,44,1000,312,-487,643,-1000,-478,704,169,1000,993,-796,-1000,-437,-654,109,-1000,495,-1000,-781,1000,-962,561,-392,-1000,-910,-1000,-1000,-1000,447,1000,-1000,671,-1000,293,-1000,-910,-1000,82,-1000,-372,614,1000,-565,-952,1000,-550,1000,1000,885,894,729,223,-684}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00135() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(char[],int,int):void",
+            new int[]{-190,-80,-1000,-456,-215,-417,-1000,1000,932,24,779,-614,935,685,-1,-563,29,-1000,231,636,-961,276,-779,173,-614,-587,481,-1000,952,-815,1000,-263,-82,560,445,-1000,857,1000,130,-1000,-255,508,-1000,611,-751,624,-543,-365,-1000,1000,-1000,627,1000,-1000,-872,624,-412,-369,655,-401,-1000,289,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00136() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(char[],int,int):void",
+            new int[]{1000,867,1000,170,313,-173,570,-984,-1000,160,934,-365,-462,843,598,326,-29,645,526,255,-1000,458,192,-1000,-1000,-722,261,1000,17,432,66,119,-694,-453,117,754,821,-704,74,-745,174,508,738,-443,729,246,-80,-512,1000,-14,1000,456,-1000,-243,739,662,-620,-195,-662,555,1000,-424,-1000,-358}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00137() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(char[],int,int):void",
+            new int[]{388,1000,-669,-259,566,268,-790,785,-3,-809,667,786,365,-18,712,-1000,-394,-1000,-74,560,-447,1000,-665,-206,181,-1000,285,-613,-114,-1000,430,-224,364,-929,-137,-1000,460,272,-59,-1000,99,-530,-1000,283,-193,-1000,300,-591,-645,403,-1000,189,235,-1000,157,1000,-197,288,1000,787,-440,255,-707,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00138() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{8,-542,-1000,1000,73,-527,-463,-1000,-982,-83,-45,-374,31,-725,399,-1000,1000,-1000,757,-758,1000,164,81,508,1000,-230,-400,-1000,809,-211,1000,869,608,591,257,1000,-1000,-1000,-870,-1000,153,-695,435,1000,-641,-1000,1000,1000,-223,-177,495,1000,-174,-646,-1000,1000,622,1000,-215,-998,1000,591,-615,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00139() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{501,-979,-118,-407,489,381,898,-72,709,114,-446,-523,219,-1000,-848,697,-786,746,43,-1000,1000,823,-1000,-270,1000,-910,217,-1000,378,-557,-1000,1000,-825,1000,700,1000,-1000,558,-352,-792,1000,-463,-83,287,9,-762,849,-1000,-141,-276,219,1000,1000,1000,-468,731,238,-1000,835,-56,-1000,-995,-628,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00140() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{1000,133,259,959,178,-271,1000,-618,383,219,-678,-909,-136,-725,1000,-1000,736,-1000,1000,927,1000,364,-1000,426,636,-766,972,-595,-336,-1000,-87,1000,232,1000,999,281,-1000,-1000,-497,-1000,1000,-1000,-208,934,-757,-1000,1000,1000,538,-1000,-1000,668,-174,-472,-638,1000,-67,769,-781,-1000,-1000,-302,-174,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00141() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{129,-571,134,-400,-905,326,725,400,418,329,1000,911,-845,-671,843,-189,1000,-652,-838,-1000,313,832,-1000,603,1000,-533,-400,116,-29,-812,-267,401,-734,591,426,-143,400,400,530,400,915,19,-292,221,-157,-1000,-400,-320,267,-834,-783,647,-174,-1000,387,858,-778,-290,-936,-535,1000,193,-1000,-26}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00142() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(java.lang.String):void",
+            new int[]{150,-581,-298,-82,-834,1000,-667,-772,924,-501,488,-1000,-21,1000,841,-506,-173,-46,1,-451,1000,1000,-178,-25,532,719,-1000,-1000,362,-872,-1000,-303,849,610,364,-485,-156,-1000,-1000,-130,-84,-477,936,-804,-142,-987,301,-1000,-1000,308,-837,594,-716,678,-361,-160,268,-952,-1000,-178,487,-738,306,-935}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00143() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(java.lang.String):void",
+            new int[]{810,564,363,488,-324,219,-332,-330,-458,73,347,-30,-1000,928,1000,352,-1000,-610,1000,239,-791,-698,-1000,-233,991,-157,843,158,437,729,-1000,-275,218,-1000,-931,1000,948,-306,483,-692,-817,-1000,-1000,491,-1000,926,-576,-374,46,587,-940,-977,376,357,1000,1000,376,636,151,-92,-775,629,1000,536}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00144() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(java.lang.String):void",
+            new int[]{-709,-739,483,-557,-420,1000,-287,-658,-286,-5,652,-601,-88,423,-1000,-259,-1000,51,895,1000,27,-194,-2,490,605,91,674,-1000,-638,-1000,-370,-612,-23,-591,1000,250,301,-8,-117,718,-692,-467,548,-639,-929,-193,1000,-33,495,905,-35,789,-576,-332,558,-255,282,-277,-756,-1000,723,385,639,-671}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00145() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(java.lang.String):void",
+            new int[]{-1000,-306,-95,-1000,-595,-503,-957,-240,314,-936,-430,-1000,813,899,1000,40,179,475,-299,885,73,731,-395,-411,871,1000,-1000,-1000,-473,-78,-951,444,968,727,-708,988,-625,216,-939,-1000,151,652,1000,-345,1000,-752,-89,-1000,117,1000,-19,-1000,-159,463,608,-1000,-1000,-397,-400,729,265,-817,640,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00146() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeString(java.lang.String):void",
+            new int[]{-684,-739,216,-921,-536,1000,-520,-754,-232,-436,96,-101,-338,418,-888,97,-1000,-39,-1000,-1000,27,-194,-140,696,927,287,674,400,-692,-1000,-370,-678,-56,-1000,838,258,-263,-760,-117,584,-583,-561,592,-459,-1000,-47,-1000,-33,495,1000,-127,732,-775,-586,558,-145,301,116,-680,-877,-318,329,293,515}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00147() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{833,1000,-362,-1000,292,-320,494,-1000,-611,918,-1000,-1000,211,577,-406,1000,1000,-600,487,-1000,-374,-189,827,191,1000,-24,962,-11,511,-1000,-1000,1000,-153,-1000,1000,-420,-1000,487,-565,969,550,1000,-525,-1000,-1000,-579,418,-1000,97,654,-929,1000,-252,330,1000,-693,1000,810,-946,1000,30,1000,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00148() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{610,300,230,-1000,-46,-184,711,-1000,-436,298,-373,-1000,-1000,247,-844,1000,-144,849,-674,-820,336,-77,333,159,1000,-462,758,-844,-153,-426,-1000,1000,99,-206,1000,14,-981,649,328,979,118,678,-570,-1000,-1000,-649,-93,-1000,670,827,-84,-580,-60,1000,1000,-576,1000,949,-1000,429,556,588,-650,-319}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00149() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{742,785,-673,205,-298,800,-156,-323,227,-41,50,958,302,-943,-592,-69,876,-386,753,-361,-330,-1000,71,461,-130,-345,20,269,854,-967,-679,203,740,449,432,-430,-901,-1000,-94,605,-501,-58,-955,-858,-1000,-151,-140,-576,-565,177,-227,584,683,-386,737,-374,207,604,-37,769,401,-379,-321,170}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00150() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{727,510,-289,-1,-992,723,971,-1000,-27,193,-892,-281,1000,-162,691,772,-227,-437,1000,-590,243,216,-864,-467,594,-103,140,-330,-654,648,-1000,570,279,-1000,1000,556,-1000,-327,-197,-695,-146,362,-790,426,-263,1000,-468,-1000,200,633,1000,-1000,1000,43,258,-10,401,405,-1000,1000,858,1000,-13,-286}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00151() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{838,168,188,727,67,1000,564,12,722,-868,-285,258,301,-677,301,335,1000,1000,-1000,-496,510,-1000,652,-1000,1000,-249,985,-992,-823,567,1000,-1000,331,326,300,1000,321,51,1000,157,217,946,-1000,205,837,146,-1000,-171,1000,1000,-189,-1000,225,894,-651,1000,186,1000,-942,-456,1000,316,-931,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00152() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{-782,-1000,482,-255,636,1000,167,-643,34,-149,-786,-223,956,-441,1000,623,-2,165,910,-158,1000,22,338,-258,235,-750,650,-265,-48,77,-1000,144,934,-231,219,202,-897,-20,451,338,-740,337,766,114,-570,463,-1000,-623,396,1000,614,-55,647,1000,558,214,-1000,789,467,1000,226,99,-505,-22}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00153() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "com.fasterxml.jackson.core.json.UTF8JsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{356,-132,-1000,-337,399,826,419,-445,643,-67,255,913,789,-195,203,109,-842,-1000,552,-411,-299,726,63,65,724,654,931,74,53,-174,19,-105,-421,-917,841,101,36,54,-251,-492,872,114,-1000,-2,176,726,61,-1000,-272,424,-171,-277,346,-1000,-293,715,842,656,-1000,891,491,1000,1000,-684}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00154() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "close():void",
+            new int[]{-402,436,-796,-1000,1000,-941,454,-819,517,154,-673,357,171,-1000,-948,-669,-213,-796,-400,531,-127,-45,-113,1000,-235,-554,223,677,167,-697,457,79,-1000,-348,330,-349,400,697,1000,299,1000,-541,-563,-54,246,-147,426,400,1000,-400,645,-315,320,-723,-236,1000,-158,-116,738,-473,-170,-199,125,-192}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00155() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "close():void",
+            new int[]{-330,712,-1000,804,-870,772,-1000,-1000,-221,43,-575,70,678,672,107,189,967,-714,-1000,-1000,-1000,-755,-1000,593,462,-1000,487,-1000,886,1000,579,-777,391,-1000,-467,415,929,-894,-429,1000,425,-72,33,561,-1000,-1000,-1000,1000,-109,-225,-420,-1000,-237,882,956,1000,-1000,594,-1000,1000,-500,906,736,417}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00156() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "close():void",
+            new int[]{-467,396,-909,378,-183,586,-1000,483,528,-118,-1000,646,409,-629,-228,-676,819,91,442,583,381,-581,750,980,-151,-362,-402,-222,-193,48,351,-816,-662,375,390,-1000,-763,1000,-645,-1000,944,-1000,307,108,395,-429,522,-1000,-1000,1000,807,-1000,147,-273,-408,504,-96,1000,-104,-1000,840,-500,-201,-223}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00157() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "flush():void",
+            new int[]{-650,1000,1000,-577,650,1000,-1000,1000,-972,132,-493,-544,-409,587,-946,1000,953,-1000,-331,-86,1000,-1000,-1000,-1000,1000,106,1000,1000,1000,-545,1000,1000,911,-77,-1000,26,27,450,-796,147,402,-1000,306,559,1000,1000,-665,-118,1000,-758,-1000,1000,-291,-119,-67,258,-443,371,573,1000,1000,-968,988,-746}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00158() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "flush():void",
+            new int[]{-155,-1000,-77,-882,-779,557,-787,-303,-1000,-236,-14,323,141,857,286,-485,190,-736,-104,1000,-797,-341,-1000,850,114,-228,350,339,202,-97,-1000,-1000,-281,-719,-1000,670,574,-327,-1000,-378,-293,794,292,-1000,-1000,-1000,1000,-1000,443,-110,-444,-1000,201,-395,-357,-290,-1000,-461,599,702,-713,366,-654,139}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00159() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "flush():void",
+            new int[]{1000,-1000,-357,-18,-82,-357,236,-32,934,-211,1000,-309,-1000,-698,-1000,523,-765,-161,-790,1000,179,433,-758,1000,-1000,-528,-1000,248,-793,-767,-553,461,-1000,-419,-199,-1000,1000,-1000,243,-431,-192,-474,768,-525,1000,-804,-127,-107,-157,-108,620,225,1000,888,-69,-424,1000,-1000,-445,1000,-385,937,909,-789}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00160() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "flush():void",
+            new int[]{606,32,837,-81,1000,477,-1000,992,-867,-157,410,-602,-990,-445,-476,617,259,-807,-494,-537,631,-1000,-534,-363,81,118,1000,535,391,400,1000,120,388,-9,-1000,118,718,-182,-714,216,79,-721,440,-242,890,265,443,99,705,142,-608,276,17,178,383,-1000,88,-574,7,145,385,-1000,258,-713}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00161() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getOutputBuffered():int",
+            new int[]{-1000,337,-162,748,-912,-185,-709,97,-732,395,815,399,-405,109,-185,-575,541,495,456,326,203,196,222,-1000,749,-2,-971,1000,-35,-1000,-72,-467,-817,-1000,53,1000,210,888,-221,524,-1000,-474,309,-438,457,159,846,-202,1000,-146,656,-93,-366,-556,-254,-366,116,-137,938,-662,-764,24,959,149}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00162() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getOutputBuffered():int",
+            new int[]{-498,873,860,391,206,-173,-442,604,-1000,504,547,977,383,-329,399,-422,-1000,830,-910,1000,-1000,-670,916,-52,1000,-964,-775,954,393,-621,509,767,473,-600,638,1000,-71,753,-541,-219,-1000,-368,524,182,1000,516,1000,-326,-632,280,671,-801,-334,-1000,-581,-417,643,-897,-358,-1000,10,-200,1000,477}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00163() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getOutputBuffered():int",
+            new int[]{-1000,1000,-115,463,-395,-756,-1000,-818,-96,344,595,1000,-645,235,850,-1000,-138,266,923,-1000,53,-1000,383,-45,235,-472,-257,-715,1000,249,171,-855,-119,-834,801,430,-1000,-66,99,-623,-896,-73,1000,123,688,546,1000,375,959,692,1000,-1000,-537,-939,132,-1000,-946,936,129,-455,11,-1000,1000,316}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00164() {
+        org.junit.Assert.assertEquals("java.lang.Integer:MA==", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getOutputBuffered():int",
+            new int[]{-145,644,1000,85,-722,-543,-542,-363,305,832,163,-21,237,459,64,-565,-493,-208,-341,591,17,601,423,174,156,336,-492,-778,225,-68,158,107,-516,-352,-124,253,292,477,127,-52,-767,1000,289,-310,751,470,950,176,779,-123,631,-185,228,416,274,-72,-661,16,-100,-161,-412,-168,408,-152}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00165() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getOutputTarget():java.lang.Object",
+            new int[]{988,-1000,562,159,1000,1000,263,634,586,-446,-714,-853,-1000,-1000,463,-781,-202,-371,-350,-141,-1000,-616,1000,-651,568,387,-614,1000,420,-545,-1000,-110,823,1000,-509,-427,1000,347,1000,-1000,-1000,879,-593,169,-179,1000,-1000,1000,1000,26,-109,447,108,632,-1000,513,313,-206,1000,-693,-462,571,364,-628}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00166() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getOutputTarget():java.lang.Object",
+            new int[]{-1000,1000,665,-1000,252,-1000,-918,965,-77,667,-403,-229,-781,-1000,1000,-832,-117,-26,-455,-733,-412,-693,138,-654,72,-223,-119,-35,1000,-429,1000,-414,-216,78,758,-43,-392,46,-59,-971,-905,-67,-672,977,-680,-363,400,-400,1000,359,-668,-1000,369,1000,-1000,-1000,691,444,524,-208,-727,-237,-619,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00167() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getOutputTarget():java.lang.Object",
+            new int[]{-421,917,1000,-146,-1000,-1000,-644,-13,-231,-456,370,-30,857,9,467,1000,-671,-1000,187,54,1000,-90,1000,574,334,-134,400,-500,140,133,894,-582,317,-699,-1000,-451,-432,61,543,791,-625,82,-441,-424,32,503,988,-566,300,412,1000,-794,-766,486,718,23,-724,67,133,-83,-903,1000,711,-132}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00168() {
+        org.junit.Assert.assertEquals("NULL", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "getOutputTarget():java.lang.Object",
+            new int[]{9,1000,540,-1000,-124,-1000,272,1000,-245,804,-37,-114,-353,-448,134,-789,49,807,1000,163,-60,620,79,79,-129,1000,1000,-1000,-380,286,1000,567,-1000,-1000,127,216,-392,-293,267,1000,-983,-553,-59,-35,-423,-155,1000,-659,974,411,-1000,-1000,286,526,-337,-1000,-1000,-838,-303,-110,-354,-526,-619,-597}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00169() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,byte[],int,int):void",
+            new int[]{-1000,-184,-568,918,-1000,906,184,1000,-48,444,26,-723,654,-445,610,362,161,579,877,1000,76,524,-51,417,311,-1000,1000,363,1000,1000,1000,325,136,-517,788,-284,-96,663,-653,-639,-505,1000,1000,-620,1000,831,1000,82,-1000,-1000,-840,1000,-1000,-88,-1000,-560,217,1000,1000,-1000,1000,148,252,513}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00170() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,byte[],int,int):void",
+            new int[]{-1000,38,-1000,1000,-1000,726,111,1000,107,559,-430,-1000,523,-653,878,362,-42,579,708,1000,16,383,-456,425,311,-1000,1000,363,1000,1000,501,182,136,-563,712,-542,645,873,-1000,-452,-524,1000,1000,-925,835,766,1000,-330,-1000,-1000,-59,1000,-1000,-740,-1000,-711,314,756,1000,-1000,995,1000,31,467}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00171() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,byte[],int,int):void",
+            new int[]{-226,-963,266,576,691,-611,203,996,-866,-537,-647,715,-1000,648,1000,-311,1000,-1000,-595,246,-1000,1000,836,-61,-836,-1000,390,-1000,-1000,-693,309,-374,-1000,-1000,1000,-1000,1000,-1000,-1000,-236,1000,416,-941,-1000,-143,567,825,618,-536,256,-439,1000,-699,-514,355,1000,929,896,-1000,650,398,1000,-852,300}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00172() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,byte[],int,int):void",
+            new int[]{-348,659,-114,-266,-433,-1000,-131,1000,-894,-21,-673,147,-327,-840,923,-1000,887,-470,-1000,-180,-534,701,426,-793,-105,-5,1000,-1000,-902,-656,-759,-1000,-1000,-1000,1000,-1000,219,-1000,-908,-294,1000,-292,-35,-764,-1000,-120,245,671,608,365,-271,-703,-293,512,1000,1000,338,654,21,-483,-127,1000,-1000,47}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00173() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,java.io.InputStream,int):int",
+            new int[]{-1000,-246,-1000,378,-1000,354,251,-340,1000,89,-835,147,-90,-661,537,467,161,-243,-220,227,-63,401,-77,423,-677,36,26,745,47,-75,1000,258,-400,-260,-640,1000,1000,1000,-439,400,207,169,-413,749,-532,1000,107,526,-869,-1000,303,344,-515,-276,459,114,-602,329,-110,150,-78,312,346,426}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00174() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,java.io.InputStream,int):int",
+            new int[]{309,195,-1000,86,-19,1000,1000,-737,-541,234,218,-727,1000,-1000,1000,-357,23,1000,-14,1000,-99,-831,-265,1000,-137,-98,-1000,-68,462,-821,-867,525,-972,-757,484,-673,-513,-831,-233,-140,-1000,42,-577,-1000,-403,133,-519,1000,-205,503,-1000,-918,-144,-934,-1000,0,-1000,-293,131,-665,-1000,-958,896,-569}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00175() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,java.io.InputStream,int):int",
+            new int[]{-136,-483,1000,-796,223,1000,562,1000,-602,44,940,23,1000,-482,507,948,1000,219,-1000,1000,1000,-1000,588,959,619,-1000,-420,441,1000,-1000,-1000,1000,-1000,501,-1000,-1000,-416,-555,-293,1000,-581,-932,1000,1000,-1000,1000,270,1000,621,-348,-1000,375,-284,-1000,-1000,-21,-1000,860,1000,-573,-595,20,-235,776}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00176() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBinary(com.fasterxml.jackson.core.Base64Variant,java.io.InputStream,int):int",
+            new int[]{-6,944,-611,1000,-845,269,1000,-905,377,139,-386,349,707,-1000,1000,-293,-1000,827,1000,547,-201,-94,-198,832,-144,744,-803,-641,298,458,-620,54,-623,-605,914,553,406,857,96,48,-1000,135,-994,-1000,-1000,94,-1000,698,-131,572,-345,-1000,-280,-467,-742,400,-599,-771,-240,-537,-1000,-920,1000,-267}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00177() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBoolean(boolean):void",
+            new int[]{-163,-594,846,-492,1000,-437,-714,42,257,24,-245,-215,105,-178,387,-332,615,-781,976,-61,-747,400,16,-443,-1000,-107,-526,-1000,-232,-766,-456,394,-532,614,-588,786,-280,291,97,-225,-564,89,-619,-50,149,930,-465,337,1000,333,213,-998,-366,-342,578,299,-9,-191,-490,-235,-226,-1000,-578,181}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00178() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBoolean(boolean):void",
+            new int[]{-1000,950,-317,-804,-377,-453,16,1000,-155,258,-807,-261,-1000,-335,316,-88,1000,-1000,725,1000,-1000,-1000,-955,32,-28,-1000,557,-460,-314,-499,-1000,513,-899,1000,305,404,171,-121,-800,241,153,-72,-766,457,1000,-235,541,1000,315,694,-538,-1000,-465,270,-575,-390,579,-462,-521,660,591,-232,-694,-83}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00179() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeBoolean(boolean):void",
+            new int[]{1000,630,-654,-241,-7,635,996,-69,1000,149,195,1000,960,946,-574,-546,-1000,1000,987,-1000,1000,1000,1000,862,-1000,1000,148,-1000,806,1000,290,447,-627,-969,-1000,-1000,1000,564,362,-773,-928,931,1000,-272,-677,-406,554,359,1000,-1000,998,701,452,1000,1000,-133,-134,-651,124,-671,-164,828,-33,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00180() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeEndArray():void",
+            new int[]{1000,-1000,132,812,-985,641,1000,617,-572,972,411,1000,1000,-941,594,533,1000,672,413,1000,-574,506,934,776,-135,1000,519,203,-222,-1000,516,435,-902,-4,387,750,-477,-1000,-81,112,-1000,982,320,399,-1000,-284,1000,1000,880,-626,1000,684,-1000,872,1000,546,-475,590,-933,61,455,387,-272,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00181() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeEndArray():void",
+            new int[]{973,1000,1000,999,-889,-400,1000,-606,191,468,11,221,-1000,-941,979,-474,-814,-1000,-1000,-546,402,1000,-293,-965,1000,669,-1000,1000,-98,-1000,-777,-815,1000,-294,-597,750,296,-1000,-1000,112,1000,602,696,350,-639,-447,-445,-646,859,-1000,929,460,835,-958,-631,156,-285,312,1000,-495,32,359,-888,118}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00182() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeEndArray():void",
+            new int[]{1000,-1000,-315,-862,-765,-59,1000,10,-692,-281,1000,-845,1000,151,-209,647,1000,-359,10,14,-403,208,309,296,-1000,-37,1000,975,444,-358,-112,317,-1000,355,697,-804,-1000,-504,-381,-445,-1000,395,-47,-252,-1000,725,1000,146,493,173,854,-83,-692,932,1000,248,-532,-492,-1000,-1000,-114,-294,-826,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00183() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeEndArray():void",
+            new int[]{1000,-50,421,-684,-150,393,834,1000,367,217,891,-399,958,749,1000,982,387,-998,-1000,-1000,-1000,1000,741,-814,-1000,-816,409,89,1000,396,-1000,-1000,-321,107,1000,286,-106,-456,-1000,272,-265,1000,1000,-321,-594,-618,741,-631,706,454,1000,-826,-1000,-1000,-1000,1000,-167,-872,-957,715,335,626,-1000,371}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00184() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeEndObject():void",
+            new int[]{1000,1000,-612,1000,-504,-644,739,215,-226,243,857,-537,-1000,523,-303,-360,171,73,-1000,1000,-968,-468,59,482,624,1000,1000,535,-89,-763,244,-1000,1000,687,-1000,-28,-874,-1000,-729,994,97,-1000,1000,681,1000,416,-614,-1000,-971,-40,103,-213,-1000,1000,-66,-145,-1000,835,-614,903,-1000,296,592,967}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00185() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeEndObject():void",
+            new int[]{-73,-493,-1000,428,1000,541,1000,883,927,219,681,235,-1000,-1000,-390,1000,-590,-1000,-815,1000,-257,-1000,-1000,961,-81,400,-1000,1000,1000,-68,1000,-1000,421,735,-401,258,1000,32,-914,1000,-548,-1000,1000,1000,1000,-1000,530,-948,-116,-1000,-1000,-126,-864,738,730,433,762,-1000,-1000,-640,365,1000,979,521}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00186() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeEndObject():void",
+            new int[]{748,-777,-624,-335,1000,628,175,1000,836,-171,171,1000,-169,-400,-480,995,-1000,-54,-481,-400,91,-195,-918,473,-405,701,-1000,864,-619,-678,211,141,1000,-184,587,189,1000,302,-1000,150,-545,-164,272,561,770,-1000,384,284,-1000,-908,619,188,-617,1000,207,794,58,911,-947,-1000,-37,1000,-179,-829}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00187() {
+        org.junit.Assert.assertEquals("THROW:com.fasterxml.jackson.core.JsonGenerationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeEndObject():void",
+            new int[]{249,571,-772,-400,-1000,329,-17,179,215,-867,890,-920,-1000,-877,-1000,-452,-262,-580,-10,280,-1000,339,1000,1000,-776,916,156,-55,344,-1000,244,-740,61,826,31,-309,78,-1000,-716,-349,-1000,-1000,552,-325,-114,1000,368,-1000,-971,-40,1000,-228,-1000,640,1000,-1000,24,374,-402,-174,400,1000,592,505}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00188() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{320,-109,578,-741,77,-437,729,-369,153,-922,-821,288,-952,995,-742,441,283,-233,-990,-471,448,-293,1000,1000,272,-401,-436,-580,-533,985,-24,542,246,645,495,271,241,251,-319,-78,800,-30,-84,98,-329,-345,-928,1000,-562,-417,-381,-93,-747,295,-652,27,284,67,959,-729,144,1000,213,-652}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00189() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-377,-155,630,-658,720,1000,-1000,-223,-711,-317,-1000,-254,914,-1000,1000,-848,75,10,-638,1000,520,600,856,-443,299,-1000,-214,73,-102,1000,1000,-457,-1000,1000,962,737,401,-747,390,458,-618,1000,406,-861,1000,92,-1000,-1000,24,1000,-1000,-564,222,-1000,1000,487,679,1000,864,1000,-249,86,696,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00190() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{468,586,383,-541,-1000,-13,-20,-232,157,123,571,-247,-248,139,-214,-171,-127,-465,137,-1000,-89,-40,910,-537,-10,-109,316,-826,-416,216,-90,60,-373,290,-122,453,-68,-180,624,-501,85,-617,446,-717,-321,-111,625,1000,-721,-276,-21,35,592,940,-170,215,-285,1000,924,-329,-238,14,492,-71}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00191() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{-1000,1000,-472,1000,-991,490,1000,-1000,-374,-333,-629,1000,-447,563,-50,-190,1000,1000,-491,-707,558,-1000,-1000,1000,1000,882,-1000,1000,29,1000,289,1000,1000,-1000,-1000,1000,329,-238,1000,-1000,-79,320,-1000,-791,781,174,289,-448,725,-722,1000,-922,-1000,533,-1000,160,-1000,-210,1000,1000,807,-1000,204,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00192() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{-1000,865,18,1000,-800,700,977,-859,246,-757,-663,1000,-285,660,-50,-131,571,1000,-943,-622,558,-118,-1000,604,315,882,-1000,803,568,1000,-182,432,-44,-488,-774,853,633,-21,368,-92,-670,260,-1000,-341,737,517,689,-680,667,-918,673,-997,-1000,865,-693,142,-1000,-436,409,1000,1000,-417,-194,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00193() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{-415,262,282,1000,-1000,89,234,-1000,-68,473,-1000,564,-613,-119,265,167,1000,1000,-697,-406,284,-1000,-1000,1000,869,-155,-1000,236,-820,1000,-401,406,400,-1000,-989,-1000,630,-467,400,1000,312,-337,-1000,-1000,247,1000,502,-1000,-241,-976,-479,-999,-1000,1000,-612,261,-1000,-447,1000,797,265,-760,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00194() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{265,11,84,-293,48,-1000,-319,95,795,77,438,48,-769,-784,663,-376,120,317,-540,-1000,-1000,471,-943,-430,-174,-233,-790,-145,-1,823,-409,-1000,-1000,-399,-394,-1000,87,-265,647,268,105,-752,-712,-171,274,304,1000,-49,-498,306,-1000,400,-635,-105,-438,483,346,1000,-640,-1000,-887,-171,-276,694}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00195() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{835,-1000,852,-1000,-371,-423,-1000,-1000,-38,-333,-678,-352,-23,-565,443,-190,-905,-100,307,-305,558,-579,-288,-23,-227,-811,1000,300,1000,-1000,-1000,668,1000,499,18,1000,-1000,-1000,561,1000,974,-853,953,1000,-826,174,226,453,-1000,-576,1000,-922,1000,-1000,-655,606,-1000,1000,917,-400,807,-1000,741,400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00196() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{547,1000,-1000,741,-1000,738,1000,-127,-1000,578,-708,631,973,395,-79,-1000,200,1000,-1000,-1000,1000,-1000,-751,1000,604,-998,-1000,1000,-157,-918,207,1000,1000,-1000,-309,1000,553,-94,1000,-1000,-701,1000,-1000,-1000,1000,252,-43,1000,1000,-1000,1000,-1000,-1000,1000,-1000,645,-1000,1000,1000,-654,1000,882,-469,-249}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00197() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{874,153,-776,972,884,297,-323,-1000,1000,419,-381,905,-1000,-1000,308,1000,-1000,825,76,-579,236,1000,223,1000,3,9,-849,-735,-916,-761,1000,742,736,983,402,-324,-769,-1000,-1000,972,230,890,1000,928,-718,938,785,70,1000,1000,-343,-1000,-1000,-270,1000,1000,712,-1000,999,967,-12,764,-803,20}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00198() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{-386,-806,-1000,-262,-216,-1000,-236,-962,-76,-1000,-205,1000,-1000,-867,-892,-1000,-88,1000,-848,-861,-569,275,-12,-428,62,572,-1000,573,-900,-292,594,-188,-198,111,608,-1000,281,-1000,504,630,1000,1000,572,262,-1000,-708,1000,1000,-115,1000,-614,-615,-817,-319,1000,393,-78,725,802,563,-44,-1000,-155,400}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00199() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{-52,1000,-421,666,-991,179,560,-972,-1000,-201,-518,1000,-493,-61,-257,-323,637,1000,-417,-863,357,-1000,-1000,1000,515,901,-361,1000,-573,589,241,731,1000,-766,-228,243,486,-552,468,-1000,-159,624,-795,-631,189,175,175,322,759,-225,1000,-1000,-1000,917,-200,-346,-1000,-329,1000,1000,261,-1000,-94,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00200() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeFieldName(java.lang.String):void",
+            new int[]{938,902,691,786,975,757,733,-204,-425,957,776,-585,-179,948,-92,-195,564,88,-144,686,186,-237,-91,-522,-471,873,675,893,53,867,777,38,-355,149,-276,790,880,-88,348,416,1000,237,-556,278,-635,638,-455,797,764,-861,130,803,-437,444,978,916,396,801,-115,-355,-117,732,-516,-475}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00201() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNull():void",
+            new int[]{-1000,-650,664,1000,-1000,-751,-1000,302,-892,844,-166,-298,-227,659,737,1000,-336,243,16,-178,-1000,-166,-1000,-46,-794,1000,-234,774,-712,1000,806,31,451,1000,-1000,200,-1000,-511,-725,358,232,432,1000,-196,581,905,-408,-1000,-836,958,-618,-164,729,88,-1000,304,572,-456,-253,-409,-457,-1000,320,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00202() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNull():void",
+            new int[]{-433,-593,816,-599,1000,1000,-259,-321,-301,-331,-749,-454,-638,115,480,91,-76,-464,-938,-775,838,-753,69,440,1000,764,914,-1000,-252,207,2,-777,926,-676,1000,484,-87,208,744,293,-761,-947,-1000,-1000,670,-402,-1000,-244,-343,-1000,548,715,-210,-1000,-641,827,-1000,126,-607,-1000,865,513,862,-227}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00203() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNull():void",
+            new int[]{225,-1000,-612,-1000,1000,1000,-846,-718,1000,409,651,-353,247,-909,1000,963,-60,-468,-918,-68,-1000,-1000,-1000,472,1000,-250,748,-736,-582,-485,116,431,-48,1000,1000,439,-684,-1000,-772,-1000,176,-162,-1000,-1000,-141,-651,131,-860,-395,436,1000,-46,-1000,-951,-1000,1000,-568,-1000,400,-1000,-360,1000,1000,874}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00204() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNull():void",
+            new int[]{-613,-1000,675,-369,787,555,-828,-314,-83,678,-245,-718,-1000,-188,675,858,-285,-406,128,-760,-311,-974,599,-49,-156,356,347,-1000,-494,351,86,-363,1000,443,695,442,902,-184,-345,-496,-1000,-850,-545,-1000,1000,-112,-1000,85,-791,249,512,1000,-708,408,-958,1000,-1000,-746,-1000,-1000,855,337,1000,-12}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00205() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNull():void",
+            new int[]{-163,435,-557,-948,116,557,-277,150,983,-117,-383,41,-725,919,984,858,143,638,698,661,-671,615,-531,685,-672,481,295,-315,100,-619,634,4,-324,-35,5,996,-966,120,-370,286,975,-878,-970,-53,354,-830,-20,-851,-987,387,-852,-908,-996,-727,894,79,316,-675,-784,520,182,91,625,-696}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00206() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(double):void",
+            new int[]{1000,1000,-488,1000,-940,-913,492,1000,-208,203,755,767,432,-349,97,-81,536,343,-261,720,1000,387,-1000,-681,1000,1000,433,1000,-80,244,90,19,-960,1000,1000,-702,-1000,-109,-7,-310,-784,-155,-748,-851,1000,-1000,160,481,-1000,1000,-1000,1000,267,484,147,-354,-352,-1000,-664,551,1000,1000,1000,73}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00207() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(double):void",
+            new int[]{-837,-720,-201,-703,408,-879,-392,-351,839,-32,515,-173,103,-147,-46,-75,-286,-1,170,130,-41,-746,-500,229,-985,-113,381,-601,694,627,513,-342,441,194,514,-419,325,59,-890,-670,617,-825,-507,-99,263,-471,-223,579,-936,-15,690,-972,708,656,599,204,-97,-767,-241,-690,852,142,284,414}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00208() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(double):void",
+            new int[]{691,594,365,654,-1000,54,-521,1000,-795,-486,1000,1000,163,400,-818,-47,-300,891,-354,835,718,147,9,-1000,687,-72,855,1000,-733,-1000,-24,-901,637,897,1000,-745,21,444,-433,557,-620,-375,-597,-531,248,-661,547,-53,400,1000,-562,775,-841,334,-922,-960,262,-395,706,-443,-556,1000,49,-822}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00209() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(double):void",
+            new int[]{178,1000,-262,-1000,-498,-994,-983,22,556,300,-424,661,398,-1000,523,-524,-1000,-182,-1000,-325,1000,-1000,-829,366,1000,906,-67,-146,574,-655,67,-60,-1000,496,-566,-98,-162,966,272,-330,-904,-698,334,-928,1000,-1000,476,776,-1000,282,-44,-95,-551,-451,-687,-489,1000,-215,-222,480,120,682,1000,90}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00210() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(double):void",
+            new int[]{-1000,-163,-865,771,-316,390,-730,-505,-830,-611,-77,340,-117,-940,-187,1000,284,198,387,492,583,-1000,290,-201,-232,-1000,-1000,-828,665,-111,-940,33,405,-119,130,584,134,-1000,-483,130,446,670,230,126,-87,486,476,64,297,-1000,1000,-789,564,759,-687,748,-63,-716,68,-152,155,-1000,-460,-134}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00211() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(double):void",
+            new int[]{-528,-723,-612,465,-343,980,-125,-966,-1000,-92,-1000,331,5,-1000,-191,1000,-843,435,843,232,549,-1000,177,792,-2,-1000,-1000,-1000,1000,-234,-585,-110,1000,-1000,-222,54,731,-1000,31,-641,948,865,397,820,858,-1000,-429,726,650,598,928,-204,22,315,1000,893,-804,103,13,1000,-706,-1000,-225,874}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00212() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(double):void",
+            new int[]{-989,512,-383,698,-173,252,-1000,4,1000,-407,312,-356,-396,-670,179,-1000,-506,356,-175,437,670,493,1000,371,617,-233,-746,499,105,995,1000,-95,-396,650,-1000,-211,-265,765,-935,533,-620,-284,202,242,315,-243,1000,-271,-168,685,1000,-667,1000,-121,-812,-85,-8,-525,-1000,-978,328,126,-1000,-211}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00213() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(float):void",
+            new int[]{288,-307,-79,-655,-65,28,-400,-890,-439,139,286,-517,131,757,-925,-1000,-1000,1000,752,656,176,-48,96,730,-528,620,142,459,-263,127,298,-571,-386,-103,-499,-341,432,-358,684,-1000,-998,-221,-1000,1000,-702,-1000,-77,-197,171,481,269,-1000,-498,-214,707,356,465,213,-270,-405,292,1000,1000,658}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00214() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(float):void",
+            new int[]{840,-749,485,-686,-286,-427,-1000,-528,-884,-237,75,-1000,467,1000,-542,-895,90,370,549,509,25,-964,-30,614,-887,1000,-225,181,-1000,1000,1000,328,-1000,-576,1000,1000,254,-1000,-426,235,-1000,144,-1000,1000,-406,-1000,394,-626,286,-475,-286,-1000,832,-734,698,1000,126,-1000,72,-185,743,1000,-338,523}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00215() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(float):void",
+            new int[]{1000,-666,1000,-1000,325,-1000,423,-483,-608,-706,898,174,691,1000,-956,529,491,946,484,204,690,-402,143,-297,-882,-527,-1000,1000,-1000,1000,1000,1000,-1000,-1000,1000,918,-760,-1000,576,807,-750,94,877,-849,-111,-654,850,-1000,-246,1000,339,-1000,1000,-1000,-31,526,31,-937,422,371,982,709,358,774}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00216() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(float):void",
+            new int[]{358,-1000,-34,-269,-1000,-1000,-1000,99,-937,-882,-549,-1000,870,-356,281,-400,-141,-65,992,741,-496,-1000,-29,-1000,-662,1000,-1000,1000,-150,403,1000,-665,-1000,-944,1000,1000,574,33,-958,-136,-1000,-876,-1000,1000,137,-929,864,-684,-48,-1000,-433,1000,-544,-465,788,534,846,-561,109,-197,766,1000,1000,-104}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00217() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(float):void",
+            new int[]{1000,215,905,25,-1000,-212,609,-475,42,-237,688,459,205,-482,684,525,790,-363,-1000,206,463,19,-1000,-87,459,1000,-678,278,129,880,-280,60,-445,1000,-284,-82,254,-117,-426,-140,-585,-77,679,881,188,1000,-366,-626,396,302,-1000,-33,-416,-512,570,1000,-1000,-119,-999,-188,-234,-557,19,-131}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00218() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(float):void",
+            new int[]{-560,-182,829,113,-841,-152,400,-556,-49,-267,-409,-1000,-236,166,32,-1000,-1000,-388,704,1000,297,342,523,899,-66,-24,1000,541,-63,-78,1000,-1000,-542,-1000,-49,-231,164,98,567,-1000,-1000,-443,-1000,1000,-118,-1000,280,-512,423,925,765,-1000,-368,666,915,708,1000,-344,-38,-403,324,1000,-369,775}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00219() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(float):void",
+            new int[]{-136,-624,429,1000,685,-1000,301,19,-685,729,548,-1000,-50,361,1000,610,946,361,16,-17,157,-1000,-1000,-949,1000,241,-306,1000,-852,-500,73,-1000,-1000,341,1000,248,-825,1000,-32,-1000,-1000,-1000,-636,794,90,1000,581,280,-301,-356,-697,398,-1000,-590,1000,1000,319,-722,566,383,-25,748,-68,89}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00220() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(float):void",
+            new int[]{106,-1000,424,-33,475,-1000,1000,509,-1000,-924,-29,-1000,575,1000,1000,386,591,474,257,-418,115,-1000,-442,-543,107,1000,-1000,-411,-803,906,1000,-243,-1000,-149,1000,857,-1000,-813,-807,-1000,-1000,-1000,-179,1000,495,-696,1000,-1000,-419,647,-1000,-272,-1000,-815,1000,715,28,-473,1000,106,589,1000,867,431}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00221() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(int):void",
+            new int[]{234,-988,632,247,-1000,-2,322,1000,-896,883,627,818,-994,291,1000,634,-34,1000,492,-705,316,-570,-47,-1000,-110,-106,232,-1000,105,65,1000,1000,356,1000,262,-468,91,-988,-152,-819,-1000,-1,633,7,-192,624,22,-234,768,-252,685,-970,-85,426,565,-1000,1000,1000,965,-1000,1000,323,617,-847}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00222() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(int):void",
+            new int[]{-536,-1000,-103,816,63,-291,1000,914,479,539,-1000,58,413,785,91,185,312,910,845,-71,-70,879,-815,-387,-686,1000,1000,265,-175,-552,268,-417,1000,664,762,935,80,-626,1000,77,-1000,-592,682,678,-144,-95,825,498,1000,1000,907,-1,-456,1000,-273,-1000,261,1000,611,-533,575,1000,-666,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00223() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(int):void",
+            new int[]{-768,-538,875,104,-647,161,1000,1000,-549,-461,1000,-53,940,-1000,-1000,419,-141,-763,1000,-1000,642,185,-316,1000,-332,125,158,-204,-261,-1000,-534,-551,-1000,1000,1000,1000,806,-1000,-1000,-161,1000,-533,432,1000,-20,-855,618,109,649,-1000,1000,1000,-315,1000,1000,-965,666,768,-57,1000,1000,-80,-1000,0}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00224() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(int):void",
+            new int[]{0,-1000,-526,453,855,-1000,1000,-50,-111,707,-937,-1000,-417,751,-78,1000,789,1000,-906,533,-349,1000,-1000,-1000,-654,736,1000,179,-719,-995,77,195,1000,72,-53,1000,-729,-89,151,259,-1000,-649,969,-427,-1000,-977,1000,868,688,1000,-1000,569,694,1000,-874,-332,730,1000,128,-899,-685,1000,-166,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00225() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.lang.String):void",
+            new int[]{-396,1000,554,-101,638,1000,699,259,742,-462,755,1000,758,-319,-958,28,776,199,311,244,408,1000,-503,-334,-515,-817,103,1000,-1000,-819,-854,193,-954,-86,453,171,220,-1000,-27,367,-1000,398,1000,305,1000,-527,-1000,287,456,-1000,96,1000,147,631,536,-351,-399,508,580,224,1000,-486,-1000,-301}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00226() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.lang.String):void",
+            new int[]{-884,1000,-587,279,-76,-1000,-746,1000,137,254,-358,-881,1000,-259,355,-350,1000,235,586,-146,788,-744,-454,616,-676,-623,-539,-863,62,340,121,-1000,396,353,-985,828,746,-478,-380,1000,1000,120,71,1000,-91,970,314,-174,675,-811,810,466,895,172,-801,371,-43,-737,713,-1000,-1000,590,-542,919}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00227() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.lang.String):void",
+            new int[]{-218,99,-809,-109,-280,-231,-47,1000,258,653,235,-1000,261,-807,187,-1000,1000,36,-724,-806,-38,53,625,1000,-1000,-316,432,-996,933,1000,1000,-886,742,1000,-483,626,261,340,-294,506,-434,76,-510,65,-768,1000,1000,-490,22,446,82,219,693,-1000,-1000,-551,71,-299,281,-730,-775,249,31,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00228() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{-350,609,1000,462,1000,149,-1000,629,1000,44,51,831,-534,-36,1000,-272,1000,-517,-900,605,-108,648,463,171,-1000,1000,-462,512,66,-388,565,-1000,137,358,-1000,-1000,56,1000,-1000,1000,-1000,534,-24,-262,362,-353,1000,-310,305,-614,-74,1000,1000,-539,340,193,-742,1000,511,-462,470,-57,900,728}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00229() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{521,194,-524,-981,15,-868,-369,-561,194,365,41,323,32,39,-253,231,70,378,564,377,981,383,-101,-731,489,-826,1000,-309,406,-434,146,-574,1000,-409,-393,-1000,-242,-132,708,615,220,-342,334,-27,-159,451,-51,-640,-182,-656,162,280,-916,-1000,-547,628,193,280,-850,804,-90,428,-445,187}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00230() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{-586,239,387,1000,-351,59,1000,-364,-886,313,-817,-157,29,1000,258,1000,-47,-974,-260,-1000,965,-1000,-104,-1000,717,-387,477,-850,-97,-26,156,-247,249,-427,547,-1000,928,-866,-151,-1000,-550,-1000,-1000,-1000,-764,-253,-1000,301,947,1000,-800,98,598,-617,847,-778,840,-874,-854,334,-1000,1000,-420,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00231() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{732,1000,744,525,860,410,-945,-86,1000,-152,302,-367,-597,1000,46,1000,-744,207,-969,377,618,583,-422,-65,717,-387,466,-783,1000,-685,382,855,361,-1000,226,-922,479,15,-14,-1000,92,-1000,-1000,-1000,1000,-736,83,188,-729,-156,277,-246,-521,-425,-735,-778,92,-325,-52,-66,-794,1000,584,575}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00232() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{492,-836,-71,-315,512,1000,-494,728,527,771,-371,-14,-1000,278,806,-628,530,1000,-1000,1000,29,928,637,304,364,-720,-70,1000,243,720,359,-817,104,607,-934,-280,255,-409,212,977,432,-509,767,-49,-210,398,1000,-69,-662,815,1000,1000,-543,-122,-1000,609,285,855,454,-1000,680,51,-366,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00233() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.math.BigDecimal):void",
+            new int[]{707,932,-869,-1000,-1000,-786,1000,568,-866,154,340,-832,171,-158,-1000,344,1000,674,859,-400,-187,-560,1000,-780,1000,140,604,-776,212,1000,146,698,154,-449,791,315,-138,-1000,1000,199,905,-1000,-338,-1000,1000,254,-1000,1000,-62,-1000,297,-217,-711,-178,1000,599,54,280,-1000,577,-42,-610,391,607}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00234() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.math.BigInteger):void",
+            new int[]{908,-962,-91,1000,-402,1000,-337,-32,-537,-159,-637,-679,-1000,218,-851,-1000,-1000,777,459,-512,-438,-1000,-379,7,317,-1000,1000,-262,1000,-269,1000,1000,405,-266,-905,464,-706,1000,-154,-304,-1000,-89,-547,-51,-1000,-77,153,-409,631,-79,-251,-922,-849,860,-258,-1000,-553,-416,-271,-924,204,-1000,49,-72}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00235() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.math.BigInteger):void",
+            new int[]{-448,606,-34,1000,-290,100,1000,-627,-1000,94,-773,-117,-100,331,-750,107,-470,234,424,628,68,267,-41,855,-1000,-601,491,802,-419,-787,-99,1000,1000,-1000,37,265,-725,-545,387,161,526,1000,-436,-228,-495,176,940,468,43,1000,615,-623,-494,327,-687,713,302,-607,274,-38,1000,-728,833,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00236() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.math.BigInteger):void",
+            new int[]{1000,-618,-519,1000,671,1000,-251,-945,934,-376,-1000,-1000,331,-727,432,107,400,801,-621,812,265,113,-1000,820,-247,-787,-400,754,1000,-751,714,1000,1000,1000,-1000,135,820,180,-899,-1000,464,-379,-209,-218,372,191,-550,-1000,702,-445,-328,-1000,108,1000,345,636,37,-400,29,-1000,1000,-852,-150,-802}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00237() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(java.math.BigInteger):void",
+            new int[]{1000,114,631,690,515,-1000,1000,-220,-73,364,-261,1000,-698,763,-455,606,-858,-377,-776,-94,482,-664,-95,-576,-610,195,1000,1000,-1000,135,631,303,564,-1000,449,250,1000,-582,1000,-1000,1000,1000,-567,745,-1000,1000,1000,314,-978,942,139,-462,-838,-1000,-526,-825,-1000,-596,1000,609,477,-675,842,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00238() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(long):void",
+            new int[]{158,-528,586,-1000,25,-402,917,204,-986,78,-621,1000,359,-1000,-933,-142,-481,-950,-8,932,-563,-240,694,427,-1000,-1000,404,1000,-472,-166,-572,625,145,-223,234,-892,226,705,-466,162,271,1000,-588,-1000,241,-843,731,-667,318,425,231,1000,-835,210,1000,-490,355,-528,-1000,-729,-439,-454,-970,-268}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00239() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(long):void",
+            new int[]{617,10,162,-857,971,-254,-607,939,-1000,-221,923,424,1000,194,-940,408,-704,-69,492,1000,-1000,-926,-1000,-1000,-705,995,-689,-273,1000,-431,-346,-298,-703,-69,1000,-976,42,248,-415,823,552,1000,637,-520,1000,-347,752,269,724,1000,124,48,510,325,-1000,-347,-908,364,307,1000,1,1000,-411,577}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00240() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(long):void",
+            new int[]{587,-150,-30,-926,1000,-599,233,924,-1000,219,43,1000,590,-1000,-1000,281,-956,-919,-624,1000,-642,-837,144,431,-773,-577,40,271,-1000,-888,-1000,1000,-55,279,9,-1000,1000,371,-632,46,264,900,211,-1000,351,-166,1000,-394,433,646,-23,-382,-931,-47,-1000,716,498,131,-929,906,-926,-287,-607,-374}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00241() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(long):void",
+            new int[]{-87,593,913,-351,-497,-562,617,-324,-517,69,468,5,-440,-1000,484,-1000,1000,-869,321,740,401,-15,950,-1000,-1000,-300,1000,1000,-133,-637,143,476,248,1000,34,535,693,552,-163,706,881,666,-632,-817,956,916,645,56,-744,888,882,929,-412,980,163,-221,-130,-962,745,-821,-500,-197,144,708}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00242() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(short):void",
+            new int[]{-120,-910,805,206,-242,239,290,1000,1000,14,-901,469,-685,707,-939,342,859,-14,935,-534,17,319,629,-130,492,-863,-734,1000,-292,300,-210,-261,-1000,-1000,-610,-193,1000,-482,1000,605,-31,961,-1000,1000,270,1000,1000,623,265,-496,240,523,-406,536,-238,168,1000,-566,-350,1000,1000,-148,866,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00243() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(short):void",
+            new int[]{-116,-526,-1000,984,1000,-234,-48,-6,260,539,-486,1000,-122,-141,-834,881,-893,-1000,851,949,857,1000,47,-1000,1000,-354,-1000,1000,-1000,-1000,-1000,-25,-1000,-1000,1000,452,1000,-477,-426,-463,-912,1000,-768,-904,171,815,1000,-677,-182,-411,1000,829,-84,535,1000,-867,1000,1000,-185,1000,211,1000,567,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00244() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(short):void",
+            new int[]{-721,-811,1000,-711,-1000,640,78,-363,-37,543,683,-599,-565,224,-287,-102,1000,-1000,-77,-1000,265,1000,483,1000,-722,524,643,-717,835,-14,1000,723,525,157,-1000,-1000,-1000,-483,-459,-1000,-120,-1000,680,849,347,-1000,-661,482,573,135,-1000,-1000,843,-521,78,1000,-600,-687,-213,-416,212,-1000,224,217}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00245() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(short):void",
+            new int[]{-578,321,1000,-1000,-618,119,364,-45,123,651,-265,-1000,-1000,163,280,-290,818,-361,-31,-817,-419,836,173,877,-1000,-703,1000,705,-182,-1000,479,631,-682,818,-1000,-1000,120,517,1000,-489,-758,-390,-330,1000,987,-300,-563,613,1000,570,-1000,-854,1000,-895,-1000,177,-10,130,-539,-605,-702,-79,-561,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00246() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeNumber(short):void",
+            new int[]{-1000,-223,1000,-1000,-127,157,592,139,251,243,284,-208,-1000,120,-845,-702,1000,257,568,-567,-723,648,-406,575,-1000,-1000,526,220,-260,1000,-102,375,-231,608,-1000,-4,937,391,3,-962,-603,-443,19,-883,311,154,418,134,845,-836,-1000,-423,119,46,-194,-248,-1000,-782,-418,-780,1000,10,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00247() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(char):void",
+            new int[]{346,-734,913,-475,-280,-316,399,790,44,683,-878,-668,-561,-965,-832,436,587,49,536,539,-859,-764,-313,-166,80,324,792,107,-921,-146,-684,735,-936,-333,860,464,178,-667,-388,-183,625,794,182,715,20,-688,142,317,240,195,154,903,-914,-280,211,-814,-494,-852,236,387,-371,829,-970,-921}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00248() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(char):void",
+            new int[]{-77,-406,305,-1000,-191,-1000,144,235,-373,884,-389,-1000,499,179,-37,553,1000,-34,1000,85,-611,-866,-1000,782,866,985,877,710,89,1000,-1000,1000,-439,-1000,370,-600,1000,-1000,892,-752,-42,616,1000,1000,-1000,641,-302,662,547,-155,-427,-41,-741,-381,705,-1000,-588,80,175,3,984,147,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00249() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(char):void",
+            new int[]{-385,-96,293,-1000,-191,948,-508,235,219,204,-389,1000,-124,691,953,812,41,-198,963,116,-1000,-68,-774,-4,1000,131,-1000,343,1000,1000,1000,1000,471,355,706,26,-384,-1000,1000,264,593,-940,132,1000,-300,792,796,1000,-227,-1000,-427,-418,1000,1000,705,928,-252,53,175,77,1000,172,-301,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00250() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(char):void",
+            new int[]{-138,-1000,364,-1000,-687,289,-1000,11,332,1000,155,-672,-889,-183,-720,657,546,-87,20,920,-1000,-1000,-1000,1000,180,1000,80,1000,525,1000,20,811,347,-700,-158,175,1000,-1000,724,1000,-398,447,1000,1000,-868,970,-941,741,1000,489,-1000,88,709,598,1000,-532,37,-2,135,9,328,893,-1000,59}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00251() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(char[],int,int):void",
+            new int[]{322,712,476,310,829,-741,-67,835,-532,614,210,437,-740,-277,-1000,-68,-117,1000,413,147,1000,-1000,1000,34,398,-700,490,-482,-99,1000,-324,-227,592,-304,1000,514,-536,-430,1000,-127,-545,587,661,-895,-1000,1000,1000,428,51,456,-113,-492,-122,-382,12,489,-530,799,1000,-138,365,491,92,552}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00252() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(char[],int,int):void",
+            new int[]{-1000,189,949,1000,1000,-228,961,581,682,228,283,1000,1000,-1000,-1000,-664,-159,1000,-1000,892,464,-1000,1000,366,-824,-1000,53,408,976,804,-1000,104,1000,-1000,1000,-1000,1000,-315,1000,1000,-1000,708,1000,744,-875,866,-1000,477,557,-274,-959,116,-511,-1000,-686,1000,-1000,883,920,-1000,-148,234,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00253() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(char[],int,int):void",
+            new int[]{681,-546,-530,-310,189,438,530,1000,863,121,-237,-998,1000,572,-316,-605,1000,269,-22,-242,-1000,-311,44,-572,632,-1000,-1000,-781,1000,144,430,-1000,-413,-192,183,829,326,-1000,1000,985,645,-605,322,-1000,158,1000,483,-907,1,128,-1000,-1000,-763,1000,-103,334,1000,1000,-1000,-386,1000,-1000,-478,-153}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00254() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(char[],int,int):void",
+            new int[]{-191,1000,-284,141,575,-49,-67,835,-459,516,-325,721,602,-63,-967,-301,678,693,390,147,732,-639,981,257,586,-700,206,-550,-12,-1000,-344,-1000,507,-473,1000,932,-536,-666,-239,707,204,-102,1000,-935,47,1000,934,945,-719,226,-1000,-1000,-122,187,201,489,-346,455,1000,488,222,170,-57,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00255() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{318,850,247,-1000,-336,-1000,-229,-123,-346,-253,238,74,341,-765,998,-320,-467,258,-359,-166,61,-134,906,-215,-822,-984,838,-78,235,-479,-72,-98,482,428,-550,487,-945,133,353,-1000,-400,-777,1000,-4,216,315,1000,-40,-262,-6,-541,-1000,491,-271,1000,257,236,709,-829,1000,291,897,134,-668}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00256() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-533,-606,313,1000,92,673,301,-65,-439,54,1000,-829,-665,-381,323,115,649,-863,-1000,-114,-93,-309,-436,-1000,943,-283,-1000,-91,-860,770,-1000,-411,-1000,-767,1000,1000,1000,-4,1000,605,928,792,996,-122,-1000,-78,-1000,-644,-301,436,825,176,729,277,-790,176,878,-1000,1000,-727,1000,359,-1000,-559}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00257() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-1000,459,-417,-163,-1000,543,654,401,-578,-283,-429,71,625,-475,768,729,-377,-671,-848,368,-848,-69,302,-1000,-558,-907,168,-1000,-381,746,-939,67,-618,528,-1000,1000,-27,-40,1000,622,-1000,222,1000,1000,-862,1000,853,-785,-533,105,-1000,-1000,877,-750,652,454,-687,71,249,640,705,-545,-1000,738}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00258() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-320,453,-618,1000,560,-347,1000,862,-821,-516,763,-573,470,-726,602,41,560,-671,-445,-759,141,-140,143,-1000,171,-323,253,-59,-517,500,-963,-118,-1000,-1000,-1000,700,120,1000,432,400,817,823,994,759,-695,-540,206,-1000,-986,944,484,640,829,-996,-361,-234,1000,-439,-83,-48,1000,250,-1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00259() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-323,355,-140,1000,-666,1000,1000,1000,-871,-643,955,-1000,561,-480,1000,1000,628,-137,-683,-114,-457,-573,177,-1000,-89,-541,-598,55,-1000,239,445,-24,-130,-1000,-1000,1000,-752,-499,847,820,928,1000,267,268,-753,-532,-1000,-1000,-612,1000,-45,361,1000,-265,-200,96,-576,-100,1000,-172,1000,-1000,-1000,624}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00260() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(java.lang.String):void",
+            new int[]{624,-235,543,424,-807,-584,-929,719,-531,237,-142,299,-482,939,-679,128,-909,-499,367,-716,767,724,-314,65,108,-606,-521,977,-609,-634,-646,712,874,-363,876,608,218,-943,371,338,685,-296,949,-406,41,-860,466,-611,717,-196,134,290,-307,-428,851,-655,-152,-802,952,757,-968,-229,65,-502}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00261() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(java.lang.String):void",
+            new int[]{1000,321,-1000,353,-1000,-721,-1000,-400,-818,-201,-141,-1000,-945,610,-746,-654,-102,-1000,469,-1000,-1000,1000,-1000,1000,-1000,759,-1000,1000,-983,-1000,-290,1000,1000,-1000,213,1000,1000,-525,-1000,313,1000,1000,-221,-1000,964,78,755,1000,568,1000,596,1000,1000,1000,1000,-716,17,651,632,-449,770,-985,735,915}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00262() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(java.lang.String):void",
+            new int[]{999,-407,579,-637,-399,41,-726,1000,-241,605,-164,-882,5,659,1000,1000,443,2,-566,-1000,1000,810,658,812,1000,-1000,1000,468,-867,-1000,447,338,493,516,378,-51,-956,-348,-967,120,1000,-160,1000,338,329,-634,853,-768,316,-57,-691,-1000,350,-568,833,-1000,649,-1000,1000,1000,-1000,1000,-2,-707}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00263() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(java.lang.String):void",
+            new int[]{966,1000,-535,-190,-264,109,-1000,391,39,-453,657,-1000,-63,610,-737,124,-666,-265,-241,-372,-1000,1000,-1000,993,-924,1000,-1000,206,-421,-1000,465,750,-138,-1000,-303,1000,646,-930,-941,751,772,891,-94,-253,964,1000,1000,1000,-666,774,1000,1000,1000,1000,404,-199,-326,-232,549,-449,267,-1000,-24,677}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00264() {
+        org.junit.Assert.assertEquals("THROW:java.lang.StringIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(java.lang.String,int,int):void",
+            new int[]{833,56,587,-1000,301,-347,-673,-1000,-629,769,-269,-405,435,360,715,-182,-337,691,751,1000,746,-1000,1000,-122,1000,-1000,-1000,-1000,-174,-940,964,-1000,1000,547,-152,-1000,-1000,995,1000,580,993,-1000,-1000,415,-487,114,1000,-1000,-1000,-1000,-621,848,-314,1000,-265,-287,631,542,-696,1000,-1000,201,566,-113}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00265() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(java.lang.String,int,int):void",
+            new int[]{190,392,879,294,1000,-526,-260,-512,626,453,-399,138,-165,171,1000,303,846,-777,-443,-74,232,555,-222,-391,852,-532,665,-1000,-474,-505,373,-956,-77,-1000,-655,-851,-598,802,655,1000,42,-548,-32,1000,214,945,1000,-1000,-1000,-51,-1000,-706,-552,616,-154,51,161,-226,-661,110,-924,1000,714,-828}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00266() {
+        org.junit.Assert.assertEquals("THROW:java.lang.StringIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRaw(java.lang.String,int,int):void",
+            new int[]{800,-98,237,-807,708,457,76,43,774,471,-171,715,-235,276,635,154,281,4,-582,-75,-321,582,-82,86,551,194,378,-917,-788,20,937,-442,-373,-816,-393,-787,-521,-277,933,964,661,165,-107,-526,387,793,-561,-113,-680,-928,-843,-944,-359,-140,1000,-77,834,-19,-252,-197,94,593,951,-702}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00267() {
+        org.junit.Assert.assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRawUTF8String(byte[],int,int):void",
+            new int[]{1000,1000,-570,318,-391,-369,33,760,1000,-216,-71,250,148,1000,711,867,288,-451,-509,-1000,378,172,677,890,-520,120,22,1000,288,-152,-22,781,854,-504,-927,-310,1000,461,745,912,-48,965,1000,-609,357,-737,438,-357,642,-1000,-1000,-577,804,1000,-785,1000,-37,474,-168,-609,-404,581,1000,-16}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00268() {
+        org.junit.Assert.assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRawUTF8String(byte[],int,int):void",
+            new int[]{-339,496,680,305,325,-413,156,1000,-1000,343,-1000,379,-1000,409,923,294,577,-244,459,1000,-292,1000,-336,-1000,474,-321,-1000,948,-1000,106,312,-1000,1000,427,853,825,298,845,-106,1000,737,-968,-513,-408,-730,680,-661,-856,275,-227,248,-504,1000,-811,326,760,-640,587,-727,1000,-1000,-960,-931,-267}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00269() {
+        org.junit.Assert.assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRawUTF8String(byte[],int,int):void",
+            new int[]{530,93,664,73,1000,-263,-246,1000,-14,-887,-965,1000,-390,1000,834,-280,40,-914,-413,307,1000,1000,218,1000,702,498,-1000,1000,-1000,-409,803,-1000,1000,-238,388,1000,1000,-1000,-1000,1000,-262,-846,828,-548,759,603,-1000,-1000,1000,-1000,-352,-1000,1000,-726,-719,77,479,179,108,1000,-899,-244,415,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00270() {
+        org.junit.Assert.assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeRawUTF8String(byte[],int,int):void",
+            new int[]{-475,210,-835,-172,-615,295,43,-1000,-397,203,482,771,-1000,-373,574,434,-296,363,-605,32,203,526,124,-363,-400,-1000,-192,135,-36,427,-205,796,998,384,74,511,-58,1000,-685,745,-572,-493,614,175,-94,-549,-910,514,1000,-95,-1000,-1000,823,75,35,724,-1000,322,-544,-6,-1000,679,-776,550}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00271() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeStartArray():void",
+            new int[]{-1000,1000,1000,476,612,804,627,782,-512,-357,1000,-387,331,-551,-253,-391,-165,831,142,391,315,-152,-888,-358,1000,-623,1000,682,816,68,1000,404,-1000,-1000,-1000,840,-228,-230,747,-903,1000,-1000,75,-704,418,-533,-310,-924,-135,-615,1000,1000,-678,1000,1000,92,1000,400,-1000,-1000,25,939,-1000,224}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00272() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeStartArray():void",
+            new int[]{517,-1000,141,-723,-56,1000,998,1000,1000,-376,523,121,-865,619,1000,560,727,226,1000,-1000,999,-130,-640,-1000,628,1000,1000,-1000,-966,482,77,-324,159,-4,-14,-1000,-1000,-783,871,817,-1000,-162,-968,1000,-1000,982,-1000,1000,-385,1000,-318,1000,499,25,646,1000,-1000,-1000,1000,712,576,-1000,589,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00273() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeStartArray():void",
+            new int[]{-679,86,141,713,9,956,574,-90,504,-96,11,231,672,-623,403,803,172,226,1000,-1000,900,-130,-325,-286,92,1000,1000,-113,87,482,1000,174,159,795,-507,-641,843,-56,742,-459,-853,-162,-294,545,-837,149,-293,473,-232,483,316,1000,1000,427,-174,-336,-258,-72,867,1000,-41,-1000,-334,-621}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00274() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeStartObject():void",
+            new int[]{-1000,403,295,286,-1000,-230,796,942,436,879,51,1000,821,-581,-500,657,-533,214,1000,406,-509,198,-1000,-489,650,734,-201,275,-359,-195,510,-518,-1000,1000,-342,1000,-561,-1000,-36,-10,-1000,451,1000,-1000,-845,963,153,-53,-440,-145,363,-725,709,381,1000,235,-1000,-916,1000,81,680,899,426,49}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00275() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeStartObject():void",
+            new int[]{1000,-228,626,1000,-253,611,1000,-116,-1000,84,771,-1000,766,-132,720,404,113,-795,-665,-835,-1000,992,-1000,609,1000,582,-373,410,-68,-473,-644,55,-1000,653,-690,1000,228,-558,30,-357,1000,-1000,1000,-1000,-1000,937,875,200,-955,-360,834,-1000,-372,-696,888,-699,-196,105,-1000,-777,-91,358,134,-607}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00276() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeStartObject():void",
+            new int[]{-639,-1000,1000,-1000,-1000,99,1000,-635,76,949,-621,-738,-162,-1000,402,-1000,-373,-450,-156,-1000,-1000,198,-1000,-273,1000,191,-789,1000,-85,-632,510,-344,-1000,1000,-1000,712,-518,-910,-429,-10,-431,-48,1000,-1000,-1000,966,-130,698,-1000,-1000,-42,-656,79,-198,789,638,133,117,878,-628,361,111,1000,-162}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00277() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(char[],int,int):void",
+            new int[]{370,-346,-141,-211,-235,-561,-1000,1000,1000,658,1000,-589,-507,-1000,1000,1000,-365,184,1000,-576,-446,-791,-383,505,-1000,-660,343,952,1000,-781,762,-1000,786,-1000,-338,1000,-1000,-511,-1000,-585,27,349,689,206,2,468,-1000,-1000,253,-104,414,1000,-385,1000,-1000,-225,1000,690,-233,1000,581,-757,-602,12}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00278() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(char[],int,int):void",
+            new int[]{-1000,-153,-3,-1000,600,-1000,-480,-640,219,964,-396,-1000,-333,-769,258,992,1000,1000,-476,-1000,829,-804,-859,511,757,-614,606,242,390,-487,643,-1000,563,-213,1000,-617,1000,579,-471,-697,-605,-376,206,1000,130,976,200,-35,-144,482,-92,6,450,454,1000,-684,-258,50,19,-9,199,181,-4,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00279() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(char[],int,int):void",
+            new int[]{144,-766,-722,463,-366,-798,-480,-884,-768,-445,-867,-277,522,-769,-616,-856,449,-420,-617,60,451,-26,372,-269,757,306,-6,-868,-417,502,-166,70,959,-338,-418,-318,-460,983,798,-506,-95,-755,447,173,-434,-710,-875,993,-803,701,-789,-874,427,-369,56,-128,978,-356,761,-841,855,-663,95,-207}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00280() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(char[],int,int):void",
+            new int[]{-1000,261,329,-485,1000,-657,-36,-335,239,-91,-327,-710,-134,-1000,243,992,751,1000,-565,-576,1000,-655,-912,-443,1000,-677,1000,265,-551,-668,657,-1000,-623,-213,916,-617,-1000,-511,-336,-278,-560,-888,169,712,91,1000,499,-35,-175,984,-537,73,773,-23,907,-276,-577,690,-326,247,200,-836,144,-845}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00281() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(char[],int,int):void",
+            new int[]{370,-1000,-1000,1000,-235,-1000,-694,1000,1000,440,1000,785,-1000,-1000,1000,-767,-365,1000,829,-306,581,-1000,-455,-516,-580,-1000,620,1000,1000,-1000,1000,-284,786,-518,259,1000,-1000,64,-1000,16,-452,973,1000,-48,472,1000,-1000,-1000,1000,1000,-1000,1000,351,1000,-510,721,1000,1000,729,1000,1000,-1000,-510,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00282() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(char[],int,int):void",
+            new int[]{-803,-683,-649,64,-19,-311,-1000,-5,-414,-546,1000,555,-1000,29,-337,-845,-803,-1000,1000,608,-1000,688,1000,-519,-1000,-663,81,-173,-449,1000,-1000,26,343,449,-677,956,-1000,210,-294,395,1000,1000,758,902,328,-870,845,1000,-570,-498,265,106,772,-736,-1000,-25,-878,-1000,679,516,1000,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00283() {
+        org.junit.Assert.assertEquals("THROW:java.lang.ArrayIndexOutOfBoundsException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(char[],int,int):void",
+            new int[]{-1000,-1000,-1000,595,-772,-591,252,-1000,147,-1000,-793,-1000,973,-1000,-1000,-1000,866,6,-1000,608,1000,1000,-128,-1000,1000,-697,1000,179,-1000,275,-1000,-276,614,1000,1000,-625,-1000,1000,1000,395,1000,726,223,1000,4,-235,-423,1000,-1000,1000,-761,355,1000,-1000,592,-1000,-1000,-1000,1000,-905,1000,243,608,-439}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00284() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(char[],int,int):void",
+            new int[]{-588,-1000,-1000,503,-366,-494,-1000,-662,-452,-1000,1000,555,168,-1000,588,1000,-662,-1000,166,228,1000,1000,1000,-1000,-193,-578,1000,-380,-1000,1000,-1000,-499,137,1000,-126,680,-1000,747,381,-773,1000,1000,844,1000,-883,-1000,857,-561,526,293,-179,-841,1000,-1000,-968,-319,-1000,-1000,1000,195,-399,1000,1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00285() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(char[],int,int):void",
+            new int[]{-285,-1000,-1000,1000,-1000,-1000,-1000,-1000,-1000,189,-1000,-277,84,-1000,-1000,-1000,1000,-986,1000,-381,1000,685,898,-1000,1000,-235,-181,-1000,-1000,-58,543,795,1000,724,412,-1000,-1000,-1000,1000,-61,509,-1000,-294,462,197,-914,-1000,1000,801,1000,-1000,-1000,824,-665,1000,-597,1000,-457,1000,-1000,1000,-1000,293,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00286() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-1000,1000,-893,1000,-909,-279,729,444,342,-109,-662,629,-813,-1000,-1000,1000,785,-610,1000,464,-1000,-880,427,1000,673,-199,-205,494,-316,-1000,343,-1000,901,-330,-253,1000,-789,1000,-1000,-598,-1000,-748,-74,-965,73,-1000,1000,551,1000,283,-25,-554,-279,-1000,1000,229,853,1000,-155,-1000,536,-411,-1000,-81}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00287() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-897,-48,-778,315,167,1000,-1000,-54,-346,-136,9,1000,-853,-710,499,-910,-886,-809,-1000,190,741,-369,5,-215,856,202,-52,512,-770,906,-884,746,224,104,1000,-1000,499,322,-115,888,1000,668,-1000,124,-114,607,-272,1000,-334,-256,1000,530,317,-813,-1000,509,-787,-866,718,1000,1000,253,305,-861}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00288() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{-1000,-168,-898,335,-952,791,41,-448,216,-381,-950,337,-1000,-267,-567,387,567,275,1000,464,-727,-842,-666,755,-172,140,-403,486,-207,-241,293,-387,175,57,639,329,-93,80,-456,-522,-580,38,-480,80,358,-1000,1000,777,1000,-496,-142,557,-1000,-539,580,-510,138,703,-530,-1000,-1000,-387,-16,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00289() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(com.fasterxml.jackson.core.SerializableString):void",
+            new int[]{507,465,1000,-682,-1000,1000,1000,-267,-1000,-832,-853,449,-1000,474,738,34,861,-1000,535,1000,-461,414,-994,1000,469,615,-991,1000,101,-96,1000,-557,285,317,183,790,-1000,-1000,-342,831,-712,393,-689,333,-281,-1000,-253,1000,1000,1000,1000,1000,-272,-1000,1000,-1000,-1000,-750,-1000,-405,-1000,-210,-413,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00290() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(java.lang.String):void",
+            new int[]{-1000,-1000,-797,-312,-206,783,811,-597,-1000,588,576,-5,-197,-768,803,-1000,-1000,217,995,1000,1000,1000,-901,1000,-1000,-175,85,549,318,1000,-737,1000,1000,-56,-1000,1000,-1000,126,1000,-1000,-856,-643,-1000,-473,-759,-1000,-462,808,-1000,-1000,-622,1000,-1000,-191,-1000,-1000,-380,-971,-512,-802,-628,-1000,1000,-1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00291() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(java.lang.String):void",
+            new int[]{902,1000,-264,1000,601,-1000,1000,1000,201,-44,947,1000,442,-115,-864,-1000,886,-76,-1000,-469,-1000,750,-1000,-1000,1000,703,-10,6,-542,-1000,559,-1000,-1000,-277,345,574,281,1000,328,1000,1000,551,1000,-1000,1000,1000,-130,1000,1000,1000,-388,-562,690,1000,-352,65,1000,1000,-639,1000,662,676,-1000,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00292() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(java.lang.String):void",
+            new int[]{977,202,-302,416,-307,-763,799,1000,193,-157,691,1000,508,700,-1000,-1000,1000,-128,8,-805,1000,182,100,87,-36,778,-262,491,-1000,-1000,1000,507,-1000,-492,1000,474,1000,846,-82,1000,849,487,-356,-1000,1000,767,-789,1000,1000,490,-1000,309,477,398,-794,1000,1000,1000,-178,1000,1000,-1000,-1000,456}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00293() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(java.lang.String):void",
+            new int[]{-802,-146,1000,-582,409,-1000,544,593,639,-301,938,1000,1000,-871,926,-400,-722,369,-1000,996,-433,-162,-592,-45,-245,-1000,1000,320,1000,823,-515,-1000,-436,72,-1000,-1000,-1000,1000,403,951,-713,-283,1000,-1000,645,963,-564,549,-437,-1000,821,-476,741,218,70,-464,948,526,332,-122,-1000,938,730,370}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00294() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(java.lang.String):void",
+            new int[]{977,-559,-891,804,-512,-950,-618,-781,813,-41,-353,892,-1000,1000,-861,-294,1000,-108,76,-1000,1000,-1000,1000,-188,633,1000,225,-527,-14,-1000,429,507,-1000,525,654,-1000,612,-557,-1000,1000,1000,-153,-1000,184,-407,-1000,332,769,1000,852,-1000,-1000,-1000,434,4,623,653,522,1000,-1000,655,-1000,-1000,-578}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00295() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(java.lang.String):void",
+            new int[]{400,538,614,1000,246,-47,-512,-366,-16,-341,497,-370,78,-204,430,-1000,-709,647,-1000,-385,906,-618,-1000,-212,541,16,229,1000,880,-406,115,-1000,-402,341,-879,-29,-1000,-145,-1000,1000,-1000,12,1000,821,148,-262,-640,390,-696,-407,549,174,303,-100,-182,-1000,-688,1000,-1000,-1000,-597,272,446,373}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00296() {
+        org.junit.Assert.assertEquals("VOID", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(java.lang.String):void",
+            new int[]{-1000,-206,-638,825,-363,136,1000,371,-836,-689,577,163,-94,100,-837,-38,259,300,505,748,1000,-1000,1000,329,1000,179,95,-1000,-288,1000,-542,399,-929,1000,-399,-1000,142,676,-967,495,752,-1000,146,-1000,-376,415,-493,453,-37,519,-778,-1000,-362,-1000,-1000,-423,-1,-1000,1000,-381,928,-510,624,-105}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00297() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(java.lang.String):void",
+            new int[]{739,-265,808,26,133,745,893,1000,-154,589,602,-1000,-449,-364,1000,-551,-1000,728,-888,-262,-756,465,-1000,-596,-96,-329,-1000,-519,-273,823,222,-1000,-450,142,-932,357,738,-393,-378,232,801,448,667,-381,-1000,896,-1000,-1000,-450,552,318,966,113,42,-680,672,-121,348,-1000,994,-1000,166,1000,194}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00298() {
+        org.junit.Assert.assertEquals("THROW:java.lang.NullPointerException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeString(java.lang.String):void",
+            new int[]{-296,-903,681,889,786,-169,-164,851,469,90,-261,-72,482,82,-742,-330,830,-997,919,-781,295,-292,-885,-165,755,-656,224,-103,668,470,-489,-592,-397,-706,-569,-425,-781,-779,-195,225,714,-842,203,-452,445,733,857,888,143,917,406,229,-41,407,908,-654,-573,-418,621,-365,-625,817,-645,118}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00299() {
+        org.junit.Assert.assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{698,703,-992,32,20,-1000,-31,-1000,-626,358,-149,309,1000,-777,59,743,-1000,1000,1000,-472,-786,617,1000,1000,592,-1000,-1000,1000,573,1000,240,-1000,-1000,-321,-153,-1000,1000,-607,-42,1000,507,-1000,-1000,1000,-523,553,768,-942,650,391,470,90,1000,500,-254,719,676,255,-487,356,-153,352,42,-528}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00300() {
+        org.junit.Assert.assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{-26,295,-1000,-1000,-886,-378,683,-696,1000,-51,771,-951,580,-933,1000,490,589,-1000,1000,-1000,-1000,928,512,-1000,417,1000,-1000,318,-1000,29,1000,-528,-1000,1000,-1000,-415,-231,1000,-804,249,860,439,-1000,678,-90,1000,132,898,-1000,169,109,-667,-1000,1000,1000,-1000,-1000,449,-763,1000,-579,-332,-334,1000}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00301() {
+        org.junit.Assert.assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{-117,889,-923,-861,-937,-903,-866,-902,999,84,117,-174,8,542,505,731,-194,-181,234,-534,-786,417,-618,639,924,-523,-982,828,-836,262,-421,735,-169,-408,-547,-917,-23,211,269,-368,434,161,-190,569,-232,336,441,441,-219,657,484,787,329,516,28,680,367,507,-617,497,797,-160,-449,-592}));
+    }
+    @org.junit.Test(timeout=60000L)
+    public void testDE00302() {
+        org.junit.Assert.assertEquals("THROW:java.lang.UnsupportedOperationException", DEReplay.run(
+            "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "com.fasterxml.jackson.core.json.WriterBasedJsonGenerator", "writeUTF8String(byte[],int,int):void",
+            new int[]{-26,295,416,69,1000,-23,683,44,-400,584,-132,239,-420,579,367,787,127,899,1000,-591,400,11,309,377,417,-1000,-1000,83,65,29,255,-233,-609,-124,-361,676,-393,-29,-804,400,-180,-1000,-798,392,-416,1000,132,69,-298,169,109,-1000,-1000,874,41,566,-1000,842,-338,86,-90,9,400,1000}));
+    }
+}
