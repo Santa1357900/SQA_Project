@@ -1,0 +1,271 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+
+public class TypedScopeCreatorClaudeTest {
+
+  /** Helper: compiles a JS snippet with type checking enabled and returns the Compiler. */
+  private Compiler compile(String code) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+    compiler.compile(
+        SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode("test.js", code),
+        options);
+    return compiler;
+  }
+
+  // Covers createInitialScope: native "Object" ctor is declared and is a constructor type.
+  @Test
+  public void testCreateInitialScope_objectDeclared_isConstructorType() throws Throwable {
+    Compiler compiler = new Compiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope scope = creator.createInitialScope(IR.block());
+    JSType type = scope.getVar("Object").getType();
+    assertTrue(type.isFunctionType());
+    assertTrue(type.toMaybeFunctionType().isConstructor());
+  }
+
+  // Covers createInitialScope: "Object.prototype" is declared alongside the native ctor.
+  @Test
+  public void testCreateInitialScope_objectPrototypeDeclared_notNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope scope = creator.createInitialScope(IR.block());
+    assertNotNull(scope.getVar("Object.prototype"));
+  }
+
+  // Covers createInitialScope: "Array" and "Array.prototype" are declared natively.
+  @Test
+  public void testCreateInitialScope_arrayAndPrototypeDeclared() throws Throwable {
+    Compiler compiler = new Compiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope scope = creator.createInitialScope(IR.block());
+    assertNotNull(scope.getVar("Array"));
+    assertNotNull(scope.getVar("Array.prototype"));
+  }
+
+  // Covers createInitialScope: "Function" is declared and is a constructor type.
+  @Test
+  public void testCreateInitialScope_functionDeclared_isConstructorType() throws Throwable {
+    Compiler compiler = new Compiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope scope = creator.createInitialScope(IR.block());
+    JSType type = scope.getVar("Function").getType();
+    assertTrue(type.toMaybeFunctionType().isConstructor());
+  }
+
+  // Covers declareNativeValueType: "undefined" is declared with exactly the VOID_TYPE instance.
+  @Test
+  public void testCreateInitialScope_undefinedDeclared_isVoidType() throws Throwable {
+    Compiler compiler = new Compiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope scope = creator.createInitialScope(IR.block());
+    JSType expected = compiler.getTypeRegistry().getNativeType(JSTypeNative.VOID_TYPE);
+    assertSame(expected, scope.getVar("undefined").getType());
+  }
+
+  // Covers declareNativeValueType: "ActiveXObject" is declared with exactly NO_OBJECT_TYPE.
+  @Test
+  public void testCreateInitialScope_activeXObjectDeclared_isNoObjectType() throws Throwable {
+    Compiler compiler = new Compiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope scope = creator.createInitialScope(IR.block());
+    JSType expected = compiler.getTypeRegistry().getNativeType(JSTypeNative.NO_OBJECT_TYPE);
+    assertSame(expected, scope.getVar("ActiveXObject").getType());
+  }
+
+  // Covers createInitialScope: "String" and "String.prototype" declared natively.
+  @Test
+  public void testCreateInitialScope_stringAndPrototypeDeclared() throws Throwable {
+    Compiler compiler = new Compiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope scope = creator.createInitialScope(IR.block());
+    assertNotNull(scope.getVar("String"));
+    assertNotNull(scope.getVar("String.prototype"));
+  }
+
+  // Covers createInitialScope: resulting scope is global, and an undeclared name is absent.
+  @Test
+  public void testCreateInitialScope_isGlobalScope_andUnknownVarAbsent() throws Throwable {
+    Compiler compiler = new Compiler();
+    TypedScopeCreator creator = new TypedScopeCreator(compiler);
+    Scope scope = creator.createInitialScope(IR.block());
+    assertTrue(scope.isGlobal());
+    assertNull(scope.getVar("NotARealNativeType"));
+  }
+
+  // Covers defineVar: multiple names with JSDoc on the VAR node triggers MULTIPLE_VAR_DEF warning.
+  @Test
+  public void testDefineVar_multipleDeclWithJsDoc_reportsMultipleVarDefWarning() throws Throwable {
+    Compiler compiler = compile("/** @type {number} */ var x, y;");
+    assertTrue(compiler.getWarningCount() >= 1);
+  }
+
+  // Covers defineVar: multiple names without JSDoc do not trigger MULTIPLE_VAR_DEF.
+  @Test
+  public void testDefineVar_multipleDeclWithoutJsDoc_noWarning() throws Throwable {
+    Compiler compiler = compile("var x, y;");
+    assertEquals(0, compiler.getWarningCount());
+  }
+
+  // Covers defineVar loop: three names with JSDoc still triggers the warning once.
+  @Test
+  public void testDefineVar_threeNamesWithJsDoc_warns() throws Throwable {
+    Compiler compiler = compile("/** @type {number} */ var a, b, c;");
+    assertTrue(compiler.getWarningCount() >= 1);
+  }
+
+  // Covers defineVar single-child branch: simple initialized var compiles cleanly.
+  @Test
+  public void testDefineVar_singleNameWithValue_noErrors() throws Throwable {
+    Compiler compiler = compile("var x = 5;");
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers defineVar single-child branch with no value and no jsdoc: inferred, no errors.
+  @Test
+  public void testDefineVar_singleNameNoValueNoJsDoc_noErrors() throws Throwable {
+    Compiler compiler = compile("var x;");
+    assertEquals(0, compiler.getErrorCount());
+    assertEquals(0, compiler.getWarningCount());
+  }
+
+  // Covers defineFunctionLiteral: hoisted constructor function self-initializes, no CTOR_INITIALIZER.
+  @Test
+  public void testDefineFunctionLiteral_hoistedConstructorFunction_noCtorInitializerWarning() throws Throwable {
+    Compiler compiler = compile("/** @constructor */ function Foo() {}");
+    assertEquals(0, compiler.getWarningCount());
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers defineSlot: @constructor var without initializer must warn per CTOR_INITIALIZER contract.
+  @Test
+  public void testDefineSlot_constructorVarWithoutInitializer_ctorInitializerWarning() throws Throwable {
+    Compiler compiler = compile("/** @constructor */ var Foo;");
+    assertTrue(compiler.getWarningCount() >= 1);
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers defineSlot: @constructor var with explicit function initializer must not warn.
+  @Test
+  public void testDefineSlot_constructorVarWithFunctionInitializer_noWarning() throws Throwable {
+    Compiler compiler = compile("/** @constructor */ var Foo = function() {};");
+    assertEquals(0, compiler.getWarningCount());
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers defineSlot: @interface var without initializer must warn per IFACE_INITIALIZER contract.
+  @Test
+  public void testDefineSlot_interfaceVarWithoutInitializer_ifaceInitializerWarning() throws Throwable {
+    Compiler compiler = compile("/** @interface */ var Foo;");
+    assertTrue(compiler.getWarningCount() >= 1);
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers createEnumTypeFromNodes: non-object/non-enum initializer must warn ENUM_INITIALIZER.
+  @Test
+  public void testCreateEnumType_nonObjectInitializer_enumInitializerWarning() throws Throwable {
+    Compiler compiler = compile("/** @enum {number} */ var Foo = 5;");
+    assertTrue(compiler.getWarningCount() >= 1);
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers createEnumTypeFromNodes: object literal initializer is valid, no ENUM_INITIALIZER warning.
+  @Test
+  public void testCreateEnumType_objectLiteralInitializer_noWarning() throws Throwable {
+    Compiler compiler = compile("/** @enum {number} */ var Foo = {A:1, B:2};");
+    assertEquals(0, compiler.getWarningCount());
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers createEnumTypeFromNodes alias branch: assigning an existing enum var to a new enum var.
+  @Test
+  public void testCreateEnumType_aliasedEnum_noErrors() throws Throwable {
+    String code = "/** @enum {number} */ var A = {X:1};"
+        + "/** @enum {number} */ var B = A;";
+    Compiler compiler = compile(code);
+    assertEquals(0, compiler.getErrorCount());
+    assertEquals(0, compiler.getWarningCount());
+  }
+
+  // Covers defineObjectLiteral @lends: lending to an undeclared variable must warn UNKNOWN_LENDS.
+  @Test
+  public void testDefineObjectLiteral_lendsToUndeclaredVar_unknownLendsWarning() throws Throwable {
+    Compiler compiler = compile("var dummy = /** @lends {UnknownName} */ ({x: 1});");
+    assertTrue(compiler.getWarningCount() >= 1);
+  }
+
+  // Covers defineObjectLiteral @lends: lending onto a non-object type must warn LENDS_ON_NON_OBJECT.
+  @Test
+  public void testDefineObjectLiteral_lendsOnNonObjectType_lendsOnNonObjectWarning() throws Throwable {
+    String code = "var num = 5; var dummy = /** @lends {num} */ ({x: 1});";
+    Compiler compiler = compile(code);
+    assertTrue(compiler.getWarningCount() >= 1);
+  }
+
+  // Covers defineObjectLiteral @lends: lending onto a valid object var must not warn.
+  @Test
+  public void testDefineObjectLiteral_lendsOnValidObjectVar_noWarnings() throws Throwable {
+    String code = "var Foo = {}; var dummy = /** @lends {Foo} */ ({x: 1});";
+    Compiler compiler = compile(code);
+    assertEquals(0, compiler.getWarningCount());
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers defineObjectLiteral: a plain object literal with no annotations compiles cleanly.
+  @Test
+  public void testDefineObjectLiteral_plainObjectLiteral_noErrors() throws Throwable {
+    Compiler compiler = compile("var obj = {a: 1, b: 2};");
+    assertEquals(0, compiler.getErrorCount());
+    assertEquals(0, compiler.getWarningCount());
+  }
+
+  // Covers getDeclaredType @const idiom: "var x = x || {}" using the secondClause type.
+  @Test
+  public void testGetDeclaredType_constSelfOrDefaultIdiom_noErrors() throws Throwable {
+    Compiler compiler = compile("/** @const */ var goog = goog || {};");
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers checkForTypedef via VAR: a valid @typedef evaluates fine, no MALFORMED_TYPEDEF.
+  @Test
+  public void testCheckForTypedef_validTypedefOnVar_noWarning() throws Throwable {
+    Compiler compiler = compile("/** @typedef {number} */ var MyNum;");
+    assertEquals(0, compiler.getWarningCount());
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers maybeDeclareQualifiedName stub path: untyped GETPROP statement compiles without errors.
+  @Test
+  public void testMaybeDeclareQualifiedName_stubDeclarationNoJsDoc_noErrors() throws Throwable {
+    Compiler compiler = compile("var Foo = {}; Foo.bar;");
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers maybeDeclareQualifiedName: assigning a function literal to a qualified name.
+  @Test
+  public void testMaybeDeclareQualifiedName_qualifiedNameAssignedFunction_noErrors() throws Throwable {
+    Compiler compiler = compile("var Foo = {}; Foo.bar = function() {};");
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers defineCatch: a catch parameter inside a function compiles without errors.
+  @Test
+  public void testDefineCatch_catchParameter_noErrors() throws Throwable {
+    Compiler compiler = compile("function f() { try { return 1; } catch (e) { return 2; } }");
+    assertEquals(0, compiler.getErrorCount());
+  }
+
+  // Covers defineFunctionLiteral: a named function expression does not declare itself as hoisted.
+  @Test
+  public void testDefineFunctionLiteral_namedFunctionExpression_noErrors() throws Throwable {
+    Compiler compiler = compile("var f = function g() { return 1; };");
+    assertEquals(0, compiler.getErrorCount());
+  }
+}

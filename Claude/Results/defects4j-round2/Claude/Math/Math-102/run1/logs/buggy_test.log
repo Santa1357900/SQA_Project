@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-102-bvticvyj/Math-102b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.math.stat.inference.ChiSquareTestImplClaudeTest::testChiSquare_unequalSums_mustRescaleExpectedPerContract
+[exit 0]

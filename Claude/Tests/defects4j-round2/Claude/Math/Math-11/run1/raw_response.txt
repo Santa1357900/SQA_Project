@@ -1,0 +1,275 @@
+package org.apache.commons.math3.distribution;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math3.exception.DimensionMismatchException;
+import org.apache.commons.math3.linear.NonPositiveDefiniteMatrixException;
+import org.apache.commons.math3.linear.SingularMatrixException;
+import org.apache.commons.math3.linear.RealMatrix;
+import org.apache.commons.math3.random.Well19937c;
+import org.apache.commons.math3.random.RandomGenerator;
+
+public class MultivariateNormalDistributionClaudeTest {
+
+    // Constructor: valid input sets means correctly, no exception thrown.
+    @Test
+    public void testConstructor_validInput_setsMeansCorrectly() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{1.0, 0.0}, {0.0, 1.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double[] got = dist.getMeans();
+        assertEquals(2, got.length);
+        assertEquals(0.0, got[0], 1e-9);
+        assertEquals(0.0, got[1], 1e-9);
+    }
+
+    // Branch: covariances.length != dim -> DimensionMismatchException.
+    @Test
+    public void testConstructor_covariancesLengthMismatch_throwsDimensionMismatchException() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{1.0, 0.0}};
+        try {
+            new MultivariateNormalDistribution(means, cov);
+            fail("expected DimensionMismatchException");
+        } catch (DimensionMismatchException expected) {
+        }
+    }
+
+    // Branch: covariances[i].length != dim -> DimensionMismatchException.
+    @Test
+    public void testConstructor_covariancesRowLengthMismatch_throwsDimensionMismatchException() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{1.0, 0.0}, {0.0}};
+        try {
+            new MultivariateNormalDistribution(means, cov);
+            fail("expected DimensionMismatchException");
+        } catch (DimensionMismatchException expected) {
+        }
+    }
+
+    // Branch: negative eigenvalue (invertible but not positive definite) -> NonPositiveDefiniteMatrixException.
+    @Test
+    public void testConstructor_negativeEigenvalue_throwsNonPositiveDefiniteMatrixException() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{1.0, 2.0}, {2.0, 1.0}};
+        try {
+            new MultivariateNormalDistribution(means, cov);
+            fail("expected NonPositiveDefiniteMatrixException");
+        } catch (NonPositiveDefiniteMatrixException expected) {
+        }
+    }
+
+    // Branch: singular (non-invertible) covariance -> SingularMatrixException from getInverse().
+    @Test
+    public void testConstructor_singularCovariance_throwsSingularMatrixException() throws Throwable {
+        double[] means = {0.0};
+        double[][] cov = {{0.0}};
+        try {
+            new MultivariateNormalDistribution(means, cov);
+            fail("expected SingularMatrixException");
+        } catch (SingularMatrixException expected) {
+        }
+    }
+
+    // Constructor with explicit RandomGenerator: valid input, no exception, correct means.
+    @Test
+    public void testConstructorWithRandomGenerator_validInput_setsMeansCorrectly() throws Throwable {
+        RandomGenerator rng = new Well19937c();
+        double[] means = {3.0, -1.0};
+        double[][] cov = {{1.0, 0.0}, {0.0, 1.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(rng, means, cov);
+        double[] got = dist.getMeans();
+        assertEquals(3.0, got[0], 1e-9);
+        assertEquals(-1.0, got[1], 1e-9);
+    }
+
+    // getMeans() returns the values passed to the constructor.
+    @Test
+    public void testGetMeans_returnsCorrectValues() throws Throwable {
+        double[] means = {1.5, -2.5};
+        double[][] cov = {{1.0, 0.0}, {0.0, 1.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double[] got = dist.getMeans();
+        assertEquals(1.5, got[0], 1e-9);
+        assertEquals(-2.5, got[1], 1e-9);
+    }
+
+    // getMeans() returns an independent copy; mutating it must not affect internal state.
+    @Test
+    public void testGetMeans_returnsIndependentCopy() throws Throwable {
+        double[] means = {1.0, 2.0};
+        double[][] cov = {{1.0, 0.0}, {0.0, 1.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double[] first = dist.getMeans();
+        first[0] = 999.0;
+        double[] second = dist.getMeans();
+        assertEquals(1.0, second[0], 1e-9);
+    }
+
+    // getCovariances() returns a matrix whose data matches the constructor input.
+    @Test
+    public void testGetCovariances_returnsCorrectMatrix() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{2.0, 0.0}, {0.0, 3.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double[][] data = dist.getCovariances().getData();
+        assertEquals(2.0, data[0][0], 1e-9);
+        assertEquals(0.0, data[0][1], 1e-9);
+        assertEquals(0.0, data[1][0], 1e-9);
+        assertEquals(3.0, data[1][1], 1e-9);
+    }
+
+    // getCovariances() returns a fresh copy object each call (copy() contract).
+    @Test
+    public void testGetCovariances_returnsCopyIndependentOfInternalState() throws Throwable {
+        double[] means = {0.0};
+        double[][] cov = {{5.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        RealMatrix m1 = dist.getCovariances();
+        RealMatrix m2 = dist.getCovariances();
+        assertNotSame(m1, m2);
+        assertEquals(m1.getData()[0][0], m2.getData()[0][0], 1e-9);
+    }
+
+    // getStandardDeviations() for a diagonal 2-dimension covariance.
+    @Test
+    public void testGetStandardDeviations_diagonalTwoDimension() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{4.0, 0.0}, {0.0, 9.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double[] std = dist.getStandardDeviations();
+        assertEquals(2.0, std[0], 1e-9);
+        assertEquals(3.0, std[1], 1e-9);
+    }
+
+    // getStandardDeviations() for a single-dimension covariance.
+    @Test
+    public void testGetStandardDeviations_singleDimension() throws Throwable {
+        double[] means = {0.0};
+        double[][] cov = {{16.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double[] std = dist.getStandardDeviations();
+        assertEquals(1, std.length);
+        assertEquals(4.0, std[0], 1e-9);
+    }
+
+    // density(): wrong-length input -> DimensionMismatchException.
+    @Test
+    public void testDensity_dimensionMismatch_throwsDimensionMismatchException() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{1.0, 0.0}, {0.0, 1.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        try {
+            dist.density(new double[] {0.0});
+            fail("expected DimensionMismatchException");
+        } catch (DimensionMismatchException expected) {
+        }
+    }
+
+    // BUG TARGET: 1-D standard normal density at the mean must equal 1/sqrt(2*pi)
+    // per the standard multivariate normal PDF formula; integer division of the
+    // exponent (-dim/2) for odd dim breaks this.
+    @Test
+    public void testDensity_oneDimensionStandardNormal_matchesPdfFormula() throws Throwable {
+        double[] means = {0.0};
+        double[][] cov = {{1.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double expected = 1.0 / Math.sqrt(2.0 * Math.PI);
+        double actual = dist.density(new double[] {0.0});
+        assertEquals(expected, actual, 1e-9);
+    }
+
+    // BUG TARGET: 1-D non-unit-variance density, another odd-dimension check.
+    @Test
+    public void testDensity_oneDimensionNonUnitVariance_matchesPdfFormula() throws Throwable {
+        double[] means = {2.0};
+        double[][] cov = {{4.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double expected = (1.0 / Math.sqrt(2.0 * Math.PI)) * 0.5 * Math.exp(-0.5);
+        double actual = dist.density(new double[] {4.0});
+        assertEquals(expected, actual, 1e-9);
+    }
+
+    // BUG TARGET: 3-D identity-covariance density at the mean must equal (2*pi)^(-1.5);
+    // odd dimension again exposes the integer-division exponent bug.
+    @Test
+    public void testDensity_threeDimensionIdentity_matchesPdfFormula() throws Throwable {
+        double[] means = {0.0, 0.0, 0.0};
+        double[][] cov = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double expected = Math.pow(2.0 * Math.PI, -1.5);
+        double actual = dist.density(new double[] {0.0, 0.0, 0.0});
+        assertEquals(expected, actual, 1e-9);
+    }
+
+    // 2-D identity covariance at the mean: density = 1/(2*pi).
+    @Test
+    public void testDensity_twoDimensionIdentityAtMean_matchesPdfFormula() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{1.0, 0.0}, {0.0, 1.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double expected = 1.0 / (2.0 * Math.PI);
+        double actual = dist.density(new double[] {0.0, 0.0});
+        assertEquals(expected, actual, 1e-9);
+    }
+
+    // 2-D identity covariance, point displaced from the mean (non-zero quadratic term).
+    @Test
+    public void testDensity_twoDimensionDisplacedFromMean_matchesPdfFormula() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{1.0, 0.0}, {0.0, 1.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double expected = (1.0 / (2.0 * Math.PI)) * Math.exp(-0.5);
+        double actual = dist.density(new double[] {1.0, 0.0});
+        assertEquals(expected, actual, 1e-9);
+    }
+
+    // 2-D diagonal (non-identity) covariance at the mean.
+    @Test
+    public void testDensity_twoDimensionDiagonalCovariance_matchesPdfFormula() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{4.0, 0.0}, {0.0, 9.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double expected = (1.0 / (2.0 * Math.PI)) * Math.pow(36.0, -0.5);
+        double actual = dist.density(new double[] {0.0, 0.0});
+        assertEquals(expected, actual, 1e-9);
+    }
+
+    // 2-D correlated covariance (exercises multi-iteration sum in getExponentTerm).
+    @Test
+    public void testDensity_twoDimensionCorrelatedCovariance_matchesPdfFormula() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{2.0, 1.0}, {1.0, 2.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double expected = (1.0 / (2.0 * Math.PI)) * Math.pow(3.0, -0.5) * Math.exp(-1.0 / 3.0);
+        double actual = dist.density(new double[] {1.0, 1.0});
+        assertEquals(expected, actual, 1e-9);
+    }
+
+    // sample(): returns a point of the correct dimension with finite coordinates.
+    @Test
+    public void testSample_twoDimension_returnsFiniteValuesOfCorrectLength() throws Throwable {
+        double[] means = {0.0, 0.0};
+        double[][] cov = {{1.0, 0.0}, {0.0, 1.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double[] sample = dist.sample();
+        assertEquals(2, sample.length);
+        assertFalse(Double.isNaN(sample[0]));
+        assertFalse(Double.isInfinite(sample[0]));
+        assertFalse(Double.isNaN(sample[1]));
+        assertFalse(Double.isInfinite(sample[1]));
+    }
+
+    // sample(): 1-D case returns a single finite value.
+    @Test
+    public void testSample_oneDimension_returnsFiniteValue() throws Throwable {
+        double[] means = {5.0};
+        double[][] cov = {{2.0}};
+        MultivariateNormalDistribution dist = new MultivariateNormalDistribution(means, cov);
+        double[] sample = dist.sample();
+        assertEquals(1, sample.length);
+        assertFalse(Double.isNaN(sample[0]));
+        assertFalse(Double.isInfinite(sample[0]));
+    }
+}

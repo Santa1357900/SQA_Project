@@ -1,0 +1,463 @@
+package org.joda.time;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.util.Calendar;
+import java.util.GregorianCalendar;
+import java.util.Date;
+
+import org.joda.time.chrono.ISOChronology;
+
+public class LocalDateClaudeTest {
+
+    // now(DateTimeZone): null zone -> NullPointerException
+    @Test
+    public void testNow_withNullZone_throwsNullPointerException() throws Throwable {
+        try {
+            LocalDate.now((DateTimeZone) null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // now(Chronology): null chronology -> NullPointerException
+    @Test
+    public void testNow_withNullChronology_throwsNullPointerException() throws Throwable {
+        try {
+            LocalDate.now((Chronology) null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // parse(String) using ISO local date parser
+    @Test
+    public void testParse_validIsoString_returnsExpectedDate() throws Throwable {
+        LocalDate ld = LocalDate.parse("2023-06-15");
+        assertEquals(2023, ld.getYear());
+        assertEquals(6, ld.getMonthOfYear());
+        assertEquals(15, ld.getDayOfMonth());
+    }
+
+    // fromCalendarFields(null) -> IllegalArgumentException
+    @Test
+    public void testFromCalendarFields_nullCalendar_throwsIllegalArgumentException() throws Throwable {
+        try {
+            LocalDate.fromCalendarFields((Calendar) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // fromCalendarFields(valid) copies year/month/day fields
+    @Test
+    public void testFromCalendarFields_validCalendar_returnsExpectedDate() throws Throwable {
+        GregorianCalendar cal = new GregorianCalendar(2023, Calendar.JUNE, 15);
+        LocalDate ld = LocalDate.fromCalendarFields(cal);
+        assertEquals(2023, ld.getYear());
+        assertEquals(6, ld.getMonthOfYear());
+        assertEquals(15, ld.getDayOfMonth());
+    }
+
+    // fromDateFields(null) -> IllegalArgumentException
+    @Test
+    public void testFromDateFields_nullDate_throwsIllegalArgumentException() throws Throwable {
+        try {
+            LocalDate.fromDateFields((Date) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // fromDateFields(valid) copies year/month/day fields
+    @Test
+    @SuppressWarnings("deprecation")
+    public void testFromDateFields_validDate_returnsExpectedDate() throws Throwable {
+        Date date = new Date(123, 5, 15);
+        LocalDate ld = LocalDate.fromDateFields(date);
+        assertEquals(2023, ld.getYear());
+        assertEquals(6, ld.getMonthOfYear());
+        assertEquals(15, ld.getDayOfMonth());
+    }
+
+    // LocalDate(long, Chronology): fields computed and local millis rounded to day
+    @Test
+    public void testConstructor_longChronology_computesCorrectFieldsAndLocalMillis() throws Throwable {
+        long instant = 10L * 24L * 60L * 60L * 1000L; // 1970-01-11 UTC
+        LocalDate ld = new LocalDate(instant, ISOChronology.getInstanceUTC());
+        assertEquals(1970, ld.getYear());
+        assertEquals(1, ld.getMonthOfYear());
+        assertEquals(11, ld.getDayOfMonth());
+        assertEquals(instant, ld.getLocalMillis());
+    }
+
+    // LocalDate(int,int,int) default ISO UTC and LocalDate(int,int,int,null chronology) default to ISO UTC
+    @Test
+    public void testConstructor_yearMonthDay_defaultsAndNullChronology_useIsoUtc() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        assertEquals(2023, ld.getYear());
+        assertEquals(6, ld.getMonthOfYear());
+        assertEquals(15, ld.getDayOfMonth());
+        LocalDate ld2 = new LocalDate(2023, 6, 15, (Chronology) null);
+        assertEquals(ld, ld2);
+    }
+
+    // size() always returns 3 supported fields
+    @Test
+    public void testSize_returnsThree() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        assertEquals(3, ld.size());
+    }
+
+    // getField(index, chrono): switch over YEAR/MONTH_OF_YEAR/DAY_OF_MONTH, default throws
+    @Test
+    public void testGetField_allIndicesAndInvalidIndex() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        Chronology chrono = ISOChronology.getInstanceUTC();
+        assertEquals(chrono.year(), ld.getField(0, chrono));
+        assertEquals(chrono.monthOfYear(), ld.getField(1, chrono));
+        assertEquals(chrono.dayOfMonth(), ld.getField(2, chrono));
+        try {
+            ld.getField(3, chrono);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // getValue(index): switch over 0/1/2, default throws
+    @Test
+    public void testGetValue_allIndicesAndInvalidIndex() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        assertEquals(2023, ld.getValue(0));
+        assertEquals(6, ld.getValue(1));
+        assertEquals(15, ld.getValue(2));
+        try {
+            ld.getValue(3);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // get(null) -> IllegalArgumentException
+    @Test
+    public void testGet_nullFieldType_throwsIllegalArgumentException() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        try {
+            ld.get((DateTimeFieldType) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // get(unsupported time field) -> IllegalArgumentException
+    @Test
+    public void testGet_unsupportedFieldType_throwsIllegalArgumentException() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        try {
+            ld.get(DateTimeFieldType.hourOfDay());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // get(valid date field) returns value
+    @Test
+    public void testGet_validFieldType_returnsValue() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        assertEquals(2023, ld.get(DateTimeFieldType.year()));
+    }
+
+    // isSupported(DateTimeFieldType): null -> false, date field -> true, time field -> false
+    @Test
+    public void testIsSupportedDateTimeFieldType_nullDateAndTimeFields() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        assertFalse(ld.isSupported((DateTimeFieldType) null));
+        assertTrue(ld.isSupported(DateTimeFieldType.year()));
+        assertFalse(ld.isSupported(DateTimeFieldType.hourOfDay()));
+    }
+
+    // isSupported(DurationFieldType): null -> false, days -> true, hours -> false
+    @Test
+    public void testIsSupportedDurationFieldType_nullDaysAndHours() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        assertFalse(ld.isSupported((DurationFieldType) null));
+        assertTrue(ld.isSupported(DurationFieldType.days()));
+        assertFalse(ld.isSupported(DurationFieldType.hours()));
+    }
+
+    // equals: same fields and chronology -> true
+    @Test
+    public void testEquals_sameFieldsAndChronology_true() throws Throwable {
+        LocalDate a = new LocalDate(2023, 6, 15);
+        LocalDate b = new LocalDate(2023, 6, 15);
+        assertTrue(a.equals(b));
+    }
+
+    // equals: different day -> false
+    @Test
+    public void testEquals_differentDay_false() throws Throwable {
+        LocalDate a = new LocalDate(2023, 6, 15);
+        LocalDate b = new LocalDate(2023, 6, 16);
+        assertFalse(a.equals(b));
+    }
+
+    // equals: non LocalDate object -> false (falls through to super)
+    @Test
+    public void testEquals_nonLocalDateObject_false() throws Throwable {
+        LocalDate a = new LocalDate(2023, 6, 15);
+        assertFalse(a.equals("2023-06-15"));
+    }
+
+    // hashCode: equal objects share hash code
+    @Test
+    public void testHashCode_equalObjectsHaveSameHash() throws Throwable {
+        LocalDate a = new LocalDate(2023, 6, 15);
+        LocalDate b = new LocalDate(2023, 6, 15);
+        assertTrue(a.equals(b));
+        assertEquals(a.hashCode(), b.hashCode());
+    }
+
+    // compareTo: less, greater, equal branches
+    @Test
+    public void testCompareTo_orderingAndEquality() throws Throwable {
+        LocalDate a = new LocalDate(2020, 1, 1);
+        LocalDate b = new LocalDate(2020, 6, 15);
+        LocalDate c = new LocalDate(2020, 1, 1);
+        assertTrue(a.compareTo(b) < 0);
+        assertTrue(b.compareTo(a) > 0);
+        assertEquals(0, a.compareTo(c));
+    }
+
+    // compareTo(null) -> NullPointerException per javadoc
+    @Test
+    public void testCompareTo_null_throwsNullPointerException() throws Throwable {
+        LocalDate a = new LocalDate(2020, 1, 1);
+        try {
+            a.compareTo((ReadablePartial) null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // property(null) and property(unsupported) -> IllegalArgumentException
+    @Test
+    public void testProperty_nullAndUnsupportedFieldType_throwIllegalArgumentException() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        try {
+            ld.property((DateTimeFieldType) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+        try {
+            ld.property(DateTimeFieldType.hourOfDay());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // property(valid) returns correctly linked Property, setCopy works
+    @Test
+    public void testProperty_valid_fieldAndLocalDateLinkCorrect() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        LocalDate.Property p = ld.property(DateTimeFieldType.dayOfMonth());
+        assertEquals(ld.getChronology().dayOfMonth(), p.getField());
+        assertSame(ld, p.getLocalDate());
+        LocalDate updated = p.setCopy(10);
+        assertEquals(10, updated.getDayOfMonth());
+    }
+
+    // withField(null) -> IllegalArgumentException
+    @Test
+    public void testWithField_nullFieldType_throwsIllegalArgumentException() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        try {
+            ld.withField((DateTimeFieldType) null, 5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // withField(unsupported time field) -> IllegalArgumentException
+    @Test
+    public void testWithField_unsupportedFieldType_throwsIllegalArgumentException() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        try {
+            ld.withField(DateTimeFieldType.hourOfDay(), 5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // withField(valid) updates only the targeted field
+    @Test
+    public void testWithField_validFieldType_updatesValue() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        LocalDate updated = ld.withField(DateTimeFieldType.dayOfMonth(), 6);
+        assertEquals(6, updated.getDayOfMonth());
+        assertEquals(6, updated.getMonthOfYear());
+        assertEquals(2023, updated.getYear());
+    }
+
+    // withFieldAdded(null,...) -> IllegalArgumentException
+    @Test
+    public void testWithFieldAdded_nullFieldType_throwsIllegalArgumentException() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        try {
+            ld.withFieldAdded((DurationFieldType) null, 5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // withFieldAdded(type, 0) -> returns same instance (amount==0 branch)
+    @Test
+    public void testWithFieldAdded_zeroAmount_returnsSameInstance() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        assertSame(ld, ld.withFieldAdded(DurationFieldType.years(), 0));
+    }
+
+    // withFieldAdded(years, 6) updates year field
+    @Test
+    public void testWithFieldAdded_validAmount_updatesValue() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        LocalDate updated = ld.withFieldAdded(DurationFieldType.years(), 6);
+        assertEquals(2029, updated.getYear());
+    }
+
+    // withFields(null) -> returns same instance
+    @Test
+    public void testWithFields_nullPartial_returnsSameInstance() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        assertSame(ld, ld.withFields((ReadablePartial) null));
+    }
+
+    // withFields(partial) replaces year/month/day from the partial (LocalDate is a ReadablePartial)
+    @Test
+    public void testWithFields_validPartial_updatesFields() throws Throwable {
+        LocalDate base = new LocalDate(2000, 1, 1);
+        LocalDate partial = new LocalDate(2022, 5, 10);
+        LocalDate result = base.withFields(partial);
+        assertEquals(2022, result.getYear());
+        assertEquals(5, result.getMonthOfYear());
+        assertEquals(10, result.getDayOfMonth());
+    }
+
+    // withPeriodAdded: null period or scalar 0 -> returns same instance
+    @Test
+    public void testWithPeriodAdded_nullPeriod_returnsSameInstance() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        assertSame(ld, ld.withPeriodAdded(null, 1));
+        assertSame(ld, ld.withPeriodAdded(Period.days(5), 0));
+    }
+
+    // plusYears(0) returns same instance; plusYears on leap day adjusts to last valid day
+    @Test
+    public void testPlusYears_zeroReturnsSameAndLeapDayAdjusted() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        assertSame(ld, ld.plusYears(0));
+        LocalDate leapDay = new LocalDate(2020, 2, 29, ISOChronology.getInstanceUTC());
+        LocalDate result = leapDay.plusYears(1);
+        assertEquals(2021, result.getYear());
+        assertEquals(2, result.getMonthOfYear());
+        assertEquals(28, result.getDayOfMonth());
+    }
+
+    // plusMonths adjusts day-of-month to the last valid day of the resulting month
+    @Test
+    public void testPlusMonths_dayOfMonthAdjustedToLastValidDay() throws Throwable {
+        LocalDate jan31 = new LocalDate(2023, 1, 31, ISOChronology.getInstanceUTC());
+        LocalDate result = jan31.plusMonths(1);
+        assertEquals(2023, result.getYear());
+        assertEquals(2, result.getMonthOfYear());
+        assertEquals(28, result.getDayOfMonth());
+    }
+
+    // plusWeeks, plusDays and plus(Period) add correct amounts
+    @Test
+    public void testPlusWeeksDaysAndPeriod_addsCorrectAmounts() throws Throwable {
+        LocalDate base = new LocalDate(2023, 6, 1, ISOChronology.getInstanceUTC());
+        assertEquals(new LocalDate(2023, 6, 8, ISOChronology.getInstanceUTC()), base.plusWeeks(1));
+        assertEquals(new LocalDate(2023, 6, 2, ISOChronology.getInstanceUTC()), base.plusDays(1));
+        assertEquals(new LocalDate(2023, 7, 1, ISOChronology.getInstanceUTC()), base.plus(Period.months(1)));
+    }
+
+    // minusYears, minusMonths, minusWeeks, minusDays subtract correct amounts
+    @Test
+    public void testMinusYearsMonthsWeeksDays_subtractsCorrectAmounts() throws Throwable {
+        LocalDate base = new LocalDate(2023, 6, 15, ISOChronology.getInstanceUTC());
+        assertEquals(new LocalDate(2022, 6, 15, ISOChronology.getInstanceUTC()), base.minusYears(1));
+        assertEquals(new LocalDate(2023, 5, 15, ISOChronology.getInstanceUTC()), base.minusMonths(1));
+        assertEquals(new LocalDate(2023, 6, 8, ISOChronology.getInstanceUTC()), base.minusWeeks(1));
+        assertEquals(new LocalDate(2023, 6, 14, ISOChronology.getInstanceUTC()), base.minusDays(1));
+    }
+
+    // minus(Period) subtracts the period fields
+    @Test
+    public void testMinus_periodSubtractsFields() throws Throwable {
+        LocalDate base = new LocalDate(2023, 6, 15, ISOChronology.getInstanceUTC());
+        LocalDate result = base.minus(Period.years(1));
+        assertEquals(new LocalDate(2022, 6, 15, ISOChronology.getInstanceUTC()), result);
+    }
+
+    // withYear and withMonthOfYear update only the respective field
+    @Test
+    public void testWithYearAndMonthOfYear_updatesRespectiveField() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        LocalDate withYear = ld.withYear(1999);
+        assertEquals(1999, withYear.getYear());
+        assertEquals(6, withYear.getMonthOfYear());
+        assertEquals(15, withYear.getDayOfMonth());
+        LocalDate withMonth = ld.withMonthOfYear(3);
+        assertEquals(2023, withMonth.getYear());
+        assertEquals(3, withMonth.getMonthOfYear());
+        assertEquals(15, withMonth.getDayOfMonth());
+    }
+
+    // withDayOfMonth(valid) updates the day
+    @Test
+    public void testWithDayOfMonth_validValue_updatesDay() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        LocalDate updated = ld.withDayOfMonth(5);
+        assertEquals(5, updated.getDayOfMonth());
+    }
+
+    // withDayOfMonth(invalid) -> IllegalArgumentException
+    @Test
+    public void testWithDayOfMonth_invalidValue_throwsIllegalArgumentException() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 15);
+        try {
+            ld.withDayOfMonth(50);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // toString() default format is ISO8601 yyyy-MM-dd
+    @Test
+    public void testToString_defaultIso8601Format() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 5, ISOChronology.getInstanceUTC());
+        assertEquals("2023-06-05", ld.toString());
+    }
+
+    // toString(pattern) uses the given pattern; toString(null) falls back to default format
+    @Test
+    public void testToString_withPatternAndNullPattern() throws Throwable {
+        LocalDate ld = new LocalDate(2023, 6, 5, ISOChronology.getInstanceUTC());
+        assertEquals("2023/06/05", ld.toString("yyyy/MM/dd"));
+        assertEquals(ld.toString(), ld.toString((String) null));
+    }
+
+    // getChronology always normalized to ISO UTC across construction paths
+    @Test
+    public void testGetChronology_isUtcForAllConstructionPaths() throws Throwable {
+        LocalDate a = new LocalDate(2023, 6, 15);
+        assertEquals(ISOChronology.getInstanceUTC(), a.getChronology());
+        LocalDate b = new LocalDate(0L, ISOChronology.getInstanceUTC());
+        assertEquals(ISOChronology.getInstanceUTC(), b.getChronology());
+        LocalDate c = new LocalDate(2023, 6, 15, (Chronology) null);
+        assertEquals(ISOChronology.getInstanceUTC(), c.getChronology());
+        LocalDate d = new LocalDate(0L, DateTimeZone.UTC);
+        assertEquals(ISOChronology.getInstanceUTC(), d.getChronology());
+    }
+}

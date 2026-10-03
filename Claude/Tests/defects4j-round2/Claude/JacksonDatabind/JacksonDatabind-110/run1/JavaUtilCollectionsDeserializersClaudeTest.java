@@ -1,0 +1,332 @@
+package com.fasterxml.jackson.databind.deser.impl;
+
+import java.util.List;
+import java.util.Set;
+import java.util.Map;
+import java.util.Collections;
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.HashMap;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+
+public class JavaUtilCollectionsDeserializersClaudeTest
+{
+    private ObjectMapper mapper;
+
+    private Class<?> arraysAsListClass;
+    private Class<?> singletonListClass;
+    private Class<?> singletonSetClass;
+    private Class<?> singletonMapClass;
+    private Class<?> unmodifiableListClass;
+    private Class<?> unmodifiableSetClass;
+    private Class<?> unmodifiableMapClass;
+
+    @Before
+    public void setUp() throws Throwable
+    {
+        mapper = new ObjectMapper();
+
+        arraysAsListClass = Arrays.asList(new Object(), new Object()).getClass();
+        singletonListClass = Collections.singletonList(new Object()).getClass();
+        singletonSetClass = Collections.singleton(new Object()).getClass();
+        singletonMapClass = Collections.singletonMap("a", "b").getClass();
+
+        List baseList = Collections.singletonList(Boolean.TRUE);
+        unmodifiableListClass = Collections.unmodifiableList(baseList).getClass();
+
+        Set baseSet = Collections.singleton(Boolean.TRUE);
+        unmodifiableSetClass = Collections.unmodifiableSet(baseSet).getClass();
+
+        Map baseMap = Collections.singletonMap("a", "b");
+        unmodifiableMapClass = Collections.unmodifiableMap(baseMap).getClass();
+    }
+
+    private boolean causeChainContains(Throwable t, String keyword)
+    {
+        Throwable current = t;
+        while (current != null) {
+            String msg = current.getMessage();
+            if (msg != null && msg.contains(keyword)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    // covers: findForCollection - branch type.hasRawClass(CLASS_AS_ARRAYS_LIST)
+    @Test
+    public void testFindForCollection_arraysAsListClass_returnsNonNullDeserializer() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(arraysAsListClass);
+        JsonDeserializer<?> deser = JavaUtilCollectionsDeserializers.findForCollection(null, type);
+        assertNotNull(deser);
+    }
+
+    // covers: findForCollection - branch type.hasRawClass(CLASS_SINGLETON_LIST)
+    @Test
+    public void testFindForCollection_singletonListClass_returnsNonNullDeserializer() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonListClass);
+        JsonDeserializer<?> deser = JavaUtilCollectionsDeserializers.findForCollection(null, type);
+        assertNotNull(deser);
+    }
+
+    // covers: findForCollection - branch type.hasRawClass(CLASS_SINGLETON_SET)
+    @Test
+    public void testFindForCollection_singletonSetClass_returnsNonNullDeserializer() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonSetClass);
+        JsonDeserializer<?> deser = JavaUtilCollectionsDeserializers.findForCollection(null, type);
+        assertNotNull(deser);
+    }
+
+    // covers: findForCollection - branch type.hasRawClass(CLASS_UNMODIFIABLE_LIST)
+    @Test
+    public void testFindForCollection_unmodifiableListClass_returnsNonNullDeserializer() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(unmodifiableListClass);
+        JsonDeserializer<?> deser = JavaUtilCollectionsDeserializers.findForCollection(null, type);
+        assertNotNull(deser);
+    }
+
+    // covers: findForCollection - branch type.hasRawClass(CLASS_UNMODIFIABLE_SET)
+    @Test
+    public void testFindForCollection_unmodifiableSetClass_returnsNonNullDeserializer() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(unmodifiableSetClass);
+        JsonDeserializer<?> deser = JavaUtilCollectionsDeserializers.findForCollection(null, type);
+        assertNotNull(deser);
+    }
+
+    // covers: findForCollection - else branch, no match returns null
+    @Test
+    public void testFindForCollection_unrelatedClass_returnsNull() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(ArrayList.class);
+        JsonDeserializer<?> deser = JavaUtilCollectionsDeserializers.findForCollection(null, type);
+        assertNull(deser);
+    }
+
+    // covers: findForMap - branch type.hasRawClass(CLASS_SINGLETON_MAP)
+    @Test
+    public void testFindForMap_singletonMapClass_returnsNonNullDeserializer() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonMapClass);
+        JsonDeserializer<?> deser = JavaUtilCollectionsDeserializers.findForMap(null, type);
+        assertNotNull(deser);
+    }
+
+    // covers: findForMap - branch type.hasRawClass(CLASS_UNMODIFIABLE_MAP)
+    @Test
+    public void testFindForMap_unmodifiableMapClass_returnsNonNullDeserializer() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(unmodifiableMapClass);
+        JsonDeserializer<?> deser = JavaUtilCollectionsDeserializers.findForMap(null, type);
+        assertNotNull(deser);
+    }
+
+    // covers: findForMap - else branch, no match returns null
+    @Test
+    public void testFindForMap_unrelatedClass_returnsNull() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(HashMap.class);
+        JsonDeserializer<?> deser = JavaUtilCollectionsDeserializers.findForMap(null, type);
+        assertNull(deser);
+    }
+
+    // covers: TYPE_AS_LIST convert() default branch, multiple elements (loop many)
+    @Test
+    public void testDeserialize_arraysAsList_multipleElements_preservesAllElements() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(arraysAsListClass);
+        List result = (List) mapper.readValue("[1,2,3]", type);
+        assertEquals(3, result.size());
+        assertEquals(Integer.valueOf(1), result.get(0));
+        assertEquals(Integer.valueOf(2), result.get(1));
+        assertEquals(Integer.valueOf(3), result.get(2));
+    }
+
+    // covers: TYPE_AS_LIST convert() default branch, zero elements (loop 0)
+    @Test
+    public void testDeserialize_arraysAsList_emptyArray_returnsEmptyList() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(arraysAsListClass);
+        List result = (List) mapper.readValue("[]", type);
+        assertEquals(0, result.size());
+    }
+
+    // covers: TYPE_SINGLETON_LIST case, size==1 success path returning immutable singleton
+    @Test
+    public void testDeserialize_singletonList_oneElement_returnsImmutableSingletonList() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonListClass);
+        List result = (List) mapper.readValue("[42]", type);
+        assertEquals(1, result.size());
+        assertEquals(Integer.valueOf(42), result.get(0));
+        try {
+            result.add(Integer.valueOf(1));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) { }
+    }
+
+    // covers: TYPE_SINGLETON_LIST case, _checkSingleton throws for size==0
+    @Test
+    public void testDeserialize_singletonList_zeroElements_throwsException() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonListClass);
+        try {
+            mapper.readValue("[]", type);
+            fail("expected exception for empty singleton list");
+        } catch (Exception e) {
+            assertTrue(causeChainContains(e, "entries"));
+        }
+    }
+
+    // covers: TYPE_SINGLETON_LIST case, _checkSingleton throws for size==2
+    @Test
+    public void testDeserialize_singletonList_twoElements_throwsException() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonListClass);
+        try {
+            mapper.readValue("[1,2]", type);
+            fail("expected exception for singleton list with 2 entries");
+        } catch (Exception e) {
+            assertTrue(causeChainContains(e, "entries"));
+        }
+    }
+
+    // covers: TYPE_SINGLETON_SET case, size==1 success path returning immutable singleton
+    @Test
+    public void testDeserialize_singletonSet_oneElement_returnsImmutableSingletonSet() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonSetClass);
+        Set result = (Set) mapper.readValue("[7]", type);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(Integer.valueOf(7)));
+        try {
+            result.add(Integer.valueOf(8));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) { }
+    }
+
+    // covers: TYPE_SINGLETON_SET case, _checkSingleton throws for size==0
+    @Test
+    public void testDeserialize_singletonSet_zeroElements_throwsException() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonSetClass);
+        try {
+            mapper.readValue("[]", type);
+            fail("expected exception for empty singleton set");
+        } catch (Exception e) {
+            assertTrue(causeChainContains(e, "entries"));
+        }
+    }
+
+    // covers: TYPE_SINGLETON_SET case, _checkSingleton throws for size==2
+    @Test
+    public void testDeserialize_singletonSet_twoElements_throwsException() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonSetClass);
+        try {
+            mapper.readValue("[1,2]", type);
+            fail("expected exception for singleton set with 2 entries");
+        } catch (Exception e) {
+            assertTrue(causeChainContains(e, "entries"));
+        }
+    }
+
+    // covers: TYPE_UNMODIFIABLE_LIST case, multiple elements, wrapper preserves order and immutability
+    @Test
+    public void testDeserialize_unmodifiableList_multipleElements_isImmutableAndOrdered() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(unmodifiableListClass);
+        List result = (List) mapper.readValue("[4,5,6]", type);
+        assertEquals(3, result.size());
+        assertEquals(Integer.valueOf(4), result.get(0));
+        assertEquals(Integer.valueOf(5), result.get(1));
+        assertEquals(Integer.valueOf(6), result.get(2));
+        try {
+            result.add(Integer.valueOf(7));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) { }
+    }
+
+    // covers: TYPE_UNMODIFIABLE_LIST case, zero elements (loop 0, no size restriction)
+    @Test
+    public void testDeserialize_unmodifiableList_emptyArray_returnsEmptyList() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(unmodifiableListClass);
+        List result = (List) mapper.readValue("[]", type);
+        assertEquals(0, result.size());
+    }
+
+    // covers: TYPE_UNMODIFIABLE_SET case, multiple elements, wrapper immutability
+    @Test
+    public void testDeserialize_unmodifiableSet_multipleElements_isImmutable() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(unmodifiableSetClass);
+        Set result = (Set) mapper.readValue("[8,9]", type);
+        assertEquals(2, result.size());
+        assertTrue(result.contains(Integer.valueOf(8)));
+        assertTrue(result.contains(Integer.valueOf(9)));
+        try {
+            result.add(Integer.valueOf(10));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) { }
+    }
+
+    // covers: TYPE_UNMODIFIABLE_SET case, zero elements (loop 0, no size restriction)
+    @Test
+    public void testDeserialize_unmodifiableSet_emptyArray_returnsEmptySet() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(unmodifiableSetClass);
+        Set result = (Set) mapper.readValue("[]", type);
+        assertEquals(0, result.size());
+    }
+
+    // covers: TYPE_SINGLETON_MAP case, size==1 success path returning immutable singleton
+    @Test
+    public void testDeserialize_singletonMap_oneEntry_returnsImmutableSingletonMap() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonMapClass);
+        Map result = (Map) mapper.readValue("{\"k\":\"v\"}", type);
+        assertEquals(1, result.size());
+        assertEquals("v", result.get("k"));
+        try {
+            result.put("k2", "v2");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) { }
+    }
+
+    // covers: TYPE_SINGLETON_MAP case, _checkSingleton throws for size==0
+    @Test
+    public void testDeserialize_singletonMap_zeroEntries_throwsException() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonMapClass);
+        try {
+            mapper.readValue("{}", type);
+            fail("expected exception for empty singleton map");
+        } catch (Exception e) {
+            assertTrue(causeChainContains(e, "entries"));
+        }
+    }
+
+    // covers: TYPE_SINGLETON_MAP case, _checkSingleton throws for size==2
+    @Test
+    public void testDeserialize_singletonMap_twoEntries_throwsException() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(singletonMapClass);
+        try {
+            mapper.readValue("{\"k1\":\"v1\",\"k2\":\"v2\"}", type);
+            fail("expected exception for singleton map with 2 entries");
+        } catch (Exception e) {
+            assertTrue(causeChainContains(e, "entries"));
+        }
+    }
+
+    // covers: TYPE_UNMODIFIABLE_MAP case, multiple entries, wrapper immutability
+    @Test
+    public void testDeserialize_unmodifiableMap_multipleEntries_isImmutable() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(unmodifiableMapClass);
+        Map result = (Map) mapper.readValue("{\"x\":\"1\",\"y\":\"2\"}", type);
+        assertEquals(2, result.size());
+        assertEquals("1", result.get("x"));
+        assertEquals("2", result.get("y"));
+        try {
+            result.put("z", "3");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) { }
+    }
+
+    // covers: TYPE_UNMODIFIABLE_MAP case, zero entries (loop 0, no size restriction)
+    @Test
+    public void testDeserialize_unmodifiableMap_emptyObject_returnsEmptyMap() throws Throwable {
+        JavaType type = mapper.getTypeFactory().constructType(unmodifiableMapClass);
+        Map result = (Map) mapper.readValue("{}", type);
+        assertEquals(0, result.size());
+    }
+}

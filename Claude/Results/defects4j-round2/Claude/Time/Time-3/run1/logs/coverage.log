@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Time-3-xsi4eoaa/Time-3b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 238
+     Lines covered: 139
+  Conditions total: 43
+Conditions covered: 29
+     Line coverage: 58.4%
+Condition coverage: 67.4%
+[exit 0]

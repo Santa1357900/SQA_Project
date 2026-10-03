@@ -1,0 +1,19 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Closure -v 115f -w /tmp/claude-Closure-115-r3ax_h4g/fixed
+Checking out 4597738e to /tmp/claude-Closure-115-r3ax_h4g/fixed............ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 4597738e:2d6e1c78..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Closure-115f.................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Closure-115-r3ax_h4g/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

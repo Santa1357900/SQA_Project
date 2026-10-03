@@ -1,0 +1,437 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.IR;
+
+public class CodeConsumerClaudeTest {
+
+  /**
+   * Concrete test double for the abstract CodeConsumer. Overrides the
+   * abstract members and the no-op hook methods so their invocation can
+   * be observed without relying on any mocking framework.
+   */
+  static class RecordingCodeConsumer extends CodeConsumer {
+    StringBuilder sb = new StringBuilder();
+    int startSourceMappingCount = 0;
+    int endSourceMappingCount = 0;
+    int startNewLineCount = 0;
+    int maybeCutLineCount = 0;
+    int endLineCount = 0;
+    int notePreferredLineBreakCount = 0;
+    int endCaseBodyCount = 0;
+    int endFileCount = 0;
+
+    char getLastChar() {
+      return sb.length() == 0 ? '\0' : sb.charAt(sb.length() - 1);
+    }
+
+    void append(String str) {
+      sb.append(str);
+    }
+
+    void startSourceMapping(Node node) {
+      startSourceMappingCount++;
+    }
+
+    void endSourceMapping(Node node) {
+      endSourceMappingCount++;
+    }
+
+    void startNewLine() {
+      startNewLineCount++;
+    }
+
+    void maybeCutLine() {
+      maybeCutLineCount++;
+    }
+
+    void endLine() {
+      endLineCount++;
+    }
+
+    void notePreferredLineBreak() {
+      notePreferredLineBreakCount++;
+    }
+
+    void endCaseBody() {
+      endCaseBodyCount++;
+    }
+
+    void endFile() {
+      endFileCount++;
+    }
+  }
+
+  private RecordingCodeConsumer consumer;
+
+  @Before
+  public void setUp() throws Throwable {
+    consumer = new RecordingCodeConsumer();
+  }
+
+  // covers startSourceMapping, endSourceMapping, endCaseBody no-op hooks
+  @Test
+  public void testStartSourceMappingEndSourceMappingEndCaseBody_tracksCallsWithoutAppending() throws Throwable {
+    Node node = IR.name("x");
+    consumer.startSourceMapping(node);
+    consumer.endSourceMapping(node);
+    consumer.endCaseBody();
+    assertEquals(1, consumer.startSourceMappingCount);
+    assertEquals(1, consumer.endSourceMappingCount);
+    assertEquals(1, consumer.endCaseBodyCount);
+    assertEquals("", consumer.sb.toString());
+  }
+
+  // covers startNewLine, notePreferredLineBreak, endFile no-op hooks
+  @Test
+  public void testStartNewLineNotePreferredLineBreakEndFile_tracksCallsWithoutAppending() throws Throwable {
+    consumer.startNewLine();
+    consumer.notePreferredLineBreak();
+    consumer.endFile();
+    assertEquals(1, consumer.startNewLineCount);
+    assertEquals(1, consumer.notePreferredLineBreakCount);
+    assertEquals(1, consumer.endFileCount);
+    assertEquals("", consumer.sb.toString());
+  }
+
+  // covers continueProcessing default implementation
+  @Test
+  public void testContinueProcessing_default_returnsTrue() throws Throwable {
+    assertTrue(consumer.continueProcessing());
+  }
+
+  // covers addIdentifier delegating to add(), word-char adjacency branch
+  @Test
+  public void testAddIdentifier_afterWordChar_insertsSpaceBeforeIdentifier() throws Throwable {
+    consumer.append("return");
+    consumer.addIdentifier("foo");
+    assertEquals("return foo", consumer.sb.toString());
+  }
+
+  // covers add() branch where previous char is not a word char
+  @Test
+  public void testAddIdentifier_afterNonWordChar_noSpaceInserted() throws Throwable {
+    consumer.append("(");
+    consumer.addIdentifier("foo");
+    assertEquals("(foo", consumer.sb.toString());
+  }
+
+  // covers appendBlockStart
+  @Test
+  public void testAppendBlockStart_appendsOpenBrace() throws Throwable {
+    consumer.appendBlockStart();
+    assertEquals("{", consumer.sb.toString());
+  }
+
+  // covers appendBlockEnd
+  @Test
+  public void testAppendBlockEnd_appendsCloseBrace() throws Throwable {
+    consumer.appendBlockEnd();
+    assertEquals("}", consumer.sb.toString());
+  }
+
+  // covers maybeLineBreak delegating to maybeCutLine
+  @Test
+  public void testMaybeLineBreak_invokesMaybeCutLine() throws Throwable {
+    consumer.maybeLineBreak();
+    assertEquals(1, consumer.maybeCutLineCount);
+  }
+
+  // covers endLine direct invocation
+  @Test
+  public void testEndLine_tracksCallWithoutAppending() throws Throwable {
+    consumer.endLine();
+    assertEquals(1, consumer.endLineCount);
+    assertEquals("", consumer.sb.toString());
+  }
+
+  // covers beginBlock() when statementNeedsEnded is false
+  @Test
+  public void testBeginBlock_whenStatementNotNeedingEnd_appendsBraceOnly() throws Throwable {
+    consumer.statementNeedsEnded = false;
+    consumer.beginBlock();
+    assertEquals("{", consumer.sb.toString());
+    assertFalse(consumer.statementNeedsEnded);
+    assertEquals(1, consumer.endLineCount);
+  }
+
+  // covers beginBlock() when statementNeedsEnded is true
+  @Test
+  public void testBeginBlock_whenStatementNeedsEnded_appendsSemicolonThenBrace() throws Throwable {
+    consumer.statementNeedsEnded = true;
+    consumer.beginBlock();
+    assertEquals(";{", consumer.sb.toString());
+    assertFalse(consumer.statementNeedsEnded);
+    assertEquals(1, consumer.maybeCutLineCount);
+  }
+
+  // covers endBlock() delegating to endBlock(false)
+  @Test
+  public void testEndBlockNoArg_appendsCloseBraceAndDoesNotEndLine() throws Throwable {
+    consumer.statementNeedsEnded = true;
+    consumer.endBlock();
+    assertEquals("}", consumer.sb.toString());
+    assertEquals(0, consumer.endLineCount);
+    assertFalse(consumer.statementNeedsEnded);
+  }
+
+  // covers endBlock(true) shouldEndLine branch
+  @Test
+  public void testEndBlockTrue_appendsCloseBraceAndEndsLine() throws Throwable {
+    consumer.endBlock(true);
+    assertEquals("}", consumer.sb.toString());
+    assertEquals(1, consumer.endLineCount);
+    assertFalse(consumer.statementNeedsEnded);
+  }
+
+  // covers listSeparator: add(",") followed by maybeLineBreak
+  @Test
+  public void testListSeparator_appendsCommaAndInvokesLineBreak() throws Throwable {
+    consumer.listSeparator();
+    assertEquals(",", consumer.sb.toString());
+    assertEquals(1, consumer.maybeCutLineCount);
+  }
+
+  // covers endStatement(false) when statementStarted is true
+  @Test
+  public void testEndStatementNoArg_whenStatementStarted_setsNeedsEnded() throws Throwable {
+    consumer.statementStarted = true;
+    consumer.endStatement();
+    assertTrue(consumer.statementNeedsEnded);
+    assertEquals("", consumer.sb.toString());
+  }
+
+  // covers endStatement(false) when statementStarted is false
+  @Test
+  public void testEndStatementNoArg_whenStatementNotStarted_doesNotSetNeedsEnded() throws Throwable {
+    consumer.statementStarted = false;
+    consumer.endStatement();
+    assertFalse(consumer.statementNeedsEnded);
+  }
+
+  // covers endStatement(true) immediate semicolon branch
+  @Test
+  public void testEndStatementTrue_appendsSemicolonImmediatelyAndResetsFlag() throws Throwable {
+    consumer.statementNeedsEnded = true;
+    consumer.endStatement(true);
+    assertEquals(";", consumer.sb.toString());
+    assertFalse(consumer.statementNeedsEnded);
+  }
+
+  // covers maybeEndStatement when statementNeedsEnded is true
+  @Test
+  public void testMaybeEndStatement_whenNeedsEnded_appendsSemicolonAndSetsStarted() throws Throwable {
+    consumer.statementNeedsEnded = true;
+    consumer.maybeEndStatement();
+    assertEquals(";", consumer.sb.toString());
+    assertFalse(consumer.statementNeedsEnded);
+    assertTrue(consumer.statementStarted);
+    assertEquals(1, consumer.endLineCount);
+  }
+
+  // covers maybeEndStatement when statementNeedsEnded is false
+  @Test
+  public void testMaybeEndStatement_whenNotNeedsEnded_onlySetsStarted() throws Throwable {
+    consumer.statementNeedsEnded = false;
+    consumer.maybeEndStatement();
+    assertEquals("", consumer.sb.toString());
+    assertTrue(consumer.statementStarted);
+  }
+
+  // covers endFunction() delegating to endFunction(false)
+  @Test
+  public void testEndFunctionNoArg_setsSawFunctionTrueWithoutEndLine() throws Throwable {
+    consumer.endFunction();
+    assertTrue(consumer.sawFunction);
+    assertEquals(0, consumer.endLineCount);
+  }
+
+  // covers endFunction(true) statementContext branch
+  @Test
+  public void testEndFunctionTrue_setsSawFunctionTrueAndCallsEndLine() throws Throwable {
+    consumer.endFunction(true);
+    assertTrue(consumer.sawFunction);
+    assertEquals(1, consumer.endLineCount);
+  }
+
+  // covers beginCaseBody
+  @Test
+  public void testBeginCaseBody_appendsColon() throws Throwable {
+    consumer.beginCaseBody();
+    assertEquals(":", consumer.sb.toString());
+  }
+
+  // covers add() early return on empty string
+  @Test
+  public void testAdd_emptyString_doesNotAppendAnything() throws Throwable {
+    consumer.add("");
+    assertEquals("", consumer.sb.toString());
+  }
+
+  // covers add() space-insertion branch for word-char adjacency (digits count as word chars)
+  @Test
+  public void testAdd_wordCharAfterWordChar_insertsSpace() throws Throwable {
+    consumer.append("x1");
+    consumer.add("2abc");
+    assertEquals("x1 2abc", consumer.sb.toString());
+  }
+
+  // covers add() branch where new token starts with a non-word char
+  @Test
+  public void testAdd_nonWordCharAfterWordChar_noSpaceInserted() throws Throwable {
+    consumer.append("foo");
+    consumer.add(".bar");
+    assertEquals("foo.bar", consumer.sb.toString());
+  }
+
+  // covers appendOp direct append behavior
+  @Test
+  public void testAppendOp_appendsOperatorLiterally() throws Throwable {
+    consumer.appendOp("&&", true);
+    assertEquals("&&", consumer.sb.toString());
+  }
+
+  // covers addOp '+'-after-'+' doubling prevention branch
+  @Test
+  public void testAddOp_plusAfterPlus_insertsSpace() throws Throwable {
+    consumer.append("+");
+    consumer.addOp("+", true);
+    assertEquals("+ +", consumer.sb.toString());
+  }
+
+  // covers addOp '-'-after-'-' doubling prevention branch
+  @Test
+  public void testAddOp_minusAfterMinus_insertsSpace() throws Throwable {
+    consumer.append("-");
+    consumer.addOp("-", true);
+    assertEquals("- -", consumer.sb.toString());
+  }
+
+  // covers addOp letter-operator after word-char branch (e.g. instanceof)
+  @Test
+  public void testAddOp_letterOperatorAfterWordChar_insertsSpace() throws Throwable {
+    consumer.append("x");
+    consumer.addOp("instanceof", false);
+    assertEquals("x instanceof", consumer.sb.toString());
+  }
+
+  // covers addOp prev=='-' && first=='>' branch preventing "-->"
+  @Test
+  public void testAddOp_greaterThanAfterMinus_insertsSpace() throws Throwable {
+    consumer.append("-");
+    consumer.addOp(">", false);
+    assertEquals("- >", consumer.sb.toString());
+  }
+
+  // covers addOp path where none of the spacing conditions apply
+  @Test
+  public void testAddOp_noSpecialCase_noExtraSpace() throws Throwable {
+    consumer.append("x");
+    consumer.addOp("*", false);
+    assertEquals("x*", consumer.sb.toString());
+  }
+
+  // covers addOp binOp branch invoking maybeCutLine
+  @Test
+  public void testAddOp_binOpTrue_invokesMaybeCutLine() throws Throwable {
+    consumer.addOp("+", true);
+    assertEquals("+", consumer.sb.toString());
+    assertEquals(1, consumer.maybeCutLineCount);
+  }
+
+  // covers addNumber for a simple positive integer below the compression threshold
+  @Test
+  public void testAddNumber_smallInteger_roundTripsCorrectly() throws Throwable {
+    consumer.addNumber(5);
+    assertEquals(5.0, Double.parseDouble(consumer.sb.toString()), 0.0);
+  }
+
+  // covers addNumber boundary where Math.abs(x) == 100 enters the mantissa-reduction loop
+  @Test
+  public void testAddNumber_boundaryHundred_roundTripsCorrectly() throws Throwable {
+    consumer.addNumber(100);
+    assertEquals(100.0, Double.parseDouble(consumer.sb.toString()), 0.0);
+  }
+
+  // covers addNumber exp > 2 scientific-notation branch
+  @Test
+  public void testAddNumber_thousandWithScientificThreshold_roundTripsCorrectly() throws Throwable {
+    consumer.addNumber(1000);
+    assertEquals(1000.0, Double.parseDouble(consumer.sb.toString()), 0.0);
+  }
+
+  // covers addNumber multi-digit mantissa reduction loop
+  @Test
+  public void testAddNumber_multiTrailingZeroMantissa_roundTripsCorrectly() throws Throwable {
+    consumer.addNumber(45000);
+    assertEquals(45000.0, Double.parseDouble(consumer.sb.toString()), 0.0);
+  }
+
+  // covers addNumber space-insertion to avoid misparsing "--" (per class comment)
+  @Test
+  public void testAddNumber_negativeNumberAfterMinus_insertsSpaceAvoidingDoubleMinus() throws Throwable {
+    consumer.append("-");
+    consumer.addNumber(-5);
+    assertEquals("- -5", consumer.sb.toString());
+  }
+
+  // covers addNumber branch where x is not negative, so no extra space is needed
+  @Test
+  public void testAddNumber_positiveNumberAfterMinus_noExtraSpace() throws Throwable {
+    consumer.append("-");
+    consumer.addNumber(5);
+    assertEquals("-5", consumer.sb.toString());
+  }
+
+  // covers addNumber else branch for non-integral doubles
+  @Test
+  public void testAddNumber_nonIntegerDouble_appendsParsableDoubleString() throws Throwable {
+    consumer.addNumber(3.14);
+    assertEquals(3.14, Double.parseDouble(consumer.sb.toString()), 1e-9);
+  }
+
+  // covers addNumber isNegativeZero branch forcing the else (non-integer) path
+  @Test
+  public void testAddNumber_negativeZero_preservesNegativeSign() throws Throwable {
+    consumer.addNumber(-0.0);
+    double result = Double.parseDouble(consumer.sb.toString());
+    assertEquals(0.0, result, 0.0);
+    assertEquals(Double.doubleToRawLongBits(-0.0), Double.doubleToRawLongBits(result));
+  }
+
+  // covers static isNegativeZero for positive zero, negative zero, and a non-zero value
+  @Test
+  public void testIsNegativeZero_variousInputs_matchesIEEESemantics() throws Throwable {
+    assertTrue(CodeConsumer.isNegativeZero(-0.0));
+    assertFalse(CodeConsumer.isNegativeZero(0.0));
+    assertFalse(CodeConsumer.isNegativeZero(5.0));
+  }
+
+  // covers static isWordChar for underscore, dollar, digit, letter, and a symbol
+  @Test
+  public void testIsWordChar_variousInputs_matchesDefinition() throws Throwable {
+    assertTrue(CodeConsumer.isWordChar('_'));
+    assertTrue(CodeConsumer.isWordChar('$'));
+    assertTrue(CodeConsumer.isWordChar('9'));
+    assertTrue(CodeConsumer.isWordChar('a'));
+    assertFalse(CodeConsumer.isWordChar('+'));
+  }
+
+  // covers shouldPreserveExtraBlocks default implementation
+  @Test
+  public void testShouldPreserveExtraBlocks_default_returnsFalse() throws Throwable {
+    assertFalse(consumer.shouldPreserveExtraBlocks());
+  }
+
+  // covers breakAfterBlockFor returning the statementContext value for both branches
+  @Test
+  public void testBreakAfterBlockFor_returnsStatementContextValue() throws Throwable {
+    Node block = IR.block();
+    assertTrue(consumer.breakAfterBlockFor(block, true));
+    assertFalse(consumer.breakAfterBlockFor(block, false));
+  }
+}

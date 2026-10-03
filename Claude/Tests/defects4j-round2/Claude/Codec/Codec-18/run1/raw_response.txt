@@ -1,0 +1,301 @@
+package org.apache.commons.codec.binary;
+
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class StringUtilsClaudeTest {
+
+    // equals: same reference (including both null) short-circuits to true
+    @Test
+    public void testEquals_sameReference_returnsTrue() throws Throwable {
+        String s = "abc";
+        assertTrue(StringUtils.equals(s, s));
+    }
+
+    // equals: cs1 == cs2 branch when both are null
+    @Test
+    public void testEquals_bothNull_returnsTrue() throws Throwable {
+        assertTrue(StringUtils.equals(null, null));
+    }
+
+    // equals: cs1 null, cs2 not null -> false
+    @Test
+    public void testEquals_firstNullSecondNotNull_returnsFalse() throws Throwable {
+        assertFalse(StringUtils.equals(null, "abc"));
+    }
+
+    // equals: cs1 not null, cs2 null -> false
+    @Test
+    public void testEquals_firstNotNullSecondNull_returnsFalse() throws Throwable {
+        assertFalse(StringUtils.equals("abc", null));
+    }
+
+    // equals: both String instances, equal content -> uses String.equals branch
+    @Test
+    public void testEquals_bothStringsEqualContent_returnsTrue() throws Throwable {
+        String s1 = new String("abc".toCharArray());
+        String s2 = new String("abc".toCharArray());
+        assertTrue(StringUtils.equals(s1, s2));
+    }
+
+    // equals: both String instances, different content -> false
+    @Test
+    public void testEquals_bothStringsDifferentContent_returnsFalse() throws Throwable {
+        assertFalse(StringUtils.equals("abc", "abd"));
+    }
+
+    // equals: case sensitive comparison per Javadoc example
+    @Test
+    public void testEquals_caseSensitive_returnsFalse() throws Throwable {
+        assertFalse(StringUtils.equals("abc", "ABC"));
+    }
+
+    // equals: non-String CharSequences with equal content -> true via regionMatches branch
+    @Test
+    public void testEquals_nonStringCharSequencesEqualContent_returnsTrue() throws Throwable {
+        StringBuilder sb1 = new StringBuilder("hello");
+        StringBuilder sb2 = new StringBuilder("hello");
+        assertTrue(StringUtils.equals(sb1, sb2));
+    }
+
+    // equals: both non-String CharSequences empty -> true, loop runs 0 times
+    @Test
+    public void testEquals_nonStringCharSequencesEmpty_returnsTrue() throws Throwable {
+        StringBuilder sb1 = new StringBuilder("");
+        StringBuilder sb2 = new StringBuilder("");
+        assertTrue(StringUtils.equals(sb1, sb2));
+    }
+
+    // equals: non-String CharSequences, same length, different content -> false
+    @Test
+    public void testEquals_nonStringCharSequencesDifferentContentSameLength_returnsFalse() throws Throwable {
+        StringBuilder sb1 = new StringBuilder("abc");
+        StringBuilder sb2 = new StringBuilder("abd");
+        assertFalse(StringUtils.equals(sb1, sb2));
+    }
+
+    // equals: non-String CharSequences, cs1 shorter than cs2 -> must be false per contract (bug: may throw)
+    @Test
+    public void testEquals_nonStringCharSequencesDifferentLengthCs1Shorter_returnsFalse() throws Throwable {
+        StringBuilder sb1 = new StringBuilder("ab");
+        StringBuilder sb2 = new StringBuilder("abc");
+        assertFalse(StringUtils.equals(sb1, sb2));
+    }
+
+    // equals: non-String CharSequences, cs1 longer than cs2 -> must be false per contract (bug: may throw)
+    @Test
+    public void testEquals_nonStringCharSequencesDifferentLengthCs2Shorter_returnsFalse() throws Throwable {
+        StringBuilder sb1 = new StringBuilder("abcde");
+        StringBuilder sb2 = new StringBuilder("ab");
+        assertFalse(StringUtils.equals(sb1, sb2));
+    }
+
+    // equals: mixed String and non-String CharSequence, equal content -> goes through regionMatches branch
+    @Test
+    public void testEquals_mixedStringAndCharSequenceEqualContent_returnsTrue() throws Throwable {
+        String s1 = "xyz";
+        StringBuilder sb2 = new StringBuilder("xyz");
+        assertTrue(StringUtils.equals(s1, sb2));
+    }
+
+    // getByteBufferUtf8: valid string encodes to UTF-8 bytes wrapped in buffer
+    @Test
+    public void testGetByteBufferUtf8_validString_returnsCorrectBytes() throws Throwable {
+        ByteBuffer buf = StringUtils.getByteBufferUtf8("abc");
+        assertTrue(Arrays.equals("abc".getBytes("UTF-8"), buf.array()));
+    }
+
+    // getByteBufferUtf8: null input returns null
+    @Test
+    public void testGetByteBufferUtf8_nullString_returnsNull() throws Throwable {
+        assertNull(StringUtils.getByteBufferUtf8(null));
+    }
+
+    // getByteBufferUtf8: empty string produces empty buffer
+    @Test
+    public void testGetByteBufferUtf8_emptyString_returnsEmptyBuffer() throws Throwable {
+        ByteBuffer buf = StringUtils.getByteBufferUtf8("");
+        assertEquals(0, buf.array().length);
+    }
+
+    // getBytesIso8859_1: Latin-1 representable string encodes correctly
+    @Test
+    public void testGetBytesIso8859_1_validString_returnsCorrectBytes() throws Throwable {
+        byte[] result = StringUtils.getBytesIso8859_1("caf\u00e9");
+        assertTrue(Arrays.equals("caf\u00e9".getBytes("ISO-8859-1"), result));
+    }
+
+    // getBytesIso8859_1: null input returns null
+    @Test
+    public void testGetBytesIso8859_1_nullString_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesIso8859_1(null));
+    }
+
+    // getBytesUnchecked: valid charset name encodes correctly
+    @Test
+    public void testGetBytesUnchecked_validCharset_returnsCorrectBytes() throws Throwable {
+        byte[] result = StringUtils.getBytesUnchecked("abc", "UTF-8");
+        assertTrue(Arrays.equals("abc".getBytes("UTF-8"), result));
+    }
+
+    // getBytesUnchecked: null string returns null
+    @Test
+    public void testGetBytesUnchecked_nullString_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUnchecked(null, "UTF-8"));
+    }
+
+    // getBytesUnchecked: invalid charset name wraps UnsupportedEncodingException as IllegalStateException
+    @Test
+    public void testGetBytesUnchecked_invalidCharset_throwsIllegalStateException() throws Throwable {
+        try {
+            StringUtils.getBytesUnchecked("abc", "NOT-A-REAL-CHARSET");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // getBytesUsAscii: ASCII-only string encodes correctly
+    @Test
+    public void testGetBytesUsAscii_validString_returnsCorrectBytes() throws Throwable {
+        byte[] result = StringUtils.getBytesUsAscii("abc123");
+        assertTrue(Arrays.equals("abc123".getBytes("US-ASCII"), result));
+    }
+
+    // getBytesUsAscii: null input returns null
+    @Test
+    public void testGetBytesUsAscii_nullString_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUsAscii(null));
+    }
+
+    // getBytesUtf16: valid string encodes with UTF-16 charset (including BOM)
+    @Test
+    public void testGetBytesUtf16_validString_returnsCorrectBytes() throws Throwable {
+        byte[] result = StringUtils.getBytesUtf16("hi");
+        assertTrue(Arrays.equals("hi".getBytes("UTF-16"), result));
+    }
+
+    // getBytesUtf16: null input returns null
+    @Test
+    public void testGetBytesUtf16_nullString_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUtf16(null));
+    }
+
+    // getBytesUtf16Be: valid string encodes with UTF-16BE charset
+    @Test
+    public void testGetBytesUtf16Be_validString_returnsCorrectBytes() throws Throwable {
+        byte[] result = StringUtils.getBytesUtf16Be("hi");
+        assertTrue(Arrays.equals("hi".getBytes("UTF-16BE"), result));
+    }
+
+    // getBytesUtf16Be: null input returns null
+    @Test
+    public void testGetBytesUtf16Be_nullString_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUtf16Be(null));
+    }
+
+    // getBytesUtf16Le: valid string encodes with UTF-16LE charset
+    @Test
+    public void testGetBytesUtf16Le_validString_returnsCorrectBytes() throws Throwable {
+        byte[] result = StringUtils.getBytesUtf16Le("hi");
+        assertTrue(Arrays.equals("hi".getBytes("UTF-16LE"), result));
+    }
+
+    // getBytesUtf16Le: null input returns null
+    @Test
+    public void testGetBytesUtf16Le_nullString_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUtf16Le(null));
+    }
+
+    // getBytesUtf8: unicode string encodes correctly with UTF-8
+    @Test
+    public void testGetBytesUtf8_validUnicodeString_returnsCorrectBytes() throws Throwable {
+        byte[] result = StringUtils.getBytesUtf8("\u4f60\u597d");
+        assertTrue(Arrays.equals("\u4f60\u597d".getBytes("UTF-8"), result));
+    }
+
+    // getBytesUtf8: null input returns null
+    @Test
+    public void testGetBytesUtf8_nullString_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUtf8(null));
+    }
+
+    // newString(byte[], String): valid charset name decodes correctly
+    @Test
+    public void testNewString_validCharset_returnsCorrectString() throws Throwable {
+        byte[] bytes = "abc".getBytes("UTF-8");
+        assertEquals("abc", StringUtils.newString(bytes, "UTF-8"));
+    }
+
+    // newString(byte[], String): null bytes returns null
+    @Test
+    public void testNewString_nullBytes_returnsNull() throws Throwable {
+        assertNull(StringUtils.newString(null, "UTF-8"));
+    }
+
+    // newString(byte[], String): invalid charset name wraps exception as IllegalStateException
+    @Test
+    public void testNewString_invalidCharset_throwsIllegalStateException() throws Throwable {
+        try {
+            StringUtils.newString(new byte[] {97, 98, 99}, "NOT-A-REAL-CHARSET");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // newStringIso8859_1: valid Latin-1 bytes decode correctly
+    @Test
+    public void testNewStringIso8859_1_validBytes_returnsCorrectString() throws Throwable {
+        byte[] bytes = "caf\u00e9".getBytes("ISO-8859-1");
+        assertEquals("caf\u00e9", StringUtils.newStringIso8859_1(bytes));
+    }
+
+    // newStringIso8859_1: null bytes returns null
+    @Test
+    public void testNewStringIso8859_1_nullBytes_returnsNull() throws Throwable {
+        assertNull(StringUtils.newStringIso8859_1(null));
+    }
+
+    // newStringUsAscii: valid ASCII bytes decode correctly
+    @Test
+    public void testNewStringUsAscii_validBytes_returnsCorrectString() throws Throwable {
+        byte[] bytes = "abc123".getBytes("US-ASCII");
+        assertEquals("abc123", StringUtils.newStringUsAscii(bytes));
+    }
+
+    // newStringUtf16: round trip through getBytesUtf16 preserves content
+    @Test
+    public void testNewStringUtf16_roundTrip_returnsOriginalString() throws Throwable {
+        byte[] bytes = StringUtils.getBytesUtf16("hello");
+        assertEquals("hello", StringUtils.newStringUtf16(bytes));
+    }
+
+    // newStringUtf16Be: valid UTF-16BE bytes decode correctly
+    @Test
+    public void testNewStringUtf16Be_validBytes_returnsCorrectString() throws Throwable {
+        byte[] bytes = "hi".getBytes("UTF-16BE");
+        assertEquals("hi", StringUtils.newStringUtf16Be(bytes));
+    }
+
+    // newStringUtf16Le: valid UTF-16LE bytes decode correctly
+    @Test
+    public void testNewStringUtf16Le_validBytes_returnsCorrectString() throws Throwable {
+        byte[] bytes = "hi".getBytes("UTF-16LE");
+        assertEquals("hi", StringUtils.newStringUtf16Le(bytes));
+    }
+
+    // newStringUtf8: unicode bytes decode correctly with UTF-8
+    @Test
+    public void testNewStringUtf8_validUnicodeBytes_returnsCorrectString() throws Throwable {
+        byte[] bytes = "\u4f60\u597d".getBytes("UTF-8");
+        assertEquals("\u4f60\u597d", StringUtils.newStringUtf8(bytes));
+    }
+
+    // newStringUtf8: null bytes returns null
+    @Test
+    public void testNewStringUtf8_nullBytes_returnsNull() throws Throwable {
+        assertNull(StringUtils.newStringUtf8(null));
+    }
+}

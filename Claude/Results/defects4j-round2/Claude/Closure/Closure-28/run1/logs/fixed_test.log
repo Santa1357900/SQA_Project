@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-28-ue4dvs5_/Closure-28f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - com.google.javascript.jscomp.InlineCostEstimatorClaudeTest::testGetCost_numberNegativeValue_costIncludesMinusSign
+  - com.google.javascript.jscomp.InlineCostEstimatorClaudeTest::testGetCost_numberDecimalValue_costIncludesDecimalPoint
+  - com.google.javascript.jscomp.InlineCostEstimatorClaudeTest::testGetCost_numberLargeValue_costMatchesDigitLength
+  - com.google.javascript.jscomp.InlineCostEstimatorClaudeTest::testGetCost_emptyBlock_returnsCostTwo
+  - com.google.javascript.jscomp.InlineCostEstimatorClaudeTest::testGetCost_numberMultiDigit_returnsCostEqualToDigitCount
+[exit 0]

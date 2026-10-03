@@ -1,0 +1,19 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-3-56734lfc/Closure-3f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 13
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_useInsideNestedClosure_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_globalScopeVariable_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_rhsIsArrayLiteral_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_rhsIsGetElem_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_sideEffectBetweenDefAndUse_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_assignmentUsedAsRValue_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_rhsIsRegexLiteral_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_multipleUsesInSameNode_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_useWithinLoop_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_rhsIsObjectLiteral_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_rhsIsNewExpression_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_rhsIsGetProp_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testProcess_sideEffectImmediatelyLeftOfUse_notInlined
+[exit 0]

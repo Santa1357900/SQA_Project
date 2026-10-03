@@ -1,0 +1,530 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Collections (Defects4J bug Collections-21)
+package: org.apache.commons.collections4.list
+class_under_test: SetUniqueList
+test_class_to_write: SetUniqueListClaudeTest
+</target>
+
+<project_notes>
+Commons Collections: ใช้ implementation จริงเช่น ArrayList/HashMap ของ JDK เป็น backing collection สำหรับ decorator
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.collections4.list;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Set;
+
+import org.apache.commons.collections4.set.UnmodifiableSet;
+import org.apache.commons.collections4.iterators.AbstractIteratorDecorator;
+import org.apache.commons.collections4.iterators.AbstractListIteratorDecorator;
+
+/**
+ * Decorates a <code>List</code> to ensure that no duplicates are present much
+ * like a <code>Set</code>.
+ * <p>
+ * The <code>List</code> interface makes certain assumptions/requirements. This
+ * implementation breaks these in certain ways, but this is merely the result of
+ * rejecting duplicates. Each violation is explained in the method, but it
+ * should not affect you. Bear in mind that Sets require immutable objects to
+ * function correctly.
+ * <p>
+ * The {@link org.apache.commons.collections4.set.ListOrderedSet ListOrderedSet}
+ * class provides an alternative approach, by wrapping an existing Set and
+ * retaining insertion order in the iterator.
+ * <p>
+ * This class is Serializable from Commons Collections 3.1.
+ * 
+ * @since 3.0
+ * @version $Id$
+ */
+public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+
+    /** Serialization version. */
+    private static final long serialVersionUID = 7196982186153478694L;
+
+    /** Internal Set to maintain uniqueness. */
+    protected final Set<E> set;
+
+    /**
+     * Factory method to create a SetList using the supplied list to retain
+     * order.
+     * <p>
+     * If the list contains duplicates, these are removed (first indexed one
+     * kept). A <code>HashSet</code> is used for the set behaviour.
+     * 
+     * @param <E>
+     *            the element type
+     * @param list
+     *            the list to decorate, must not be null
+     * @return a new {@link SetUniqueList}
+     * @throws IllegalArgumentException
+     *             if list is null
+     */
+    public static <E> SetUniqueList<E> setUniqueList(final List<E> list) {
+        if (list == null) {
+            throw new IllegalArgumentException("List must not be null");
+        }
+        if (list.isEmpty()) {
+            return new SetUniqueList<E>(list, new HashSet<E>());
+        }
+        final List<E> temp = new ArrayList<E>(list);
+        list.clear();
+        final SetUniqueList<E> sl = new SetUniqueList<E>(list, new HashSet<E>());
+        sl.addAll(temp);
+        return sl;
+    }
+
+    // -----------------------------------------------------------------------
+    /**
+     * Constructor that wraps (not copies) the List and specifies the set to
+     * use.
+     * <p>
+     * The set and list must both be correctly initialised to the same elements.
+     * 
+     * @param set
+     *            the set to decorate, must not be null
+     * @param list
+     *            the list to decorate, must not be null
+     * @throws IllegalArgumentException
+     *             if set or list is null
+     */
+    protected SetUniqueList(final List<E> list, final Set<E> set) {
+        super(list);
+        if (set == null) {
+            throw new IllegalArgumentException("Set must not be null");
+        }
+        this.set = set;
+    }
+
+    // -----------------------------------------------------------------------
+    /**
+     * Gets an unmodifiable view as a Set.
+     * 
+     * @return an unmodifiable set view
+     */
+    public Set<E> asSet() {
+        return UnmodifiableSet.unmodifiableSet(set);
+    }
+
+    // -----------------------------------------------------------------------
+    /**
+     * Adds an element to the list if it is not already present.
+     * <p>
+     * <i>(Violation)</i> The <code>List</code> interface requires that this
+     * method returns <code>true</code> always. However this class may return
+     * <code>false</code> because of the <code>Set</code> behaviour.
+     * 
+     * @param object
+     *            the object to add
+     * @return true if object was added
+     */
+    @Override
+    public boolean add(final E object) {
+        // gets initial size
+        final int sizeBefore = size();
+
+        // adds element if unique
+        add(size(), object);
+
+        // compares sizes to detect if collection changed
+        return sizeBefore != size();
+    }
+
+    /**
+     * Adds an element to a specific index in the list if it is not already
+     * present.
+     * <p>
+     * <i>(Violation)</i> The <code>List</code> interface makes the assumption
+     * that the element is always inserted. This may not happen with this
+     * implementation.
+     * 
+     * @param index
+     *            the index to insert at
+     * @param object
+     *            the object to add
+     */
+    @Override
+    public void add(final int index, final E object) {
+        // adds element if it is not contained already
+        if (set.contains(object) == false) {
+            super.add(index, object);
+            set.add(object);
+        }
+    }
+
+    /**
+     * Adds a collection of objects to the end of the list avoiding duplicates.
+     * <p>
+     * Only elements that are not already in this list will be added, and
+     * duplicates from the specified collection will be ignored.
+     * <p>
+     * <i>(Violation)</i> The <code>List</code> interface makes the assumption
+     * that the elements are always inserted. This may not happen with this
+     * implementation.
+     * 
+     * @param coll
+     *            the collection to add in iterator order
+     * @return true if this collection changed
+     */
+    @Override
+    public boolean addAll(final Collection<? extends E> coll) {
+        return addAll(size(), coll);
+    }
+
+    /**
+     * Adds a collection of objects a specific index in the list avoiding
+     * duplicates.
+     * <p>
+     * Only elements that are not already in this list will be added, and
+     * duplicates from the specified collection will be ignored.
+     * <p>
+     * <i>(Violation)</i> The <code>List</code> interface makes the assumption
+     * that the elements are always inserted. This may not happen with this
+     * implementation.
+     * 
+     * @param index
+     *            the index to insert at
+     * @param coll
+     *            the collection to add in iterator order
+     * @return true if this collection changed
+     */
+    @Override
+    public boolean addAll(final int index, final Collection<? extends E> coll) {
+        final List<E> temp = new ArrayList<E>();
+        for (final E e : coll) {
+            if (set.add(e)) {
+                temp.add(e);
+            }
+        }
+        return super.addAll(index, temp);
+    }
+
+    // -----------------------------------------------------------------------
+    /**
+     * Sets the value at the specified index avoiding duplicates.
+     * <p>
+     * The object is set into the specified index. Afterwards, any previous
+     * duplicate is removed. If the object is not already in the list then a
+     * normal set occurs. If it is present, then the old version is removed.
+     * 
+     * @param index
+     *            the index to insert at
+     * @param object
+     *            the object to set
+     * @return the previous object
+     */
+    @Override
+    public E set(final int index, final E object) {
+        final int pos = indexOf(object);
+        final E removed = super.set(index, object);
+
+        if (pos != -1 && pos != index) {
+            // the object is already in the unique list
+            // (and it hasn't been swapped with itself)
+            super.remove(pos); // remove the duplicate by index
+        }
+
+        set.remove(removed); // remove the item deleted by the set
+        set.add(object); // add the new item to the unique set
+
+        return removed; // return the item deleted by the set
+    }
+
+    @Override
+    public boolean remove(final Object object) {
+        final boolean result = set.remove(object);
+        if (result) {
+            super.remove(object);
+        }
+        return result;
+    }
+
+    @Override
+    public E remove(final int index) {
+        final E result = super.remove(index);
+        set.remove(result);
+        return result;
+    }
+
+    @Override
+    public boolean removeAll(final Collection<?> coll) {
+        boolean result = false;
+        for (final Object name : coll) {
+            result |= remove(name);
+        }
+        return result;
+    }
+
+    @Override
+    public boolean retainAll(final Collection<?> coll) {
+        final Set<Object> setRetainAll = new HashSet<Object>();
+        for (final Object next : coll) {
+            if (set.contains(next)) {
+                setRetainAll.add(next);
+            }
+        }
+        if (setRetainAll.size() == set.size()) {
+            return false;
+        }
+        if (setRetainAll.size() == 0) {
+            clear();
+        } else {
+            for (final Iterator<E> it = iterator(); it.hasNext();) {
+                if (!setRetainAll.contains(it.next())) {
+                    it.remove();
+                }
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public void clear() {
+        super.clear();
+        set.clear();
+    }
+
+    @Override
+    public boolean contains(final Object object) {
+        return set.contains(object);
+    }
+
+    @Override
+    public boolean containsAll(final Collection<?> coll) {
+        return set.containsAll(coll);
+    }
+
+    @Override
+    public Iterator<E> iterator() {
+        return new SetListIterator<E>(super.iterator(), set);
+    }
+
+    @Override
+    public ListIterator<E> listIterator() {
+        return new SetListListIterator<E>(super.listIterator(), set);
+    }
+
+    @Override
+    public ListIterator<E> listIterator(final int index) {
+        return new SetListListIterator<E>(super.listIterator(index), set);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * NOTE: from 4.0, an unmodifiable list will be returned, as changes to the
+     * subList can invalidate the parent list. 
+     */
+    @Override
+    public List<E> subList(final int fromIndex, final int toIndex) {
+        final List<E> superSubList = super.subList(fromIndex, toIndex);
+        final Set<E> subSet = createSetBasedOnList(set, superSubList);
+        return new SetUniqueList<E>(superSubList, subSet);
+    }
+
+    /**
+     * Create a new {@link Set} with the same type as the provided {@code set}
+     * and populate it with all elements of {@code list}.
+     * 
+     * @param set
+     *            the {@link Set} to be used as return type, must not be null
+     * @param list
+     *            the {@link List} to populate the {@link Set}
+     * @return a new {@link Set} populated with all elements of the provided
+     *         {@link List}
+     */
+    @SuppressWarnings("unchecked")
+    protected Set<E> createSetBasedOnList(final Set<E> set, final List<E> list) {
+        Set<E> subSet;
+        if (set.getClass().equals(HashSet.class)) {
+            subSet = new HashSet<E>(list.size());
+        } else {
+            try {
+                subSet = set.getClass().newInstance();
+            } catch (final InstantiationException ie) {
+                subSet = new HashSet<E>();
+            } catch (final IllegalAccessException iae) {
+                subSet = new HashSet<E>();
+            }
+        }
+        subSet.addAll(list);
+        return subSet;
+    }
+
+    // -----------------------------------------------------------------------
+    /**
+     * Inner class iterator.
+     */
+    static class SetListIterator<E> extends AbstractIteratorDecorator<E> {
+
+        protected final Set<E> set;
+        protected E last = null;
+
+        protected SetListIterator(final Iterator<E> it, final Set<E> set) {
+            super(it);
+            this.set = set;
+        }
+
+        @Override
+        public E next() {
+            last = super.next();
+            return last;
+        }
+
+        @Override
+        public void remove() {
+            super.remove();
+            set.remove(last);
+            last = null;
+        }
+    }
+
+    /**
+     * Inner class iterator.
+     */
+    static class SetListListIterator<E> extends
+            AbstractListIteratorDecorator<E> {
+
+        protected final Set<E> set;
+        protected E last = null;
+
+        protected SetListListIterator(final ListIterator<E> it, final Set<E> set) {
+            super(it);
+            this.set = set;
+        }
+
+        @Override
+        public E next() {
+            last = super.next();
+            return last;
+        }
+
+        @Override
+        public E previous() {
+            last = super.previous();
+            return last;
+        }
+
+        @Override
+        public void remove() {
+            super.remove();
+            set.remove(last);
+            last = null;
+        }
+
+        @Override
+        public void add(final E object) {
+            if (set.contains(object) == false) {
+                super.add(object);
+                set.add(object);
+            }
+        }
+
+        @Override
+        public void set(final E object) {
+            throw new UnsupportedOperationException("ListIterator does not support set");
+        }
+    }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ SetUniqueListClaudeTest ใน package org.apache.commons.collections4.list เพื่อทดสอบคลาส SetUniqueList ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.collections4.list;` เท่านั้น
+</instructions>

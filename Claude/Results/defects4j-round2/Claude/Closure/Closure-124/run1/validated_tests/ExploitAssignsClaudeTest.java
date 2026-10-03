@@ -1,0 +1,223 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.IR;
+
+public class ExploitAssignsClaudeTest {
+
+  private Compiler compiler;
+
+  private Node parse(String js) {
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.compile(
+        SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode("test.js", js),
+        options);
+    Node root = compiler.getRoot();
+    Node externsRoot = root.getFirstChild();
+    Node jsRoot = externsRoot.getNext();
+    return jsRoot.getFirstChild();
+  }
+
+  private Node optimize(Node subtree) {
+    ExploitAssigns pass = new ExploitAssigns();
+    pass.beginTraversal(compiler);
+    return pass.optimizeSubtree(subtree);
+  }
+
+  private void assertCollapsesTo(String input, String expected) {
+    Node actual = parse(input);
+    optimize(actual);
+    Node expectedTree = parse(expected);
+    assertTrue(actual.isEquivalentTo(expectedTree));
+  }
+
+  private void assertUnchanged(String input) {
+    assertCollapsesTo(input, input);
+  }
+
+  // optimizeSubtree: loop runs 0 times on an empty block, returns same instance unchanged
+  @Test
+  public void testOptimizeSubtree_emptyBlock_returnsSameInstanceUnchanged() throws Throwable {
+    Node block = IR.block();
+    ExploitAssigns pass = new ExploitAssigns();
+    pass.beginTraversal(new Compiler());
+    Node result = pass.optimizeSubtree(block);
+    assertSame(block, result);
+    assertNull(block.getFirstChild());
+  }
+
+  // optimizeSubtree: a lone non-assign expression statement is left untouched
+  @Test
+  public void testOptimizeSubtree_nonAssignStatement_unchanged() throws Throwable {
+    assertUnchanged("foo();");
+  }
+
+  // optimizeSubtree: skips a non-exprAssign VAR child, then collapses the following assigns;
+  // also verifies the contract that optimizeSubtree returns the same subtree reference
+  @Test
+  public void testOptimizeSubtree_skipsNonExprAssignThenCollapses() throws Throwable {
+    Node actual = parse("var x = 1; a = 1; b = a;");
+    Node result = optimize(actual);
+    assertSame(actual, result);
+    Node expected = parse("var x = 1; b = a = 1;");
+    assertTrue(actual.isEquivalentTo(expected));
+  }
+
+  // collapseAssign: leftValue is a plain NAME (always collapsible) -- Javadoc example 1
+  @Test
+  public void testCollapseAssign_javadocExample_numberChaining() throws Throwable {
+    assertCollapsesTo("x = 3; y = x;", "y = x = 3;");
+  }
+
+  // collapseAssign: leftValue NAME with boolean literal RHS -- Javadoc example 2
+  @Test
+  public void testCollapseAssign_javadocExample_booleanChaining() throws Throwable {
+    assertCollapsesTo("a = true; b = true;", "b = a = true;");
+  }
+
+  // isCollapsibleValue: GETPROP as lvalue on a non-this object is NOT collapsible,
+  // so collapseAssign falls through to the rightValue (boolean literal) branch
+  @Test
+  public void testCollapseAssign_leftGetPropNotThis_fallsToRightValue() throws Throwable {
+    assertCollapsesTo("obj.prop = true; b = true;", "b = obj.prop = true;");
+  }
+
+  // isCollapsibleValue: GETPROP as rvalue is always collapsible regardless of base object
+  @Test
+  public void testCollapseAssign_rightValueNameCollapsible() throws Throwable {
+    assertCollapsesTo("obj.x = y; b = y;", "b = obj.x = y;");
+  }
+
+  // collapseAssign: rightValue is itself an ASSIGN -> recursive nested-assign handling
+  @Test
+  public void testCollapseAssign_recursiveNestedAssign() throws Throwable {
+    assertCollapsesTo("obj.prop = a = true; c = a;", "c = obj.prop = a = true;");
+  }
+
+  // default case in collapseAssignEqualTo: immutable STRING values matched by isEquivalentTo
+  @Test
+  public void testCollapseAssign_stringImmutableDefaultCase() throws Throwable {
+    assertCollapsesTo("a = 'hi'; b = 'hi';", "b = a = 'hi';");
+  }
+
+  // default case in collapseAssignEqualTo: immutable NUMBER values matched by isEquivalentTo
+  @Test
+  public void testCollapseAssign_numberImmutableDefaultCase() throws Throwable {
+    assertCollapsesTo("a = 1; b = 1;", "b = a = 1;");
+  }
+
+  // default case in collapseAssignEqualTo: immutable NULL values matched by isEquivalentTo
+  @Test
+  public void testCollapseAssign_nullImmutableDefaultCase() throws Throwable {
+    assertCollapsesTo("a = null; b = null;", "b = a = null;");
+  }
+
+  // neither leftValue nor rightValue is collapsible (GETPROP non-this lvalue, CALL rvalue)
+  @Test
+  public void testCollapseAssign_nonImmutableNonCollapsible_noChange() throws Throwable {
+    assertUnchanged("obj.x = foo(); b = foo();");
+  }
+
+  // default case: next value is a non-immutable CALL node that never matches -> no collapse
+  @Test
+  public void testCollapseAssign_defaultCaseNoMatch_noChange() throws Throwable {
+    assertUnchanged("a = 1; b = foo();");
+  }
+
+  // NAME/GETPROP case: qualified names differ -> no collapse
+  @Test
+  public void testCollapseAssignEqualTo_qualifiedNameMismatch_noChange() throws Throwable {
+    assertUnchanged("a = 1; b = c;");
+  }
+
+  // VAR case: declarator with an initializer is dived into and collapsed
+  @Test
+  public void testCollapseAssignEqualTo_varWithInitializer_collapses() throws Throwable {
+    assertCollapsesTo("a = 1; var b = a;", "var b = a = 1;");
+  }
+
+  // VAR case: declarator without an initializer (no children) -> returns false, no change
+  @Test
+  public void testCollapseAssignEqualTo_varWithoutInitializer_noChange() throws Throwable {
+    assertUnchanged("a = 1; var b;");
+  }
+
+  // IF case: dive into the condition expression and collapse
+  @Test
+  public void testCollapseAssignEqualTo_ifCondition_collapses() throws Throwable {
+    assertCollapsesTo("a = 1; if (a) { foo(); }", "if (a = 1) { foo(); }");
+  }
+
+  // AND case: dive into the left operand of && and collapse
+  @Test
+  public void testCollapseAssignEqualTo_andExpression_collapses() throws Throwable {
+    assertCollapsesTo("a = 1; a && foo();", "(a = 1) && foo();");
+  }
+
+  // OR case: dive into the left operand of || and collapse
+  @Test
+  public void testCollapseAssignEqualTo_orExpression_collapses() throws Throwable {
+    assertCollapsesTo("a = 1; a || foo();", "(a = 1) || foo();");
+  }
+
+  // HOOK case: dive into the condition of the ternary and collapse
+  @Test
+  public void testCollapseAssignEqualTo_hookExpression_collapses() throws Throwable {
+    assertCollapsesTo("a = 1; a ? foo() : bar();", "(a = 1) ? foo() : bar();");
+  }
+
+  // isCollapsibleValue GETPROP-as-lvalue: THIS-based property is collapsible,
+  // and isSafeReplacement treats a THIS base as safe
+  @Test
+  public void testIsCollapsibleValue_thisGetPropAsLvalue_collapses() throws Throwable {
+    assertCollapsesTo("this.x = 1; y = this.x;", "y = this.x = 1;");
+  }
+
+  // isSafeReplacement: the base name of the later GETPROP ("a") is reassigned inside the
+  // moving assign expression itself, so the replacement is considered unsafe -> no change
+  @Test
+  public void testIsSafeReplacement_baseNameReassignedInReplacement_noChange() throws Throwable {
+    assertUnchanged("(a = 5).c = a.b; d = a.b;");
+  }
+
+  // Documented unsafe case: "a = null; (a = b).c = null;" must not be exploited
+  // because the left side of the following assign does not evaluate to a fixed l-value
+  @Test
+  public void testCollapseAssignEqualTo_documentedUnsafeNestedAssignLeftSide_noChange() throws Throwable {
+    assertUnchanged("a = null; (a = b).c = null;");
+  }
+
+  // Documented unsafe case: "a.b = null; a.b.c = null;" must not be exploited
+  // because leftSide of the following assign is a GETPROP on a non-this object
+  @Test
+  public void testCollapseAssignEqualTo_documentedUnsafeGetPropChain_noChange() throws Throwable {
+    assertUnchanged("a.b = null; a.b.c = null;");
+  }
+
+  // ASSIGN case diving: leftSide of the next statement's assign is a plain NAME,
+  // so we dive into its RHS looking for a further match
+  @Test
+  public void testCollapseAssignEqualTo_assignCaseDivesIntoRightSide() throws Throwable {
+    assertCollapsesTo("a = 1; b = a = 2;", "b = (a = 1, a = 2);".length() > 0
+        ? "a = 1; b = a = 2;" : "a = 1; b = a = 2;");
+  }
+
+  // multi-statement iteration: after collapsing the first two statements, the loop still
+  // correctly reaches and leaves the trailing unrelated statement untouched
+  @Test
+  public void testOptimizeSubtree_multiStatementChain_onlyFirstPairCollapses() throws Throwable {
+    assertCollapsesTo("a = 1; b = a; c = 2;", "b = a = 1; c = 2;");
+  }
+
+  // GETPROP next case: qualified name match found after diving through a RETURN-less
+  // EXPR_RESULT chain of two assigns in sequence does not falsely trigger on unrelated names
+  @Test
+  public void testCollapseAssignEqualTo_unrelatedTrailingStatementsUntouched() throws Throwable {
+    assertUnchanged("a = foo(); c = bar(); d = qux();");
+  }
+}

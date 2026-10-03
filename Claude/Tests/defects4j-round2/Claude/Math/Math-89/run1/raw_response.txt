@@ -1,0 +1,389 @@
+package org.apache.commons.math.stat;
+
+import java.util.Comparator;
+import java.util.Iterator;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class FrequencyClaudeTest {
+
+    private Frequency f;
+
+    @Before
+    public void setUp() throws Throwable {
+        f = new Frequency();
+    }
+
+    // Default constructor: empty table => sumFreq is 0
+    @Test
+    public void testConstructorDefault_emptyTable_sumFreqZero() throws Throwable {
+        assertEquals(0L, f.getSumFreq());
+    }
+
+    // Constructor with comparator: custom ordering is used for iteration order
+    @Test
+    public void testConstructorWithComparator_customOrder_reversesIterationOrder() throws Throwable {
+        Comparator reverse = new Comparator() {
+            public int compare(Object o1, Object o2) {
+                return ((Comparable) o2).compareTo(o1);
+            }
+        };
+        Frequency rf = new Frequency(reverse);
+        rf.addValue(1);
+        rf.addValue(2);
+        rf.addValue(3);
+        Iterator it = rf.valuesIterator();
+        assertEquals(Long.valueOf(3), it.next());
+        assertEquals(Long.valueOf(2), it.next());
+        assertEquals(Long.valueOf(1), it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // addValue(Comparable): new value gets count 1
+    @Test
+    public void testAddValueComparable_newValue_countOne() throws Throwable {
+        f.addValue(Long.valueOf(5));
+        assertEquals(1L, f.getCount(5L));
+    }
+
+    // addValue(Comparable): existing value increments count
+    @Test
+    public void testAddValueComparable_existingValue_countIncrement() throws Throwable {
+        f.addValue(Long.valueOf(5));
+        f.addValue(Long.valueOf(5));
+        assertEquals(2L, f.getCount(5L));
+    }
+
+    // addValue(Comparable): Integer is converted/stored as Long
+    @Test
+    public void testAddValueComparable_integerConvertedToLong() throws Throwable {
+        f.addValue(Integer.valueOf(7));
+        Iterator it = f.valuesIterator();
+        Object stored = it.next();
+        assertTrue(stored instanceof Long);
+        assertEquals(Long.valueOf(7), stored);
+    }
+
+    // addValue(Comparable): incompatible type with existing values throws IllegalArgumentException
+    @Test
+    public void testAddValueComparable_incompatibleType_throwsIllegalArgumentException() throws Throwable {
+        f.addValue(Long.valueOf(1));
+        try {
+            f.addValue("abc");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected per javadoc
+        }
+    }
+
+    // addValue(Object) deprecated: valid Comparable value is added normally
+    @Test
+    public void testAddValueObject_validComparable_addsNormally() throws Throwable {
+        f.addValue((Object) Integer.valueOf(5));
+        assertEquals(1L, f.getCount(5L));
+    }
+
+    // Bug hunt: addValue(Object) javadoc promises IllegalArgumentException for non-Comparable
+    // values, but the implementation performs a raw cast that throws ClassCastException instead.
+    @Test
+    public void testAddValueObject_notComparable_throwsIllegalArgumentException() throws Throwable {
+        Object notComparable = new Object();
+        try {
+            f.addValue(notComparable);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected per javadoc contract
+        }
+    }
+
+    // addValue(int): increments count for int value
+    @Test
+    public void testAddValueInt_incrementsCount() throws Throwable {
+        f.addValue(3);
+        f.addValue(3);
+        assertEquals(2L, f.getCount(3));
+    }
+
+    // addValue(Integer): increments count, stored equivalently to long
+    @Test
+    public void testAddValueIntegerObject_incrementsCount() throws Throwable {
+        f.addValue(Integer.valueOf(4));
+        assertEquals(1L, f.getCount(4));
+    }
+
+    // addValue(long): works with values outside int range
+    @Test
+    public void testAddValueLong_incrementsCount_outsideIntRange() throws Throwable {
+        long big = 10000000000L;
+        f.addValue(big);
+        assertEquals(1L, f.getCount(big));
+    }
+
+    // addValue(char): stores as Character, independent counting
+    @Test
+    public void testAddValueChar_incrementsCount() throws Throwable {
+        f.addValue('x');
+        f.addValue('x');
+        assertEquals(2L, f.getCount('x'));
+        assertEquals(0L, f.getCount('y'));
+    }
+
+    // clear(): resets the table so sumFreq and counts go back to zero
+    @Test
+    public void testClear_resetsSumFreqAndCount() throws Throwable {
+        f.addValue(1);
+        f.addValue(2);
+        f.clear();
+        assertEquals(0L, f.getSumFreq());
+        assertEquals(0L, f.getCount(1));
+    }
+
+    // valuesIterator(): empty table yields iterator with no elements
+    @Test
+    public void testValuesIterator_emptyTable_noElements() throws Throwable {
+        Iterator it = f.valuesIterator();
+        assertFalse(it.hasNext());
+    }
+
+    // valuesIterator(): integral values are returned as Long instances
+    @Test
+    public void testValuesIterator_withIntValues_returnsLongs() throws Throwable {
+        f.addValue(9);
+        Iterator it = f.valuesIterator();
+        assertTrue(it.hasNext());
+        Object val = it.next();
+        assertTrue(val instanceof Long);
+        assertFalse(it.hasNext());
+    }
+
+    // getSumFreq(): sums counts across multiple distinct values
+    @Test
+    public void testGetSumFreq_multipleValues() throws Throwable {
+        f.addValue(1);
+        f.addValue(1);
+        f.addValue(2);
+        assertEquals(3L, f.getSumFreq());
+    }
+
+    // getCount(Object): returns stored count for a present value
+    @Test
+    public void testGetCountObject_valuePresent() throws Throwable {
+        f.addValue(Long.valueOf(2));
+        assertEquals(1L, f.getCount((Object) Long.valueOf(2)));
+    }
+
+    // getCount(Object): returns 0 for a comparable but absent value
+    @Test
+    public void testGetCountObject_valueAbsent_returnsZero() throws Throwable {
+        f.addValue(Long.valueOf(1));
+        assertEquals(0L, f.getCount((Object) Long.valueOf(99)));
+    }
+
+    // getCount(Object): returns 0 (not an exception) when value is not comparable to existing entries
+    @Test
+    public void testGetCountObject_notComparable_returnsZero() throws Throwable {
+        f.addValue(Long.valueOf(1));
+        assertEquals(0L, f.getCount((Object) "abc"));
+    }
+
+    // getCount(Object): Integer argument matches Long stored values
+    @Test
+    public void testGetCountObject_integerArgument_matchesLongStored() throws Throwable {
+        f.addValue(5);
+        assertEquals(1L, f.getCount((Object) Integer.valueOf(5)));
+    }
+
+    // getCount(int): simple lookup delegation
+    @Test
+    public void testGetCountInt() throws Throwable {
+        f.addValue(42);
+        assertEquals(1L, f.getCount(42));
+    }
+
+    // getCount(long): simple lookup delegation
+    @Test
+    public void testGetCountLong() throws Throwable {
+        f.addValue(42L);
+        assertEquals(1L, f.getCount(42L));
+    }
+
+    // getCount(char): simple lookup delegation
+    @Test
+    public void testGetCountChar() throws Throwable {
+        f.addValue('z');
+        assertEquals(1L, f.getCount('z'));
+    }
+
+    // getPct(Object): returns NaN when no values have been added
+    @Test
+    public void testGetPctObject_emptyTable_returnsNaN() throws Throwable {
+        double pct = f.getPct((Object) Long.valueOf(1));
+        assertTrue(Double.isNaN(pct));
+    }
+
+    // getPct(Object): correct proportion computed from counts and sum
+    @Test
+    public void testGetPctObject_normalCase() throws Throwable {
+        f.addValue(1);
+        f.addValue(1);
+        f.addValue(2);
+        assertEquals(2.0 / 3.0, f.getPct((Object) Long.valueOf(1)), 1e-9);
+    }
+
+    // getPct(int): delegates correctly
+    @Test
+    public void testGetPctInt() throws Throwable {
+        f.addValue(1);
+        f.addValue(2);
+        assertEquals(0.5, f.getPct(1), 1e-9);
+    }
+
+    // getPct(long): delegates correctly
+    @Test
+    public void testGetPctLong() throws Throwable {
+        f.addValue(1L);
+        f.addValue(2L);
+        assertEquals(0.5, f.getPct(1L), 1e-9);
+    }
+
+    // getPct(char): delegates correctly
+    @Test
+    public void testGetPctChar() throws Throwable {
+        f.addValue('a');
+        f.addValue('b');
+        assertEquals(0.5, f.getPct('a'), 1e-9);
+    }
+
+    // getCumFreq(Object): empty table returns 0
+    @Test
+    public void testGetCumFreqObject_emptyTable_returnsZero() throws Throwable {
+        assertEquals(0L, f.getCumFreq((Object) Long.valueOf(1)));
+    }
+
+    // getCumFreq(Object): value below the first key returns 0
+    @Test
+    public void testGetCumFreqObject_belowFirst_returnsZero() throws Throwable {
+        f.addValue(1);
+        f.addValue(2);
+        assertEquals(0L, f.getCumFreq((Object) Long.valueOf(0)));
+    }
+
+    // getCumFreq(Object): value at or above the last key returns full sum
+    @Test
+    public void testGetCumFreqObject_aboveLast_returnsSumFreq() throws Throwable {
+        f.addValue(1);
+        f.addValue(2);
+        assertEquals(2L, f.getCumFreq((Object) Long.valueOf(10)));
+    }
+
+    // getCumFreq(Object): middle value not present sums counts of all smaller keys
+    @Test
+    public void testGetCumFreqObject_middleValueAbsent_returnsPartialSum() throws Throwable {
+        f.addValue(1);
+        f.addValue(2);
+        f.addValue(4);
+        f.addValue(5);
+        assertEquals(2L, f.getCumFreq((Object) Long.valueOf(3)));
+    }
+
+    // getCumFreq(Object): middle value present includes its own count plus smaller keys
+    @Test
+    public void testGetCumFreqObject_middleValuePresent_includesOwnCount() throws Throwable {
+        f.addValue(1);
+        f.addValue(2);
+        f.addValue(3);
+        assertEquals(2L, f.getCumFreq((Object) Long.valueOf(2)));
+    }
+
+    // getCumFreq(Object): non-comparable value returns 0 rather than throwing
+    @Test
+    public void testGetCumFreqObject_notComparable_returnsZero() throws Throwable {
+        f.addValue(Long.valueOf(1));
+        assertEquals(0L, f.getCumFreq((Object) "abc"));
+    }
+
+    // getCumFreq(int): delegates correctly, including Integer instanceof branch
+    @Test
+    public void testGetCumFreqInt() throws Throwable {
+        f.addValue(1);
+        f.addValue(2);
+        f.addValue(3);
+        assertEquals(2L, f.getCumFreq(2));
+    }
+
+    // getCumFreq(long): delegates correctly
+    @Test
+    public void testGetCumFreqLong() throws Throwable {
+        f.addValue(1L);
+        f.addValue(2L);
+        f.addValue(3L);
+        assertEquals(2L, f.getCumFreq(2L));
+    }
+
+    // getCumFreq(char): delegates correctly for character ordering
+    @Test
+    public void testGetCumFreqChar() throws Throwable {
+        f.addValue('a');
+        f.addValue('b');
+        f.addValue('c');
+        assertEquals(2L, f.getCumFreq('b'));
+    }
+
+    // getCumPct(Object): empty table returns NaN
+    @Test
+    public void testGetCumPctObject_emptyTable_returnsNaN() throws Throwable {
+        double pct = f.getCumPct((Object) Long.valueOf(1));
+        assertTrue(Double.isNaN(pct));
+    }
+
+    // getCumPct(Object): non-comparable value returns 0 when at least one value exists
+    @Test
+    public void testGetCumPctObject_notComparable_returnsZero() throws Throwable {
+        f.addValue(Long.valueOf(1));
+        assertEquals(0.0, f.getCumPct((Object) "abc"), 1e-9);
+    }
+
+    // getCumPct(Object): normal case computes correct cumulative proportion
+    @Test
+    public void testGetCumPctObject_normalCase() throws Throwable {
+        f.addValue(1);
+        f.addValue(1);
+        f.addValue(2);
+        assertEquals(1.0, f.getCumPct((Object) Long.valueOf(2)), 1e-9);
+    }
+
+    // getCumPct(int): delegates correctly
+    @Test
+    public void testGetCumPctInt() throws Throwable {
+        f.addValue(1);
+        f.addValue(2);
+        assertEquals(0.5, f.getCumPct(1), 1e-9);
+    }
+
+    // getCumPct(long): delegates correctly
+    @Test
+    public void testGetCumPctLong() throws Throwable {
+        f.addValue(1L);
+        f.addValue(2L);
+        assertEquals(0.5, f.getCumPct(1L), 1e-9);
+    }
+
+    // getCumPct(char): delegates correctly
+    @Test
+    public void testGetCumPctChar() throws Throwable {
+        f.addValue('a');
+        f.addValue('b');
+        assertEquals(0.5, f.getCumPct('a'), 1e-9);
+    }
+
+    // toString(): header line present and value/count fields rendered (locale-independent part)
+    @Test
+    public void testToString_containsHeaderAndValueCountFields() throws Throwable {
+        f.addValue(1);
+        String s = f.toString();
+        assertTrue(s.startsWith("Value"));
+        assertTrue(s.contains("1\t1\t"));
+    }
+}

@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-3-csqjblu2/JxPath-3f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.jxpath.ri.model.beans.NullPropertyPointerClaudeTest::testContextSetValue_beanUnknownProperty_throwsChangeableLocationMessage
+  - org.apache.commons.jxpath.ri.model.beans.NullPropertyPointerClaudeTest::testCreatePath_withMapRootParent_returnsNonNullPointer
+[exit 0]

@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Lang-41-_sbd2ufs/Lang-41b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.lang.ClassUtilsClaudeTest::testGetShortClassName_PrimitiveArrayClass_bug_returnsArrayNotation
+  - org.apache.commons.lang.ClassUtilsClaudeTest::testGetShortClassName_ObjectArrayClass_bug_returnsArrayNotation
+[exit 0]

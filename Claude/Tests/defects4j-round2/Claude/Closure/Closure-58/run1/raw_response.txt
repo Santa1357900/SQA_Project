@@ -1,0 +1,323 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.Node;
+
+import org.junit.Test;
+
+import java.util.Set;
+
+public class LiveVariablesAnalysisClaudeTest {
+
+  private static class Fixture {
+    final LiveVariablesAnalysis analysis;
+    final Node body;
+
+    Fixture(LiveVariablesAnalysis analysis, Node body) {
+      this.analysis = analysis;
+      this.body = body;
+    }
+  }
+
+  private Fixture build(String params, String body) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    compiler.initOptions(options);
+    String src = "function _FUNCTION(" + params + ") {" + body + "}";
+    Node script = compiler.parseTestCode(src);
+    assertEquals(0, compiler.getErrorCount());
+    Node function = script.getFirstChild();
+    Node fnBody = function.getLastChild();
+    Scope scope = new SyntacticScopeCreator(compiler).createScope(function, null);
+    ControlFlowAnalysis cfa = new ControlFlowAnalysis(compiler, false, true);
+    cfa.process(null, function);
+    ControlFlowGraph<Node> cfg = cfa.getCfg();
+    LiveVariablesAnalysis analysis = new LiveVariablesAnalysis(cfg, scope, compiler);
+    return new Fixture(analysis, fnBody);
+  }
+
+  // ARGUMENT_ARRAY_ALIAS constant must equal "arguments"
+  @Test
+  public void testArgumentArrayAlias_constantValue() throws Throwable {
+    assertEquals("arguments", LiveVariablesAnalysis.ARGUMENT_ARRAY_ALIAS);
+  }
+
+  // LiveVariableLattice.toString delegates to BitSet.toString for an empty set
+  @Test
+  public void testLiveVariableLattice_toString_emptySetRepresentation() throws Throwable {
+    Fixture f = build("a, b", "");
+    assertEquals("{}", f.analysis.createEntryLattice().toString());
+  }
+
+  // LiveVariableLattice.equals: two freshly created empty lattices are equal
+  @Test
+  public void testLiveVariableLattice_equals_twoFreshLatticesEqual() throws Throwable {
+    Fixture f = build("a, b", "");
+    assertTrue(f.analysis.createEntryLattice().equals(
+        f.analysis.createInitialEstimateLattice()));
+  }
+
+  // LiveVariableLattice.hashCode: equal objects must have equal hash codes
+  @Test
+  public void testLiveVariableLattice_hashCode_equalObjectsEqualHashCodes() throws Throwable {
+    Fixture f = build("a, b", "");
+    LiveVariablesAnalysis.LiveVariableLattice l1 = f.analysis.createEntryLattice();
+    LiveVariablesAnalysis.LiveVariableLattice l2 = f.analysis.createInitialEstimateLattice();
+    assertEquals(l1.hashCode(), l2.hashCode());
+  }
+
+  // isLive(Var) with a real Var from getEscapedLocals must be consistent with isLive(int)
+  @Test
+  public void testLiveVariableLattice_isLiveWithVarObject_matchesIndexLookup() throws Throwable {
+    Fixture f = build("a", "function inner() { a; }");
+    Set<Var> escaped = f.analysis.getEscapedLocals();
+    Var aVar = escaped.iterator().next();
+    LiveVariablesAnalysis.LiveVariableLattice entry = f.analysis.createEntryLattice();
+    assertFalse(entry.isLive(aVar));
+    assertEquals(entry.isLive(aVar), entry.isLive(f.analysis.getVarIndex("a")));
+  }
+
+  // getEscapedLocals: no inner closures -> nothing escapes
+  @Test
+  public void testGetEscapedLocals_noClosures_empty() throws Throwable {
+    Fixture f = build("a, b", "a;");
+    assertEquals(0, f.analysis.getEscapedLocals().size());
+  }
+
+  // getEscapedLocals: inner function referencing outer param -> it escapes
+  @Test
+  public void testGetEscapedLocals_innerFunctionReferencesParam_oneEscaped() throws Throwable {
+    Fixture f = build("a", "function inner() { a; }");
+    assertEquals(1, f.analysis.getEscapedLocals().size());
+  }
+
+  // getVarIndex: distinct declared variables map to distinct indices
+  @Test
+  public void testGetVarIndex_distinctParams_distinctIndices() throws Throwable {
+    Fixture f = build("a, b", "");
+    assertTrue(f.analysis.getVarIndex("a") != f.analysis.getVarIndex("b"));
+  }
+
+  // getVarIndex: undeclared variable name -> NullPointerException
+  @Test
+  public void testGetVarIndex_undeclaredVariable_throwsNullPointerException() throws Throwable {
+    Fixture f = build("a", "");
+    try {
+      f.analysis.getVarIndex("undeclaredXyz");
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // isForward: this is a backward analysis
+  @Test
+  public void testIsForward_backwardAnalysis_returnsFalse() throws Throwable {
+    Fixture f = build("a", "a;");
+    assertFalse(f.analysis.isForward());
+  }
+
+  // createEntryLattice: fresh lattice has no variable live
+  @Test
+  public void testCreateEntryLattice_freshLattice_allVariablesDead() throws Throwable {
+    Fixture f = build("a, b", "");
+    LiveVariablesAnalysis.LiveVariableLattice lat = f.analysis.createEntryLattice();
+    assertFalse(lat.isLive(f.analysis.getVarIndex("a")));
+    assertFalse(lat.isLive(f.analysis.getVarIndex("b")));
+  }
+
+  // createInitialEstimateLattice: fresh lattice has no variable live
+  @Test
+  public void testCreateInitialEstimateLattice_freshLattice_allVariablesDead() throws Throwable {
+    Fixture f = build("a, b", "");
+    LiveVariablesAnalysis.LiveVariableLattice lat = f.analysis.createInitialEstimateLattice();
+    assertFalse(lat.isLive(f.analysis.getVarIndex("a")));
+    assertFalse(lat.isLive(f.analysis.getVarIndex("b")));
+  }
+
+  // flowThrough: a simple read of a NAME generates liveness for that variable only
+  @Test
+  public void testFlowThrough_simpleRead_genLiveVariable() throws Throwable {
+    Fixture f = build("a, b", "a;");
+    Node stmt = f.body.getFirstChild();
+    LiveVariablesAnalysis.LiveVariableLattice result =
+        f.analysis.flowThrough(stmt, f.analysis.createEntryLattice());
+    assertTrue(result.isLive(f.analysis.getVarIndex("a")));
+    assertFalse(result.isLive(f.analysis.getVarIndex("b")));
+  }
+
+  // flowThrough: plain assignment kills the variable before it (backward chain)
+  @Test
+  public void testFlowThrough_plainAssignment_killsVariable() throws Throwable {
+    Fixture f = build("a", "a = 1; a;");
+    Node stmt1 = f.body.getFirstChild();
+    Node stmt2 = stmt1.getNext();
+    LiveVariablesAnalysis.LiveVariableLattice afterStmt2 =
+        f.analysis.flowThrough(stmt2, f.analysis.createEntryLattice());
+    assertTrue(afterStmt2.isLive(f.analysis.getVarIndex("a")));
+    LiveVariablesAnalysis.LiveVariableLattice beforeStmt1 =
+        f.analysis.flowThrough(stmt1, afterStmt2);
+    assertFalse(beforeStmt1.isLive(f.analysis.getVarIndex("a")));
+  }
+
+  // flowThrough: compound assignment (a += 1) both reads and writes, so a is live
+  @Test
+  public void testFlowThrough_compoundAssignment_genAndKill() throws Throwable {
+    Fixture f = build("a", "a += 1;");
+    Node stmt = f.body.getFirstChild();
+    LiveVariablesAnalysis.LiveVariableLattice result =
+        f.analysis.flowThrough(stmt, f.analysis.createEntryLattice());
+    assertTrue(result.isLive(f.analysis.getVarIndex("a")));
+  }
+
+  // flowThrough: AND expression, both operands are read (short-circuit still conservative)
+  @Test
+  public void testFlowThrough_andExpression_bothOperandsLive() throws Throwable {
+    Fixture f = build("a, b", "a && b;");
+    Node stmt = f.body.getFirstChild();
+    LiveVariablesAnalysis.LiveVariableLattice result =
+        f.analysis.flowThrough(stmt, f.analysis.createEntryLattice());
+    assertTrue(result.isLive(f.analysis.getVarIndex("a")));
+    assertTrue(result.isLive(f.analysis.getVarIndex("b")));
+  }
+
+  // flowThrough: OR expression, both operands are read (short-circuit still conservative)
+  @Test
+  public void testFlowThrough_orExpression_bothOperandsLive() throws Throwable {
+    Fixture f = build("a, b", "a || b;");
+    Node stmt = f.body.getFirstChild();
+    LiveVariablesAnalysis.LiveVariableLattice result =
+        f.analysis.flowThrough(stmt, f.analysis.createEntryLattice());
+    assertTrue(result.isLive(f.analysis.getVarIndex("a")));
+    assertTrue(result.isLive(f.analysis.getVarIndex("b")));
+  }
+
+  // flowThrough: HOOK branches are conditional, so an assignment inside does not kill
+  @Test
+  public void testFlowThrough_hookConditionalAssignment_doesNotKill() throws Throwable {
+    Fixture f = build("y, a", "y ? a = 1 : 0; a;");
+    Node stmt1 = f.body.getFirstChild();
+    Node stmt2 = stmt1.getNext();
+    LiveVariablesAnalysis.LiveVariableLattice afterStmt2 =
+        f.analysis.flowThrough(stmt2, f.analysis.createEntryLattice());
+    LiveVariablesAnalysis.LiveVariableLattice beforeStmt1 =
+        f.analysis.flowThrough(stmt1, afterStmt2);
+    assertTrue(beforeStmt1.isLive(f.analysis.getVarIndex("a")));
+    assertTrue(beforeStmt1.isLive(f.analysis.getVarIndex("y")));
+  }
+
+  // flowThrough: VAR with initializer kills the declared variable unconditionally
+  @Test
+  public void testFlowThrough_varWithInitializer_killsVariable() throws Throwable {
+    Fixture f = build("", "var a = 1; a;");
+    Node stmt1 = f.body.getFirstChild();
+    Node stmt2 = stmt1.getNext();
+    LiveVariablesAnalysis.LiveVariableLattice afterStmt2 =
+        f.analysis.flowThrough(stmt2, f.analysis.createEntryLattice());
+    assertTrue(afterStmt2.isLive(f.analysis.getVarIndex("a")));
+    LiveVariablesAnalysis.LiveVariableLattice beforeStmt1 =
+        f.analysis.flowThrough(stmt1, afterStmt2);
+    assertFalse(beforeStmt1.isLive(f.analysis.getVarIndex("a")));
+  }
+
+  // flowThrough: VAR without initializer does not kill prior liveness
+  @Test
+  public void testFlowThrough_varWithoutInitializer_noGenKill() throws Throwable {
+    Fixture f = build("", "var b; b;");
+    Node stmt1 = f.body.getFirstChild();
+    Node stmt2 = stmt1.getNext();
+    LiveVariablesAnalysis.LiveVariableLattice afterStmt2 =
+        f.analysis.flowThrough(stmt2, f.analysis.createEntryLattice());
+    LiveVariablesAnalysis.LiveVariableLattice beforeStmt1 =
+        f.analysis.flowThrough(stmt1, afterStmt2);
+    assertTrue(beforeStmt1.isLive(f.analysis.getVarIndex("b")));
+  }
+
+  // flowThrough: for-in header both defines and conservatively uses the loop variable
+  @Test
+  public void testFlowThrough_forIn_definesAndUsesLoopVariable() throws Throwable {
+    Fixture f = build("obj, x", "for (x in obj) {}");
+    Node stmt = f.body.getFirstChild();
+    LiveVariablesAnalysis.LiveVariableLattice result =
+        f.analysis.flowThrough(stmt, f.analysis.createEntryLattice());
+    assertTrue(result.isLive(f.analysis.getVarIndex("x")));
+    assertTrue(result.isLive(f.analysis.getVarIndex("obj")));
+  }
+
+  // flowThrough: IF condition expression generates liveness for the tested variable
+  @Test
+  public void testFlowThrough_ifCondition_genVariable() throws Throwable {
+    Fixture f = build("a", "if (a) {}");
+    Node stmt = f.body.getFirstChild();
+    LiveVariablesAnalysis.LiveVariableLattice result =
+        f.analysis.flowThrough(stmt, f.analysis.createEntryLattice());
+    assertTrue(result.isLive(f.analysis.getVarIndex("a")));
+  }
+
+  // flowThrough: WHILE condition expression generates liveness for the tested variable
+  @Test
+  public void testFlowThrough_whileCondition_genVariable() throws Throwable {
+    Fixture f = build("a", "while (a) {}");
+    Node stmt = f.body.getFirstChild();
+    LiveVariablesAnalysis.LiveVariableLattice result =
+        f.analysis.flowThrough(stmt, f.analysis.createEntryLattice());
+    assertTrue(result.isLive(f.analysis.getVarIndex("a")));
+  }
+
+  // flowThrough: BLOCK node is an early-return case, leaving the lattice unchanged
+  @Test
+  public void testFlowThrough_blockNode_noChangeToLattice() throws Throwable {
+    Fixture f = build("a", "a;");
+    Node stmt = f.body.getFirstChild();
+    LiveVariablesAnalysis.LiveVariableLattice afterStmt =
+        f.analysis.flowThrough(stmt, f.analysis.createEntryLattice());
+    LiveVariablesAnalysis.LiveVariableLattice afterBlock =
+        f.analysis.flowThrough(f.body, afterStmt);
+    assertTrue(afterBlock.isLive(f.analysis.getVarIndex("a")));
+    assertTrue(afterBlock.equals(afterStmt));
+  }
+
+  // markAllParametersEscaped: all declared parameters become escaped
+  @Test
+  public void testMarkAllParametersEscaped_twoParams_bothEscaped() throws Throwable {
+    Fixture f = build("a, b", "");
+    f.analysis.markAllParametersEscaped();
+    assertEquals(2, f.analysis.getEscapedLocals().size());
+  }
+
+  // markAllParametersEscaped: zero-iteration loop when there are no parameters
+  @Test
+  public void testMarkAllParametersEscaped_noParams_noneEscaped() throws Throwable {
+    Fixture f = build("", "");
+    f.analysis.markAllParametersEscaped();
+    assertEquals(0, f.analysis.getEscapedLocals().size());
+  }
+
+  // computeGenKill(NAME "arguments"): triggers escape of all parameters and is excluded
+  // from gen itself; subsequent reads of an escaped parameter are not gen'd either.
+  @Test
+  public void testFlowThrough_argumentsUsage_escapesAllParameters() throws Throwable {
+    Fixture f = build("a, b", "arguments; a;");
+    Node stmt1 = f.body.getFirstChild();
+    Node stmt2 = stmt1.getNext();
+    f.analysis.flowThrough(stmt1, f.analysis.createEntryLattice());
+    assertEquals(2, f.analysis.getEscapedLocals().size());
+    LiveVariablesAnalysis.LiveVariableLattice result =
+        f.analysis.flowThrough(stmt2, f.analysis.createEntryLattice());
+    assertFalse(result.isLive(f.analysis.getVarIndex("a")));
+  }
+
+  // isArgumentsName: when "arguments" is itself declared locally, it is treated as a
+  // normal local variable instead of triggering the escape mechanism.
+  @Test
+  public void testFlowThrough_argumentsShadowedByLocalVar_treatedAsNormalVariable()
+      throws Throwable {
+    Fixture f = build("", "var arguments; arguments;");
+    Node stmt2 = f.body.getFirstChild().getNext();
+    LiveVariablesAnalysis.LiveVariableLattice result =
+        f.analysis.flowThrough(stmt2, f.analysis.createEntryLattice());
+    assertTrue(result.isLive(f.analysis.getVarIndex("arguments")));
+    assertEquals(0, f.analysis.getEscapedLocals().size());
+  }
+}

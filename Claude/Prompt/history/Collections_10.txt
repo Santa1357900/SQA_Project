@@ -1,0 +1,567 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Collections (Defects4J bug Collections-10)
+package: org.apache.commons.collections.map
+class_under_test: MultiValueMap
+test_class_to_write: MultiValueMapClaudeTest
+</target>
+
+<project_notes>
+Commons Collections: ใช้ implementation จริงเช่น ArrayList/HashMap ของ JDK เป็น backing collection สำหรับ decorator
+</project_notes>
+
+<source_code>
+/*
+ *  Licensed to the Apache Software Foundation (ASF) under one or more
+ *  contributor license agreements.  See the NOTICE file distributed with
+ *  this work for additional information regarding copyright ownership.
+ *  The ASF licenses this file to You under the Apache License, Version 2.0
+ *  (the "License"); you may not use this file except in compliance with
+ *  the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
+package org.apache.commons.collections.map;
+
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+
+import java.util.AbstractCollection;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.commons.collections.Factory;
+import org.apache.commons.collections.FunctorException;
+import org.apache.commons.collections.MultiMap;
+import org.apache.commons.collections.iterators.EmptyIterator;
+import org.apache.commons.collections.iterators.IteratorChain;
+
+/**
+ * A MultiValueMap decorates another map, allowing it to have
+ * more than one value for a key.
+ * <p>
+ * A <code>MultiMap</code> is a Map with slightly different semantics.
+ * Putting a value into the map will add the value to a Collection at that key.
+ * Getting a value will return a Collection, holding all the values put to that key.
+ * <p>
+ * This implementation is a decorator, allowing any Map implementation
+ * to be used as the base.
+ * <p>
+ * In addition, this implementation allows the type of collection used
+ * for the values to be controlled. By default, an <code>ArrayList</code>
+ * is used, however a <code>Class</code> to instantiate may be specified,
+ * or a factory that returns a <code>Collection</code> instance.
+ * <p>
+ * <strong>Note that MultiValueMap is not synchronized and is not thread-safe.</strong>
+ * If you wish to use this map from multiple threads concurrently, you must use
+ * appropriate synchronization. This class may throw exceptions when accessed
+ * by concurrent threads without synchronization.
+ *
+ * @author James Carman
+ * @author Christopher Berry
+ * @author James Strachan
+ * @author Steve Downey
+ * @author Stephen Colebourne
+ * @author Julien Buret
+ * @author Serhiy Yevtushenko
+ * @version $Revision$ $Date$
+ * @since Commons Collections 3.2
+ */
+public class MultiValueMap extends AbstractMapDecorator implements MultiMap {
+
+    /** Serialization version */
+
+    /** The factory for creating value collections. */
+    private final Factory collectionFactory;
+    /** The cached values. */
+    private transient Collection valuesView;
+
+    /**
+     * Creates a map which wraps the given map and
+     * maps keys to ArrayLists.
+     *
+     * @param map  the map to wrap
+     */
+    public static MultiValueMap decorate(Map map) {
+        return new MultiValueMap(map, new ReflectionFactory(ArrayList.class));
+    }
+
+    /**
+     * Creates a map which decorates the given <code>map</code> and
+     * maps keys to collections of type <code>collectionClass</code>.
+     *
+     * @param map  the map to wrap
+     * @param collectionClass  the type of the collection class
+     */
+    public static MultiValueMap decorate(Map map, Class collectionClass) {
+        return new MultiValueMap(map, new ReflectionFactory(collectionClass));
+    }
+
+    /**
+     * Creates a map which decorates the given <code>map</code> and
+     * creates the value collections using the supplied <code>collectionFactory</code>.
+     *
+     * @param map  the map to decorate
+     * @param collectionFactory  the collection factory (must return a Collection object).
+     */
+    public static MultiValueMap decorate(Map map, Factory collectionFactory) {
+        return new MultiValueMap(map, collectionFactory);
+    }
+
+    //-----------------------------------------------------------------------
+    /**
+     * Creates a MultiValueMap based on a <code>HashMap</code> and
+     * storing the multiple values in an <code>ArrayList</code>.
+     */
+    public MultiValueMap() {
+        this(new HashMap(), new ReflectionFactory(ArrayList.class));
+    }
+
+    /**
+     * Creates a MultiValueMap which decorates the given <code>map</code> and
+     * creates the value collections using the supplied <code>collectionFactory</code>.
+     *
+     * @param map  the map to decorate
+     * @param collectionFactory  the collection factory which must return a Collection instance
+     */
+    protected MultiValueMap(Map map, Factory collectionFactory) {
+        super(map);
+        if (collectionFactory == null) {
+            throw new IllegalArgumentException("The factory must not be null");
+        }
+        this.collectionFactory = collectionFactory;
+    }
+
+    //-----------------------------------------------------------------------
+    /**
+     * Write the map out using a custom routine.
+     * 
+     * @param out  the output stream
+     * @throws IOException
+     * @since Commons Collections 3.3
+     */
+    private void writeObject(ObjectOutputStream out) throws IOException {
+        out.defaultWriteObject();
+        out.writeObject(map);
+    }
+
+    /**
+     * Read the map in using a custom routine.
+     * 
+     * @param in  the input stream
+     * @throws IOException
+     * @throws ClassNotFoundException
+     * @since Commons Collections 3.3
+     */
+    private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        map = (Map) in.readObject();
+    }
+
+    //-----------------------------------------------------------------------
+    /**
+     * Clear the map.
+     */
+    public void clear() {
+        // If you believe that you have GC issues here, try uncommenting this code
+//        Set pairs = getMap().entrySet();
+//        Iterator pairsIterator = pairs.iterator();
+//        while (pairsIterator.hasNext()) {
+//            Map.Entry keyValuePair = (Map.Entry) pairsIterator.next();
+//            Collection coll = (Collection) keyValuePair.getValue();
+//            coll.clear();
+//        }
+        getMap().clear();
+    }
+
+    /**
+     * Removes a specific value from map.
+     * <p>
+     * The item is removed from the collection mapped to the specified key.
+     * Other values attached to that key are unaffected.
+     * <p>
+     * If the last value for a key is removed, <code>null</code> will be returned
+     * from a subsequant <code>get(key)</code>.
+     *
+     * @param key  the key to remove from
+     * @param value the value to remove
+     * @return the value removed (which was passed in), null if nothing removed
+     */
+    public Object removeMapping(Object key, Object value) {
+        Collection valuesForKey = getCollection(key);
+        if (valuesForKey == null) {
+            return null;
+        }
+        boolean removed = valuesForKey.remove(value);
+        if (removed == false) {
+            return null;
+        }
+        if (valuesForKey.isEmpty()) {
+            remove(key);
+        }
+        return value;
+    }
+
+    /**
+     * Checks whether the map contains the value specified.
+     * <p>
+     * This checks all collections against all keys for the value, and thus could be slow.
+     *
+     * @param value  the value to search for
+     * @return true if the map contains the value
+     */
+    public boolean containsValue(Object value) {
+        Set pairs = getMap().entrySet();
+        if (pairs == null) {
+            return false;
+        }
+        Iterator pairsIterator = pairs.iterator();
+        while (pairsIterator.hasNext()) {
+            Map.Entry keyValuePair = (Map.Entry) pairsIterator.next();
+            Collection coll = (Collection) keyValuePair.getValue();
+            if (coll.contains(value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Adds the value to the collection associated with the specified key.
+     * <p>
+     * Unlike a normal <code>Map</code> the previous value is not replaced.
+     * Instead the new value is added to the collection stored against the key.
+     *
+     * @param key  the key to store against
+     * @param value  the value to add to the collection at the key
+     * @return the value added if the map changed and null if the map did not change
+     */
+    public Object put(Object key, Object value) {
+        boolean result = false;
+        Collection coll = getCollection(key);
+        if (coll == null) {
+            coll = createCollection(1);  // might produce a non-empty collection
+            coll.add(value);
+            if (coll.size() > 0) {
+                // only add if non-zero size to maintain class state
+                getMap().put(key, coll);
+                result = true;  // map definitely changed
+            }
+        } else {
+            result = coll.add(value);
+        }
+        return (result ? value : null);
+    }
+
+    /**
+     * Override superclass to ensure that MultiMap instances are
+     * correctly handled.
+     * <p>
+     * If you call this method with a normal map, each entry is
+     * added using <code>put(Object,Object)</code>.
+     * If you call this method with a multi map, each entry is
+     * added using <code>putAll(Object,Collection)</code>.
+     *
+     * @param map  the map to copy (either a normal or multi map)
+     */
+    public void putAll(Map map) {
+        if (map instanceof MultiMap) {
+            for (Iterator it = map.entrySet().iterator(); it.hasNext();) {
+                Map.Entry entry = (Map.Entry) it.next();
+                Collection coll = (Collection) entry.getValue();
+                putAll(entry.getKey(), coll);
+            }
+        } else {
+            for (Iterator it = map.entrySet().iterator(); it.hasNext();) {
+                Map.Entry entry = (Map.Entry) it.next();
+                put(entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    /**
+     * Gets a collection containing all the values in the map.
+     * <p>
+     * This returns a collection containing the combination of values from all keys.
+     *
+     * @return a collection view of the values contained in this map
+     */
+    public Collection values() {
+        if (valuesView == null) {
+            valuesView = new Values();
+        }
+        return valuesView;
+    }
+
+    /**
+     * Checks whether the collection at the specified key contains the value.
+     *
+     * @param value  the value to search for
+     * @return true if the map contains the value
+     */
+    public boolean containsValue(Object key, Object value) {
+        Collection coll = getCollection(key);
+        if (coll == null) {
+            return false;
+        }
+        return coll.contains(value);
+    }
+
+    /**
+     * Gets the collection mapped to the specified key.
+     * This method is a convenience method to typecast the result of <code>get(key)</code>.
+     *
+     * @param key  the key to retrieve
+     * @return the collection mapped to the key, null if no mapping
+     */
+    public Collection getCollection(Object key) {
+        return (Collection) getMap().get(key);
+    }
+
+    /**
+     * Gets the size of the collection mapped to the specified key.
+     *
+     * @param key  the key to get size for
+     * @return the size of the collection at the key, zero if key not in map
+     */
+    public int size(Object key) {
+        Collection coll = getCollection(key);
+        if (coll == null) {
+            return 0;
+        }
+        return coll.size();
+    }
+
+    /**
+     * Adds a collection of values to the collection associated with
+     * the specified key.
+     *
+     * @param key  the key to store against
+     * @param values  the values to add to the collection at the key, null ignored
+     * @return true if this map changed
+     */
+    public boolean putAll(Object key, Collection values) {
+        if (values == null || values.size() == 0) {
+            return false;
+        }
+        boolean result = false;
+        Collection coll = getCollection(key);
+        if (coll == null) {
+            coll = createCollection(values.size());  // might produce a non-empty collection
+            coll.addAll(values);
+            if (coll.size() > 0) {
+                // only add if non-zero size to maintain class state
+                getMap().put(key, coll);
+                result = true;  // map definitely changed
+            }
+        } else {
+            result = coll.addAll(values);
+        }
+        return result;
+    }
+
+    /**
+     * Gets an iterator for the collection mapped to the specified key.
+     *
+     * @param key  the key to get an iterator for
+     * @return the iterator of the collection at the key, empty iterator if key not in map
+     */
+    public Iterator iterator(Object key) {
+        if (!containsKey(key)) {
+            return EmptyIterator.INSTANCE;
+        } else {
+            return new ValuesIterator(key);
+        }
+    }
+
+    /**
+     * Gets the total size of the map by counting all the values.
+     *
+     * @return the total size of the map counting all values
+     */
+    public int totalSize() {
+        int total = 0;
+        Collection values = getMap().values();
+        for (Iterator it = values.iterator(); it.hasNext();) {
+            Collection coll = (Collection) it.next();
+            total += coll.size();
+        }
+        return total;
+    }
+
+    /**
+     * Creates a new instance of the map value Collection container
+     * using the factory.
+     * <p>
+     * This method can be overridden to perform your own processing
+     * instead of using the factory.
+     *
+     * @param size  the collection size that is about to be added
+     * @return the new collection
+     */
+    protected Collection createCollection(int size) {
+        return (Collection) collectionFactory.create();
+    }
+
+    //-----------------------------------------------------------------------
+    /**
+     * Inner class that provides the values view.
+     */
+    private class Values extends AbstractCollection {
+        public Iterator iterator() {
+            final IteratorChain chain = new IteratorChain();
+            for (Iterator it = keySet().iterator(); it.hasNext();) {
+                chain.addIterator(new ValuesIterator(it.next()));
+            }
+            return chain;
+        }
+
+        public int size() {
+            return totalSize();
+        }
+
+        public void clear() {
+            MultiValueMap.this.clear();
+        }
+    }
+
+    /**
+     * Inner class that provides the values iterator.
+     */
+    private class ValuesIterator implements Iterator {
+        private final Object key;
+        private final Collection values;
+        private final Iterator iterator;
+
+        public ValuesIterator(Object key) {
+            this.key = key;
+            this.values = getCollection(key);
+            this.iterator = values.iterator();
+        }
+
+        public void remove() {
+            iterator.remove();
+            if (values.isEmpty()) {
+                MultiValueMap.this.remove(key);
+            }
+        }
+
+        public boolean hasNext() {
+            return iterator.hasNext();
+        }
+
+        public Object next() {
+            return iterator.next();
+        }
+    }
+
+    /**
+     * Inner class that provides a simple reflection factory.
+     */
+    private static class ReflectionFactory implements Factory {
+        private final Class clazz;
+
+        public ReflectionFactory(Class clazz) {
+            this.clazz = clazz;
+        }
+
+        public Object create() {
+            try {
+                return clazz.newInstance();
+            } catch (Exception ex) {
+                throw new FunctorException("Cannot instantiate class: " + clazz, ex);
+            }
+        }
+    }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ MultiValueMapClaudeTest ใน package org.apache.commons.collections.map เพื่อทดสอบคลาส MultiValueMap ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.collections.map;` เท่านั้น
+</instructions>

@@ -1,0 +1,317 @@
+package org.apache.commons.math.stat.correlation;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.linear.RealMatrix;
+import org.apache.commons.math.linear.BlockRealMatrix;
+
+public class PearsonsCorrelationClaudeTest {
+
+    private PearsonsCorrelation pc;
+
+    @Before
+    public void setUp() throws Throwable {
+        pc = new PearsonsCorrelation();
+    }
+
+    // No-arg constructor: nObs=0, correlationMatrix=null
+    @Test
+    public void testDefaultConstructor_noData_correlationMatrixIsNull() throws Throwable {
+        PearsonsCorrelation p = new PearsonsCorrelation();
+        assertNull(p.getCorrelationMatrix());
+    }
+
+    // RealMatrix constructor: minimal 2x2 sufficient data, no throw
+    @Test
+    public void testMatrixConstructor_minimalSufficientData_computesCorrelationMatrix() throws Throwable {
+        RealMatrix m = new BlockRealMatrix(new double[][]{{1.0, 2.0}, {3.0, 5.0}});
+        PearsonsCorrelation p = new PearsonsCorrelation(m);
+        assertNotNull(p.getCorrelationMatrix());
+        assertEquals(1.0, p.getCorrelationMatrix().getEntry(0, 0), 1e-9);
+    }
+
+    // checkSufficientData branch: nRows < 2
+    @Test
+    public void testMatrixConstructor_insufficientRows_throwsIllegalArgumentException() throws Throwable {
+        RealMatrix m = new BlockRealMatrix(new double[][]{{1.0, 2.0, 3.0}});
+        try {
+            new PearsonsCorrelation(m);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // checkSufficientData branch: nCols < 2
+    @Test
+    public void testMatrixConstructor_insufficientColumns_throwsIllegalArgumentException() throws Throwable {
+        RealMatrix m = new BlockRealMatrix(new double[][]{{1.0}, {2.0}});
+        try {
+            new PearsonsCorrelation(m);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // checkSufficientData branch: both nRows<2 and nCols<2
+    @Test
+    public void testMatrixConstructor_insufficientRowsAndColumns_throwsIllegalArgumentException() throws Throwable {
+        RealMatrix m = new BlockRealMatrix(new double[][]{{1.0}});
+        try {
+            new PearsonsCorrelation(m);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // double[][] constructor delegates to BlockRealMatrix and checkSufficientData
+    @Test
+    public void testArrayConstructor_validRectangularData_computesCorrelationMatrix() throws Throwable {
+        double[][] data = {{1.0, 2.0}, {3.0, 4.0}};
+        PearsonsCorrelation p = new PearsonsCorrelation(data);
+        assertEquals(2, p.getCorrelationMatrix().getColumnDimension());
+        assertEquals(1.0, p.getCorrelationMatrix().getEntry(1, 1), 1e-9);
+    }
+
+    // double[][] constructor: ragged (non-rectangular) array must throw
+    @Test
+    public void testArrayConstructor_raggedArray_throwsIllegalArgumentException() throws Throwable {
+        double[][] data = {{1.0, 2.0}, {3.0}};
+        try {
+            new PearsonsCorrelation(data);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // covariance+n constructor: zero covariance off-diagonal -> identity correlation
+    @Test
+    public void testCovarianceMatrixConstructor_diagonalCovariance_identityCorrelation() throws Throwable {
+        RealMatrix cov = new BlockRealMatrix(new double[][]{{4.0, 0.0}, {0.0, 9.0}});
+        PearsonsCorrelation p = new PearsonsCorrelation(cov, 5);
+        assertEquals(0.0, p.getCorrelationMatrix().getEntry(0, 1), 1e-9);
+        assertEquals(1.0, p.getCorrelationMatrix().getEntry(0, 0), 1e-9);
+    }
+
+    // covariance+n constructor: known covariance ratio r = cov(i,j)/(sigma_i*sigma_j)
+    @Test
+    public void testCovarianceMatrixConstructor_knownCovariance_correctRatio() throws Throwable {
+        RealMatrix cov = new BlockRealMatrix(new double[][]{{4.0, 2.0}, {2.0, 9.0}});
+        PearsonsCorrelation p = new PearsonsCorrelation(cov, 10);
+        assertEquals(1.0 / 3.0, p.getCorrelationMatrix().getEntry(0, 1), 1e-9);
+        assertEquals(1.0 / 3.0, p.getCorrelationMatrix().getEntry(1, 0), 1e-9);
+    }
+
+    // getCorrelationMatrix: diagonal must always be exactly 1 for every variable
+    @Test
+    public void testGetCorrelationMatrix_threeVariables_diagonalIsOne() throws Throwable {
+        double[][] data = {{1.0, 2.0, 5.0}, {2.0, 1.0, 3.0}, {3.0, 4.0, 4.0}, {4.0, 3.0, 1.0}};
+        PearsonsCorrelation p = new PearsonsCorrelation(data);
+        RealMatrix m = p.getCorrelationMatrix();
+        assertEquals(1.0, m.getEntry(0, 0), 1e-9);
+        assertEquals(1.0, m.getEntry(1, 1), 1e-9);
+        assertEquals(1.0, m.getEntry(2, 2), 1e-9);
+    }
+
+    // getCorrelationMatrix: must be symmetric for all off-diagonal pairs
+    @Test
+    public void testGetCorrelationMatrix_threeVariables_isSymmetric() throws Throwable {
+        double[][] data = {{1.0, 2.0, 5.0}, {2.0, 1.0, 3.0}, {3.0, 4.0, 4.0}, {4.0, 3.0, 1.0}};
+        PearsonsCorrelation p = new PearsonsCorrelation(data);
+        RealMatrix m = p.getCorrelationMatrix();
+        assertEquals(m.getEntry(0, 1), m.getEntry(1, 0), 1e-9);
+        assertEquals(m.getEntry(0, 2), m.getEntry(2, 0), 1e-9);
+        assertEquals(m.getEntry(1, 2), m.getEntry(2, 1), 1e-9);
+    }
+
+    // getCorrelationStandardErrors: r=1 => (1-r^2)=0 => SE must be exactly 0
+    @Test
+    public void testGetCorrelationStandardErrors_perfectCorrelation_zeroError() throws Throwable {
+        double[][] data = {{1.0, 2.0}, {2.0, 4.0}, {3.0, 6.0}};
+        PearsonsCorrelation p = new PearsonsCorrelation(data);
+        RealMatrix se = p.getCorrelationStandardErrors();
+        assertEquals(0.0, se.getEntry(0, 1), 1e-9);
+    }
+
+    // getCorrelationStandardErrors: exact formula sqrt((1-r^2)/(n-2)) with hand-computed r
+    @Test
+    public void testGetCorrelationStandardErrors_knownRValue_matchesFormula() throws Throwable {
+        double[][] data = {{1.0, 1.0}, {2.0, 2.0}, {3.0, 4.0}};
+        PearsonsCorrelation p = new PearsonsCorrelation(data);
+        RealMatrix se = p.getCorrelationStandardErrors();
+        double expected = Math.sqrt(1.0 / 28.0);
+        assertEquals(expected, se.getEntry(0, 1), 1e-4);
+        assertEquals(expected, se.getEntry(1, 0), 1e-4);
+    }
+
+    // getCorrelationStandardErrors: diagonal entries always zero since diagonal r=1
+    @Test
+    public void testGetCorrelationStandardErrors_diagonalAlwaysZero() throws Throwable {
+        double[][] data = {{1.0, 2.0, 5.0}, {2.0, 1.0, 3.0}, {3.0, 4.0, 4.0}, {4.0, 3.0, 1.0}};
+        PearsonsCorrelation p = new PearsonsCorrelation(data);
+        RealMatrix se = p.getCorrelationStandardErrors();
+        assertEquals(0.0, se.getEntry(0, 0), 1e-9);
+        assertEquals(0.0, se.getEntry(1, 1), 1e-9);
+        assertEquals(0.0, se.getEntry(2, 2), 1e-9);
+    }
+
+    // getCorrelationStandardErrors: symmetric since based on symmetric correlation matrix
+    @Test
+    public void testGetCorrelationStandardErrors_isSymmetric() throws Throwable {
+        double[][] data = {{1.0, 2.0, 5.0}, {2.0, 1.0, 3.0}, {3.0, 4.0, 4.0}, {4.0, 3.0, 1.0}};
+        PearsonsCorrelation p = new PearsonsCorrelation(data);
+        RealMatrix se = p.getCorrelationStandardErrors();
+        assertEquals(se.getEntry(0, 1), se.getEntry(1, 0), 1e-9);
+        assertEquals(se.getEntry(0, 2), se.getEntry(2, 0), 1e-9);
+    }
+
+    // getCorrelationPValues: explicit i==j branch must yield exactly 0d
+    @Test
+    public void testGetCorrelationPValues_diagonalIsZero() throws Throwable {
+        double[][] data = {{1.0, 2.0, 5.0}, {2.0, 1.0, 3.0}, {3.0, 4.0, 4.0}, {4.0, 3.0, 1.0}};
+        PearsonsCorrelation p = new PearsonsCorrelation(data);
+        RealMatrix pv = p.getCorrelationPValues();
+        assertEquals(0.0, pv.getEntry(0, 0), 1e-9);
+        assertEquals(0.0, pv.getEntry(1, 1), 1e-9);
+        assertEquals(0.0, pv.getEntry(2, 2), 1e-9);
+    }
+
+    // getCorrelationPValues: symmetric since r(i,j)=r(j,i)
+    @Test
+    public void testGetCorrelationPValues_isSymmetric() throws Throwable {
+        double[][] data = {{1.0, 2.0, 5.0}, {2.0, 1.0, 3.0}, {3.0, 4.0, 4.0}, {4.0, 3.0, 1.0}};
+        PearsonsCorrelation p = new PearsonsCorrelation(data);
+        RealMatrix pv = p.getCorrelationPValues();
+        assertEquals(pv.getEntry(0, 1), pv.getEntry(1, 0), 1e-9);
+        assertEquals(pv.getEntry(1, 2), pv.getEntry(2, 1), 1e-9);
+    }
+
+    // getCorrelationPValues: formula uses |r|, so p-value identical for r and -r
+    @Test
+    public void testGetCorrelationPValues_signIndependent_sameAbsoluteCorrelation() throws Throwable {
+        double[][] dataPos = {{1.0, 2.0}, {2.0, 4.0}, {3.0, 1.0}, {4.0, 5.0}};
+        double[][] dataNeg = {{1.0, -2.0}, {2.0, -4.0}, {3.0, -1.0}, {4.0, -5.0}};
+        PearsonsCorrelation pPos = new PearsonsCorrelation(dataPos);
+        PearsonsCorrelation pNeg = new PearsonsCorrelation(dataNeg);
+        double valPos = pPos.getCorrelationPValues().getEntry(0, 1);
+        double valNeg = pNeg.getCorrelationPValues().getEntry(0, 1);
+        assertEquals(valPos, valNeg, 1e-9);
+    }
+
+    // getCorrelationPValues: must be a finite probability in [0,1]
+    @Test
+    public void testGetCorrelationPValues_valueInValidRange() throws Throwable {
+        double[][] data = {{1.0, 2.0}, {2.0, 4.0}, {3.0, 1.0}, {4.0, 5.0}};
+        PearsonsCorrelation p = new PearsonsCorrelation(data);
+        double val = p.getCorrelationPValues().getEntry(0, 1);
+        assertFalse(Double.isNaN(val));
+        assertTrue(val >= 0.0 && val <= 1.0);
+    }
+
+    // computeCorrelationMatrix(RealMatrix): known hand-computed r value
+    @Test
+    public void testComputeCorrelationMatrix_fromRealMatrix_knownRValue() throws Throwable {
+        RealMatrix m = new BlockRealMatrix(new double[][]{{1.0, 1.0}, {2.0, 2.0}, {3.0, 4.0}});
+        RealMatrix corr = pc.computeCorrelationMatrix(m);
+        assertEquals(0.9819805060619657, corr.getEntry(0, 1), 1e-6);
+        assertEquals(1.0, corr.getEntry(0, 0), 1e-9);
+    }
+
+    // computeCorrelationMatrix(double[][]): same known value via array overload
+    @Test
+    public void testComputeCorrelationMatrix_fromDoubleArray_knownRValue() throws Throwable {
+        double[][] data = {{1.0, 1.0}, {2.0, 2.0}, {3.0, 4.0}};
+        RealMatrix corr = pc.computeCorrelationMatrix(data);
+        assertEquals(0.9819805060619657, corr.getEntry(1, 0), 1e-6);
+    }
+
+    // computeCorrelationMatrix: loop covers multiple j<i pairs, diagonal always 1
+    @Test
+    public void testComputeCorrelationMatrix_threeVariables_allDiagonalOne() throws Throwable {
+        double[][] data = {{1.0, 2.0, 5.0}, {2.0, 1.0, 3.0}, {3.0, 4.0, 4.0}, {4.0, 3.0, 1.0}};
+        RealMatrix corr = pc.computeCorrelationMatrix(data);
+        assertEquals(1.0, corr.getEntry(0, 0), 1e-9);
+        assertEquals(1.0, corr.getEntry(1, 1), 1e-9);
+        assertEquals(1.0, corr.getEntry(2, 2), 1e-9);
+    }
+
+    // correlation(): perfectly linear increasing data must give r=1
+    @Test
+    public void testCorrelation_perfectPositiveCorrelation_returnsOne() throws Throwable {
+        double[] x = {1.0, 2.0, 3.0, 4.0, 5.0};
+        double[] y = {2.0, 4.0, 6.0, 8.0, 10.0};
+        assertEquals(1.0, pc.correlation(x, y), 1e-9);
+    }
+
+    // correlation(): perfectly linear decreasing data must give r=-1
+    @Test
+    public void testCorrelation_perfectNegativeCorrelation_returnsMinusOne() throws Throwable {
+        double[] x = {1.0, 2.0, 3.0, 4.0, 5.0};
+        double[] y = {10.0, 8.0, 6.0, 4.0, 2.0};
+        assertEquals(-1.0, pc.correlation(x, y), 1e-9);
+    }
+
+    // correlation(): hand-computed r for a non-trivial dataset (r^2=27/28)
+    @Test
+    public void testCorrelation_knownDataset_matchesHandComputedValue() throws Throwable {
+        double[] x = {1.0, 2.0, 3.0};
+        double[] y = {1.0, 2.0, 4.0};
+        assertEquals(0.9819805060619657, pc.correlation(x, y), 1e-6);
+    }
+
+    // correlation(): mismatched array lengths must throw
+    @Test
+    public void testCorrelation_mismatchedLengths_throwsIllegalArgumentException() throws Throwable {
+        double[] x = {1.0, 2.0, 3.0};
+        double[] y = {1.0, 2.0};
+        try {
+            pc.correlation(x, y);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // correlation(): common length of 1 (< 2) must throw
+    @Test
+    public void testCorrelation_lengthOne_throwsIllegalArgumentException() throws Throwable {
+        double[] x = {1.0};
+        double[] y = {2.0};
+        try {
+            pc.correlation(x, y);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // correlation(): common length of 0 (< 2) must throw even though lengths match
+    @Test
+    public void testCorrelation_lengthZero_throwsIllegalArgumentException() throws Throwable {
+        double[] x = new double[0];
+        double[] y = new double[0];
+        try {
+            pc.correlation(x, y);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // correlation(): boundary length of 2 is the minimum valid, must not throw
+    @Test
+    public void testCorrelation_minimumLengthTwo_returnsPlusOrMinusOne() throws Throwable {
+        double[] x = {1.0, 2.0};
+        double[] y = {3.0, 7.0};
+        assertEquals(1.0, pc.correlation(x, y), 1e-9);
+    }
+
+    // covarianceToCorrelation(): diagonal entries always set to exactly 1
+    @Test
+    public void testCovarianceToCorrelation_diagonalEntriesAlwaysOne() throws Throwable {
+        RealMatrix cov = new BlockRealMatrix(new double[][]{{10.0, 3.0}, {3.0, 20.0}});
+        RealMatrix corr = pc.covarianceToCorrelation(cov);
+        assertEquals(1.0, corr.getEntry(0, 0), 1e-9);
+        assertEquals(1.0, corr.getEntry(1, 1), 1e-9);
+    }
+
+    // covarianceToCorrelation(): r(X,Y)=cov(X,Y)/(s(X)s(Y)) for known covariance matrix
+    @Test
+    public void testCovarianceToCorrelation_knownValues_correctRatio() throws Throwable {
+        RealMatrix cov = new BlockRealMatrix(new double[][]{{4.0, 2.0}, {2.0, 9.0}});
+        RealMatrix corr = pc.covarianceToCorrelation(cov);
+        assertEquals(1.0 / 3.0, corr.getEntry(0, 1), 1e-9);
+        assertEquals(1.0 / 3.0, corr.getEntry(1, 0), 1e-9);
+    }
+}

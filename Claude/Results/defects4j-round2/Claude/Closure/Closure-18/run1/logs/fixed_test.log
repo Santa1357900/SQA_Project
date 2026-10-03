@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-18-d8ixvsxf/Closure-18f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - com.google.javascript.jscomp.CompilerClaudeTest::testCodeBuilderEndsWith_exactMatch_returnsTrue
+  - com.google.javascript.jscomp.CompilerClaudeTest::testGetErrorLevel_returnsNonNullLevel
+  - com.google.javascript.jscomp.CompilerClaudeTest::testConstructorDefault_noErrorsInitially
+[exit 0]

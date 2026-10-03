@@ -1,0 +1,319 @@
+package org.apache.commons.csv;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.io.File;
+import java.io.StringReader;
+import java.net.URL;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+
+public class CSVParserClaudeTest {
+
+    // parse(File,...): file null -> Assertions.notNull(file) throws before any I/O
+    @Test
+    public void testParseFile_nullFile_throwsIllegalArgumentException() throws Throwable {
+        try {
+            CSVParser.parse((File) null, Charset.forName("UTF-8"), CSVFormat.DEFAULT);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // parse(File,...): format null -> throws before FileInputStream is opened
+    @Test
+    public void testParseFile_nullFormat_throwsIllegalArgumentException() throws Throwable {
+        File dummy = new File("nonexistent-dummy.csv");
+        try {
+            CSVParser.parse(dummy, Charset.forName("UTF-8"), null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // parse(String,...): string null branch
+    @Test
+    public void testParseString_nullString_throwsIllegalArgumentException() throws Throwable {
+        try {
+            CSVParser.parse((String) null, CSVFormat.DEFAULT);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // parse(String,...): format null branch
+    @Test
+    public void testParseString_nullFormat_throwsIllegalArgumentException() throws Throwable {
+        try {
+            CSVParser.parse("a,b", null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // parse(String,...): happy path, single record with three values
+    @Test
+    public void testParseString_validCsv_parsesRecordsCorrectly() throws Throwable {
+        CSVParser parser = CSVParser.parse("a,b,c", CSVFormat.DEFAULT);
+        List<CSVRecord> records = parser.getRecords();
+        assertEquals(1, records.size());
+        assertArrayEquals(new String[] { "a", "b", "c" }, records.get(0).values());
+    }
+
+    // parse(URL,...): url null branch, no network access performed
+    @Test
+    public void testParseURL_nullUrl_throwsIllegalArgumentException() throws Throwable {
+        try {
+            CSVParser.parse((URL) null, Charset.forName("UTF-8"), CSVFormat.DEFAULT);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // parse(URL,...): charset null branch, thrown before openStream()
+    @Test
+    public void testParseURL_nullCharset_throwsIllegalArgumentException() throws Throwable {
+        URL url = new URL("http://localhost/test.csv");
+        try {
+            CSVParser.parse(url, null, CSVFormat.DEFAULT);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // parse(URL,...): format null branch, thrown before openStream()
+    @Test
+    public void testParseURL_nullFormat_throwsIllegalArgumentException() throws Throwable {
+        URL url = new URL("http://localhost/test.csv");
+        try {
+            CSVParser.parse(url, Charset.forName("UTF-8"), null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor: reader null branch
+    @Test
+    public void testConstructor_nullReader_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new CSVParser(null, CSVFormat.DEFAULT);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor: format null branch
+    @Test
+    public void testConstructor_nullFormat_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new CSVParser(new StringReader("a"), null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor: format without header -> headerMap must be null
+    @Test
+    public void testConstructor_noHeaderFormat_headerMapIsNull() throws Throwable {
+        CSVParser parser = new CSVParser(new StringReader("a,b"), CSVFormat.DEFAULT);
+        assertNull(parser.getHeaderMap());
+    }
+
+    // close(): idempotent, calling twice must not throw
+    @Test
+    public void testClose_calledTwice_doesNotThrow() throws Throwable {
+        CSVParser parser = CSVParser.parse("a,b", CSVFormat.DEFAULT);
+        parser.close();
+        parser.close();
+        assertTrue(parser.isClosed());
+    }
+
+    // getCurrentLineNumber(): increments as records are consumed
+    @Test
+    public void testGetCurrentLineNumber_reflectsLinesConsumed() throws Throwable {
+        CSVParser parser = new CSVParser(new StringReader("a,b\nc,d\n"), CSVFormat.DEFAULT);
+        assertEquals(0, parser.getCurrentLineNumber());
+        parser.nextRecord();
+        assertEquals(1, parser.getCurrentLineNumber());
+        parser.nextRecord();
+        assertEquals(2, parser.getCurrentLineNumber());
+    }
+
+    // getHeaderMap(): must return an independent copy, not a live view
+    @Test
+    public void testGetHeaderMap_returnsIndependentCopy() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withHeader("a", "b");
+        CSVParser parser = CSVParser.parse("1,2", format);
+        Map<String, Integer> map1 = parser.getHeaderMap();
+        map1.put("c", Integer.valueOf(99));
+        Map<String, Integer> map2 = parser.getHeaderMap();
+        assertFalse(map2.containsKey("c"));
+    }
+
+    // getRecordNumber(): starts at 0 and increments once per non-empty record
+    @Test
+    public void testGetRecordNumber_incrementsPerRecord() throws Throwable {
+        CSVParser parser = new CSVParser(new StringReader("a,b\nc,d"), CSVFormat.DEFAULT);
+        assertEquals(0, parser.getRecordNumber());
+        parser.nextRecord();
+        assertEquals(1, parser.getRecordNumber());
+        parser.nextRecord();
+        assertEquals(2, parser.getRecordNumber());
+    }
+
+    // getRecords(): empty input yields empty list (0 loop iterations)
+    @Test
+    public void testGetRecords_emptyInput_returnsEmptyList() throws Throwable {
+        CSVParser parser = CSVParser.parse("", CSVFormat.DEFAULT);
+        List<CSVRecord> records = parser.getRecords();
+        assertTrue(records.isEmpty());
+    }
+
+    // getRecords(): multiple records loop, order preserved
+    @Test
+    public void testGetRecords_multipleRecords_returnsAllInOrder() throws Throwable {
+        CSVParser parser = CSVParser.parse("a,b,c\nd,e,f", CSVFormat.DEFAULT);
+        List<CSVRecord> records = parser.getRecords();
+        assertEquals(2, records.size());
+        assertArrayEquals(new String[] { "a", "b", "c" }, records.get(0).values());
+        assertArrayEquals(new String[] { "d", "e", "f" }, records.get(1).values());
+    }
+
+    // getRecords(Collection): returns the same collection instance, populated
+    @Test
+    public void testGetRecordsWithCollection_populatesProvidedCollection() throws Throwable {
+        CSVParser parser = CSVParser.parse("a,b", CSVFormat.DEFAULT);
+        List<CSVRecord> list = new ArrayList<CSVRecord>();
+        List<CSVRecord> result = parser.getRecords(list);
+        assertSame(list, result);
+        assertEquals(1, result.size());
+    }
+
+    // header explicit + skipHeaderRecord=false (default): first line is data, not skipped
+    @Test
+    public void testHeaderExplicit_withoutSkip_firstLineTreatedAsData() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withHeader("h1", "h2");
+        CSVParser parser = CSVParser.parse("1,2\n3,4", format);
+        List<CSVRecord> records = parser.getRecords();
+        assertEquals(2, records.size());
+        assertArrayEquals(new String[] { "1", "2" }, records.get(0).values());
+    }
+
+    // header explicit + skipHeaderRecord=true: first line is consumed as header, not data
+    @Test
+    public void testHeaderExplicit_withSkipHeaderRecord_firstLineSkipped() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withHeader("h1", "h2").withSkipHeaderRecord(true);
+        CSVParser parser = CSVParser.parse("h1,h2\n1,2", format);
+        List<CSVRecord> records = parser.getRecords();
+        assertEquals(1, records.size());
+        assertArrayEquals(new String[] { "1", "2" }, records.get(0).values());
+    }
+
+    // header auto-detect (empty header array): first line becomes the header map
+    @Test
+    public void testHeaderAutoDetect_emptyHeaderArray_readsFirstLineAsHeader() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withHeader();
+        CSVParser parser = CSVParser.parse("x,y\n1,2", format);
+        Map<String, Integer> headerMap = parser.getHeaderMap();
+        assertEquals(Integer.valueOf(0), headerMap.get("x"));
+        assertEquals(Integer.valueOf(1), headerMap.get("y"));
+        List<CSVRecord> records = parser.getRecords();
+        assertEquals(1, records.size());
+        assertArrayEquals(new String[] { "1", "2" }, records.get(0).values());
+    }
+
+
+
+
+
+
+
+    // isClosed(): false before close, true after close
+    @Test
+    public void testIsClosed_falseInitially_trueAfterClose() throws Throwable {
+        CSVParser parser = CSVParser.parse("a,b", CSVFormat.DEFAULT);
+        assertFalse(parser.isClosed());
+        parser.close();
+        assertTrue(parser.isClosed());
+    }
+
+    // iterator(): hasNext()/next() traverse all records then stop
+    @Test
+    public void testIterator_hasNextAndNext_traversesAllRecords() throws Throwable {
+        CSVParser parser = CSVParser.parse("a,b\nc,d", CSVFormat.DEFAULT);
+        Iterator<CSVRecord> it = parser.iterator();
+        assertTrue(it.hasNext());
+        CSVRecord r1 = it.next();
+        assertArrayEquals(new String[] { "a", "b" }, r1.values());
+        assertTrue(it.hasNext());
+        CSVRecord r2 = it.next();
+        assertArrayEquals(new String[] { "c", "d" }, r2.values());
+        assertFalse(it.hasNext());
+    }
+
+    // iterator(): next() without prior hasNext(), then exhausted throws NoSuchElementException
+    @Test
+    public void testIterator_next_throwsNoSuchElementExceptionWhenExhausted() throws Throwable {
+        CSVParser parser = CSVParser.parse("a", CSVFormat.DEFAULT);
+        Iterator<CSVRecord> it = parser.iterator();
+        it.next();
+        try {
+            it.next();
+            fail("expected NoSuchElementException");
+        } catch (NoSuchElementException expected) {
+        }
+    }
+
+    // iterator(): remove() is unsupported
+    @Test
+    public void testIterator_remove_throwsUnsupportedOperationException() throws Throwable {
+        CSVParser parser = CSVParser.parse("a", CSVFormat.DEFAULT);
+        Iterator<CSVRecord> it = parser.iterator();
+        try {
+            it.remove();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // iterator(): hasNext() returns false once parser is closed
+    @Test
+    public void testIterator_hasNext_afterClose_returnsFalse() throws Throwable {
+        CSVParser parser = CSVParser.parse("a,b\nc,d", CSVFormat.DEFAULT);
+        Iterator<CSVRecord> it = parser.iterator();
+        parser.close();
+        assertFalse(it.hasNext());
+    }
+
+    // nextRecord()/addRecordValue(): value equal to configured nullString becomes null
+    @Test
+    public void testNextRecord_nullStringMatchingValue_convertsToNull() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withNullString("NULL");
+        CSVParser parser = CSVParser.parse("NULL,b", format);
+        String[] values = parser.getRecords().get(0).values();
+        assertNull(values[0]);
+        assertEquals("b", values[1]);
+    }
+
+    // nextRecord()/addRecordValue(): value not matching nullString stays unchanged
+    @Test
+    public void testNextRecord_nullStringNonMatchingValue_keepsOriginalString() throws Throwable {
+        CSVFormat format = CSVFormat.DEFAULT.withNullString("NULL");
+        CSVParser parser = CSVParser.parse("abc,b", format);
+        String[] values = parser.getRecords().get(0).values();
+        assertEquals("abc", values[0]);
+    }
+
+    // nextRecord()/addRecordValue(): nullString not configured (null) keeps literal text
+    @Test
+    public void testNextRecord_nullStringNotConfigured_keepsLiteralValue() throws Throwable {
+        CSVParser parser = CSVParser.parse("NULL,b", CSVFormat.DEFAULT);
+        String[] values = parser.getRecords().get(0).values();
+        assertEquals("NULL", values[0]);
+    }
+}

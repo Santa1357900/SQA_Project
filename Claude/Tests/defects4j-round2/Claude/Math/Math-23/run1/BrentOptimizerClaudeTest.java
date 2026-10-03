@@ -1,0 +1,313 @@
+package org.apache.commons.math3.optimization.univariate;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.apache.commons.math3.analysis.UnivariateFunction;
+import org.apache.commons.math3.optimization.GoalType;
+import org.apache.commons.math3.optimization.ConvergenceChecker;
+import org.apache.commons.math3.exception.NumberIsTooSmallException;
+import org.apache.commons.math3.exception.NotStrictlyPositiveException;
+
+public class BrentOptimizerClaudeTest {
+
+    // Covers: constructor branch rel < MIN_RELATIVE_TOLERANCE -> throws NumberIsTooSmallException
+    @Test
+    public void testConstructor_relBelowMinimum_throwsNumberIsTooSmallException() throws Throwable {
+        double belowMin = Math.ulp(1.0);
+        try {
+            new BrentOptimizer(belowMin, 1.0);
+            fail("expected NumberIsTooSmallException");
+        } catch (NumberIsTooSmallException expected) {
+        }
+    }
+
+    // Covers: boundary rel == MIN_RELATIVE_TOLERANCE is allowed (condition uses strict <)
+    @Test
+    public void testConstructor_relExactlyAtMinimum_allowed() throws Throwable {
+        double exactMin = 2 * Math.ulp(1.0);
+        BrentOptimizer optimizer = new BrentOptimizer(exactMin, 1e-10);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return x * x; }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MINIMIZE, -2.0, 2.0, 1.0);
+        assertTrue(result.getPoint() >= -2.0 && result.getPoint() <= 2.0);
+    }
+
+    // Covers: constructor branch abs <= 0 (abs == 0) -> throws NotStrictlyPositiveException
+    @Test
+    public void testConstructor_absZero_throwsNotStrictlyPositiveException() throws Throwable {
+        try {
+            new BrentOptimizer(1e-8, 0.0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // Covers: constructor branch abs <= 0 (abs < 0) -> throws NotStrictlyPositiveException
+    @Test
+    public void testConstructor_absNegative_throwsNotStrictlyPositiveException() throws Throwable {
+        try {
+            new BrentOptimizer(1e-8, -1.0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // Covers: two-arg constructor delegates to three-arg with null checker, valid args
+    @Test
+    public void testConstructor_twoArg_validValues_noException() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-6, 1e-6);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return (x - 1.0) * (x - 1.0); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MINIMIZE, -5.0, 5.0, 0.0);
+        assertEquals(1.0, result.getPoint(), 1e-3);
+    }
+
+    // Covers: three-arg constructor with non-null checker stores checker, valid args
+    @Test
+    public void testConstructor_threeArg_withChecker_validValues_noException() throws Throwable {
+        ConvergenceChecker<UnivariatePointValuePair> checker = new ConvergenceChecker<UnivariatePointValuePair>() {
+            public boolean converged(int iteration, UnivariatePointValuePair previous, UnivariatePointValuePair current) {
+                return false;
+            }
+        };
+        BrentOptimizer optimizer = new BrentOptimizer(1e-6, 1e-6, checker);
+        assertNotNull(optimizer);
+    }
+
+    // Covers: doOptimize default path, isMinim=true, converges to interior minimum via stop criterion
+    @Test
+    public void testOptimize_minimizeParabola_findsVertex() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-9, 1e-12);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return (x - 2.0) * (x - 2.0); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MINIMIZE, -10.0, 10.0, -5.0);
+        assertEquals(2.0, result.getPoint(), 1e-4);
+        assertEquals(0.0, result.getValue(), 1e-6);
+    }
+
+    // Covers: same branch with startValue on the other side of the minimum
+    @Test
+    public void testOptimize_minimizeParabola_differentStartValue() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-9, 1e-12);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return (x - 2.0) * (x - 2.0); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MINIMIZE, -10.0, 10.0, 9.0);
+        assertEquals(2.0, result.getPoint(), 1e-4);
+    }
+
+    // Covers: isMinim=false branch, negation of fx/fu applied correctly for GoalType.MAXIMIZE
+    @Test
+    public void testOptimize_maximizeInvertedParabola_findsMaximum() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-9, 1e-12);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return -(x - 3.0) * (x - 3.0); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MAXIMIZE, -10.0, 10.0, 0.0);
+        assertEquals(3.0, result.getPoint(), 1e-4);
+        assertEquals(0.0, result.getValue(), 1e-6);
+    }
+
+    // Covers: result point always stays within original [min,max] bounds, minimum at boundary
+    @Test
+    public void testOptimize_resultWithinSearchBounds() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-9, 1e-12);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return (x - 50.0) * (x - 50.0); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(500, f, GoalType.MINIMIZE, 0.0, 10.0, 1.0);
+        assertTrue(result.getPoint() >= 0.0 && result.getPoint() <= 10.0);
+    }
+
+    // Covers: initial x equals lo boundary at start of algorithm
+    @Test
+    public void testOptimize_startValueAtLowerBound() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-8, 1e-10);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return x * x; }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MINIMIZE, -3.0, 3.0, -3.0);
+        assertEquals(0.0, result.getPoint(), 1e-3);
+    }
+
+    // Covers: initial x equals hi boundary at start of algorithm
+    @Test
+    public void testOptimize_startValueAtUpperBound() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-8, 1e-10);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return x * x; }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MINIMIZE, -3.0, 3.0, 3.0);
+        assertEquals(0.0, result.getPoint(), 1e-3);
+    }
+
+    // Covers: u-a<tol2 / b-u<tol2 boundary-adjustment branch with a very narrow interval
+    @Test
+    public void testOptimize_narrowInterval_boundaryMinimum() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-9, 1e-12);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return x * x; }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MINIMIZE, 0.999, 1.001, 1.0);
+        assertTrue(result.getPoint() >= 0.999 && result.getPoint() <= 1.001);
+        assertEquals(result.getPoint() * result.getPoint(), result.getValue(), 1e-9);
+    }
+
+    // Covers: non-smooth function forces parabola-fit rejection -> golden section branch repeatedly
+    @Test
+    public void testOptimize_absoluteValueKink_goldenSectionPath() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-8, 1e-10);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return Math.abs(x - 1.0); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(500, f, GoalType.MINIMIZE, -5.0, 5.0, 4.0);
+        assertEquals(1.0, result.getPoint(), 1e-2);
+        assertEquals(0.0, result.getValue(), 1e-2);
+    }
+
+    // Covers: checker != null but never converges -> falls through to default Brent stopping criterion
+    @Test
+    public void testOptimize_checkerAlwaysFalse_behavesLikeDefaultCriterion() throws Throwable {
+        ConvergenceChecker<UnivariatePointValuePair> checker = new ConvergenceChecker<UnivariatePointValuePair>() {
+            public boolean converged(int iteration, UnivariatePointValuePair previous, UnivariatePointValuePair current) {
+                return false;
+            }
+        };
+        BrentOptimizer optimizer = new BrentOptimizer(1e-9, 1e-12, checker);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return (x - 4.0) * (x - 4.0); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MINIMIZE, -10.0, 10.0, 0.0);
+        assertEquals(4.0, result.getPoint(), 1e-4);
+    }
+
+    // Covers: checker-forced stop after two rejections must still return true best point x (bug regression), not last trial points
+    @Test
+    public void testOptimize_checkerTriggersAfterTwoRejections_returnsOverallBestPoint_minimize() throws Throwable {
+        ConvergenceChecker<UnivariatePointValuePair> checker = new ConvergenceChecker<UnivariatePointValuePair>() {
+            public boolean converged(int iteration, UnivariatePointValuePair previous, UnivariatePointValuePair current) {
+                return iteration >= 1;
+            }
+        };
+        BrentOptimizer optimizer = new BrentOptimizer(1e-8, 1e-10, checker);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return x * x; }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(100, f, GoalType.MINIMIZE, -1.0, 1.0, 0.0);
+        assertEquals(0.0, result.getValue(), 1e-6);
+        assertEquals(0.0, result.getPoint(), 1e-6);
+    }
+
+    // Covers: same two-rejection scenario under isMinim=false (GoalType.MAXIMIZE) negation branches
+    @Test
+    public void testOptimize_checkerTriggersAfterTwoRejections_returnsOverallBestPoint_maximize() throws Throwable {
+        ConvergenceChecker<UnivariatePointValuePair> checker = new ConvergenceChecker<UnivariatePointValuePair>() {
+            public boolean converged(int iteration, UnivariatePointValuePair previous, UnivariatePointValuePair current) {
+                return iteration >= 1;
+            }
+        };
+        BrentOptimizer optimizer = new BrentOptimizer(1e-8, 1e-10, checker);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return -(x * x); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(100, f, GoalType.MAXIMIZE, -1.0, 1.0, 0.0);
+        assertEquals(0.0, result.getValue(), 1e-6);
+        assertEquals(0.0, result.getPoint(), 1e-6);
+    }
+
+    // Covers: documented contract that the best point encountered (including the initial guess) is returned
+    @Test
+    public void testOptimize_resultNeverWorseThanStartValue_convexFunction() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-8, 1e-10);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return x * x; }
+        };
+        double startValueFx = f.value(7.0);
+        UnivariatePointValuePair result = optimizer.optimize(500, f, GoalType.MINIMIZE, -10.0, 10.0, 7.0);
+        assertTrue(result.getValue() <= startValueFx);
+    }
+
+    // Covers: multiple parabolic and golden section iterations on a non-quadratic W-shaped function
+    @Test
+    public void testOptimize_quarticWShapeFunction_findsLocalMinimum() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-9, 1e-12);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return x * x * x * x - 4.0 * x * x; }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(500, f, GoalType.MINIMIZE, 0.0, 3.0, 2.5);
+        assertEquals(Math.sqrt(2.0), result.getPoint(), 1e-3);
+        assertEquals(-4.0, result.getValue(), 1e-3);
+    }
+
+    // Covers: fu<=fx always true (equal values) -> acceptance branch and loop termination with flat function
+    @Test
+    public void testOptimize_constantFunction_terminatesWithinBounds() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-8, 1e-10);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return 5.0; }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(300, f, GoalType.MINIMIZE, -2.0, 2.0, 0.5);
+        assertEquals(5.0, result.getValue(), 1e-12);
+        assertTrue(result.getPoint() >= -2.0 && result.getPoint() <= 2.0);
+    }
+
+    // Covers: minimum-allowed relative threshold used operationally, high precision convergence
+    @Test
+    public void testOptimize_tightThresholds_highPrecisionConvergence() throws Throwable {
+        double minRel = 2 * Math.ulp(1.0);
+        BrentOptimizer optimizer = new BrentOptimizer(minRel, 1e-14);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return (x - 2.0) * (x - 2.0); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(1000, f, GoalType.MINIMIZE, -10.0, 10.0, -5.0);
+        assertEquals(2.0, result.getPoint(), 1e-6);
+    }
+
+    // Covers: large relative/absolute thresholds cause earlier stop (tol1/tol2 large) but result stays reasonable
+    @Test
+    public void testOptimize_looseThresholds_resultStillValid() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-2, 1e-2);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return (x - 2.0) * (x - 2.0); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MINIMIZE, -10.0, 10.0, 0.0);
+        assertEquals(2.0, result.getPoint(), 0.5);
+    }
+
+    // Covers: lo<hi branch with a=lo,b=hi assigned directly (no internal swap needed), asymmetric bounds
+    @Test
+    public void testOptimize_asymmetricBounds_minimizeNearUpperEdgeOfSearch() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-8, 1e-10);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return (x - 1.0) * (x - 1.0); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(200, f, GoalType.MINIMIZE, -50.0, 50.0, 40.0);
+        assertEquals(1.0, result.getPoint(), 1e-3);
+    }
+
+    // Covers: returned pair's value is exactly the objective function evaluated at returned point
+    @Test
+    public void testOptimize_valueConsistentWithFunctionAtReturnedPoint() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-8, 1e-10);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return Math.sin(x); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(300, f, GoalType.MINIMIZE, 0.0, 6.0, 3.0);
+        assertEquals(Math.sin(result.getPoint()), result.getValue(), 1e-9);
+    }
+
+    // Covers: smooth transcendental function, interior minimum away from both bounds
+    @Test
+    public void testOptimize_sineFunction_findsKnownMinimum() throws Throwable {
+        BrentOptimizer optimizer = new BrentOptimizer(1e-9, 1e-12);
+        UnivariateFunction f = new UnivariateFunction() {
+            public double value(double x) { return Math.sin(x); }
+        };
+        UnivariatePointValuePair result = optimizer.optimize(300, f, GoalType.MINIMIZE, 0.0, 6.0, 3.0);
+        assertEquals(3.0 * Math.PI / 2.0, result.getPoint(), 1e-3);
+        assertEquals(-1.0, result.getValue(), 1e-6);
+    }
+}

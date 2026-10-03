@@ -1,0 +1,325 @@
+package org.apache.commons.math3.distribution;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math3.exception.MathArithmeticException;
+import org.apache.commons.math3.exception.MathIllegalArgumentException;
+import org.apache.commons.math3.exception.NotPositiveException;
+import org.apache.commons.math3.exception.NotStrictlyPositiveException;
+import org.apache.commons.math3.random.RandomGenerator;
+import org.apache.commons.math3.random.Well19937c;
+import org.apache.commons.math3.util.Pair;
+
+public class DiscreteDistributionClaudeTest {
+
+    // ครอบคลุม constructor(List) ปกติ: normalize ให้ผลรวมความน่าจะเป็นเท่ากับ 1
+    @Test
+    public void testConstructorSingleArg_validSamples_normalizesProbabilitiesToSumOne() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 1.0));
+        samples.add(new Pair<String, Double>("b", 3.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        List<Pair<String, Double>> out = dist.getSamples();
+        double sum = out.get(0).getValue().doubleValue() + out.get(1).getValue().doubleValue();
+        assertEquals(1.0, sum, 1e-9);
+        assertEquals(0.25, out.get(0).getValue().doubleValue(), 1e-9);
+    }
+
+    // ครอบคลุม branch sum==0 ของ normalizeArray เมื่อ list ว่าง
+    @Test
+    public void testConstructorSingleArg_emptyList_throwsMathArithmeticException() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        try {
+            new DiscreteDistribution<String>(samples);
+            fail("expected MathArithmeticException");
+        } catch (MathArithmeticException expected) {
+        }
+    }
+
+    // ครอบคลุม throw NotPositiveException เมื่อสมาชิกตัวแรกมีความน่าจะเป็นติดลบ
+    @Test
+    public void testConstructorSingleArg_negativeProbabilityFirstElement_throwsNotPositiveException() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", -1.0));
+        samples.add(new Pair<String, Double>("b", 2.0));
+        try {
+            new DiscreteDistribution<String>(samples);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // ครอบคลุม throw NotPositiveException เมื่อสมาชิกลำดับถัดไป (ไม่ใช่ตัวแรก) ติดลบ
+    @Test
+    public void testConstructorSingleArg_negativeProbabilityLaterElement_throwsNotPositiveException() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 2.0));
+        samples.add(new Pair<String, Double>("b", -0.5));
+        try {
+            new DiscreteDistribution<String>(samples);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // ค่า -Infinity ถือเป็นค่าติดลบ ต้องเข้า branch NotPositiveException ไม่ใช่ MathIllegalArgumentException
+    @Test
+    public void testConstructorSingleArg_negativeInfinityProbability_throwsNotPositiveException() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", Double.NEGATIVE_INFINITY));
+        try {
+            new DiscreteDistribution<String>(samples);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // ครอบคลุม constructor(RandomGenerator, List) ด้วย generator ที่กำหนดเอง ทำงานได้ปกติ
+    @Test
+    public void testConstructorTwoArg_customRandomGenerator_buildsDistributionSuccessfully() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("x", 5.0));
+        RandomGenerator rng = new Well19937c();
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(rng, samples);
+        assertEquals(1, dist.getSamples().size());
+        assertEquals("x", dist.getSamples().get(0).getKey());
+    }
+
+    // ค่าความน่าจะเป็นเป็นอนันต์บวก ต้อง throw MathIllegalArgumentException ตาม Javadoc ของ constructor
+    @Test
+    public void testConstructorTwoArg_positiveInfiniteProbability_throwsMathIllegalArgumentException() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", Double.POSITIVE_INFINITY));
+        samples.add(new Pair<String, Double>("b", 1.0));
+        RandomGenerator rng = new Well19937c();
+        try {
+            new DiscreteDistribution<String>(rng, samples);
+            fail("expected MathIllegalArgumentException");
+        } catch (MathIllegalArgumentException expected) {
+        }
+    }
+
+    // ความน่าจะเป็นทุกตัวเป็นศูนย์ ผลรวมเป็น 0 ต้อง throw MathArithmeticException
+    @Test
+    public void testConstructorTwoArg_allZeroProbabilities_throwsMathArithmeticException() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 0.0));
+        samples.add(new Pair<String, Double>("b", 0.0));
+        RandomGenerator rng = new Well19937c();
+        try {
+            new DiscreteDistribution<String>(rng, samples);
+            fail("expected MathArithmeticException");
+        } catch (MathArithmeticException expected) {
+        }
+    }
+
+    // สมาชิกเดียวที่มีความน่าจะเป็น 1.0 ต้อง normalize คงที่เป็น 1.0
+    @Test
+    public void testConstructorTwoArg_singleSampleProbabilityOne_normalizesToOne() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("only", 1.0));
+        RandomGenerator rng = new Well19937c();
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(rng, samples);
+        assertEquals(1.0, dist.getSamples().get(0).getValue().doubleValue(), 1e-9);
+    }
+
+    // reseedRandomGenerator ด้วย seed เดียวกันต้องทำให้ random generator ให้ลำดับค่าเดียวกัน
+    @Test
+    public void testReseedRandomGenerator_sameSeed_producesSameNextDouble() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 1.0));
+        DiscreteDistribution<String> dist1 = new DiscreteDistribution<String>(samples);
+        DiscreteDistribution<String> dist2 = new DiscreteDistribution<String>(samples);
+        dist1.reseedRandomGenerator(99L);
+        dist2.reseedRandomGenerator(99L);
+        assertEquals(dist1.random.nextDouble(), dist2.random.nextDouble(), 1e-9);
+    }
+
+    // probability(x) ของค่าที่ตรงกับ singleton ต้องคืนค่า normalized probability
+    @Test
+    public void testProbability_matchingSingleton_returnsNormalizedValue() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 1.0));
+        samples.add(new Pair<String, Double>("b", 1.0));
+        samples.add(new Pair<String, Double>("c", 2.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        assertEquals(0.5, dist.probability("c"), 1e-9);
+    }
+
+    // probability(x) ของค่าที่ไม่ตรงกับ singleton ใดเลย ต้องคืน 0
+    @Test
+    public void testProbability_nonMatchingValue_returnsZero() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 1.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        assertEquals(0.0, dist.probability("zzz"), 1e-9);
+    }
+
+    // รองรับ null: เมื่อ singleton เป็น null และ query ด้วย null ต้องจับคู่และคืนค่าความน่าจะเป็นนั้น
+    @Test
+    public void testProbability_nullSingletonPresent_matchesNullQuery() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>(null, 1.0));
+        samples.add(new Pair<String, Double>("b", 1.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        assertEquals(0.5, dist.probability(null), 1e-9);
+    }
+
+    // query ด้วย null แต่ไม่มี singleton ใดเป็น null ต้องคืน 0
+    @Test
+    public void testProbability_nullQueryNoNullSingleton_returnsZero() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 1.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        assertEquals(0.0, dist.probability(null), 1e-9);
+    }
+
+    // มี singleton ซ้ำกันหลายรายการ probability ต้องรวมความน่าจะเป็นของทุกรายการที่ตรงกัน
+    @Test
+    public void testProbability_duplicateSingletons_sumsProbabilities() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 1.0));
+        samples.add(new Pair<String, Double>("a", 1.0));
+        samples.add(new Pair<String, Double>("b", 2.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        assertEquals(0.5, dist.probability("a"), 1e-9);
+    }
+
+    // getSamples ต้องคืนขนาดและลำดับ key ตรงกับ input
+    @Test
+    public void testGetSamples_returnsCorrectSizeAndKeyOrder() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("first", 1.0));
+        samples.add(new Pair<String, Double>("second", 1.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        List<Pair<String, Double>> out = dist.getSamples();
+        assertEquals(2, out.size());
+        assertEquals("first", out.get(0).getKey());
+        assertEquals("second", out.get(1).getKey());
+    }
+
+    // ผลรวมความน่าจะเป็นทั้งหมดจาก getSamples ต้องเท่ากับ 1.0 เสมอตาม normalizedSum ที่กำหนด
+    @Test
+    public void testGetSamples_probabilitiesSumToOne() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 2.0));
+        samples.add(new Pair<String, Double>("b", 3.0));
+        samples.add(new Pair<String, Double>("c", 5.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        List<Pair<String, Double>> out = dist.getSamples();
+        double sum = 0;
+        for (int i = 0; i < out.size(); i++) {
+            sum += out.get(i).getValue().doubleValue();
+        }
+        assertEquals(1.0, sum, 1e-9);
+    }
+
+    // ค่าน้ำหนักเดิมต้องถูก normalize ไม่ใช่คืนค่าน้ำหนักดิบ
+    @Test
+    public void testGetSamples_normalizesOriginalWeights() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 4.0));
+        samples.add(new Pair<String, Double>("b", 4.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        assertEquals(0.5, dist.getSamples().get(0).getValue().doubleValue(), 1e-9);
+    }
+
+    // เมื่อ probability ตัวแรกเป็น 1.0 sample() ต้องคืนสมาชิกตัวแรกเสมอไม่ว่าค่าสุ่มจะเป็นเท่าไรใน [0,1)
+    @Test
+    public void testSample_firstProbabilityOne_alwaysReturnsFirstSingleton() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("first", 1.0));
+        samples.add(new Pair<String, Double>("second", 0.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        for (int i = 0; i < 5; i++) {
+            assertEquals("first", dist.sample());
+        }
+    }
+
+    // เมื่อ probability ตัวแรกเป็น 0 ตัวสองเป็น 1.0 sample() ต้องคืนสมาชิกตัวสองเสมอ
+    @Test
+    public void testSample_firstProbabilityZeroSecondOne_alwaysReturnsSecondSingleton() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("first", 0.0));
+        samples.add(new Pair<String, Double>("second", 1.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        for (int i = 0; i < 5; i++) {
+            assertEquals("second", dist.sample());
+        }
+    }
+
+    // มีสมาชิกเดียวในการแจกแจง sample() ต้องคืนสมาชิกนั้นเสมอ
+    @Test
+    public void testSample_singleSingleton_alwaysReturnsThatSingleton() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("only", 10.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        assertEquals("only", dist.sample());
+    }
+
+    // sampleSize เท่ากับ 0 ต้อง throw NotStrictlyPositiveException
+    @Test
+    public void testSampleInt_zeroSampleSize_throwsNotStrictlyPositiveException() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 1.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        try {
+            dist.sample(0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // sampleSize ติดลบ ต้อง throw NotStrictlyPositiveException เช่นกัน
+    @Test
+    public void testSampleInt_negativeSampleSize_throwsNotStrictlyPositiveException() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("a", 1.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        try {
+            dist.sample(-3);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // การแจกแจงที่กำหนดแน่นอน (prob แรก=1.0) ต้องคืนอาเรย์ขนาดถูกต้องและทุกค่าตรงกับ singleton เดียว
+    @Test
+    public void testSampleInt_deterministicDistribution_returnsArrayWithCorrectSizeAndValues() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("only", 1.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        String[] result = dist.sample(4);
+        assertEquals(4, result.length);
+        for (int i = 0; i < result.length; i++) {
+            assertEquals("only", result[i]);
+        }
+    }
+
+    // sampleSize เท่ากับ 1 ต้องคืนอาเรย์ขนาด 1
+    @Test
+    public void testSampleInt_sampleSizeOne_returnsArrayLengthOne() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>("solo", 1.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        String[] result = dist.sample(1);
+        assertEquals(1, result.length);
+        assertEquals("solo", result[0]);
+    }
+
+    // probability() รองรับ null เป็นค่าของ singleton ได้ ดังนั้น sample(int) ไม่ควร throw NullPointerException
+    // แม้สมาชิกตัวแรกของการแจกแจงจะเป็น null (บั๊ก: โค้ดเรียก singletons.get(0).getClass() โดยไม่เช็ค null)
+    @Test
+    public void testSampleInt_firstSingletonNull_doesNotThrowNullPointerException() throws Throwable {
+        List<Pair<String, Double>> samples = new ArrayList<Pair<String, Double>>();
+        samples.add(new Pair<String, Double>(null, 1.0));
+        DiscreteDistribution<String> dist = new DiscreteDistribution<String>(samples);
+        String[] result = dist.sample(3);
+        assertEquals(3, result.length);
+        assertNull(result[0]);
+    }
+}

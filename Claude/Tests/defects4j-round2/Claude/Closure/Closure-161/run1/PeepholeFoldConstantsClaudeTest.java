@@ -1,0 +1,383 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class PeepholeFoldConstantsClaudeTest {
+
+  private Result lastResult;
+
+  private String fold(String js) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.foldConstants = true;
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    lastResult = compiler.compile(externs, input, options);
+    return compiler.toSource();
+  }
+
+  // tryFoldTypeof: typeof(number literal) -> "number"
+  @Test
+  public void testTypeof_number_foldsToNumberString() throws Throwable {
+    String src = fold("var x = typeof 5;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("\"number\""));
+  }
+
+  // tryFoldTypeof: typeof(string literal) -> "string"
+  @Test
+  public void testTypeof_string_foldsToStringString() throws Throwable {
+    String src = fold("var x = typeof 'hi';");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("\"string\""));
+  }
+
+  // tryFoldTypeof: typeof(undefined NAME) -> "undefined"
+  @Test
+  public void testTypeof_undefinedName_foldsToUndefinedString() throws Throwable {
+    String src = fold("var x = typeof undefined;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("\"undefined\""));
+  }
+
+  // tryFoldTypeof: typeof(non-literal NAME) is not folded, typeof stays
+  @Test
+  public void testTypeof_nonLiteral_notFolded() throws Throwable {
+    String src = fold("var y; var x = typeof y;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("typeof"));
+  }
+
+  // tryFoldUnaryOperator NOT: !2 (non 0/1 number) folds to false
+  @Test
+  public void testNot_nonZeroOrOneNumber_foldsToFalse() throws Throwable {
+    String src = fold("var x = !2;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("false"));
+  }
+
+  // tryFoldUnaryOperator NOT: !0 is explicitly NOT folded back to a boolean
+  @Test
+  public void testNot_zero_notFolded() throws Throwable {
+    String src = fold("var x = !0;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("!0"));
+  }
+
+  // tryFoldUnaryOperator POS: +5 folds away the unary plus, leaving 5
+  @Test
+  public void testPos_numberLiteral_foldsAwayUnaryPlus() throws Throwable {
+    String src = fold("var x = +5;");
+    assertTrue(lastResult.success);
+    assertFalse(src.contains("+5"));
+    assertTrue(src.contains("5"));
+  }
+
+  // tryFoldUnaryOperator POS: +y where y is a non-numeric NAME is not folded
+  @Test
+  public void testPos_nonNumericName_notFolded() throws Throwable {
+    String src = fold("var y; var x = +y;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("+y"));
+  }
+
+  // tryFoldUnaryOperator NEG combined with ADD fold: -(1+2) -> -3
+  @Test
+  public void testNeg_combinedWithAdd_foldsToNegativeSum() throws Throwable {
+    String src = fold("var x = -(1+2);");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("-3"));
+  }
+
+  // tryFoldUnaryOperator NEG: "-NaN" is "NaN"
+  @Test
+  public void testNeg_NaN_staysNaN() throws Throwable {
+    String src = fold("var x = -NaN;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("NaN"));
+    assertFalse(src.contains("-NaN"));
+  }
+
+  // tryFoldUnaryOperator NEG: negating a non-numeric literal reports an error
+  @Test
+  public void testNeg_nonNumericOperand_reportsError() throws Throwable {
+    fold("var x = -'abc';");
+    assertFalse(lastResult.success);
+  }
+
+  // tryFoldUnaryOperator BITNOT: ~5 folds to the bitwise complement -6
+  @Test
+  public void testBitnot_integer_foldsToComplement() throws Throwable {
+    String src = fold("var x = ~5;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("-6"));
+  }
+
+  // tryFoldUnaryOperator BITNOT: fractional operand reports an error
+  @Test
+  public void testBitnot_fractionalOperand_reportsError() throws Throwable {
+    fold("var x = ~1.5;");
+    assertFalse(lastResult.success);
+  }
+
+  // tryFoldUnaryOperator BITNOT: operand outside int range reports an error
+  @Test
+  public void testBitnot_outOfRangeOperand_reportsError() throws Throwable {
+    fold("var x = ~4294967296;");
+    assertFalse(lastResult.success);
+  }
+
+  // tryFoldInstanceof: a primitive literal is never an instance of anything
+  @Test
+  public void testInstanceof_primitiveNumberLeft_foldsToFalse() throws Throwable {
+    String src = fold("var x = (5 instanceof Object);");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("false"));
+  }
+
+  // tryFoldInstanceof: an object literal is an instance of Object
+  @Test
+  public void testInstanceof_objectLiteralLeftAgainstObject_foldsToTrue() throws Throwable {
+    String src = fold("var x = ({} instanceof Object);");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("true"));
+  }
+
+  // tryFoldAssign: x = x + 1 folds into the compound assignment x += 1
+  @Test
+  public void testAssign_sameOperandMatch_foldsToCompoundAssign() throws Throwable {
+    String src = fold("var x; x = x + 1;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("+="));
+  }
+
+  // tryFoldAssign: non-commutative op with mismatched operand order is not folded
+  @Test
+  public void testAssign_nonCommutativeMismatch_notFolded() throws Throwable {
+    String src = fold("var x, y; x = y - x;");
+    assertTrue(lastResult.success);
+    assertFalse(src.contains("-="));
+  }
+
+  // tryFoldAndOr AND: falsy left folds to left value, right side not evaluated
+  @Test
+  public void testAnd_falsyLeft_foldsToLeftWithoutEvaluatingRight() throws Throwable {
+    String src = fold("function foo(){return 1;} var x = 0 && foo();");
+    assertTrue(lastResult.success);
+    assertFalse(src.contains("foo()"));
+    assertFalse(src.contains("&&"));
+  }
+
+  // tryFoldAndOr OR: truthy left folds to left value, right side not evaluated
+  @Test
+  public void testOr_truthyLeft_foldsToLeftWithoutEvaluatingRight() throws Throwable {
+    String src = fold("function foo(){return 1;} var x = 1 || foo();");
+    assertTrue(lastResult.success);
+    assertFalse(src.contains("foo()"));
+    assertFalse(src.contains("||"));
+  }
+
+  // tryFoldAndOr OR: falsy left with no side effects folds to the right operand
+  @Test
+  public void testOr_falsyLeftNoSideEffects_foldsToRight() throws Throwable {
+    String src = fold("var y; var x = 0 || y;");
+    assertTrue(lastResult.success);
+    assertFalse(src.contains("||"));
+    assertTrue(src.contains("y"));
+  }
+
+  // tryFoldArithmeticOp ADD: two number literals fold to their sum
+  @Test
+  public void testAdd_numberLiterals_foldsToSum() throws Throwable {
+    String src = fold("var x = 1 + 2;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("3"));
+  }
+
+  // tryFoldArithmeticOp SUB: two number literals fold to their difference
+  @Test
+  public void testSub_numberLiterals_foldsToDifference() throws Throwable {
+    String src = fold("var x = 10 - 3;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("7"));
+  }
+
+  // tryFoldArithmeticOp MUL: two number literals fold to their product
+  @Test
+  public void testMul_numberLiterals_foldsToProduct() throws Throwable {
+    String src = fold("var x = 4 * 5;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("20"));
+  }
+
+  // tryFoldArithmeticOp DIV: two number literals fold to their quotient
+  @Test
+  public void testDiv_numberLiterals_foldsToQuotient() throws Throwable {
+    String src = fold("var x = 6 / 3;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("2"));
+  }
+
+  // tryFoldArithmeticOp MOD: two number literals fold to their remainder
+  @Test
+  public void testMod_numberLiterals_foldsToRemainder() throws Throwable {
+    String src = fold("var x = 7 % 2;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("1"));
+  }
+
+  // performArithmeticOp DIV: division by zero is explicitly not folded
+  @Test
+  public void testDiv_byZero_notFolded() throws Throwable {
+    String src = fold("var x = 1 / 0;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("1/0"));
+  }
+
+  // tryFoldAddConstantString: two string literals concatenate
+  @Test
+  public void testAdd_stringLiterals_foldsToConcatenation() throws Throwable {
+    String src = fold("var x = 'foo' + 'bar';");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("foobar"));
+  }
+
+  // tryFoldAddConstantString: string literal plus number literal concatenates
+  @Test
+  public void testAdd_stringAndNumber_foldsToConcatenation() throws Throwable {
+    String src = fold("var x = 'a' + 1;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("a1"));
+  }
+
+  // tryFoldLeftChildOp: foo() + 1 + 2 combines the trailing constants to foo() + 3
+  @Test
+  public void testAdd_leftChildOpWithSideEffect_combinesRightConstant() throws Throwable {
+    String src = fold("function foo(){return 5;} var x = foo() + 1 + 2;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("foo()"));
+    assertTrue(src.contains("+3"));
+  }
+
+  // tryFoldShift LSH: literal numbers fold via the left-shift operator
+  @Test
+  public void testShift_leftShift_foldsToResult() throws Throwable {
+    String src = fold("var x = 2 << 3;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("16"));
+  }
+
+  // tryFoldShift URSH: unsigned right shift treats the left operand as unsigned 32-bit
+  @Test
+  public void testShift_unsignedRightShift_foldsToResult() throws Throwable {
+    String src = fold("var x = -1 >>> 28;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("15"));
+  }
+
+  // tryFoldShift: shift amount outside [0,32) reports an error, no fold
+  @Test
+  public void testShift_amountOutOfBounds_reportsError() throws Throwable {
+    fold("var x = 1 << 32;");
+    assertFalse(lastResult.success);
+  }
+
+  // tryFoldComparison: literal number less-than folds to a boolean
+  @Test
+  public void testComparison_numberLessThan_foldsToBoolean() throws Throwable {
+    String src = fold("var x = 1 < 2;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("true"));
+  }
+
+  // compareToUndefined EQ: null == undefined is loosely equal (true)
+  @Test
+  public void testComparison_nullLooseEqualsUndefined_foldsToTrue() throws Throwable {
+    String src = fold("var x = (null == undefined);");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("true"));
+  }
+
+  // compareToUndefined SHEQ: null === undefined is strictly not equal (false)
+  @Test
+  public void testComparison_nullStrictEqualsUndefined_foldsToFalse() throws Throwable {
+    String src = fold("var x = (null === undefined);");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("false"));
+  }
+
+  // tryFoldInForcedStringContext: new String('foo') used as a GETELEM key folds to "foo"
+  @Test
+  public void testCtorFold_newStringInGetElem_foldsToStringLiteral() throws Throwable {
+    String src = fold("var a; a[new String('foo')];");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("foo"));
+    assertFalse(src.contains("String"));
+  }
+
+  // tryFoldGetProp: array literal .length folds to its element count
+  @Test
+  public void testGetProp_arrayLength_foldsToCount() throws Throwable {
+    String src = fold("var x = [1,2,3].length;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("3"));
+  }
+
+  // tryFoldGetProp: array literal containing a side-effecting call is not folded
+  @Test
+  public void testGetProp_lengthWithSideEffectElement_notFolded() throws Throwable {
+    String src = fold("function foo(){return 1;} var x = [foo()].length;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("length"));
+  }
+
+  // tryFoldArrayAccess: a valid literal index folds to the element value
+  @Test
+  public void testGetElem_arrayLiteralValidIndex_foldsToElement() throws Throwable {
+    String src = fold("var x = [10,20,30][1];");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("20"));
+  }
+
+  // tryFoldArrayAccess: out-of-bounds index reports an error, no fold
+  @Test
+  public void testGetElem_outOfBoundsIndex_reportsError() throws Throwable {
+    fold("var x = [1,2,3][10];");
+    assertFalse(lastResult.success);
+  }
+
+  // tryFoldArrayAccess: an elided (sparse) array hole folds to undefined (void 0)
+  @Test
+  public void testGetElem_sparseArrayHole_foldsToUndefined() throws Throwable {
+    String src = fold("var x = [1,,3][1];");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("void 0"));
+  }
+
+  // BUG: array literal GETELEM used as a compound-assignment target must not be
+  // folded away, mirroring the isAssignmentTarget guard used in tryFoldObjectPropAccess.
+  @Test
+  public void testGetElem_arrayLiteralAsCompoundAssignTarget_notFolded() throws Throwable {
+    String src = fold("[1,2,3][0] += 1;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains("["));
+  }
+
+  // tryFoldObjectPropAccess: a simple object literal property access folds to its value
+  @Test
+  public void testObjectPropAccess_simpleProperty_foldsToValue() throws Throwable {
+    String src = fold("var x = ({a:1,b:2}).a;");
+    assertTrue(lastResult.success);
+    assertFalse(src.contains("a:1"));
+    assertTrue(src.contains("1"));
+  }
+
+  // tryFoldObjectPropAccess / isAssignmentTarget: used as an assignment target, not folded
+  @Test
+  public void testObjectPropAccess_assignmentTarget_notFolded() throws Throwable {
+    String src = fold("({a:1}).a = 2;");
+    assertTrue(lastResult.success);
+    assertTrue(src.contains(":1"));
+  }
+}

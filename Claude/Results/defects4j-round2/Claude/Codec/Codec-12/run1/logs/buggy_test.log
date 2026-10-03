@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Codec-12-oh4u1yv3/Codec-12b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.codec.binary.BaseNCodecInputStreamClaudeTest::testAvailable_beforeEOF_returnsOne
+  - org.apache.commons.codec.binary.BaseNCodecInputStreamClaudeTest::testSkip_lengthGreaterThanAvailableData_returnsActualSkippedAmount
+  - org.apache.commons.codec.binary.BaseNCodecInputStreamClaudeTest::testSkip_negativeLength_throwsIllegalArgumentException
+[exit 0]

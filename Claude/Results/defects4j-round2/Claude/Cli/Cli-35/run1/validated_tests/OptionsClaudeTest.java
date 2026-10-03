@@ -1,0 +1,352 @@
+package org.apache.commons.cli;
+
+import java.util.Collection;
+import java.util.List;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class OptionsClaudeTest
+{
+    private Options options;
+
+    @Before
+    public void setUp() throws Throwable
+    {
+        options = new Options();
+    }
+
+    // addOptionGroup: group.isRequired() true branch -> group added to requiredOpts
+    @Test
+    public void testAddOptionGroup_required_addsToRequiredOptions() throws Throwable {
+        OptionGroup group = new OptionGroup();
+        Option opt1 = new Option("a", true, "desc1");
+        group.addOption(opt1);
+        group.setRequired(true);
+        options.addOptionGroup(group);
+        assertTrue(options.getRequiredOptions().contains(group));
+    }
+
+    // addOptionGroup: group.isRequired() false branch -> not added to requiredOpts
+    @Test
+    public void testAddOptionGroup_notRequired_notAddedToRequiredOptions() throws Throwable {
+        OptionGroup group = new OptionGroup();
+        Option opt1 = new Option("a", true, "desc1");
+        group.addOption(opt1);
+        options.addOptionGroup(group);
+        assertFalse(options.getRequiredOptions().contains(group));
+    }
+
+    // options inside a group must have their required flag forced to false
+    @Test
+    public void testAddOptionGroup_optionsInGroupHaveRequiredFalse() throws Throwable {
+        OptionGroup group = new OptionGroup();
+        Option opt1 = new Option("a", true, "desc1");
+        opt1.setRequired(true);
+        group.addOption(opt1);
+        options.addOptionGroup(group);
+        assertFalse(options.getOption("a").isRequired());
+    }
+
+    // each option in a group is mapped to that group in optionGroups map
+    @Test
+    public void testAddOptionGroup_optionGroupMappedForEachOption() throws Throwable {
+        OptionGroup group = new OptionGroup();
+        Option opt1 = new Option("a", true, "desc1");
+        Option opt2 = new Option("b", true, "desc2");
+        group.addOption(opt1);
+        group.addOption(opt2);
+        options.addOptionGroup(group);
+        assertEquals(group, options.getOptionGroup(options.getOption("a")));
+        assertEquals(group, options.getOptionGroup(options.getOption("b")));
+    }
+
+    // getOptionGroups: multiple distinct groups vs one group with multiple options (HashSet uniqueness)
+    @Test
+    public void testGetOptionGroups_returnsDistinctGroups() throws Throwable {
+        OptionGroup g1 = new OptionGroup();
+        g1.addOption(new Option("a", true, "d1"));
+        OptionGroup g2 = new OptionGroup();
+        g2.addOption(new Option("b", true, "d2"));
+        options.addOptionGroup(g1);
+        options.addOptionGroup(g2);
+        assertEquals(2, options.getOptionGroups().size());
+    }
+
+    // getOptionGroups: same group added with two options counted once
+    @Test
+    public void testGetOptionGroups_sameGroupCountedOnce() throws Throwable {
+        OptionGroup group = new OptionGroup();
+        group.addOption(new Option("a", true, "d1"));
+        group.addOption(new Option("b", true, "d2"));
+        options.addOptionGroup(group);
+        assertEquals(1, options.getOptionGroups().size());
+    }
+
+    // addOption(String opt, String description): no long opt, option added
+    @Test
+    public void testAddOption_shortNameOnly_noArgument() throws Throwable {
+        options.addOption("a", "desc");
+        Option o = options.getOption("a");
+        assertNotNull(o);
+        assertFalse(o.hasLongOpt());
+    }
+
+    // addOption(String opt, boolean hasArg, String description): hasArg true branch
+    @Test
+    public void testAddOption_shortNameWithHasArgTrue() throws Throwable {
+        options.addOption("a", true, "desc");
+        assertTrue(options.hasOption("a"));
+    }
+
+    // addOption(String opt, boolean hasArg, String description): hasArg false branch
+    @Test
+    public void testAddOption_shortNameWithHasArgFalse() throws Throwable {
+        options.addOption("a", false, "desc");
+        assertTrue(options.hasOption("a"));
+    }
+
+    // addOption(String opt, String longOpt, boolean hasArg, String description): full constructor
+    @Test
+    public void testAddOption_fullConstructor_withLongOpt() throws Throwable {
+        options.addOption("a", "alpha", true, "desc");
+        assertTrue(options.hasShortOption("a"));
+        assertTrue(options.hasLongOption("alpha"));
+    }
+
+    // addOption(Option): hasLongOpt true branch -> added to longOpts
+    @Test
+    public void testAddOptionOptionInstance_longOptAddedToLongOpts() throws Throwable {
+        Option opt = new Option("a", "alpha", true, "desc");
+        options.addOption(opt);
+        assertEquals(opt, options.getOption("alpha"));
+    }
+
+    // addOption(Option): hasLongOpt false branch -> not present in longOpts lookups
+    @Test
+    public void testAddOptionOptionInstance_noLongOpt_notInLongOpts() throws Throwable {
+        Option opt = new Option("a", false, "desc");
+        options.addOption(opt);
+        assertFalse(options.hasLongOption("a"));
+        assertTrue(options.hasShortOption("a"));
+    }
+
+    // addOption(Option): required option added once even when same key added twice (no duplicate)
+    @Test
+    public void testAddOptionOptionInstance_requiredAddedOnce_noDuplicate() throws Throwable {
+        Option opt = new Option("r", true, "desc");
+        opt.setRequired(true);
+        options.addOption(opt);
+        options.addOption(opt);
+        int count = 0;
+        List requiredList = options.getRequiredOptions();
+        for (int i = 0; i < requiredList.size(); i++)
+        {
+            if ("r".equals(requiredList.get(i)))
+            {
+                count++;
+            }
+        }
+        assertEquals(1, count);
+    }
+
+    // getOptions: returns all added options
+    @Test
+    public void testGetOptions_returnsAllAddedOptions() throws Throwable {
+        options.addOption("a", true, "d1");
+        options.addOption("b", true, "d2");
+        Collection<Option> all = options.getOptions();
+        assertEquals(2, all.size());
+    }
+
+    // getOptions: unmodifiable collection throws on structural modification
+    @Test
+    public void testGetOptions_unmodifiable_throwsOnClear() throws Throwable {
+        options.addOption("a", true, "d1");
+        Collection<Option> all = options.getOptions();
+        try
+        {
+            all.clear();
+            fail("expected UnsupportedOperationException");
+        }
+        catch (UnsupportedOperationException expected)
+        {
+        }
+    }
+
+    // getRequiredOptions: empty initially
+    @Test
+    public void testGetRequiredOptions_emptyInitially() throws Throwable {
+        assertTrue(options.getRequiredOptions().isEmpty());
+    }
+
+    // getRequiredOptions: unmodifiable list throws on structural modification
+    @Test
+    public void testGetRequiredOptions_unmodifiable_throwsOnClear() throws Throwable {
+        List requiredList = options.getRequiredOptions();
+        try
+        {
+            requiredList.clear();
+            fail("expected UnsupportedOperationException");
+        }
+        catch (UnsupportedOperationException expected)
+        {
+        }
+    }
+
+    // getOption: found by short name
+    @Test
+    public void testGetOption_byShortName() throws Throwable {
+        options.addOption("a", "alpha", true, "desc");
+        Option o = options.getOption("a");
+        assertNotNull(o);
+    }
+
+    // getOption: found by long name (shortOpts miss, falls through to longOpts)
+    @Test
+    public void testGetOption_byLongName() throws Throwable {
+        options.addOption("a", "alpha", true, "desc");
+        Option o = options.getOption("alpha");
+        assertNotNull(o);
+    }
+
+    // getOption: leading hyphens stripped before lookup
+    @Test
+    public void testGetOption_withLeadingHyphens_stripped() throws Throwable {
+        options.addOption("a", "alpha", true, "desc");
+        assertNotNull(options.getOption("-a"));
+        assertNotNull(options.getOption("--alpha"));
+    }
+
+    // getOption: not found returns null
+    @Test
+    public void testGetOption_notFound_returnsNull() throws Throwable {
+        assertNull(options.getOption("zzz"));
+    }
+
+    // getMatchingOptions: per javadoc, a perfect match should return the single option only
+    @Test
+    public void testGetMatchingOptions_exactMatch_returnsOnlySingleMatch() throws Throwable {
+        options.addOption("a", "foo", true, "d1");
+        options.addOption("b", "foobar", true, "d2");
+        List<String> matches = options.getMatchingOptions("foo");
+        assertEquals(1, matches.size());
+        assertTrue(matches.contains("foo"));
+    }
+
+    // getMatchingOptions: prefix match with no exact match returns all matching prefixes
+    @Test
+    public void testGetMatchingOptions_prefixMatch_multiple() throws Throwable {
+        options.addOption("a", "alpha", true, "d1");
+        options.addOption("b", "alphabet", true, "d2");
+        List<String> matches = options.getMatchingOptions("alph");
+        assertEquals(2, matches.size());
+        assertTrue(matches.contains("alpha"));
+        assertTrue(matches.contains("alphabet"));
+    }
+
+    // getMatchingOptions: no matches returns empty list
+    @Test
+    public void testGetMatchingOptions_noMatch_emptyList() throws Throwable {
+        options.addOption("a", "alpha", true, "d1");
+        List<String> matches = options.getMatchingOptions("xyz");
+        assertTrue(matches.isEmpty());
+    }
+
+    // hasOption: matches by short name
+    @Test
+    public void testHasOption_shortName_true() throws Throwable {
+        options.addOption("a", "alpha", true, "desc");
+        assertTrue(options.hasOption("a"));
+    }
+
+    // hasOption: matches by long name (first branch false, second true)
+    @Test
+    public void testHasOption_longName_true() throws Throwable {
+        options.addOption("a", "alpha", true, "desc");
+        assertTrue(options.hasOption("alpha"));
+    }
+
+    // hasOption: leading hyphens stripped before lookup
+    @Test
+    public void testHasOption_withHyphens() throws Throwable {
+        options.addOption("a", "alpha", true, "desc");
+        assertTrue(options.hasOption("--alpha"));
+    }
+
+    // hasOption: not present returns false (both branches false)
+    @Test
+    public void testHasOption_notPresent_false() throws Throwable {
+        assertFalse(options.hasOption("zzz"));
+    }
+
+    // hasLongOption: present returns true
+    @Test
+    public void testHasLongOption_true() throws Throwable {
+        options.addOption("a", "alpha", true, "desc");
+        assertTrue(options.hasLongOption("alpha"));
+    }
+
+    // hasLongOption: absent returns false
+    @Test
+    public void testHasLongOption_false() throws Throwable {
+        options.addOption("a", true, "desc");
+        assertFalse(options.hasLongOption("a"));
+    }
+
+    // hasShortOption: present returns true
+    @Test
+    public void testHasShortOption_true() throws Throwable {
+        options.addOption("a", "alpha", true, "desc");
+        assertTrue(options.hasShortOption("a"));
+    }
+
+    // hasShortOption: absent returns false
+    @Test
+    public void testHasShortOption_false() throws Throwable {
+        assertFalse(options.hasShortOption("zzz"));
+    }
+
+    // getOptionGroup: option belongs to a group returns that group
+    @Test
+    public void testGetOptionGroup_returnsGroup() throws Throwable {
+        OptionGroup group = new OptionGroup();
+        Option opt1 = new Option("a", true, "d1");
+        group.addOption(opt1);
+        options.addOptionGroup(group);
+        assertEquals(group, options.getOptionGroup(options.getOption("a")));
+    }
+
+    // getOptionGroup: option not part of any group returns null
+    @Test
+    public void testGetOptionGroup_notInGroup_returnsNull() throws Throwable {
+        options.addOption("a", true, "d1");
+        assertNull(options.getOptionGroup(options.getOption("a")));
+    }
+
+    // toString: dump contains short and long option markers
+    @Test
+    public void testToString_containsShortAndLong() throws Throwable {
+        options.addOption("a", "alpha", true, "desc");
+        String s = options.toString();
+        assertTrue(s.contains("short"));
+        assertTrue(s.contains("long"));
+    }
+
+    // helpOptions (package-private): returns list containing added options
+    @Test
+    public void testHelpOptions_returnsAddedOptions() throws Throwable {
+        options.addOption("a", true, "d1");
+        options.addOption("b", true, "d2");
+        List<Option> list = options.helpOptions();
+        assertEquals(2, list.size());
+    }
+
+    // getOptionGroups (package-private): no groups added returns empty collection
+    @Test
+    public void testGetOptionGroups_emptyWhenNoGroupsAdded() throws Throwable {
+        options.addOption("a", true, "d1");
+        assertTrue(options.getOptionGroups().isEmpty());
+    }
+}

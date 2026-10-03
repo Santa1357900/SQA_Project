@@ -1,0 +1,331 @@
+package org.mockito.internal.stubbing.defaultanswers;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.mockito.internal.util.MockUtil;
+import org.mockito.internal.util.ObjectMethodsGuru;
+import org.mockito.stubbing.Answer;
+
+public class ReturnsEmptyValuesClaudeTest {
+
+    private ReturnsEmptyValues values;
+
+    @Before
+    public void setUp() throws Throwable {
+        values = new ReturnsEmptyValues();
+    }
+
+    // constructor should initialize methodsGuru field with a usable ObjectMethodsGuru instance
+    @Test
+    public void testConstructor_initializesMethodsGuru_notNull() throws Throwable {
+        assertNotNull(values.methodsGuru);
+        assertTrue(values.methodsGuru instanceof ObjectMethodsGuru);
+    }
+
+    // constructor should initialize mockUtil field with a usable MockUtil instance
+    @Test
+    public void testConstructor_initializesMockUtil_notNull() throws Throwable {
+        assertNotNull(values.mockUtil);
+        assertTrue(values.mockUtil instanceof MockUtil);
+    }
+
+    // class must implement Answer and Serializable contracts declared in class signature
+    @Test
+    public void testClass_implementsAnswerAndSerializable() throws Throwable {
+        assertTrue(values instanceof Answer);
+        assertTrue(values instanceof Serializable);
+    }
+
+    // primitive boolean.class should default to Boolean.FALSE per Java primitive default rules
+    @Test
+    public void testReturnValueFor_booleanPrimitive_returnsFalse() throws Throwable {
+        Object result = values.returnValueFor(boolean.class);
+        assertEquals(Boolean.FALSE, result);
+    }
+
+    // wrapper Boolean.class must be consistent with primitive boolean default (javadoc: consistent values)
+    @Test
+    public void testReturnValueFor_booleanWrapper_returnsFalse() throws Throwable {
+        Object result = values.returnValueFor(Boolean.class);
+        assertEquals(Boolean.FALSE, result);
+    }
+
+    // primitive char.class default is the null character '\u0000'
+    @Test
+    public void testReturnValueFor_charPrimitive_returnsNulChar() throws Throwable {
+        Object result = values.returnValueFor(char.class);
+        assertEquals(Character.valueOf((char) 0), result);
+    }
+
+    // wrapper Character.class must be consistent with primitive char default
+    @Test
+    public void testReturnValueFor_characterWrapper_returnsNulChar() throws Throwable {
+        Object result = values.returnValueFor(Character.class);
+        assertEquals(Character.valueOf((char) 0), result);
+    }
+
+    // primitive byte.class default is 0
+    @Test
+    public void testReturnValueFor_bytePrimitive_returnsZero() throws Throwable {
+        Object result = values.returnValueFor(byte.class);
+        assertEquals(Byte.valueOf((byte) 0), result);
+    }
+
+    // primitive short.class default is 0
+    @Test
+    public void testReturnValueFor_shortPrimitive_returnsZero() throws Throwable {
+        Object result = values.returnValueFor(short.class);
+        assertEquals(Short.valueOf((short) 0), result);
+    }
+
+    // primitive int.class default is 0
+    @Test
+    public void testReturnValueFor_intPrimitive_returnsZero() throws Throwable {
+        Object result = values.returnValueFor(int.class);
+        assertEquals(Integer.valueOf(0), result);
+    }
+
+    // wrapper Integer.class must be consistent with primitive int default
+    @Test
+    public void testReturnValueFor_integerWrapper_returnsZero() throws Throwable {
+        Object result = values.returnValueFor(Integer.class);
+        assertEquals(Integer.valueOf(0), result);
+    }
+
+    // primitive long.class default is 0L
+    @Test
+    public void testReturnValueFor_longPrimitive_returnsZero() throws Throwable {
+        Object result = values.returnValueFor(long.class);
+        assertEquals(Long.valueOf(0L), result);
+    }
+
+    // primitive float.class default is 0.0f
+    @Test
+    public void testReturnValueFor_floatPrimitive_returnsZero() throws Throwable {
+        Object result = values.returnValueFor(float.class);
+        assertEquals(0.0f, ((Float) result).floatValue(), 1e-9f);
+    }
+
+    // primitive double.class default is 0.0d
+    @Test
+    public void testReturnValueFor_doublePrimitive_returnsZero() throws Throwable {
+        Object result = values.returnValueFor(double.class);
+        assertEquals(0.0d, ((Double) result).doubleValue(), 1e-9d);
+    }
+
+    // Collection.class branch must return a mutable, empty Collection instance
+    @Test
+    public void testReturnValueFor_collectionType_returnsEmptyMutableCollection() throws Throwable {
+        Object result = values.returnValueFor(Collection.class);
+        assertTrue(result instanceof Collection);
+        Collection<Object> c = (Collection<Object>) result;
+        assertTrue(c.isEmpty());
+        c.add("x");
+        assertEquals(1, c.size());
+    }
+
+    // Set.class branch must return a mutable, empty Set instance
+    @Test
+    public void testReturnValueFor_setType_returnsEmptyMutableSet() throws Throwable {
+        Object result = values.returnValueFor(Set.class);
+        assertTrue(result instanceof Set);
+        Set<Object> s = (Set<Object>) result;
+        assertTrue(s.isEmpty());
+        s.add("x");
+        assertEquals(1, s.size());
+    }
+
+    // HashSet.class branch must return a mutable, empty HashSet instance
+    @Test
+    public void testReturnValueFor_hashSetType_returnsEmptyMutableHashSet() throws Throwable {
+        Object result = values.returnValueFor(HashSet.class);
+        assertTrue(result instanceof HashSet);
+        assertTrue(((HashSet<Object>) result).isEmpty());
+    }
+
+    // SortedSet.class branch must return a sorted, mutable, empty SortedSet instance
+    @Test
+    public void testReturnValueFor_sortedSetType_returnsEmptySortedSet() throws Throwable {
+        Object result = values.returnValueFor(SortedSet.class);
+        assertTrue(result instanceof SortedSet);
+        SortedSet<String> s = (SortedSet<String>) result;
+        assertTrue(s.isEmpty());
+        s.add("b");
+        s.add("a");
+        assertEquals("a", s.first());
+    }
+
+    // TreeSet.class branch must return an empty, mutable TreeSet instance
+    @Test
+    public void testReturnValueFor_treeSetType_returnsEmptyTreeSet() throws Throwable {
+        Object result = values.returnValueFor(TreeSet.class);
+        assertTrue(result instanceof TreeSet);
+        assertTrue(((TreeSet<Object>) result).isEmpty());
+    }
+
+    // LinkedHashSet.class branch must return an empty, mutable LinkedHashSet preserving insertion order
+    @Test
+    public void testReturnValueFor_linkedHashSetType_preservesInsertionOrder() throws Throwable {
+        Object result = values.returnValueFor(LinkedHashSet.class);
+        assertTrue(result instanceof LinkedHashSet);
+        LinkedHashSet<String> s = (LinkedHashSet<String>) result;
+        s.add("b");
+        s.add("a");
+        Iterator<String> it = s.iterator();
+        assertEquals("b", it.next());
+    }
+
+    // List.class branch must return a mutable, empty List instance
+    @Test
+    public void testReturnValueFor_listType_returnsEmptyMutableList() throws Throwable {
+        Object result = values.returnValueFor(List.class);
+        assertTrue(result instanceof List);
+        List<Object> l = (List<Object>) result;
+        assertTrue(l.isEmpty());
+        l.add("x");
+        assertEquals(1, l.size());
+    }
+
+    // LinkedList.class branch must return an empty, mutable LinkedList instance
+    @Test
+    public void testReturnValueFor_linkedListType_returnsEmptyLinkedList() throws Throwable {
+        Object result = values.returnValueFor(LinkedList.class);
+        assertTrue(result instanceof LinkedList);
+        assertTrue(((LinkedList<Object>) result).isEmpty());
+    }
+
+    // ArrayList.class branch must return an empty, mutable ArrayList instance
+    @Test
+    public void testReturnValueFor_arrayListType_returnsEmptyArrayList() throws Throwable {
+        Object result = values.returnValueFor(ArrayList.class);
+        assertTrue(result instanceof ArrayList);
+        assertTrue(((ArrayList<Object>) result).isEmpty());
+    }
+
+    // Map.class branch must return a mutable, empty Map instance
+    @Test
+    public void testReturnValueFor_mapType_returnsEmptyMutableMap() throws Throwable {
+        Object result = values.returnValueFor(Map.class);
+        assertTrue(result instanceof Map);
+        Map<Object, Object> m = (Map<Object, Object>) result;
+        assertTrue(m.isEmpty());
+        m.put("k", "v");
+        assertEquals(1, m.size());
+    }
+
+    // HashMap.class branch must return an empty, mutable HashMap instance
+    @Test
+    public void testReturnValueFor_hashMapType_returnsEmptyHashMap() throws Throwable {
+        Object result = values.returnValueFor(HashMap.class);
+        assertTrue(result instanceof HashMap);
+        assertTrue(((HashMap<Object, Object>) result).isEmpty());
+    }
+
+    // SortedMap.class branch must return a sorted, mutable, empty SortedMap instance
+    @Test
+    public void testReturnValueFor_sortedMapType_returnsEmptySortedMap() throws Throwable {
+        Object result = values.returnValueFor(SortedMap.class);
+        assertTrue(result instanceof SortedMap);
+        SortedMap<String, Object> m = (SortedMap<String, Object>) result;
+        m.put("b", "1");
+        m.put("a", "2");
+        assertEquals("a", m.firstKey());
+    }
+
+    // TreeMap.class branch must return an empty, mutable TreeMap instance
+    @Test
+    public void testReturnValueFor_treeMapType_returnsEmptyTreeMap() throws Throwable {
+        Object result = values.returnValueFor(TreeMap.class);
+        assertTrue(result instanceof TreeMap);
+        assertTrue(((TreeMap<Object, Object>) result).isEmpty());
+    }
+
+    // LinkedHashMap.class branch must return an empty, mutable LinkedHashMap preserving insertion order
+    @Test
+    public void testReturnValueFor_linkedHashMapType_preservesInsertionOrder() throws Throwable {
+        Object result = values.returnValueFor(LinkedHashMap.class);
+        assertTrue(result instanceof LinkedHashMap);
+        LinkedHashMap<String, String> m = (LinkedHashMap<String, String>) result;
+        m.put("b", "1");
+        m.put("a", "2");
+        Iterator<String> it = m.keySet().iterator();
+        assertEquals("b", it.next());
+    }
+
+    // unrelated reference type (String) not explicitly handled must fall through to null
+    @Test
+    public void testReturnValueFor_unhandledType_returnsNull() throws Throwable {
+        Object result = values.returnValueFor(String.class);
+        assertNull(result);
+    }
+
+    // unrelated reference type (custom class) not explicitly handled must fall through to null
+    @Test
+    public void testReturnValueFor_customObjectType_returnsNull() throws Throwable {
+        Object result = values.returnValueFor(Object.class);
+        assertNull(result);
+    }
+
+    // two separate calls for the same list type must yield independent, non-shared instances
+    @Test
+    public void testReturnValueFor_listType_returnsFreshInstanceEachCall() throws Throwable {
+        List<Object> first = (List<Object>) values.returnValueFor(List.class);
+        List<Object> second = (List<Object>) values.returnValueFor(List.class);
+        assertNotSame(first, second);
+        first.add("polluted");
+        assertTrue(second.isEmpty());
+    }
+
+    // two separate calls for the same map type must yield independent, non-shared instances
+    @Test
+    public void testReturnValueFor_mapType_returnsFreshInstanceEachCall() throws Throwable {
+        Map<Object, Object> first = (Map<Object, Object>) values.returnValueFor(Map.class);
+        Map<Object, Object> second = (Map<Object, Object>) values.returnValueFor(Map.class);
+        assertNotSame(first, second);
+        first.put("k", "v");
+        assertTrue(second.isEmpty());
+    }
+
+    // two separate calls for the same set type must yield independent, non-shared instances
+    @Test
+    public void testReturnValueFor_setType_returnsFreshInstanceEachCall() throws Throwable {
+        Set<Object> first = (Set<Object>) values.returnValueFor(Set.class);
+        Set<Object> second = (Set<Object>) values.returnValueFor(Set.class);
+        assertNotSame(first, second);
+        first.add("x");
+        assertTrue(second.isEmpty());
+    }
+
+    // wrapper Double.class must be consistent with primitive double default
+    @Test
+    public void testReturnValueFor_doubleWrapper_returnsZero() throws Throwable {
+        Object result = values.returnValueFor(Double.class);
+        assertEquals(0.0d, ((Double) result).doubleValue(), 1e-9d);
+    }
+
+    // wrapper Long.class must be consistent with primitive long default
+    @Test
+    public void testReturnValueFor_longWrapper_returnsZero() throws Throwable {
+        Object result = values.returnValueFor(Long.class);
+        assertEquals(Long.valueOf(0L), result);
+    }
+}

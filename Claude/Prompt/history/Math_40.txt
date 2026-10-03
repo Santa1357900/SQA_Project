@@ -1,0 +1,488 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Math (Defects4J bug Math-40)
+package: org.apache.commons.math.analysis.solvers
+class_under_test: BracketingNthOrderBrentSolver
+test_class_to_write: BracketingNthOrderBrentSolverClaudeTest
+</target>
+
+<project_notes>
+Commons Math: ใช้ delta ทุกครั้งที่เทียบ double ห้าม implement UnivariateRealFunction/UnivariateFunction ถ้าไม่ได้ปรากฏใน source ให้ใช้ anonymous inner class เมื่อ interface มีเมธอดเดียว exception เป็น checked หลายตัว (เช่น MathException) จึงต้อง throws Throwable
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.math.analysis.solvers;
+
+
+import org.apache.commons.math.analysis.UnivariateFunction;
+import org.apache.commons.math.exception.MathInternalError;
+import org.apache.commons.math.exception.NoBracketingException;
+import org.apache.commons.math.exception.NumberIsTooSmallException;
+import org.apache.commons.math.util.FastMath;
+import org.apache.commons.math.util.Precision;
+
+/**
+ * This class implements a modification of the <a
+ * href="http://mathworld.wolfram.com/BrentsMethod.html"> Brent algorithm</a>.
+ * <p>
+ * The changes with respect to the original Brent algorithm are:
+ * <ul>
+ *   <li>the returned value is chosen in the current interval according
+ *   to user specified {@link AllowedSolution},</li>
+ *   <li>the maximal order for the invert polynomial root search is
+ *   user-specified instead of being invert quadratic only</li>
+ * </ul>
+ * </p>
+ * The given interval must bracket the root.
+ *
+ * @version $Id$
+ */
+public class BracketingNthOrderBrentSolver
+    extends AbstractUnivariateRealSolver
+    implements BracketedUnivariateRealSolver<UnivariateFunction> {
+
+    /** Default absolute accuracy. */
+    private static final double DEFAULT_ABSOLUTE_ACCURACY = 1e-6;
+
+    /** Default maximal order. */
+    private static final int DEFAULT_MAXIMAL_ORDER = 5;
+
+    /** Maximal aging triggering an attempt to balance the bracketing interval. */
+    private static final int MAXIMAL_AGING = 2;
+
+    /** Reduction factor for attempts to balance the bracketing interval. */
+    private static final double REDUCTION_FACTOR = 1.0 / 16.0;
+
+    /** Maximal order. */
+    private final int maximalOrder;
+
+    /** The kinds of solutions that the algorithm may accept. */
+    private AllowedSolution allowed;
+
+    /**
+     * Construct a solver with default accuracy and maximal order (1e-6 and 5 respectively)
+     */
+    public BracketingNthOrderBrentSolver() {
+        this(DEFAULT_ABSOLUTE_ACCURACY, DEFAULT_MAXIMAL_ORDER);
+    }
+
+    /**
+     * Construct a solver.
+     *
+     * @param absoluteAccuracy Absolute accuracy.
+     * @param maximalOrder maximal order.
+     * @exception NumberIsTooSmallException if maximal order is lower than 2
+     */
+    public BracketingNthOrderBrentSolver(final double absoluteAccuracy,
+                                         final int maximalOrder)
+        throws NumberIsTooSmallException {
+        super(absoluteAccuracy);
+        if (maximalOrder < 2) {
+            throw new NumberIsTooSmallException(maximalOrder, 2, true);
+        }
+        this.maximalOrder = maximalOrder;
+        this.allowed = AllowedSolution.ANY_SIDE;
+    }
+
+    /**
+     * Construct a solver.
+     *
+     * @param relativeAccuracy Relative accuracy.
+     * @param absoluteAccuracy Absolute accuracy.
+     * @param maximalOrder maximal order.
+     * @exception NumberIsTooSmallException if maximal order is lower than 2
+     */
+    public BracketingNthOrderBrentSolver(final double relativeAccuracy,
+                                         final double absoluteAccuracy,
+                                         final int maximalOrder)
+        throws NumberIsTooSmallException {
+        super(relativeAccuracy, absoluteAccuracy);
+        if (maximalOrder < 2) {
+            throw new NumberIsTooSmallException(maximalOrder, 2, true);
+        }
+        this.maximalOrder = maximalOrder;
+        this.allowed = AllowedSolution.ANY_SIDE;
+    }
+
+    /**
+     * Construct a solver.
+     *
+     * @param relativeAccuracy Relative accuracy.
+     * @param absoluteAccuracy Absolute accuracy.
+     * @param functionValueAccuracy Function value accuracy.
+     * @param maximalOrder maximal order.
+     * @exception NumberIsTooSmallException if maximal order is lower than 2
+     */
+    public BracketingNthOrderBrentSolver(final double relativeAccuracy,
+                                         final double absoluteAccuracy,
+                                         final double functionValueAccuracy,
+                                         final int maximalOrder)
+        throws NumberIsTooSmallException {
+        super(relativeAccuracy, absoluteAccuracy, functionValueAccuracy);
+        if (maximalOrder < 2) {
+            throw new NumberIsTooSmallException(maximalOrder, 2, true);
+        }
+        this.maximalOrder = maximalOrder;
+        this.allowed = AllowedSolution.ANY_SIDE;
+    }
+
+    /** Get the maximal order.
+     * @return maximal order
+     */
+    public int getMaximalOrder() {
+        return maximalOrder;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    protected double doSolve() {
+
+        // prepare arrays with the first points
+        final double[] x = new double[maximalOrder + 1];
+        final double[] y = new double[maximalOrder + 1];
+        x[0] = getMin();
+        x[1] = getStartValue();
+        x[2] = getMax();
+        verifySequence(x[0], x[1], x[2]);
+
+        // evaluate initial guess
+        y[1] = computeObjectiveValue(x[1]);
+        if (Precision.equals(y[1], 0.0, 1)) {
+            // return the initial guess if it is a perfect root.
+            return x[1];
+        }
+
+        // evaluate first  endpoint
+        y[0] = computeObjectiveValue(x[0]);
+        if (Precision.equals(y[0], 0.0, 1)) {
+            // return the first endpoint if it is a perfect root.
+            return x[0];
+        }
+
+        int nbPoints;
+        int signChangeIndex;
+        if (y[0] * y[1] < 0) {
+
+            // reduce interval if it brackets the root
+            nbPoints        = 2;
+            signChangeIndex = 1;
+
+        } else {
+
+            // evaluate second endpoint
+            y[2] = computeObjectiveValue(x[2]);
+            if (Precision.equals(y[2], 0.0, 1)) {
+                // return the second endpoint if it is a perfect root.
+                return x[2];
+            }
+
+            if (y[1] * y[2] < 0) {
+                // use all computed point as a start sampling array for solving
+                nbPoints        = 3;
+                signChangeIndex = 2;
+            } else {
+                throw new NoBracketingException(x[0], x[2], y[0], y[2]);
+            }
+
+        }
+
+        // prepare a work array for inverse polynomial interpolation
+        final double[] tmpX = new double[x.length];
+
+        // current tightest bracketing of the root
+        double xA    = x[signChangeIndex - 1];
+        double yA    = y[signChangeIndex - 1];
+        double absYA = FastMath.abs(yA);
+        int agingA   = 0;
+        double xB    = x[signChangeIndex];
+        double yB    = y[signChangeIndex];
+        double absYB = FastMath.abs(yB);
+        int agingB   = 0;
+
+        // search loop
+        while (true) {
+
+            // check convergence of bracketing interval
+            final double xTol = getAbsoluteAccuracy() +
+                                getRelativeAccuracy() * FastMath.max(FastMath.abs(xA), FastMath.abs(xB));
+            if (((xB - xA) <= xTol) || (FastMath.max(absYA, absYB) < getFunctionValueAccuracy())) {
+                switch (allowed) {
+                case ANY_SIDE :
+                    return absYA < absYB ? xA : xB;
+                case LEFT_SIDE :
+                    return xA;
+                case RIGHT_SIDE :
+                    return xB;
+                case BELOW_SIDE :
+                    return (yA <= 0) ? xA : xB;
+                case ABOVE_SIDE :
+                    return (yA <  0) ? xB : xA;
+                default :
+                    // this should never happen
+                    throw new MathInternalError(null);
+                }
+            }
+
+            // target for the next evaluation point
+            double targetY;
+            if (agingA >= MAXIMAL_AGING) {
+                // we keep updating the high bracket, try to compensate this
+                targetY = -REDUCTION_FACTOR * yB;
+            } else if (agingB >= MAXIMAL_AGING) {
+                // we keep updating the low bracket, try to compensate this
+                targetY = -REDUCTION_FACTOR * yA;
+            } else {
+                // bracketing is balanced, try to find the root itself
+                targetY = 0;
+            }
+
+            // make a few attempts to guess a root,
+            double nextX;
+            int start = 0;
+            int end   = nbPoints;
+            do {
+
+                // guess a value for current target, using inverse polynomial interpolation
+                System.arraycopy(x, start, tmpX, start, end - start);
+                nextX = guessX(targetY, tmpX, y, start, end);
+
+                if (!((nextX > xA) && (nextX < xB))) {
+                    // the guessed root is not strictly inside of the tightest bracketing interval
+
+                    // the guessed root is either not strictly inside the interval or it
+                    // is a NaN (which occurs when some sampling points share the same y)
+                    // we try again with a lower interpolation order
+                    if (signChangeIndex - start >= end - signChangeIndex) {
+                        // we have more points before the sign change, drop the lowest point
+                        ++start;
+                    } else {
+                        // we have more points after sign change, drop the highest point
+                        --end;
+                    }
+
+                    // we need to do one more attempt
+                    nextX = Double.NaN;
+
+                }
+
+            } while (Double.isNaN(nextX) && (end - start > 1));
+
+            if (Double.isNaN(nextX)) {
+                // fall back to bisection
+                nextX = xA + 0.5 * (xB - xA);
+                start = signChangeIndex - 1;
+                end   = signChangeIndex;
+            }
+
+            // evaluate the function at the guessed root
+            final double nextY = computeObjectiveValue(nextX);
+            if (Precision.equals(nextY, 0.0, 1)) {
+                // we have found an exact root, since it is not an approximation
+                // we don't need to bother about the allowed solutions setting
+                return nextX;
+            }
+
+            if ((nbPoints > 2) && (end - start != nbPoints)) {
+
+                // we have been forced to ignore some points to keep bracketing,
+                // they are probably too far from the root, drop them from now on
+                nbPoints = end - start;
+                System.arraycopy(x, start, x, 0, nbPoints);
+                System.arraycopy(y, start, y, 0, nbPoints);
+                signChangeIndex -= start;
+
+            } else  if (nbPoints == x.length) {
+
+                // we have to drop one point in order to insert the new one
+                nbPoints--;
+
+                // keep the tightest bracketing interval as centered as possible
+                if (signChangeIndex >= (x.length + 1) / 2) {
+                    // we drop the lowest point, we have to shift the arrays and the index
+                    System.arraycopy(x, 1, x, 0, nbPoints);
+                    System.arraycopy(y, 1, y, 0, nbPoints);
+                    --signChangeIndex;
+                }
+
+            }
+
+            // insert the last computed point
+            //(by construction, we know it lies inside the tightest bracketing interval)
+            System.arraycopy(x, signChangeIndex, x, signChangeIndex + 1, nbPoints - signChangeIndex);
+            x[signChangeIndex] = nextX;
+            System.arraycopy(y, signChangeIndex, y, signChangeIndex + 1, nbPoints - signChangeIndex);
+            y[signChangeIndex] = nextY;
+            ++nbPoints;
+
+            // update the bracketing interval
+            if (nextY * yA <= 0) {
+                // the sign change occurs before the inserted point
+                xB = nextX;
+                yB = nextY;
+                absYB = FastMath.abs(yB);
+                ++agingA;
+                agingB = 0;
+            } else {
+                // the sign change occurs after the inserted point
+                xA = nextX;
+                yA = nextY;
+                absYA = FastMath.abs(yA);
+                agingA = 0;
+                ++agingB;
+
+                // update the sign change index
+                signChangeIndex++;
+
+            }
+
+        }
+
+    }
+
+    /** Guess an x value by n<sup>th</sup> order inverse polynomial interpolation.
+     * <p>
+     * The x value is guessed by evaluating polynomial Q(y) at y = targetY, where Q
+     * is built such that for all considered points (x<sub>i</sub>, y<sub>i</sub>),
+     * Q(y<sub>i</sub>) = x<sub>i</sub>.
+     * </p>
+     * @param targetY target value for y
+     * @param x reference points abscissas for interpolation,
+     * note that this array <em>is</em> modified during computation
+     * @param y reference points ordinates for interpolation
+     * @param start start index of the points to consider (inclusive)
+     * @param end end index of the points to consider (exclusive)
+     * @return guessed root (will be a NaN if two points share the same y)
+     */
+    private double guessX(final double targetY, final double[] x, final double[] y,
+                          final int start, final int end) {
+
+        // compute Q Newton coefficients by divided differences
+        for (int i = start; i < end - 1; ++i) {
+            final int delta = i + 1 - start;
+            for (int j = end - 1; j > i; --j) {
+                x[j] = (x[j] - x[j-1]) / (y[j] - y[j - delta]);
+            }
+        }
+
+        // evaluate Q(targetY)
+        double x0 = 0;
+        for (int j = end - 1; j >= start; --j) {
+            x0 = x[j] + x0 * (targetY - y[j]);
+        }
+
+        return x0;
+
+    }
+
+    /** {@inheritDoc} */
+    public double solve(int maxEval, UnivariateFunction f, double min,
+                        double max, AllowedSolution allowedSolution) {
+        this.allowed = allowedSolution;
+        return super.solve(maxEval, f, min, max);
+    }
+
+    /** {@inheritDoc} */
+    public double solve(int maxEval, UnivariateFunction f, double min,
+                        double max, double startValue,
+                        AllowedSolution allowedSolution) {
+        this.allowed = allowedSolution;
+        return super.solve(maxEval, f, min, max, startValue);
+    }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ BracketingNthOrderBrentSolverClaudeTest ใน package org.apache.commons.math.analysis.solvers เพื่อทดสอบคลาส BracketingNthOrderBrentSolver ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.math.analysis.solvers;` เท่านั้น
+</instructions>

@@ -1,0 +1,316 @@
+package com.fasterxml.jackson.core.base;
+
+import java.io.StringWriter;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.core.JsonStreamContext;
+import com.fasterxml.jackson.core.PrettyPrinter;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+
+public class GeneratorBaseClaudeTest
+{
+    private JsonFactory factory;
+
+    @Before
+    public void setUp() throws Throwable {
+        factory = new JsonFactory();
+    }
+
+    // covers version() returning non-null Version object
+    @Test
+    public void testVersion_returnsNonNull() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        assertNotNull(gen.version());
+    }
+
+    // covers getCurrentValue() default state from root context
+    @Test
+    public void testGetCurrentValue_initiallyNull() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        assertNull(gen.getCurrentValue());
+    }
+
+    // covers setCurrentValue()/getCurrentValue() round trip
+    @Test
+    public void testSetCurrentValue_thenGetCurrentValue_returnsSameValue() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        Object value = "myValue";
+        gen.setCurrentValue(value);
+        assertSame(value, gen.getCurrentValue());
+    }
+
+    // covers isEnabled(Feature) default state (QUOTE_FIELD_NAMES on by default)
+    @Test
+    public void testIsEnabled_defaultQuoteFieldNamesTrue() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        assertTrue(gen.isEnabled(JsonGenerator.Feature.QUOTE_FIELD_NAMES));
+    }
+
+    // covers getFeatureMask() bit reflects QUOTE_FIELD_NAMES default enabled
+    @Test
+    public void testGetFeatureMask_reflectsQuoteFieldNamesBit() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        int mask = gen.getFeatureMask();
+        int bit = JsonGenerator.Feature.QUOTE_FIELD_NAMES.getMask();
+        assertTrue((mask & bit) != 0);
+    }
+
+    // covers enable() sets the bit and returns same instance (fluent)
+    @Test
+    public void testEnable_returnsSameInstance_andSetsBit() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        JsonGenerator ret = gen.enable(JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS);
+        assertSame(gen, ret);
+        assertTrue(gen.isEnabled(JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS));
+    }
+
+    // covers disable() clears the bit and returns same instance (fluent)
+    @Test
+    public void testDisable_returnsSameInstance_andClearsBit() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        JsonGenerator ret = gen.disable(JsonGenerator.Feature.QUOTE_FIELD_NAMES);
+        assertSame(gen, ret);
+        assertFalse(gen.isEnabled(JsonGenerator.Feature.QUOTE_FIELD_NAMES));
+    }
+
+    // covers enable(WRITE_NUMBERS_AS_STRINGS) derived-feature effect on real output
+    @Test
+    public void testEnable_writeNumbersAsStrings_appliesToGeneratedOutput() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        gen.enable(JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS);
+        gen.writeStartArray();
+        gen.writeNumber(5);
+        gen.writeEndArray();
+        gen.flush();
+        assertEquals("[\"5\"]", sw.toString());
+    }
+
+    // covers default (disabled) WRITE_NUMBERS_AS_STRINGS producing plain number
+    @Test
+    public void testWriteNumbersAsStringsDisabled_defaultOutputsPlainNumber() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        gen.writeStartArray();
+        gen.writeNumber(5);
+        gen.writeEndArray();
+        gen.flush();
+        assertEquals("[5]", sw.toString());
+    }
+
+    // covers enable(STRICT_DUPLICATE_DETECTION) causing exception on duplicate field name
+    @Test
+    public void testEnable_strictDuplicateDetection_throwsOnDuplicateFieldName() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        gen.enable(JsonGenerator.Feature.STRICT_DUPLICATE_DETECTION);
+        gen.writeStartObject();
+        gen.writeFieldName("a");
+        gen.writeNumber(1);
+        try {
+            gen.writeFieldName("a");
+            fail("expected JsonGenerationException for duplicate field name");
+        } catch (JsonGenerationException expected) {
+            // expected
+        }
+    }
+
+    // covers default (disabled) STRICT_DUPLICATE_DETECTION allowing duplicate field names
+    @Test
+    public void testDisable_strictDuplicateDetection_allowsDuplicateFieldNames() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        gen.disable(JsonGenerator.Feature.STRICT_DUPLICATE_DETECTION);
+        gen.writeStartObject();
+        gen.writeFieldName("a");
+        gen.writeNumber(1);
+        gen.writeFieldName("a");
+        gen.writeNumber(2);
+        gen.writeEndObject();
+        gen.flush();
+        assertTrue(sw.toString().length() > 0);
+    }
+
+    // covers setFeatureMask() changing features and applying derived feature updates
+    @Test
+    public void testSetFeatureMask_changesFeaturesAndAppliesDerivedChanges() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        int newMask = gen.getFeatureMask() | JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS.getMask();
+        gen.setFeatureMask(newMask);
+        assertTrue(gen.isEnabled(JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS));
+        assertEquals(newMask, gen.getFeatureMask());
+    }
+
+    // covers setFeatureMask() no-op branch (changed == 0)
+    @Test
+    public void testSetFeatureMask_noChange_returnsSameMaskAndInstance() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        int mask = gen.getFeatureMask();
+        JsonGenerator ret = gen.setFeatureMask(mask);
+        assertSame(gen, ret);
+        assertEquals(mask, gen.getFeatureMask());
+    }
+
+    // covers overrideStdFeatures() changing only masked bits
+    @Test
+    public void testOverrideStdFeatures_changesOnlyMaskedBits() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        int mask = JsonGenerator.Feature.QUOTE_FIELD_NAMES.getMask();
+        gen.overrideStdFeatures(0, mask);
+        assertFalse(gen.isEnabled(JsonGenerator.Feature.QUOTE_FIELD_NAMES));
+    }
+
+    // covers overrideStdFeatures() no-op branch (changed == 0)
+    @Test
+    public void testOverrideStdFeatures_noChange_leavesFeaturesUnchanged() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        int before = gen.getFeatureMask();
+        gen.overrideStdFeatures(before, 0);
+        assertEquals(before, gen.getFeatureMask());
+    }
+
+    // covers useDefaultPrettyPrinter() when no printer is set yet
+    @Test
+    public void testUseDefaultPrettyPrinter_whenNoneSet_setsDefaultPrettyPrinter() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        assertNull(gen.getPrettyPrinter());
+        gen.useDefaultPrettyPrinter();
+        PrettyPrinter pp = gen.getPrettyPrinter();
+        assertNotNull(pp);
+        assertTrue(pp instanceof DefaultPrettyPrinter);
+    }
+
+    // covers useDefaultPrettyPrinter() not overriding an already-set printer
+    @Test
+    public void testUseDefaultPrettyPrinter_whenAlreadySet_doesNotOverride() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        DefaultPrettyPrinter customPP = new DefaultPrettyPrinter();
+        gen.setPrettyPrinter(customPP);
+        gen.useDefaultPrettyPrinter();
+        assertSame(customPP, gen.getPrettyPrinter());
+    }
+
+    // covers setCodec()/getCodec() round trip with null codec
+    @Test
+    public void testSetCodecGetCodec_roundTrip() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        gen.setCodec(null);
+        assertNull(gen.getCodec());
+    }
+
+    // covers getOutputContext() initial root state
+    @Test
+    public void testGetOutputContext_initiallyInRoot() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        JsonStreamContext ctx = gen.getOutputContext();
+        assertNotNull(ctx);
+        assertTrue(ctx.inRoot());
+    }
+
+    // covers writeRawValue(String) delegating to writeRaw unchanged
+    @Test
+    public void testWriteRawValue_string_writesRawTextUnchanged() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        gen.writeRawValue("raw");
+        gen.flush();
+        assertEquals("raw", sw.toString());
+    }
+
+    // covers writeRawValue(String, offset, len) writing only the specified substring
+    @Test
+    public void testWriteRawValue_stringWithOffsetLen_writesSubstring() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        gen.writeRawValue("hello raw value", 6, 3);
+        gen.flush();
+        assertEquals("raw", sw.toString());
+    }
+
+    // covers writeRawValue(char[], offset, len) writing only the specified subrange
+    @Test
+    public void testWriteRawValue_charArrayOffsetLen_writesSubrange() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        char[] data = "XrawY".toCharArray();
+        gen.writeRawValue(data, 1, 3);
+        gen.flush();
+        assertEquals("raw", sw.toString());
+    }
+
+    // covers writeObject(null) delegating to writeNull()
+    @Test
+    public void testWriteObject_null_writesNull() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        gen.writeObject(null);
+        gen.flush();
+        assertEquals("null", sw.toString());
+    }
+
+    // covers writeObject(String) with no codec, simple-type handling of String
+    @Test
+    public void testWriteObject_stringValue_writesQuotedString() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        gen.writeObject("hi");
+        gen.flush();
+        assertEquals("\"hi\"", sw.toString());
+    }
+
+    // covers writeObject(Integer) with no codec, simple-type handling of Number
+    @Test
+    public void testWriteObject_integerValue_writesNumber() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        gen.writeObject(Integer.valueOf(42));
+        gen.flush();
+        assertEquals("42", sw.toString());
+    }
+
+    // covers writeObject(Object) with no codec and unrecognized type throwing IllegalStateException
+    @Test
+    public void testWriteObject_unsupportedType_throwsIllegalStateException() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        try {
+            gen.writeObject(new Object());
+            fail("expected IllegalStateException for unrecognized type without ObjectCodec");
+        } catch (IllegalStateException expected) {
+            // expected
+        }
+    }
+
+    // covers writeTree(null) delegating to writeNull()
+    @Test
+    public void testWriteTree_null_writesNull() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        gen.writeTree(null);
+        gen.flush();
+        assertEquals("null", sw.toString());
+    }
+
+    // covers close()/isClosed() state transition
+    @Test
+    public void testClose_setsClosedTrueAndIsClosedReflects() throws Throwable {
+        JsonGenerator gen = factory.createGenerator(new StringWriter());
+        assertFalse(gen.isClosed());
+        gen.close();
+        assertTrue(gen.isClosed());
+    }
+
+    // covers flush() making buffered content available on underlying writer
+    @Test
+    public void testFlush_writesBufferedContentToWriter() throws Throwable {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        gen.writeString("abc");
+        gen.flush();
+        assertEquals("\"abc\"", sw.toString());
+    }
+}

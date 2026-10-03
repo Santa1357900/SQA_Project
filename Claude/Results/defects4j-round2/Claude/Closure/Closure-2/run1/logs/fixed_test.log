@@ -1,0 +1,14 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-2-5oabvxuo/Closure-2f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 8
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testEnum_nonConstantKey_reportsWarning
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testForIn_withStructObject_reportsWarning
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testEnum_duplicateKey_reportsError
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testAssign_newPropertyOnStructInstance_reportsWarning
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testImplements_nonInterfaceType_reportsWarning
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testCast_unrelatedTypes_reportsWarning
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testIn_withStructRightOperand_reportsWarning
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testExtends_constructorExtendingInterface_reportsWarning
+[exit 0]

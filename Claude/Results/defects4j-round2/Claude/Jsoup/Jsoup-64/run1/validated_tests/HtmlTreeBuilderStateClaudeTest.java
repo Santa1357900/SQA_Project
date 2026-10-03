@@ -1,0 +1,345 @@
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.DocumentType;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.select.Elements;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class HtmlTreeBuilderStateClaudeTest {
+
+    // Initial state: doctype creates DocumentType node and sets noQuirks mode for standard html doctype
+    @Test
+    public void testInitial_doctype_createsDocumentTypeAndNoQuirksMode() throws Throwable {
+        Document doc = Jsoup.parse("<!DOCTYPE html><html><body>Hi</body></html>");
+        Node first = doc.childNode(0);
+        assertTrue(first instanceof DocumentType);
+        assertEquals("html", ((DocumentType) first).attr("name"));
+        assertEquals(Document.QuirksMode.noQuirks, doc.quirksMode());
+    }
+
+    // Initial state: leading whitespace before html is ignored, body content unaffected
+    @Test
+    public void testInitial_leadingWhitespaceIgnored_bodyContentIntact() throws Throwable {
+        Document doc = Jsoup.parse("   \n  <html><body>content</body></html>");
+        assertEquals("content", doc.body().text());
+    }
+
+    // Initial state: comment before html is inserted as a document-level comment node
+    @Test
+    public void testInitial_commentBeforeHtml_insertedAsDocumentComment() throws Throwable {
+        Document doc = Jsoup.parse("<!--c--><html><body>x</body></html>");
+        Node first = doc.childNode(0);
+        assertTrue(first instanceof Comment);
+        assertEquals("c", ((Comment) first).getData());
+    }
+
+    // BeforeHtml state: stray end tag (not head/body/html/br) is ignored, html/body implicitly created
+    @Test
+    public void testBeforeHtml_strayEndTag_ignoredBodyStillCreated() throws Throwable {
+        Document doc = Jsoup.parse("</div><p>Hi</p>");
+        assertNotNull(doc.body());
+        assertEquals(1, doc.body().children().size());
+        assertEquals("p", doc.body().children().get(0).tagName());
+    }
+
+    // BeforeHead state: stray end tag before head is ignored, head/title still parsed correctly
+    @Test
+    public void testBeforeHead_strayEndTag_ignoredHeadStillParsed() throws Throwable {
+        Document doc = Jsoup.parse("</foo><head><title>Ok</title></head><body>hi</body>");
+        assertEquals("Ok", doc.title());
+        assertEquals("hi", doc.body().text());
+    }
+
+    // InHead state: meta start tag is inserted as an empty element into head
+    @Test
+    public void testInHead_metaTag_insertedIntoHead() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><meta charset='utf-8'></head><body></body></html>");
+        Elements metas = doc.head().select("meta");
+        assertEquals(1, metas.size());
+        assertEquals("utf-8", metas.first().attr("charset"));
+    }
+
+    // InHead state: title is RCDATA - entities decoded, embedded tags treated as literal text
+    @Test
+    public void testInHead_titleRcdata_decodesEntitiesNoNestedTags() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>A &lt;b&gt; B</title></head><body></body></html>");
+        assertEquals("A <b> B", doc.title());
+        assertTrue(doc.select("title b").isEmpty());
+    }
+
+    // InHead state: style is RAWTEXT - content preserved literally, not parsed into elements
+    @Test
+    public void testInHead_styleRawtext_preservesLiteralContent() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><style><div>not a tag</div></style></head><body></body></html>");
+        Element style = doc.select("style").first();
+        assertTrue(style.data().contains("<div>not a tag</div>"));
+        assertTrue(doc.select("style div").isEmpty());
+    }
+
+    // InHead state: duplicate head start tag is an error and ignored, only one head element exists
+    @Test
+    public void testInHead_duplicateHeadStartTag_ignoredSingleHead() throws Throwable {
+        Document doc = Jsoup.parse("<head><head><title>Hi</title></head>");
+        assertEquals("Hi", doc.title());
+        assertEquals(1, doc.select("head").size());
+    }
+
+    // InHeadNoscript state: whitelisted tag (style) is processed inside noscript via InHead handling
+    @Test
+    public void testInHeadNoscript_allowedStyleTag_insertedInsideNoscript() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><noscript><style>x</style></noscript></head><body></body></html>");
+        Elements styles = doc.select("noscript style");
+        assertEquals(1, styles.size());
+    }
+
+    // InHeadNoscript state: disallowed tag is not parsed as an element, text content preserved
+    @Test
+    public void testInHeadNoscript_disallowedTag_notParsedAsElement() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><noscript><p>hi</p></noscript></head><body>after</body></html>");
+        assertTrue(doc.select("noscript p").isEmpty());
+        assertTrue(doc.select("noscript").first().text().contains("hi"));
+    }
+
+    // AfterHead state: stray title after head already closed is still routed into head
+    @Test
+    public void testAfterHead_strayTitleAfterHeadClosed_stillAddedToHead() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><title>Stray</title><body>after</body></html>");
+        assertEquals("Stray", doc.title());
+    }
+
+    // AfterHead state: frameset start tag transitions to frameset structure
+    @Test
+    public void testAfterHead_frameset_createsFramesetStructure() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><frameset><frame src='a'></frameset></html>");
+        Elements frames = doc.select("frame");
+        assertEquals(1, frames.size());
+        assertEquals("a", frames.first().attr("src"));
+    }
+
+    // AfterHead state: any other token (text) implicitly creates a body element
+    @Test
+    public void testAfterHead_textDirectlyAfterHead_createsImplicitBody() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head>Hello</html>");
+        assertEquals("Hello", doc.body().text());
+    }
+
+    // InBody state: duplicate active 'a' formatting element triggers close+reconstruct, text preserved
+    @Test
+    public void testInBody_duplicateAnchor_preservesTextAndCreatesAnchors() throws Throwable {
+        Document doc = Jsoup.parse("<p><a>1<a>2</a></p>");
+        assertEquals("12", doc.body().text());
+        assertTrue(doc.select("a").size() >= 2);
+    }
+
+    // InBody state: block element (div) closes an open <p>, resulting in sibling elements
+    @Test
+    public void testInBody_pClosedByDiv_siblingsNotNested() throws Throwable {
+        Document doc = Jsoup.parse("<p>Text<div>After</div>");
+        Elements children = doc.body().children();
+        assertEquals(2, children.size());
+        assertEquals("p", children.get(0).tagName());
+        assertEquals("div", children.get(1).tagName());
+    }
+
+    // InBody state: sequential <li> tags auto-close the previous one, resulting in siblings
+    @Test
+    public void testInBody_liSiblingsNotNested() throws Throwable {
+        Document doc = Jsoup.parse("<ul><li>one<li>two</ul>");
+        Elements lis = doc.select("li");
+        assertEquals(2, lis.size());
+        assertSame(lis.get(0).parent(), lis.get(1).parent());
+    }
+
+    // InBody state: a second <html> start tag merges its attributes onto the root html element
+    @Test
+    public void testInBody_htmlStartTagMergesAttributes() throws Throwable {
+        Document doc = Jsoup.parse("<html id='x'><html class='y'><body></body></html>");
+        Element html = doc.select("html").first();
+        assertEquals("x", html.attr("id"));
+        assertEquals("y", html.attr("class"));
+    }
+
+    // InBody state: title tag encountered in body is redirected to head processing
+    @Test
+    public void testInBody_titleInBodyRedirectsToHead() throws Throwable {
+        Document doc = Jsoup.parse("<body><title>Hey</title></body>");
+        assertEquals("Hey", doc.title());
+    }
+
+    // InBody state: a second body start tag merges attributes onto the existing single body element
+    @Test
+    public void testInBody_duplicateBodyMergesAttributes() throws Throwable {
+        Document doc = Jsoup.parse("<body id='a'>First<body class='b'>Second");
+        assertEquals("a", doc.body().attr("id"));
+        assertEquals("b", doc.body().attr("class"));
+        assertEquals("FirstSecond", doc.body().text());
+    }
+
+    // InBody state: frameset start tag is ignored once frameset-ok flag has been set false by text
+    @Test
+    public void testInBody_framesetIgnoredWhenFramesetNotOk() throws Throwable {
+        Document doc = Jsoup.parse("<body>Text<frameset><frame></frameset></body>");
+        assertTrue(doc.select("frameset").isEmpty());
+    }
+
+    // InBody state: a new heading start tag auto-closes a currently open heading element
+    @Test
+    public void testInBody_headingStartTagAutoClosesPriorHeading() throws Throwable {
+        Document doc = Jsoup.parse("<h1>One<h2>Two");
+        assertEquals("One", doc.select("h1").first().text());
+        assertEquals("Two", doc.select("h2").first().text());
+        assertEquals(2, doc.body().children().size());
+    }
+
+    // InBody state: mismatched heading end tag still closes the currently open heading element
+    @Test
+    public void testInBody_headingEndTagClosesDespiteMismatch() throws Throwable {
+        Document doc = Jsoup.parse("<h1>Title</h2>");
+        assertEquals("Title", doc.select("h1").first().text());
+        assertTrue(doc.select("h2").isEmpty());
+    }
+
+
+
+    // InBody state: sequential dt/dd tags close each other and end as siblings under dl
+    @Test
+    public void testInBody_ddDtSiblingsNotNested() throws Throwable {
+        Document doc = Jsoup.parse("<dl><dt>Term<dd>Def</dl>");
+        Elements children = doc.select("dl").first().children();
+        assertEquals(2, children.size());
+        assertEquals("dt", children.get(0).tagName());
+        assertEquals("dd", children.get(1).tagName());
+    }
+
+    // InBody state: plaintext causes remaining input to be treated as literal, un-parsed text
+    @Test
+    public void testInBody_plaintextTreatsRestAsLiteralText() throws Throwable {
+        Document doc = Jsoup.parse("<plaintext><p>NotATag</p>");
+        Element pt = doc.select("plaintext").first();
+        assertTrue(pt.text().contains("<p>NotATag</p>"));
+        assertTrue(doc.select("plaintext p").isEmpty());
+    }
+
+    // InBody state: nested button auto-closes the first button, producing sibling buttons
+    @Test
+    public void testInBody_nestedButtonClosesFirst() throws Throwable {
+        Document doc = Jsoup.parse("<button>1<button>2</button></button>");
+        Elements buttons = doc.select("button");
+        assertEquals(2, buttons.size());
+        assertSame(buttons.get(0).parent(), buttons.get(1).parent());
+    }
+
+    // InBody state: nested nobr closes the previous one via adoption agency, text is preserved
+    @Test
+    public void testInBody_nestedNobrPreservesText() throws Throwable {
+        Document doc = Jsoup.parse("<nobr>1<nobr>2</nobr></nobr>");
+        assertEquals("12", doc.body().text());
+        assertFalse(doc.select("nobr").isEmpty());
+    }
+
+    // InBody end tag for applet/marquee/object: must close applet even with an ancestor literally named <name>
+    @Test
+    public void testInBody_endTagApplet_bugAncestorNamedName_failsToClose() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><name><applet>hi</applet><span>after</span></name></body></html>");
+        Element name = doc.select("name").first();
+        Elements children = name.children();
+        assertEquals(2, children.size());
+        assertEquals("applet", children.get(0).tagName());
+        assertEquals("span", children.get(1).tagName());
+        assertEquals("after", children.get(1).text());
+    }
+
+    // InBody end tag for applet: normal case (no <name> ancestor) closes applet correctly
+    @Test
+    public void testInBody_endTagApplet_normalCase_closesProperly() throws Throwable {
+        Document doc = Jsoup.parse("<applet>hi</applet><span>after</span>");
+        Elements children = doc.body().children();
+        assertEquals(2, children.size());
+        assertEquals("applet", children.get(0).tagName());
+        assertEquals("span", children.get(1).tagName());
+    }
+
+    // InBody state: <image> start tag is renamed and processed as <img>
+    @Test
+    public void testInBody_imageTagRenamedToImg() throws Throwable {
+        Document doc = Jsoup.parse("<image src='pic.png'>");
+        assertEquals(1, doc.select("img").size());
+        assertEquals("pic.png", doc.select("img").first().attr("src"));
+        assertTrue(doc.select("image").isEmpty());
+    }
+
+    // InBody state: textarea is RCDATA - entities decoded, embedded tags kept as literal text
+    @Test
+    public void testInBody_textareaRcdataLiteralContent() throws Throwable {
+        Document doc = Jsoup.parse("<textarea>&lt;b&gt;Not a tag&lt;/b&gt;</textarea>");
+        Element ta = doc.select("textarea").first();
+        assertEquals("<b>Not a tag</b>", ta.text());
+        assertTrue(doc.select("textarea b").isEmpty());
+    }
+
+
+
+    // InBody state: table-context start tags (e.g. td) appearing directly in body are dropped
+    @Test
+    public void testInBody_dropTagsIgnoredInBodyContext() throws Throwable {
+        Document doc = Jsoup.parse("<body><td>Ignored</td>Hello</body>");
+        assertTrue(doc.select("td").isEmpty());
+        assertEquals("IgnoredHello", doc.body().text());
+    }
+
+    // InBody end tag: div end tag without a matching open div is ignored (no element created)
+    @Test
+    public void testInBody_divEndTagWithoutOpen_ignored() throws Throwable {
+        Document doc = Jsoup.parse("<p>Hi</div>");
+        assertTrue(doc.select("div").isEmpty());
+        assertEquals("Hi", doc.select("p").first().text());
+    }
+
+    // InBody end tag: span end tag without matching open span is ignored, content stays put
+    @Test
+    public void testInBody_spanEndTagWithoutOpen_keepsContent() throws Throwable {
+        Document doc = Jsoup.parse("<div>Hi</span>Bye</div>");
+        assertTrue(doc.select("span").isEmpty());
+        assertEquals("HiBye", doc.select("div").first().text());
+    }
+
+    // InBody end tag: body end tag transitions to AfterBody, later text still appended into body
+    @Test
+    public void testInBody_bodyEndTagContinuesParsingAfter() throws Throwable {
+        Document doc = Jsoup.parse("<body>Hi</body>After");
+        assertEquals("HiAfter", doc.body().text());
+    }
+
+    // InBody end tag: p end tag without an open p creates and immediately closes an empty <p>
+    @Test
+    public void testInBody_pEndTagWithoutOpen_createsEmptyP() throws Throwable {
+        Document doc = Jsoup.parse("<div></p>Text</div>");
+        Element div = doc.select("div").first();
+        assertEquals(1, div.select("p").size());
+        assertEquals("", div.select("p").first().text());
+    }
+
+    // InBody end tag: br end tag is treated as a start tag, inserting a real <br> element
+    @Test
+    public void testInBody_brEndTagInsertsBrElement() throws Throwable {
+        Document doc = Jsoup.parse("<html><body></br></body></html>");
+        assertEquals(1, doc.select("br").size());
+    }
+
+    // InBody state: isindex start tag builds a form with label, hr and a named input element
+    @Test
+    public void testInBody_isindexCreatesFormAndInput() throws Throwable {
+        Document doc = Jsoup.parse("<isindex prompt='Enter:' action='/submit'>");
+        assertEquals(1, doc.select("form").size());
+        assertEquals("/submit", doc.select("form").first().attr("action"));
+        assertEquals(1, doc.select("input[name=isindex]").size());
+        assertTrue(doc.select("form").first().text().contains("Enter:"));
+    }
+
+
+}

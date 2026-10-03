@@ -1,0 +1,528 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="1.0" branch-rate="0.7916666666666666" lines-covered="116" lines-valid="116" branches-covered="38" branches-valid="48" complexity="1.9142857142857144" version="2.0.3" timestamp="1790850692380">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="org.apache.commons.math.geometry" line-rate="1.0" branch-rate="0.7916666666666666" complexity="1.9142857142857144">
+			<classes>
+				<class name="org.apache.commons.math.geometry.Vector3D" filename="org/apache/commons/math/geometry/Vector3D.java" line-rate="1.0" branch-rate="0.7916666666666666" complexity="1.9142857142857144">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="35" hits="1" branch="false"/>
+								<line number="38" hits="1" branch="false"/>
+								<line number="41" hits="1" branch="false"/>
+								<line number="44" hits="1" branch="false"/>
+								<line number="47" hits="1" branch="false"/>
+								<line number="50" hits="1" branch="false"/>
+								<line number="53" hits="1" branch="false"/>
+								<line number="57" hits="1" branch="false"/>
+								<line number="61" hits="1" branch="false"/>
+								<line number="65" hits="1" branch="false"/>
+								<line number="69" hits="1" branch="false"/>
+								<line number="70" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(DD)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="107" hits="2" branch="false"/>
+								<line number="108" hits="2" branch="false"/>
+								<line number="109" hits="2" branch="false"/>
+								<line number="110" hits="2" branch="false"/>
+								<line number="111" hits="2" branch="false"/>
+								<line number="112" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(DDD)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="93" hits="83" branch="false"/>
+								<line number="94" hits="83" branch="false"/>
+								<line number="95" hits="83" branch="false"/>
+								<line number="96" hits="83" branch="false"/>
+								<line number="97" hits="83" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(DLorg/apache/commons/math/geometry/Vector3D;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="120" hits="1" branch="false"/>
+								<line number="121" hits="1" branch="false"/>
+								<line number="122" hits="1" branch="false"/>
+								<line number="123" hits="1" branch="false"/>
+								<line number="124" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(DLorg/apache/commons/math/geometry/Vector3D;DLorg/apache/commons/math/geometry/Vector3D;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="134" hits="1" branch="false"/>
+								<line number="135" hits="1" branch="false"/>
+								<line number="136" hits="1" branch="false"/>
+								<line number="137" hits="1" branch="false"/>
+								<line number="138" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(DLorg/apache/commons/math/geometry/Vector3D;DLorg/apache/commons/math/geometry/Vector3D;DLorg/apache/commons/math/geometry/Vector3D;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="151" hits="1" branch="false"/>
+								<line number="152" hits="1" branch="false"/>
+								<line number="153" hits="1" branch="false"/>
+								<line number="154" hits="1" branch="false"/>
+								<line number="155" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(DLorg/apache/commons/math/geometry/Vector3D;DLorg/apache/commons/math/geometry/Vector3D;DLorg/apache/commons/math/geometry/Vector3D;DLorg/apache/commons/math/geometry/Vector3D;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="170" hits="1" branch="false"/>
+								<line number="171" hits="1" branch="false"/>
+								<line number="172" hits="1" branch="false"/>
+								<line number="173" hits="1" branch="false"/>
+								<line number="174" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="add" signature="(DLorg/apache/commons/math/geometry/Vector3D;)Lorg/apache/commons/math/geometry/Vector3D;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="258" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="add" signature="(Lorg/apache/commons/math/geometry/Vector3D;)Lorg/apache/commons/math/geometry/Vector3D;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="249" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="angle" signature="(Lorg/apache/commons/math/geometry/Vector3D;Lorg/apache/commons/math/geometry/Vector3D;)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="337" hits="5" branch="false"/>
+								<line number="338" hits="5" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="339" hits="1" branch="false"/>
+								<line number="342" hits="4" branch="false"/>
+								<line number="343" hits="4" branch="false"/>
+								<line number="344" hits="4" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="346" hits="3" branch="false"/>
+								<line number="347" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="348" hits="2" branch="false"/>
+								<line number="350" hits="1" branch="false"/>
+								<line number="354" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="crossProduct" signature="(Lorg/apache/commons/math/geometry/Vector3D;Lorg/apache/commons/math/geometry/Vector3D;)Lorg/apache/commons/math/geometry/Vector3D;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="473" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="distance" signature="(Lorg/apache/commons/math/geometry/Vector3D;Lorg/apache/commons/math/geometry/Vector3D;)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="501" hits="1" branch="false"/>
+								<line number="502" hits="1" branch="false"/>
+								<line number="503" hits="1" branch="false"/>
+								<line number="504" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="distance1" signature="(Lorg/apache/commons/math/geometry/Vector3D;Lorg/apache/commons/math/geometry/Vector3D;)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="486" hits="1" branch="false"/>
+								<line number="487" hits="1" branch="false"/>
+								<line number="488" hits="1" branch="false"/>
+								<line number="489" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="distanceInf" signature="(Lorg/apache/commons/math/geometry/Vector3D;Lorg/apache/commons/math/geometry/Vector3D;)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="516" hits="1" branch="false"/>
+								<line number="517" hits="1" branch="false"/>
+								<line number="518" hits="1" branch="false"/>
+								<line number="519" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="distanceSq" signature="(Lorg/apache/commons/math/geometry/Vector3D;Lorg/apache/commons/math/geometry/Vector3D;)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="531" hits="1" branch="false"/>
+								<line number="532" hits="1" branch="false"/>
+								<line number="533" hits="1" branch="false"/>
+								<line number="534" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="dotProduct" signature="(Lorg/apache/commons/math/geometry/Vector3D;Lorg/apache/commons/math/geometry/Vector3D;)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="449" hits="8" branch="false"/>
+							</lines>
+						</method>
+						<method name="equals" signature="(Ljava/lang/Object;)Z" line-rate="1.0" branch-rate="0.8333333333333334">
+							<lines>
+								<line number="413" hits="6" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="414" hits="1" branch="false"/>
+								<line number="417" hits="5" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="418" hits="3" branch="false"/>
+								<line number="419" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="420" hits="1" branch="false"/>
+								<line number="423" hits="2" branch="true" condition-coverage="66% (4/6)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="50%"/>
+										<condition number="2" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="425" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="getAlpha" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="233" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="getDelta" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="241" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="getNorm" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="211" hits="29" branch="false"/>
+							</lines>
+						</method>
+						<method name="getNorm1" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="204" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="getNormInf" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="225" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="getNormSq" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="218" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="getX" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="181" hits="17" branch="false"/>
+							</lines>
+						</method>
+						<method name="getY" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="189" hits="17" branch="false"/>
+							</lines>
+						</method>
+						<method name="getZ" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="197" hits="17" branch="false"/>
+							</lines>
+						</method>
+						<method name="hashCode" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="437" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="438" hits="1" branch="false"/>
+								<line number="440" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="isInfinite" signature="()Z" line-rate="1.0" branch-rate="0.375">
+							<lines>
+								<line number="388" hits="2" branch="true" condition-coverage="37% (3/8)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="50%"/>
+										<condition number="2" type="jump" coverage="0%"/>
+										<condition number="3" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="isNaN" signature="()Z" line-rate="1.0" branch-rate="0.8333333333333334">
+							<lines>
+								<line number="378" hits="13" branch="true" condition-coverage="83% (5/6)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+										<condition number="2" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="negate" signature="()Lorg/apache/commons/math/geometry/Vector3D;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="362" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="normalize" signature="()Lorg/apache/commons/math/geometry/Vector3D;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="283" hits="2" branch="false"/>
+								<line number="284" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="285" hits="1" branch="false"/>
+								<line number="287" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="orthogonal" signature="()Lorg/apache/commons/math/geometry/Vector3D;" line-rate="1.0" branch-rate="0.8">
+							<lines>
+								<line number="307" hits="4" branch="false"/>
+								<line number="308" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="309" hits="1" branch="false"/>
+								<line number="312" hits="3" branch="true" condition-coverage="75% (3/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="313" hits="1" branch="false"/>
+								<line number="314" hits="1" branch="false"/>
+								<line number="315" hits="2" branch="true" condition-coverage="75% (3/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="316" hits="1" branch="false"/>
+								<line number="317" hits="1" branch="false"/>
+								<line number="319" hits="1" branch="false"/>
+								<line number="320" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="scalarMultiply" signature="(D)Lorg/apache/commons/math/geometry/Vector3D;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="370" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="subtract" signature="(DLorg/apache/commons/math/geometry/Vector3D;)Lorg/apache/commons/math/geometry/Vector3D;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="275" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="subtract" signature="(Lorg/apache/commons/math/geometry/Vector3D;)Lorg/apache/commons/math/geometry/Vector3D;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="266" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="542" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="35" hits="1" branch="false"/>
+						<line number="38" hits="1" branch="false"/>
+						<line number="41" hits="1" branch="false"/>
+						<line number="44" hits="1" branch="false"/>
+						<line number="47" hits="1" branch="false"/>
+						<line number="50" hits="1" branch="false"/>
+						<line number="53" hits="1" branch="false"/>
+						<line number="57" hits="1" branch="false"/>
+						<line number="61" hits="1" branch="false"/>
+						<line number="65" hits="1" branch="false"/>
+						<line number="69" hits="1" branch="false"/>
+						<line number="70" hits="1" branch="false"/>
+						<line number="93" hits="83" branch="false"/>
+						<line number="94" hits="83" branch="false"/>
+						<line number="95" hits="83" branch="false"/>
+						<line number="96" hits="83" branch="false"/>
+						<line number="97" hits="83" branch="false"/>
+						<line number="107" hits="2" branch="false"/>
+						<line number="108" hits="2" branch="false"/>
+						<line number="109" hits="2" branch="false"/>
+						<line number="110" hits="2" branch="false"/>
+						<line number="111" hits="2" branch="false"/>
+						<line number="112" hits="2" branch="false"/>
+						<line number="120" hits="1" branch="false"/>
+						<line number="121" hits="1" branch="false"/>
+						<line number="122" hits="1" branch="false"/>
+						<line number="123" hits="1" branch="false"/>
+						<line number="124" hits="1" branch="false"/>
+						<line number="134" hits="1" branch="false"/>
+						<line number="135" hits="1" branch="false"/>
+						<line number="136" hits="1" branch="false"/>
+						<line number="137" hits="1" branch="false"/>
+						<line number="138" hits="1" branch="false"/>
+						<line number="151" hits="1" branch="false"/>
+						<line number="152" hits="1" branch="false"/>
+						<line number="153" hits="1" branch="false"/>
+						<line number="154" hits="1" branch="false"/>
+						<line number="155" hits="1" branch="false"/>
+						<line number="170" hits="1" branch="false"/>
+						<line number="171" hits="1" branch="false"/>
+						<line number="172" hits="1" branch="false"/>
+						<line number="173" hits="1" branch="false"/>
+						<line number="174" hits="1" branch="false"/>
+						<line number="181" hits="17" branch="false"/>
+						<line number="189" hits="17" branch="false"/>
+						<line number="197" hits="17" branch="false"/>
+						<line number="204" hits="1" branch="false"/>
+						<line number="211" hits="29" branch="false"/>
+						<line number="218" hits="1" branch="false"/>
+						<line number="225" hits="1" branch="false"/>
+						<line number="233" hits="4" branch="false"/>
+						<line number="241" hits="4" branch="false"/>
+						<line number="249" hits="1" branch="false"/>
+						<line number="258" hits="1" branch="false"/>
+						<line number="266" hits="1" branch="false"/>
+						<line number="275" hits="1" branch="false"/>
+						<line number="283" hits="2" branch="false"/>
+						<line number="284" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="285" hits="1" branch="false"/>
+						<line number="287" hits="1" branch="false"/>
+						<line number="307" hits="4" branch="false"/>
+						<line number="308" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="309" hits="1" branch="false"/>
+						<line number="312" hits="3" branch="true" condition-coverage="75% (3/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="313" hits="1" branch="false"/>
+						<line number="314" hits="1" branch="false"/>
+						<line number="315" hits="2" branch="true" condition-coverage="75% (3/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="316" hits="1" branch="false"/>
+						<line number="317" hits="1" branch="false"/>
+						<line number="319" hits="1" branch="false"/>
+						<line number="320" hits="1" branch="false"/>
+						<line number="337" hits="5" branch="false"/>
+						<line number="338" hits="5" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="339" hits="1" branch="false"/>
+						<line number="342" hits="4" branch="false"/>
+						<line number="343" hits="4" branch="false"/>
+						<line number="344" hits="4" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="346" hits="3" branch="false"/>
+						<line number="347" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="348" hits="2" branch="false"/>
+						<line number="350" hits="1" branch="false"/>
+						<line number="354" hits="1" branch="false"/>
+						<line number="362" hits="1" branch="false"/>
+						<line number="370" hits="2" branch="false"/>
+						<line number="378" hits="13" branch="true" condition-coverage="83% (5/6)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+								<condition number="2" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="388" hits="2" branch="true" condition-coverage="37% (3/8)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="50%"/>
+								<condition number="2" type="jump" coverage="0%"/>
+								<condition number="3" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="413" hits="6" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="414" hits="1" branch="false"/>
+						<line number="417" hits="5" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="418" hits="3" branch="false"/>
+						<line number="419" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="420" hits="1" branch="false"/>
+						<line number="423" hits="2" branch="true" condition-coverage="66% (4/6)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="50%"/>
+								<condition number="2" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="425" hits="2" branch="false"/>
+						<line number="437" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="438" hits="1" branch="false"/>
+						<line number="440" hits="2" branch="false"/>
+						<line number="449" hits="8" branch="false"/>
+						<line number="473" hits="5" branch="false"/>
+						<line number="486" hits="1" branch="false"/>
+						<line number="487" hits="1" branch="false"/>
+						<line number="488" hits="1" branch="false"/>
+						<line number="489" hits="1" branch="false"/>
+						<line number="501" hits="1" branch="false"/>
+						<line number="502" hits="1" branch="false"/>
+						<line number="503" hits="1" branch="false"/>
+						<line number="504" hits="1" branch="false"/>
+						<line number="516" hits="1" branch="false"/>
+						<line number="517" hits="1" branch="false"/>
+						<line number="518" hits="1" branch="false"/>
+						<line number="519" hits="1" branch="false"/>
+						<line number="531" hits="1" branch="false"/>
+						<line number="532" hits="1" branch="false"/>
+						<line number="533" hits="1" branch="false"/>
+						<line number="534" hits="1" branch="false"/>
+						<line number="542" hits="1" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

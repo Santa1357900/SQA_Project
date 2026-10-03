@@ -1,0 +1,176 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.io.File;
+
+public class ProcessCommonJSModulesClaudeTest {
+
+  // ตรวจค่าคงที่ DEFAULT_FILENAME_PREFIX ต้องเป็น "." + File.separator
+  @Test
+  public void testDefaultFilenamePrefixConstant_matchesDotAndSeparator() throws Throwable {
+    assertEquals("." + File.separator, ProcessCommonJSModules.DEFAULT_FILENAME_PREFIX);
+  }
+
+  // toModuleName: กรณีไฟล์ .js ธรรมดา ต้องมี prefix module$ และตัด .js ออก
+  @Test
+  public void testToModuleName_simpleJsFile_addsModulePrefixAndStripsJsExtension() throws Throwable {
+    assertEquals("module$foo", ProcessCommonJSModules.toModuleName("foo.js"));
+  }
+
+  // toModuleName: ลบ "./" นำหน้าออก
+  @Test
+  public void testToModuleName_leadingDotSlash_isRemoved() throws Throwable {
+    String input = "." + File.separator + "foo.js";
+    assertEquals("module$foo", ProcessCommonJSModules.toModuleName(input));
+  }
+
+  // toModuleName: แทนที่ File.separator ด้วย $
+  @Test
+  public void testToModuleName_pathSeparator_replacedWithDollar() throws Throwable {
+    String input = "foo" + File.separator + "bar.js";
+    assertEquals("module$foo$bar", ProcessCommonJSModules.toModuleName(input));
+  }
+
+  // toModuleName: แทนที่ - ด้วย _ (กรณีเดียว)
+  @Test
+  public void testToModuleName_singleDash_replacedWithUnderscore() throws Throwable {
+    assertEquals("module$foo_bar", ProcessCommonJSModules.toModuleName("foo-bar.js"));
+  }
+
+  // toModuleName: แทนที่ - ด้วย _ (หลายครั้ง)
+  @Test
+  public void testToModuleName_multipleDashes_allReplaced() throws Throwable {
+    assertEquals("module$foo_bar_baz", ProcessCommonJSModules.toModuleName("foo-bar-baz.js"));
+  }
+
+  // toModuleName: ไม่มีส่วนขยาย .js ชื่อไม่เปลี่ยนนอกจาก prefix
+  @Test
+  public void testToModuleName_noJsExtension_nameUnchangedExceptPrefix() throws Throwable {
+    assertEquals("module$foo", ProcessCommonJSModules.toModuleName("foo"));
+  }
+
+  // toModuleName: ส่วนขยายที่ไม่ใช่ .js เป๊ะๆ (.jsx) ต้องไม่ถูกตัด
+  @Test
+  public void testToModuleName_nonJsSuffix_notStripped() throws Throwable {
+    assertEquals("module$foo.jsx", ProcessCommonJSModules.toModuleName("foo.jsx"));
+  }
+
+  // toModuleName: รวมทั้ง leading "./" , path separator และ dash ในโฟลเดอร์
+  @Test
+  public void testToModuleName_nestedPathWithDashAndLeadingDotSlash() throws Throwable {
+    String input = "." + File.separator + "my-dir" + File.separator + "file.js";
+    assertEquals("module$my_dir$file", ProcessCommonJSModules.toModuleName(input));
+  }
+
+  // toModuleName: input เป็นแค่ "./" หลังตัดแล้วเหลือว่าง
+  @Test
+  public void testToModuleName_emptyAfterStrippingLeadingDotSlash() throws Throwable {
+    String input = "." + File.separator;
+    assertEquals("module$", ProcessCommonJSModules.toModuleName(input));
+  }
+
+  // toModuleName: dash อยู่ในชื่อโฟลเดอร์โดยไม่มี "./" นำหน้า
+  @Test
+  public void testToModuleName_dashInDirectorySegmentWithoutLeadingDotSlash() throws Throwable {
+    String input = "my-dir" + File.separator + "file.js";
+    assertEquals("module$my_dir$file", ProcessCommonJSModules.toModuleName(input));
+  }
+
+  // toModuleName: รวม dash หลายจุดในหลายส่วนของ path
+  @Test
+  public void testToModuleName_multipleDashesAndPathCombined() throws Throwable {
+    String input = "." + File.separator + "a-b" + File.separator + "c-d.js";
+    assertEquals("module$a_b$c_d", ProcessCommonJSModules.toModuleName(input));
+  }
+
+  // toModuleName(required, current): required ไม่ใช่ relative path จึงไม่ resolve กับ current
+  @Test
+  public void testToModuleNameTwoArg_nonRelativeRequired_noResolution() throws Throwable {
+    String current = "a" + File.separator + "b.js";
+    String required = "bar.js";
+    assertEquals("module$bar", ProcessCommonJSModules.toModuleName(required, current));
+  }
+
+  // toModuleName(required, current): required เริ่มด้วย "./" ต้อง resolve เทียบกับ current (RFC3986 merge)
+  @Test
+  public void testToModuleNameTwoArg_dotSlashRelative_resolvesAgainstCurrent() throws Throwable {
+    String current = "a" + File.separator + "b.js";
+    String required = "." + File.separator + "c.js";
+    assertEquals("module$a$c", ProcessCommonJSModules.toModuleName(required, current));
+  }
+
+  // toModuleName(required, current): required เริ่มด้วย "../" ต้อง resolve ขึ้นไปหนึ่งระดับ
+  @Test
+  public void testToModuleNameTwoArg_dotDotSlashRelative_resolvesUpOneLevel() throws Throwable {
+    String current = "a" + File.separator + "b" + File.separator + "c.js";
+    String required = ".." + File.separator + "d.js";
+    assertEquals("module$a$d", ProcessCommonJSModules.toModuleName(required, current));
+  }
+
+  // toModuleName(required, current): required ไม่มี .js ต่อท้ายอยู่แล้ว ผลลัพธ์ต้องเหมือนกับกรณีมี .js
+  @Test
+  public void testToModuleNameTwoArg_requiredWithoutJsExtension_sameResolution() throws Throwable {
+    String current = "a" + File.separator + "b.js";
+    String required = "." + File.separator + "c";
+    assertEquals("module$a$c", ProcessCommonJSModules.toModuleName(required, current));
+  }
+
+  // toModuleName(required, current): URI ไม่ถูกต้อง (มีช่องว่าง) ต้อง throw RuntimeException ห่อ URISyntaxException
+  @Test
+  public void testToModuleNameTwoArg_invalidUriSyntax_throwsRuntimeException() throws Throwable {
+    String current = "baz.js";
+    String required = "." + File.separator + "foo bar.js";
+    try {
+      ProcessCommonJSModules.toModuleName(required, current);
+      fail("expected RuntimeException due to invalid URI syntax");
+    } catch (RuntimeException expected) {
+      // ยืนยันเป็น RuntimeException ตามสัญญาของโค้ด (ห่อ URISyntaxException)
+      assertNotNull(expected);
+    }
+  }
+
+  // guessCJSModuleName: filenamePrefix ไม่มี separator ต่อท้าย ต้องถูกเติมและตัด prefix ออกจากชื่อไฟล์
+  @Test
+  public void testGuessCJSModuleName_prefixWithoutTrailingSeparator_stripsPrefix() throws Throwable {
+    Compiler compiler = new Compiler();
+    ProcessCommonJSModules pcm = new ProcessCommonJSModules(compiler, "src");
+    String filename = "src" + File.separator + "foo.js";
+    assertEquals("module$foo", pcm.guessCJSModuleName(filename));
+  }
+
+  // guessCJSModuleName: filenamePrefix มี separator ต่อท้ายอยู่แล้ว ต้องไม่เติมซ้ำ
+  @Test
+  public void testGuessCJSModuleName_prefixWithTrailingSeparator_stripsPrefix() throws Throwable {
+    Compiler compiler = new Compiler();
+    ProcessCommonJSModules pcm = new ProcessCommonJSModules(compiler, "src" + File.separator);
+    String filename = "src" + File.separator + "bar.js";
+    assertEquals("module$bar", pcm.guessCJSModuleName(filename));
+  }
+
+  // guessCJSModuleName: filename ไม่ตรงกับ prefix จึงใช้ทั้งชื่อไฟล์ในการแปลง
+  @Test
+  public void testGuessCJSModuleName_filenameNotMatchingPrefix_usesFullFilename() throws Throwable {
+    Compiler compiler = new Compiler();
+    ProcessCommonJSModules pcm = new ProcessCommonJSModules(compiler, "src");
+    String filename = "other" + File.separator + "baz.js";
+    assertEquals("module$other$baz", pcm.guessCJSModuleName(filename));
+  }
+
+  // constructor 3 พารามิเตอร์ reportDependencies=false ยังคำนวณชื่อโมดูลได้ถูกต้อง
+  @Test
+  public void testThreeArgConstructor_reportDependenciesFalse_stillComputesModuleName() throws Throwable {
+    Compiler compiler = new Compiler();
+    ProcessCommonJSModules pcm = new ProcessCommonJSModules(compiler, "src", false);
+    String filename = "src" + File.separator + "qux.js";
+    assertEquals("module$qux", pcm.guessCJSModuleName(filename));
+  }
+
+  // getModule(): ก่อนเรียก process() ต้องเป็น null เสมอ
+  @Test
+  public void testGetModule_beforeProcess_isNull() throws Throwable {
+    Compiler compiler = new Compiler();
+    ProcessCommonJSModules pcm = new ProcessCommonJSModules(compiler, "src");
+    assertNull(pcm.getModule());
+  }
+}

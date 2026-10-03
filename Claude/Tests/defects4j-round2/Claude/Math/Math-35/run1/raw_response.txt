@@ -1,0 +1,302 @@
+package org.apache.commons.math3.genetics;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.commons.math3.exception.OutOfRangeException;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ElitisticListPopulationClaudeTest {
+
+    private static class TestChromosome extends Chromosome {
+        private final double fitnessValue;
+        TestChromosome(double fitnessValue) {
+            this.fitnessValue = fitnessValue;
+        }
+        public double fitness() {
+            return fitnessValue;
+        }
+    }
+
+    private List<Chromosome> buildList(double[] fitnessValues) {
+        List<Chromosome> list = new ArrayList<Chromosome>();
+        for (int i = 0; i < fitnessValues.length; i++) {
+            list.add(new TestChromosome(fitnessValues[i]));
+        }
+        return list;
+    }
+
+    // valid elitism rate between 0 and 1: constructor stores rate and chromosomes without error
+    @Test
+    public void testConstructorListIntDouble_validRate_setsElitismRateAndChromosomes() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0, 2.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 0.5);
+        assertEquals(0.5, pop.getElitismRate(), 1e-9);
+        assertEquals(2, pop.getChromosomes().size());
+    }
+
+    // boundary elitismRate = 0.0 must be accepted (inclusive lower bound of [0,1])
+    @Test
+    public void testConstructorListIntDouble_rateZero_boundaryAccepted() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 5, 0.0);
+        assertEquals(0.0, pop.getElitismRate(), 1e-9);
+    }
+
+    // boundary elitismRate = 1.0 must be accepted (inclusive upper bound of [0,1])
+    @Test
+    public void testConstructorListIntDouble_rateOne_boundaryAccepted() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 5, 1.0);
+        assertEquals(1.0, pop.getElitismRate(), 1e-9);
+    }
+
+    // per javadoc: elitismRate below 0 must throw OutOfRangeException (bug: ctor assigns field directly, no check)
+    @Test
+    public void testConstructorListIntDouble_rateNegative_throwsOutOfRangeException() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0});
+        try {
+            new ElitisticListPopulation(list, 5, -0.1);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // per javadoc: elitismRate above 1 must throw OutOfRangeException (bug: ctor assigns field directly, no check)
+    @Test
+    public void testConstructorListIntDouble_rateGreaterThanOne_throwsOutOfRangeException() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0});
+        try {
+            new ElitisticListPopulation(list, 5, 1.5);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // empty chromosome list is allowed; population starts empty
+    @Test
+    public void testConstructorListIntDouble_emptyList_populationEmpty() throws Throwable {
+        List<Chromosome> list = new ArrayList<Chromosome>();
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 5, 0.5);
+        assertEquals(0, pop.getChromosomes().size());
+    }
+
+    // valid elitism rate stored correctly, population starts empty
+    @Test
+    public void testConstructorIntDouble_validRate_setsElitismRate() throws Throwable {
+        ElitisticListPopulation pop = new ElitisticListPopulation(10, 0.3);
+        assertEquals(0.3, pop.getElitismRate(), 1e-9);
+        assertEquals(0, pop.getChromosomes().size());
+    }
+
+    // per javadoc: negative elitismRate must throw OutOfRangeException (bug: ctor assigns field directly, no check)
+    @Test
+    public void testConstructorIntDouble_rateNegative_throwsOutOfRangeException() throws Throwable {
+        try {
+            new ElitisticListPopulation(10, -0.5);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // per javadoc: elitismRate above 1 must throw OutOfRangeException (bug: ctor assigns field directly, no check)
+    @Test
+    public void testConstructorIntDouble_rateGreaterThanOne_throwsOutOfRangeException() throws Throwable {
+        try {
+            new ElitisticListPopulation(10, 2.0);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // populationLimit passed to constructor must be retrievable via getPopulationLimit
+    @Test
+    public void testConstructorIntDouble_populationLimitStored() throws Throwable {
+        ElitisticListPopulation pop = new ElitisticListPopulation(7, 0.4);
+        assertEquals(7, pop.getPopulationLimit());
+    }
+
+    // empty population: boundIndex = ceil((1-rate)*0) = 0, loop runs 0 times -> next generation empty
+    @Test
+    public void testNextGeneration_emptyPopulation_returnsEmptyPopulation() throws Throwable {
+        List<Chromosome> list = new ArrayList<Chromosome>();
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 0.9);
+        Population next = pop.nextGeneration();
+        ElitisticListPopulation nextPop = (ElitisticListPopulation) next;
+        assertEquals(0, nextPop.getChromosomes().size());
+    }
+
+    // single chromosome, rate=0.9 -> boundIndex=ceil(0.1*1)=1, loop i=1..<1 -> 0 copies
+    @Test
+    public void testNextGeneration_singleChromosomeHighElitism_returnsEmptyNextGeneration() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {5.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 0.9);
+        Population next = pop.nextGeneration();
+        ElitisticListPopulation nextPop = (ElitisticListPopulation) next;
+        assertEquals(0, nextPop.getChromosomes().size());
+    }
+
+    // rate=1.0 -> boundIndex=ceil(0*size)=0, loop copies all chromosomes, sorted ascending by fitness
+    @Test
+    public void testNextGeneration_elitismRateOne_copiesAllChromosomesSorted() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {3.0, 1.0, 2.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 1.0);
+        Population next = pop.nextGeneration();
+        ElitisticListPopulation nextPop = (ElitisticListPopulation) next;
+        List<Chromosome> result = nextPop.getChromosomes();
+        assertEquals(3, result.size());
+        assertEquals(1.0, result.get(0).fitness(), 1e-9);
+        assertEquals(3.0, result.get(2).fitness(), 1e-9);
+    }
+
+    // rate=0.0 -> boundIndex=ceil(1*size)=size, loop i=size..<size -> 0 copies
+    @Test
+    public void testNextGeneration_elitismRateZero_returnsEmptyNextGeneration() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0, 2.0, 3.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 0.0);
+        Population next = pop.nextGeneration();
+        ElitisticListPopulation nextPop = (ElitisticListPopulation) next;
+        assertEquals(0, nextPop.getChromosomes().size());
+    }
+
+    // rate=0.5, size=4 -> boundIndex=ceil(2)=2, loop copies the 2 best (highest-fitness) chromosomes
+    @Test
+    public void testNextGeneration_elitismRateHalf_copiesTopHalfByFitness() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0, 2.0, 3.0, 4.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 0.5);
+        Population next = pop.nextGeneration();
+        ElitisticListPopulation nextPop = (ElitisticListPopulation) next;
+        List<Chromosome> result = nextPop.getChromosomes();
+        assertEquals(2, result.size());
+        assertEquals(3.0, result.get(0).fitness(), 1e-9);
+        assertEquals(4.0, result.get(1).fitness(), 1e-9);
+    }
+
+    // next generation must preserve the population limit of the originating population
+    @Test
+    public void testNextGeneration_preservesPopulationLimit() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 42, 0.5);
+        Population next = pop.nextGeneration();
+        ElitisticListPopulation nextPop = (ElitisticListPopulation) next;
+        assertEquals(42, nextPop.getPopulationLimit());
+    }
+
+    // next generation must preserve the elitism rate of the originating population
+    @Test
+    public void testNextGeneration_preservesElitismRate() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 0.75);
+        Population next = pop.nextGeneration();
+        ElitisticListPopulation nextPop = (ElitisticListPopulation) next;
+        assertEquals(0.75, nextPop.getElitismRate(), 1e-9);
+    }
+
+    // nextGeneration sorts the original population's chromosome list ascending by fitness (observable side effect)
+    @Test
+    public void testNextGeneration_sortsOriginalChromosomesAscendingByFitness() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {3.0, 1.0, 2.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 0.5);
+        pop.nextGeneration();
+        List<Chromosome> original = pop.getChromosomes();
+        assertEquals(1.0, original.get(0).fitness(), 1e-9);
+        assertEquals(2.0, original.get(1).fitness(), 1e-9);
+        assertEquals(3.0, original.get(2).fitness(), 1e-9);
+    }
+
+    // size=5, rate=0.3 -> boundIndex=ceil(0.7*5)=ceil(3.5)=4, only the single best chromosome is copied
+    @Test
+    public void testNextGeneration_nonExactBoundary_ceilsBoundIndex() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0, 2.0, 3.0, 4.0, 5.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 0.3);
+        Population next = pop.nextGeneration();
+        ElitisticListPopulation nextPop = (ElitisticListPopulation) next;
+        List<Chromosome> result = nextPop.getChromosomes();
+        assertEquals(1, result.size());
+        assertEquals(5.0, result.get(0).fitness(), 1e-9);
+    }
+
+    // returned object from nextGeneration must be an ElitisticListPopulation instance
+    @Test
+    public void testNextGeneration_resultIsElitisticListPopulationInstance() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 0.5);
+        Population next = pop.nextGeneration();
+        assertTrue(next instanceof ElitisticListPopulation);
+    }
+
+    // valid rate within (0,1) updates the stored elitism rate
+    @Test
+    public void testSetElitismRate_validValue_updatesRate() throws Throwable {
+        ElitisticListPopulation pop = new ElitisticListPopulation(10, 0.5);
+        pop.setElitismRate(0.2);
+        assertEquals(0.2, pop.getElitismRate(), 1e-9);
+    }
+
+    // boundary value 0.0 is within inclusive [0,1] range, must be accepted
+    @Test
+    public void testSetElitismRate_boundaryZero_accepted() throws Throwable {
+        ElitisticListPopulation pop = new ElitisticListPopulation(10, 0.5);
+        pop.setElitismRate(0.0);
+        assertEquals(0.0, pop.getElitismRate(), 1e-9);
+    }
+
+    // boundary value 1.0 is within inclusive [0,1] range, must be accepted
+    @Test
+    public void testSetElitismRate_boundaryOne_accepted() throws Throwable {
+        ElitisticListPopulation pop = new ElitisticListPopulation(10, 0.5);
+        pop.setElitismRate(1.0);
+        assertEquals(1.0, pop.getElitismRate(), 1e-9);
+    }
+
+    // value below 0 is out of range and must throw OutOfRangeException
+    @Test
+    public void testSetElitismRate_negative_throwsOutOfRangeException() throws Throwable {
+        ElitisticListPopulation pop = new ElitisticListPopulation(10, 0.5);
+        try {
+            pop.setElitismRate(-0.01);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // value above 1 is out of range and must throw OutOfRangeException
+    @Test
+    public void testSetElitismRate_greaterThanOne_throwsOutOfRangeException() throws Throwable {
+        ElitisticListPopulation pop = new ElitisticListPopulation(10, 0.5);
+        try {
+            pop.setElitismRate(1.01);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // invalid setElitismRate call must not change the previously stored rate
+    @Test
+    public void testSetElitismRate_invalidValue_doesNotChangeStoredRate() throws Throwable {
+        ElitisticListPopulation pop = new ElitisticListPopulation(10, 0.5);
+        try {
+            pop.setElitismRate(-1.0);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+        assertEquals(0.5, pop.getElitismRate(), 1e-9);
+    }
+
+    // getElitismRate reflects the value passed to the (List, int, double) constructor
+    @Test
+    public void testGetElitismRate_returnsValueSetByListConstructor() throws Throwable {
+        List<Chromosome> list = buildList(new double[] {1.0});
+        ElitisticListPopulation pop = new ElitisticListPopulation(list, 10, 0.6);
+        assertEquals(0.6, pop.getElitismRate(), 1e-9);
+    }
+
+    // getElitismRate reflects the latest value set via setElitismRate
+    @Test
+    public void testGetElitismRate_returnsValueAfterSetElitismRate() throws Throwable {
+        ElitisticListPopulation pop = new ElitisticListPopulation(10, 0.5);
+        pop.setElitismRate(0.33);
+        assertEquals(0.33, pop.getElitismRate(), 1e-9);
+    }
+}

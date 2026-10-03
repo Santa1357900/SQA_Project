@@ -1,0 +1,47 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-16-gu9mpwo4/JxPath-16f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 41
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testCreateAttribute_withoutPrefix_createsNewOrKeepsExisting
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testSetValue_elementWithStringValue_replacesChildrenWithText
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testRemove_rootNode_throwsJXPathException
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testCompareChildNodePointers_attributeElementAndDocumentOrder
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetNamespaceURIPrefix_emptyPrefix_returnsDefaultNamespace
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testRemove_nonRootNode_removesFromParent
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetValue_textDefaultTrimAndXmlSpacePreserve
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetName_elementAndProcessingInstruction
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testConstructor_nodeLocaleId_asPathUsesId
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetNamespaceURIPrefix_unknownPrefix_returnsNull
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testAsPath_idWithQuote_escapesQuoteCharacter
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testAsPath_textNodeUnderElement_buildsTextNodePath
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testEquals_sameInstanceAndSameNode_returnsTrue
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testCreateChild_noFactoryOnContext_throwsJXPathException
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testTestNode_nullTest_returnsTrue
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testConstructor_nodeLocale_storesNode
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testIsLanguage_matchAndNonMatch
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testAsPath_processingInstructionUnderElement_buildsPiPath
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testSimpleProperties_baseValueActiveCollectionLength
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testCreateAttribute_unresolvablePrefix_throwsJXPathException
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testAttributeAndNamespaceIterator
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testAsPath_elementChildrenUnderDomParent_buildsIndexedPath
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetDefaultNamespaceURI_noneAndDeclared
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testIsLeaf_noneAndWithChildren
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testHashCode_matchesIdentityHashCodeOfNode
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetNamespaceURIPrefix_declaredCustomPrefix_resolvesURI
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetNamespaceURIPrefix_xmlAndXmlnsConstants
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetValue_elementConcatenatesChildTextValues
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetNamespaceResolver_calledTwice_returnsSameInstance
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testSetValue_elementWithElementValue_clonesChildren
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetPrefixStatic_domPrefixFallbackAndNoColon
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetNamespaceURIStatic_documentAndElementWithoutNamespace
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testChildIterator_forwardOrder_returnsChildrenInDocumentOrder
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetValue_commentAndProcessingInstruction
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testSetValue_elementWithEmptyString_removesAllChildren
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testEquals_differentNodeOrWrongType_returnsFalse
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetLocalNameStatic_fallbackAndFullName
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testSetValue_textNode_nonEmptyAndEmpty
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testChildIterator_reverseOrder_returnsChildrenReversed
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetNamespaceURI_instance_matchesElementNamespace
+  - org.apache.commons.jxpath.ri.model.dom.DOMNodePointerClaudeTest::testGetPointerByID_foundAndMissing
+[exit 0]

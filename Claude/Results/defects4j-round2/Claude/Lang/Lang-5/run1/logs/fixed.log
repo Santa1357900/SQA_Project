@@ -1,0 +1,25 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Lang -v 5f -w /tmp/claude-Lang-5-zlfn_2_w/fixed
+Checking out 4d46f014 to /tmp/claude-Lang-5-zlfn_2_w/fixed................. OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Lang-5-zlfn_2_w/fixed/default.properties OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 4d46f014:bc255ccf..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Lang-5f......................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Lang-5-zlfn_2_w/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

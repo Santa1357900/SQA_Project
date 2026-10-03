@@ -1,0 +1,188 @@
+package org.mockito.internal.util.reflection;
+
+import java.lang.reflect.Field;
+import java.util.List;
+import java.util.Set;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class GenericMasterClaudeTest {
+
+    // Helper fields used purely for their reflective type metadata.
+    private List<String> stringListField;
+    private Set<Integer> integerSetField;
+    private String nonGenericStringField;
+    private int primitiveIntField;
+    private String[] arrayField;
+    private List rawListField;
+    private Map<String, Integer> mapField;
+    private Comparable<Double> comparableDoubleField;
+    private List<List<String>> nestedListField;
+    private List<?> wildcardListField;
+    private List<? extends Number> boundedWildcardField;
+    private List<Long> longListField;
+    private List<Boolean> booleanListField;
+    private List<Double> doubleListField;
+    private List<Character> charListField;
+    private List<Custom> customListField;
+
+    static class Custom {
+    }
+
+    static class GenericHolder<T> {
+        List<T> genericField;
+    }
+
+    // Branch: generic ParameterizedType with Class actual argument -> returns that Class
+    @Test
+    public void testGetGenericType_simpleGenericList_returnsTypeArgumentClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("stringListField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(String.class, result);
+    }
+
+    // Branch: generic ParameterizedType (Set) with Class actual argument -> returns that Class
+    @Test
+    public void testGetGenericType_simpleGenericSet_returnsTypeArgumentClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("integerSetField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Integer.class, result);
+    }
+
+    // Branch: field is not generic at all -> returns Object.class
+    @Test
+    public void testGetGenericType_fieldWithoutGeneric_returnsObjectClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("nonGenericStringField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Object.class, result);
+    }
+
+    // Branch: primitive field, generic type is not ParameterizedType -> Object.class
+    @Test
+    public void testGetGenericType_primitiveField_returnsObjectClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("primitiveIntField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Object.class, result);
+    }
+
+    // Branch: array field, generic type is not ParameterizedType -> Object.class
+    @Test
+    public void testGetGenericType_arrayField_returnsObjectClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("arrayField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Object.class, result);
+    }
+
+    // Branch: raw usage of a generic type (no type parameter supplied) -> not ParameterizedType -> Object.class
+    @Test
+    public void testGetGenericType_rawGenericField_returnsObjectClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("rawListField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Object.class, result);
+    }
+
+    // Branch: multiple type parameters -> only the first actual type argument is used
+    @Test
+    public void testGetGenericType_multipleTypeParameters_returnsFirstTypeArgument() throws Throwable {
+        Field field = this.getClass().getDeclaredField("mapField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(String.class, result);
+    }
+
+    // Branch: generic interface type (Comparable<Double>) -> returns the Class actual argument
+    @Test
+    public void testGetGenericType_genericInterfaceField_returnsTypeArgumentClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("comparableDoubleField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Double.class, result);
+    }
+
+    // Branch: nested generics (List<List<String>>) -> comment states "we don't go deep",
+    // the raw type of the nested parameterized type should be returned.
+    @Test
+    public void testGetGenericType_nestedGenericField_returnsRawTypeOfOuterNestedType() throws Throwable {
+        Field field = this.getClass().getDeclaredField("nestedListField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(List.class, result);
+    }
+
+    // Branch: wildcard generic (List<?>) -> actual type argument is a WildcardType, not a Class
+    // according to the contract ("if the field is not generic it returns Object.class"),
+    // an unresolved wildcard parameter should fall back to Object.class.
+    @Test
+    public void testGetGenericType_wildcardGenericField_returnsObjectClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("wildcardListField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Object.class, result);
+    }
+
+    // Branch: bounded wildcard generic (List<? extends Number>) -> WildcardType, not a Class
+    // -> should fall back to Object.class, not throw ClassCastException.
+    @Test
+    public void testGetGenericType_boundedWildcardGenericField_returnsObjectClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("boundedWildcardField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Object.class, result);
+    }
+
+    // Branch: generic parameter is a TypeVariable (declared in an enclosing generic class),
+    // not a concrete Class -> should fall back to Object.class, not throw ClassCastException.
+    @Test
+    public void testGetGenericType_typeVariableGenericField_returnsObjectClass() throws Throwable {
+        Field field = GenericHolder.class.getDeclaredField("genericField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Object.class, result);
+    }
+
+    // Branch: null field argument -> NullPointerException is thrown when accessing field.getGenericType()
+    @Test
+    public void testGetGenericType_nullField_throwsNullPointerException() throws Throwable {
+        try {
+            new GenericMaster().getGenericType(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // Additional coverage: generic list of Long -> Long.class
+    @Test
+    public void testGetGenericType_genericListOfLong_returnsLongClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("longListField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Long.class, result);
+    }
+
+    // Additional coverage: generic list of Boolean -> Boolean.class
+    @Test
+    public void testGetGenericType_genericListOfBoolean_returnsBooleanClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("booleanListField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Boolean.class, result);
+    }
+
+    // Additional coverage: generic list of Double -> Double.class
+    @Test
+    public void testGetGenericType_genericListOfDouble_returnsDoubleClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("doubleListField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Double.class, result);
+    }
+
+    // Additional coverage: generic list of Character -> Character.class
+    @Test
+    public void testGetGenericType_genericListOfCharacter_returnsCharacterClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("charListField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Character.class, result);
+    }
+
+    // Additional coverage: generic list of a custom user-defined class -> that Class is returned
+    @Test
+    public void testGetGenericType_genericListOfCustomClass_returnsCustomClass() throws Throwable {
+        Field field = this.getClass().getDeclaredField("customListField");
+        Class result = new GenericMaster().getGenericType(field);
+        assertEquals(Custom.class, result);
+    }
+}

@@ -1,0 +1,351 @@
+package org.apache.commons.csv;
+
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CSVRecordClaudeTest {
+
+    private enum Header {
+        NAME, AGE
+    }
+
+    // get(Enum): mapping exists for enum's toString() value -> returns mapped value
+    @Test
+    public void testGetEnum_mappedValue_returnsCorrespondingValue() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("NAME", Integer.valueOf(0));
+        CSVRecord record = new CSVRecord(new String[] {"John"}, mapping, null, 1L);
+        assertEquals("John", record.get(Header.NAME));
+    }
+
+    // get(Enum): enum name not present in mapping -> IllegalArgumentException
+    @Test
+    public void testGetEnum_unmappedValue_throwsIllegalArgumentException() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("NAME", Integer.valueOf(0));
+        CSVRecord record = new CSVRecord(new String[] {"John"}, mapping, null, 1L);
+        try {
+            record.get(Header.AGE);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // get(Enum): null mapping -> IllegalStateException propagated from get(String)
+    @Test
+    public void testGetEnum_nullMapping_throwsIllegalStateException() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a"}, null, null, 1L);
+        try {
+            record.get(Header.NAME);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // get(int): valid indices return corresponding values
+    @Test
+    public void testGetInt_validIndex_returnsValue() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a", "b"}, null, null, 1L);
+        assertEquals("a", record.get(0));
+        assertEquals("b", record.get(1));
+    }
+
+    // get(int): index equal to length -> ArrayIndexOutOfBoundsException
+    @Test
+    public void testGetInt_indexEqualsLength_throwsArrayIndexOutOfBoundsException() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a"}, null, null, 1L);
+        try {
+            record.get(1);
+            fail("expected ArrayIndexOutOfBoundsException");
+        } catch (ArrayIndexOutOfBoundsException expected) {
+        }
+    }
+
+    // get(int): negative index -> ArrayIndexOutOfBoundsException
+    @Test
+    public void testGetInt_negativeIndex_throwsArrayIndexOutOfBoundsException() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a"}, null, null, 1L);
+        try {
+            record.get(-1);
+            fail("expected ArrayIndexOutOfBoundsException");
+        } catch (ArrayIndexOutOfBoundsException expected) {
+        }
+    }
+
+    // get(String): null mapping -> IllegalStateException
+    @Test
+    public void testGetString_nullMapping_throwsIllegalStateException() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a"}, null, null, 1L);
+        try {
+            record.get("name");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("header mapping"));
+        }
+    }
+
+    // get(String): name not present in mapping -> IllegalArgumentException
+    @Test
+    public void testGetString_nameNotMapped_throwsIllegalArgumentException() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", Integer.valueOf(0));
+        CSVRecord record = new CSVRecord(new String[] {"a"}, mapping, null, 1L);
+        try {
+            record.get("other");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Mapping for"));
+        }
+    }
+
+    // get(String): mapped index beyond values length (inconsistent record) -> IllegalArgumentException
+    @Test
+    public void testGetString_indexOutOfRangeForValues_throwsIllegalArgumentException() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", Integer.valueOf(0));
+        mapping.put("age", Integer.valueOf(1));
+        CSVRecord record = new CSVRecord(new String[] {"John"}, mapping, null, 1L);
+        try {
+            record.get("age");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("CSVRecord only has"));
+        }
+    }
+
+    // get(String): valid mapping returns the mapped value
+    @Test
+    public void testGetString_validMapping_returnsValue() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", Integer.valueOf(0));
+        CSVRecord record = new CSVRecord(new String[] {"Alice"}, mapping, null, 1L);
+        assertEquals("Alice", record.get("name"));
+    }
+
+    // getComment(): null comment is returned as null
+    @Test
+    public void testGetComment_nullComment_returnsNull() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a"}, null, null, 1L);
+        assertNull(record.getComment());
+    }
+
+    // getComment(): non-null comment is returned unchanged
+    @Test
+    public void testGetComment_withComment_returnsComment() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a"}, null, "hello world", 1L);
+        assertEquals("hello world", record.getComment());
+    }
+
+    // getRecordNumber(): returns the number supplied at construction
+    @Test
+    public void testGetRecordNumber_returnsGivenNumber() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a"}, null, null, 42L);
+        assertEquals(42L, record.getRecordNumber());
+    }
+
+    // getRecordNumber(): edge value zero
+    @Test
+    public void testGetRecordNumber_zero_returnsZero() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a"}, null, null, 0L);
+        assertEquals(0L, record.getRecordNumber());
+    }
+
+    // isConsistent(): null mapping is considered always consistent
+    @Test
+    public void testIsConsistent_nullMapping_returnsTrue() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a", "b"}, null, null, 1L);
+        assertTrue(record.isConsistent());
+    }
+
+    // isConsistent(): mapping size equals values length -> true
+    @Test
+    public void testIsConsistent_mappingSizeEqualsValuesLength_returnsTrue() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("a", Integer.valueOf(0));
+        mapping.put("b", Integer.valueOf(1));
+        CSVRecord record = new CSVRecord(new String[] {"x", "y"}, mapping, null, 1L);
+        assertTrue(record.isConsistent());
+    }
+
+    // isConsistent(): mapping size differs from values length -> false
+    @Test
+    public void testIsConsistent_mappingSizeNotEqualsValuesLength_returnsFalse() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("a", Integer.valueOf(0));
+        mapping.put("b", Integer.valueOf(1));
+        CSVRecord record = new CSVRecord(new String[] {"x"}, mapping, null, 1L);
+        assertFalse(record.isConsistent());
+    }
+
+    // isMapped(): null mapping -> false
+    @Test
+    public void testIsMapped_nullMapping_returnsFalse() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a"}, null, null, 1L);
+        assertFalse(record.isMapped("a"));
+    }
+
+    // isMapped(): name present in mapping -> true
+    @Test
+    public void testIsMapped_nameExists_returnsTrue() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", Integer.valueOf(0));
+        CSVRecord record = new CSVRecord(new String[] {"a"}, mapping, null, 1L);
+        assertTrue(record.isMapped("name"));
+    }
+
+    // isMapped(): name absent from mapping -> false
+    @Test
+    public void testIsMapped_nameNotExists_returnsFalse() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", Integer.valueOf(0));
+        CSVRecord record = new CSVRecord(new String[] {"a"}, mapping, null, 1L);
+        assertFalse(record.isMapped("other"));
+    }
+
+    // isSet(): name not mapped -> false (short-circuit of &&)
+    @Test
+    public void testIsSet_notMapped_returnsFalse() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", Integer.valueOf(0));
+        CSVRecord record = new CSVRecord(new String[] {"a"}, mapping, null, 1L);
+        assertFalse(record.isSet("other"));
+    }
+
+    // isSet(): mapped with index within values length -> true
+    @Test
+    public void testIsSet_mappedWithinRange_returnsTrue() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", Integer.valueOf(0));
+        CSVRecord record = new CSVRecord(new String[] {"a"}, mapping, null, 1L);
+        assertTrue(record.isSet("name"));
+    }
+
+    // isSet(): mapped but index equals values length (boundary) -> false
+    @Test
+    public void testIsSet_mappedIndexEqualsLength_returnsFalse() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", Integer.valueOf(1));
+        CSVRecord record = new CSVRecord(new String[] {"a"}, mapping, null, 1L);
+        assertFalse(record.isSet("name"));
+    }
+
+    // iterator(): empty values array yields an empty iterator
+    @Test
+    public void testIterator_emptyValues_hasNoElements() throws Throwable {
+        CSVRecord record = new CSVRecord(null, null, null, 1L);
+        Iterator<String> it = record.iterator();
+        assertFalse(it.hasNext());
+    }
+
+    // iterator(): iterates all values in order
+    @Test
+    public void testIterator_multipleValues_iteratesInOrder() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a", "b", "c"}, null, null, 1L);
+        Iterator<String> it = record.iterator();
+        assertEquals("a", it.next());
+        assertEquals("b", it.next());
+        assertEquals("c", it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // putIn(): populates the supplied map using the header mapping
+    @Test
+    public void testPutIn_populatesGivenMap() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", Integer.valueOf(0));
+        mapping.put("age", Integer.valueOf(1));
+        CSVRecord record = new CSVRecord(new String[] {"Bob", "30"}, mapping, null, 1L);
+        Map<String, String> result = record.putIn(new HashMap<String, String>());
+        assertEquals("Bob", result.get("name"));
+        assertEquals("30", result.get("age"));
+        assertEquals(2, result.size());
+    }
+
+    // size(): returns the number of values
+    @Test
+    public void testSize_returnsValuesLength() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a", "b", "c"}, null, null, 1L);
+        assertEquals(3, record.size());
+    }
+
+    // size(): empty array -> zero
+    @Test
+    public void testSize_emptyValues_returnsZero() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[0], null, null, 1L);
+        assertEquals(0, record.size());
+    }
+
+    // size(): constructor given null values defaults to empty array -> size zero
+    @Test
+    public void testSize_nullValuesInConstructor_returnsZero() throws Throwable {
+        CSVRecord record = new CSVRecord(null, null, null, 1L);
+        assertEquals(0, record.size());
+    }
+
+    // toMap(): with a valid header mapping, returns a map with the correct entries
+    @Test
+    public void testToMap_withMapping_returnsCorrectMap() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", Integer.valueOf(0));
+        mapping.put("age", Integer.valueOf(1));
+        CSVRecord record = new CSVRecord(new String[] {"Carol", "25"}, mapping, null, 1L);
+        Map<String, String> map = record.toMap();
+        assertEquals("Carol", map.get("name"));
+        assertEquals("25", map.get("age"));
+        assertEquals(2, map.size());
+    }
+
+    // toMap(): per Javadoc "the map is empty if the record has no headers" -> must not throw when mapping is null
+    @Test
+    public void testToMap_noHeaderMapping_returnsEmptyMapInsteadOfThrowing() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[] {"a", "b"}, null, null, 1L);
+        Map<String, String> map = record.toMap();
+        assertNotNull(map);
+        assertTrue(map.isEmpty());
+    }
+
+    // toMap(): empty (non-null) mapping -> empty map, no iterations
+    @Test
+    public void testToMap_emptyMapping_returnsEmptyMap() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        CSVRecord record = new CSVRecord(new String[0], mapping, null, 1L);
+        Map<String, String> map = record.toMap();
+        assertTrue(map.isEmpty());
+    }
+
+    // toString(): matches Arrays.toString of the underlying values
+    @Test
+    public void testToString_returnsArraysToStringOfValues() throws Throwable {
+        String[] values = new String[] {"a", "b"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        assertEquals(Arrays.toString(values), record.toString());
+    }
+
+    // toString(): empty values array renders as "[]"
+    @Test
+    public void testToString_emptyValues_returnsEmptyBrackets() throws Throwable {
+        CSVRecord record = new CSVRecord(new String[0], null, null, 1L);
+        assertEquals("[]", record.toString());
+    }
+
+    // values(): returns the exact array instance passed to the constructor
+    @Test
+    public void testValues_returnsSameArrayReference() throws Throwable {
+        String[] values = new String[] {"a", "b"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        assertSame(values, record.values());
+    }
+
+    // values(): null given at construction yields a non-null empty array
+    @Test
+    public void testValues_nullAtConstruction_returnsEmptyArray() throws Throwable {
+        CSVRecord record = new CSVRecord(null, null, null, 1L);
+        assertNotNull(record.values());
+        assertEquals(0, record.values().length);
+    }
+}

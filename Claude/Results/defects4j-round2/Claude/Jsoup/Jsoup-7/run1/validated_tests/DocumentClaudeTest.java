@@ -1,0 +1,334 @@
+package org.jsoup.nodes;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.jsoup.Jsoup;
+import java.nio.charset.Charset;
+
+public class DocumentClaudeTest {
+
+    // constructor: nodeName() must be the fixed "#document" literal
+    @Test
+    public void testConstructor_setsNodeNameToDocument() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertEquals("#document", doc.nodeName());
+    }
+
+    // constructor: baseUri is stored and retrievable
+    @Test
+    public void testConstructor_baseUriAccessible() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertEquals("http://example.com/", doc.baseUri());
+    }
+
+    // createShell: valid baseUri produces html/head/body skeleton
+    @Test
+    public void testCreateShell_validBaseUri_hasHtmlHeadBody() throws Throwable {
+        Document doc = Document.createShell("http://example.com/");
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+        assertEquals("head", doc.head().nodeName());
+        assertEquals("body", doc.body().nodeName());
+    }
+
+    // createShell: empty string is a valid (non-null) baseUri
+    @Test
+    public void testCreateShell_emptyBaseUri_succeeds() throws Throwable {
+        Document doc = Document.createShell("");
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+    }
+
+    // createShell: null baseUri triggers Validate.notNull -> IllegalArgumentException
+    @Test
+    public void testCreateShell_nullBaseUri_throwsIllegalArgumentException() throws Throwable {
+        try {
+            Document.createShell(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // head(): present element is found and returned
+    @Test
+    public void testHead_whenPresent_returnsHeadElement() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>T</title></head><body></body></html>");
+        assertNotNull(doc.head());
+        assertEquals("head", doc.head().nodeName());
+    }
+
+    // head(): absent element returns null
+    @Test
+    public void testHead_whenAbsent_returnsNull() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertNull(doc.head());
+    }
+
+    // body(): present element is found and returned
+    @Test
+    public void testBody_whenPresent_returnsBodyElement() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body><p>Hi</p></body></html>");
+        assertNotNull(doc.body());
+        assertEquals("body", doc.body().nodeName());
+    }
+
+    // body(): absent element returns null
+    @Test
+    public void testBody_whenAbsent_returnsNull() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertNull(doc.body());
+    }
+
+    // title(): no <title> element -> contract says empty string
+    @Test
+    public void testTitle_noTitleElement_returnsEmptyString() throws Throwable {
+        Document doc = Document.createShell("http://example.com/");
+        assertEquals("", doc.title());
+    }
+
+    // title(): existing element -> trimmed text
+    @Test
+    public void testTitle_withTitleElement_returnsTrimmedText() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>  Hello World  </title></head><body></body></html>");
+        assertEquals("Hello World", doc.title());
+    }
+
+    // title(): multiple <title> tags -> first() one wins
+    @Test
+    public void testTitle_withMultipleTitleElements_returnsFirst() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>First</title><title>Second</title></head><body></body></html>");
+        assertEquals("First", doc.title());
+    }
+
+    // title(String): no existing title -> new title appended into head
+    @Test
+    public void testTitleSetter_noExistingTitle_addsTitleToHead() throws Throwable {
+        Document doc = Document.createShell("http://example.com/");
+        doc.title("New Title");
+        assertEquals("New Title", doc.title());
+    }
+
+    // title(String): existing title -> text is updated in place
+    @Test
+    public void testTitleSetter_existingTitle_updatesText() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>Old</title></head><body></body></html>");
+        doc.title("New");
+        assertEquals("New", doc.title());
+    }
+
+    // title(String): null argument triggers Validate.notNull -> IllegalArgumentException
+    @Test
+    public void testTitleSetter_nullTitle_throwsIllegalArgumentException() throws Throwable {
+        Document doc = Document.createShell("http://example.com/");
+        try {
+            doc.title(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // createElement: returned element shares the document's baseUri
+    @Test
+    public void testCreateElement_returnsElementWithBaseUri() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        Element el = doc.createElement("div");
+        assertNotNull(el);
+        assertEquals("http://example.com/", el.baseUri());
+    }
+
+    // createElement: javadoc states it does NOT attach the element to the document
+    @Test
+    public void testCreateElement_doesNotAttachToDocument() throws Throwable {
+        Document doc = Document.createShell("http://example.com/");
+        doc.createElement("span");
+        assertNull(doc.getElementsByTag("span").first());
+    }
+
+    // normalise(): must return the same document instance (for chaining)
+    @Test
+    public void testNormalise_returnsThisDocument() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        Document result = doc.normalise();
+        assertSame(doc, result);
+    }
+
+    // normalise(): completely empty document gets html/head/body scaffolding
+    @Test
+    public void testNormalise_emptyDocument_createsHtmlHeadBody() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        doc.normalise();
+        assertNotNull(doc.head());
+        assertNotNull(doc.body());
+        assertNotNull(doc.getElementsByTag("html").first());
+    }
+
+    // normalise(): html present without head -> head is created
+    @Test
+    public void testNormalise_htmlWithoutHead_headCreated() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        Element html = doc.appendElement("html");
+        html.appendElement("body");
+        doc.normalise();
+        assertNotNull(doc.head());
+    }
+
+    // normalise(): html present without body -> body is created
+    @Test
+    public void testNormalise_htmlWithoutBody_bodyCreated() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        Element html = doc.appendElement("html");
+        html.appendElement("head");
+        doc.normalise();
+        assertNotNull(doc.body());
+    }
+
+    // normalise(): stray text outside body must be moved into the body (per javadoc)
+    @Test
+    public void testNormalise_movesStrayTextIntoBody() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        Element html = doc.appendElement("html");
+        html.appendElement("head");
+        html.appendElement("body");
+        doc.prependChild(new TextNode("StrayText", ""));
+        doc.normalise();
+        assertTrue(doc.body().text().contains("StrayText"));
+    }
+
+    // normalise(): existing body content is preserved after normalisation
+    @Test
+    public void testNormalise_preservesExistingBodyContent() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        Element html = doc.appendElement("html");
+        html.appendElement("head");
+        Element body = html.appendElement("body");
+        body.appendElement("p").text("ExistingContent");
+        doc.prependChild(new TextNode("StrayText", ""));
+        doc.normalise();
+        assertTrue(doc.body().text().contains("ExistingContent"));
+    }
+
+    // outerHtml(): overridden to skip the outer wrapper, so no "#document" tag leaks out
+    @Test
+    public void testOuterHtml_containsBodyContentNoDocumentWrapper() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body><p>Hi</p></body></html>");
+        String outer = doc.outerHtml();
+        assertTrue(outer.contains("<p>"));
+        assertFalse(outer.contains("#document"));
+    }
+
+    // text(String): overridden to set body's text (not nuke doc structure) and return this
+    @Test
+    public void testTextSetter_replacesBodyTextAndReturnsThis() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body><p>Old</p></body></html>");
+        Element result = doc.text("New text");
+        assertSame(doc, result);
+        assertEquals("New text", doc.body().text());
+    }
+
+    // nodeName(): constant literal, independent of content
+    @Test
+    public void testNodeName_returnsDocumentLiteral() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body></body></html>");
+        assertEquals("#document", doc.nodeName());
+    }
+
+    // OutputSettings: default escape mode is "base" per javadoc
+    @Test
+    public void testOutputSettings_defaultEscapeModeIsBase() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertEquals(Entities.EscapeMode.base, doc.outputSettings().escapeMode());
+    }
+
+    // OutputSettings: escapeMode setter updates value and returns same instance (chaining)
+    @Test
+    public void testOutputSettings_escapeModeSetter_updatesAndChains() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        Document.OutputSettings os = doc.outputSettings();
+        Document.OutputSettings res = os.escapeMode(Entities.EscapeMode.extended);
+        assertSame(os, res);
+        assertEquals(Entities.EscapeMode.extended, os.escapeMode());
+    }
+
+    // OutputSettings: default charset is UTF-8 per javadoc
+    @Test
+    public void testOutputSettings_defaultCharsetIsUTF8() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertEquals("UTF-8", doc.outputSettings().charset().name());
+    }
+
+    // OutputSettings: charset(Charset) setter updates the charset
+    @Test
+    public void testOutputSettings_charsetSetterWithCharsetObject() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        Charset cs = Charset.forName("ISO-8859-1");
+        doc.outputSettings().charset(cs);
+        assertEquals(cs, doc.outputSettings().charset());
+    }
+
+    // OutputSettings: charset(String) setter resolves name to Charset
+    @Test
+    public void testOutputSettings_charsetSetterWithString() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        doc.outputSettings().charset("UTF-16");
+        assertEquals("UTF-16", doc.outputSettings().charset().name());
+    }
+
+    // OutputSettings: default prettyPrint is true per javadoc
+    @Test
+    public void testOutputSettings_defaultPrettyPrintTrue() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertTrue(doc.outputSettings().prettyPrint());
+    }
+
+    // OutputSettings: prettyPrint setter can disable pretty printing
+    @Test
+    public void testOutputSettings_prettyPrintSetterFalse() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        doc.outputSettings().prettyPrint(false);
+        assertFalse(doc.outputSettings().prettyPrint());
+    }
+
+    // OutputSettings: default indentAmount is 1
+    @Test
+    public void testOutputSettings_defaultIndentAmountIsOne() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        assertEquals(1, doc.outputSettings().indentAmount());
+    }
+
+    // OutputSettings: indentAmount setter accepts a valid positive value
+    @Test
+    public void testOutputSettings_indentAmountSetter_validValue() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        doc.outputSettings().indentAmount(4);
+        assertEquals(4, doc.outputSettings().indentAmount());
+    }
+
+    // OutputSettings: boundary value 0 is allowed ("must be >= 0")
+    @Test
+    public void testOutputSettings_indentAmountSetter_zeroBoundaryAllowed() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        doc.outputSettings().indentAmount(0);
+        assertEquals(0, doc.outputSettings().indentAmount());
+    }
+
+    // OutputSettings: negative indentAmount violates "must be >= 0" -> IllegalArgumentException
+    @Test
+    public void testOutputSettings_indentAmountSetter_negativeThrowsException() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        try {
+            doc.outputSettings().indentAmount(-1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // outputSettings(): repeated calls return the same instance (single settings object per doc)
+    @Test
+    public void testOutputSettings_returnsSameInstanceEachCall() throws Throwable {
+        Document doc = new Document("http://example.com/");
+        Document.OutputSettings os1 = doc.outputSettings();
+        Document.OutputSettings os2 = doc.outputSettings();
+        assertSame(os1, os2);
+    }
+}

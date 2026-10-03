@@ -1,0 +1,317 @@
+package org.jsoup.nodes;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class AttributeClaudeTest {
+
+    // Constructor: key is trimmed but case preserved, value stored unchanged
+    @Test
+    public void testConstructor_trimsKeyPreservesValue() throws Throwable {
+        Attribute attr = new Attribute("  Href  ", "index.html");
+        assertEquals("Href", attr.getKey());
+        assertEquals("index.html", attr.getValue());
+    }
+
+    // Constructor: null key -> Validate.notNull must throw before any field is set
+    @Test
+    public void testConstructor_nullKey_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Attribute((String) null, "v");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // Constructor: key becomes empty after trim -> Validate.notEmpty must throw
+    @Test
+    public void testConstructor_blankKeyAfterTrim_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Attribute("   ", "v");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // 3-arg constructor explicitly allows a null parent (delegate constructor passes null too)
+    @Test
+    public void testConstructorWithParent_nullParentAllowed() throws Throwable {
+        Attribute attr = new Attribute("id", "x", null);
+        assertEquals("id", attr.getKey());
+        assertEquals("x", attr.getValue());
+    }
+
+    // getKey returns the trimmed key stored by the constructor
+    @Test
+    public void testGetKey_returnsTrimmedKey() throws Throwable {
+        Attribute attr = new Attribute("name", "v");
+        assertEquals("name", attr.getKey());
+    }
+
+    // setKey with no parent: trims and updates key, parent-null branch skipped safely
+    @Test
+    public void testSetKey_trimsNewKeyNoParent() throws Throwable {
+        Attribute attr = new Attribute("old", "v");
+        attr.setKey("  new  ");
+        assertEquals("new", attr.getKey());
+    }
+
+    // setKey: null key must throw before mutating state
+    @Test
+    public void testSetKey_nullKey_throwsIllegalArgumentException() throws Throwable {
+        Attribute attr = new Attribute("k", "v");
+        try {
+            attr.setKey(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // setKey: blank-after-trim throws and original key must remain unchanged
+    @Test
+    public void testSetKey_blankKeyAfterTrim_throwsAndPreservesOriginalKey() throws Throwable {
+        Attribute attr = new Attribute("k", "v");
+        try {
+            attr.setKey("   ");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+        assertEquals("k", attr.getKey());
+    }
+
+    // getValue returns exactly the stored value
+    @Test
+    public void testGetValue_returnsStoredValue() throws Throwable {
+        Attribute attr = new Attribute("k", "theValue");
+        assertEquals("theValue", attr.getValue());
+    }
+
+    // getValue: value may legitimately be null
+    @Test
+    public void testGetValue_nullValue_returnsNull() throws Throwable {
+        Attribute attr = new Attribute("k", null);
+        assertNull(attr.getValue());
+    }
+
+    // BUG: setValue with no parent must still return the old value without throwing NPE
+    @Test
+    public void testSetValue_noParent_returnsOldValueWithoutException() throws Throwable {
+        Attribute attr = new Attribute("foo", "bar");
+        String oldVal = attr.setValue("baz");
+        assertEquals("bar", oldVal);
+    }
+
+    // setValue must update the stored value so getValue reflects the new value
+    @Test
+    public void testSetValue_updatesStoredValue() throws Throwable {
+        Attribute attr = new Attribute("foo", "bar");
+        attr.setValue("baz");
+        assertEquals("baz", attr.getValue());
+    }
+
+    // setValue(null) with no parent must also succeed per contract (value may be null)
+    @Test
+    public void testSetValue_settingNullValue_noParent_succeeds() throws Throwable {
+        Attribute attr = new Attribute("foo", "bar");
+        attr.setValue(null);
+        assertNull(attr.getValue());
+    }
+
+    // html(): boolean attribute with empty value collapses to key only
+    @Test
+    public void testHtml_booleanAttributeEmptyValue_collapses() throws Throwable {
+        Attribute attr = new Attribute("disabled", "");
+        assertEquals("disabled", attr.html());
+    }
+
+    // html(): boolean attribute whose value equals key (ignoring case) also collapses
+    @Test
+    public void testHtml_booleanAttributeValueEqualsKeyIgnoreCase_collapses() throws Throwable {
+        Attribute attr = new Attribute("checked", "CHECKED");
+        assertEquals("checked", attr.html());
+    }
+
+    // html(): non-boolean attribute with empty value must NOT collapse
+    @Test
+    public void testHtml_nonBooleanAttributeEmptyValue_doesNotCollapse() throws Throwable {
+        Attribute attr = new Attribute("class", "");
+        assertEquals("class=\"\"", attr.html());
+    }
+
+    // html(): value containing quotes must be escaped within the quoted attribute value
+    @Test
+    public void testHtml_valueWithQuotes_escapesQuotes() throws Throwable {
+        Attribute attr = new Attribute("title", "say \"hi\"");
+        String html = attr.html();
+        assertTrue(html.startsWith("title=\""));
+        assertTrue(html.contains("&quot;"));
+    }
+
+    // toString() is implemented as html(), results must be identical
+    @Test
+    public void testToString_matchesHtml() throws Throwable {
+        Attribute attr = new Attribute("rel", "nofollow");
+        assertEquals(attr.html(), attr.toString());
+    }
+
+    // static html(key,val,accum,out): non-collapsing branch appends key="value"
+    @Test
+    public void testStaticHtml_nonCollapsing_appendsKeyEqualsQuotedValue() throws Throwable {
+        Document doc = new Document("");
+        Document.OutputSettings out = doc.outputSettings();
+        StringBuilder sb = new StringBuilder();
+        Attribute.html("class", "box", sb, out);
+        assertEquals("class=\"box\"", sb.toString());
+    }
+
+    // static html(key,val,accum,out): collapsing branch appends key only
+    @Test
+    public void testStaticHtml_collapsing_appendsKeyOnly() throws Throwable {
+        Document doc = new Document("");
+        Document.OutputSettings out = doc.outputSettings();
+        StringBuilder sb = new StringBuilder();
+        Attribute.html("disabled", "", sb, out);
+        assertEquals("disabled", sb.toString());
+    }
+
+    // createFromEncoded: HTML entity in encoded value must be unescaped
+    @Test
+    public void testCreateFromEncoded_unescapesEntity() throws Throwable {
+        Attribute attr = Attribute.createFromEncoded("rel", "a&amp;b");
+        assertEquals("a&b", attr.getValue());
+    }
+
+    // createFromEncoded: plain value without entities stays unchanged
+    @Test
+    public void testCreateFromEncoded_plainValueUnchanged() throws Throwable {
+        Attribute attr = Attribute.createFromEncoded("rel", "plainValue");
+        assertEquals("plainValue", attr.getValue());
+    }
+
+    // isBooleanAttribute(String): known HTML5 boolean attribute name returns true
+    @Test
+    public void testIsBooleanAttributeStatic_knownKey_true() throws Throwable {
+        assertTrue(Attribute.isBooleanAttribute("checked"));
+    }
+
+    // isBooleanAttribute(String): unknown attribute name returns false
+    @Test
+    public void testIsBooleanAttributeStatic_unknownKey_false() throws Throwable {
+        assertFalse(Attribute.isBooleanAttribute("foobar"));
+    }
+
+    // instance isBooleanAttribute(): key present in booleanAttributes list returns true
+    @Test
+    public void testIsBooleanAttributeInstance_booleanKey_true() throws Throwable {
+        Attribute attr = new Attribute("checked", "x");
+        assertTrue(attr.isBooleanAttribute());
+    }
+
+    // instance isBooleanAttribute(): null value makes it true regardless of key
+    @Test
+    public void testIsBooleanAttributeInstance_nullValue_trueRegardlessOfKey() throws Throwable {
+        Attribute attr = new Attribute("foobar", null);
+        assertTrue(attr.isBooleanAttribute());
+    }
+
+    // static shouldCollapseAttribute: boolean key + empty value under html syntax -> true
+    @Test
+    public void testShouldCollapseAttributeStatic_booleanEmptyVal_true() throws Throwable {
+        Document doc = new Document("");
+        Document.OutputSettings out = doc.outputSettings();
+        assertTrue(Attribute.shouldCollapseAttribute("disabled", "", out));
+    }
+
+    // static shouldCollapseAttribute: non-boolean key + empty value -> false
+    @Test
+    public void testShouldCollapseAttributeStatic_nonBooleanEmptyVal_false() throws Throwable {
+        Document doc = new Document("");
+        Document.OutputSettings out = doc.outputSettings();
+        assertFalse(Attribute.shouldCollapseAttribute("class", "", out));
+    }
+
+    // instance shouldCollapseAttribute(out) must match the static result for its own key/val
+    @Test
+    public void testShouldCollapseAttributeInstance_matchesExpected() throws Throwable {
+        Document doc = new Document("");
+        Document.OutputSettings out = doc.outputSettings();
+        Attribute attr = new Attribute("disabled", "");
+        assertTrue(attr.shouldCollapseAttribute(out));
+    }
+
+    // equals: same key and value -> true
+    @Test
+    public void testEquals_sameKeyAndValue_true() throws Throwable {
+        Attribute a = new Attribute("k", "v");
+        Attribute b = new Attribute("k", "v");
+        assertTrue(a.equals(b));
+    }
+
+    // equals: differing value -> false
+    @Test
+    public void testEquals_differentValue_false() throws Throwable {
+        Attribute a = new Attribute("k", "v1");
+        Attribute b = new Attribute("k", "v2");
+        assertFalse(a.equals(b));
+    }
+
+    // equals: differing key -> false
+    @Test
+    public void testEquals_differentKey_false() throws Throwable {
+        Attribute a = new Attribute("k1", "v");
+        Attribute b = new Attribute("k2", "v");
+        assertFalse(a.equals(b));
+    }
+
+    // equals: comparison with null returns false
+    @Test
+    public void testEquals_null_false() throws Throwable {
+        Attribute a = new Attribute("k", "v");
+        assertFalse(a.equals(null));
+    }
+
+    // equals: different class returns false
+    @Test
+    public void testEquals_differentClass_false() throws Throwable {
+        Attribute a = new Attribute("k", "v");
+        assertFalse(a.equals("k=v"));
+    }
+
+    // equals: same instance reference -> true (identity shortcut)
+    @Test
+    public void testEquals_sameInstance_true() throws Throwable {
+        Attribute a = new Attribute("k", "v");
+        assertTrue(a.equals(a));
+    }
+
+    // equals: both values null and keys equal -> true
+    @Test
+    public void testEquals_bothValNull_true() throws Throwable {
+        Attribute a = new Attribute("k", null);
+        Attribute b = new Attribute("k", null);
+        assertTrue(a.equals(b));
+    }
+
+    // hashCode: equal objects per equals() must produce equal hash codes
+    @Test
+    public void testHashCode_equalObjects_sameHashCode() throws Throwable {
+        Attribute a = new Attribute("k", "v");
+        Attribute b = new Attribute("k", "v");
+        assertEquals(a.hashCode(), b.hashCode());
+    }
+
+    // clone: produces an equal object that is a distinct instance
+    @Test
+    public void testClone_producesEqualButDistinctInstance() throws Throwable {
+        Attribute a = new Attribute("k", "v");
+        Attribute c = a.clone();
+        assertTrue(a.equals(c));
+        assertNotSame(a, c);
+    }
+
+    // clone: mutating the clone's key via setKey must not affect the original
+    @Test
+    public void testClone_independentAfterSetKey() throws Throwable {
+        Attribute a = new Attribute("key1", "val1");
+        Attribute c = a.clone();
+        c.setKey("key2");
+        assertEquals("key1", a.getKey());
+        assertEquals("key2", c.getKey());
+    }
+}

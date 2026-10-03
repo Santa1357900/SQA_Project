@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Compress-13-ba5gap2m/Compress-13f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.compress.archivers.zip.ZipArchiveEntryClaudeTest::testSetExtra_malformedData_consumedAsUnparseableNotThrown
+  - org.apache.commons.compress.archivers.zip.ZipArchiveEntryClaudeTest::testConstructorZipEntry_methodNotSet_doesNotThrow
+[exit 0]

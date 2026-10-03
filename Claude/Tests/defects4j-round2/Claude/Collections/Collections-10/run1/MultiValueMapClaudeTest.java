@@ -1,0 +1,427 @@
+package org.apache.commons.collections.map;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Collection;
+import java.util.Iterator;
+
+import org.apache.commons.collections.Factory;
+import org.apache.commons.collections.FunctorException;
+import org.apache.commons.collections.iterators.EmptyIterator;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class MultiValueMapClaudeTest {
+
+    // decorate(Map): default collection type is ArrayList, preserves insertion order
+    @Test
+    public void testDecorateMap_defaultArrayList_insertionOrderPreserved() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "a");
+        mvm.put("k", "b");
+        Collection c = mvm.getCollection("k");
+        assertTrue(c instanceof ArrayList);
+        List list = (List) c;
+        assertEquals("a", list.get(0));
+        assertEquals("b", list.get(1));
+    }
+
+    // decorate(Map, Class): HashSet semantics, duplicate value not added, size stays 1
+    @Test
+    public void testDecorateMapClass_setSemantics_duplicateNotAdded() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap(), HashSet.class);
+        mvm.put("k", "a");
+        mvm.put("k", "a");
+        assertEquals(1, mvm.size("k"));
+        assertTrue(mvm.getCollection("k") instanceof HashSet);
+    }
+
+    // decorate(Map, Class) with class lacking no-arg constructor -> FunctorException on put
+    @Test
+    public void testDecorateMapClass_noNoArgCtor_throwsFunctorException() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap(), Integer.class);
+        try {
+            mvm.put("k", "v");
+            fail("expected FunctorException");
+        } catch (FunctorException expected) {
+        }
+    }
+
+    // decorate(Map, Class) with non-Collection class -> ClassCastException on put
+    @Test
+    public void testDecorateMapClass_nonCollectionClass_throwsClassCastException() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap(), String.class);
+        try {
+            mvm.put("k", "v");
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // decorate(Map, Factory): custom factory used to create value collections
+    @Test
+    public void testDecorateMapFactory_customFactory_usesFactoryCollection() throws Throwable {
+        Factory factory = new Factory() {
+            public Object create() {
+                return new LinkedList();
+            }
+        };
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap(), factory);
+        mvm.put("k", "v");
+        assertTrue(mvm.getCollection("k") instanceof LinkedList);
+    }
+
+    // decorate(Map, Factory) with null factory -> IllegalArgumentException
+    @Test
+    public void testDecorateMapFactory_nullFactory_throwsIllegalArgumentException() throws Throwable {
+        try {
+            MultiValueMap.decorate(new HashMap(), (Factory) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // default constructor: backed by HashMap and ArrayList values
+    @Test
+    public void testDefaultConstructor_backedByArrayList() throws Throwable {
+        MultiValueMap mvm = new MultiValueMap();
+        mvm.put("k", "v");
+        assertTrue(mvm.getCollection("k") instanceof ArrayList);
+        assertEquals(1, mvm.totalSize());
+    }
+
+    // protected constructor with null factory -> IllegalArgumentException
+    @Test
+    public void testProtectedConstructor_nullFactory_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new MultiValueMap(new HashMap(), (Factory) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // protected constructor with valid factory: basic put/get works
+    @Test
+    public void testProtectedConstructor_validFactory_worksCorrectly() throws Throwable {
+        Factory factory = new Factory() {
+            public Object create() {
+                return new ArrayList();
+            }
+        };
+        MultiValueMap mvm = new MultiValueMap(new HashMap(), factory);
+        mvm.put("k", "v");
+        assertEquals(1, mvm.size("k"));
+    }
+
+    // clear(): removes all entries, map becomes empty
+    @Test
+    public void testClear_removesAllEntries() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k1", "a");
+        mvm.put("k2", "b");
+        mvm.clear();
+        assertTrue(mvm.isEmpty());
+        assertEquals(0, mvm.totalSize());
+    }
+
+    // removeMapping: key not present -> returns null
+    @Test
+    public void testRemoveMapping_keyNotPresent_returnsNull() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        assertNull(mvm.removeMapping("missing", "v"));
+    }
+
+    // removeMapping: value not present in existing collection -> returns null, unaffected
+    @Test
+    public void testRemoveMapping_valueNotPresent_returnsNull() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "a");
+        assertNull(mvm.removeMapping("k", "other"));
+        assertEquals(1, mvm.size("k"));
+    }
+
+    // removeMapping: removes the only value -> key removed, get(key) becomes null
+    @Test
+    public void testRemoveMapping_removesLastValue_keyRemovedFromMap() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "only");
+        Object removed = mvm.removeMapping("k", "only");
+        assertEquals("only", removed);
+        assertNull(mvm.get("k"));
+        assertFalse(mvm.containsKey("k"));
+    }
+
+    // removeMapping: removes one of multiple values, key remains with remaining value
+    @Test
+    public void testRemoveMapping_removesOneOfMultiple_keyRemains() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "a");
+        mvm.put("k", "b");
+        Object removed = mvm.removeMapping("k", "a");
+        assertEquals("a", removed);
+        assertTrue(mvm.containsKey("k"));
+        assertEquals(1, mvm.size("k"));
+    }
+
+    // containsValue(value): true when value present under any key
+    @Test
+    public void testContainsValue_valuePresent_returnsTrue() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k1", "a");
+        mvm.put("k2", "b");
+        assertTrue(mvm.containsValue("b"));
+    }
+
+    // containsValue(value): false when value absent from every collection
+    @Test
+    public void testContainsValue_valueAbsent_returnsFalse() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k1", "a");
+        assertFalse(mvm.containsValue("zzz"));
+    }
+
+    // put: new key creates collection and returns the added value
+    @Test
+    public void testPut_newKey_returnsValue() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        Object result = mvm.put("k", "v");
+        assertEquals("v", result);
+        assertEquals(1, mvm.size("k"));
+    }
+
+    // put: existing key appends to the collection and returns the value
+    @Test
+    public void testPut_existingKey_appendsValue() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "a");
+        Object result = mvm.put("k", "b");
+        assertEquals("b", result);
+        assertEquals(2, mvm.size("k"));
+    }
+
+    // put: adding duplicate into a Set-backed collection returns null (no change)
+    @Test
+    public void testPut_setDuplicateValue_returnsNull() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap(), HashSet.class);
+        mvm.put("k", "v");
+        Object result = mvm.put("k", "v");
+        assertNull(result);
+        assertEquals(1, mvm.size("k"));
+    }
+
+    // putAll(Map): normal map copies each entry via put
+    @Test
+    public void testPutAllMap_normalMap_entriesAddedIndividually() throws Throwable {
+        Map plain = new HashMap();
+        plain.put("k1", "v1");
+        plain.put("k2", "v2");
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.putAll(plain);
+        assertEquals(1, mvm.size("k1"));
+        assertEquals(1, mvm.size("k2"));
+        assertTrue(mvm.containsValue("k1", "v1"));
+    }
+
+    // putAll(Map): MultiMap source merges whole collections per key
+    @Test
+    public void testPutAllMap_multiMapSource_mergesCollections() throws Throwable {
+        MultiValueMap source = MultiValueMap.decorate(new HashMap());
+        source.put("k", "a");
+        source.put("k", "b");
+        MultiValueMap target = MultiValueMap.decorate(new HashMap());
+        target.put("k", "x");
+        target.putAll(source);
+        assertEquals(3, target.size("k"));
+        assertTrue(target.containsValue("k", "x"));
+        assertTrue(target.containsValue("k", "a"));
+    }
+
+    // values(): size equals totalSize and contains every value across keys
+    @Test
+    public void testValues_sizeEqualsTotalSizeAndContainsElements() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k1", "a");
+        mvm.put("k1", "b");
+        mvm.put("k2", "c");
+        Collection allValues = mvm.values();
+        assertEquals(mvm.totalSize(), allValues.size());
+        assertEquals(3, allValues.size());
+        assertTrue(allValues.contains("a"));
+        assertTrue(allValues.contains("c"));
+    }
+
+    // values(): cached, repeated calls return the same instance
+    @Test
+    public void testValues_cachedSameInstance() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        Collection v1 = mvm.values();
+        Collection v2 = mvm.values();
+        assertSame(v1, v2);
+    }
+
+    // values().clear(): clears the underlying map
+    @Test
+    public void testValuesClear_clearsUnderlyingMap() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "v");
+        mvm.values().clear();
+        assertTrue(mvm.isEmpty());
+        assertEquals(0, mvm.totalSize());
+    }
+
+    // containsValue(key, value): true when value is in the key's collection
+    @Test
+    public void testContainsValueKeyed_present_returnsTrue() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "v");
+        assertTrue(mvm.containsValue("k", "v"));
+        assertFalse(mvm.containsValue("k", "other"));
+    }
+
+    // containsValue(key, value): absent key returns false
+    @Test
+    public void testContainsValueKeyed_keyAbsent_returnsFalse() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        assertFalse(mvm.containsValue("missing", "v"));
+    }
+
+    // getCollection: absent key returns null
+    @Test
+    public void testGetCollection_absentKey_returnsNull() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        assertNull(mvm.getCollection("missing"));
+    }
+
+    // getCollection: present key returns the stored collection with its value
+    @Test
+    public void testGetCollection_presentKey_returnsStoredCollection() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "v");
+        Collection c = mvm.getCollection("k");
+        assertNotNull(c);
+        assertTrue(c.contains("v"));
+    }
+
+    // size(key): absent key returns zero
+    @Test
+    public void testSizeKey_absentKey_returnsZero() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        assertEquals(0, mvm.size("missing"));
+    }
+
+    // size(key): present key returns collection size
+    @Test
+    public void testSizeKey_presentKey_returnsCollectionSize() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "a");
+        mvm.put("k", "b");
+        assertEquals(2, mvm.size("k"));
+    }
+
+    // putAll(key, values): null values -> returns false, no key created
+    @Test
+    public void testPutAllKeyValues_nullValues_returnsFalse() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        boolean result = mvm.putAll("k", null);
+        assertFalse(result);
+        assertFalse(mvm.containsKey("k"));
+    }
+
+    // putAll(key, values): empty values collection -> returns false, no key created
+    @Test
+    public void testPutAllKeyValues_emptyValues_returnsFalse() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        boolean result = mvm.putAll("k", new ArrayList());
+        assertFalse(result);
+        assertFalse(mvm.containsKey("k"));
+    }
+
+    // putAll(key, values): new key with values -> returns true, all values added
+    @Test
+    public void testPutAllKeyValues_newKey_addsAllReturnsTrue() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        List values = new ArrayList();
+        values.add("a");
+        values.add("b");
+        boolean result = mvm.putAll("k", values);
+        assertTrue(result);
+        assertEquals(2, mvm.size("k"));
+    }
+
+    // putAll(key, values): existing Set-backed key, all values already present -> returns false
+    @Test
+    public void testPutAllKeyValues_setNoNewElements_returnsFalse() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap(), HashSet.class);
+        mvm.put("k", "a");
+        List values = new ArrayList();
+        values.add("a");
+        boolean result = mvm.putAll("k", values);
+        assertFalse(result);
+        assertEquals(1, mvm.size("k"));
+    }
+
+    // iterator(key): absent key returns the shared EmptyIterator instance
+    @Test
+    public void testIteratorKey_absentKey_returnsEmptyIterator() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        Iterator it = mvm.iterator("missing");
+        assertSame(EmptyIterator.INSTANCE, it);
+        assertFalse(it.hasNext());
+    }
+
+    // iterator(key): removing the last remaining element removes the key entirely
+    @Test
+    public void testIteratorKey_removeLastElement_removesKeyFromMap() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "only");
+        Iterator it = mvm.iterator("k");
+        assertTrue(it.hasNext());
+        it.next();
+        it.remove();
+        assertFalse(mvm.containsKey("k"));
+    }
+
+    // iterator(key): removing one of several elements keeps the key with remaining value
+    @Test
+    public void testIteratorKey_removeOneOfMultiple_keyRemains() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k", "a");
+        mvm.put("k", "b");
+        Iterator it = mvm.iterator("k");
+        it.next();
+        it.remove();
+        assertTrue(mvm.containsKey("k"));
+        assertEquals(1, mvm.size("k"));
+    }
+
+    // totalSize: empty map returns zero
+    @Test
+    public void testTotalSize_emptyMap_returnsZero() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        assertEquals(0, mvm.totalSize());
+    }
+
+    // totalSize: multiple keys with multiple values sums correctly
+    @Test
+    public void testTotalSize_multipleKeysMultipleValues_sumsCorrectly() throws Throwable {
+        MultiValueMap mvm = MultiValueMap.decorate(new HashMap());
+        mvm.put("k1", "a");
+        mvm.put("k1", "b");
+        mvm.put("k2", "c");
+        assertEquals(3, mvm.totalSize());
+    }
+
+    // createCollection: default factory produces an empty ArrayList
+    @Test
+    public void testCreateCollection_defaultFactory_returnsEmptyArrayList() throws Throwable {
+        MultiValueMap mvm = new MultiValueMap();
+        Collection c = mvm.createCollection(3);
+        assertTrue(c instanceof ArrayList);
+        assertTrue(c.isEmpty());
+    }
+}

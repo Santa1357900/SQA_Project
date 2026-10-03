@@ -1,0 +1,68 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-165-qo_e0xhu/Closure-165f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /tmp/claude-Closure-165-qo_e0xhu/fixed && ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-Closure-165-qo_e0xhu/fixed -Dd4j.test.dir=/tmp/claude-Closure-165-qo_e0xhu/fixed/.test_suite compile.gen.tests 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+rhino:
+
+properties:
+
+init:
+
+compile:
+
+compile-most:
+
+compile-jdk15:
+
+compile:
+
+properties:
+
+compile:
+
+xmlimplsrc-compile:
+     [echo] Calling /tmp/claude-Closure-165-qo_e0xhu/fixed/lib/rhino/xmlimplsrc/build.xml
+
+compile:
+
+compile-all:
+
+compile:
+
+jar:
+
+rhino-jarjar:
+   [jarjar] Updating jar: /tmp/claude-Closure-165-qo_e0xhu/fixed/build/lib/rhino.jar
+
+svnversion:
+
+compile:
+    [javac] /tmp/claude-Closure-165-qo_e0xhu/fixed/build.xml:252: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] /tmp/claude-Closure-165-qo_e0xhu/fixed/build.xml:258: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+[propertyfile] Updating property file: /tmp/claude-Closure-165-qo_e0xhu/fixed/build/classes/com/google/javascript/jscomp/parsing/ParserConfig.properties
+
+compile.gen.tests:
+     [echo] classes.dir: /tmp/claude-Closure-165-qo_e0xhu/fixed/build/classes
+     [echo] build.home: /tmp/claude-Closure-165-qo_e0xhu/fixed/build
+    [mkdir] Created dir: /tmp/claude-Closure-165-qo_e0xhu/fixed/.classes_testgen
+    [javac] /home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /tmp/claude-Closure-165-qo_e0xhu/fixed/.classes_testgen
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 6
+    [javac] warning: [options] source value 6 is obsolete and will be removed in a future release
+    [javac] warning: [options] target value 1.6 is obsolete and will be removed in a future release
+    [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+    [javac] /tmp/claude-Closure-165-qo_e0xhu/fixed/.test_suite/com/google/javascript/rhino/jstype/JSTypeRegistryClaudeTest.java:23: error: incompatible types: Compiler cannot be converted to ErrorReporter
+    [javac]     reporter = new Compiler();
+    [javac]                ^
+    [javac] 1 error
+    [javac] 4 warnings
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 6 seconds
+Cannot compile extracted test suite! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

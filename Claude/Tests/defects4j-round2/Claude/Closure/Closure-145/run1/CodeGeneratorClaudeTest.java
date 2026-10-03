@@ -1,0 +1,253 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+
+import com.google.common.base.Charsets;
+
+public class CodeGeneratorClaudeTest {
+
+  // Constructor: outputCharset == null -> outputCharsetEncoder stays null, object constructed.
+  @Test
+  public void testConstructor_nullConsumerNullCharset_createsInstance() throws Throwable {
+    CodeGenerator cg = new CodeGenerator((CodeConsumer) null, (Charset) null);
+    assertNotNull(cg);
+  }
+
+  // Constructor: outputCharset == Charsets.US_ASCII -> takes the "no encoder" branch.
+  @Test
+  public void testConstructor_usAsciiCharset_createsInstance() throws Throwable {
+    CodeGenerator cg = new CodeGenerator((CodeConsumer) null, Charsets.US_ASCII);
+    assertNotNull(cg);
+  }
+
+  // Constructor: other non-null, non-US_ASCII charset -> else branch, newEncoder() created.
+  @Test
+  public void testConstructor_utf8Charset_createsInstance() throws Throwable {
+    CodeGenerator cg = new CodeGenerator((CodeConsumer) null, Charset.forName("UTF-8"));
+    assertNotNull(cg);
+  }
+
+  // Single-arg constructor delegates to (consumer, null) two-arg constructor.
+  @Test
+  public void testConstructor_singleArgConstructor_createsInstance() throws Throwable {
+    CodeGenerator cg = new CodeGenerator((CodeConsumer) null);
+    assertNotNull(cg);
+  }
+
+  // jsString: singleq < doubleq -> single-quote delimiter, double quotes kept literal, single quote escaped.
+  @Test
+  public void testJsString_moreDoubleQuotesThanSingle_usesSingleQuoteDelimiter() throws Throwable {
+    String s = "\"\"\"" + "'";
+    String result = CodeGenerator.jsString(s, null);
+    assertEquals('\'', result.charAt(0));
+    assertEquals('\'', result.charAt(result.length() - 1));
+    assertTrue(result.indexOf("\\'") >= 0);
+    assertTrue(result.indexOf("\"\"\"") >= 0);
+  }
+
+  // jsString: singleq >= doubleq -> double-quote delimiter, single quotes kept literal, double quote escaped.
+  @Test
+  public void testJsString_moreSingleQuotesThanDouble_usesDoubleQuoteDelimiter() throws Throwable {
+    String s = "a'b'c'd\"e";
+    String result = CodeGenerator.jsString(s, null);
+    assertEquals('"', result.charAt(0));
+    assertEquals('"', result.charAt(result.length() - 1));
+    assertTrue(result.indexOf("\\\"") >= 0);
+    assertTrue(result.indexOf("'") >= 0);
+  }
+
+  // jsString: equal quote counts (boundary of singleq < doubleq) -> false branch -> double-quote delimiter.
+  @Test
+  public void testJsString_equalQuoteCounts_usesDoubleQuoteDelimiter() throws Throwable {
+    String s = "a'b\"c";
+    String result = CodeGenerator.jsString(s, null);
+    assertEquals('"', result.charAt(0));
+    assertEquals('"', result.charAt(result.length() - 1));
+    assertTrue(result.indexOf("\\\"") >= 0);
+  }
+
+  // strEscape switch: '\n', '\r', '\t' all converted to their two-char escape sequences.
+  @Test
+  public void testJsString_newlineCarriageReturnTab_escaped() throws Throwable {
+    String s = "a\nb\rc\td";
+    String result = CodeGenerator.jsString(s, null);
+    assertTrue(result.indexOf("\\n") >= 0);
+    assertTrue(result.indexOf("\\r") >= 0);
+    assertTrue(result.indexOf("\\t") >= 0);
+  }
+
+  // strEscape: backslash char is always doubled regardless of quote selection.
+  @Test
+  public void testJsString_backslash_escapedDoubled() throws Throwable {
+    String s = "a\\b";
+    String result = CodeGenerator.jsString(s, null);
+    assertEquals("\"a\\\\b\"", result);
+  }
+
+  // strEscape '>' case: preceded by "--" -> escaped to "\>".
+  @Test
+  public void testJsString_doubleDashBeforeGreaterThan_escaped() throws Throwable {
+    String s = "x-->y";
+    String result = CodeGenerator.jsString(s, null);
+    assertTrue(result.indexOf("--\\>") >= 0);
+    assertTrue(result.indexOf("-->") < 0);
+  }
+
+  // strEscape '>' case: preceded by "]]" -> escaped to "\>".
+  @Test
+  public void testJsString_doubleCloseBracketBeforeGreaterThan_escaped() throws Throwable {
+    String s = "x]]>y";
+    String result = CodeGenerator.jsString(s, null);
+    assertTrue(result.indexOf("]]\\>") >= 0);
+    assertTrue(result.indexOf("]]>") < 0);
+  }
+
+  // strEscape '>' case: not preceded by "--" or "]]" -> kept literal.
+  @Test
+  public void testJsString_greaterThanWithoutPrefix_notEscaped() throws Throwable {
+    String s = "ab>cd";
+    String result = CodeGenerator.jsString(s, null);
+    assertTrue(result.indexOf("ab>cd") >= 0);
+  }
+
+  // strEscape '<' case: followed by "/script" (case-insensitive) -> escaped to "<\".
+  @Test
+  public void testJsString_lessThanBeforeScriptCaseInsensitive_escaped() throws Throwable {
+    String s = "x</ScRiPt>y";
+    String result = CodeGenerator.jsString(s, null);
+    assertTrue(result.indexOf("<\\/ScRiPt") >= 0);
+  }
+
+  // strEscape '<' case: not followed by "/script" -> kept literal.
+  @Test
+  public void testJsString_lessThanNotFollowedByScript_notEscaped() throws Throwable {
+    String s = "x<abc>y";
+    String result = CodeGenerator.jsString(s, null);
+    assertTrue(result.indexOf("<abc>") >= 0);
+  }
+
+  // strEscape '<' case: near end of string so regionMatches lacks enough remaining chars; must not throw.
+  @Test
+  public void testJsString_lessThanNearEndOfString_noExceptionNotEscaped() throws Throwable {
+    String s = "ab<";
+    String result = CodeGenerator.jsString(s, null);
+    assertTrue(result.indexOf("ab<") >= 0);
+  }
+
+  // strEscape default branch, no encoder: control char (<=0x1f) -> hex escaped.
+  @Test
+  public void testJsString_controlCharNoEncoder_escaped() throws Throwable {
+    String s = "\u0000";
+    String result = CodeGenerator.jsString(s, null);
+    assertEquals("\"" + "\\u0000" + "\"", result);
+  }
+
+  // strEscape default branch, no encoder: char > 0x7f -> hex escaped.
+  @Test
+  public void testJsString_nonAsciiNoEncoder_escaped() throws Throwable {
+    String s = "\u0080";
+    String result = CodeGenerator.jsString(s, null);
+    assertEquals("\"" + "\\u0080" + "\"", result);
+  }
+
+  // strEscape default branch boundary: char == 0x7f (DEL) satisfies c<=0x7f -> kept literal, not escaped.
+  @Test
+  public void testJsString_delCharBoundaryNoEncoder_notEscaped() throws Throwable {
+    String s = "\u007f";
+    String result = CodeGenerator.jsString(s, null);
+    String expected = "\"" + "\u007f" + "\"";
+    assertEquals(expected, result);
+  }
+
+  // strEscape default branch with encoder: canEncode true (plain ascii) -> appended literally.
+  @Test
+  public void testJsString_encoderCanEncodeAscii_appendedLiteral() throws Throwable {
+    CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
+    String result = CodeGenerator.jsString("Z", encoder);
+    assertEquals("\"Z\"", result);
+  }
+
+  // strEscape default branch with encoder: canEncode false -> hex escaped.
+  @Test
+  public void testJsString_encoderCannotEncode_escaped() throws Throwable {
+    CharsetEncoder encoder = Charset.forName("US-ASCII").newEncoder();
+    String result = CodeGenerator.jsString("\u00e9", encoder);
+    assertEquals("\"" + "\\u00e9" + "\"", result);
+  }
+
+  // Bug check: U+2028 LINE SEPARATOR must always be escaped in a JS string even
+  // when the output charset encoder (e.g. UTF-8) can encode it, because it is a
+  // JS line terminator that is unsafe to leave raw inside a string literal.
+  @Test
+  public void testJsString_lineSeparatorWithEncoder_mustBeEscaped() throws Throwable {
+    CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
+    String result = CodeGenerator.jsString("a\u2028b", encoder);
+    assertEquals("\"a\\u2028b\"", result);
+  }
+
+  // Bug check: U+2029 PARAGRAPH SEPARATOR must always be escaped, same reasoning as U+2028.
+  @Test
+  public void testJsString_paragraphSeparatorWithEncoder_mustBeEscaped() throws Throwable {
+    CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
+    String result = CodeGenerator.jsString("a\u2029b", encoder);
+    assertEquals("\"a\\u2029b\"", result);
+  }
+
+  // regexpEscape(s, encoder): default branch with encoder that cannot encode -> hex escaped, wrapped in '/'.
+  @Test
+  public void testRegexpEscape_withEncoderCannotEncode_escapesChar() throws Throwable {
+    CharsetEncoder encoder = Charset.forName("US-ASCII").newEncoder();
+    String result = CodeGenerator.regexpEscape("\u00e9", encoder);
+    assertEquals("/" + "\\u00e9" + "/", result);
+  }
+
+  // escapeToDoubleQuotedJsString: fixed '"' delimiter; double quote escaped, single quote literal, backslash doubled.
+  @Test
+  public void testEscapeToDoubleQuotedJsString_mixedQuotesAndBackslash_properlyEscaped() throws Throwable {
+    String s = "a\"b'c\\d";
+    String result = CodeGenerator.escapeToDoubleQuotedJsString(s);
+    assertEquals("\"a\\\"b'c\\\\d\"", result);
+  }
+
+  // regexpEscape(s): no-encoder overload, fixed '/' delimiter, quote/backslash chars passed through literally.
+  @Test
+  public void testRegexpEscape_defaultEncoder_wrapsWithSlashAndKeepsQuotesLiteral() throws Throwable {
+    String s = "ab'cd\"ef";
+    String result = CodeGenerator.regexpEscape(s);
+    assertEquals("/ab'cd\"ef/", result);
+  }
+
+  // strEscape direct call: plain string with no special chars is only wrapped by the given quote char.
+  @Test
+  public void testStrEscape_plainStringCustomQuote_wrapsOnly() throws Throwable {
+    String result = CodeGenerator.strEscape("plain", 'X', "D", "S", "B", null);
+    assertEquals("XplainX", result);
+  }
+
+  // strEscape default branch boundary: char == 0x1f fails c>0x1f -> hex escaped (no encoder).
+  @Test
+  public void testStrEscape_controlBoundary0x1f_escaped() throws Throwable {
+    String result = CodeGenerator.strEscape("\u001f", 'Q', "D", "S", "B", null);
+    assertEquals("Q" + "\\u001f" + "Q", result);
+  }
+
+  // identifierEscape: fully latin/ascii identifier is returned unchanged (isLatin shortcut).
+  @Test
+  public void testIdentifierEscape_asciiIdentifier_unchanged() throws Throwable {
+    String s = "myVar123";
+    assertEquals(s, CodeGenerator.identifierEscape(s));
+  }
+
+  // identifierEscape: non-latin char is hex-escaped rather than returned unchanged.
+  @Test
+  public void testIdentifierEscape_nonLatinChar_escaped() throws Throwable {
+    String s = "\u00e9";
+    String result = CodeGenerator.identifierEscape(s);
+    assertTrue(result.indexOf("\\u00e9") >= 0);
+    assertFalse(result.equals(s));
+  }
+}

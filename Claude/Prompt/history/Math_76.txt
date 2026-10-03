@@ -1,0 +1,529 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Math (Defects4J bug Math-76)
+package: org.apache.commons.math.linear
+class_under_test: SingularValueDecompositionImpl
+test_class_to_write: SingularValueDecompositionImplClaudeTest
+</target>
+
+<project_notes>
+Commons Math: ใช้ delta ทุกครั้งที่เทียบ double ห้าม implement UnivariateRealFunction/UnivariateFunction ถ้าไม่ได้ปรากฏใน source ให้ใช้ anonymous inner class เมื่อ interface มีเมธอดเดียว exception เป็น checked หลายตัว (เช่น MathException) จึงต้อง throws Throwable
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.math.linear;
+
+import org.apache.commons.math.MathRuntimeException;
+import org.apache.commons.math.util.MathUtils;
+
+/**
+ * Calculates the compact or truncated Singular Value Decomposition of a matrix.
+ * <p>The Singular Value Decomposition of matrix A is a set of three matrices:
+ * U, &Sigma; and V such that A = U &times; &Sigma; &times; V<sup>T</sup>.
+ * Let A be a m &times; n matrix, then U is a m &times; p orthogonal matrix,
+ * &Sigma; is a p &times; p diagonal matrix with positive diagonal elements,
+ * V is a n &times; p orthogonal matrix (hence V<sup>T</sup> is a p &times; n
+ * orthogonal matrix). The size p depends on the chosen algorithm:
+ * <ul>
+ *   <li>for full SVD, p would be n, but this is not supported by this implementation,</li>
+ *   <li>for compact SVD, p is the rank r of the matrix
+ *       (i. e. the number of positive singular values),</li>
+ *   <li>for truncated SVD p is min(r, t) where t is user-specified.</li>
+ * </ul>
+ * </p>
+ * <p>
+ * Note that since this class computes only the compact or truncated SVD and not
+ * the full SVD, the singular values computed are always positive.
+ * </p>
+ *
+ * @version $Revision$ $Date$
+ * @since 2.0
+ */
+public class SingularValueDecompositionImpl implements SingularValueDecomposition {
+
+    /** Number of rows of the initial matrix. */
+    private int m;
+
+    /** Number of columns of the initial matrix. */
+    private int n;
+
+    /** Transformer to bidiagonal. */
+    private BiDiagonalTransformer transformer;
+
+    /** Main diagonal of the bidiagonal matrix. */
+    private double[] mainBidiagonal;
+
+    /** Secondary diagonal of the bidiagonal matrix. */
+    private double[] secondaryBidiagonal;
+
+    /** Main diagonal of the tridiagonal matrix. */
+    private double[] mainTridiagonal;
+
+    /** Secondary diagonal of the tridiagonal matrix. */
+    private double[] secondaryTridiagonal;
+
+    /** Eigen decomposition of the tridiagonal matrix. */
+    private EigenDecomposition eigenDecomposition;
+
+    /** Singular values. */
+    private double[] singularValues;
+
+    /** Cached value of U. */
+    private RealMatrix cachedU;
+
+    /** Cached value of U<sup>T</sup>. */
+    private RealMatrix cachedUt;
+
+    /** Cached value of S. */
+    private RealMatrix cachedS;
+
+    /** Cached value of V. */
+    private RealMatrix cachedV;
+
+    /** Cached value of V<sup>T</sup>. */
+    private RealMatrix cachedVt;
+
+    /**
+     * Calculates the compact Singular Value Decomposition of the given matrix.
+     * @param matrix The matrix to decompose.
+     * @exception InvalidMatrixException (wrapping a {@link
+     * org.apache.commons.math.ConvergenceException} if algorithm fails to converge
+     */
+    public SingularValueDecompositionImpl(final RealMatrix matrix)
+        throws InvalidMatrixException {
+        this(matrix, Math.min(matrix.getRowDimension(), matrix.getColumnDimension()));
+    }
+
+    /**
+     * Calculates the Singular Value Decomposition of the given matrix.
+     * @param matrix The matrix to decompose.
+     * @param max maximal number of singular values to compute
+     * @exception InvalidMatrixException (wrapping a {@link
+     * org.apache.commons.math.ConvergenceException} if algorithm fails to converge
+     */
+    public SingularValueDecompositionImpl(final RealMatrix matrix, final int max)
+        throws InvalidMatrixException {
+
+        m = matrix.getRowDimension();
+        n = matrix.getColumnDimension();
+
+        cachedU  = null;
+        cachedS  = null;
+        cachedV  = null;
+        cachedVt = null;
+
+        // transform the matrix to bidiagonal
+        transformer         = new BiDiagonalTransformer(matrix);
+        mainBidiagonal      = transformer.getMainDiagonalRef();
+        secondaryBidiagonal = transformer.getSecondaryDiagonalRef();
+
+        // compute Bt.B (if upper diagonal) or B.Bt (if lower diagonal)
+        mainTridiagonal      = new double[mainBidiagonal.length];
+        secondaryTridiagonal = new double[mainBidiagonal.length - 1];
+        double a = mainBidiagonal[0];
+        mainTridiagonal[0] = a * a;
+        for (int i = 1; i < mainBidiagonal.length; ++i) {
+            final double b  = secondaryBidiagonal[i - 1];
+            secondaryTridiagonal[i - 1] = a * b;
+            a = mainBidiagonal[i];
+            mainTridiagonal[i] = a * a + b * b;
+        }
+
+        // compute singular values
+        eigenDecomposition =
+            new EigenDecompositionImpl(mainTridiagonal, secondaryTridiagonal,
+                                       MathUtils.SAFE_MIN);
+        final double[] eigenValues = eigenDecomposition.getRealEigenvalues();
+        int p = Math.min(max, eigenValues.length);
+        while ((p > 0) && (eigenValues[p - 1] <= 0)) {
+            --p;
+        }
+        singularValues = new double[p];
+        for (int i = 0; i < p; ++i) {
+            singularValues[i] = Math.sqrt(eigenValues[i]);
+        }
+
+    }
+
+    /** {@inheritDoc} */
+    public RealMatrix getU()
+        throws InvalidMatrixException {
+
+        if (cachedU == null) {
+
+            final int p = singularValues.length;
+            if (m >= n) {
+                // the tridiagonal matrix is Bt.B, where B is upper bidiagonal
+                final RealMatrix e =
+                    eigenDecomposition.getV().getSubMatrix(0, p - 1, 0, p - 1);
+                final double[][] eData = e.getData();
+                final double[][] wData = new double[m][p];
+                double[] ei1 = eData[0];
+                for (int i = 0; i < p - 1; ++i) {
+                    // compute W = B.E.S^(-1) where E is the eigenvectors matrix
+                    final double mi = mainBidiagonal[i];
+                    final double[] ei0 = ei1;
+                    final double[] wi  = wData[i];
+                        ei1 = eData[i + 1];
+                        final double si = secondaryBidiagonal[i];
+                        for (int j = 0; j < p; ++j) {
+                            wi[j] = (mi * ei0[j] + si * ei1[j]) / singularValues[j];
+                        }
+                }
+                        for (int j = 0; j < p; ++j) {
+                            wData[p - 1][j] = ei1[j] * mainBidiagonal[p - 1] / singularValues[j];
+                        }
+
+                for (int i = p; i < m; ++i) {
+                    wData[i] = new double[p];
+                }
+                cachedU =
+                    transformer.getU().multiply(MatrixUtils.createRealMatrix(wData));
+            } else {
+                // the tridiagonal matrix is B.Bt, where B is lower bidiagonal
+                final RealMatrix e =
+                    eigenDecomposition.getV().getSubMatrix(0, m - 1, 0, p - 1);
+                cachedU = transformer.getU().multiply(e);
+            }
+
+        }
+
+        // return the cached matrix
+        return cachedU;
+
+    }
+
+    /** {@inheritDoc} */
+    public RealMatrix getUT()
+        throws InvalidMatrixException {
+
+        if (cachedUt == null) {
+            cachedUt = getU().transpose();
+        }
+
+        // return the cached matrix
+        return cachedUt;
+
+    }
+
+    /** {@inheritDoc} */
+    public RealMatrix getS()
+        throws InvalidMatrixException {
+
+        if (cachedS == null) {
+
+            // cache the matrix for subsequent calls
+            cachedS = MatrixUtils.createRealDiagonalMatrix(singularValues);
+
+        }
+        return cachedS;
+    }
+
+    /** {@inheritDoc} */
+    public double[] getSingularValues()
+        throws InvalidMatrixException {
+        return singularValues.clone();
+    }
+
+    /** {@inheritDoc} */
+    public RealMatrix getV()
+        throws InvalidMatrixException {
+
+        if (cachedV == null) {
+
+            final int p = singularValues.length;
+            if (m >= n) {
+                // the tridiagonal matrix is Bt.B, where B is upper bidiagonal
+                final RealMatrix e =
+                    eigenDecomposition.getV().getSubMatrix(0, n - 1, 0, p - 1);
+                cachedV = transformer.getV().multiply(e);
+            } else {
+                // the tridiagonal matrix is B.Bt, where B is lower bidiagonal
+                // compute W = Bt.E.S^(-1) where E is the eigenvectors matrix
+                final RealMatrix e =
+                    eigenDecomposition.getV().getSubMatrix(0, p - 1, 0, p - 1);
+                final double[][] eData = e.getData();
+                final double[][] wData = new double[n][p];
+                double[] ei1 = eData[0];
+                for (int i = 0; i < p - 1; ++i) {
+                    final double mi = mainBidiagonal[i];
+                    final double[] ei0 = ei1;
+                    final double[] wi  = wData[i];
+                        ei1 = eData[i + 1];
+                        final double si = secondaryBidiagonal[i];
+                        for (int j = 0; j < p; ++j) {
+                            wi[j] = (mi * ei0[j] + si * ei1[j]) / singularValues[j];
+                        }
+                }
+                        for (int j = 0; j < p; ++j) {
+                            wData[p - 1][j] = ei1[j] * mainBidiagonal[p - 1] / singularValues[j];
+                        }
+                for (int i = p; i < n; ++i) {
+                    wData[i] = new double[p];
+                }
+                cachedV =
+                    transformer.getV().multiply(MatrixUtils.createRealMatrix(wData));
+            }
+
+        }
+
+        // return the cached matrix
+        return cachedV;
+
+    }
+
+    /** {@inheritDoc} */
+    public RealMatrix getVT()
+        throws InvalidMatrixException {
+
+        if (cachedVt == null) {
+            cachedVt = getV().transpose();
+        }
+
+        // return the cached matrix
+        return cachedVt;
+
+    }
+
+    /** {@inheritDoc} */
+    public RealMatrix getCovariance(final double minSingularValue) {
+
+        // get the number of singular values to consider
+        final int p = singularValues.length;
+        int dimension = 0;
+        while ((dimension < p) && (singularValues[dimension] >= minSingularValue)) {
+            ++dimension;
+        }
+
+        if (dimension == 0) {
+            throw MathRuntimeException.createIllegalArgumentException(
+                  "cutoff singular value is {0}, should be at most {1}",
+                  minSingularValue, singularValues[0]);
+        }
+
+        final double[][] data = new double[dimension][p];
+        getVT().walkInOptimizedOrder(new DefaultRealMatrixPreservingVisitor() {
+            /** {@inheritDoc} */
+            @Override
+            public void visit(final int row, final int column, final double value) {
+                data[row][column] = value / singularValues[row];
+            }
+        }, 0, dimension - 1, 0, p - 1);
+
+        RealMatrix jv = new Array2DRowRealMatrix(data, false);
+        return jv.transpose().multiply(jv);
+
+    }
+
+    /** {@inheritDoc} */
+    public double getNorm()
+        throws InvalidMatrixException {
+        return singularValues[0];
+    }
+
+    /** {@inheritDoc} */
+    public double getConditionNumber()
+        throws InvalidMatrixException {
+        return singularValues[0] / singularValues[singularValues.length - 1];
+    }
+
+    /** {@inheritDoc} */
+    public int getRank()
+        throws IllegalStateException {
+
+        final double threshold = Math.max(m, n) * Math.ulp(singularValues[0]);
+
+        for (int i = singularValues.length - 1; i >= 0; --i) {
+           if (singularValues[i] > threshold) {
+              return i + 1;
+           }
+        }
+        return 0;
+
+    }
+
+    /** {@inheritDoc} */
+    public DecompositionSolver getSolver() {
+        return new Solver(singularValues, getUT(), getV(),
+                          getRank() == Math.max(m, n));
+    }
+
+    /** Specialized solver. */
+    private static class Solver implements DecompositionSolver {
+
+        /** Pseudo-inverse of the initial matrix. */
+        private final RealMatrix pseudoInverse;
+
+        /** Singularity indicator. */
+        private boolean nonSingular;
+
+        /**
+         * Build a solver from decomposed matrix.
+         * @param singularValues singularValues
+         * @param uT U<sup>T</sup> matrix of the decomposition
+         * @param v V matrix of the decomposition
+         * @param nonSingular singularity indicator
+         */
+        private Solver(final double[] singularValues, final RealMatrix uT, final RealMatrix v,
+                       final boolean nonSingular) {
+            double[][] suT      = uT.getData();
+            for (int i = 0; i < singularValues.length; ++i) {
+                final double a      = 1.0 / singularValues[i];
+                final double[] suTi = suT[i];
+                for (int j = 0; j < suTi.length; ++j) {
+                    suTi[j] *= a;
+                }
+            }
+            pseudoInverse    = v.multiply(new Array2DRowRealMatrix(suT, false));
+            this.nonSingular = nonSingular;
+        }
+
+        /** Solve the linear equation A &times; X = B in least square sense.
+         * <p>The m&times;n matrix A may not be square, the solution X is
+         * such that ||A &times; X - B|| is minimal.</p>
+         * @param b right-hand side of the equation A &times; X = B
+         * @return a vector X that minimizes the two norm of A &times; X - B
+         * @exception IllegalArgumentException if matrices dimensions don't match
+         */
+        public double[] solve(final double[] b)
+            throws IllegalArgumentException {
+            return pseudoInverse.operate(b);
+        }
+
+        /** Solve the linear equation A &times; X = B in least square sense.
+         * <p>The m&times;n matrix A may not be square, the solution X is
+         * such that ||A &times; X - B|| is minimal.</p>
+         * @param b right-hand side of the equation A &times; X = B
+         * @return a vector X that minimizes the two norm of A &times; X - B
+         * @exception IllegalArgumentException if matrices dimensions don't match
+         */
+        public RealVector solve(final RealVector b)
+            throws IllegalArgumentException {
+            return pseudoInverse.operate(b);
+        }
+
+        /** Solve the linear equation A &times; X = B in least square sense.
+         * <p>The m&times;n matrix A may not be square, the solution X is
+         * such that ||A &times; X - B|| is minimal.</p>
+         * @param b right-hand side of the equation A &times; X = B
+         * @return a matrix X that minimizes the two norm of A &times; X - B
+         * @exception IllegalArgumentException if matrices dimensions don't match
+         */
+        public RealMatrix solve(final RealMatrix b)
+            throws IllegalArgumentException {
+            return pseudoInverse.multiply(b);
+        }
+
+        /**
+         * Check if the decomposed matrix is non-singular.
+         * @return true if the decomposed matrix is non-singular
+         */
+        public boolean isNonSingular() {
+            return nonSingular;
+        }
+
+        /** Get the pseudo-inverse of the decomposed matrix.
+         * @return inverse matrix
+         */
+        public RealMatrix getInverse() {
+            return pseudoInverse;
+        }
+
+    }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ SingularValueDecompositionImplClaudeTest ใน package org.apache.commons.math.linear เพื่อทดสอบคลาส SingularValueDecompositionImpl ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.math.linear;` เท่านั้น
+</instructions>

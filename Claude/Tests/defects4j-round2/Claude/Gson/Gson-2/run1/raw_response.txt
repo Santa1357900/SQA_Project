@@ -1,0 +1,616 @@
+package com.google.gson.internal.bind;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonIOException;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.TypeAdapter;
+import com.google.gson.TypeAdapterFactory;
+import com.google.gson.annotations.SerializedName;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonWriter;
+
+import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.URL;
+import java.util.BitSet;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.Locale;
+import java.util.UUID;
+
+public class TypeAdaptersClaudeTest {
+
+  private enum SampleEnum {
+    @SerializedName("r") RED,
+    GREEN
+  }
+
+  // CLASS.write: value == null -> out.nullValue()
+  @Test
+  public void testClassWrite_null_writesNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    TypeAdapters.CLASS.write(writer, null);
+    writer.close();
+    assertEquals("null", sw.toString());
+  }
+
+  // CLASS.write: value != null -> throws UnsupportedOperationException
+  @Test
+  public void testClassWrite_nonNullClass_throwsUnsupportedOperationException() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    try {
+      TypeAdapters.CLASS.write(writer, String.class);
+      fail("expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException expected) {
+    }
+  }
+
+  // CLASS.read: NULL token -> returns null
+  @Test
+  public void testClassRead_nullToken_returnsNull() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("null"));
+    Class result = TypeAdapters.CLASS.read(reader);
+    assertNull(result);
+  }
+
+  // CLASS.read: non-null token -> throws UnsupportedOperationException
+  @Test
+  public void testClassRead_nonNullToken_throwsUnsupportedOperationException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"foo\""));
+    try {
+      TypeAdapters.CLASS.read(reader);
+      fail("expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException expected) {
+    }
+  }
+
+  // BIT_SET.read: NUMBER branch, non-zero sets bit
+  @Test
+  public void testBitSetRead_numberTokens_setsBitsForNonZero() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[1,0,2]"));
+    BitSet result = TypeAdapters.BIT_SET.read(reader);
+    assertTrue(result.get(0));
+    assertFalse(result.get(1));
+    assertTrue(result.get(2));
+  }
+
+  // BIT_SET.read: STRING branch invalid number -> JsonSyntaxException
+  @Test
+  public void testBitSetRead_invalidStringValue_throwsJsonSyntaxException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[\"abc\"]"));
+    try {
+      TypeAdapters.BIT_SET.read(reader);
+      fail("expected JsonSyntaxException");
+    } catch (JsonSyntaxException expected) {
+    }
+  }
+
+  // BIT_SET.read: default branch on unsupported token type -> JsonSyntaxException
+  @Test
+  public void testBitSetRead_unsupportedTokenType_throwsJsonSyntaxException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[null]"));
+    try {
+      TypeAdapters.BIT_SET.read(reader);
+      fail("expected JsonSyntaxException");
+    } catch (JsonSyntaxException expected) {
+    }
+  }
+
+  // BIT_SET.read: NULL token -> returns null
+  @Test
+  public void testBitSetRead_nullToken_returnsNull() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("null"));
+    assertNull(TypeAdapters.BIT_SET.read(reader));
+  }
+
+  // BIT_SET.write: writes 1/0 up to src.length()
+  @Test
+  public void testBitSetWrite_bitsSet_writesOnesAndZerosUpToLength() throws Throwable {
+    BitSet bitSet = new BitSet();
+    bitSet.set(0);
+    bitSet.set(2);
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    TypeAdapters.BIT_SET.write(writer, bitSet);
+    writer.close();
+    assertEquals("[1,0,1]", sw.toString());
+  }
+
+  // BIT_SET.write: null -> writes null literal
+  @Test
+  public void testBitSetWrite_null_writesNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    TypeAdapters.BIT_SET.write(writer, null);
+    writer.close();
+    assertEquals("null", sw.toString());
+  }
+
+  // BOOLEAN.read: STRING token coerced via Boolean.parseBoolean
+  @Test
+  public void testBooleanRead_stringToken_parsesLegacyBoolean() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"true\""));
+    Boolean result = TypeAdapters.BOOLEAN.read(reader);
+    assertTrue(result.booleanValue());
+  }
+
+  // BOOLEAN.read: NULL token -> null
+  @Test
+  public void testBooleanRead_nullToken_returnsNull() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("null"));
+    assertNull(TypeAdapters.BOOLEAN.read(reader));
+  }
+
+  // BOOLEAN.write: null -> writes null literal
+  @Test
+  public void testBooleanWrite_null_writesNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    TypeAdapters.BOOLEAN.write(writer, null);
+    writer.close();
+    assertEquals("null", sw.toString());
+  }
+
+  // BOOLEAN_AS_STRING.read: parses string into Boolean
+  @Test
+  public void testBooleanAsStringRead_stringToken_parsesBoolean() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"true\""));
+    Boolean result = TypeAdapters.BOOLEAN_AS_STRING.read(reader);
+    assertTrue(result.booleanValue());
+  }
+
+  // BOOLEAN_AS_STRING.write: null -> writes the literal string "null"
+  @Test
+  public void testBooleanAsStringWrite_null_writesStringNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    TypeAdapters.BOOLEAN_AS_STRING.write(writer, null);
+    writer.close();
+    assertEquals("\"null\"", sw.toString());
+  }
+
+  // BYTE.read: valid number parses to byte value
+  @Test
+  public void testByteRead_validNumber_returnsByteValue() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("127"));
+    Number result = TypeAdapters.BYTE.read(reader);
+    assertEquals((byte) 127, result.byteValue());
+  }
+
+  // SHORT.read: valid number parses to short value
+  @Test
+  public void testShortRead_validNumber_returnsShortValue() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("32000"));
+    Number result = TypeAdapters.SHORT.read(reader);
+    assertEquals((short) 32000, result.shortValue());
+  }
+
+  // INTEGER.read: max int value boundary
+  @Test
+  public void testIntegerRead_maxValue_returnsMaxInt() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("2147483647"));
+    Number result = TypeAdapters.INTEGER.read(reader);
+    assertEquals(Integer.MAX_VALUE, result.intValue());
+  }
+
+  // INTEGER.read: NULL token -> null
+  @Test
+  public void testIntegerRead_nullToken_returnsNull() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("null"));
+    assertNull(TypeAdapters.INTEGER.read(reader));
+  }
+
+  // LONG.read: min long value boundary
+  @Test
+  public void testLongRead_minValue_returnsMinLong() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("-9223372036854775808"));
+    Number result = TypeAdapters.LONG.read(reader);
+    assertEquals(Long.MIN_VALUE, result.longValue());
+  }
+
+  // FLOAT.read: valid decimal value
+  @Test
+  public void testFloatRead_validNumber_returnsFloatValue() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("3.5"));
+    Number result = TypeAdapters.FLOAT.read(reader);
+    assertEquals(3.5f, result.floatValue(), 0.0001f);
+  }
+
+  // DOUBLE.read: valid decimal value
+  @Test
+  public void testDoubleRead_validNumber_returnsDoubleValue() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("3.14159"));
+    Number result = TypeAdapters.DOUBLE.read(reader);
+    assertEquals(3.14159, result.doubleValue(), 0.00001);
+  }
+
+  // NUMBER.read: NUMBER token -> numeric value preserved
+  @Test
+  public void testNumberRead_numberToken_returnsNumericValue() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("42"));
+    Number result = TypeAdapters.NUMBER.read(reader);
+    assertEquals(42, result.intValue());
+  }
+
+  // NUMBER.read: default branch on non-number token -> JsonSyntaxException
+  @Test
+  public void testNumberRead_nonNumberToken_throwsJsonSyntaxException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"foo\""));
+    try {
+      TypeAdapters.NUMBER.read(reader);
+      fail("expected JsonSyntaxException");
+    } catch (JsonSyntaxException expected) {
+    }
+  }
+
+  // NUMBER.read: NULL token -> null
+  @Test
+  public void testNumberRead_nullToken_returnsNull() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("null"));
+    assertNull(TypeAdapters.NUMBER.read(reader));
+  }
+
+  // CHARACTER.read: single char string -> char value
+  @Test
+  public void testCharacterRead_singleCharString_returnsChar() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"a\""));
+    Character result = TypeAdapters.CHARACTER.read(reader);
+    assertEquals('a', result.charValue());
+  }
+
+  // CHARACTER.read: length != 1 (multi-char) -> JsonSyntaxException
+  @Test
+  public void testCharacterRead_multiCharString_throwsJsonSyntaxException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"ab\""));
+    try {
+      TypeAdapters.CHARACTER.read(reader);
+      fail("expected JsonSyntaxException");
+    } catch (JsonSyntaxException expected) {
+    }
+  }
+
+  // STRING.read: BOOLEAN token coerced to string for backwards compatibility
+  @Test
+  public void testStringRead_booleanToken_coercesToString() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("true"));
+    String result = TypeAdapters.STRING.read(reader);
+    assertEquals("true", result);
+  }
+
+  // STRING.read: NULL token -> null
+  @Test
+  public void testStringRead_nullToken_returnsNull() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("null"));
+    assertNull(TypeAdapters.STRING.read(reader));
+  }
+
+  // BIG_DECIMAL.read: valid numeric string
+  @Test
+  public void testBigDecimalRead_validNumberString_returnsBigDecimal() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("123.456"));
+    BigDecimal result = TypeAdapters.BIG_DECIMAL.read(reader);
+    assertEquals(new BigDecimal("123.456"), result);
+  }
+
+  // BIG_DECIMAL.read: invalid string -> wraps NumberFormatException as JsonSyntaxException
+  @Test
+  public void testBigDecimalRead_invalidNumberString_throwsJsonSyntaxException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"abc\""));
+    try {
+      TypeAdapters.BIG_DECIMAL.read(reader);
+      fail("expected JsonSyntaxException");
+    } catch (JsonSyntaxException expected) {
+    }
+  }
+
+  // BIG_INTEGER.read: valid numeric string
+  @Test
+  public void testBigIntegerRead_validNumberString_returnsBigInteger() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("12345678901234567890"));
+    BigInteger result = TypeAdapters.BIG_INTEGER.read(reader);
+    assertEquals(new BigInteger("12345678901234567890"), result);
+  }
+
+  // STRING_BUILDER.read: constructs StringBuilder with content
+  @Test
+  public void testStringBuilderRead_validString_returnsStringBuilderWithContent() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"hello\""));
+    StringBuilder result = TypeAdapters.STRING_BUILDER.read(reader);
+    assertEquals("hello", result.toString());
+  }
+
+  // URL.read: valid URL string
+  @Test
+  public void testUrlRead_validUrlString_returnsUrl() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"http://example.com\""));
+    URL result = TypeAdapters.URL.read(reader);
+    assertEquals("http://example.com", result.toExternalForm());
+  }
+
+  // URL.read: literal "null" string -> null (special-cased)
+  @Test
+  public void testUrlRead_literalNullString_returnsNull() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"null\""));
+    assertNull(TypeAdapters.URL.read(reader));
+  }
+
+  // URI.read: invalid URI syntax wrapped in JsonIOException
+  @Test
+  public void testUriRead_invalidUriString_throwsJsonIOException() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"http://exa mple.com\""));
+    try {
+      TypeAdapters.URI.read(reader);
+      fail("expected JsonIOException");
+    } catch (JsonIOException expected) {
+    }
+  }
+
+  // URI.read: valid uri string
+  @Test
+  public void testUriRead_validUriString_returnsUri() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"http://example.com/path\""));
+    URI result = TypeAdapters.URI.read(reader);
+    assertEquals("http://example.com/path", result.toASCIIString());
+  }
+
+  // INET_ADDRESS.read: IP literal, no DNS lookup needed
+  @Test
+  public void testInetAddressRead_ipLiteral_returnsAddressWithMatchingHostAddress() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"127.0.0.1\""));
+    InetAddress result = TypeAdapters.INET_ADDRESS.read(reader);
+    assertEquals("127.0.0.1", result.getHostAddress());
+  }
+
+  // UUID.read: valid UUID string
+  @Test
+  public void testUuidRead_validUuidString_returnsUuid() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"123e4567-e89b-12d3-a456-426614174000\""));
+    UUID result = TypeAdapters.UUID.read(reader);
+    assertEquals(UUID.fromString("123e4567-e89b-12d3-a456-426614174000"), result);
+  }
+
+  // CALENDAR.read: parses all named fields into calendar
+  @Test
+  public void testCalendarRead_validObject_setsAllFields() throws Throwable {
+    String json = "{\"year\":2020,\"month\":3,\"dayOfMonth\":15,\"hourOfDay\":8,\"minute\":5,\"second\":59}";
+    JsonReader reader = new JsonReader(new StringReader(json));
+    Calendar result = TypeAdapters.CALENDAR.read(reader);
+    assertEquals(2020, result.get(Calendar.YEAR));
+    assertEquals(3, result.get(Calendar.MONTH));
+    assertEquals(15, result.get(Calendar.DAY_OF_MONTH));
+    assertEquals(8, result.get(Calendar.HOUR_OF_DAY));
+    assertEquals(5, result.get(Calendar.MINUTE));
+    assertEquals(59, result.get(Calendar.SECOND));
+  }
+
+  // CALENDAR.read: NULL token -> null
+  @Test
+  public void testCalendarRead_nullToken_returnsNull() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("null"));
+    assertNull(TypeAdapters.CALENDAR.read(reader));
+  }
+
+  // CALENDAR.write: writes fields in fixed order matching read() field names
+  @Test
+  public void testCalendarWrite_validCalendar_writesFieldsInOrder() throws Throwable {
+    GregorianCalendar cal = new GregorianCalendar(2020, 3, 15, 8, 5, 59);
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    TypeAdapters.CALENDAR.write(writer, cal);
+    writer.close();
+    String expected = "{\"year\":2020,\"month\":3,\"dayOfMonth\":15,\"hourOfDay\":8,\"minute\":5,\"second\":59}";
+    assertEquals(expected, sw.toString());
+  }
+
+  // LOCALE.read: language only token
+  @Test
+  public void testLocaleRead_languageOnly_returnsLocaleWithLanguage() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"en\""));
+    Locale result = TypeAdapters.LOCALE.read(reader);
+    assertEquals(new Locale("en"), result);
+  }
+
+  // LOCALE.read: language_country_variant token
+  @Test
+  public void testLocaleRead_languageCountryVariant_returnsFullLocale() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("\"en_US_WIN\""));
+    Locale result = TypeAdapters.LOCALE.read(reader);
+    assertEquals(new Locale("en", "US", "WIN"), result);
+  }
+
+  // LOCALE.read: NULL token -> null
+  @Test
+  public void testLocaleRead_nullToken_returnsNull() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("null"));
+    assertNull(TypeAdapters.LOCALE.read(reader));
+  }
+
+  // JSON_ELEMENT.read: BEGIN_ARRAY branch recursively builds JsonArray
+  @Test
+  public void testJsonElementRead_arrayToken_returnsJsonArrayWithElements() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("[1,\"two\",true]"));
+    JsonElement result = TypeAdapters.JSON_ELEMENT.read(reader);
+    JsonArray array = result.getAsJsonArray();
+    assertEquals(3, array.size());
+    assertEquals(1, array.get(0).getAsInt());
+    assertEquals("two", array.get(1).getAsString());
+    assertTrue(array.get(2).getAsBoolean());
+  }
+
+  // JSON_ELEMENT.read: BEGIN_OBJECT branch recursively builds JsonObject
+  @Test
+  public void testJsonElementRead_objectToken_returnsJsonObjectWithMembers() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("{\"a\":1,\"b\":\"x\"}"));
+    JsonElement result = TypeAdapters.JSON_ELEMENT.read(reader);
+    JsonObject obj = result.getAsJsonObject();
+    assertEquals(1, obj.get("a").getAsInt());
+    assertEquals("x", obj.get("b").getAsString());
+  }
+
+  // JSON_ELEMENT.read: NULL token -> JsonNull.INSTANCE
+  @Test
+  public void testJsonElementRead_nullToken_returnsJsonNullInstance() throws Throwable {
+    JsonReader reader = new JsonReader(new StringReader("null"));
+    JsonElement result = TypeAdapters.JSON_ELEMENT.read(reader);
+    assertTrue(result.isJsonNull());
+  }
+
+  // JSON_ELEMENT.write: null value writes null literal
+  @Test
+  public void testJsonElementWrite_javaNull_writesNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    TypeAdapters.JSON_ELEMENT.write(writer, null);
+    writer.close();
+    assertEquals("null", sw.toString());
+  }
+
+  // JSON_ELEMENT.write: JsonNull.INSTANCE writes null literal
+  @Test
+  public void testJsonElementWrite_jsonNullInstance_writesNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    TypeAdapters.JSON_ELEMENT.write(writer, JsonNull.INSTANCE);
+    writer.close();
+    assertEquals("null", sw.toString());
+  }
+
+  // ENUM_FACTORY.create: non-enum raw type -> returns null
+  @Test
+  public void testEnumFactoryCreate_nonEnumType_returnsNull() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<String> adapter = TypeAdapters.ENUM_FACTORY.create(gson, new TypeToken<String>() {});
+    assertNull(adapter);
+  }
+
+  // EnumTypeAdapter.read: SerializedName annotation value maps to constant
+  @Test
+  public void testEnumAdapterRead_serializedNameValue_returnsMatchingConstant() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<SampleEnum> adapter = TypeAdapters.ENUM_FACTORY.create(gson, new TypeToken<SampleEnum>() {});
+    JsonReader reader = new JsonReader(new StringReader("\"r\""));
+    assertEquals(SampleEnum.RED, adapter.read(reader));
+  }
+
+  // EnumTypeAdapter.read: default constant name used when no annotation present
+  @Test
+  public void testEnumAdapterRead_defaultName_returnsMatchingConstant() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<SampleEnum> adapter = TypeAdapters.ENUM_FACTORY.create(gson, new TypeToken<SampleEnum>() {});
+    JsonReader reader = new JsonReader(new StringReader("\"GREEN\""));
+    assertEquals(SampleEnum.GREEN, adapter.read(reader));
+  }
+
+  // EnumTypeAdapter.write: writes the serialized name for the constant
+  @Test
+  public void testEnumAdapterWrite_constant_writesSerializedName() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<SampleEnum> adapter = TypeAdapters.ENUM_FACTORY.create(gson, new TypeToken<SampleEnum>() {});
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    adapter.write(writer, SampleEnum.RED);
+    writer.close();
+    assertEquals("\"r\"", sw.toString());
+  }
+
+  // EnumTypeAdapter.read: NULL token -> null
+  @Test
+  public void testEnumAdapterRead_nullToken_returnsNull() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<SampleEnum> adapter = TypeAdapters.ENUM_FACTORY.create(gson, new TypeToken<SampleEnum>() {});
+    JsonReader reader = new JsonReader(new StringReader("null"));
+    assertNull(adapter.read(reader));
+  }
+
+  // newFactory(TypeToken, TypeAdapter): matching type token returns same adapter instance
+  @Test
+  public void testNewFactoryTypeToken_matchingToken_returnsSameAdapter() throws Throwable {
+    Gson gson = new Gson();
+    TypeToken<String> token = new TypeToken<String>() {};
+    TypeAdapter<String> dummy = new TypeAdapter<String>() {
+      public void write(JsonWriter out, String value) throws IOException {
+        out.value(value);
+      }
+      public String read(JsonReader in) throws IOException {
+        return in.nextString();
+      }
+    };
+    TypeAdapterFactory factory = TypeAdapters.newFactory(token, dummy);
+    TypeAdapter<String> result = factory.create(gson, new TypeToken<String>() {});
+    assertSame(dummy, result);
+  }
+
+  // STRING_FACTORY (built via newFactory(Class,...)): matching raw type returns registered adapter
+  @Test
+  public void testStringFactoryCreate_matchingType_returnsStringAdapter() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<String> result = TypeAdapters.STRING_FACTORY.create(gson, new TypeToken<String>() {});
+    assertSame(TypeAdapters.STRING, result);
+  }
+
+  // CLASS_FACTORY: non-matching raw type returns null
+  @Test
+  public void testClassFactoryCreate_nonMatchingType_returnsNull() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<Integer> result = TypeAdapters.CLASS_FACTORY.create(gson, new TypeToken<Integer>() {});
+    assertNull(result);
+  }
+
+  // BOOLEAN_FACTORY (built via newFactory(unboxed,boxed,...)): boxed type returns registered adapter
+  @Test
+  public void testBooleanFactoryCreate_boxedType_returnsBooleanAdapter() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<Boolean> result = TypeAdapters.BOOLEAN_FACTORY.create(gson, new TypeToken<Boolean>() {});
+    assertSame(TypeAdapters.BOOLEAN, result);
+  }
+
+  // CALENDAR_FACTORY (built via newFactoryForMultipleTypes): subtype GregorianCalendar matches
+  @Test
+  public void testCalendarFactoryCreate_subType_returnsAdapter() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<GregorianCalendar> result =
+        TypeAdapters.CALENDAR_FACTORY.create(gson, new TypeToken<GregorianCalendar>() {});
+    assertNotNull(result);
+  }
+
+  // CALENDAR_FACTORY: unrelated type returns null
+  @Test
+  public void testCalendarFactoryCreate_unrelatedType_returnsNull() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<Date> result = TypeAdapters.CALENDAR_FACTORY.create(gson, new TypeToken<Date>() {});
+    assertNull(result);
+  }
+
+  // JSON_ELEMENT_FACTORY (built via newTypeHierarchyFactory): subtype JsonObject matches hierarchy
+  @Test
+  public void testJsonElementFactoryCreate_subType_returnsAdapter() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<JsonObject> result =
+        TypeAdapters.JSON_ELEMENT_FACTORY.create(gson, new TypeToken<JsonObject>() {});
+    assertNotNull(result);
+  }
+
+  // JSON_ELEMENT_FACTORY: unrelated type returns null
+  @Test
+  public void testJsonElementFactoryCreate_unrelatedType_returnsNull() throws Throwable {
+    Gson gson = new Gson();
+    TypeAdapter<String> result = TypeAdapters.JSON_ELEMENT_FACTORY.create(gson, new TypeToken<String>() {});
+    assertNull(result);
+  }
+}

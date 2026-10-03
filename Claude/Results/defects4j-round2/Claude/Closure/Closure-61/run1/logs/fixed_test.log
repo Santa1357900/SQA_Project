@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-61-3npofzt9/Closure-61f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - com.google.javascript.jscomp.NodeUtilClaudeTest::testGetConditionExpression_variants
+  - com.google.javascript.jscomp.NodeUtilClaudeTest::testGetStringNumberValue_hexOverflow_matchesJsNumberCast
+[exit 0]

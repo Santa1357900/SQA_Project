@@ -1,0 +1,392 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Math (Defects4J bug Math-100)
+package: org.apache.commons.math.estimation
+class_under_test: AbstractEstimator
+test_class_to_write: AbstractEstimatorClaudeTest
+</target>
+
+<project_notes>
+Commons Math: ใช้ delta ทุกครั้งที่เทียบ double ห้าม implement UnivariateRealFunction/UnivariateFunction ถ้าไม่ได้ปรากฏใน source ให้ใช้ anonymous inner class เมื่อ interface มีเมธอดเดียว exception เป็น checked หลายตัว (เช่น MathException) จึงต้อง throws Throwable
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.math.estimation;
+
+import java.util.Arrays;
+
+import org.apache.commons.math.linear.InvalidMatrixException;
+import org.apache.commons.math.linear.RealMatrixImpl;
+
+/**
+ * Base class for implementing estimators.
+ * <p>This base class handles the boilerplates methods associated to thresholds
+ * settings, jacobian and error estimation.</p>
+ * @version $Revision$ $Date$
+ * @since 1.2
+ *
+ */
+public abstract class AbstractEstimator implements Estimator {
+
+    /**
+     * Build an abstract estimator for least squares problems.
+     */
+    protected AbstractEstimator() {
+    }
+
+    /**
+     * Set the maximal number of cost evaluations allowed.
+     * 
+     * @param maxCostEval maximal number of cost evaluations allowed
+     * @see #estimate
+     */
+    public final void setMaxCostEval(int maxCostEval) {
+        this.maxCostEval = maxCostEval;
+    }
+
+    /**
+     * Get the number of cost evaluations.
+     * 
+     * @return number of cost evaluations
+     * */
+    public final int getCostEvaluations() {
+        return costEvaluations;
+    }
+
+    /** 
+     * Get the number of jacobian evaluations.
+     * 
+     * @return number of jacobian evaluations
+     * */
+    public final int getJacobianEvaluations() {
+        return jacobianEvaluations;
+    }
+
+    /** 
+     * Update the jacobian matrix.
+     */
+    protected void updateJacobian() {
+        incrementJacobianEvaluationsCounter();
+        Arrays.fill(jacobian, 0);
+        for (int i = 0, index = 0; i < rows; i++) {
+            WeightedMeasurement wm = measurements[i];
+            double factor = -Math.sqrt(wm.getWeight());
+            for (int j = 0; j < cols; ++j) {
+                jacobian[index++] = factor * wm.getPartial(parameters[j]);
+            }
+        }
+    }
+
+    /**
+     * Increment the jacobian evaluations counter.
+     */
+    protected final void incrementJacobianEvaluationsCounter() {
+      ++jacobianEvaluations;
+    }
+
+    /** 
+     * Update the residuals array and cost function value.
+     * @exception EstimationException if the number of cost evaluations
+     * exceeds the maximum allowed
+     */
+    protected void updateResidualsAndCost()
+    throws EstimationException {
+
+        if (++costEvaluations > maxCostEval) {
+            throw new EstimationException("maximal number of evaluations exceeded ({0})",
+                                          new Object[] { new Integer(maxCostEval) });
+        }
+
+        cost = 0;
+        for (int i = 0, index = 0; i < rows; i++, index += cols) {
+            WeightedMeasurement wm = measurements[i];
+            double residual = wm.getResidual();
+            residuals[i] = Math.sqrt(wm.getWeight()) * residual;
+            cost += wm.getWeight() * residual * residual;
+        }
+        cost = Math.sqrt(cost);
+
+    }
+
+    /** 
+     * Get the Root Mean Square value.
+     * Get the Root Mean Square value, i.e. the root of the arithmetic
+     * mean of the square of all weighted residuals. This is related to the
+     * criterion that is minimized by the estimator as follows: if
+     * <em>c</em> if the criterion, and <em>n</em> is the number of
+     * measurements, then the RMS is <em>sqrt (c/n)</em>.
+     * 
+     * @param problem estimation problem
+     * @return RMS value
+     */
+    public double getRMS(EstimationProblem problem) {
+        WeightedMeasurement[] wm = problem.getMeasurements();
+        double criterion = 0;
+        for (int i = 0; i < wm.length; ++i) {
+            double residual = wm[i].getResidual();
+            criterion += wm[i].getWeight() * residual * residual;
+        }
+        return Math.sqrt(criterion / wm.length);
+    }
+
+    /**
+     * Get the Chi-Square value.
+     * @param problem estimation problem
+     * @return chi-square value
+     */
+    public double getChiSquare(EstimationProblem problem) {
+        WeightedMeasurement[] wm = problem.getMeasurements();
+        double chiSquare = 0;
+        for (int i = 0; i < wm.length; ++i) {
+            double residual = wm[i].getResidual();
+            chiSquare += residual * residual / wm[i].getWeight();
+        }
+        return chiSquare;
+    }
+
+    /**
+     * Get the covariance matrix of unbound estimated parameters.
+     * @param problem estimation problem
+     * @return covariance matrix
+     * @exception EstimationException if the covariance matrix
+     * cannot be computed (singular problem)
+     */
+    public double[][] getCovariances(EstimationProblem problem)
+      throws EstimationException {
+ 
+        // set up the jacobian
+        updateJacobian();
+
+        // compute transpose(J).J, avoiding building big intermediate matrices
+        final int rows = problem.getMeasurements().length;
+        final int cols = problem.getAllParameters().length;
+        final int max  = cols * rows;
+        double[][] jTj = new double[cols][cols];
+        for (int i = 0; i < cols; ++i) {
+            for (int j = i; j < cols; ++j) {
+                double sum = 0;
+                for (int k = 0; k < max; k += cols) {
+                    sum += jacobian[k + i] * jacobian[k + j];
+                }
+                jTj[i][j] = sum;
+                jTj[j][i] = sum;
+            }
+        }
+
+        try {
+            // compute the covariances matrix
+            return new RealMatrixImpl(jTj).inverse().getData();
+        } catch (InvalidMatrixException ime) {
+            throw new EstimationException("unable to compute covariances: singular problem",
+                                          new Object[0]);
+        }
+
+    }
+
+    /**
+     * Guess the errors in unbound estimated parameters.
+     * <p>Guessing is covariance-based, it only gives rough order of magnitude.</p>
+     * @param problem estimation problem
+     * @return errors in estimated parameters
+     * @exception EstimationException if the covariances matrix cannot be computed
+     * or the number of degrees of freedom is not positive (number of measurements
+     * lesser or equal to number of parameters)
+     */
+    public double[] guessParametersErrors(EstimationProblem problem)
+      throws EstimationException {
+        int m = problem.getMeasurements().length;
+        int p = problem.getAllParameters().length;
+        if (m <= p) {
+            throw new EstimationException("no degrees of freedom ({0} measurements, {1} parameters)",
+                                          new Object[] { new Integer(m), new Integer(p)});
+        }
+        double[] errors = new double[problem.getAllParameters().length];
+        final double c = Math.sqrt(getChiSquare(problem) / (m - p));
+        double[][] covar = getCovariances(problem);
+        for (int i = 0; i < errors.length; ++i) {
+            errors[i] = Math.sqrt(covar[i][i]) * c;
+        }
+        return errors;
+    }
+
+    /**
+     * Initialization of the common parts of the estimation.
+     * <p>This method <em>must</em> be called at the start
+     * of the {@link #estimate(EstimationProblem) estimate}
+     * method.</p>
+     * @param problem estimation problem to solve
+     */
+    protected void initializeEstimate(EstimationProblem problem) {
+
+        // reset counters
+        costEvaluations     = 0;
+        jacobianEvaluations = 0;
+
+        // retrieve the equations and the parameters
+        measurements = problem.getMeasurements();
+        parameters   = problem.getUnboundParameters();
+
+        // arrays shared with the other private methods
+        rows      = measurements.length;
+        cols      = parameters.length;
+        jacobian  = new double[rows * cols];
+        residuals = new double[rows];
+
+        cost = Double.POSITIVE_INFINITY;
+
+    }
+
+    /** 
+     * Solve an estimation problem.
+     *
+     * <p>The method should set the parameters of the problem to several
+     * trial values until it reaches convergence. If this method returns
+     * normally (i.e. without throwing an exception), then the best
+     * estimate of the parameters can be retrieved from the problem
+     * itself, through the {@link EstimationProblem#getAllParameters
+     * EstimationProblem.getAllParameters} method.</p>
+     *
+     * @param problem estimation problem to solve
+     * @exception EstimationException if the problem cannot be solved
+     *
+     */
+    public abstract void estimate(EstimationProblem problem)
+    throws EstimationException;
+
+    /** Array of measurements. */
+    protected WeightedMeasurement[] measurements;
+
+    /** Array of parameters. */
+    protected EstimatedParameter[] parameters;
+
+    /** 
+     * Jacobian matrix.
+     * <p>This matrix is in canonical form just after the calls to
+     * {@link #updateJacobian()}, but may be modified by the solver
+     * in the derived class (the {@link LevenbergMarquardtEstimator
+     * Levenberg-Marquardt estimator} does this).</p>
+     */
+    protected double[] jacobian;
+
+    /** Number of columns of the jacobian matrix. */
+    protected int cols;
+
+    /** Number of rows of the jacobian matrix. */
+    protected int rows;
+
+    /** Residuals array.
+     * <p>This array is in canonical form just after the calls to
+     * {@link #updateJacobian()}, but may be modified by the solver
+     * in the derived class (the {@link LevenbergMarquardtEstimator
+     * Levenberg-Marquardt estimator} does this).</p>
+     */
+    protected double[] residuals;
+
+    /** Cost value (square root of the sum of the residuals). */
+    protected double cost;
+
+    /** Maximal allowed number of cost evaluations. */
+    private int maxCostEval;
+
+    /** Number of cost evaluations. */
+    private int costEvaluations;
+
+    /** Number of jacobian evaluations. */
+    private int jacobianEvaluations;
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ AbstractEstimatorClaudeTest ใน package org.apache.commons.math.estimation เพื่อทดสอบคลาส AbstractEstimator ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.math.estimation;` เท่านั้น
+</instructions>

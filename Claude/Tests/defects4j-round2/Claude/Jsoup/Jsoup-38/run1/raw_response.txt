@@ -1,0 +1,258 @@
+package org.jsoup.parser;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.DocumentType;
+import org.jsoup.select.Elements;
+
+public class HtmlTreeBuilderStateClaudeTest {
+
+    // Initial: t.isDoctype() branch -> DocumentType appended, no forceQuirks => not quirks mode
+    @Test
+    public void testInitial_doctypeDeclaration_setsDoctypeNodeAndNoQuirksMode() throws Throwable {
+        Document doc = Jsoup.parse("<!DOCTYPE html><html><body>x</body></html>");
+        assertTrue(doc.childNode(0) instanceof DocumentType);
+        assertTrue(doc.quirksMode() != Document.QuirksMode.quirks);
+    }
+
+    // Initial: isWhitespace(t) branch ignores leading whitespace, stays in Initial
+    @Test
+    public void testInitial_leadingWhitespace_ignoredBeforeHtml() throws Throwable {
+        Document doc = Jsoup.parse("   \n\t<html><body>content</body></html>");
+        assertEquals("content", doc.body().text());
+    }
+
+    // Initial: else branch transitions to BeforeHtml and reprocesses token
+    @Test
+    public void testInitial_noDoctypeOrHtml_wrapsContentInHtmlBodyStructure() throws Throwable {
+        Document doc = Jsoup.parse("Hello World");
+        assertEquals("Hello World", doc.body().text());
+    }
+
+    // BeforeHtml: t.isComment() branch inserts comment at document level
+    @Test
+    public void testBeforeHtml_commentBeforeHtmlTag_insertedAsDocumentChild() throws Throwable {
+        Document doc = Jsoup.parse("<!-- lead --><html><body>y</body></html>");
+        assertTrue(doc.childNode(0) instanceof Comment);
+    }
+
+    // BeforeHtml: t.isEndTag() (not head/body/html/br) -> error, return false, parsing continues
+    @Test
+    public void testBeforeHtml_strayEndTagBeforeHtml_ignoredGracefully() throws Throwable {
+        Document doc = Jsoup.parse("</div><html><body>z</body></html>");
+        assertEquals("z", doc.body().text());
+    }
+
+    // BeforeHead: anythingElse branch inserts head then reprocesses character which cascades to body
+    @Test
+    public void testBeforeHead_textBeforeHead_endsUpInsideBody() throws Throwable {
+        Document doc = Jsoup.parse("<html>text before head</html>");
+        assertEquals("text before head", doc.body().text());
+    }
+
+    // InHead: StartTag "meta" branch -> insertEmpty preserves attributes
+    @Test
+    public void testInHead_metaTag_parsedAsEmptyElementWithAttributes() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><meta charset=\"utf-8\"></head><body></body></html>");
+        Elements metas = doc.select("meta");
+        assertEquals(1, metas.size());
+        assertEquals("utf-8", metas.first().attr("charset"));
+    }
+
+    // InHead: StartTag "base" branch -> maybeSetBaseUri when href present, used for absUrl resolution
+    @Test
+    public void testInHead_baseTagWithHref_setsBaseUriForRelativeLinks() throws Throwable {
+        String html = "<html><head><base href=\"http://example.com/dir/\"></head><body><a href=\"page.html\">L</a></body></html>";
+        Document doc = Jsoup.parse(html, "http://ignored.com/");
+        Element a = doc.select("a").first();
+        assertEquals("http://example.com/dir/page.html", a.absUrl("href"));
+    }
+
+    // InHead: StartTag "title" -> handleRcData, entities decoded but tags not parsed
+    @Test
+    public void testInHead_titleTag_rcDataParsedAsText() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>A &amp; B</title></head><body></body></html>");
+        assertEquals("A & B", doc.title());
+    }
+
+    // InHead: StartTag "script" -> tokeniser transitions to ScriptData, content kept literal
+    @Test
+    public void testInHead_scriptTag_contentTreatedLiterally() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><script>var x = 1 < 2;</script></head><body></body></html>");
+        Element script = doc.select("script").first();
+        assertTrue(script.html().contains("var x = 1"));
+    }
+
+    // InHeadNoscript: style startTag delegates processing to InHead
+    @Test
+    public void testInHeadNoscript_styleInsideNoscript_delegatesToInHead() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><noscript><style>.a{}</style></noscript></head><body></body></html>");
+        assertEquals(1, doc.select("style").size());
+    }
+
+    // AfterHead: StartTag "body" -> insert, framesetOk(false), transition InBody
+    @Test
+    public void testAfterHead_bodyStartTag_transitionsToInBody() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body class=\"main\">hi</body></html>");
+        assertEquals("main", doc.body().attr("class"));
+        assertEquals("hi", doc.body().text());
+    }
+
+    // InBody StartTag: "p" in InBodyStartPClosers closes previous open <p> via inButtonScope check
+    @Test
+    public void testInBody_pTagAutoCloses_previousOpenParagraph() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><p>one<p>two</body></html>");
+        Elements ps = doc.select("p");
+        assertEquals(2, ps.size());
+        assertEquals("one", ps.get(0).text());
+        assertEquals("two", ps.get(1).text());
+    }
+
+    // InBody StartTag: Headings branch pops current heading element before inserting new one
+    @Test
+    public void testInBody_headingAutoCloses_previousOpenHeading() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><h1>A<h2>B</body></html>");
+        Element h1 = doc.select("h1").first();
+        Element h2 = doc.select("h2").first();
+        assertEquals("A", h1.text());
+        assertEquals("B", h2.text());
+        assertEquals(h1.parent(), h2.parent());
+    }
+
+    // InBody StartTag "li": stack scan closes previous open li before inserting new
+    @Test
+    public void testInBody_liAutoCloses_previousOpenListItem() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><ul><li>one<li>two</ul></body></html>");
+        Elements lis = doc.select("li");
+        assertEquals(2, lis.size());
+        assertEquals("one", lis.get(0).text());
+        assertEquals("two", lis.get(1).text());
+    }
+
+    // InBody StartTag DdDt: closes previous dd/dt before inserting new one
+    @Test
+    public void testInBody_ddDtAutoCloses_previousOpenDefinition() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><dl><dt>Term<dd>Def</dl></body></html>");
+        assertEquals("Term", doc.select("dt").first().text());
+        assertEquals("Def", doc.select("dd").first().text());
+    }
+
+    // InBody StartTag "a": active formatting element "a" present -> closes previous anchor first
+    @Test
+    public void testInBody_nestedATag_closesPreviousAnchor() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><a href=\"1\">one<a href=\"2\">two</a></a></body></html>");
+        Elements as = doc.select("a");
+        assertEquals(2, as.size());
+        assertEquals("one", as.get(0).text());
+        assertEquals("two", as.get(1).text());
+    }
+
+    // InBody StartTag "table": closes open <p> in button scope when document is not in quirks mode
+    @Test
+    public void testInBody_tableStartTag_closesOpenParagraphWhenNotQuirks() throws Throwable {
+        Document doc = Jsoup.parse("<!DOCTYPE html><html><body><p>Before<table><tr><td>Cell</td></tr></table></body></html>");
+        Element p = doc.select("p").first();
+        assertEquals("Before", p.text());
+        assertEquals(0, p.select("table").size());
+    }
+
+    // InBody StartTag "hr": closes open p in button scope then inserts empty hr as sibling
+    @Test
+    public void testInBody_hrTag_closesOpenParagraphBeforeInsertion() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><p>Test<hr></body></html>");
+        Element p = doc.select("p").first();
+        assertEquals("Test", p.text());
+        Element hr = doc.select("hr").first();
+        assertEquals(p.parent(), hr.parent());
+    }
+
+    // InBody StartTag "image": reprocessed as "img" tag name
+    @Test
+    public void testInBody_imageTagRenamed_toImgElement() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><image src=\"x.png\"></body></html>");
+        assertEquals(1, doc.select("img").size());
+        assertEquals(0, doc.select("image").size());
+    }
+
+    // InBody StartTag "textarea": content parsed as RCDATA (tags not parsed, entities decoded)
+    @Test
+    public void testInBody_textareaContent_treatedAsRcData() throws Throwable {
+        Document frag = Jsoup.parseBodyFragment("<textarea>Some &amp; <b>Text</b></textarea>");
+        Element textarea = frag.select("textarea").first();
+        assertEquals("Some & <b>Text</b>", textarea.text());
+    }
+
+    // InBody StartTag "xmp": content parsed as RAWTEXT (tags not parsed, entities not decoded)
+    @Test
+    public void testInBody_xmpContent_treatedAsRawText() throws Throwable {
+        Document frag = Jsoup.parseBodyFragment("<xmp><tag>content</xmp>");
+        Element xmp = frag.select("xmp").first();
+        assertEquals("<tag>content", xmp.text());
+    }
+
+    // InBody StartTag "select": transitions to InSelect and children options parsed correctly
+    @Test
+    public void testInBody_selectInsideBody_parsesOptionsCorrectly() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><select><option>A</option><option>B</option></select></body></html>");
+        Elements options = doc.select("option");
+        assertEquals(2, options.size());
+        assertEquals("A", options.get(0).text());
+    }
+
+    // InSelect StartTag "option": closes currently open option before inserting new one
+    @Test
+    public void testInSelect_nestedOption_autoClosesPrevious() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><select><option>A<option>B</option></select></body></html>");
+        Elements options = doc.select("option");
+        assertEquals(2, options.size());
+        assertEquals("A", options.get(0).text());
+        assertEquals("B", options.get(1).text());
+    }
+
+    // InSelect StartTag "input": error, closes select via EndTag reprocessing, input ends outside select
+    @Test
+    public void testInSelect_inputTag_closesSelectAndReprocessesOutside() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><select><input></select></body></html>");
+        Element select = doc.select("select").first();
+        Element input = doc.select("input").first();
+        assertEquals(0, select.children().size());
+        assertEquals(select.parent(), input.parent());
+    }
+
+    // InCaption: caption closed on end tag, transitions back to InTable before row is processed
+    @Test
+    public void testInCaption_captionElement_notNestedInsideRow() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><table><caption>Cap</caption><tr><td>Cell</td></tr></table></body></html>");
+        Element caption = doc.select("caption").first();
+        assertEquals("Cap", caption.text());
+        assertEquals(0, caption.select("td").size());
+    }
+
+    // InColumnGroup StartTag "col": inserted as empty element within colgroup
+    @Test
+    public void testInColumnGroup_colTag_insertedInsideColgroup() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><table><colgroup><col><col></colgroup><tr><td>X</td></tr></table></body></html>");
+        Elements cols = doc.select("col");
+        assertEquals(2, cols.size());
+    }
+
+    // InBody EndTag: InBodyStartApplets branch must check inScope(name), not the literal string "name" (bug region)
+    @Test
+    public void testInBody_endTagApplet_nestedUnclosedTag_closesAppletPerHtml5Spec() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><applet><name>foo</applet>bar</body></html>");
+        Element applet = doc.select("applet").first();
+        assertEquals("foo", applet.text());
+    }
+
+    // Entry point sanity check: parseBodyFragment builds body content directly without extra wrapper text
+    @Test
+    public void testParseBodyFragment_simpleFragment_parsesWithoutHtmlHeadWrapper() throws Throwable {
+        Document frag = Jsoup.parseBodyFragment("<p>fragment text</p>");
+        assertEquals("fragment text", frag.body().text());
+    }
+}

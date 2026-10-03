@@ -1,0 +1,394 @@
+package org.apache.commons.cli;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Properties;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ParserClaudeTest
+{
+    private Parser parser;
+    private Options options;
+
+    @Before
+    public void setUp() throws Throwable
+    {
+        parser = new PosixParser();
+        options = new Options();
+    }
+
+    // exercises: option token starting with "-" recognized -> processOption -> cmd.addOption
+    @Test
+    public void testParse_singleOption_flagRecognized() throws Throwable {
+        options.addOption("a", false, "toggle a");
+        CommandLine cmd = parser.parse(options, new String[] {"-a"});
+        assertTrue(cmd.hasOption("a"));
+    }
+
+    // exercises: arguments == null branch -> converted to empty array, no options/args set
+    @Test
+    public void testParse_nullArguments_resultsInEmptyCommandLine() throws Throwable {
+        options.addOption("a", false, "toggle a");
+        CommandLine cmd = parser.parse(options, (String[]) null);
+        assertFalse(cmd.hasOption("a"));
+        assertEquals(0, cmd.getArgList().size());
+    }
+
+    // exercises: non-option argument branch (not starting with '-') -> cmd.addArg
+    @Test
+    public void testParse_plainArgumentNoOptions_addsToArgList() throws Throwable {
+        CommandLine cmd = parser.parse(options, new String[] {"value1"});
+        assertEquals(1, cmd.getArgList().size());
+        assertEquals("value1", cmd.getArgList().get(0));
+    }
+
+    // exercises: parse(Options,String[],Properties) overload -> processProperties adds value
+    @Test
+    public void testParse_withPropertiesOverload_addsOptionValue() throws Throwable {
+        options.addOption("f", true, "file option");
+        Properties props = new Properties();
+        props.setProperty("f", "myfile.txt");
+        CommandLine cmd = parser.parse(options, new String[0], props);
+        assertEquals("myfile.txt", cmd.getOptionValue("f"));
+    }
+
+    // exercises: parse(Options,String[],boolean) overload, stopAtNonOption true eats remaining raw tokens
+    @Test
+    public void testParse_stopAtNonOptionOverload_stopsAtNonOption() throws Throwable {
+        options.addOption("a", false, "toggle a");
+        CommandLine cmd = parser.parse(options, new String[] {"-a", "value", "-a"}, true);
+        assertTrue(cmd.hasOption("a"));
+        List args = cmd.getArgList();
+        assertEquals(2, args.size());
+        assertEquals("value", args.get(0));
+        assertEquals("-a", args.get(1));
+    }
+
+    // exercises: unrecognized option token, stopAtNonOption=false -> UnrecognizedOptionException
+    @Test
+    public void testParse_fullOverload_unrecognizedOptionStopAtNonOptionFalse_throws() throws Throwable {
+        options.addOption("a", false, "toggle a");
+        try
+        {
+            parser.parse(options, new String[] {"-x"}, (Properties) null, false);
+            fail("expected UnrecognizedOptionException");
+        }
+        catch (UnrecognizedOptionException expected)
+        {
+            assertTrue(expected.getMessage().contains("-x"));
+        }
+    }
+
+    // exercises: unrecognized option token, stopAtNonOption=true -> eatTheRest, raw arg added
+    @Test
+    public void testParse_fullOverload_unrecognizedOptionStopAtNonOptionTrue_addsArgAndStops() throws Throwable {
+        options.addOption("a", false, "toggle a");
+        CommandLine cmd = parser.parse(options, new String[] {"-x", "rest"}, (Properties) null, true);
+        assertFalse(cmd.hasOption("a"));
+        List args = cmd.getArgList();
+        assertEquals(2, args.size());
+        assertEquals("-x", args.get(0));
+        assertEquals("rest", args.get(1));
+    }
+
+    // exercises: "--" token eats rest, and a second "--" within eaten tokens is not re-added
+    @Test
+    public void testParse_doubleDash_eatsRestSkipsExtraDoubleDash() throws Throwable {
+        CommandLine cmd = parser.parse(options, new String[] {"--", "foo", "--", "bar"});
+        List args = cmd.getArgList();
+        assertEquals(2, args.size());
+        assertEquals("foo", args.get(0));
+        assertEquals("bar", args.get(1));
+    }
+
+    // exercises: "-" token with stopAtNonOption=false -> cmd.addArg(t) branch
+    @Test
+    public void testParse_singleDashNotStopAtNonOption_addedAsArg() throws Throwable {
+        options.addOption("a", false, "toggle a");
+        options.addOption("b", false, "toggle b");
+        CommandLine cmd = parser.parse(options, new String[] {"-b", "-", "-a", "-"});
+        assertTrue(cmd.hasOption("a"));
+        assertTrue(cmd.hasOption("b"));
+        assertEquals(2, cmd.getArgList().size());
+    }
+
+    // exercises: "-" token with stopAtNonOption=true -> eatTheRest true without adding "-" itself
+    @Test
+    public void testParse_singleDashStopAtNonOption_eatsRest() throws Throwable {
+        options.addOption("a", false, "toggle a");
+        options.addOption("b", false, "toggle b");
+        CommandLine cmd = parser.parse(options, new String[] {"-a", "-", "-b"}, true);
+        assertTrue(cmd.hasOption("a"));
+        assertFalse(cmd.hasOption("b"));
+        List args = cmd.getArgList();
+        assertEquals(1, args.size());
+        assertEquals("-b", args.get(0));
+    }
+
+    // exercises: reused Options instance across two parse calls -> prior value cleared (helpOptions loop)
+    @Test
+    public void testParse_reuseOptionsInstance_clearsPreviousValues() throws Throwable {
+        options.addOption("f", true, "file");
+        parser.parse(options, new String[] {"-f", "first.txt"});
+        CommandLine cmd2 = parser.parse(options, new String[] {"-f", "second.txt"});
+        assertEquals("second.txt", cmd2.getOptionValue("f"));
+    }
+
+    // exercises: checkRequiredOptions throws when required option not supplied anywhere
+    @Test
+    public void testParse_requiredOptionMissingEntirely_throwsMissingOptionException() throws Throwable {
+        Option required = new Option("r", false, "required flag");
+        required.setRequired(true);
+        options.addOption(required);
+        try
+        {
+            parser.parse(options, new String[0]);
+            fail("expected MissingOptionException");
+        }
+        catch (MissingOptionException expected)
+        {
+            // expected
+        }
+    }
+
+    // BUG ORACLE: required option satisfied only via Properties must not raise MissingOptionException
+    @Test
+    public void testParse_requiredOptionSatisfiedViaProperties_noExceptionAndHasOption() throws Throwable {
+        Option required = new Option("f", false, "required flag");
+        required.setRequired(true);
+        options.addOption(required);
+
+        Properties props = new Properties();
+        props.setProperty("f", "true");
+
+        CommandLine cmd = parser.parse(options, new String[0], props);
+        assertTrue(cmd.hasOption("f"));
+    }
+
+    // exercises: processOption removes satisfied required option key from requiredOptions list
+    @Test
+    public void testParse_requiredOptionSatisfiedViaCommandLine_requiredListEmptyAfterParse() throws Throwable {
+        Option required = new Option("r", false, "required flag");
+        required.setRequired(true);
+        options.addOption(required);
+
+        parser.parse(options, new String[] {"-r"});
+        assertTrue(parser.getRequiredOptions().isEmpty());
+    }
+
+    // exercises: processProperties(null) returns immediately, cmd untouched
+    @Test
+    public void testProcessProperties_null_doesNothing() throws Throwable {
+        options.addOption("a", false, "toggle a");
+        CommandLine cmd = parser.parse(options, new String[0]);
+        parser.processProperties(null);
+        assertSame(cmd, parser.cmd);
+        assertFalse(cmd.hasOption("a"));
+    }
+
+    // exercises: property skipped because cmd already has option set from command line
+    @Test
+    public void testProcessProperties_optionAlreadyOnCommandLine_notOverridden() throws Throwable {
+        options.addOption("a", false, "toggle a");
+        CommandLine cmd = parser.parse(options, new String[] {"-a"});
+        Properties props = new Properties();
+        props.setProperty("a", "false");
+        parser.processProperties(props);
+        assertTrue(cmd.hasOption("a"));
+    }
+
+    // exercises: hasArg option whose Option already carries a value -> property value ignored
+    @Test
+    public void testProcessProperties_hasArgOptionAlreadyHasValues_propertyValueNotAdded() throws Throwable {
+        options.addOption("f", true, "file");
+        parser.parse(options, new String[0]);
+        Option opt = options.getOption("f");
+        opt.addValueForProcessing("preset.txt");
+
+        Properties props = new Properties();
+        props.setProperty("f", "prop.txt");
+        parser.processProperties(props);
+
+        assertEquals("preset.txt", parser.cmd.getOptionValue("f"));
+    }
+
+    // exercises: hasArg option with no existing value -> property value is added
+    @Test
+    public void testProcessProperties_hasArgNoExistingValue_valueAdded() throws Throwable {
+        options.addOption("f", true, "file");
+        parser.parse(options, new String[0]);
+        Properties props = new Properties();
+        props.setProperty("f", "fromprops.txt");
+        parser.processProperties(props);
+        assertEquals("fromprops.txt", parser.cmd.getOptionValue("f"));
+    }
+
+    // exercises: flag option (hasArg=false) with value not yes/true/1 -> not added to cmd
+    @Test
+    public void testProcessProperties_flagFalseValue_notAdded() throws Throwable {
+        options.addOption("e", false, "toggle e");
+        parser.parse(options, new String[0]);
+        Properties props = new Properties();
+        props.setProperty("e", "false");
+        parser.processProperties(props);
+        assertFalse(parser.cmd.hasOption("e"));
+    }
+
+    // exercises: flag option with value "true" -> added to cmd
+    @Test
+    public void testProcessProperties_flagTrueValue_added() throws Throwable {
+        options.addOption("e", false, "toggle e");
+        parser.parse(options, new String[0]);
+        Properties props = new Properties();
+        props.setProperty("e", "true");
+        parser.processProperties(props);
+        assertTrue(parser.cmd.hasOption("e"));
+    }
+
+    // exercises: processArgs consumes single value token, stores it, iterator exhausted
+    @Test
+    public void testProcessArgs_singleValue_storesValue() throws Throwable {
+        options.addOption("a", true, "desc");
+        parser.parse(options, new String[0]);
+        Option opt = new Option("a", true, "desc");
+        List tokens = Arrays.asList(new String[] {"value1"});
+        ListIterator it = tokens.listIterator();
+        parser.processArgs(opt, it);
+        assertEquals("value1", opt.getValue());
+        assertFalse(it.hasNext());
+    }
+
+    // exercises: second value beyond single-arg limit causes iter.previous()+break, only first stored
+    @Test
+    public void testProcessArgs_multipleValuesSingleArgOption_onlyFirstStored() throws Throwable {
+        options.addOption("a", true, "desc");
+        parser.parse(options, new String[0]);
+        Option opt = new Option("a", true, "desc");
+        List tokens = Arrays.asList(new String[] {"value1", "value2"});
+        ListIterator it = tokens.listIterator();
+        parser.processArgs(opt, it);
+        assertEquals("value1", opt.getValue());
+        assertTrue(it.hasNext());
+        assertEquals("value2", it.next());
+    }
+
+    // exercises: token matching a recognized option breaks loop immediately -> no values -> MissingArgumentException
+    @Test
+    public void testProcessArgs_tokenIsRecognizedOption_throwsMissingArgumentException() throws Throwable {
+        options.addOption("a", true, "desc");
+        options.addOption("b", false, "desc b");
+        parser.parse(options, new String[0]);
+        Option opt = new Option("a", true, "desc");
+        List tokens = Arrays.asList(new String[] {"-b"});
+        ListIterator it = tokens.listIterator();
+        try
+        {
+            parser.processArgs(opt, it);
+            fail("expected MissingArgumentException");
+        }
+        catch (MissingArgumentException expected)
+        {
+            // expected
+        }
+    }
+
+    // exercises: zero-iteration loop, opt.getValues()==null && !hasOptionalArg -> MissingArgumentException
+    @Test
+    public void testProcessArgs_emptyIterator_throwsMissingArgumentException() throws Throwable {
+        options.addOption("a", true, "desc");
+        parser.parse(options, new String[0]);
+        Option opt = new Option("a", true, "desc");
+        List tokens = Arrays.asList(new String[0]);
+        ListIterator it = tokens.listIterator();
+        try
+        {
+            parser.processArgs(opt, it);
+            fail("expected MissingArgumentException");
+        }
+        catch (MissingArgumentException expected)
+        {
+            // expected
+        }
+    }
+
+    // exercises: processOption throws UnrecognizedOptionException for unknown token
+    @Test
+    public void testProcessOption_unrecognizedOption_throwsUnrecognizedOptionException() throws Throwable {
+        parser.parse(options, new String[0]);
+        List tokens = Arrays.asList(new String[] {"-z"});
+        ListIterator it = tokens.listIterator();
+        try
+        {
+            parser.processOption("-z", it);
+            fail("expected UnrecognizedOptionException");
+        }
+        catch (UnrecognizedOptionException expected)
+        {
+            assertTrue(expected.getMessage().contains("-z"));
+        }
+    }
+
+    // exercises: processOption removes required option key from requiredOptions once processed
+    @Test
+    public void testProcessOption_requiredOptionRemovedFromRequiredList() throws Throwable {
+        Option required = new Option("r", false, "required flag");
+        required.setRequired(true);
+        options.addOption(required);
+        parser.setOptions(options);
+        parser.cmd = new CommandLine();
+        List tokens = Arrays.asList(new String[] {"-r"});
+        ListIterator it = tokens.listIterator();
+        parser.processOption("-r", it);
+        assertFalse(parser.getRequiredOptions().contains("r"));
+    }
+
+    // exercises: checkRequiredOptions with empty required list -> no exception thrown
+    @Test
+    public void testCheckRequiredOptions_emptyRequiredList_noException() throws Throwable {
+        parser.setOptions(new Options());
+        parser.checkRequiredOptions();
+        assertTrue(parser.getRequiredOptions().isEmpty());
+    }
+
+    // exercises: checkRequiredOptions with non-empty required list -> MissingOptionException
+    @Test
+    public void testCheckRequiredOptions_nonEmptyRequiredList_throwsMissingOptionException() throws Throwable {
+        Option required = new Option("r", false, "required flag");
+        required.setRequired(true);
+        Options opts = new Options();
+        opts.addOption(required);
+        parser.setOptions(opts);
+        try
+        {
+            parser.checkRequiredOptions();
+            fail("expected MissingOptionException");
+        }
+        catch (MissingOptionException expected)
+        {
+            // expected
+        }
+    }
+
+    // exercises: setOptions stores the given Options instance, retrievable via getOptions
+    @Test
+    public void testSetOptionsGetOptions_returnsSameInstance() throws Throwable {
+        Options opts = new Options();
+        parser.setOptions(opts);
+        assertSame(opts, parser.getOptions());
+    }
+
+    // exercises: setOptions populates requiredOptions list with the required option's key
+    @Test
+    public void testGetRequiredOptions_containsRequiredOptionAfterSetOptions() throws Throwable {
+        Option required = new Option("r", false, "required flag");
+        required.setRequired(true);
+        Options opts = new Options();
+        opts.addOption(required);
+        parser.setOptions(opts);
+        assertTrue(parser.getRequiredOptions().contains("r"));
+    }
+}

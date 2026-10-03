@@ -1,0 +1,656 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Math (Defects4J bug Math-13)
+package: org.apache.commons.math3.optimization.general
+class_under_test: AbstractLeastSquaresOptimizer
+test_class_to_write: AbstractLeastSquaresOptimizerClaudeTest
+</target>
+
+<project_notes>
+Commons Math: ใช้ delta ทุกครั้งที่เทียบ double ห้าม implement UnivariateRealFunction/UnivariateFunction ถ้าไม่ได้ปรากฏใน source ให้ใช้ anonymous inner class เมื่อ interface มีเมธอดเดียว exception เป็น checked หลายตัว (เช่น MathException) จึงต้อง throws Throwable
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.math3.optimization.general;
+
+import org.apache.commons.math3.analysis.DifferentiableMultivariateVectorFunction;
+import org.apache.commons.math3.analysis.FunctionUtils;
+import org.apache.commons.math3.analysis.differentiation.DerivativeStructure;
+import org.apache.commons.math3.analysis.differentiation.MultivariateDifferentiableVectorFunction;
+import org.apache.commons.math3.exception.DimensionMismatchException;
+import org.apache.commons.math3.exception.NumberIsTooSmallException;
+import org.apache.commons.math3.exception.util.LocalizedFormats;
+import org.apache.commons.math3.linear.ArrayRealVector;
+import org.apache.commons.math3.linear.RealMatrix;
+import org.apache.commons.math3.linear.DiagonalMatrix;
+import org.apache.commons.math3.linear.DecompositionSolver;
+import org.apache.commons.math3.linear.MatrixUtils;
+import org.apache.commons.math3.linear.QRDecomposition;
+import org.apache.commons.math3.linear.EigenDecomposition;
+import org.apache.commons.math3.optimization.OptimizationData;
+import org.apache.commons.math3.optimization.InitialGuess;
+import org.apache.commons.math3.optimization.Target;
+import org.apache.commons.math3.optimization.Weight;
+import org.apache.commons.math3.optimization.ConvergenceChecker;
+import org.apache.commons.math3.optimization.DifferentiableMultivariateVectorOptimizer;
+import org.apache.commons.math3.optimization.PointVectorValuePair;
+import org.apache.commons.math3.optimization.direct.BaseAbstractMultivariateVectorOptimizer;
+import org.apache.commons.math3.util.FastMath;
+
+/**
+ * Base class for implementing least squares optimizers.
+ * It handles the boilerplate methods associated to thresholds settings,
+ * Jacobian and error estimation.
+ * <br/>
+ * This class constructs the Jacobian matrix of the function argument in method
+ * {@link BaseAbstractMultivariateVectorOptimizer#optimize(int,MultivariateVectorFunction,OptimizationData[])
+ * optimize} and assumes that the rows of that matrix iterate on the model
+ * functions while the columns iterate on the parameters; thus, the numbers
+ * of rows is equal to the dimension of the
+ * {@link org.apache.commons.math3.optimization.Target Target} while
+ * the number of columns is equal to the dimension of the
+ * {@link org.apache.commons.math3.optimization.InitialGuess InitialGuess}.
+ *
+ * @version $Id$
+ * @deprecated As of 3.1 (to be removed in 4.0).
+ * @since 1.2
+ */
+@Deprecated
+public abstract class AbstractLeastSquaresOptimizer
+    extends BaseAbstractMultivariateVectorOptimizer<DifferentiableMultivariateVectorFunction>
+    implements DifferentiableMultivariateVectorOptimizer {
+    /**
+     * Singularity threshold (cf. {@link #getCovariances(double)}).
+     * @deprecated As of 3.1.
+     */
+    @Deprecated
+    private static final double DEFAULT_SINGULARITY_THRESHOLD = 1e-14;
+    /**
+     * Jacobian matrix of the weighted residuals.
+     * This matrix is in canonical form just after the calls to
+     * {@link #updateJacobian()}, but may be modified by the solver
+     * in the derived class (the {@link LevenbergMarquardtOptimizer
+     * Levenberg-Marquardt optimizer} does this).
+     * @deprecated As of 3.1. To be removed in 4.0. Please use
+     * {@link #computeWeightedJacobian(double[])} instead.
+     */
+    @Deprecated
+    protected double[][] weightedResidualJacobian;
+    /** Number of columns of the jacobian matrix.
+     * @deprecated As of 3.1.
+     */
+    @Deprecated
+    protected int cols;
+    /** Number of rows of the jacobian matrix.
+     * @deprecated As of 3.1.
+     */
+    @Deprecated
+    protected int rows;
+    /** Current point.
+     * @deprecated As of 3.1.
+     */
+    @Deprecated
+    protected double[] point;
+    /** Current objective function value.
+     * @deprecated As of 3.1.
+     */
+    @Deprecated
+    protected double[] objective;
+    /** Weighted residuals
+     * @deprecated As of 3.1.
+     */
+    @Deprecated
+    protected double[] weightedResiduals;
+    /** Cost value (square root of the sum of the residuals).
+     * @deprecated As of 3.1. Field to become "private" in 4.0.
+     * Please use {@link #setCost(double)}.
+     */
+    @Deprecated
+    protected double cost;
+    /** Objective function derivatives. */
+    private MultivariateDifferentiableVectorFunction jF;
+    /** Number of evaluations of the Jacobian. */
+    private int jacobianEvaluations;
+    /** Square-root of the weight matrix. */
+    private RealMatrix weightMatrixSqrt;
+
+    /**
+     * Simple constructor with default settings.
+     * The convergence check is set to a {@link
+     * org.apache.commons.math3.optimization.SimpleVectorValueChecker}.
+     * @deprecated See {@link org.apache.commons.math3.optimization.SimpleValueChecker#SimpleValueChecker()}
+     */
+    @Deprecated
+    protected AbstractLeastSquaresOptimizer() {}
+
+    /**
+     * @param checker Convergence checker.
+     */
+    protected AbstractLeastSquaresOptimizer(ConvergenceChecker<PointVectorValuePair> checker) {
+        super(checker);
+    }
+
+    /**
+     * @return the number of evaluations of the Jacobian function.
+     */
+    public int getJacobianEvaluations() {
+        return jacobianEvaluations;
+    }
+
+    /**
+     * Update the jacobian matrix.
+     *
+     * @throws DimensionMismatchException if the Jacobian dimension does not
+     * match problem dimension.
+     * @deprecated As of 3.1. Please use {@link #computeWeightedJacobian(double[])}
+     * instead.
+     */
+    @Deprecated
+    protected void updateJacobian() {
+        final RealMatrix weightedJacobian = computeWeightedJacobian(point);
+        weightedResidualJacobian = weightedJacobian.scalarMultiply(-1).getData();
+    }
+
+    /**
+     * Computes the Jacobian matrix.
+     *
+     * @param params Model parameters at which to compute the Jacobian.
+     * @return the weighted Jacobian: W<sup>1/2</sup> J.
+     * @throws DimensionMismatchException if the Jacobian dimension does not
+     * match problem dimension.
+     * @since 3.1
+     */
+    protected RealMatrix computeWeightedJacobian(double[] params) {
+        ++jacobianEvaluations;
+
+        final DerivativeStructure[] dsPoint = new DerivativeStructure[params.length];
+        final int nC = params.length;
+        for (int i = 0; i < nC; ++i) {
+            dsPoint[i] = new DerivativeStructure(nC, 1, i, params[i]);
+        }
+        final DerivativeStructure[] dsValue = jF.value(dsPoint);
+        final int nR = getTarget().length;
+        if (dsValue.length != nR) {
+            throw new DimensionMismatchException(dsValue.length, nR);
+        }
+        final double[][] jacobianData = new double[nR][nC];
+        for (int i = 0; i < nR; ++i) {
+            int[] orders = new int[nC];
+            for (int j = 0; j < nC; ++j) {
+                orders[j] = 1;
+                jacobianData[i][j] = dsValue[i].getPartialDerivative(orders);
+                orders[j] = 0;
+            }
+        }
+
+        return weightMatrixSqrt.multiply(MatrixUtils.createRealMatrix(jacobianData));
+    }
+
+    /**
+     * Update the residuals array and cost function value.
+     * @throws DimensionMismatchException if the dimension does not match the
+     * problem dimension.
+     * @throws org.apache.commons.math3.exception.TooManyEvaluationsException
+     * if the maximal number of evaluations is exceeded.
+     * @deprecated As of 3.1. Please use {@link #computeResiduals(double[])},
+     * {@link #computeObjectiveValue(double[])}, {@link #computeCost(double[])}
+     * and {@link #setCost(double)} instead.
+     */
+    @Deprecated
+    protected void updateResidualsAndCost() {
+        objective = computeObjectiveValue(point);
+        final double[] res = computeResiduals(objective);
+
+        // Compute cost.
+        cost = computeCost(res);
+
+        // Compute weighted residuals.
+        final ArrayRealVector residuals = new ArrayRealVector(res);
+        weightedResiduals = weightMatrixSqrt.operate(residuals).toArray();
+    }
+
+    /**
+     * Computes the cost.
+     *
+     * @param residuals Residuals.
+     * @return the cost.
+     * @see #computeResiduals(double[])
+     * @since 3.1
+     */
+    protected double computeCost(double[] residuals) {
+        final ArrayRealVector r = new ArrayRealVector(residuals);
+        return FastMath.sqrt(r.dotProduct(getWeight().operate(r)));
+    }
+
+    /**
+     * Get the Root Mean Square value.
+     * Get the Root Mean Square value, i.e. the root of the arithmetic
+     * mean of the square of all weighted residuals. This is related to the
+     * criterion that is minimized by the optimizer as follows: if
+     * <em>c</em> if the criterion, and <em>n</em> is the number of
+     * measurements, then the RMS is <em>sqrt (c/n)</em>.
+     *
+     * @return RMS value
+     */
+    public double getRMS() {
+        return FastMath.sqrt(getChiSquare() / rows);
+    }
+
+    /**
+     * Get a Chi-Square-like value assuming the N residuals follow N
+     * distinct normal distributions centered on 0 and whose variances are
+     * the reciprocal of the weights.
+     * @return chi-square value
+     */
+    public double getChiSquare() {
+        return cost * cost;
+    }
+
+    /**
+     * Gets the square-root of the weight matrix.
+     *
+     * @return the square-root of the weight matrix.
+     * @since 3.1
+     */
+    public RealMatrix getWeightSquareRoot() {
+        return weightMatrixSqrt.copy();
+    }
+
+    /**
+     * Sets the cost.
+     *
+     * @param cost Cost value.
+     * @since 3.1
+     */
+    protected void setCost(double cost) {
+        this.cost = cost;
+    }
+
+    /**
+     * Get the covariance matrix of the optimized parameters.
+     *
+     * @return the covariance matrix.
+     * @throws org.apache.commons.math3.linear.SingularMatrixException
+     * if the covariance matrix cannot be computed (singular problem).
+     * @see #getCovariances(double)
+     * @deprecated As of 3.1. Please use {@link #computeCovariances(double[],double)}
+     * instead.
+     */
+    @Deprecated
+    public double[][] getCovariances() {
+        return getCovariances(DEFAULT_SINGULARITY_THRESHOLD);
+    }
+
+    /**
+     * Get the covariance matrix of the optimized parameters.
+     * <br/>
+     * Note that this operation involves the inversion of the
+     * <code>J<sup>T</sup>J</code> matrix, where {@code J} is the
+     * Jacobian matrix.
+     * The {@code threshold} parameter is a way for the caller to specify
+     * that the result of this computation should be considered meaningless,
+     * and thus trigger an exception.
+     *
+     * @param threshold Singularity threshold.
+     * @return the covariance matrix.
+     * @throws org.apache.commons.math3.linear.SingularMatrixException
+     * if the covariance matrix cannot be computed (singular problem).
+     * @deprecated As of 3.1. Please use {@link #computeCovariances(double[],double)}
+     * instead.
+     */
+    @Deprecated
+    public double[][] getCovariances(double threshold) {
+        return computeCovariances(point, threshold);
+    }
+
+    /**
+     * Get the covariance matrix of the optimized parameters.
+     * <br/>
+     * Note that this operation involves the inversion of the
+     * <code>J<sup>T</sup>J</code> matrix, where {@code J} is the
+     * Jacobian matrix.
+     * The {@code threshold} parameter is a way for the caller to specify
+     * that the result of this computation should be considered meaningless,
+     * and thus trigger an exception.
+     *
+     * @param params Model parameters.
+     * @param threshold Singularity threshold.
+     * @return the covariance matrix.
+     * @throws org.apache.commons.math3.linear.SingularMatrixException
+     * if the covariance matrix cannot be computed (singular problem).
+     * @since 3.1
+     */
+    public double[][] computeCovariances(double[] params,
+                                         double threshold) {
+        // Set up the Jacobian.
+        final RealMatrix j = computeWeightedJacobian(params);
+
+        // Compute transpose(J)J.
+        final RealMatrix jTj = j.transpose().multiply(j);
+
+        // Compute the covariances matrix.
+        final DecompositionSolver solver
+            = new QRDecomposition(jTj, threshold).getSolver();
+        return solver.getInverse().getData();
+    }
+
+    /**
+     * <p>
+     * Returns an estimate of the standard deviation of each parameter. The
+     * returned values are the so-called (asymptotic) standard errors on the
+     * parameters, defined as {@code sd(a[i]) = sqrt(S / (n - m) * C[i][i])},
+     * where {@code a[i]} is the optimized value of the {@code i}-th parameter,
+     * {@code S} is the minimized value of the sum of squares objective function
+     * (as returned by {@link #getChiSquare()}), {@code n} is the number of
+     * observations, {@code m} is the number of parameters and {@code C} is the
+     * covariance matrix.
+     * </p>
+     * <p>
+     * See also
+     * <a href="http://en.wikipedia.org/wiki/Least_squares">Wikipedia</a>,
+     * or
+     * <a href="http://mathworld.wolfram.com/LeastSquaresFitting.html">MathWorld</a>,
+     * equations (34) and (35) for a particular case.
+     * </p>
+     *
+     * @return an estimate of the standard deviation of the optimized parameters
+     * @throws org.apache.commons.math3.linear.SingularMatrixException
+     * if the covariance matrix cannot be computed.
+     * @throws NumberIsTooSmallException if the number of degrees of freedom is not
+     * positive, i.e. the number of measurements is less or equal to the number of
+     * parameters.
+     * @deprecated as of version 3.1, {@link #computeSigma(double[],double)} should be used
+     * instead. It should be emphasized that {@code guessParametersErrors} and
+     * {@code computeSigma} are <em>not</em> strictly equivalent.
+     */
+    @Deprecated
+    public double[] guessParametersErrors() {
+        if (rows <= cols) {
+            throw new NumberIsTooSmallException(LocalizedFormats.NO_DEGREES_OF_FREEDOM,
+                                                rows, cols, false);
+        }
+        double[] errors = new double[cols];
+        final double c = FastMath.sqrt(getChiSquare() / (rows - cols));
+        double[][] covar = computeCovariances(point, 1e-14);
+        for (int i = 0; i < errors.length; ++i) {
+            errors[i] = FastMath.sqrt(covar[i][i]) * c;
+        }
+        return errors;
+    }
+
+    /**
+     * Computes an estimate of the standard deviation of the parameters. The
+     * returned values are the square root of the diagonal coefficients of the
+     * covariance matrix, {@code sd(a[i]) ~= sqrt(C[i][i])}, where {@code a[i]}
+     * is the optimized value of the {@code i}-th parameter, and {@code C} is
+     * the covariance matrix.
+     *
+     * @param params Model parameters.
+     * @param covarianceSingularityThreshold Singularity threshold (see
+     * {@link #computeCovariances(double[],double) computeCovariances}).
+     * @return an estimate of the standard deviation of the optimized parameters
+     * @throws org.apache.commons.math3.linear.SingularMatrixException
+     * if the covariance matrix cannot be computed.
+     * @since 3.1
+     */
+    public double[] computeSigma(double[] params,
+                                 double covarianceSingularityThreshold) {
+        final int nC = params.length;
+        final double[] sig = new double[nC];
+        final double[][] cov = computeCovariances(params, covarianceSingularityThreshold);
+        for (int i = 0; i < nC; ++i) {
+            sig[i] = FastMath.sqrt(cov[i][i]);
+        }
+        return sig;
+    }
+
+    /** {@inheritDoc}
+     * @deprecated As of 3.1. Please use
+     * {@link BaseAbstractMultivariateVectorOptimizer#optimize(int,MultivariateVectorFunction,OptimizationData[])
+     * optimize(int,MultivariateDifferentiableVectorFunction,OptimizationData...)}
+     * instead.
+     */
+    @Override
+    @Deprecated
+    public PointVectorValuePair optimize(int maxEval,
+                                         final DifferentiableMultivariateVectorFunction f,
+                                         final double[] target, final double[] weights,
+                                         final double[] startPoint) {
+        return optimizeInternal(maxEval,
+                                FunctionUtils.toMultivariateDifferentiableVectorFunction(f),
+                                new Target(target),
+                                new Weight(weights),
+                                new InitialGuess(startPoint));
+    }
+
+    /**
+     * Optimize an objective function.
+     * Optimization is considered to be a weighted least-squares minimization.
+     * The cost function to be minimized is
+     * <code>&sum;weight<sub>i</sub>(objective<sub>i</sub> - target<sub>i</sub>)<sup>2</sup></code>
+     *
+     * @param f Objective function.
+     * @param target Target value for the objective functions at optimum.
+     * @param weights Weights for the least squares cost computation.
+     * @param startPoint Start point for optimization.
+     * @return the point/value pair giving the optimal value for objective
+     * function.
+     * @param maxEval Maximum number of function evaluations.
+     * @throws org.apache.commons.math3.exception.DimensionMismatchException
+     * if the start point dimension is wrong.
+     * @throws org.apache.commons.math3.exception.TooManyEvaluationsException
+     * if the maximal number of evaluations is exceeded.
+     * @throws org.apache.commons.math3.exception.NullArgumentException if
+     * any argument is {@code null}.
+     * @deprecated As of 3.1. Please use
+     * {@link BaseAbstractMultivariateVectorOptimizer#optimize(int,MultivariateVectorFunction,OptimizationData[])
+     * optimize(int,MultivariateDifferentiableVectorFunction,OptimizationData...)}
+     * instead.
+     */
+    @Deprecated
+    public PointVectorValuePair optimize(final int maxEval,
+                                         final MultivariateDifferentiableVectorFunction f,
+                                         final double[] target, final double[] weights,
+                                         final double[] startPoint) {
+        return optimizeInternal(maxEval, f,
+                                new Target(target),
+                                new Weight(weights),
+                                new InitialGuess(startPoint));
+    }
+
+    /**
+     * Optimize an objective function.
+     * Optimization is considered to be a weighted least-squares minimization.
+     * The cost function to be minimized is
+     * <code>&sum;weight<sub>i</sub>(objective<sub>i</sub> - target<sub>i</sub>)<sup>2</sup></code>
+     *
+     * @param maxEval Allowed number of evaluations of the objective function.
+     * @param f Objective function.
+     * @param optData Optimization data. The following data will be looked for:
+     * <ul>
+     *  <li>{@link Target}</li>
+     *  <li>{@link Weight}</li>
+     *  <li>{@link InitialGuess}</li>
+     * </ul>
+     * @return the point/value pair giving the optimal value of the objective
+     * function.
+     * @throws org.apache.commons.math3.exception.TooManyEvaluationsException if
+     * the maximal number of evaluations is exceeded.
+     * @throws DimensionMismatchException if the target, and weight arguments
+     * have inconsistent dimensions.
+     * @see BaseAbstractMultivariateVectorOptimizer#optimizeInternal(int,MultivariateVectorFunction,OptimizationData[])
+     * @since 3.1
+     * @deprecated As of 3.1. Override is necessary only until this class's generic
+     * argument is changed to {@code MultivariateDifferentiableVectorFunction}.
+     */
+    @Deprecated
+    protected PointVectorValuePair optimizeInternal(final int maxEval,
+                                                    final MultivariateDifferentiableVectorFunction f,
+                                                    OptimizationData... optData) {
+        // XXX Conversion will be removed when the generic argument of the
+        // base class becomes "MultivariateDifferentiableVectorFunction".
+        return super.optimizeInternal(maxEval, FunctionUtils.toDifferentiableMultivariateVectorFunction(f), optData);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    protected void setUp() {
+        super.setUp();
+
+        // Reset counter.
+        jacobianEvaluations = 0;
+
+        // Square-root of the weight matrix.
+        weightMatrixSqrt = squareRoot(getWeight());
+
+        // Store least squares problem characteristics.
+        // XXX The conversion won't be necessary when the generic argument of
+        // the base class becomes "MultivariateDifferentiableVectorFunction".
+        // XXX "jF" is not strictly necessary anymore but is currently more
+        // efficient than converting the value returned from "getObjectiveFunction()"
+        // every time it is used.
+        jF = FunctionUtils.toMultivariateDifferentiableVectorFunction((DifferentiableMultivariateVectorFunction) getObjectiveFunction());
+
+        // Arrays shared with "private" and "protected" methods.
+        point = getStartPoint();
+        rows = getTarget().length;
+        cols = point.length;
+    }
+
+    /**
+     * Computes the residuals.
+     * The residual is the difference between the observed (target)
+     * values and the model (objective function) value.
+     * There is one residual for each element of the vector-valued
+     * function.
+     *
+     * @param objectiveValue Value of the the objective function. This is
+     * the value returned from a call to
+     * {@link #computeObjectiveValue(double[]) computeObjectiveValue}
+     * (whose array argument contains the model parameters).
+     * @return the residuals.
+     * @throws DimensionMismatchException if {@code params} has a wrong
+     * length.
+     * @since 3.1
+     */
+    protected double[] computeResiduals(double[] objectiveValue) {
+        final double[] target = getTarget();
+        if (objectiveValue.length != target.length) {
+            throw new DimensionMismatchException(target.length,
+                                                 objectiveValue.length);
+        }
+
+        final double[] residuals = new double[target.length];
+        for (int i = 0; i < target.length; i++) {
+            residuals[i] = target[i] - objectiveValue[i];
+        }
+
+        return residuals;
+    }
+
+    /**
+     * Computes the square-root of the weight matrix.
+     *
+     * @param m Symmetric, positive-definite (weight) matrix.
+     * @return the square-root of the weight matrix.
+     */
+    private RealMatrix squareRoot(RealMatrix m) {
+            final EigenDecomposition dec = new EigenDecomposition(m);
+            return dec.getSquareRoot();
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ AbstractLeastSquaresOptimizerClaudeTest ใน package org.apache.commons.math3.optimization.general เพื่อทดสอบคลาส AbstractLeastSquaresOptimizer ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.math3.optimization.general;` เท่านั้น
+</instructions>

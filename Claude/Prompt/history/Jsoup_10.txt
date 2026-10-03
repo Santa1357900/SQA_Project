@@ -1,0 +1,544 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Jsoup (Defects4J bug Jsoup-10)
+package: org.jsoup.nodes
+class_under_test: Node
+test_class_to_write: NodeClaudeTest
+</target>
+
+<project_notes>
+Jsoup: ใช้ Jsoup.parse(String) และ Jsoup.parseBodyFragment(String) เป็นทางเข้า import org.jsoup.nodes.* และ org.jsoup.parser.* ให้ครบ
+</project_notes>
+
+<source_code>
+package org.jsoup.nodes;
+
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.select.NodeTraversor;
+import org.jsoup.select.NodeVisitor;
+
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ The base, abstract Node model. Elements, Documents, Comments etc are all Node instances.
+
+ @author Jonathan Hedley, jonathan@hedley.net */
+public abstract class Node implements Cloneable {
+    Node parentNode;
+    List<Node> childNodes;
+    Attributes attributes;
+    String baseUri;
+    int siblingIndex;
+
+    /**
+     Create a new Node.
+     @param baseUri base URI
+     @param attributes attributes (not null, but may be empty)
+     */
+    protected Node(String baseUri, Attributes attributes) {
+        Validate.notNull(baseUri);
+        Validate.notNull(attributes);
+        
+        childNodes = new ArrayList<Node>(4);
+        this.baseUri = baseUri.trim();
+        this.attributes = attributes;
+    }
+
+    protected Node(String baseUri) {
+        this(baseUri, new Attributes());
+    }
+
+    /**
+     * Default constructor. Doesn't setup base uri, children, or attributes; use with caution.
+     */
+    protected Node() {
+        childNodes = Collections.EMPTY_LIST;
+        attributes = null;
+    }
+
+    /**
+     Get the node name of this node. Use for debugging purposes and not logic switching (for that, use instanceof).
+     @return node name
+     */
+    public abstract String nodeName();
+
+    /**
+     * Get an attribute's value by its key.
+     * <p/>
+     * To get an absolute URL from an attribute that may be a relative URL, prefix the key with <code><b>abs</b></code>,
+     * which is a shortcut to the {@link #absUrl} method.
+     * E.g.: <blockquote><code>String url = a.attr("abs:href");</code></blockquote>
+     * @param attributeKey The attribute key.
+     * @return The attribute, or empty string if not present (to avoid nulls).
+     * @see #attributes()
+     * @see #hasAttr(String)
+     * @see #absUrl(String)
+     */
+    public String attr(String attributeKey) {
+        Validate.notNull(attributeKey);
+
+        if (hasAttr(attributeKey))
+            return attributes.get(attributeKey);
+        else if (attributeKey.toLowerCase().startsWith("abs:"))
+            return absUrl(attributeKey.substring("abs:".length()));
+        else return "";
+    }
+
+    /**
+     * Get all of the element's attributes.
+     * @return attributes (which implements iterable, in same order as presented in original HTML).
+     */
+    public Attributes attributes() {
+        return attributes;
+    }
+
+    /**
+     * Set an attribute (key=value). If the attribute already exists, it is replaced.
+     * @param attributeKey The attribute key.
+     * @param attributeValue The attribute value.
+     * @return this (for chaining)
+     */
+    public Node attr(String attributeKey, String attributeValue) {
+        attributes.put(attributeKey, attributeValue);
+        return this;
+    }
+
+    /**
+     * Test if this element has an attribute.
+     * @param attributeKey The attribute key to check.
+     * @return true if the attribute exists, false if not.
+     */
+    public boolean hasAttr(String attributeKey) {
+        Validate.notNull(attributeKey);
+        return attributes.hasKey(attributeKey);
+    }
+
+    /**
+     * Remove an attribute from this element.
+     * @param attributeKey The attribute to remove.
+     * @return this (for chaining)
+     */
+    public Node removeAttr(String attributeKey) {
+        Validate.notNull(attributeKey);
+        attributes.remove(attributeKey);
+        return this;
+    }
+
+    /**
+     Get the base URI of this node.
+     @return base URI
+     */
+    public String baseUri() {
+        return baseUri;
+    }
+
+    /**
+     Update the base URI of this node.
+     @param baseUri base URI to set
+     */
+    public void setBaseUri(String baseUri) {
+        Validate.notNull(baseUri);
+        this.baseUri = baseUri;
+    }
+
+    /**
+     * Get an absolute URL from a URL attribute that may be relative (i.e. an <code>&lt;a href></code> or
+     * <code>&lt;img src></code>).
+     * <p/>
+     * E.g.: <code>String absUrl = linkEl.absUrl("href");</code>
+     * <p/>
+     * If the attribute value is already absolute (i.e. it starts with a protocol, like
+     * <code>http://</code> or <code>https://</code> etc), and it successfully parses as a URL, the attribute is
+     * returned directly. Otherwise, it is treated as a URL relative to the element's {@link #baseUri}, and made
+     * absolute using that.
+     * <p/>
+     * As an alternate, you can use the {@link #attr} method with the <code>abs:</code> prefix, e.g.:
+     * <code>String absUrl = linkEl.attr("abs:href");</code>
+     *
+     * @param attributeKey The attribute key
+     * @return An absolute URL if one could be made, or an empty string (not null) if the attribute was missing or
+     * could not be made successfully into a URL.
+     * @see #attr
+     * @see java.net.URL#URL(java.net.URL, String)
+     */
+    public String absUrl(String attributeKey) {
+        Validate.notEmpty(attributeKey);
+
+        String relUrl = attr(attributeKey);
+        if (!hasAttr(attributeKey)) {
+            return ""; // nothing to make absolute with
+        } else {
+            URL base;
+            try {
+                try {
+                    base = new URL(baseUri);
+                } catch (MalformedURLException e) {
+                    // the base is unsuitable, but the attribute may be abs on its own, so try that
+                    URL abs = new URL(relUrl);
+                    return abs.toExternalForm();
+                }
+                // workaround: java resolves '//path/file + ?foo' to '//path/?foo', not '//path/file?foo' as desired
+                URL abs = new URL(base, relUrl);
+                return abs.toExternalForm();
+            } catch (MalformedURLException e) {
+                return "";
+            }
+        }
+    }
+
+    /**
+     Get a child node by index
+     @param index index of child node
+     @return the child node at this index.
+     */
+    public Node childNode(int index) {
+        return childNodes.get(index);
+    }
+
+    /**
+     Get this node's children. Presented as an unmodifiable list: new children can not be added, but the child nodes
+     themselves can be manipulated.
+     @return list of children. If no children, returns an empty list.
+     */
+    public List<Node> childNodes() {
+        return Collections.unmodifiableList(childNodes);
+    }
+    
+    protected Node[] childNodesAsArray() {
+        return childNodes.toArray(new Node[childNodes().size()]);
+    }
+
+    /**
+     Gets this node's parent node.
+     @return parent node; or null if no parent.
+     */
+    public Node parent() {
+        return parentNode;
+    }
+    
+    /**
+     * Gets the Document associated with this Node. 
+     * @return the Document associated with this Node, or null if there is no such Document.
+     */
+    public Document ownerDocument() {
+        if (this instanceof Document)
+            return (Document) this;
+        else if (parentNode == null)
+            return null;
+        else
+            return parentNode.ownerDocument();
+    }
+    
+    /**
+     * Remove (delete) this node from the DOM tree. If this node has children, they are also removed.
+     */
+    public void remove() {
+        Validate.notNull(parentNode);
+        parentNode.removeChild(this);
+    }
+    
+    /**
+     * Replace this node in the DOM with the supplied node.
+     * @param in the node that will will replace the existing node.
+     */
+    public void replaceWith(Node in) {
+        Validate.notNull(in);
+        Validate.notNull(parentNode);
+        parentNode.replaceChild(this, in);
+    }
+
+    protected void setParentNode(Node parentNode) {
+        if (this.parentNode != null)
+            this.parentNode.removeChild(this);
+        this.parentNode = parentNode;
+    }
+
+    protected void replaceChild(Node out, Node in) {
+        Validate.isTrue(out.parentNode == this);
+        Validate.notNull(in);
+        if (in.parentNode != null)
+            in.parentNode.removeChild(in);
+        
+        Integer index = out.siblingIndex();
+        childNodes.set(index, in);
+        in.parentNode = this;
+        in.setSiblingIndex(index);
+        out.parentNode = null;
+    }
+
+    protected void removeChild(Node out) {
+        Validate.isTrue(out.parentNode == this);
+        int index = out.siblingIndex();
+        childNodes.remove(index);
+        reindexChildren();
+        out.parentNode = null;
+    }
+
+    protected void addChildren(Node... children) {
+        //most used. short circuit addChildren(int), which hits reindex children and array copy
+        for (Node child: children) {
+            reparentChild(child);
+            childNodes.add(child);
+            child.setSiblingIndex(childNodes.size()-1);
+        }
+    }
+
+    protected void addChildren(int index, Node... children) {
+        Validate.noNullElements(children);
+        for (int i = children.length - 1; i >= 0; i--) {
+            Node in = children[i];
+            reparentChild(in);
+            childNodes.add(index, in);
+        }
+        reindexChildren();
+    }
+
+    private void reparentChild(Node child) {
+        if (child.parentNode != null)
+            child.parentNode.removeChild(child);
+        child.setParentNode(this);
+    }
+    
+    private void reindexChildren() {
+        for (int i = 0; i < childNodes.size(); i++) {
+            childNodes.get(i).setSiblingIndex(i);
+        }
+    }
+    
+    /**
+     Retrieves this node's sibling nodes. Effectively, {@link #childNodes()  node.parent.childNodes()}.
+     @return node siblings, including this node
+     */
+    public List<Node> siblingNodes() {
+        return parent().childNodes(); // TODO: should this strip out this node? i.e. not a sibling of self?
+    }
+
+    /**
+     Get this node's next sibling.
+     @return next sibling, or null if this is the last sibling
+     */
+    public Node nextSibling() {
+        if (parentNode == null)
+            return null; // root
+        
+        List<Node> siblings = parentNode.childNodes;
+        Integer index = siblingIndex();
+        Validate.notNull(index);
+        if (siblings.size() > index+1)
+            return siblings.get(index+1);
+        else
+            return null;
+    }
+
+    /**
+     Get this node's previous sibling.
+     @return the previous sibling, or null if this is the first sibling
+     */
+    public Node previousSibling() {
+        List<Node> siblings = parentNode.childNodes;
+        Integer index = siblingIndex();
+        Validate.notNull(index);
+        if (index > 0)
+            return siblings.get(index-1);
+        else
+            return null;
+    }
+
+    /**
+     * Get the list index of this node in its node sibling list. I.e. if this is the first node
+     * sibling, returns 0.
+     * @return position in node sibling list
+     * @see org.jsoup.nodes.Element#elementSiblingIndex()
+     */
+    public Integer siblingIndex() {
+        return siblingIndex;
+    }
+    
+    protected void setSiblingIndex(int siblingIndex) {
+        this.siblingIndex = siblingIndex;
+    }
+
+    /**
+     Get the outer HTML of this node.
+     @return HTML
+     */
+    public String outerHtml() {
+        StringBuilder accum = new StringBuilder(32*1024);
+        outerHtml(accum);
+        return accum.toString();
+    }
+
+    protected void outerHtml(StringBuilder accum) {
+        new NodeTraversor(new OuterHtmlVisitor(accum, getOutputSettings())).traverse(this);
+    }
+
+    // if this node has no document (or parent), retrieve the default output settings
+    private Document.OutputSettings getOutputSettings() {
+        return ownerDocument() != null ? ownerDocument().outputSettings() : (new Document("")).outputSettings();
+    }
+
+    /**
+     Get the outer HTML of this node.
+     @param accum accumulator to place HTML into
+     */
+    abstract void outerHtmlHead(StringBuilder accum, int depth, Document.OutputSettings out);
+
+    abstract void outerHtmlTail(StringBuilder accum, int depth, Document.OutputSettings out);
+
+    public String toString() {
+        return outerHtml();
+    }
+
+    protected void indent(StringBuilder accum, int depth, Document.OutputSettings out) {
+        accum.append("\n").append(StringUtil.padding(depth * out.indentAmount()));
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        // todo: have nodes hold a child index, compare against that and parent (not children)
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = parentNode != null ? parentNode.hashCode() : 0;
+        // not children, or will block stack as they go back up to parent)
+        result = 31 * result + (attributes != null ? attributes.hashCode() : 0);
+        return result;
+    }
+
+    /**
+     * Create a stand-alone, deep copy of this node, and all of its children. The cloned node will have no siblings or
+     * parent node. As a stand-alone object, any changes made to the clone or any of its children will not impact the
+     * original node.
+     * <p>
+     * The cloned node may be adopted into another Document or node structure using {@link Element#appendChild(Node)}.
+     * @return stand-alone cloned node
+     */
+    @Override
+    public Node clone() {
+        return doClone(null); // splits for orphan
+    }
+
+    protected Node doClone(Node parent) {
+        Node clone;
+        try {
+            clone = (Node) super.clone();
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
+        }
+
+        clone.parentNode = parent; // can be null, to create an orphan split
+        clone.siblingIndex = parent == null ? 0 : siblingIndex;
+        clone.attributes = attributes != null ? attributes.clone() : null;
+        clone.baseUri = baseUri;
+        clone.childNodes = new ArrayList<Node>(childNodes.size());
+        for (Node child: childNodes)
+            clone.childNodes.add(child.doClone(clone)); // clone() creates orphans, doClone() keeps parent
+
+        return clone;
+    }
+
+    private static class OuterHtmlVisitor implements NodeVisitor {
+        private StringBuilder accum;
+        private Document.OutputSettings out;
+
+        OuterHtmlVisitor(StringBuilder accum, Document.OutputSettings out) {
+            this.accum = accum;
+            this.out = out;
+        }
+
+        public void head(Node node, int depth) {
+            node.outerHtmlHead(accum, depth, out);
+        }
+
+        public void tail(Node node, int depth) {
+            if (!node.nodeName().equals("#text")) // saves a void hit.
+                node.outerHtmlTail(accum, depth, out);
+        }
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ NodeClaudeTest ใน package org.jsoup.nodes เพื่อทดสอบคลาส Node ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.jsoup.nodes;` เท่านั้น
+</instructions>

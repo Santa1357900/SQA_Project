@@ -1,0 +1,347 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+import java.io.InputStream;
+import java.io.ByteArrayInputStream;
+
+import com.google.common.io.CharStreams;
+import com.google.common.base.Charsets;
+
+public class SourceFileClaudeTest {
+
+  // Constructor: null fileName must throw IllegalArgumentException
+  @Test
+  public void testConstructor_nullFileName_throwsIllegalArgumentException() throws Throwable {
+    try {
+      new SourceFile(null);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) { }
+  }
+
+  // Constructor: empty fileName must throw IllegalArgumentException
+  @Test
+  public void testConstructor_emptyFileName_throwsIllegalArgumentException() throws Throwable {
+    try {
+      new SourceFile("");
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) { }
+  }
+
+  // Constructor: valid fileName sets name, originalPath default, and isExtern default
+  @Test
+  public void testConstructor_validFileName_setsNameAndDefaults() throws Throwable {
+    SourceFile sf = new SourceFile("test.js");
+    assertEquals("test.js", sf.getName());
+    assertEquals("test.js", sf.getOriginalPath());
+    assertFalse(sf.isExtern());
+  }
+
+  // getLineOffset: lineno < 1 must throw IllegalArgumentException
+  @Test
+  public void testGetLineOffset_lineZero_throwsIllegalArgumentException() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "abc\ndefgh\nij");
+    try {
+      sf.getLineOffset(0);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) { }
+  }
+
+  // getLineOffset: lineno > number of lines must throw IllegalArgumentException
+  @Test
+  public void testGetLineOffset_lineTooLarge_throwsIllegalArgumentException() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "abc\ndefgh\nij");
+    try {
+      sf.getLineOffset(4);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) { }
+  }
+
+  // getLineOffset: valid line numbers return correct cumulative offsets
+  @Test
+  public void testGetLineOffset_validLines_returnsCorrectOffsets() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "abc\ndefgh\nij");
+    assertEquals(0, sf.getLineOffset(1));
+    assertEquals(4, sf.getLineOffset(2));
+    assertEquals(10, sf.getLineOffset(3));
+  }
+
+  // getNumLines: multi-line source returns correct line count
+  @Test
+  public void testGetNumLines_multipleLines_returnsCorrectCount() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "abc\ndefgh\nij");
+    assertEquals(3, sf.getNumLines());
+  }
+
+  // getNumLines: single line with no newline returns 1
+  @Test
+  public void testGetNumLines_singleLineNoNewline_returnsOne() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "hello");
+    assertEquals(1, sf.getNumLines());
+  }
+
+  // getCode: preloaded source returns exact code
+  @Test
+  public void testGetCode_preloadedSource_returnsCode() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "var x = 1;");
+    assertEquals("var x = 1;", sf.getCode());
+  }
+
+  // getCode: plain SourceFile with no code set returns null
+  @Test
+  public void testGetCode_noCodeSet_returnsNull() throws Throwable {
+    SourceFile sf = new SourceFile("a.js");
+    assertNull(sf.getCode());
+  }
+
+  // getCodeReader: returns a Reader whose content matches the code
+  @Test
+  public void testGetCodeReader_returnsReaderWithSameContent() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "var y = 2;");
+    Reader r = sf.getCodeReader();
+    assertEquals("var y = 2;", CharStreams.toString(r));
+  }
+
+  // getCodeNoCache: returns the underlying code field directly
+  @Test
+  public void testGetCodeNoCache_returnsUnderlyingCode() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "var z = 3;");
+    assertEquals("var z = 3;", sf.getCodeNoCache());
+  }
+
+  // getOriginalPath: two-arg fromCode defaults originalPath to fileName
+  @Test
+  public void testGetOriginalPath_notExplicitlySet_returnsFileName() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "code");
+    assertEquals("a.js", sf.getOriginalPath());
+  }
+
+  // setOriginalPath / getOriginalPath: explicit set overrides default
+  @Test
+  public void testSetOriginalPath_explicit_returnsSetPath() throws Throwable {
+    SourceFile sf = new SourceFile("a.js");
+    sf.setOriginalPath("original/a.js");
+    assertEquals("original/a.js", sf.getOriginalPath());
+  }
+
+  // fromCode three-arg: originalPath distinct from fileName
+  @Test
+  public void testFromCode_threeArg_setsDistinctOriginalPath() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "orig/a.js", "code");
+    assertEquals("orig/a.js", sf.getOriginalPath());
+    assertEquals("a.js", sf.getName());
+  }
+
+  // clearCachedSource: default (Preloaded) implementation is a no-op
+  @Test
+  public void testClearCachedSource_preloaded_doesNothing() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "unchanged");
+    sf.clearCachedSource();
+    assertEquals("unchanged", sf.getCode());
+  }
+
+  // hasSourceInMemory: true when code preloaded, false when not set
+  @Test
+  public void testHasSourceInMemory_variousStates() throws Throwable {
+    SourceFile withCode = SourceFile.fromCode("a.js", "code");
+    SourceFile withoutCode = new SourceFile("b.js");
+    assertTrue(withCode.hasSourceInMemory());
+    assertFalse(withoutCode.hasSourceInMemory());
+  }
+
+  // getName: returns the fileName passed to constructor
+  @Test
+  public void testGetName_returnsFileName() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("myfile.js", "code");
+    assertEquals("myfile.js", sf.getName());
+  }
+
+  // isExtern: default value is false
+  @Test
+  public void testIsExtern_defaultFalse() throws Throwable {
+    SourceFile sf = new SourceFile("a.js");
+    assertFalse(sf.isExtern());
+  }
+
+  // setIsExtern: toggling true/false updates isExtern()
+  @Test
+  public void testSetIsExtern_togglesValue() throws Throwable {
+    SourceFile sf = new SourceFile("a.js");
+    sf.setIsExtern(true);
+    assertTrue(sf.isExtern());
+    sf.setIsExtern(false);
+    assertFalse(sf.isExtern());
+  }
+
+  // getLine: first line returned without trailing newline
+  @Test
+  public void testGetLine_firstLine_returnsCorrectContent() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "line1\nline2\nline3\n");
+    assertEquals("line1", sf.getLine(1));
+  }
+
+  // getLine: middle line returned correctly
+  @Test
+  public void testGetLine_middleLine_returnsCorrectContent() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "line1\nline2\nline3\n");
+    assertEquals("line2", sf.getLine(2));
+  }
+
+  // getLine: requesting a line number that does not exist returns null
+  @Test
+  public void testGetLine_lineNumberBeyondLines_returnsNull() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "line1\nline2\nline3\n");
+    assertNull(sf.getLine(4));
+  }
+
+  // BUG: contract says the last line without a trailing newline must be
+  // returned (not null) since the line exists; code incorrectly returns null.
+  @Test
+  public void testGetLine_lastLineNoTrailingNewline_returnsContent() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "line1\nline2");
+    assertEquals("line2", sf.getLine(2));
+  }
+
+  // getLine: sequential increasing line numbers exercise the caching shortcut
+  @Test
+  public void testGetLine_sequentialCallsCachingWorks() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "alpha\nbeta\ngamma\n");
+    assertEquals("alpha", sf.getLine(1));
+    assertEquals("gamma", sf.getLine(3));
+  }
+
+  // getLine: requesting a lower line number after a higher one resets scan from start
+  @Test
+  public void testGetLine_lowerLineNumberAfterHigher_resetsAndReturnsCorrect() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "alpha\nbeta\ngamma\n");
+    assertEquals("gamma", sf.getLine(3));
+    assertEquals("alpha", sf.getLine(1));
+  }
+
+  // getRegion: valid line number near start returns a non-null region
+  @Test
+  public void testGetRegion_firstLine_returnsNonNullRegion() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "one\ntwo\nthree\n");
+    Region region = sf.getRegion(1);
+    assertNotNull(region);
+  }
+
+  // getRegion: line number far beyond file length returns null
+  @Test
+  public void testGetRegion_lineNumberBeyondFile_returnsNull() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js", "one\ntwo\nthree\n");
+    Region region = sf.getRegion(100);
+    assertNull(region);
+  }
+
+  // getRegion: mid-file line number with enough surrounding lines returns a region
+  @Test
+  public void testGetRegion_midFileLine_returnsNonNullRegion() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("a.js",
+        "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\n");
+    Region region = sf.getRegion(5);
+    assertNotNull(region);
+  }
+
+  // toString: returns the fileName
+  @Test
+  public void testToString_returnsFileName() throws Throwable {
+    SourceFile sf = SourceFile.fromCode("myname.js", "code");
+    assertEquals("myname.js", sf.toString());
+  }
+
+  // fromFile(String): constructs OnDisk source without touching disk; name/isExtern correct
+  @Test
+  public void testFromFile_stringOverload_setsNameAndDefaults() throws Throwable {
+    SourceFile sf = SourceFile.fromFile("somepath/file.js");
+    assertEquals("somepath/file.js", sf.getName());
+    assertFalse(sf.isExtern());
+  }
+
+  // fromFile(String, Charset): constructs OnDisk source without touching disk
+  @Test
+  public void testFromFile_stringAndCharsetOverload_setsName() throws Throwable {
+    SourceFile sf = SourceFile.fromFile("other/file.js", Charsets.UTF_8);
+    assertEquals("other/file.js", sf.getName());
+  }
+
+  // fromInputStream(String, InputStream): decodes UTF-8 bytes into code
+  @Test
+  public void testFromInputStream_twoArg_returnsDecodedCode() throws Throwable {
+    byte[] bytes = "var a = 1;".getBytes("UTF-8");
+    InputStream in = new ByteArrayInputStream(bytes);
+    SourceFile sf = SourceFile.fromInputStream("in.js", in);
+    assertEquals("var a = 1;", sf.getCode());
+  }
+
+  // fromInputStream(String, String, InputStream): sets originalPath and decodes code
+  @Test
+  public void testFromInputStream_threeArg_setsOriginalPathAndCode() throws Throwable {
+    byte[] bytes = "var b = 2;".getBytes("UTF-8");
+    InputStream in = new ByteArrayInputStream(bytes);
+    SourceFile sf = SourceFile.fromInputStream("in.js", "orig/in.js", in);
+    assertEquals("orig/in.js", sf.getOriginalPath());
+    assertEquals("var b = 2;", sf.getCode());
+  }
+
+  // fromReader: reads all content from Reader into code
+  @Test
+  public void testFromReader_returnsCode() throws Throwable {
+    Reader r = new StringReader("var c = 3;");
+    SourceFile sf = SourceFile.fromReader("r.js", r);
+    assertEquals("var c = 3;", sf.getCode());
+  }
+
+  // fromGenerator: generated code is cached, generator invoked only once
+  @Test
+  public void testFromGenerator_cachesGeneratedCode() throws Throwable {
+    final int[] callCount = new int[1];
+    SourceFile.Generator gen = new SourceFile.Generator() {
+      public String getCode() {
+        callCount[0]++;
+        return "generated code";
+      }
+    };
+    SourceFile sf = SourceFile.fromGenerator("gen.js", gen);
+    String first = sf.getCode();
+    String second = sf.getCode();
+    assertEquals("generated code", first);
+    assertEquals("generated code", second);
+    assertEquals(1, callCount[0]);
+  }
+
+  // fromGenerator: clearCachedSource forces regeneration on next getCode call
+  @Test
+  public void testFromGenerator_clearCachedSource_regeneratesCode() throws Throwable {
+    final int[] callCount = new int[1];
+    SourceFile.Generator gen = new SourceFile.Generator() {
+      public String getCode() {
+        callCount[0]++;
+        return "gen-" + callCount[0];
+      }
+    };
+    SourceFile sf = SourceFile.fromGenerator("gen.js", gen);
+    sf.getCode();
+    sf.clearCachedSource();
+    sf.getCode();
+    assertEquals(2, callCount[0]);
+  }
+
+  // fromGenerator: hasSourceInMemory is false before getCode and true after
+  @Test
+  public void testFromGenerator_hasSourceInMemory_changesAfterGetCode() throws Throwable {
+    SourceFile.Generator gen = new SourceFile.Generator() {
+      public String getCode() {
+        return "x";
+      }
+    };
+    SourceFile sf = SourceFile.fromGenerator("gen.js", gen);
+    assertFalse(sf.hasSourceInMemory());
+    sf.getCode();
+    assertTrue(sf.hasSourceInMemory());
+  }
+}

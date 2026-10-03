@@ -1,0 +1,215 @@
+package org.apache.commons.cli;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class PosixParserClaudeTest
+{
+    private PosixParser parser;
+    private Options options;
+
+    @Before
+    public void setUp() throws Throwable
+    {
+        parser = new PosixParser();
+        options = new Options();
+    }
+
+    // covers: while loop with zero iterations (empty arguments array)
+    @Test
+    public void testFlatten_emptyArguments_returnsEmptyArray() throws Throwable {
+        String[] result = parser.flatten(options, new String[0], false);
+        assertEquals(0, result.length);
+    }
+
+    // covers: token.startsWith("--") branch, pos == -1, options.hasOption(opt) true
+    @Test
+    public void testFlatten_longOptionRecognizedNoEquals_addsOptionToken() throws Throwable {
+        options.addOption(new Option("foo", false, "desc"));
+        String[] result = parser.flatten(options, new String[] { "--foo" }, false);
+        assertArrayEquals(new String[] { "--foo" }, result);
+    }
+
+    // covers: pos != -1 branch splitting opt and value on '='
+    @Test
+    public void testFlatten_longOptionRecognizedWithEquals_splitsOptAndValue() throws Throwable {
+        options.addOption(new Option("foo", true, "desc"));
+        String[] result = parser.flatten(options, new String[] { "--foo=bar" }, false);
+        assertArrayEquals(new String[] { "--foo", "bar" }, result);
+    }
+
+    // covers: substring(pos+1) producing an empty string value
+    @Test
+    public void testFlatten_longOptionWithEqualsEmptyValue_addsEmptyValueToken() throws Throwable {
+        options.addOption(new Option("foo", true, "desc"));
+        String[] result = parser.flatten(options, new String[] { "--foo=" }, false);
+        assertArrayEquals(new String[] { "--foo", "" }, result);
+    }
+
+    // covers: !options.hasOption(opt) -> processNonOptionToken, no trailing args
+    @Test
+    public void testFlatten_longOptionUnrecognizedNoTrailingArgs_addsMarkerAndToken() throws Throwable {
+        String[] result = parser.flatten(options, new String[] { "--foo" }, false);
+        assertArrayEquals(new String[] { "--", "--foo" }, result);
+    }
+
+    // covers: eatTheRest set true by processNonOptionToken consuming subsequent tokens raw
+    @Test
+    public void testFlatten_longOptionUnrecognizedWithTrailingArgs_eatsRest() throws Throwable {
+        String[] result = parser.flatten(options, new String[] { "--foo", "bar", "baz" }, false);
+        assertArrayEquals(new String[] { "--", "--foo", "bar", "baz" }, result);
+    }
+
+    // covers: exact "--" token must be added exactly once per its own contract rule
+    @Test
+    public void testFlatten_doubleDashAlone_addsExactlyOnce() throws Throwable {
+        String[] result = parser.flatten(options, new String[] { "--" }, false);
+        assertEquals(1, result.length);
+        assertEquals("--", result[0]);
+    }
+
+    // covers: "--" marker followed by plain arguments that must pass through unchanged
+    @Test
+    public void testFlatten_doubleDashWithTrailingPlainArgs_passesThroughRemaining() throws Throwable {
+        String[] result = parser.flatten(options, new String[] { "--", "a", "b" }, false);
+        assertArrayEquals(new String[] { "--", "a", "b" }, result);
+    }
+
+    // covers: "-".equals(token) branch
+    @Test
+    public void testFlatten_singleHyphenAlone_addsHyphenToken() throws Throwable {
+        String[] result = parser.flatten(options, new String[] { "-" }, false);
+        assertArrayEquals(new String[] { "-" }, result);
+    }
+
+    // covers: token.length() == 2 branch routed to processOptionToken, valid option
+    @Test
+    public void testFlatten_shortOptionRecognizedLengthTwo_addsToken() throws Throwable {
+        options.addOption(new Option("a", false, "desc"));
+        String[] result = parser.flatten(options, new String[] { "-a" }, false);
+        assertArrayEquals(new String[] { "-a" }, result);
+    }
+
+    // covers: processOptionToken, !hasOption(token) && !stopAtNonOption -> still added, eatTheRest false
+    @Test
+    public void testFlatten_shortOptionUnrecognizedLengthTwo_stopAtNonOptionFalse_addsTokenAnyway() throws Throwable {
+        String[] result = parser.flatten(options, new String[] { "-x" }, false);
+        assertArrayEquals(new String[] { "-x" }, result);
+    }
+
+    // covers: processOptionToken, !hasOption(token) && stopAtNonOption -> eatTheRest true, gobble rest
+    @Test
+    public void testFlatten_shortOptionUnrecognizedLengthTwo_stopAtNonOptionTrue_eatsRest() throws Throwable {
+        String[] result = parser.flatten(options, new String[] { "-x", "y", "z" }, true);
+        assertArrayEquals(new String[] { "-x", "y", "z" }, result);
+    }
+
+    // covers: token.length() > 2 but options.hasOption(token) true -> processOptionToken directly
+    @Test
+    public void testFlatten_multiCharOptionRecognizedAsWhole_addsToken() throws Throwable {
+        options.addOption(new Option("abc", false, "desc"));
+        String[] result = parser.flatten(options, new String[] { "-abc" }, false);
+        assertArrayEquals(new String[] { "-abc" }, result);
+    }
+
+    // covers: burstToken loop, two consecutive no-arg options, no break needed
+    @Test
+    public void testFlatten_burstTwoNoArgOptions_addsBothSeparately() throws Throwable {
+        options.addOption(new Option("a", false, "desc"));
+        options.addOption(new Option("b", false, "desc"));
+        String[] result = parser.flatten(options, new String[] { "-ab" }, false);
+        assertArrayEquals(new String[] { "-a", "-b" }, result);
+    }
+
+    // covers: burstToken, currentOption.hasArg() true and remaining chars present -> break with remainder
+    @Test
+    public void testFlatten_burstOptionWithArgAndRemainder_addsOptionAndRemainderValue() throws Throwable {
+        options.addOption(new Option("b", true, "desc"));
+        String[] result = parser.flatten(options, new String[] { "-bVALUE" }, false);
+        assertArrayEquals(new String[] { "-b", "VALUE" }, result);
+    }
+
+    // covers: burstToken, hasArg true but token.length()==(i+1) -> no remainder, loop ends naturally
+    @Test
+    public void testFlatten_burstOptionWithArgNoRemainder_loopEndsNaturally() throws Throwable {
+        options.addOption(new Option("a", false, "desc"));
+        options.addOption(new Option("b", true, "desc"));
+        String[] result = parser.flatten(options, new String[] { "-ab" }, false);
+        assertArrayEquals(new String[] { "-a", "-b" }, result);
+    }
+
+    // covers: burstToken, unrecognized char with stopAtNonOption false -> adds whole original token
+    @Test
+    public void testFlatten_burstUnrecognizedCharStopAtNonOptionFalse_addsWholeOriginalToken() throws Throwable {
+        options.addOption(new Option("a", false, "desc"));
+        String[] result = parser.flatten(options, new String[] { "-ax" }, false);
+        assertArrayEquals(new String[] { "-a", "-ax" }, result);
+    }
+
+    // covers: burstToken, unrecognized char with stopAtNonOption true -> processNonOptionToken + gobble
+    @Test
+    public void testFlatten_burstUnrecognizedCharStopAtNonOptionTrue_addsMarkerAndRemainderThenEatsRest() throws Throwable {
+        options.addOption(new Option("a", false, "desc"));
+        String[] result = parser.flatten(options, new String[] { "-ax", "y", "z" }, true);
+        assertArrayEquals(new String[] { "-a", "--", "x", "y", "z" }, result);
+    }
+
+    // covers: plain argument, stopAtNonOption false -> final else tokens.add(token)
+    @Test
+    public void testFlatten_plainArgumentStopAtNonOptionFalse_addsAsIs() throws Throwable {
+        String[] result = parser.flatten(options, new String[] { "plain" }, false);
+        assertArrayEquals(new String[] { "plain" }, result);
+    }
+
+    // covers: plain argument, stopAtNonOption true -> processNonOptionToken + gobble
+    @Test
+    public void testFlatten_plainArgumentStopAtNonOptionTrue_eatsRestWithMarker() throws Throwable {
+        String[] result = parser.flatten(options, new String[] { "plain", "next" }, true);
+        assertArrayEquals(new String[] { "--", "plain", "next" }, result);
+    }
+
+    // covers: multiple while-loop rounds mixing short option, burst with arg, and plain token
+    @Test
+    public void testFlatten_mixedArgumentsMultipleRounds_processesInOrder() throws Throwable {
+        options.addOption(new Option("v", false, "verbose"));
+        options.addOption(new Option("f", true, "file"));
+        String[] result = parser.flatten(options, new String[] { "-v", "-ffile.txt", "plain" }, false);
+        assertArrayEquals(new String[] { "-v", "-f", "file.txt", "plain" }, result);
+    }
+
+    // covers: burstToken with a no-arg option followed by an arg option consuming remainder
+    @Test
+    public void testFlatten_burstThreeCharsMixed_addsInOrderWithArgValue() throws Throwable {
+        options.addOption(new Option("a", false, "desc"));
+        options.addOption(new Option("b", true, "desc"));
+        String[] result = parser.flatten(options, new String[] { "-abVALUE" }, false);
+        assertArrayEquals(new String[] { "-a", "-b", "VALUE" }, result);
+    }
+
+    // covers: init() resetting tokens/eatTheRest between separate flatten() invocations
+    @Test
+    public void testFlatten_calledTwiceOnSameParser_resetsTokensBetweenCalls() throws Throwable {
+        parser.flatten(options, new String[] { "-" }, false);
+        String[] result = parser.flatten(options, new String[] { "plain" }, false);
+        assertArrayEquals(new String[] { "plain" }, result);
+    }
+
+    // covers: long option with '=' splits regardless of the option's hasArg flag
+    @Test
+    public void testFlatten_longOptionRecognizedWithEqualsHasArgFalse_stillSplits() throws Throwable {
+        options.addOption(new Option("z", false, "desc"));
+        String[] result = parser.flatten(options, new String[] { "--z=val" }, false);
+        assertArrayEquals(new String[] { "--z", "val" }, result);
+    }
+
+    // covers: burstToken with three consecutive no-arg options, last iteration ends loop without break
+    @Test
+    public void testFlatten_burstAllNoArgOptions_addsThreeSeparately() throws Throwable {
+        options.addOption(new Option("a", false, "desc"));
+        options.addOption(new Option("b", false, "desc"));
+        options.addOption(new Option("c", false, "desc"));
+        String[] result = parser.flatten(options, new String[] { "-abc" }, false);
+        assertArrayEquals(new String[] { "-a", "-b", "-c" }, result);
+    }
+}

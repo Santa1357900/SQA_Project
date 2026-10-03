@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-20-glanluue/Closure-20f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntaxClaudeTest::testOptimizeSubtree_ifWithDuplicateReturn_redundantRemoved
+  - com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntaxClaudeTest::testOptimizeSubtree_whileWithDuplicateThrow_replacedWithBreak
+  - com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntaxClaudeTest::testOptimizeSubtree_ifEmptyReturnThenReturnValue_mergedWithHook
+  - com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntaxClaudeTest::testOptimizeSubtree_whileWithDuplicateReturn_replacedWithBreak
+  - com.google.javascript.jscomp.PeepholeSubstituteAlternateSyntaxClaudeTest::testOptimizeSubtree_stringCall_foldsToConcat
+[exit 0]

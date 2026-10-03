@@ -1,0 +1,280 @@
+package org.apache.commons.math.distribution;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.exception.NotStrictlyPositiveException;
+import org.apache.commons.math.exception.OutOfRangeException;
+
+public class NormalDistributionImplClaudeTest {
+
+    private NormalDistributionImpl standardNormal;
+
+    @Before
+    public void setUp() throws Throwable {
+        standardNormal = new NormalDistributionImpl();
+    }
+
+    // Default constructor: mean = 0, sd = 1
+    @Test
+    public void testConstructor_default_meanZeroStdOne() throws Throwable {
+        assertEquals(0.0, standardNormal.getMean(), 1e-9);
+        assertEquals(1.0, standardNormal.getStandardDeviation(), 1e-9);
+    }
+
+    // Two-arg constructor: custom mean and sd stored as-is
+    @Test
+    public void testConstructor_twoArg_customMeanAndSd() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(5.0, 2.0);
+        assertEquals(5.0, d.getMean(), 1e-9);
+        assertEquals(2.0, d.getStandardDeviation(), 1e-9);
+    }
+
+    // Three-arg constructor: custom inverse cumulative accuracy is stored
+    @Test
+    public void testConstructor_threeArg_customAccuracyStored() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(1.0, 2.0, 1e-6);
+        assertEquals(1e-6, d.getSolverAbsoluteAccuracy(), 1e-20);
+    }
+
+    // Two-arg constructor: sd == 0 must throw NotStrictlyPositiveException
+    @Test
+    public void testConstructor_twoArg_sdZero_throwsException() throws Throwable {
+        try {
+            new NormalDistributionImpl(0.0, 0.0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // Two-arg constructor: sd negative must throw NotStrictlyPositiveException
+    @Test
+    public void testConstructor_twoArg_sdNegative_throwsException() throws Throwable {
+        try {
+            new NormalDistributionImpl(0.0, -1.0);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // Three-arg constructor: sd == 0 must throw NotStrictlyPositiveException
+    @Test
+    public void testConstructor_threeArg_sdZero_throwsException() throws Throwable {
+        try {
+            new NormalDistributionImpl(0.0, 0.0, 1e-9);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // getMean returns exactly the value given at construction
+    @Test
+    public void testGetMean_returnsConstructorValue() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(-3.5, 1.0);
+        assertEquals(-3.5, d.getMean(), 1e-9);
+    }
+
+    // getStandardDeviation returns exactly the value given at construction
+    @Test
+    public void testGetStandardDeviation_returnsConstructorValue() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(0.0, 7.25);
+        assertEquals(7.25, d.getStandardDeviation(), 1e-9);
+    }
+
+    // density at mean for standard normal: 1/sqrt(2*pi)
+    @Test
+    public void testDensity_atMean_standardNormal() throws Throwable {
+        double result = standardNormal.density(0.0);
+        assertEquals(0.3989422804014327, result, 1e-9);
+    }
+
+    // density at x=1 for standard normal: exp(-0.5)/sqrt(2*pi)
+    @Test
+    public void testDensity_atOne_standardNormal() throws Throwable {
+        double result = standardNormal.density(1.0);
+        assertEquals(0.24197072451914337, result, 1e-9);
+    }
+
+    // density is symmetric around the mean: density(mean+d) == density(mean-d)
+    @Test
+    public void testDensity_symmetricAroundMean() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(3.0, 2.0);
+        double left = d.density(3.0 - 1.5);
+        double right = d.density(3.0 + 1.5);
+        assertEquals(left, right, 1e-9);
+    }
+
+    // density at mean for a non-standard distribution: 1/(sd*sqrt(2*pi))
+    @Test
+    public void testDensity_customMeanSd_atMean() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(2.0, 3.0);
+        double result = d.density(2.0);
+        assertEquals(0.3989422804014327 / 3.0, result, 1e-9);
+    }
+
+    // cumulativeProbability at the mean equals 0.5 (erf(0) == 0)
+    @Test
+    public void testCumulativeProbability_atMean_returnsHalf() throws Throwable {
+        double result = standardNormal.cumulativeProbability(0.0);
+        assertEquals(0.5, result, 1e-9);
+    }
+
+    // cumulativeProbability at x=1 for standard normal is a well known value
+    @Test
+    public void testCumulativeProbability_atOne_standardNormal() throws Throwable {
+        double result = standardNormal.cumulativeProbability(1.0);
+        assertEquals(0.8413447460685429, result, 1e-6);
+    }
+
+    // cumulativeProbability at x=-1 for standard normal is 1 - P(X<1)
+    @Test
+    public void testCumulativeProbability_atNegativeOne_standardNormal() throws Throwable {
+        double result = standardNormal.cumulativeProbability(-1.0);
+        assertEquals(0.15865525393145711, result, 1e-6);
+    }
+
+    // CDF symmetry: P(X < mean-d) + P(X < mean+d) == 1
+    @Test
+    public void testCumulativeProbability_symmetryAroundMean() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(4.0, 1.5);
+        double lower = d.cumulativeProbability(4.0 - 1.0);
+        double upper = d.cumulativeProbability(4.0 + 1.0);
+        assertEquals(1.0, lower + upper, 1e-6);
+    }
+
+    // Far left tail (<< mean - 20*sd) must be essentially 0, per documented behavior
+    @Test
+    public void testCumulativeProbability_farLeftTail_nearZero() throws Throwable {
+        double result = standardNormal.cumulativeProbability(-100.0);
+        assertEquals(0.0, result, 1e-9);
+    }
+
+    // Far right tail (>> mean + 20*sd) must be essentially 1, per documented behavior
+    @Test
+    public void testCumulativeProbability_farRightTail_nearOne() throws Throwable {
+        double result = standardNormal.cumulativeProbability(100.0);
+        assertEquals(1.0, result, 1e-9);
+    }
+
+    // p == 0 special case returns NEGATIVE_INFINITY without delegating to solver
+    @Test
+    public void testInverseCumulativeProbability_pZero_negativeInfinity() throws Throwable {
+        double result = standardNormal.inverseCumulativeProbability(0.0);
+        assertEquals(Double.NEGATIVE_INFINITY, result, 0.0);
+    }
+
+    // p == 1 special case returns POSITIVE_INFINITY without delegating to solver
+    @Test
+    public void testInverseCumulativeProbability_pOne_positiveInfinity() throws Throwable {
+        double result = standardNormal.inverseCumulativeProbability(1.0);
+        assertEquals(Double.POSITIVE_INFINITY, result, 0.0);
+    }
+
+    // p == 0.5 must map to the mean (median of a symmetric distribution)
+    @Test
+    public void testInverseCumulativeProbability_pHalf_equalsMean() throws Throwable {
+        double result = standardNormal.inverseCumulativeProbability(0.5);
+        assertEquals(0.0, result, 1e-6);
+    }
+
+    // Round trip: cumulativeProbability(inverseCumulativeProbability(p)) == p
+    @Test
+    public void testInverseCumulativeProbability_roundtrip() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(2.0, 3.0);
+        double x = d.inverseCumulativeProbability(0.75);
+        double p2 = d.cumulativeProbability(x);
+        assertEquals(0.75, p2, 1e-6);
+    }
+
+    // p < 0 is not a valid probability, must throw OutOfRangeException
+    @Test
+    public void testInverseCumulativeProbability_pNegative_throwsOutOfRange() throws Throwable {
+        try {
+            standardNormal.inverseCumulativeProbability(-0.1);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // p > 1 is not a valid probability, must throw OutOfRangeException
+    @Test
+    public void testInverseCumulativeProbability_pGreaterThanOne_throwsOutOfRange() throws Throwable {
+        try {
+            standardNormal.inverseCumulativeProbability(1.1);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // Default solver accuracy equals the documented class constant
+    @Test
+    public void testGetSolverAbsoluteAccuracy_default() throws Throwable {
+        double result = standardNormal.getSolverAbsoluteAccuracy();
+        assertEquals(NormalDistributionImpl.DEFAULT_INVERSE_ABSOLUTE_ACCURACY, result, 1e-20);
+    }
+
+    // Custom solver accuracy passed via 3-arg constructor is preserved
+    @Test
+    public void testGetSolverAbsoluteAccuracy_custom() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(0.0, 1.0, 1e-3);
+        assertEquals(1e-3, d.getSolverAbsoluteAccuracy(), 1e-20);
+    }
+
+    // getDomainLowerBound branch: p < 0.5 returns -Double.MAX_VALUE
+    @Test
+    public void testGetDomainLowerBound_pLessThanHalf() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(5.0, 2.0);
+        assertEquals(-Double.MAX_VALUE, d.getDomainLowerBound(0.3), 0.0);
+    }
+
+    // getDomainLowerBound branch: p >= 0.5 returns the mean
+    @Test
+    public void testGetDomainLowerBound_pGreaterEqualHalf() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(5.0, 2.0);
+        assertEquals(5.0, d.getDomainLowerBound(0.5), 1e-9);
+        assertEquals(5.0, d.getDomainLowerBound(0.7), 1e-9);
+    }
+
+    // getDomainUpperBound branch: p < 0.5 returns the mean
+    @Test
+    public void testGetDomainUpperBound_pLessThanHalf() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(5.0, 2.0);
+        assertEquals(5.0, d.getDomainUpperBound(0.3), 1e-9);
+    }
+
+    // getDomainUpperBound branch: p >= 0.5 returns Double.MAX_VALUE
+    @Test
+    public void testGetDomainUpperBound_pGreaterEqualHalf() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(5.0, 2.0);
+        assertEquals(Double.MAX_VALUE, d.getDomainUpperBound(0.5), 0.0);
+        assertEquals(Double.MAX_VALUE, d.getDomainUpperBound(0.7), 0.0);
+    }
+
+    // getInitialDomain branches: p<0.5 => mean-sd, p>0.5 => mean+sd, p==0.5 => mean
+    @Test
+    public void testGetInitialDomain_pLessThanHalf() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(5.0, 2.0);
+        assertEquals(3.0, d.getInitialDomain(0.3), 1e-9);
+    }
+
+    @Test
+    public void testGetInitialDomain_pGreaterThanHalf() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(5.0, 2.0);
+        assertEquals(7.0, d.getInitialDomain(0.7), 1e-9);
+    }
+
+    @Test
+    public void testGetInitialDomain_pEqualsHalf() throws Throwable {
+        NormalDistributionImpl d = new NormalDistributionImpl(5.0, 2.0);
+        assertEquals(5.0, d.getInitialDomain(0.5), 1e-9);
+    }
+
+    // sample() must return a well-defined finite real number
+    @Test
+    public void testSample_returnsFiniteNumber() throws Throwable {
+        double s = standardNormal.sample();
+        assertFalse(Double.isNaN(s));
+        assertFalse(Double.isInfinite(s));
+    }
+}

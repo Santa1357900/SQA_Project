@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-2-5oabvxuo/Closure-2b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - com.google.javascript.jscomp.TypeCheckClaudeTest::testInterface_extendsMultipleUnresolvedTypes_doesNotCrash
+[exit 0]

@@ -1,0 +1,373 @@
+package com.fasterxml.jackson.databind.util;
+
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.ParsePosition;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.Locale;
+import java.util.TimeZone;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class StdDateFormatClaudeTest {
+
+    private Date utcDate(int year, int month, int day, int hour, int minute, int second, int millis) {
+        GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone("UTC"), Locale.US);
+        cal.clear();
+        cal.set(year, month, day, hour, minute, second);
+        cal.set(Calendar.MILLISECOND, millis);
+        return cal.getTime();
+    }
+
+    // default constructor: _timezone left null until explicitly set
+    @Test
+    public void testDefaultConstructor_timeZoneIsNull() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        assertNull(fmt.getTimeZone());
+    }
+
+    // static default timezone must be UTC (2.7+ contract)
+    @Test
+    public void testGetDefaultTimeZone_isUTC() throws Throwable {
+        assertEquals(TimeZone.getTimeZone("UTC"), StdDateFormat.getDefaultTimeZone());
+    }
+
+    // withTimeZone(null) branch: falls back to DEFAULT_TIMEZONE
+    @Test
+    public void testWithTimeZone_nullUsesDefaultUTC() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat().withTimeZone(null);
+        assertEquals(StdDateFormat.getDefaultTimeZone(), fmt.getTimeZone());
+    }
+
+    // withTimeZone(equal tz) branch: returns same instance
+    @Test
+    public void testWithTimeZone_sameTimeZoneReturnsSameInstance() throws Throwable {
+        StdDateFormat base = new StdDateFormat().withTimeZone(TimeZone.getTimeZone("GMT"));
+        StdDateFormat again = base.withTimeZone(TimeZone.getTimeZone("GMT"));
+        assertSame(base, again);
+    }
+
+    // withTimeZone(different tz) branch: returns new instance with new tz
+    @Test
+    public void testWithTimeZone_differentTimeZoneReturnsNewInstance() throws Throwable {
+        StdDateFormat base = new StdDateFormat().withTimeZone(TimeZone.getTimeZone("GMT"));
+        StdDateFormat diff = base.withTimeZone(TimeZone.getTimeZone("America/Chicago"));
+        assertNotSame(base, diff);
+        assertEquals(TimeZone.getTimeZone("America/Chicago"), diff.getTimeZone());
+    }
+
+    // withLocale(equal locale) branch: returns same instance
+    @Test
+    public void testWithLocale_sameLocaleReturnsSameInstance() throws Throwable {
+        StdDateFormat base = new StdDateFormat();
+        StdDateFormat same = base.withLocale(Locale.US);
+        assertSame(base, same);
+    }
+
+    // withLocale(different locale) branch: returns new instance
+    @Test
+    public void testWithLocale_differentLocaleReturnsNewInstance() throws Throwable {
+        StdDateFormat base = new StdDateFormat();
+        StdDateFormat diff = base.withLocale(Locale.GERMANY);
+        assertNotSame(base, diff);
+    }
+
+    // withLenient changes isLenient() result
+    @Test
+    public void testWithLenient_changesIsLenient() throws Throwable {
+        StdDateFormat base = new StdDateFormat();
+        assertTrue(base.isLenient());
+        StdDateFormat strict = base.withLenient(Boolean.FALSE);
+        assertFalse(strict.isLenient());
+    }
+
+    // withLenient(same value) branch: returns same instance
+    @Test
+    public void testWithLenient_sameValueReturnsSameInstance() throws Throwable {
+        StdDateFormat strict = new StdDateFormat().withLenient(Boolean.FALSE);
+        StdDateFormat same = strict.withLenient(Boolean.FALSE);
+        assertSame(strict, same);
+    }
+
+    // withColonInTimeZone toggles flag and returns same instance when unchanged
+    @Test
+    public void testWithColonInTimeZone_changesFlagAndIdentity() throws Throwable {
+        StdDateFormat base = new StdDateFormat();
+        assertFalse(base.isColonIncludedInTimeZone());
+        StdDateFormat colon = base.withColonInTimeZone(true);
+        assertTrue(colon.isColonIncludedInTimeZone());
+        assertSame(colon, colon.withColonInTimeZone(true));
+    }
+
+    // clone() returns new instance preserving timezone configuration
+    @Test
+    public void testClone_returnsNewInstanceWithSameConfig() throws Throwable {
+        StdDateFormat base = new StdDateFormat().withTimeZone(TimeZone.getTimeZone("GMT+3"));
+        StdDateFormat cloned = base.clone();
+        assertNotSame(base, cloned);
+        assertEquals(base.getTimeZone(), cloned.getTimeZone());
+    }
+
+    // deprecated static factory: ISO8601 formatter produces expected pattern for epoch
+    @Test
+    public void testGetISO8601Format_formatsEpochCorrectly() throws Throwable {
+        DateFormat fmt = StdDateFormat.getISO8601Format(TimeZone.getTimeZone("UTC"), Locale.US);
+        assertEquals("1970-01-01T00:00:00.000+0000", fmt.format(new Date(0)));
+    }
+
+    // deprecated static factory: RFC1123 formatter parses a known date correctly
+    @Test
+    public void testGetRFC1123Format_parsesKnownDate() throws Throwable {
+        DateFormat fmt = StdDateFormat.getRFC1123Format(TimeZone.getTimeZone("UTC"), Locale.US);
+        Date d = fmt.parse("Fri, 01 Jan 2021 00:00:00 GMT");
+        assertEquals(utcDate(2021, Calendar.JANUARY, 1, 0, 0, 0, 0), d);
+    }
+
+    // setTimeZone updates the stored timezone (and clears caches)
+    @Test
+    public void testSetTimeZone_updatesTimeZone() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        fmt.setTimeZone(TimeZone.getTimeZone("GMT+1"));
+        assertEquals(TimeZone.getTimeZone("GMT+1"), fmt.getTimeZone());
+    }
+
+    // setLenient(false) flips isLenient() from default true
+    @Test
+    public void testSetLenient_defaultTrueThenFalse() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        assertTrue(fmt.isLenient());
+        fmt.setLenient(false);
+        assertFalse(fmt.isLenient());
+    }
+
+    // default colon-in-timezone flag is false
+    @Test
+    public void testIsColonIncludedInTimeZone_defaultFalse() throws Throwable {
+        assertFalse(new StdDateFormat().isColonIncludedInTimeZone());
+    }
+
+    // parse: plain "yyyy-MM-dd" (PATTERN_PLAIN branch, totalLen<=10)
+    @Test
+    public void testParse_plainIsoDate() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2021-03-15");
+        assertEquals(utcDate(2021, Calendar.MARCH, 15, 0, 0, 0, 0), d);
+    }
+
+    // parse: full ISO8601 with millis and trailing Z
+    @Test
+    public void testParse_isoDateTimeWithMillisAndZ() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2021-03-15T10:20:30.456Z");
+        assertEquals(utcDate(2021, Calendar.MARCH, 15, 10, 20, 30, 456), d);
+    }
+
+    // parse: full ISO8601 with colon offset, verifies offset is subtracted correctly
+    @Test
+    public void testParse_isoDateTimeWithOffsetColon() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2021-03-15T10:20:30+05:30");
+        assertEquals(utcDate(2021, Calendar.MARCH, 15, 4, 50, 30, 0), d);
+    }
+
+    // parse: optional seconds omitted branch
+    @Test
+    public void testParse_isoDateTimeNoSeconds() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2021-03-15T10:20Z");
+        assertEquals(utcDate(2021, Calendar.MARCH, 15, 10, 20, 0, 0), d);
+    }
+
+    // parse: pure numeric string -> timestamp-from-long branch
+    @Test
+    public void testParse_timestampPositiveLong() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("1000000000000");
+        assertEquals(new Date(1000000000000L), d);
+    }
+
+    // parse: leading '-' numeric string -> negative timestamp branch
+    @Test
+    public void testParse_timestampNegative() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("-5000");
+        assertEquals(new Date(-5000L), d);
+    }
+
+    // parse: falls back to RFC1123 format branch
+    @Test
+    public void testParse_rfc1123KnownDate() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("Fri, 01 Jan 2021 00:00:00 GMT");
+        assertEquals(utcDate(2021, Calendar.JANUARY, 1, 0, 0, 0, 0), d);
+    }
+
+    // parse: unparseable input throws ParseException with expected message keyword
+    @Test
+    public void testParse_invalidStringThrowsParseException() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        try {
+            fmt.parse("not a real date!!");
+            fail("expected ParseException");
+        } catch (ParseException expected) {
+            assertTrue(expected.getMessage().contains("Cannot parse date"));
+        }
+    }
+
+    // parse(String,ParsePosition): invalid input returns null instead of throwing
+    @Test
+    public void testParseWithParsePosition_invalidReturnsNull() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        ParsePosition pos = new ParsePosition(0);
+        Date d = fmt.parse("not a real date!!", pos);
+        assertNull(d);
+    }
+
+    // format: default instance, zero offset, no colon -> "+0000"
+    @Test
+    public void testFormat_epochUtcNoColon() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        assertEquals("1970-01-01T00:00:00.000+0000", fmt.format(new Date(0)));
+    }
+
+    // format: non-zero offset with colon enabled -> "+02:00"
+    @Test
+    public void testFormat_withColonInTimeZone_nonZeroOffset() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat()
+                .withTimeZone(TimeZone.getTimeZone("GMT+02:00"))
+                .withColonInTimeZone(true);
+        assertEquals("1970-01-01T02:00:00.000+02:00", fmt.format(new Date(0)));
+    }
+
+    // format: zero offset branch with colon enabled -> "+00:00"
+    @Test
+    public void testFormat_zeroOffsetWithColon() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat().withColonInTimeZone(true);
+        assertEquals("1970-01-01T00:00:00.000+00:00", fmt.format(new Date(0)));
+    }
+
+    // toString contains documented parts
+    @Test
+    public void testToString_containsExpectedParts() throws Throwable {
+        String s = new StdDateFormat().toString();
+        assertTrue(s.contains("StdDateFormat"));
+        assertTrue(s.contains("timezone"));
+        assertTrue(s.contains("locale"));
+        assertTrue(s.contains("lenient"));
+    }
+
+    // toPattern: lenient vs strict branch text
+    @Test
+    public void testToPattern_lenientAndStrictVariants() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        assertTrue(fmt.toPattern().contains("lenient"));
+        StdDateFormat strict = fmt.withLenient(Boolean.FALSE);
+        assertTrue(strict.toPattern().contains("strict"));
+    }
+
+    // equals: identity-based per documented override
+    @Test
+    public void testEquals_identityBased() throws Throwable {
+        StdDateFormat a = new StdDateFormat();
+        StdDateFormat b = new StdDateFormat();
+        assertTrue(a.equals(a));
+        assertFalse(a.equals(b));
+    }
+
+    // hashCode: must equal System.identityHashCode per documented override
+    @Test
+    public void testHashCode_matchesIdentityHashCode() throws Throwable {
+        StdDateFormat a = new StdDateFormat();
+        assertEquals(System.identityHashCode(a), a.hashCode());
+    }
+
+    // looksLikeISO8601: true/false/length-boundary branches
+    @Test
+    public void testLooksLikeISO8601_trueAndFalseCases() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        assertTrue(fmt.looksLikeISO8601("2021-01-01"));
+        assertFalse(fmt.looksLikeISO8601("20210101"));
+        assertTrue(fmt.looksLikeISO8601("2021-01"));
+        assertFalse(fmt.looksLikeISO8601("20-1-1"));
+    }
+
+    // parseAsISO8601: direct protected call on plain date
+    @Test
+    public void testParseAsISO8601Direct_plainDate() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parseAsISO8601("2021-07-04", new ParsePosition(0));
+        assertEquals(utcDate(2021, Calendar.JULY, 4, 0, 0, 0, 0), d);
+    }
+
+    // parseAsRFC1123: direct protected call, invalid input returns null (never throws)
+    @Test
+    public void testParseAsRFC1123Direct_invalidReturnsNull() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parseAsRFC1123("totally-invalid", new ParsePosition(0));
+        assertNull(d);
+    }
+
+    // _getCalendar: applies requested timezone to internal calendar
+    @Test
+    public void testGetCalendar_appliesRequestedTimeZone() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Calendar cal = fmt._getCalendar(TimeZone.getTimeZone("Asia/Tokyo"));
+        assertEquals(TimeZone.getTimeZone("Asia/Tokyo"), cal.getTimeZone());
+    }
+
+    // fractional seconds: single digit -> represents tenths of a second (500ms)
+    @Test
+    public void testParse_fractionalSecondsSingleDigit() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2021-01-01T00:00:00.5Z");
+        assertEquals(utcDate(2021, Calendar.JANUARY, 1, 0, 0, 0, 500), d);
+    }
+
+    // fractional seconds: nine digits, truncated to millisecond precision
+    @Test
+    public void testParse_fractionalSecondsNineDigitsTruncated() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2021-01-01T00:00:00.123456789Z");
+        assertEquals(utcDate(2021, Calendar.JANUARY, 1, 0, 0, 0, 123), d);
+    }
+
+    // fractional seconds: more than nine digits must throw ParseException
+    @Test
+    public void testParse_fractionalSecondsTooManyDigitsThrows() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        try {
+            fmt.parse("2021-01-01T00:00:00.1234567890Z");
+            fail("expected ParseException");
+        } catch (ParseException expected) {
+            assertTrue(expected.getMessage().contains("fractional seconds"));
+        }
+    }
+
+    // BUG TARGET: _format() has a comment stating "special handling needed for BCE (aka BC)"
+    // but never reads Calendar.ERA, so a BC-era date and an AD-era date with identical
+    // year/month/day/time fields must not collide into the same formatted string.
+    @Test
+    public void testFormat_bceYear_mustDifferFromCeYearWithSameFields() throws Throwable {
+        GregorianCalendar bc = new GregorianCalendar(TimeZone.getTimeZone("UTC"), Locale.US);
+        bc.clear();
+        bc.set(Calendar.ERA, GregorianCalendar.BC);
+        bc.set(1, Calendar.JANUARY, 1, 0, 0, 0);
+        Date bcDate = bc.getTime();
+
+        GregorianCalendar ce = new GregorianCalendar(TimeZone.getTimeZone("UTC"), Locale.US);
+        ce.clear();
+        ce.set(Calendar.ERA, GregorianCalendar.AD);
+        ce.set(1, Calendar.JANUARY, 1, 0, 0, 0);
+        Date ceDate = ce.getTime();
+
+        assertFalse(bcDate.equals(ceDate));
+
+        StdDateFormat fmt = new StdDateFormat();
+        String bcStr = fmt.format(bcDate);
+        String ceStr = fmt.format(ceDate);
+        assertFalse(bcStr.equals(ceStr));
+    }
+}

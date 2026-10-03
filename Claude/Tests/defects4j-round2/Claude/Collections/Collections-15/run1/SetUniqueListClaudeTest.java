@@ -1,0 +1,423 @@
+package org.apache.commons.collections.list;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Set;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class SetUniqueListClaudeTest {
+
+    private SetUniqueList list;
+
+    @Before
+    public void setUp() throws Throwable {
+        list = SetUniqueList.decorate(new ArrayList());
+    }
+
+    // decorate: null list -> IllegalArgumentException
+    @Test
+    public void testDecorate_nullList_throwsIllegalArgumentException() throws Throwable {
+        try {
+            SetUniqueList.decorate(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // decorate: empty list branch
+    @Test
+    public void testDecorate_emptyList_returnsEmptySetUniqueList() throws Throwable {
+        SetUniqueList sl = SetUniqueList.decorate(new ArrayList());
+        assertEquals(0, sl.size());
+    }
+
+    // decorate: non-empty list branch, dedups keeping first occurrence
+    @Test
+    public void testDecorate_listWithDuplicates_keepsFirstOccurrenceOnly() throws Throwable {
+        List source = new ArrayList();
+        source.add("a");
+        source.add("b");
+        source.add("a");
+        source.add("c");
+        SetUniqueList sl = SetUniqueList.decorate(source);
+        assertEquals(3, sl.size());
+        assertEquals("a", sl.get(0));
+        assertEquals("b", sl.get(1));
+        assertEquals("c", sl.get(2));
+    }
+
+    // constructor: null set -> IllegalArgumentException
+    @Test
+    public void testConstructor_nullSet_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new SetUniqueList(new ArrayList(), null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // constructor: valid list and set wraps correctly
+    @Test
+    public void testConstructor_validListAndSet_createsWorkingDecorator() throws Throwable {
+        List l = new ArrayList();
+        l.add("a");
+        Set s = new HashSet();
+        s.add("a");
+        SetUniqueList sl = new SetUniqueList(l, s);
+        assertEquals(1, sl.size());
+        assertTrue(sl.contains("a"));
+    }
+
+    // asSet: reflects current list contents
+    @Test
+    public void testAsSet_reflectsListContents() throws Throwable {
+        list.add("x");
+        list.add("y");
+        Set asSet = list.asSet();
+        assertEquals(2, asSet.size());
+        assertTrue(asSet.contains("x"));
+        assertTrue(asSet.contains("y"));
+    }
+
+    // asSet: returned view is unmodifiable
+    @Test
+    public void testAsSet_isUnmodifiable() throws Throwable {
+        list.add("x");
+        Set asSet = list.asSet();
+        try {
+            asSet.add("z");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // add(Object): unique element branch -> true, size increases
+    @Test
+    public void testAdd_uniqueElement_returnsTrueAndAppends() throws Throwable {
+        boolean result = list.add("a");
+        assertTrue(result);
+        assertEquals(1, list.size());
+    }
+
+    // add(Object): duplicate element branch -> false, size unchanged
+    @Test
+    public void testAdd_duplicateElement_returnsFalseAndListUnchanged() throws Throwable {
+        list.add("a");
+        boolean result = list.add("a");
+        assertFalse(result);
+        assertEquals(1, list.size());
+    }
+
+    // add(int,Object): unique element inserted at given index
+    @Test
+    public void testAddIndex_uniqueElement_insertsAtIndex() throws Throwable {
+        list.add("a");
+        list.add("c");
+        list.add(1, "b");
+        assertEquals(3, list.size());
+        assertEquals("b", list.get(1));
+    }
+
+    // add(int,Object): duplicate element -> not inserted, structure unchanged
+    @Test
+    public void testAddIndex_duplicateElement_noInsertion() throws Throwable {
+        list.add("x");
+        list.add("y");
+        list.add(0, "x");
+        assertEquals(2, list.size());
+        assertEquals("x", list.get(0));
+    }
+
+    // addAll(Collection): mix of unique and duplicate elements
+    @Test
+    public void testAddAllCollection_mixedUniqueAndDuplicate_onlyUniqueAdded() throws Throwable {
+        list.add("a");
+        List coll = Arrays.asList(new Object[]{"a", "b", "c"});
+        boolean changed = list.addAll(coll);
+        assertTrue(changed);
+        assertEquals(3, list.size());
+        assertEquals("b", list.get(1));
+        assertEquals("c", list.get(2));
+    }
+
+    // addAll(Collection): empty collection -> no change
+    @Test
+    public void testAddAllCollection_emptyCollection_returnsFalse() throws Throwable {
+        boolean changed = list.addAll(new ArrayList());
+        assertFalse(changed);
+        assertEquals(0, list.size());
+    }
+
+    // addAll(Collection): all elements already duplicates -> returns false
+    @Test
+    public void testAddAllCollection_allDuplicatesOnly_returnsFalse() throws Throwable {
+        list.add("a");
+        boolean changed = list.addAll(Arrays.asList(new Object[]{"a"}));
+        assertFalse(changed);
+        assertEquals(1, list.size());
+    }
+
+    // addAll(int,Collection): insertion with index shift and duplicate skip
+    @Test
+    public void testAddAllIndex_insertsSkippingDuplicatesWithIndexShift() throws Throwable {
+        list.add("a");
+        list.add("d");
+        List coll = Arrays.asList(new Object[]{"b", "a", "c"});
+        list.addAll(1, coll);
+        assertEquals(4, list.size());
+        assertEquals("a", list.get(0));
+        assertEquals("b", list.get(1));
+        assertEquals("c", list.get(2));
+        assertEquals("d", list.get(3));
+    }
+
+    // set(int,Object): replacing with a brand-new value (pos == -1) must keep
+    // the internal Set in sync with the list content (contract: contains()
+    // reflects actual list membership). This targets the known Collections-15 bug.
+    @Test
+    public void testSet_newValueNotInList_internalSetReflectsReplacement() throws Throwable {
+        list.add("a");
+        list.add("b");
+        list.add("c");
+        Object old = list.set(1, "d");
+        assertEquals("b", old);
+        assertEquals("d", list.get(1));
+        assertTrue(list.contains("d"));
+        assertFalse(list.contains("b"));
+    }
+
+    // set(int,Object): value already at same index (pos == index) -> no structural change
+    @Test
+    public void testSet_replaceWithSameValueAtSameIndex_noStructuralChange() throws Throwable {
+        list.add("a");
+        list.add("b");
+        Object old = list.set(0, "a");
+        assertEquals("a", old);
+        assertEquals(2, list.size());
+        assertTrue(list.contains("a"));
+    }
+
+    // set(int,Object): value is a duplicate located elsewhere (pos != -1, pos != index)
+    @Test
+    public void testSet_replaceWithDuplicateAtDifferentIndex_removesDuplicate() throws Throwable {
+        list.add("a");
+        list.add("b");
+        list.add("c");
+        Object old = list.set(0, "c");
+        assertEquals("a", old);
+        assertEquals(2, list.size());
+        assertEquals("c", list.get(0));
+        assertEquals("b", list.get(1));
+        assertFalse(list.contains("a"));
+    }
+
+    // remove(Object): existing element removed from both list and set
+    @Test
+    public void testRemoveObject_existingElement_removesFromListAndSet() throws Throwable {
+        list.add("a");
+        list.add("b");
+        boolean result = list.remove("a");
+        assertTrue(result);
+        assertFalse(list.contains("a"));
+        assertEquals(1, list.size());
+    }
+
+    // remove(Object): non-existing element -> false, no change
+    @Test
+    public void testRemoveObject_nonExistingElement_returnsFalse() throws Throwable {
+        list.add("a");
+        boolean result = list.remove("zzz");
+        assertFalse(result);
+        assertEquals(1, list.size());
+    }
+
+    // remove(int): removes by index and updates contains()
+    @Test
+    public void testRemoveIndex_returnsRemovedAndUpdatesContains() throws Throwable {
+        list.add("a");
+        list.add("b");
+        Object removed = list.remove(0);
+        assertEquals("a", removed);
+        assertFalse(list.contains("a"));
+        assertEquals(1, list.size());
+    }
+
+    // removeAll: removes all elements present in given collection
+    @Test
+    public void testRemoveAll_removesAllMatchingElements() throws Throwable {
+        list.add("a");
+        list.add("b");
+        list.add("c");
+        List toRemove = Arrays.asList(new Object[]{"a", "c"});
+        boolean changed = list.removeAll(toRemove);
+        assertTrue(changed);
+        assertEquals(1, list.size());
+        assertEquals("b", list.get(0));
+        assertFalse(list.contains("a"));
+        assertFalse(list.contains("c"));
+    }
+
+    // retainAll: keeps only elements present in given collection
+    @Test
+    public void testRetainAll_keepsOnlySpecifiedElements() throws Throwable {
+        list.add("a");
+        list.add("b");
+        list.add("c");
+        List toRetain = Arrays.asList(new Object[]{"b"});
+        boolean changed = list.retainAll(toRetain);
+        assertTrue(changed);
+        assertEquals(1, list.size());
+        assertTrue(list.contains("b"));
+        assertFalse(list.contains("a"));
+    }
+
+    // clear: empties both list and internal set
+    @Test
+    public void testClear_emptiesListAndSet() throws Throwable {
+        list.add("a");
+        list.add("b");
+        list.clear();
+        assertEquals(0, list.size());
+        assertFalse(list.contains("a"));
+    }
+
+    // contains: true and false branches via set membership
+    @Test
+    public void testContains_trueAndFalseCases() throws Throwable {
+        list.add("a");
+        assertTrue(list.contains("a"));
+        assertFalse(list.contains("b"));
+    }
+
+    // containsAll: true and false branches via set membership
+    @Test
+    public void testContainsAll_trueAndFalseCases() throws Throwable {
+        list.add("a");
+        list.add("b");
+        assertTrue(list.containsAll(Arrays.asList(new Object[]{"a", "b"})));
+        assertFalse(list.containsAll(Arrays.asList(new Object[]{"a", "c"})));
+    }
+
+    // iterator: next() returns elements in insertion order
+    @Test
+    public void testIterator_nextReturnsElementsInOrder() throws Throwable {
+        list.add("a");
+        list.add("b");
+        Iterator it = list.iterator();
+        assertEquals("a", it.next());
+        assertEquals("b", it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // iterator: remove() updates internal set, allowing element to be re-added
+    @Test
+    public void testIterator_removeUpdatesSetAllowingReAdd() throws Throwable {
+        list.add("a");
+        list.add("b");
+        Iterator it = list.iterator();
+        it.next();
+        it.remove();
+        assertFalse(list.contains("a"));
+        assertTrue(list.add("a"));
+        assertEquals(2, list.size());
+    }
+
+    // listIterator(): next and previous navigation
+    @Test
+    public void testListIterator_nextAndPrevious() throws Throwable {
+        list.add("a");
+        list.add("b");
+        ListIterator lit = list.listIterator();
+        assertEquals("a", lit.next());
+        assertEquals("b", lit.next());
+        assertEquals("b", lit.previous());
+    }
+
+    // listIterator(): remove() updates internal set
+    @Test
+    public void testListIterator_removeUpdatesSet() throws Throwable {
+        list.add("a");
+        list.add("b");
+        ListIterator lit = list.listIterator();
+        lit.next();
+        lit.remove();
+        assertFalse(list.contains("a"));
+        assertEquals(1, list.size());
+    }
+
+    // listIterator(): add() of a duplicate value is ignored
+    @Test
+    public void testListIterator_addDuplicate_ignored() throws Throwable {
+        list.add("a");
+        list.add("b");
+        ListIterator lit = list.listIterator();
+        lit.next();
+        lit.add("b");
+        assertEquals(2, list.size());
+    }
+
+    // listIterator(): add() of a unique value is inserted
+    @Test
+    public void testListIterator_addUnique_inserted() throws Throwable {
+        list.add("a");
+        ListIterator lit = list.listIterator();
+        lit.next();
+        lit.add("c");
+        assertEquals(2, list.size());
+        assertTrue(list.contains("c"));
+    }
+
+    // listIterator(): set() always throws UnsupportedOperationException
+    @Test
+    public void testListIterator_set_throwsUnsupportedOperationException() throws Throwable {
+        list.add("a");
+        ListIterator lit = list.listIterator();
+        lit.next();
+        try {
+            lit.set("z");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // listIterator(int): starts iteration at given position
+    @Test
+    public void testListIteratorIndex_startsAtGivenPosition() throws Throwable {
+        list.add("a");
+        list.add("b");
+        list.add("c");
+        ListIterator lit = list.listIterator(1);
+        assertEquals("b", lit.next());
+    }
+
+    // subList: returns a SetUniqueList instance covering the given range
+    @Test
+    public void testSubList_returnsSetUniqueListInstance() throws Throwable {
+        list.add("a");
+        list.add("b");
+        list.add("c");
+        List sub = list.subList(0, 2);
+        assertTrue(sub instanceof SetUniqueList);
+        assertEquals(2, sub.size());
+    }
+
+    // subList: shares the same uniqueness Set as the parent list
+    @Test
+    public void testSubList_sharesUniquenessSetWithParent() throws Throwable {
+        list.add("a");
+        list.add("b");
+        list.add("c");
+        SetUniqueList sub = (SetUniqueList) list.subList(0, 2);
+        boolean result = sub.add("c");
+        assertFalse(result);
+        assertEquals(2, sub.size());
+    }
+}

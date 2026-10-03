@@ -1,0 +1,203 @@
+package com.fasterxml.jackson.databind.deser.std;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.HashSet;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class JdkDeserializersClaudeTest {
+
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    // covers: _classNames.contains(clsName) == false -> method returns null
+    @Test
+    public void testFind_clsNameNotRegistered_returnsNull() throws Throwable {
+        JsonDeserializer<?> result = JdkDeserializers.find(String.class, "not.a.Registered.ClassName");
+        assertNull(result);
+    }
+
+    // covers: _classNames.contains(null) -> false -> return null (no NPE)
+    @Test
+    public void testFind_nullClsName_returnsNull() throws Throwable {
+        JsonDeserializer<?> result = JdkDeserializers.find(UUID.class, null);
+        assertNull(result);
+    }
+
+    // covers: _classNames.contains("") -> false -> return null
+    @Test
+    public void testFind_emptyClsName_returnsNull() throws Throwable {
+        JsonDeserializer<?> result = JdkDeserializers.find(AtomicBoolean.class, "");
+        assertNull(result);
+    }
+
+    // covers: clsName registered but rawType matches none of the specific checks -> fallthrough return null
+    @Test
+    public void testFind_registeredNameButUnmatchedRawType_returnsNull() throws Throwable {
+        JsonDeserializer<?> result = JdkDeserializers.find(Object.class, UUID.class.getName());
+        assertNull(result);
+    }
+
+    // covers: rawType == UUID.class branch is reached and returns a deserializer
+    @Test
+    public void testFind_uuidType_returnsNonNullDeserializer() throws Throwable {
+        JsonDeserializer<?> result = JdkDeserializers.find(UUID.class, UUID.class.getName());
+        assertNotNull(result);
+    }
+
+    // covers: rawType == AtomicBoolean.class branch is reached and returns a deserializer
+    @Test
+    public void testFind_atomicBooleanType_returnsNonNullDeserializer() throws Throwable {
+        JsonDeserializer<?> result = JdkDeserializers.find(AtomicBoolean.class, AtomicBoolean.class.getName());
+        assertNotNull(result);
+    }
+
+    // covers: rawType == StackTraceElement.class branch is reached and returns a deserializer
+    @Test
+    public void testFind_stackTraceElementType_returnsNonNullDeserializer() throws Throwable {
+        JsonDeserializer<?> result = JdkDeserializers.find(StackTraceElement.class, StackTraceElement.class.getName());
+        assertNotNull(result);
+    }
+
+    // covers: rawType == ByteBuffer.class branch is reached and returns a deserializer
+    @Test
+    public void testFind_byteBufferType_returnsNonNullDeserializer() throws Throwable {
+        JsonDeserializer<?> result = JdkDeserializers.find(ByteBuffer.class, ByteBuffer.class.getName());
+        assertNotNull(result);
+    }
+
+    // covers: repeated invocation with same args each produces a non-null result independently
+    @Test
+    public void testFind_multipleInvocationsUuid_bothNonNull() throws Throwable {
+        JsonDeserializer<?> first = JdkDeserializers.find(UUID.class, UUID.class.getName());
+        JsonDeserializer<?> second = JdkDeserializers.find(UUID.class, UUID.class.getName());
+        assertNotNull(first);
+        assertNotNull(second);
+    }
+
+    // covers: each of the 4 special rawTypes must yield its OWN dedicated deserializer class,
+    // guarding against a copy-paste bug that reuses the wrong deserializer class for a type
+    @Test
+    public void testFind_allFourSpecialTypes_returnDistinctDeserializerClasses() throws Throwable {
+        HashSet<Class<?>> classes = new HashSet<Class<?>>();
+        classes.add(JdkDeserializers.find(UUID.class, UUID.class.getName()).getClass());
+        classes.add(JdkDeserializers.find(AtomicBoolean.class, AtomicBoolean.class.getName()).getClass());
+        classes.add(JdkDeserializers.find(StackTraceElement.class, StackTraceElement.class.getName()).getClass());
+        classes.add(JdkDeserializers.find(ByteBuffer.class, ByteBuffer.class.getName()).getClass());
+        assertEquals(4, classes.size());
+    }
+
+    // covers: plain non-special JDK type (String) is not registered -> returns null
+    @Test
+    public void testFind_plainStringType_returnsNull() throws Throwable {
+        JsonDeserializer<?> result = JdkDeserializers.find(String.class, String.class.getName());
+        assertNull(result);
+    }
+
+    // covers: plain non-special JDK type (Integer) is not registered -> returns null
+    @Test
+    public void testFind_integerType_returnsNull() throws Throwable {
+        JsonDeserializer<?> result = JdkDeserializers.find(Integer.class, Integer.class.getName());
+        assertNull(result);
+    }
+
+    // covers UUID deserialization from its standard canonical string representation
+    @Test
+    public void testObjectMapper_deserializeUuid_standardFormat() throws Throwable {
+        UUID expected = UUID.fromString("123e4567-e89b-12d3-a456-426655440000");
+        UUID result = mapper.readValue("\"123e4567-e89b-12d3-a456-426655440000\"", UUID.class);
+        assertEquals(expected, result);
+    }
+
+    // covers: per java.util.UUID contract, hex digits in a UUID string are case-insensitive
+    @Test
+    public void testObjectMapper_deserializeUuid_caseInsensitive() throws Throwable {
+        UUID expected = UUID.fromString("123e4567-e89b-12d3-a456-426655440000");
+        UUID result = mapper.readValue("\"123E4567-E89B-12D3-A456-426655440000\"", UUID.class);
+        assertEquals(expected, result);
+    }
+
+    // covers full serialize-then-deserialize round trip for UUID via the selected deserializer
+    @Test
+    public void testObjectMapper_roundTripUuid() throws Throwable {
+        UUID orig = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        String json = mapper.writeValueAsString(orig);
+        UUID result = mapper.readValue(json, UUID.class);
+        assertEquals(orig, result);
+    }
+
+    // covers edge value: nil UUID (all zero bits)
+    @Test
+    public void testObjectMapper_deserializeUuid_nilUuid() throws Throwable {
+        UUID result = mapper.readValue("\"00000000-0000-0000-0000-000000000000\"", UUID.class);
+        assertEquals(new UUID(0L, 0L), result);
+    }
+
+    // covers: malformed UUID string must fail per java.util.UUID string format contract
+    @Test
+    public void testObjectMapper_deserializeUuid_malformedString_throws() throws Throwable {
+        try {
+            mapper.readValue("\"not-a-valid-uuid\"", UUID.class);
+            fail("expected IOException for malformed UUID string");
+        } catch (IOException expected) {
+            // expected
+        }
+    }
+
+    // covers AtomicBoolean deserialization from JSON literal true
+    @Test
+    public void testObjectMapper_deserializeAtomicBoolean_true() throws Throwable {
+        AtomicBoolean result = mapper.readValue("true", AtomicBoolean.class);
+        assertTrue(result.get());
+    }
+
+    // covers AtomicBoolean deserialization from JSON literal false
+    @Test
+    public void testObjectMapper_deserializeAtomicBoolean_false() throws Throwable {
+        AtomicBoolean result = mapper.readValue("false", AtomicBoolean.class);
+        assertFalse(result.get());
+    }
+
+    // covers full serialize-then-deserialize round trip for AtomicBoolean
+    @Test
+    public void testObjectMapper_roundTripAtomicBoolean() throws Throwable {
+        AtomicBoolean orig = new AtomicBoolean(true);
+        String json = mapper.writeValueAsString(orig);
+        AtomicBoolean result = mapper.readValue(json, AtomicBoolean.class);
+        assertEquals(orig.get(), result.get());
+    }
+
+    // covers: invalid textual value for boolean must fail, per Jackson boolean coercion contract
+    @Test
+    public void testObjectMapper_deserializeAtomicBoolean_invalidValue_throws() throws Throwable {
+        try {
+            mapper.readValue("\"notabool\"", AtomicBoolean.class);
+            fail("expected IOException for invalid boolean text");
+        } catch (IOException expected) {
+            // expected
+        }
+    }
+
+    // covers full serialize-then-deserialize round trip for StackTraceElement, preserving its fields
+    @Test
+    public void testObjectMapper_roundTripStackTraceElement() throws Throwable {
+        StackTraceElement orig = new StackTraceElement("com.example.MyClass", "myMethod", "MyClass.java", 42);
+        String json = mapper.writeValueAsString(orig);
+        StackTraceElement result = mapper.readValue(json, StackTraceElement.class);
+        assertEquals(orig.getClassName(), result.getClassName());
+        assertEquals(orig.getMethodName(), result.getMethodName());
+        assertEquals(orig.getLineNumber(), result.getLineNumber());
+    }
+}

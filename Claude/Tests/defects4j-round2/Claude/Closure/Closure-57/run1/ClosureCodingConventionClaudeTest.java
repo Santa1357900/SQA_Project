@@ -1,0 +1,258 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+
+import java.util.Collection;
+
+public class ClosureCodingConventionClaudeTest {
+
+  private ClosureCodingConvention convention;
+
+  @Before
+  public void setUp() throws Throwable {
+    convention = new ClosureCodingConvention();
+  }
+
+  // isSuperClassReference: exact match "superClass_" returns true
+  @Test
+  public void testIsSuperClassReference_exactMatch_returnsTrue() throws Throwable {
+    assertTrue(convention.isSuperClassReference("superClass_"));
+  }
+
+  // isSuperClassReference: different property name returns false
+  @Test
+  public void testIsSuperClassReference_differentName_returnsFalse() throws Throwable {
+    assertFalse(convention.isSuperClassReference("superClass"));
+  }
+
+  // isSuperClassReference: empty string returns false
+  @Test
+  public void testIsSuperClassReference_emptyString_returnsFalse() throws Throwable {
+    assertFalse(convention.isSuperClassReference(""));
+  }
+
+  // isSuperClassReference: null input does not throw, returns false
+  @Test
+  public void testIsSuperClassReference_null_returnsFalse() throws Throwable {
+    assertFalse(convention.isSuperClassReference(null));
+  }
+
+  // isSuperClassReference: case-sensitive comparison, mismatched case returns false
+  @Test
+  public void testIsSuperClassReference_caseMismatch_returnsFalse() throws Throwable {
+    assertFalse(convention.isSuperClassReference("SUPERCLASS_"));
+  }
+
+  // getExportPropertyFunction: returns Closure's goog.exportProperty function name
+  @Test
+  public void testGetExportPropertyFunction_returnsGoogExportProperty() throws Throwable {
+    assertEquals("goog.exportProperty", convention.getExportPropertyFunction());
+  }
+
+  // getExportSymbolFunction: returns Closure's goog.exportSymbol function name
+  @Test
+  public void testGetExportSymbolFunction_returnsGoogExportSymbol() throws Throwable {
+    assertEquals("goog.exportSymbol", convention.getExportSymbolFunction());
+  }
+
+  // getAbstractMethodName: returns goog.abstractMethod
+  @Test
+  public void testGetAbstractMethodName_returnsGoogAbstractMethod() throws Throwable {
+    assertEquals("goog.abstractMethod", convention.getAbstractMethodName());
+  }
+
+  // getGlobalObject: returns goog.global
+  @Test
+  public void testGetGlobalObject_returnsGoogGlobal() throws Throwable {
+    assertEquals("goog.global", convention.getGlobalObject());
+  }
+
+  // isOptionalParameter: always false regardless of node, tested with null
+  @Test
+  public void testIsOptionalParameter_nullNode_returnsFalse() throws Throwable {
+    assertFalse(convention.isOptionalParameter(null));
+  }
+
+  // isOptionalParameter: always false regardless of node, tested with NAME node
+  @Test
+  public void testIsOptionalParameter_nameNode_returnsFalse() throws Throwable {
+    Node n = IR.name("x");
+    assertFalse(convention.isOptionalParameter(n));
+  }
+
+  // isVarArgsParameter: always false regardless of node, tested with null
+  @Test
+  public void testIsVarArgsParameter_nullNode_returnsFalse() throws Throwable {
+    assertFalse(convention.isVarArgsParameter(null));
+  }
+
+  // isVarArgsParameter: always false regardless of node, tested with STRING node
+  @Test
+  public void testIsVarArgsParameter_stringNode_returnsFalse() throws Throwable {
+    Node n = IR.string("x");
+    assertFalse(convention.isVarArgsParameter(n));
+  }
+
+  // isPrivate: regular identifier returns false
+  @Test
+  public void testIsPrivate_regularName_returnsFalse() throws Throwable {
+    assertFalse(convention.isPrivate("foo"));
+  }
+
+  // isPrivate: trailing underscore name still returns false (no naming heuristic applied)
+  @Test
+  public void testIsPrivate_trailingUnderscore_returnsFalse() throws Throwable {
+    assertFalse(convention.isPrivate("foo_"));
+  }
+
+  // isPrivate: empty string returns false
+  @Test
+  public void testIsPrivate_emptyString_returnsFalse() throws Throwable {
+    assertFalse(convention.isPrivate(""));
+  }
+
+  // isPrivate: null input does not throw, returns false
+  @Test
+  public void testIsPrivate_null_returnsFalse() throws Throwable {
+    assertFalse(convention.isPrivate(null));
+  }
+
+  // getAssertionFunctions: must contain exactly the 7 documented assertion specs
+  @Test
+  public void testGetAssertionFunctions_sizeIsSeven() throws Throwable {
+    Collection<AssertionFunctionSpec> specs = convention.getAssertionFunctions();
+    assertEquals(7, specs.size());
+  }
+
+  // getAssertionFunctions: collection is non-null and contains no null elements
+  @Test
+  public void testGetAssertionFunctions_notEmptyAndElementsNotNull() throws Throwable {
+    Collection<AssertionFunctionSpec> specs = convention.getAssertionFunctions();
+    assertNotNull(specs);
+    assertFalse(specs.isEmpty());
+    for (AssertionFunctionSpec spec : specs) {
+      assertNotNull(spec);
+    }
+  }
+
+  // isPropertyTestFunction: precondition requires a CALL node; NAME node must throw
+  @Test
+  public void testIsPropertyTestFunction_nameNode_throwsIllegalArgumentException() throws Throwable {
+    try {
+      convention.isPropertyTestFunction(IR.name("foo"));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // isPropertyTestFunction: precondition requires a CALL node; STRING node must throw
+  @Test
+  public void testIsPropertyTestFunction_stringNode_throwsIllegalArgumentException() throws Throwable {
+    try {
+      convention.isPropertyTestFunction(IR.string("foo"));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // isPropertyTestFunction: precondition requires a CALL node; BLOCK node must throw
+  @Test
+  public void testIsPropertyTestFunction_blockNode_throwsIllegalArgumentException() throws Throwable {
+    try {
+      convention.isPropertyTestFunction(IR.block());
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // getObjectLiteralCast: precondition requires a CALL node; NAME node must throw
+  @Test
+  public void testGetObjectLiteralCast_nameNode_throwsIllegalArgumentException() throws Throwable {
+    try {
+      convention.getObjectLiteralCast((NodeTraversal) null, IR.name("foo"));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // getObjectLiteralCast: precondition requires a CALL node; NUMBER node must throw
+  @Test
+  public void testGetObjectLiteralCast_numberNode_throwsIllegalArgumentException() throws Throwable {
+    try {
+      convention.getObjectLiteralCast((NodeTraversal) null, IR.number(5));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // getObjectLiteralCast: precondition requires a CALL node; BLOCK node must throw
+  @Test
+  public void testGetObjectLiteralCast_blockNode_throwsIllegalArgumentException() throws Throwable {
+    try {
+      convention.getObjectLiteralCast((NodeTraversal) null, IR.block());
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // extractClassNameIfProvide: parent that is not an EXPR_RESULT/CALL returns null
+  @Test
+  public void testExtractClassNameIfProvide_parentIsNameNode_returnsNull() throws Throwable {
+    String result = convention.extractClassNameIfProvide(IR.string("X"), IR.name("notExprCall"));
+    assertNull(result);
+  }
+
+  // extractClassNameIfProvide: parent that is a BLOCK (not expr call) returns null
+  @Test
+  public void testExtractClassNameIfProvide_parentIsBlockNode_returnsNull() throws Throwable {
+    String result = convention.extractClassNameIfProvide(IR.string("X"), IR.block());
+    assertNull(result);
+  }
+
+  // extractClassNameIfRequire: parent that is not an EXPR_RESULT/CALL returns null
+  @Test
+  public void testExtractClassNameIfRequire_parentIsNameNode_returnsNull() throws Throwable {
+    String result = convention.extractClassNameIfRequire(IR.string("X"), IR.name("notExprCall"));
+    assertNull(result);
+  }
+
+  // extractClassNameIfRequire: parent that is a BLOCK (not expr call) returns null
+  @Test
+  public void testExtractClassNameIfRequire_parentIsBlockNode_returnsNull() throws Throwable {
+    String result = convention.extractClassNameIfRequire(IR.string("X"), IR.block());
+    assertNull(result);
+  }
+
+  // describeFunctionBind: a plain NAME node is never a function bind call
+  @Test
+  public void testDescribeFunctionBind_nameNode_returnsNull() throws Throwable {
+    Object result = convention.describeFunctionBind(IR.name("x"));
+    assertNull(result);
+  }
+
+  // describeFunctionBind: a plain STRING node is never a function bind call
+  @Test
+  public void testDescribeFunctionBind_stringNode_returnsNull() throws Throwable {
+    Object result = convention.describeFunctionBind(IR.string("x"));
+    assertNull(result);
+  }
+
+  // describeFunctionBind: a plain NUMBER node is never a function bind call
+  @Test
+  public void testDescribeFunctionBind_numberNode_returnsNull() throws Throwable {
+    Object result = convention.describeFunctionBind(IR.number(1));
+    assertNull(result);
+  }
+
+  // describeFunctionBind: a plain BLOCK node is never a function bind call
+  @Test
+  public void testDescribeFunctionBind_blockNode_returnsNull() throws Throwable {
+    Object result = convention.describeFunctionBind(IR.block());
+    assertNull(result);
+  }
+}

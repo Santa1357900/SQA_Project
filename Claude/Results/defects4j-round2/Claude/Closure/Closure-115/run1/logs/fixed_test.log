@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-115-r3ax_h4g/Closure-115f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - com.google.javascript.jscomp.FunctionInjectorClaudeTest::testSetKnownConstants_calledTwice_throwsIllegalStateException
+[exit 0]

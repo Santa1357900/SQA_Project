@@ -1,0 +1,464 @@
+package com.google.gson.stream;
+
+import java.io.IOException;
+import java.io.StringWriter;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class JsonWriterClaudeTest {
+
+  // constructor: out == null -> NullPointerException
+  @Test
+  public void testConstructor_nullWriter_throwsNullPointerException() throws Throwable {
+    try {
+      new JsonWriter(null);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // setIndent: indent.length()==0 branch -> indent=null, separator=":"
+  @Test
+  public void testSetIndent_emptyString_compactOutput() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.setIndent("");
+    writer.beginObject();
+    writer.name("a");
+    writer.value(1L);
+    writer.endObject();
+    assertEquals("{\"a\":1}", sw.toString());
+  }
+
+  // setIndent: non-empty branch -> pretty printing with newline + indent + ": " separator
+  @Test
+  public void testSetIndent_nonEmptyString_prettyPrints() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.setIndent("  ");
+    writer.beginObject();
+    writer.name("a");
+    writer.value(1L);
+    writer.endObject();
+    assertEquals("{\n  \"a\": 1\n}", sw.toString());
+  }
+
+  // setLenient/isLenient default false and true
+  @Test
+  public void testSetLenient_defaultFalse_andSetTrue() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    assertFalse(writer.isLenient());
+    writer.setLenient(true);
+    assertTrue(writer.isLenient());
+  }
+
+  // setHtmlSafe/isHtmlSafe default false and true
+  @Test
+  public void testSetHtmlSafe_defaultFalse_andSetTrue() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    assertFalse(writer.isHtmlSafe());
+    writer.setHtmlSafe(true);
+    assertTrue(writer.isHtmlSafe());
+  }
+
+  // setSerializeNulls/getSerializeNulls default true and set false
+  @Test
+  public void testSetSerializeNulls_defaultTrue_andSetFalse() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    assertTrue(writer.getSerializeNulls());
+    writer.setSerializeNulls(false);
+    assertFalse(writer.getSerializeNulls());
+  }
+
+  // beginArray + endArray on empty array -> "[]"
+  @Test
+  public void testBeginArray_endArray_emptyArray_writesBrackets() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.beginArray();
+    writer.endArray();
+    assertEquals("[]", sw.toString());
+  }
+
+  // endArray without matching beginArray -> IllegalStateException "Nesting problem."
+  @Test
+  public void testEndArray_withoutBeginArray_throwsIllegalStateException() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    try {
+      writer.endArray();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      assertTrue(expected.getMessage().contains("Nesting problem"));
+    }
+  }
+
+  // beginObject + endObject on empty object -> "{}"
+  @Test
+  public void testBeginObject_endObject_emptyObject_writesBraces() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.beginObject();
+    writer.endObject();
+    assertEquals("{}", sw.toString());
+  }
+
+  // endObject with dangling name -> IllegalStateException
+  @Test
+  public void testEndObject_danglingName_throwsIllegalStateException() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    writer.beginObject();
+    writer.name("a");
+    try {
+      writer.endObject();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      assertTrue(expected.getMessage().contains("Dangling name"));
+    }
+  }
+
+  // endObject on wrong scope (array) -> IllegalStateException "Nesting problem."
+  @Test
+  public void testEndObject_nestingProblem_throwsIllegalStateException() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    writer.beginArray();
+    try {
+      writer.endObject();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      assertTrue(expected.getMessage().contains("Nesting problem"));
+    }
+  }
+
+  // name(null) -> NullPointerException
+  @Test
+  public void testName_nullName_throwsNullPointerException() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    writer.beginObject();
+    try {
+      writer.name(null);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // name() called twice consecutively (deferredName already set) -> IllegalStateException
+  @Test
+  public void testName_duplicateDeferredName_throwsIllegalStateException() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    writer.beginObject();
+    writer.name("a");
+    try {
+      writer.name("b");
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // name() after close() -> IllegalStateException "JsonWriter is closed."
+  @Test
+  public void testName_afterClose_throwsIllegalStateException() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.beginArray();
+    writer.endArray();
+    writer.close();
+    try {
+      writer.name("x");
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      assertTrue(expected.getMessage().contains("closed"));
+    }
+  }
+
+  // value(String) null -> writes null literal
+  @Test
+  public void testValueString_null_writesNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.value((String) null);
+    assertEquals("null", sw.toString());
+  }
+
+  // value(String) escapes quote and backslash
+  @Test
+  public void testValueString_quoteAndBackslashEscaped() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.value("he said \"hi\"");
+    String out = sw.toString();
+    assertTrue(out.startsWith("\""));
+    assertTrue(out.endsWith("\""));
+    assertTrue(out.contains("\\\"hi\\\""));
+  }
+
+  // value(String) escapes backslash and control chars (tab, newline)
+  @Test
+  public void testValueString_tabNewlineControlCharsEscaped() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.value("a\tb\nc\u0000");
+    String out = sw.toString();
+    assertTrue(out.contains("a\\tb\\nc"));
+    assertTrue(out.contains("\\u0000"));
+  }
+
+  // value(String) htmlSafe escapes <, >, &, =, '
+  @Test
+  public void testValueString_htmlSafeEscaping() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.setHtmlSafe(true);
+    writer.value("<a>&b=c'd");
+    String out = sw.toString();
+    assertTrue(out.contains("\\u003c"));
+    assertTrue(out.contains("\\u003e"));
+    assertTrue(out.contains("\\u0026"));
+    assertTrue(out.contains("\\u003d"));
+    assertTrue(out.contains("\\u0027"));
+  }
+
+  // value(String) unicode line separator U+2028 always escaped
+  @Test
+  public void testValueString_unicodeLineSeparatorEscaped() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.value("a\u2028b");
+    String out = sw.toString();
+    assertTrue(out.contains("\\u2028"));
+  }
+
+  // jsonValue(null) -> writes null literal
+  @Test
+  public void testJsonValue_null_writesNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.jsonValue(null);
+    assertEquals("null", sw.toString());
+  }
+
+  // jsonValue writes raw content without escaping
+  @Test
+  public void testJsonValue_rawJsonWrittenWithoutEscaping() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.jsonValue("{\"x\":1}");
+    assertEquals("{\"x\":1}", sw.toString());
+  }
+
+  // nullValue() basic -> writes "null"
+  @Test
+  public void testNullValue_writesNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.nullValue();
+    assertEquals("null", sw.toString());
+  }
+
+  // nullValue() with serializeNulls=false and deferredName set -> skip name and value
+  @Test
+  public void testNullValue_serializeNullsFalse_skipsNameAndValue() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.setSerializeNulls(false);
+    writer.beginObject();
+    writer.name("a");
+    writer.nullValue();
+    writer.endObject();
+    assertEquals("{}", sw.toString());
+  }
+
+  // value(boolean) primitive true/false
+  @Test
+  public void testValueBooleanPrimitive_trueAndFalse() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.beginArray();
+    writer.value(true);
+    writer.value(false);
+    writer.endArray();
+    assertEquals("[true,false]", sw.toString());
+  }
+
+  // value(Boolean) null -> writes null literal
+  @Test
+  public void testValueBooleanWrapper_null_writesNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.value((Boolean) null);
+    assertEquals("null", sw.toString());
+  }
+
+  // value(Boolean) non-null -> writes literal
+  @Test
+  public void testValueBooleanWrapper_nonNull_writesLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.value(Boolean.TRUE);
+    assertEquals("true", sw.toString());
+  }
+
+  // value(double) finite value writes number via Double.toString
+  @Test
+  public void testValueDouble_finite_writesNumber() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.value(1.5d);
+    assertEquals(Double.toString(1.5d), sw.toString());
+  }
+
+  // value(double) NaN in strict mode -> IllegalArgumentException (per javadoc: may not be NaN)
+  @Test
+  public void testValueDouble_strictNaN_throwsIllegalArgumentException() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    try {
+      writer.value(Double.NaN);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // value(double) Infinite in strict mode -> IllegalArgumentException
+  @Test
+  public void testValueDouble_strictInfinite_throwsIllegalArgumentException() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    try {
+      writer.value(Double.POSITIVE_INFINITY);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // BUG TEST: setLenient(true) must permit NaN per class-level contract: "Numbers may be NaNs or infinities"
+  @Test
+  public void testValueDouble_lenientNaN_doesNotThrow_andWritesNaN() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.setLenient(true);
+    writer.value(Double.NaN);
+    assertEquals("NaN", sw.toString());
+  }
+
+  // BUG TEST: setLenient(true) must permit Infinite values too
+  @Test
+  public void testValueDouble_lenientInfinite_doesNotThrow_andWritesInfinity() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.setLenient(true);
+    writer.value(Double.POSITIVE_INFINITY);
+    assertEquals("Infinity", sw.toString());
+  }
+
+  // value(long) MIN_VALUE and MAX_VALUE
+  @Test
+  public void testValueLong_minAndMaxValues() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.beginArray();
+    writer.value(Long.MIN_VALUE);
+    writer.value(Long.MAX_VALUE);
+    writer.endArray();
+    assertEquals("[" + Long.MIN_VALUE + "," + Long.MAX_VALUE + "]", sw.toString());
+  }
+
+  // value(Number) null -> writes null literal via nullValue()
+  @Test
+  public void testValueNumber_null_writesNullLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.value((Number) null);
+    assertEquals("null", sw.toString());
+  }
+
+  // value(Number) NaN in strict mode -> IllegalArgumentException
+  @Test
+  public void testValueNumber_strictNaN_throwsIllegalArgumentException() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    Double nan = new Double(Double.NaN);
+    try {
+      writer.value((Number) nan);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // value(Number) NaN in lenient mode -> writes raw "NaN" literal
+  @Test
+  public void testValueNumber_lenientNaN_writesNaNLiteral() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.setLenient(true);
+    Double nan = new Double(Double.NaN);
+    writer.value((Number) nan);
+    assertEquals("NaN", sw.toString());
+  }
+
+  // flush() after close() -> IllegalStateException "JsonWriter is closed."
+  @Test
+  public void testFlush_afterClose_throwsIllegalStateException() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.beginArray();
+    writer.endArray();
+    writer.close();
+    try {
+      writer.flush();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      assertTrue(expected.getMessage().contains("closed"));
+    }
+  }
+
+  // close() with incomplete document -> IOException
+  @Test
+  public void testClose_incompleteDocument_throwsIOException() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.beginArray();
+    try {
+      writer.close();
+      fail("expected IOException");
+    } catch (IOException expected) {
+      assertTrue(expected.getMessage().contains("Incomplete document"));
+    }
+  }
+
+  // close() with complete document -> no exception; stack reset so flush() afterwards throws ISE
+  @Test
+  public void testClose_completeDocument_noExceptionThenClosedState() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.beginArray();
+    writer.endArray();
+    writer.close();
+    try {
+      writer.flush();
+      fail("expected IllegalStateException after close");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // second top-level value without lenient -> IllegalStateException
+  @Test
+  public void testValue_secondTopLevelValueStrict_throwsIllegalStateException() throws Throwable {
+    JsonWriter writer = new JsonWriter(new StringWriter());
+    writer.value("first");
+    try {
+      writer.value("second");
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      assertTrue(expected.getMessage().contains("top-level"));
+    }
+  }
+
+  // second top-level value with lenient -> allowed
+  @Test
+  public void testValue_secondTopLevelValueLenient_isAllowed() throws Throwable {
+    StringWriter sw = new StringWriter();
+    JsonWriter writer = new JsonWriter(sw);
+    writer.setLenient(true);
+    writer.value("first");
+    writer.value("second");
+    assertEquals("\"first\"\"second\"", sw.toString());
+  }
+}

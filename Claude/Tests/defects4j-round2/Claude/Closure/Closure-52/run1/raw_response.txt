@@ -1,0 +1,301 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CodeGeneratorClaudeTest {
+
+  private CodeGenerator gen;
+
+  @Before
+  public void setUp() throws Throwable {
+    // Instance with a null CodeConsumer: safe because jsString()/identifierEscape()
+    // and friends never touch the consumer field directly.
+    gen = new CodeGenerator(null);
+  }
+
+  private String compileToSource(String js) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    compiler.compile(externs, input, options);
+    return compiler.toSource();
+  }
+
+  // Covers Token.VAR + Token.NAME-with-initializer branch
+  @Test
+  public void testAdd_varDeclarationWithNumber_includesNameAndValue() throws Throwable {
+    String output = compileToSource("var x = 1;");
+    assertNotNull(output);
+    assertTrue(output.contains("var x=1"));
+  }
+
+  // Covers addList traversal with multiple NAME children separated by comma
+  @Test
+  public void testAdd_multipleVarNames_commaSeparated() throws Throwable {
+    String output = compileToSource("var a = 1, b = 2;");
+    assertNotNull(output);
+    assertTrue(output.contains("var a=1,b=2"));
+  }
+
+  // Covers BLOCK/SCRIPT loop emitting ';' between consecutive statements
+  @Test
+  public void testAdd_twoStatements_semicolonSeparated() throws Throwable {
+    String output = compileToSource("var a=1;var b=2;");
+    assertNotNull(output);
+    assertTrue(output.contains("var a=1;var b=2"));
+  }
+
+  // Covers binary operator branch (opstr != null) with no extra spaces for '+'
+  @Test
+  public void testAdd_binaryAddition_noExtraSpaces() throws Throwable {
+    String output = compileToSource("var x=1+2;");
+    assertNotNull(output);
+    assertTrue(output.contains("x=1+2"));
+  }
+
+  // Covers && binary operator printed without surrounding spaces
+  @Test
+  public void testAdd_logicalAnd_noSpaces() throws Throwable {
+    String output = compileToSource("function f(a,b){return a&&b;}");
+    assertNotNull(output);
+    assertTrue(output.contains("a&&b"));
+  }
+
+  // Covers word-operator 'in' requiring separating spaces from operands
+  @Test
+  public void testAdd_inOperator_requiresSpaces() throws Throwable {
+    String output = compileToSource("function f(a,b){return a in b;}");
+    assertNotNull(output);
+    assertTrue(output.contains("a in b"));
+  }
+
+  // Covers TYPEOF unary operator needing a space before identifier
+  @Test
+  public void testAdd_typeofOperator_requiresSpace() throws Throwable {
+    String output = compileToSource("function f(a){return typeof a;}");
+    assertNotNull(output);
+    assertTrue(output.contains("typeof a"));
+  }
+
+  // Covers HOOK (ternary) branch producing compact a?b:c form
+  @Test
+  public void testAdd_ternaryOperator_compactForm() throws Throwable {
+    String output = compileToSource("function f(a,b,c){return a?b:c;}");
+    assertNotNull(output);
+    assertTrue(output.contains("a?b:c"));
+  }
+
+  // Covers ARRAYLIT + addArrayList elision handling (EMPTY slot between commas)
+  @Test
+  public void testAdd_arrayLiteralWithHole_preservesEmptySlot() throws Throwable {
+    String output = compileToSource("var x=[1,,3];");
+    assertNotNull(output);
+    assertTrue(output.contains("[1,,3]"));
+  }
+
+  // Covers OBJECTLIT branch where key is a simple number (getSimpleNumber path)
+  @Test
+  public void testAdd_objectLiteralNumericKey_printsAsNumber() throws Throwable {
+    String output = compileToSource("var x={1:2};");
+    assertNotNull(output);
+    assertTrue(output.contains("{1:2}"));
+  }
+
+  // Covers OBJECTLIT branch where quoted key must stay quoted (not a valid identifier)
+  @Test
+  public void testAdd_objectLiteralQuotedKey_staysQuoted() throws Throwable {
+    String output = compileToSource("var x={'a-b':1};");
+    assertNotNull(output);
+    assertTrue(output.contains("{\"a-b\":1}"));
+  }
+
+  // Covers GETPROP needsParens branch: numeric receiver must be parenthesized
+  @Test
+  public void testAdd_getPropOnNumber_wrappedInParens() throws Throwable {
+    String output = compileToSource("(1).toString;");
+    assertNotNull(output);
+    assertTrue(output.contains("(1).toString"));
+  }
+
+  // Covers NEW with an explicit argument list
+  @Test
+  public void testAdd_newWithArguments_includesParens() throws Throwable {
+    String output = compileToSource("new Array(1,2);");
+    assertNotNull(output);
+    assertTrue(output.contains("new Array(1,2)"));
+  }
+
+  // Covers Token.FOR 4-child (classic for) branch structure
+  @Test
+  public void testAdd_forLoop_cStyleStructure() throws Throwable {
+    String output = compileToSource("for(var i=0;i<10;i++)b();");
+    assertNotNull(output);
+    assertTrue(output.contains("for(var i=0;i<10;i++)"));
+  }
+
+  // Covers Token.IF with else branch
+  @Test
+  public void testAdd_ifElse_structure() throws Throwable {
+    String output = compileToSource("if(a)b();else c();");
+    assertNotNull(output);
+    assertTrue(output.contains("if(a)"));
+    assertTrue(output.contains("else"));
+    assertTrue(output.contains("b()"));
+    assertTrue(output.contains("c()"));
+  }
+
+  // Covers Token.TRY with catch and finally (childCount == 3 path)
+  @Test
+  public void testAdd_tryCatchFinally_structure() throws Throwable {
+    String output = compileToSource("try{a();}catch(e){b();}finally{c();}");
+    assertNotNull(output);
+    assertTrue(output.contains("try{"));
+    assertTrue(output.contains("catch(e)"));
+    assertTrue(output.contains("finally"));
+  }
+
+  // Covers Token.REGEXP printing with flags preserved
+  @Test
+  public void testAdd_regexLiteral_printsSlashesAndFlags() throws Throwable {
+    String output = compileToSource("var x=/abc/g;");
+    assertNotNull(output);
+    assertTrue(output.contains("/abc/g"));
+  }
+
+  // Covers Token.INC post-increment branch (INCRDECR_PROP != 0)
+  @Test
+  public void testAdd_postIncrement_noSpaceBeforeOperator() throws Throwable {
+    String output = compileToSource("a++;");
+    assertNotNull(output);
+    assertTrue(output.contains("a++"));
+  }
+
+  // Covers isSimpleNumber loop: all characters are digits, length>0
+  @Test
+  public void testIsSimpleNumber_allDigits_returnsTrue() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("123"));
+  }
+
+  // Covers isSimpleNumber boundary: empty string -> len>0 is false
+  @Test
+  public void testIsSimpleNumber_emptyString_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber(""));
+  }
+
+  // Covers isSimpleNumber early-exit when a non-digit character is found
+  @Test
+  public void testIsSimpleNumber_containsNonDigit_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("1a2"));
+  }
+
+  // Covers isSimpleNumber character-below-'0' branch
+  @Test
+  public void testIsSimpleNumber_negativeSign_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("-1"));
+  }
+
+  // Covers getSimpleNumber success path via Long.parseLong
+  @Test
+  public void testGetSimpleNumber_validDigits_returnsParsedValue() throws Throwable {
+    assertEquals(123.0, CodeGenerator.getSimpleNumber("123"), 1e-9);
+  }
+
+  // Covers getSimpleNumber with single zero digit
+  @Test
+  public void testGetSimpleNumber_zero_returnsZero() throws Throwable {
+    assertEquals(0.0, CodeGenerator.getSimpleNumber("0"), 1e-9);
+  }
+
+  // Covers getSimpleNumber returning NaN when isSimpleNumber is false
+  @Test
+  public void testGetSimpleNumber_nonNumeric_returnsNaN() throws Throwable {
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("abc")));
+  }
+
+  // Covers getSimpleNumber NumberFormatException catch branch (too long for long)
+  @Test
+  public void testGetSimpleNumber_overflowLong_returnsNaN() throws Throwable {
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("99999999999999999999")));
+  }
+
+  // Covers getSimpleNumber with leading zeros; Long.parseLong semantics apply
+  @Test
+  public void testGetSimpleNumber_leadingZeros_parsesAsDecimalValue() throws Throwable {
+    assertEquals(7.0, CodeGenerator.getSimpleNumber("007"), 1e-9);
+  }
+
+  // Covers jsString default branch (no quote chars) -> double quote delimiter
+  @Test
+  public void testJsString_noSpecialChars_usesDoubleQuotes() throws Throwable {
+    assertEquals("\"hello\"", gen.jsString("hello"));
+  }
+
+  // Covers jsString singleq < doubleq == false branch: single quote left unescaped
+  @Test
+  public void testJsString_containsSingleQuote_usesDoubleQuoteDelimiter() throws Throwable {
+    assertEquals("\"it's\"", gen.jsString("it's"));
+  }
+
+  // Covers jsString singleq < doubleq == true branch: double quote left unescaped
+  @Test
+  public void testJsString_containsDoubleQuote_usesSingleQuoteDelimiter() throws Throwable {
+    assertEquals("'say \"hi\"'", gen.jsString("say \"hi\""));
+  }
+
+  // Covers strEscape '\n' case producing a literal backslash-n sequence
+  @Test
+  public void testJsString_newlineCharacter_escapedAsBackslashN() throws Throwable {
+    assertEquals("\"a\\nb\"", gen.jsString("a\nb"));
+  }
+
+  // Covers strEscape '<' case guarding against "</script" injection
+  @Test
+  public void testJsString_scriptTagClose_escapedToPreventXss() throws Throwable {
+    assertEquals("\"<\\/script>\"", gen.jsString("</script>"));
+  }
+
+  // Covers strEscape '>' case guarding against "-->" sequence
+  @Test
+  public void testJsString_doubleDashBeforeGreaterThan_escaped() throws Throwable {
+    assertEquals("\"a--\\>b\"", gen.jsString("a-->b"));
+  }
+
+  // Covers strEscape default branch with null encoder: non-ascii char unicode-escaped
+  @Test
+  public void testJsString_nonAsciiCharacter_unicodeEscaped() throws Throwable {
+    assertEquals("\"\\u00e9\"", gen.jsString("\u00e9"));
+  }
+
+  // Covers regexpEscape wrapping pattern with '/' delimiters
+  @Test
+  public void testRegexpEscape_plainPattern_wrappedInSlashes() throws Throwable {
+    assertEquals("/abc/", CodeGenerator.regexpEscape("abc"));
+  }
+
+  // Covers regexpEscape sharing the "</script" protection with jsString
+  @Test
+  public void testRegexpEscape_scriptTagClose_escaped() throws Throwable {
+    assertEquals("/<\\/script>/", CodeGenerator.regexpEscape("</script>"));
+  }
+
+  // Covers escapeToDoubleQuotedJsString escaping an embedded double quote
+  @Test
+  public void testEscapeToDoubleQuotedJsString_containsDoubleQuote_escaped() throws Throwable {
+    assertEquals("\"a\\\"b\"", CodeGenerator.escapeToDoubleQuotedJsString("a\"b"));
+  }
+
+  // Covers identifierEscape fast-path when NodeUtil.isLatin is true
+  @Test
+  public void testIdentifierEscape_asciiIdentifier_unchanged() throws Throwable {
+    assertEquals("hello", CodeGenerator.identifierEscape("hello"));
+  }
+
+  // Covers identifierEscape per-character loop escaping a non-latin character
+  @Test
+  public void testIdentifierEscape_nonLatinCharacter_unicodeEscaped() throws Throwable {
+    assertEquals("a\\u00e9b", CodeGenerator.identifierEscape("a\u00e9b"));
+  }
+}

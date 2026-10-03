@@ -1,0 +1,367 @@
+package com.fasterxml.jackson.databind.util;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.text.DateFormat;
+import java.text.FieldPosition;
+import java.text.ParseException;
+import java.text.ParsePosition;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
+
+public class StdDateFormatClaudeTest {
+
+    // default constructor: locale must be US, timezone unset (null)
+    @Test
+    public void testConstructor_default_localeIsUSAndTimezoneNull() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        assertEquals(Locale.US, fmt._locale);
+        assertNull(fmt._timezone);
+    }
+
+    // deprecated TimeZone-only constructor delegates to (tz, DEFAULT_LOCALE)
+    @Test
+    public void testDeprecatedConstructorWithTimeZone_setsTimeZoneAndDefaultLocale() throws Throwable {
+        TimeZone est = TimeZone.getTimeZone("America/New_York");
+        StdDateFormat fmt = new StdDateFormat(est);
+        assertEquals(est, fmt._timezone);
+        assertEquals(Locale.US, fmt._locale);
+    }
+
+    // getDefaultTimeZone must be GMT
+    @Test
+    public void testGetDefaultTimeZone_returnsGMT() throws Throwable {
+        TimeZone tz = StdDateFormat.getDefaultTimeZone();
+        assertEquals("GMT", tz.getID());
+    }
+
+    // withTimeZone: same timezone (equals) => returns same instance
+    @Test
+    public void testWithTimeZone_sameTimeZone_returnsSameInstance() throws Throwable {
+        TimeZone gmt = TimeZone.getTimeZone("GMT");
+        StdDateFormat fmt = new StdDateFormat(gmt, Locale.US);
+        StdDateFormat result = fmt.withTimeZone(gmt);
+        assertSame(fmt, result);
+    }
+
+    // withTimeZone: null tz defaults to DEFAULT_TIMEZONE, new instance created
+    @Test
+    public void testWithTimeZone_null_returnsNewInstanceWithDefaultTimeZone() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        StdDateFormat result = fmt.withTimeZone(null);
+        assertNotSame(fmt, result);
+        assertEquals(StdDateFormat.getDefaultTimeZone(), result._timezone);
+    }
+
+    // withTimeZone: different timezone => new instance with that timezone
+    @Test
+    public void testWithTimeZone_differentTimeZone_returnsNewInstance() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        TimeZone est = TimeZone.getTimeZone("America/New_York");
+        StdDateFormat result = fmt.withTimeZone(est);
+        assertNotSame(fmt, result);
+        assertEquals(est, result._timezone);
+    }
+
+    // withLocale: same locale (equals) => returns same instance
+    @Test
+    public void testWithLocale_sameLocale_returnsSameInstance() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        StdDateFormat result = fmt.withLocale(Locale.US);
+        assertSame(fmt, result);
+    }
+
+    // withLocale: different locale => new instance carrying that locale
+    @Test
+    public void testWithLocale_differentLocale_returnsNewInstance() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        StdDateFormat result = fmt.withLocale(Locale.GERMANY);
+        assertNotSame(fmt, result);
+        assertEquals(Locale.GERMANY, result._locale);
+    }
+
+    // clone: new instance, same timezone/locale fields copied
+    @Test
+    public void testClone_returnsNewInstanceWithSameFields() throws Throwable {
+        TimeZone est = TimeZone.getTimeZone("America/New_York");
+        StdDateFormat fmt = new StdDateFormat(est, Locale.GERMANY);
+        StdDateFormat cloned = fmt.clone();
+        assertNotSame(fmt, cloned);
+        assertEquals(est, cloned._timezone);
+        assertEquals(Locale.GERMANY, cloned._locale);
+    }
+
+    // getISO8601Format: default-locale branch, parses ISO8601 with explicit offset
+    @Test
+    public void testGetISO8601Format_parsesKnownDate() throws Throwable {
+        DateFormat df = StdDateFormat.getISO8601Format(TimeZone.getTimeZone("GMT"), Locale.US);
+        Date d = df.parse("2015-03-14T00:00:00.000+0000");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 0, 0, 0);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // getISO8601Format: non-default locale branch (creates fresh SimpleDateFormat)
+    @Test
+    public void testGetISO8601Format_nonDefaultLocale_parsesCorrectly() throws Throwable {
+        DateFormat df = StdDateFormat.getISO8601Format(TimeZone.getTimeZone("GMT"), Locale.GERMANY);
+        Date d = df.parse("2015-03-14T00:00:00.000+0000");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 0, 0, 0);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // getISO8601Format: null timezone branch keeps blueprint GMT
+    @Test
+    public void testGetISO8601Format_nullTimeZone_defaultsToGMT() throws Throwable {
+        DateFormat df = StdDateFormat.getISO8601Format(null, Locale.US);
+        assertEquals(TimeZone.getTimeZone("GMT"), df.getTimeZone());
+    }
+
+    // deprecated single-arg getISO8601Format overload
+    @Test
+    public void testGetISO8601Format_deprecatedOverload_notNull() throws Throwable {
+        DateFormat df = StdDateFormat.getISO8601Format(TimeZone.getTimeZone("GMT"));
+        assertNotNull(df);
+    }
+
+    // deprecated blueprint accessor
+    @Test
+    public void testGetBlueprintISO8601Format_notNull() throws Throwable {
+        DateFormat df = StdDateFormat.getBlueprintISO8601Format();
+        assertNotNull(df);
+    }
+
+    // getRFC1123Format round trip (format then parse back)
+    @Test
+    public void testGetRFC1123Format_roundTrip() throws Throwable {
+        DateFormat df = StdDateFormat.getRFC1123Format(TimeZone.getTimeZone("GMT"), Locale.US);
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 12, 30, 45);
+        Date original = cal.getTime();
+        String formatted = df.format(original);
+        Date parsed = df.parse(formatted);
+        assertEquals(original.getTime(), parsed.getTime());
+    }
+
+    // deprecated single-arg getRFC1123Format overload
+    @Test
+    public void testGetRFC1123Format_deprecatedOverload_notNull() throws Throwable {
+        DateFormat df = StdDateFormat.getRFC1123Format(TimeZone.getTimeZone("GMT"));
+        assertNotNull(df);
+    }
+
+    // deprecated blueprint accessor for RFC1123
+    @Test
+    public void testGetBlueprintRFC1123Format_notNull() throws Throwable {
+        DateFormat df = StdDateFormat.getBlueprintRFC1123Format();
+        assertNotNull(df);
+    }
+
+    // setTimeZone changes cached formats and thus formatted offset
+    @Test
+    public void testSetTimeZone_changesFormattedOutput() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        fmt.setTimeZone(TimeZone.getTimeZone("GMT+02:00"));
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 12, 30, 45);
+        String result = fmt.format(cal.getTime(), new StringBuffer(), new FieldPosition(0)).toString();
+        assertTrue(result.indexOf("+0200") >= 0);
+    }
+
+    // parse: plain "yyyy-MM-dd" date -> midnight UTC
+    @Test
+    public void testParse_plainDate_returnsMidnightUTC() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2015-03-14");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 0, 0, 0);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // parse: ISO8601 with millis and 'Z'
+    @Test
+    public void testParse_isoWithMillisAndZ_returnsCorrectDate() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2015-03-14T12:30:45.123Z");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 12, 30, 45);
+        cal.set(Calendar.MILLISECOND, 123);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // parse: ISO8601 with 'Z' but no millis -> millis defaulted to 0
+    @Test
+    public void testParse_isoWithZNoMillis_addsZeroMillis() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2015-03-14T12:30:45Z");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 12, 30, 45);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // parse: ISO8601 with colon offset "+02:00"
+    @Test
+    public void testParse_isoWithOffsetColon_returnsCorrectDate() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2015-03-14T12:30:45+02:00");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 10, 30, 45);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // parse: ISO8601 with no-colon offset "+0200"
+    @Test
+    public void testParse_isoWithOffsetNoColon_returnsCorrectDate() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2015-03-14T12:30:45+0200");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 10, 30, 45);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // parse: ISO8601 with hours-only offset "+02" (missing minutes)
+    @Test
+    public void testParse_isoWithOffsetHoursOnly_returnsCorrectDate() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2015-03-14T12:30:45+02");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 10, 30, 45);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // parse: ISO8601 without any timezone indicator -> treated as UTC
+    @Test
+    public void testParse_isoWithoutTimezone_treatedAsUTC() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("2015-03-14T12:30:45");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 12, 30, 45);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // parse: all-digit string within long range -> raw timestamp
+    @Test
+    public void testParse_plainTimestamp_returnsCorrectDate() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("123456789");
+        assertEquals(123456789L, d.getTime());
+    }
+
+    // parse: negative all-digit string -> raw timestamp (negative numbers accepted)
+    @Test
+    public void testParse_negativeTimestamp_returnsCorrectDate() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("-123456789");
+        assertEquals(-123456789L, d.getTime());
+    }
+
+    // parse: all-digit string exceeding Long range falls back to RFC1123 and fails
+    @Test
+    public void testParse_timestampOverflow_throwsParseException() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        try {
+            fmt.parse("99999999999999999999");
+            fail("expected ParseException");
+        } catch (ParseException expected) {
+        }
+    }
+
+    // parse: unparseable garbage string throws ParseException
+    @Test
+    public void testParse_invalidDate_throwsParseException() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        try {
+            fmt.parse("not-a-date");
+            fail("expected ParseException");
+        } catch (ParseException expected) {
+        }
+    }
+
+    // parse(String): leading/trailing whitespace is trimmed before parsing
+    @Test
+    public void testParse_withWhitespace_trimsBeforeParsing() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("  2015-03-14  ");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 0, 0, 0);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // parse(String, ParsePosition): invalid format returns null, does not throw
+    @Test
+    public void testParseWithPosition_invalidFormat_returnsNull() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        ParsePosition pos = new ParsePosition(0);
+        Date d = fmt.parse("garbage-value", pos);
+        assertNull(d);
+    }
+
+    // parse: RFC-1123 formatted string routed through non-ISO, non-numeric path
+    @Test
+    public void testParse_rfc1123Format_returnsCorrectDate() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Date d = fmt.parse("Sat, 14 Mar 2015 12:30:45 GMT");
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 12, 30, 45);
+        assertEquals(cal.getTimeInMillis(), d.getTime());
+    }
+
+    // format: produces ISO8601 string with GMT offset "+0000"
+    @Test
+    public void testFormat_knownDate_returnsISO8601String() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"), Locale.US);
+        cal.clear();
+        cal.set(2015, Calendar.MARCH, 14, 12, 30, 45);
+        cal.set(Calendar.MILLISECOND, 123);
+        StringBuffer result = fmt.format(cal.getTime(), new StringBuffer(), new FieldPosition(0));
+        assertEquals("2015-03-14T12:30:45.123+0000", result.toString());
+    }
+
+    // toString contains class simple name fragment and locale info
+    @Test
+    public void testToString_containsClassNameAndLocale() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        String s = fmt.toString();
+        assertTrue(s.indexOf("StdDateFormat") >= 0);
+        assertTrue(s.indexOf("locale") >= 0);
+    }
+
+    // looksLikeISO8601: valid "yyyy-" prefix returns true
+    @Test
+    public void testLooksLikeISO8601_validPrefix_returnsTrue() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        assertTrue(fmt.looksLikeISO8601("2015-03-14"));
+    }
+
+    // looksLikeISO8601: too short (<5 chars) returns false
+    @Test
+    public void testLooksLikeISO8601_tooShort_returnsFalse() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        assertFalse(fmt.looksLikeISO8601("201"));
+    }
+
+    // looksLikeISO8601: no dash at index 4 returns false
+    @Test
+    public void testLooksLikeISO8601_noDashAtIndex4_returnsFalse() throws Throwable {
+        StdDateFormat fmt = new StdDateFormat();
+        assertFalse(fmt.looksLikeISO8601("20150314"));
+    }
+}

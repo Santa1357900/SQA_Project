@@ -1,0 +1,401 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Math (Defects4J bug Math-23)
+package: org.apache.commons.math3.optimization.univariate
+class_under_test: BrentOptimizer
+test_class_to_write: BrentOptimizerClaudeTest
+</target>
+
+<project_notes>
+Commons Math: ใช้ delta ทุกครั้งที่เทียบ double ห้าม implement UnivariateRealFunction/UnivariateFunction ถ้าไม่ได้ปรากฏใน source ให้ใช้ anonymous inner class เมื่อ interface มีเมธอดเดียว exception เป็น checked หลายตัว (เช่น MathException) จึงต้อง throws Throwable
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.math3.optimization.univariate;
+
+import org.apache.commons.math3.util.Precision;
+import org.apache.commons.math3.util.FastMath;
+import org.apache.commons.math3.exception.NumberIsTooSmallException;
+import org.apache.commons.math3.exception.NotStrictlyPositiveException;
+import org.apache.commons.math3.optimization.ConvergenceChecker;
+import org.apache.commons.math3.optimization.GoalType;
+
+/**
+ * For a function defined on some interval {@code (lo, hi)}, this class
+ * finds an approximation {@code x} to the point at which the function
+ * attains its minimum.
+ * It implements Richard Brent's algorithm (from his book "Algorithms for
+ * Minimization without Derivatives", p. 79) for finding minima of real
+ * univariate functions.
+ * <br/>
+ * This code is an adaptation, partly based on the Python code from SciPy
+ * (module "optimize.py" v0.5); the original algorithm is also modified
+ * <ul>
+ *  <li>to use an initial guess provided by the user,</li>
+ *  <li>to ensure that the best point encountered is the one returned.</li>
+ * </ul>
+ *
+ * @version $Id$
+ * @since 2.0
+ */
+public class BrentOptimizer extends BaseAbstractUnivariateOptimizer {
+    /**
+     * Golden section.
+     */
+    private static final double GOLDEN_SECTION = 0.5 * (3 - FastMath.sqrt(5));
+    /**
+     * Minimum relative tolerance.
+     */
+    private static final double MIN_RELATIVE_TOLERANCE = 2 * FastMath.ulp(1d);
+    /**
+     * Relative threshold.
+     */
+    private final double relativeThreshold;
+    /**
+     * Absolute threshold.
+     */
+    private final double absoluteThreshold;
+
+    /**
+     * The arguments are used implement the original stopping criterion
+     * of Brent's algorithm.
+     * {@code abs} and {@code rel} define a tolerance
+     * {@code tol = rel |x| + abs}. {@code rel} should be no smaller than
+     * <em>2 macheps</em> and preferably not much less than <em>sqrt(macheps)</em>,
+     * where <em>macheps</em> is the relative machine precision. {@code abs} must
+     * be positive.
+     *
+     * @param rel Relative threshold.
+     * @param abs Absolute threshold.
+     * @param checker Additional, user-defined, convergence checking
+     * procedure.
+     * @throws NotStrictlyPositiveException if {@code abs <= 0}.
+     * @throws NumberIsTooSmallException if {@code rel < 2 * Math.ulp(1d)}.
+     */
+    public BrentOptimizer(double rel,
+                          double abs,
+                          ConvergenceChecker<UnivariatePointValuePair> checker) {
+        super(checker);
+
+        if (rel < MIN_RELATIVE_TOLERANCE) {
+            throw new NumberIsTooSmallException(rel, MIN_RELATIVE_TOLERANCE, true);
+        }
+        if (abs <= 0) {
+            throw new NotStrictlyPositiveException(abs);
+        }
+
+        relativeThreshold = rel;
+        absoluteThreshold = abs;
+    }
+
+    /**
+     * The arguments are used for implementing the original stopping criterion
+     * of Brent's algorithm.
+     * {@code abs} and {@code rel} define a tolerance
+     * {@code tol = rel |x| + abs}. {@code rel} should be no smaller than
+     * <em>2 macheps</em> and preferably not much less than <em>sqrt(macheps)</em>,
+     * where <em>macheps</em> is the relative machine precision. {@code abs} must
+     * be positive.
+     *
+     * @param rel Relative threshold.
+     * @param abs Absolute threshold.
+     * @throws NotStrictlyPositiveException if {@code abs <= 0}.
+     * @throws NumberIsTooSmallException if {@code rel < 2 * Math.ulp(1d)}.
+     */
+    public BrentOptimizer(double rel,
+                          double abs) {
+        this(rel, abs, null);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    protected UnivariatePointValuePair doOptimize() {
+        final boolean isMinim = getGoalType() == GoalType.MINIMIZE;
+        final double lo = getMin();
+        final double mid = getStartValue();
+        final double hi = getMax();
+
+        // Optional additional convergence criteria.
+        final ConvergenceChecker<UnivariatePointValuePair> checker
+            = getConvergenceChecker();
+
+        double a;
+        double b;
+        if (lo < hi) {
+            a = lo;
+            b = hi;
+        } else {
+            a = hi;
+            b = lo;
+        }
+
+        double x = mid;
+        double v = x;
+        double w = x;
+        double d = 0;
+        double e = 0;
+        double fx = computeObjectiveValue(x);
+        if (!isMinim) {
+            fx = -fx;
+        }
+        double fv = fx;
+        double fw = fx;
+
+        UnivariatePointValuePair previous = null;
+        UnivariatePointValuePair current
+            = new UnivariatePointValuePair(x, isMinim ? fx : -fx);
+        // Best point encountered so far (which is the initial guess).
+
+        int iter = 0;
+        while (true) {
+            final double m = 0.5 * (a + b);
+            final double tol1 = relativeThreshold * FastMath.abs(x) + absoluteThreshold;
+            final double tol2 = 2 * tol1;
+
+            // Default stopping criterion.
+            final boolean stop = FastMath.abs(x - m) <= tol2 - 0.5 * (b - a);
+            if (!stop) {
+                double p = 0;
+                double q = 0;
+                double r = 0;
+                double u = 0;
+
+                if (FastMath.abs(e) > tol1) { // Fit parabola.
+                    r = (x - w) * (fx - fv);
+                    q = (x - v) * (fx - fw);
+                    p = (x - v) * q - (x - w) * r;
+                    q = 2 * (q - r);
+
+                    if (q > 0) {
+                        p = -p;
+                    } else {
+                        q = -q;
+                    }
+
+                    r = e;
+                    e = d;
+
+                    if (p > q * (a - x) &&
+                        p < q * (b - x) &&
+                        FastMath.abs(p) < FastMath.abs(0.5 * q * r)) {
+                        // Parabolic interpolation step.
+                        d = p / q;
+                        u = x + d;
+
+                        // f must not be evaluated too close to a or b.
+                        if (u - a < tol2 || b - u < tol2) {
+                            if (x <= m) {
+                                d = tol1;
+                            } else {
+                                d = -tol1;
+                            }
+                        }
+                    } else {
+                        // Golden section step.
+                        if (x < m) {
+                            e = b - x;
+                        } else {
+                            e = a - x;
+                        }
+                        d = GOLDEN_SECTION * e;
+                    }
+                } else {
+                    // Golden section step.
+                    if (x < m) {
+                        e = b - x;
+                    } else {
+                        e = a - x;
+                    }
+                    d = GOLDEN_SECTION * e;
+                }
+
+                // Update by at least "tol1".
+                if (FastMath.abs(d) < tol1) {
+                    if (d >= 0) {
+                        u = x + tol1;
+                    } else {
+                        u = x - tol1;
+                    }
+                } else {
+                    u = x + d;
+                }
+
+                double fu = computeObjectiveValue(u);
+                if (!isMinim) {
+                    fu = -fu;
+                }
+
+                // User-defined convergence checker.
+                previous = current;
+                current = new UnivariatePointValuePair(u, isMinim ? fu : -fu);
+
+                if (checker != null) {
+                    if (checker.converged(iter, previous, current)) {
+                        return best(current, previous, isMinim);
+                    }
+                }
+
+                // Update a, b, v, w and x.
+                if (fu <= fx) {
+                    if (u < x) {
+                        b = x;
+                    } else {
+                        a = x;
+                    }
+                    v = w;
+                    fv = fw;
+                    w = x;
+                    fw = fx;
+                    x = u;
+                    fx = fu;
+                } else {
+                    if (u < x) {
+                        a = u;
+                    } else {
+                        b = u;
+                    }
+                    if (fu <= fw ||
+                        Precision.equals(w, x)) {
+                        v = w;
+                        fv = fw;
+                        w = u;
+                        fw = fu;
+                    } else if (fu <= fv ||
+                               Precision.equals(v, x) ||
+                               Precision.equals(v, w)) {
+                        v = u;
+                        fv = fu;
+                    }
+                }
+            } else { // Default termination (Brent's criterion).
+                return
+                            best(current,
+                                 previous,
+                            isMinim);
+            }
+            ++iter;
+        }
+    }
+
+    /**
+     * Selects the best of two points.
+     *
+     * @param a Point and value.
+     * @param b Point and value.
+     * @param isMinim {@code true} if the selected point must be the one with
+     * the lowest value.
+     * @return the best point, or {@code null} if {@code a} and {@code b} are
+     * both {@code null}. When {@code a} and {@code b} have the same function
+     * value, {@code a} is returned.
+     */
+    private UnivariatePointValuePair best(UnivariatePointValuePair a,
+                                          UnivariatePointValuePair b,
+                                          boolean isMinim) {
+        if (a == null) {
+            return b;
+        }
+        if (b == null) {
+            return a;
+        }
+
+        if (isMinim) {
+            return a.getValue() <= b.getValue() ? a : b;
+        } else {
+            return a.getValue() >= b.getValue() ? a : b;
+        }
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ BrentOptimizerClaudeTest ใน package org.apache.commons.math3.optimization.univariate เพื่อทดสอบคลาส BrentOptimizer ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.math3.optimization.univariate;` เท่านั้น
+</instructions>

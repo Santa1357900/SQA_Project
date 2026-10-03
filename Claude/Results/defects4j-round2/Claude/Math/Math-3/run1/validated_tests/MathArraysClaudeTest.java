@@ -1,0 +1,452 @@
+package org.apache.commons.math3.util;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import org.apache.commons.math3.exception.DimensionMismatchException;
+import org.apache.commons.math3.exception.MathArithmeticException;
+import org.apache.commons.math3.exception.MathIllegalArgumentException;
+import org.apache.commons.math3.exception.NoDataException;
+import org.apache.commons.math3.exception.NonMonotonicSequenceException;
+import org.apache.commons.math3.exception.NotPositiveException;
+import org.apache.commons.math3.exception.NotStrictlyPositiveException;
+import org.apache.commons.math3.exception.NullArgumentException;
+
+public class MathArraysClaudeTest {
+
+    // scale(): each element multiplied by scalar, original array untouched
+    @Test
+    public void testScale_normalArray_multipliesEachElement() throws Throwable {
+        double[] arr = {1.0, 2.0, 3.0};
+        double[] result = MathArrays.scale(2.0, arr);
+        assertEquals(2.0, result[0], 1e-9);
+        assertEquals(4.0, result[1], 1e-9);
+        assertEquals(6.0, result[2], 1e-9);
+        assertEquals(1.0, arr[0], 1e-9);
+    }
+
+    // scaleInPlace(): array modified directly
+    @Test
+    public void testScaleInPlace_modifiesArrayInPlace() throws Throwable {
+        double[] arr = {1.0, 2.0, 3.0};
+        MathArrays.scaleInPlace(3.0, arr);
+        assertEquals(3.0, arr[0], 1e-9);
+        assertEquals(9.0, arr[2], 1e-9);
+    }
+
+    // ebeAdd(): normal element-wise addition path
+    @Test
+    public void testEbeAdd_sameLength_elementWiseSum() throws Throwable {
+        double[] a = {1, 2, 3};
+        double[] b = {4, 5, 6};
+        double[] r = MathArrays.ebeAdd(a, b);
+        assertEquals(5.0, r[0], 1e-9);
+        assertEquals(9.0, r[2], 1e-9);
+    }
+
+    // ebeAdd(): length mismatch branch throws
+    @Test
+    public void testEbeAdd_differentLength_throwsDimensionMismatchException() throws Throwable {
+        try {
+            MathArrays.ebeAdd(new double[]{1, 2}, new double[]{1});
+            fail("expected DimensionMismatchException");
+        } catch (DimensionMismatchException expected) {
+        }
+    }
+
+    // ebeSubtract(): normal element-wise subtraction path
+    @Test
+    public void testEbeSubtract_sameLength_elementWiseDifference() throws Throwable {
+        double[] a = {5, 7};
+        double[] b = {2, 3};
+        double[] r = MathArrays.ebeSubtract(a, b);
+        assertEquals(3.0, r[0], 1e-9);
+        assertEquals(4.0, r[1], 1e-9);
+    }
+
+    // ebeMultiply(): normal element-wise multiplication path
+    @Test
+    public void testEbeMultiply_sameLength_elementWiseProduct() throws Throwable {
+        double[] a = {2, 3};
+        double[] b = {4, 5};
+        double[] r = MathArrays.ebeMultiply(a, b);
+        assertEquals(8.0, r[0], 1e-9);
+        assertEquals(15.0, r[1], 1e-9);
+    }
+
+    // ebeDivide(): normal element-wise division path
+    @Test
+    public void testEbeDivide_sameLength_elementWiseQuotient() throws Throwable {
+        double[] a = {10, 9};
+        double[] b = {2, 3};
+        double[] r = MathArrays.ebeDivide(a, b);
+        assertEquals(5.0, r[0], 1e-9);
+        assertEquals(3.0, r[1], 1e-9);
+    }
+
+    // distance1(double[]): sum of absolute differences, loop multiple rounds
+    @Test
+    public void testDistance1_doubleArrays_sumOfAbsDifferences() throws Throwable {
+        double[] p1 = {1, 2, 3};
+        double[] p2 = {4, 0, 3};
+        assertEquals(5.0, MathArrays.distance1(p1, p2), 1e-9);
+    }
+
+    // distance1(int[]): integer overload sum of absolute differences
+    @Test
+    public void testDistance1_intArrays_sumOfAbsDifferences() throws Throwable {
+        int[] p1 = {1, 2, 3};
+        int[] p2 = {4, 0, 3};
+        assertEquals(5, MathArrays.distance1(p1, p2));
+    }
+
+    // distance(double[]): Euclidean distance, classic 3-4-5 triangle
+    @Test
+    public void testDistance_doubleArrays_euclideanDistance() throws Throwable {
+        double[] p1 = {0, 0};
+        double[] p2 = {3, 4};
+        assertEquals(5.0, MathArrays.distance(p1, p2), 1e-9);
+    }
+
+    // distance(int[]): integer overload Euclidean distance
+    @Test
+    public void testDistance_intArrays_euclideanDistance() throws Throwable {
+        int[] p1 = {0, 0};
+        int[] p2 = {3, 4};
+        assertEquals(5.0, MathArrays.distance(p1, p2), 1e-9);
+    }
+
+    // distanceInf(double[]): max of absolute differences
+    @Test
+    public void testDistanceInf_doubleArrays_maxAbsDifference() throws Throwable {
+        double[] p1 = {1, 5, 2};
+        double[] p2 = {4, 1, 2};
+        assertEquals(4.0, MathArrays.distanceInf(p1, p2), 1e-9);
+    }
+
+    // distanceInf(int[]): integer overload max of absolute differences
+    @Test
+    public void testDistanceInf_intArrays_maxAbsDifference() throws Throwable {
+        int[] p1 = {1, 5, 2};
+        int[] p2 = {4, 1, 2};
+        assertEquals(4, MathArrays.distanceInf(p1, p2));
+    }
+
+    // isMonotonic(T[]): strictly increasing generic array -> true
+    @Test
+    public void testIsMonotonicGeneric_strictIncreasing_true() throws Throwable {
+        Integer[] vals = {1, 2, 3, 4};
+        assertTrue(MathArrays.isMonotonic(vals, MathArrays.OrderDirection.INCREASING, true));
+    }
+
+    // isMonotonic(T[]): equal consecutive elements under strict mode -> false
+    @Test
+    public void testIsMonotonicGeneric_strictWithEqualElements_false() throws Throwable {
+        Integer[] vals = {1, 2, 2, 4};
+        assertFalse(MathArrays.isMonotonic(vals, MathArrays.OrderDirection.INCREASING, true));
+    }
+
+    // isMonotonic(double[]): decreasing with equal elements, non-strict -> true
+    @Test
+    public void testIsMonotonic_doubleArrayDecreasingNonStrict_true() throws Throwable {
+        double[] val = {4, 3, 3, 1};
+        assertTrue(MathArrays.isMonotonic(val, MathArrays.OrderDirection.DECREASING, false));
+    }
+
+    // checkOrder(val,dir,strict,abort): sorted array, loop completes -> true
+    @Test
+    public void testCheckOrder_strictIncreasingValid_returnsTrue() throws Throwable {
+        double[] val = {1, 2, 3};
+        assertTrue(MathArrays.checkOrder(val, MathArrays.OrderDirection.INCREASING, true, false));
+    }
+
+    // checkOrder(val,dir,strict,abort): unsorted, abort=false -> returns false
+    @Test
+    public void testCheckOrder_notSorted_abortFalse_returnsFalse() throws Throwable {
+        double[] val = {1, 3, 2};
+        assertFalse(MathArrays.checkOrder(val, MathArrays.OrderDirection.INCREASING, true, false));
+    }
+
+    // checkOrder(val,dir,strict,abort): unsorted, abort=true -> throws
+    @Test
+    public void testCheckOrder_notSorted_abortTrue_throwsNonMonotonicSequenceException() throws Throwable {
+        double[] val = {1, 3, 2};
+        try {
+            MathArrays.checkOrder(val, MathArrays.OrderDirection.INCREASING, true, true);
+            fail("expected NonMonotonicSequenceException");
+        } catch (NonMonotonicSequenceException expected) {
+        }
+    }
+
+    // checkOrder(val,dir,strict): DECREASING branch violation throws
+    @Test
+    public void testCheckOrderThreeArg_decreasingViolation_throws() throws Throwable {
+        double[] val = {5, 4, 6};
+        try {
+            MathArrays.checkOrder(val, MathArrays.OrderDirection.DECREASING, false);
+            fail("expected NonMonotonicSequenceException");
+        } catch (NonMonotonicSequenceException expected) {
+        }
+    }
+
+    // checkOrder(val): strictly increasing required, duplicate values -> throws
+    @Test
+    public void testCheckOrderSingleArg_duplicateValues_throwsNonMonotonicSequenceException() throws Throwable {
+        double[] val = {1, 1, 2};
+        try {
+            MathArrays.checkOrder(val);
+            fail("expected NonMonotonicSequenceException");
+        } catch (NonMonotonicSequenceException expected) {
+        }
+    }
+
+    // checkRectangular(): null input -> NullArgumentException
+    @Test
+    public void testCheckRectangular_null_throwsNullArgumentException() throws Throwable {
+        try {
+            MathArrays.checkRectangular(null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // checkRectangular(): mismatched row lengths -> DimensionMismatchException
+    @Test
+    public void testCheckRectangular_mismatchedRows_throwsDimensionMismatchException() throws Throwable {
+        long[][] in = {{1, 2}, {1}};
+        try {
+            MathArrays.checkRectangular(in);
+            fail("expected DimensionMismatchException");
+        } catch (DimensionMismatchException expected) {
+        }
+    }
+
+    // checkPositive(): zero entry violates strictly-positive contract -> throws
+    @Test
+    public void testCheckPositive_hasZero_throwsNotStrictlyPositiveException() throws Throwable {
+        double[] in = {1.0, 0.0};
+        try {
+            MathArrays.checkPositive(in);
+            fail("expected NotStrictlyPositiveException");
+        } catch (NotStrictlyPositiveException expected) {
+        }
+    }
+
+    // checkNonNegative(long[]): negative entry -> throws
+    @Test
+    public void testCheckNonNegative1D_hasNegative_throwsNotPositiveException() throws Throwable {
+        long[] in = {1, -1};
+        try {
+            MathArrays.checkNonNegative(in);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // checkNonNegative(long[][]): negative entry in nested row -> throws
+    @Test
+    public void testCheckNonNegative2D_hasNegative_throwsNotPositiveException() throws Throwable {
+        long[][] in = {{1, 2}, {3, -1}};
+        try {
+            MathArrays.checkNonNegative(in);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // safeNorm(): simple vector matches ordinary Euclidean norm
+    @Test
+    public void testSafeNorm_simpleVector_matchesEuclideanNorm() throws Throwable {
+        double[] v = {3.0, 4.0};
+        assertEquals(5.0, MathArrays.safeNorm(v), 1e-9);
+    }
+
+    // sortInPlace(): x and accompanying y reordered per Javadoc example
+    @Test
+    public void testSortInPlace_increasingOrder_sortsXAndY() throws Throwable {
+        double[] x = {3, 1, 2};
+        double[] y = {1, 2, 3};
+        MathArrays.sortInPlace(x, y);
+        assertEquals(1.0, x[0], 1e-9);
+        assertEquals(2.0, x[1], 1e-9);
+        assertEquals(3.0, x[2], 1e-9);
+        assertEquals(2.0, y[0], 1e-9);
+        assertEquals(3.0, y[1], 1e-9);
+        assertEquals(1.0, y[2], 1e-9);
+    }
+
+    // sortInPlace(): null x -> NullArgumentException
+    @Test
+    public void testSortInPlace_nullX_throwsNullArgumentException() throws Throwable {
+        try {
+            MathArrays.sortInPlace((double[]) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // sortInPlace(): y length mismatch -> DimensionMismatchException
+    @Test
+    public void testSortInPlace_yLengthMismatch_throwsDimensionMismatchException() throws Throwable {
+        double[] x = {1, 2};
+        double[] y = {1};
+        try {
+            MathArrays.sortInPlace(x, y);
+            fail("expected DimensionMismatchException");
+        } catch (DimensionMismatchException expected) {
+        }
+    }
+
+    // copyOf(int[], len): larger length pads with zero
+    @Test
+    public void testCopyOfInt_withLenLarger_padsWithZero() throws Throwable {
+        int[] source = {1, 2, 3};
+        int[] result = MathArrays.copyOf(source, 5);
+        assertEquals(5, result.length);
+        assertEquals(0, result[3]);
+        assertEquals(0, result[4]);
+    }
+
+    // copyOf(double[], len): smaller length truncates
+    @Test
+    public void testCopyOfDouble_withLenSmaller_truncates() throws Throwable {
+        double[] source = {1.0, 2.0, 3.0};
+        double[] result = MathArrays.copyOf(source, 2);
+        assertEquals(2, result.length);
+        assertEquals(1.0, result[0], 1e-9);
+        assertEquals(2.0, result[1], 1e-9);
+    }
+
+    // linearCombination(double[],double[]): single-element arrays must follow
+    // the general contract r = a[0]*b[0] (bug: code indexes prodHigh[1] unconditionally)
+    @Test
+    public void testLinearCombinationArrays_singleElement_returnsProduct() throws Throwable {
+        double[] a = {3.0};
+        double[] b = {4.0};
+        double result = MathArrays.linearCombination(a, b);
+        assertEquals(12.0, result, 1e-9);
+    }
+
+    // linearCombination(double[],double[]): multi-element dot product
+    @Test
+    public void testLinearCombinationArrays_multipleElements_matchesDotProduct() throws Throwable {
+        double[] a = {1, 2, 3};
+        double[] b = {4, 5, 6};
+        assertEquals(32.0, MathArrays.linearCombination(a, b), 1e-9);
+    }
+
+    // linearCombination(double[],double[]): length mismatch -> throws
+    @Test
+    public void testLinearCombinationArrays_mismatchedLength_throwsDimensionMismatchException() throws Throwable {
+        double[] a = {1, 2};
+        double[] b = {1};
+        try {
+            MathArrays.linearCombination(a, b);
+            fail("expected DimensionMismatchException");
+        } catch (DimensionMismatchException expected) {
+        }
+    }
+
+    // linearCombination(a1,b1,a2,b2): 2-term accurate sum
+    @Test
+    public void testLinearCombination2Term_basicCase() throws Throwable {
+        double result = MathArrays.linearCombination(2.0, 3.0, 4.0, 5.0);
+        assertEquals(26.0, result, 1e-9);
+    }
+
+    // linearCombination(a1,b1,...,a3,b3): 3-term accurate sum
+    @Test
+    public void testLinearCombination3Term_basicCase() throws Throwable {
+        double result = MathArrays.linearCombination(1.0, 2.0, 3.0, 4.0, 5.0, 6.0);
+        assertEquals(44.0, result, 1e-9);
+    }
+
+    // linearCombination(a1,b1,...,a4,b4): 4-term accurate sum
+    @Test
+    public void testLinearCombination4Term_basicCase() throws Throwable {
+        double result = MathArrays.linearCombination(1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0);
+        assertEquals(30.0, result, 1e-9);
+    }
+
+    // equals(float[]): both null -> true
+    @Test
+    public void testEqualsFloat_bothNull_true() throws Throwable {
+        assertTrue(MathArrays.equals((float[]) null, (float[]) null));
+    }
+
+    // equals(float[]): one null -> false
+    @Test
+    public void testEqualsFloat_oneNull_false() throws Throwable {
+        assertFalse(MathArrays.equals(new float[]{1f}, (float[]) null));
+    }
+
+    // equalsIncludingNaN(double[]): NaN in both treated as equal
+    @Test
+    public void testEqualsIncludingNaNDouble_withNaNInBoth_true() throws Throwable {
+        double[] x = {1.0, Double.NaN};
+        double[] y = {1.0, Double.NaN};
+        assertTrue(MathArrays.equalsIncludingNaN(x, y));
+    }
+
+    // normalizeArray(): rescales entries to sum to normalizedSum
+    @Test
+    public void testNormalizeArray_basicCase_sumsToTarget() throws Throwable {
+        double[] values = {1.0, 2.0, 3.0};
+        double[] out = MathArrays.normalizeArray(values, 12.0);
+        assertEquals(2.0, out[0], 1e-9);
+        assertEquals(4.0, out[1], 1e-9);
+        assertEquals(6.0, out[2], 1e-9);
+    }
+
+    // normalizeArray(): infinite target sum -> MathIllegalArgumentException
+    @Test
+    public void testNormalizeArray_infiniteNormalizedSum_throwsMathIllegalArgumentException() throws Throwable {
+        try {
+            MathArrays.normalizeArray(new double[]{1, 2}, Double.POSITIVE_INFINITY);
+            fail("expected MathIllegalArgumentException");
+        } catch (MathIllegalArgumentException expected) {
+        }
+    }
+
+    // normalizeArray(): array sums to zero -> MathArithmeticException
+    @Test
+    public void testNormalizeArray_sumZero_throwsMathArithmeticException() throws Throwable {
+        try {
+            MathArrays.normalizeArray(new double[]{1.0, -1.0}, 1.0);
+            fail("expected MathArithmeticException");
+        } catch (MathArithmeticException expected) {
+        }
+    }
+
+    // convolve(): basic case, result length and values per convolution sum
+    @Test
+    public void testConvolve_basicCase_correctLength() throws Throwable {
+        double[] x = {1, 1};
+        double[] h = {1, 1};
+        double[] y = MathArrays.convolve(x, h);
+        assertEquals(3, y.length);
+        assertEquals(1.0, y[0], 1e-9);
+        assertEquals(2.0, y[1], 1e-9);
+        assertEquals(1.0, y[2], 1e-9);
+    }
+
+    // convolve(): empty input array -> NoDataException
+    @Test
+    public void testConvolve_emptyInput_throwsNoDataException() throws Throwable {
+        try {
+            MathArrays.convolve(new double[0], new double[]{1.0});
+            fail("expected NoDataException");
+        } catch (NoDataException expected) {
+        }
+    }
+
+    // convolve(): null input -> NullArgumentException
+    @Test
+    public void testConvolve_nullInput_throwsNullArgumentException() throws Throwable {
+        try {
+            MathArrays.convolve(null, new double[]{1.0});
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+    }
+}

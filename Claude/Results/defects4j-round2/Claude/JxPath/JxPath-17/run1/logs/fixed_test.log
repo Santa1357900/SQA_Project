@@ -1,0 +1,30 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-17-scza3kas/JxPath-17f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 24
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_namedAttributeQueryTwiceSameContext_consistentResult
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_wildcardIncludesNamespacedAttributeExcludesNsDeclaration
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_wildcardSingleAttribute_oneResult
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_namedAttributeOnElementWithNoAttributes_noPointerIterated
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_wildcardExcludesPrefixedXmlnsDeclaration
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_namedAttributeSpecialCharacterValue_returnsExactValue
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_wildcardDoesNotExcludeAttributeNameStartingWithXmlns
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_nonElementTextNode_noAttributesIterated
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_namedAttributeOnChildElement_returnsValue
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_namedAttributeUnicodeValue_returnsExactValue
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_wildcardMultipleAttributes_allValuesPresentAndCountCorrect
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_wildcardDoesNotExcludeXmlPrefixedAttribute
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_namedAttributeExists_returnsValue
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetAttribute_namedAttributeWithMatchingNamespace_returnsValue
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_namedAttributeMissingAmongOthers_noPointerIterated
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_wildcardNoAttributes_emptyIteration
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_rootWildcardDoesNotIncludeChildAttributes
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testTestAttr_namedAttributeWithMismatchedNamespace_noResult
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testGetPointer_namedAttributeExists_pointerValueMatches
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_wildcardExcludesDefaultXmlnsDeclaration
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_namedAttributeCaseSensitiveMatch_noMatchForDifferentCase
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testIteratePointersAndIterate_countsConsistentForWildcard
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_namedAttributeEmptyValue_returnsEmptyString
+  - org.apache.commons.jxpath.ri.model.dom.DOMAttributeIteratorClaudeTest::testConstructor_wildcardAttributeValueWithWhitespace_preserved
+[exit 0]

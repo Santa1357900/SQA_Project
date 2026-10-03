@@ -1,0 +1,380 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+
+public class NormalizeClaudeTest {
+
+  private Compiler compiler;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+  }
+
+  // Covers shouldTraverse() always returning true for a node that triggers no normalization
+  @Test
+  public void testShouldTraverse_returnsTrueForAnyNode() throws Throwable {
+    Node name = IR.name("x");
+    Normalize normalizer = new Normalize(compiler, true);
+    boolean result = normalizer.shouldTraverse(null, name, null);
+    assertTrue(result);
+  }
+
+  // Covers PropogateConstantAnnotations.visit early-return branch for an empty NAME string
+  @Test
+  public void testPropogateConstantAnnotations_emptyNameString_noOpNoException() throws Throwable {
+    Node emptyName = Node.newString(Token.NAME, "");
+    Normalize.PropogateConstantAnnotations annotator =
+        new Normalize.PropogateConstantAnnotations(compiler, true);
+    annotator.visit(null, emptyName, null);
+    assertFalse(emptyName.getBooleanProp(Node.IS_CONSTANT_NAME));
+  }
+
+  // Covers PropogateConstantAnnotations.visit outer guard: non-NAME nodes are ignored entirely
+  @Test
+  public void testPropogateConstantAnnotations_nonNameNode_noOpNoException() throws Throwable {
+    Node block = IR.block();
+    Normalize.PropogateConstantAnnotations annotator =
+        new Normalize.PropogateConstantAnnotations(compiler, true);
+    annotator.visit(null, block, null);
+    assertEquals(Token.BLOCK, block.getType());
+  }
+
+  // Covers visit() WHILE case: converts WHILE(cond,body) to FOR(EMPTY,cond,EMPTY,body), then reportCodeChange throws
+  @Test
+  public void testVisit_whileNode_convertsToForAndThrowsOnAssertOnChange() throws Throwable {
+    Node cond = IR.name("cond");
+    Node body = IR.block();
+    Node whileNode = new Node(Token.WHILE, cond, body);
+    Normalize normalizer = new Normalize(compiler, true);
+    try {
+      normalizer.visit(null, whileNode, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    assertEquals(Token.FOR, whileNode.getType());
+    Node init = whileNode.getFirstChild();
+    Node condOut = init.getNext();
+    Node incr = condOut.getNext();
+    Node bodyOut = incr.getNext();
+    assertEquals(Token.EMPTY, init.getType());
+    assertSame(cond, condOut);
+    assertEquals(Token.EMPTY, incr.getType());
+    assertSame(body, bodyOut);
+    assertNull(bodyOut.getNext());
+  }
+
+  // Covers visit() default switch branch: non-WHILE node is left untouched, no exception
+  @Test
+  public void testVisit_blockNode_noOp() throws Throwable {
+    Node block = IR.block();
+    Normalize normalizer = new Normalize(compiler, true);
+    normalizer.visit(null, block, null);
+    assertEquals(Token.BLOCK, block.getType());
+    assertNull(block.getFirstChild());
+  }
+
+  // Covers normalizeLabels default case: a non block/loop LABEL body gets wrapped in a new BLOCK
+  @Test
+  public void testNormalizeLabels_defaultBody_wrapsInBlock_throwsISE() throws Throwable {
+    Node labelName = Node.newString(Token.NAME, "L");
+    Node inner = new Node(Token.EXPR_RESULT, IR.name("x"));
+    Node labelNode = new Node(Token.LABEL, labelName, inner);
+    Normalize normalizer = new Normalize(compiler, true);
+    try {
+      normalizer.shouldTraverse(null, labelNode, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    Node last = labelNode.getLastChild();
+    assertEquals(Token.BLOCK, last.getType());
+    assertSame(inner, last.getFirstChild());
+  }
+
+  // Covers normalizeLabels early-return branch when LABEL body is already a BLOCK
+  @Test
+  public void testNormalizeLabels_blockBody_noChange() throws Throwable {
+    Node lastChild = new Node(Token.BLOCK);
+    Node labelNode = new Node(Token.LABEL, Node.newString(Token.NAME, "L"), lastChild);
+    Normalize normalizer = new Normalize(compiler, true);
+    normalizer.shouldTraverse(null, labelNode, null);
+    assertSame(lastChild, labelNode.getLastChild());
+  }
+
+  // Covers normalizeLabels early-return branch when LABEL body is a FOR loop
+  @Test
+  public void testNormalizeLabels_forBody_noChange() throws Throwable {
+    Node lastChild = new Node(Token.FOR, new Node(Token.EMPTY), new Node(Token.EMPTY));
+    Node labelNode = new Node(Token.LABEL, Node.newString(Token.NAME, "L"), lastChild);
+    Normalize normalizer = new Normalize(compiler, true);
+    normalizer.shouldTraverse(null, labelNode, null);
+    assertSame(lastChild, labelNode.getLastChild());
+  }
+
+  // Covers normalizeLabels early-return branch when LABEL body is a WHILE loop
+  @Test
+  public void testNormalizeLabels_whileBody_noChange() throws Throwable {
+    Node lastChild = new Node(Token.WHILE, new Node(Token.EMPTY), new Node(Token.BLOCK));
+    Node labelNode = new Node(Token.LABEL, Node.newString(Token.NAME, "L"), lastChild);
+    Normalize normalizer = new Normalize(compiler, true);
+    normalizer.shouldTraverse(null, labelNode, null);
+    assertSame(lastChild, labelNode.getLastChild());
+  }
+
+  // Covers normalizeLabels early-return branch when LABEL body is a DO loop
+  @Test
+  public void testNormalizeLabels_doBody_noChange() throws Throwable {
+    Node lastChild = new Node(Token.DO, new Node(Token.BLOCK), new Node(Token.EMPTY));
+    Node labelNode = new Node(Token.LABEL, Node.newString(Token.NAME, "L"), lastChild);
+    Normalize normalizer = new Normalize(compiler, true);
+    normalizer.shouldTraverse(null, labelNode, null);
+    assertSame(lastChild, labelNode.getLastChild());
+  }
+
+  // Covers normalizeLabels early-return branch when LABEL body is itself another LABEL
+  @Test
+  public void testNormalizeLabels_labelBody_noChange() throws Throwable {
+    Node lastChild = new Node(Token.LABEL, Node.newString(Token.NAME, "M"), new Node(Token.BLOCK));
+    Node labelNode = new Node(Token.LABEL, Node.newString(Token.NAME, "L"), lastChild);
+    Normalize normalizer = new Normalize(compiler, true);
+    normalizer.shouldTraverse(null, labelNode, null);
+    assertSame(lastChild, labelNode.getLastChild());
+  }
+
+  // Covers extractForInitializer: a FOR with a VAR initializer is hoisted out as its own VAR statement
+  @Test
+  public void testExtractForInitializer_varInit_extractsVarBeforeFor_throwsISE() throws Throwable {
+    Node varNode = new Node(Token.VAR, Node.newString(Token.NAME, "i"));
+    Node cond = IR.name("cond");
+    Node incr = new Node(Token.EMPTY);
+    Node body = new Node(Token.BLOCK);
+    Node forNode = new Node(Token.FOR, varNode, cond);
+    forNode.addChildAfter(incr, cond);
+    forNode.addChildAfter(body, incr);
+    Node blockNode = new Node(Token.BLOCK, forNode);
+    Normalize normalizer = new Normalize(compiler, true);
+    try {
+      normalizer.shouldTraverse(null, blockNode, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    Node firstChild = blockNode.getFirstChild();
+    assertSame(varNode, firstChild);
+    assertSame(forNode, firstChild.getNext());
+    assertEquals(Token.EMPTY, forNode.getFirstChild().getType());
+    assertNull(firstChild.getNext().getNext());
+  }
+
+  // Covers extractForInitializer: a FOR with an expression initializer is hoisted as an EXPR_RESULT statement
+  @Test
+  public void testExtractForInitializer_exprInit_extractsExprStatement_throwsISE() throws Throwable {
+    Node exprInit = new Node(Token.ASSIGN, IR.name("a"), IR.name("b"));
+    Node cond = IR.name("cond");
+    Node incr = new Node(Token.EMPTY);
+    Node body = new Node(Token.BLOCK);
+    Node forNode = new Node(Token.FOR, exprInit, cond);
+    forNode.addChildAfter(incr, cond);
+    forNode.addChildAfter(body, incr);
+    Node blockNode = new Node(Token.BLOCK, forNode);
+    Normalize normalizer = new Normalize(compiler, true);
+    try {
+      normalizer.shouldTraverse(null, blockNode, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    Node firstChild = blockNode.getFirstChild();
+    assertEquals(Token.EXPR_RESULT, firstChild.getType());
+    assertSame(exprInit, firstChild.getFirstChild());
+    assertSame(forNode, firstChild.getNext());
+    assertEquals(Token.EMPTY, forNode.getFirstChild().getType());
+  }
+
+  // Covers extractForInitializer: a FOR with an already EMPTY initializer is left untouched
+  @Test
+  public void testExtractForInitializer_emptyInit_noExtraction() throws Throwable {
+    Node forNode = new Node(Token.FOR, new Node(Token.EMPTY), IR.name("cond"));
+    forNode.addChildAfter(new Node(Token.EMPTY), forNode.getFirstChild().getNext());
+    Node blockNode = new Node(Token.BLOCK, forNode);
+    Normalize normalizer = new Normalize(compiler, true);
+    boolean result = normalizer.shouldTraverse(null, blockNode, null);
+    assertTrue(result);
+    assertSame(forNode, blockNode.getFirstChild());
+    assertEquals(Token.EMPTY, forNode.getFirstChild().getType());
+    assertNull(blockNode.getFirstChild().getNext());
+  }
+
+  // Covers extractForInitializer: a BLOCK with no FOR node at all is left untouched
+  @Test
+  public void testExtractForInitializer_noForPresent_noChange() throws Throwable {
+    Node stmt = new Node(Token.EXPR_RESULT, IR.name("x"));
+    Node blockNode = new Node(Token.BLOCK, stmt);
+    Normalize normalizer = new Normalize(compiler, true);
+    boolean result = normalizer.shouldTraverse(null, blockNode, null);
+    assertTrue(result);
+    assertSame(stmt, blockNode.getFirstChild());
+    assertNull(blockNode.getFirstChild().getNext());
+  }
+
+  // Covers extractForInitializer recursing through a LABEL so the init is hoisted before the outer LABEL
+  @Test
+  public void testExtractForInitializer_nestedLabel_extractsBeforeLabel_throwsISE() throws Throwable {
+    Node varNode = new Node(Token.VAR, Node.newString(Token.NAME, "i"));
+    Node cond = IR.name("cond");
+    Node incr = new Node(Token.EMPTY);
+    Node body = new Node(Token.BLOCK);
+    Node innerFor = new Node(Token.FOR, varNode, cond);
+    innerFor.addChildAfter(incr, cond);
+    innerFor.addChildAfter(body, incr);
+    Node nestedLabel = new Node(Token.LABEL, Node.newString(Token.NAME, "INNER"), innerFor);
+    Node outerBlock = new Node(Token.BLOCK, nestedLabel);
+    Normalize normalizer = new Normalize(compiler, true);
+    try {
+      normalizer.shouldTraverse(null, outerBlock, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    assertSame(varNode, outerBlock.getFirstChild());
+    assertSame(nestedLabel, outerBlock.getFirstChild().getNext());
+    assertEquals(Token.EMPTY, innerFor.getFirstChild().getType());
+  }
+
+  // Covers splitVarDeclarations: the split-out VAR must retain the ORIGINAL declaration's own
+  // source position, not the position of the enclosing statement block.
+  @Test
+  public void testSplitVarDeclarations_twoNames_preservesOriginalNameSourceInfo_throwsISE()
+      throws Throwable {
+    Node nameA = new Node(Token.NAME, IR.number(1), 7, 3);
+    Node nameB = new Node(Token.NAME, IR.number(2), 7, 20);
+    Node varMulti = new Node(Token.VAR, nameA, nameB);
+    Node blockNode = new Node(Token.BLOCK, varMulti, 1, 0);
+    Normalize normalizer = new Normalize(compiler, true);
+    try {
+      normalizer.shouldTraverse(null, blockNode, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    Node newVar = blockNode.getFirstChild();
+    assertEquals(Token.VAR, newVar.getType());
+    assertSame(nameA, newVar.getFirstChild());
+    assertEquals(7, newVar.getLineno());
+    assertEquals(3, newVar.getCharno());
+  }
+
+  // Covers splitVarDeclarations while-loop running across multiple invocations until fully split
+  @Test
+  public void testSplitVarDeclarations_threeNames_splitsSequentiallyAcrossCalls_throwsISE()
+      throws Throwable {
+    Node nameA = Node.newString(Token.NAME, "a");
+    Node nameB = Node.newString(Token.NAME, "b");
+    Node nameC = Node.newString(Token.NAME, "c");
+    Node varMulti = new Node(Token.VAR, nameA, nameB);
+    varMulti.addChildAfter(nameC, nameB);
+    Node blockNode = new Node(Token.BLOCK, varMulti);
+    Normalize normalizer = new Normalize(compiler, true);
+    try {
+      normalizer.shouldTraverse(null, blockNode, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    try {
+      normalizer.shouldTraverse(null, blockNode, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    Node n1 = blockNode.getFirstChild();
+    Node n2 = n1.getNext();
+    Node n3 = n2.getNext();
+    assertSame(nameA, n1.getFirstChild());
+    assertSame(nameB, n2.getFirstChild());
+    assertSame(nameC, n3.getFirstChild());
+    assertTrue(n3.hasOneChild());
+    assertNull(n3.getNext());
+  }
+
+  // Covers splitVarDeclarations while-loop condition false immediately for a single-name VAR
+  @Test
+  public void testSplitVarDeclarations_singleName_noChange() throws Throwable {
+    Node name = Node.newString(Token.NAME, "a");
+    Node varNode = new Node(Token.VAR, name);
+    Node blockNode = new Node(Token.BLOCK, varNode);
+    Normalize normalizer = new Normalize(compiler, true);
+    normalizer.shouldTraverse(null, blockNode, null);
+    assertSame(varNode, blockNode.getFirstChild());
+    assertTrue(varNode.hasOneChild());
+  }
+
+  // Covers splitVarDeclarations explicit guard: an empty VAR node with assertOnChange=true throws
+  @Test
+  public void testSplitVarDeclarations_emptyVarAssertOnChange_throwsISE() throws Throwable {
+    Node emptyVar = new Node(Token.VAR);
+    Node blockNode = new Node(Token.BLOCK, emptyVar);
+    Normalize normalizer = new Normalize(compiler, true);
+    try {
+      normalizer.shouldTraverse(null, blockNode, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      assertTrue(expected.getMessage().contains("Empty VAR"));
+    }
+  }
+
+  // Covers splitVarDeclarations addChildBefore insertion keeping correct relative sibling order
+  @Test
+  public void testSplitVarDeclarations_withSiblingStatements_preservesRelativeOrder_throwsISE()
+      throws Throwable {
+    Node before = new Node(Token.EXPR_RESULT, IR.name("before"));
+    Node nameA = Node.newString(Token.NAME, "a");
+    Node nameB = Node.newString(Token.NAME, "b");
+    Node varMulti = new Node(Token.VAR, nameA, nameB);
+    Node after = new Node(Token.EXPR_RESULT, IR.name("after"));
+    Node blockNode = new Node(Token.BLOCK, before);
+    blockNode.addChildAfter(varMulti, before);
+    blockNode.addChildAfter(after, varMulti);
+    Normalize normalizer = new Normalize(compiler, true);
+    try {
+      normalizer.shouldTraverse(null, blockNode, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    Node n1 = blockNode.getFirstChild();
+    Node n2 = n1.getNext();
+    Node n3 = n2.getNext();
+    Node n4 = n3.getNext();
+    assertSame(before, n1);
+    assertEquals(Token.VAR, n2.getType());
+    assertSame(nameA, n2.getFirstChild());
+    assertSame(varMulti, n3);
+    assertSame(after, n4);
+    assertNull(n4.getNext());
+  }
+
+  // Covers moveNamedFunctions with an empty function body: skip-loop and move-loop both run 0 times
+  @Test
+  public void testMoveNamedFunctions_emptyBody_noOp() throws Throwable {
+    Node nameSlot = Node.newString(Token.NAME, "f");
+    Node body = new Node(Token.BLOCK);
+    Node functionNode = new Node(Token.FUNCTION, nameSlot, body);
+    Normalize normalizer = new Normalize(compiler, true);
+    normalizer.shouldTraverse(null, functionNode, null);
+    assertNull(body.getFirstChild());
+    assertEquals(Token.BLOCK, body.getType());
+  }
+
+  // Covers moveNamedFunctions second loop with a single non-function-declaration statement
+  @Test
+  public void testMoveNamedFunctions_singleNonFunctionStatement_noOp() throws Throwable {
+    Node nameSlot = Node.newString(Token.NAME, "f");
+    Node varStmt = new Node(Token.VAR, Node.newString(Token.NAME, "x"));
+    Node body = new Node(Token.BLOCK, varStmt);
+    Node functionNode = new Node(Token.FUNCTION, nameSlot, body);
+    Normalize normalizer = new Normalize(compiler, true);
+    normalizer.shouldTraverse(null, functionNode, null);
+    assertSame(varStmt, body.getFirstChild());
+    assertNull(varStmt.getNext());
+  }
+}

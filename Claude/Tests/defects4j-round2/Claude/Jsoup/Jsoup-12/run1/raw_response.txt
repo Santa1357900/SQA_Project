@@ -1,0 +1,441 @@
+package org.jsoup.select;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+
+import java.util.LinkedHashSet;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class SelectorClaudeTest {
+
+    private Document doc;
+    private Element div1, div3, p1, p2, span1, ul1, li1, li2, li3, fb1;
+
+    @Before
+    public void setUp() throws Throwable {
+        String html = "<html><head><title>Test</title></head><body>" +
+            "<div id=\"1\" class=\"outer\">" +
+            "<p id=\"p1\" class=\"a b\" title=\"foo\">One</p>" +
+            "<p id=\"p2\" class=\"b\">Two</p>" +
+            "<span id=\"span1\" data-foo=\"bar\">Three</span>" +
+            "</div>" +
+            "<div id=\"3\" class=\"outer second\">" +
+            "<ul id=\"ul1\">" +
+            "<li id=\"li1\">Item1</li>" +
+            "<li id=\"li2\">Item2</li>" +
+            "<li id=\"li3\">Item3</li>" +
+            "</ul>" +
+            "</div>" +
+            "<fb:name id=\"fb1\">Namespaced</fb:name>" +
+            "</body></html>";
+        doc = Jsoup.parse(html);
+        div1 = doc.getElementById("1");
+        div3 = doc.getElementById("3");
+        p1 = doc.getElementById("p1");
+        p2 = doc.getElementById("p2");
+        span1 = doc.getElementById("span1");
+        ul1 = doc.getElementById("ul1");
+        li1 = doc.getElementById("li1");
+        li2 = doc.getElementById("li2");
+        li3 = doc.getElementById("li3");
+        fb1 = doc.getElementById("fb1");
+    }
+
+    // byId(): found branch returns single matching element
+    @Test
+    public void testById_matchReturnsSingleElement() throws Throwable {
+        Elements result = Selector.select("#p2", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(p2));
+    }
+
+    // byId(): not-found branch returns empty Elements
+    @Test
+    public void testById_noMatchReturnsEmpty() throws Throwable {
+        Elements result = Selector.select("#missing", doc);
+        assertEquals(0, result.size());
+    }
+
+    // byId(): empty identifier triggers Validate.notEmpty throw
+    @Test
+    public void testById_emptyIdentifierThrows() throws Throwable {
+        try {
+            Selector.select("#", doc);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // byClass(): multiple elements share a class
+    @Test
+    public void testByClass_multipleMatches() throws Throwable {
+        Elements result = Selector.select(".b", doc);
+        assertEquals(2, result.size());
+        assertTrue(result.contains(p1));
+        assertTrue(result.contains(p2));
+    }
+
+    // byClass(): no elements have given class
+    @Test
+    public void testByClass_noMatchReturnsEmpty() throws Throwable {
+        Elements result = Selector.select(".zzz", doc);
+        assertEquals(0, result.size());
+    }
+
+    // byTag(): tag matches multiple elements
+    @Test
+    public void testByTag_multipleMatches() throws Throwable {
+        Elements result = Selector.select("p", doc);
+        assertEquals(2, result.size());
+        assertTrue(result.contains(p1));
+        assertTrue(result.contains(p2));
+    }
+
+    // byTag(): namespace "ns|E" is converted to "ns:E" tag name
+    @Test
+    public void testByTag_namespaceSelector() throws Throwable {
+        Elements result = Selector.select("fb|name", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(fb1));
+    }
+
+    // allElements(): "*" scoped to a root includes the root itself and descendants
+    @Test
+    public void testUniversalStar_scopedToRootIncludesSelf() throws Throwable {
+        Elements result = Selector.select("*", ul1);
+        assertEquals(4, result.size());
+        assertTrue(result.contains(ul1));
+        assertTrue(result.contains(li1));
+        assertTrue(result.contains(li3));
+    }
+
+    // byAttribute(): [attr] existence, no value clause
+    @Test
+    public void testAttributeExists() throws Throwable {
+        Elements result = Selector.select("[title]", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(p1));
+    }
+
+    // byAttribute(): [^prefix] attribute-name-starting-with branch
+    @Test
+    public void testAttributePrefix() throws Throwable {
+        Elements result = Selector.select("[^data-]", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(span1));
+    }
+
+    // byAttribute(): [attr=val] exact value equality
+    @Test
+    public void testAttributeEquals() throws Throwable {
+        Elements result = Selector.select("[title=foo]", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(p1));
+    }
+
+    // byAttribute(): [attr^=valPrefix] starts-with value
+    @Test
+    public void testAttributeStartsWith() throws Throwable {
+        Elements result = Selector.select("[title^=fo]", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(p1));
+    }
+
+    // byAttribute(): [attr$=valSuffix] ends-with value
+    @Test
+    public void testAttributeEndsWith() throws Throwable {
+        Elements result = Selector.select("[data-foo$=ar]", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(span1));
+    }
+
+    // byAttribute(): [attr*=valContaining] value contains substring
+    @Test
+    public void testAttributeContains() throws Throwable {
+        Elements result = Selector.select("[title*=oo]", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(p1));
+    }
+
+    // byAttribute(): [attr~=regex] value matches regular expression
+    @Test
+    public void testAttributeRegexMatches() throws Throwable {
+        Elements result = Selector.select("[data-foo~=b.r]", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(span1));
+    }
+
+    // compound selector (tag.class): intersectElements/filterForSelf AND logic
+    @Test
+    public void testCompoundTagAndClass_intersects() throws Throwable {
+        Elements result = Selector.select("div.second", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(div3));
+        assertFalse(result.contains(div1));
+    }
+
+    // combinator ' ' (descendant): matches elements at any depth
+    @Test
+    public void testDescendantCombinator_multiLevel() throws Throwable {
+        Elements result = Selector.select("div li", doc);
+        assertEquals(3, result.size());
+        assertTrue(result.contains(li1));
+        assertTrue(result.contains(li2));
+        assertTrue(result.contains(li3));
+    }
+
+    // combinator '>' (child): matches only direct children
+    @Test
+    public void testChildCombinator_directOnly() throws Throwable {
+        Elements result = Selector.select("div > p", doc);
+        assertEquals(2, result.size());
+        assertTrue(result.contains(p1));
+        assertTrue(result.contains(p2));
+    }
+
+    // combinator '>' (child): must exclude grandchildren (li is child of ul, not div)
+    @Test
+    public void testChildCombinator_excludesGrandchildren() throws Throwable {
+        Elements result = Selector.select("div > li", doc);
+        assertEquals(0, result.size());
+    }
+
+    // combinator '+' (adjacent sibling): only the immediately following sibling matches
+    @Test
+    public void testAdjacentSiblingCombinator() throws Throwable {
+        Elements result = Selector.select("p + p", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(p2));
+        assertFalse(result.contains(p1));
+    }
+
+    // combinator '~' (general sibling): any later sibling of same type matches
+    @Test
+    public void testGeneralSiblingCombinator() throws Throwable {
+        Elements result = Selector.select("li ~ li", doc);
+        assertEquals(2, result.size());
+        assertTrue(result.contains(li2));
+        assertTrue(result.contains(li3));
+        assertFalse(result.contains(li1));
+    }
+
+    // combinator ',' (group or): union of two independent selector matches
+    @Test
+    public void testGroupOrCombinator() throws Throwable {
+        Elements result = Selector.select("p, li", doc);
+        assertEquals(5, result.size());
+        assertTrue(result.contains(p1));
+        assertTrue(result.contains(li3));
+    }
+
+    // pseudo :lt(n) intersected with a tag selector for deterministic scope
+    @Test
+    public void testIndexLessThan() throws Throwable {
+        Elements result = Selector.select("li:lt(2)", doc);
+        assertEquals(2, result.size());
+        assertTrue(result.contains(li1));
+        assertTrue(result.contains(li2));
+        assertFalse(result.contains(li3));
+    }
+
+    // pseudo :gt(n) intersected with a tag selector for deterministic scope
+    @Test
+    public void testIndexGreaterThan() throws Throwable {
+        Elements result = Selector.select("li:gt(0)", doc);
+        assertEquals(2, result.size());
+        assertTrue(result.contains(li2));
+        assertTrue(result.contains(li3));
+        assertFalse(result.contains(li1));
+    }
+
+    // pseudo :eq(n) intersected with a tag selector for deterministic scope
+    @Test
+    public void testIndexEquals() throws Throwable {
+        Elements result = Selector.select("li:eq(1)", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(li2));
+    }
+
+    // pseudo :has(selector): parent contains a matching descendant anywhere below
+    @Test
+    public void testPseudoHas() throws Throwable {
+        Elements result = Selector.select("div:has(ul)", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(div3));
+        assertFalse(result.contains(div1));
+    }
+
+    // pseudo :not(selector): excludes elements matching the sub-selector
+    @Test
+    public void testPseudoNot() throws Throwable {
+        Elements result = Selector.select("div:not(.second)", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(div1));
+        assertFalse(result.contains(div3));
+    }
+
+    // pseudo :contains(text): text may appear in element or its descendants
+    @Test
+    public void testPseudoContains() throws Throwable {
+        Elements result = Selector.select("p:contains(One)", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(p1));
+    }
+
+    // pseudo :containsOwn(text): must be direct own text, excludes descendant-only text
+    @Test
+    public void testPseudoContainsOwn_excludesDescendantText() throws Throwable {
+        Elements containsResult = Selector.select("div:contains(One)", doc);
+        Elements ownResult = Selector.select("div:containsOwn(One)", doc);
+        assertTrue(containsResult.contains(div1));
+        assertEquals(0, ownResult.size());
+    }
+
+    // pseudo :matches(regex): regex may match element or descendant text
+    @Test
+    public void testPseudoMatches() throws Throwable {
+        Elements result = Selector.select("span:matches(Three)", doc);
+        assertEquals(1, result.size());
+        assertTrue(result.contains(span1));
+    }
+
+    // pseudo :matchesOwn(regex): must match own text only, excludes descendant-only text
+    @Test
+    public void testPseudoMatchesOwn_excludesDescendantText() throws Throwable {
+        Elements matchesResult = Selector.select("div:matches(One)", doc);
+        Elements ownResult = Selector.select("div:matchesOwn(One)", doc);
+        assertTrue(matchesResult.contains(div1));
+        assertEquals(0, ownResult.size());
+    }
+
+    // constructor: null query triggers Validate.notNull throw
+    @Test
+    public void testNullQueryThrows() throws Throwable {
+        try {
+            Selector.select((String) null, doc);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // constructor: empty query (after trim) triggers Validate.notEmpty throw
+    @Test
+    public void testEmptyQueryThrows() throws Throwable {
+        try {
+            Selector.select("", doc);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // constructor: whitespace-only query becomes empty after trim() and throws
+    @Test
+    public void testWhitespaceOnlyQueryThrows() throws Throwable {
+        try {
+            Selector.select("   ", doc);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // constructor: null root triggers Validate.notNull throw
+    @Test
+    public void testNullRootThrows() throws Throwable {
+        try {
+            Selector.select("div", (Element) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // findElements(): unrecognized token falls into the final else and throws SelectorParseException
+    @Test
+    public void testUnknownTokenThrowsParseException() throws Throwable {
+        try {
+            Selector.select("!bad", doc);
+            fail("expected SelectorParseException");
+        } catch (Selector.SelectorParseException expected) { }
+    }
+
+    // consumeIndex(): non-numeric index triggers Validate.isTrue throw
+    @Test
+    public void testIndexNonNumericThrows() throws Throwable {
+        try {
+            Selector.select(":lt(a)", doc);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("numeric"));
+        }
+    }
+
+    // has(): empty sub-selector triggers Validate.notEmpty throw
+    @Test
+    public void testHasEmptySubqueryThrows() throws Throwable {
+        try {
+            Selector.select("div:has()", doc);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("has"));
+        }
+    }
+
+    // not(): empty sub-selector triggers Validate.notEmpty throw
+    @Test
+    public void testNotEmptySubqueryThrows() throws Throwable {
+        try {
+            Selector.select("div:not()", doc);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("not"));
+        }
+    }
+
+    // contains(): empty search text triggers Validate.notEmpty throw
+    @Test
+    public void testContainsEmptySubqueryThrows() throws Throwable {
+        try {
+            Selector.select("p:contains()", doc);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("contains"));
+        }
+    }
+
+    // select(query, Iterable<Element>): unions matches across all supplied roots
+    @Test
+    public void testSelectIterableRoots_unionOfMatches() throws Throwable {
+        LinkedHashSet<Element> roots = new LinkedHashSet<Element>();
+        roots.add(div1);
+        roots.add(div3);
+        Elements result = Selector.select("p", roots);
+        assertEquals(2, result.size());
+        assertTrue(result.contains(p1));
+        assertTrue(result.contains(p2));
+    }
+
+    // select(query, Iterable<Element>): null roots triggers Validate.notNull throw
+    @Test
+    public void testSelectIterableRoots_nullRootsThrows() throws Throwable {
+        try {
+            Selector.select("div", (Iterable<Element>) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // select(query, Iterable<Element>): empty query triggers Validate.notEmpty throw
+    @Test
+    public void testSelectIterableRoots_emptyQueryThrows() throws Throwable {
+        LinkedHashSet<Element> roots = new LinkedHashSet<Element>();
+        roots.add(div1);
+        try {
+            Selector.select("", roots);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // SelectorParseException: constructor formats message with String.format params
+    @Test
+    public void testSelectorParseException_formatsMessageWithParams() throws Throwable {
+        Selector.SelectorParseException ex = new Selector.SelectorParseException("bad token %s found", "xyz");
+        assertTrue(ex.getMessage().contains("xyz"));
+    }
+}

@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-100-zy1n1y34/Math-100f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.math.estimation.AbstractEstimatorClaudeTest::testGuessParametersErrors_validCase_returnsCorrectErrors
+  - org.apache.commons.math.estimation.AbstractEstimatorClaudeTest::testGetChiSquare_singleMeasurement_returnsWeightTimesResidualSquared
+  - org.apache.commons.math.estimation.AbstractEstimatorClaudeTest::testGetChiSquare_multipleMeasurements_returnsSumOfWeightedSquaredResiduals
+[exit 0]

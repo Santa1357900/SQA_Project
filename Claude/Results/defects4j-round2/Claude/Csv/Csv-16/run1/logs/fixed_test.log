@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Csv-16-k2ozl20_/Csv-16f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.csv.CSVParserClaudeTest::testInitializeHeader_duplicateEmptyHeadersAllowed_doesNotThrow
+  - org.apache.commons.csv.CSVParserClaudeTest::testGetHeaderMap_ignoreHeaderCase_caseInsensitiveLookup
+[exit 0]

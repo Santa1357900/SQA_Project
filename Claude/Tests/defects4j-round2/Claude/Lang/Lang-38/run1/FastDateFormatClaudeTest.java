@@ -1,0 +1,452 @@
+package org.apache.commons.lang3.time;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.text.FieldPosition;
+import java.text.ParsePosition;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
+
+public class FastDateFormatClaudeTest {
+
+    private static final TimeZone UTC = TimeZone.getTimeZone("UTC");
+
+    // covers: getInstance() -> getDefaultPattern() contract (default SimpleDateFormat pattern)
+    @Test
+    public void testGetInstance_defaultPattern_matchesSimpleDateFormatDefault() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance();
+        assertEquals(new SimpleDateFormat().toPattern(), fmt.getPattern());
+    }
+
+    // covers: constructor null-pattern check -> IllegalArgumentException
+    @Test
+    public void testGetInstance_withNullPattern_throwsIllegalArgumentException() throws Throwable {
+        try {
+            FastDateFormat.getInstance((String) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("pattern"));
+        }
+    }
+
+    // covers: getInstance cache hit branch (format == null false on 2nd call)
+    @Test
+    public void testGetInstance_sameArguments_returnsCachedSameInstance() throws Throwable {
+        FastDateFormat a = FastDateFormat.getInstance("HH:mm:ss", UTC, Locale.US);
+        FastDateFormat b = FastDateFormat.getInstance("HH:mm:ss", UTC, Locale.US);
+        assertSame(a, b);
+    }
+
+    // covers: getInstance(pattern, timeZone) -> mTimeZoneForced true branch
+    @Test
+    public void testGetInstance_withTimeZone_forcesTimeZoneTrue() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy", UTC);
+        assertTrue(fmt.getTimeZoneOverridesCalendar());
+        assertEquals(UTC, fmt.getTimeZone());
+    }
+
+    // covers: getInstance(pattern) -> mTimeZoneForced false branch
+    @Test
+    public void testGetInstance_withoutTimeZone_forcesTimeZoneFalse() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyyMMdd");
+        assertFalse(fmt.getTimeZoneOverridesCalendar());
+    }
+
+    // covers: getDateInstance invalid style -> IllegalArgumentException (ClassCastException or direct)
+    @Test
+    public void testGetDateInstance_invalidStyle_throwsIllegalArgumentException() throws Throwable {
+        try {
+            FastDateFormat.getDateInstance(999);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // covers: getDateInstance derived pattern formats same as SimpleDateFormat using that pattern
+    @Test
+    public void testGetDateInstance_matchesSimpleDateFormatOutput() throws Throwable {
+        FastDateFormat fdf = FastDateFormat.getDateInstance(FastDateFormat.MEDIUM, UTC, Locale.US);
+        SimpleDateFormat sdf = new SimpleDateFormat(fdf.getPattern(), Locale.US);
+        sdf.setTimeZone(UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2023, Calendar.MARCH, 10, 12, 0, 0);
+        Date date = cal.getTime();
+        assertEquals(sdf.format(date), fdf.format(date));
+    }
+
+    // covers: getTimeInstance invalid style -> IllegalArgumentException
+    @Test
+    public void testGetTimeInstance_invalidStyle_throwsIllegalArgumentException() throws Throwable {
+        try {
+            FastDateFormat.getTimeInstance(999);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // covers: getDateTimeInstance invalid style -> IllegalArgumentException
+    @Test
+    public void testGetDateTimeInstance_invalidStyle_throwsIllegalArgumentException() throws Throwable {
+        try {
+            FastDateFormat.getDateTimeInstance(999, 999);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // covers: format(Object,...) instanceof Date branch
+    @Test
+    public void testFormatObject_withDate_matchesFormatDate() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2019, Calendar.JULY, 4, 0, 0, 0);
+        Date date = cal.getTime();
+        StringBuffer buf = new StringBuffer();
+        fmt.format((Object) date, buf, new FieldPosition(0));
+        assertEquals("2019-07-04", buf.toString());
+    }
+
+    // covers: format(Object,...) instanceof Long branch
+    @Test
+    public void testFormatObject_withLong_matchesFormatLongMillis() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2019, Calendar.JULY, 4, 0, 0, 0);
+        long millis = cal.getTimeInMillis();
+        StringBuffer buf = new StringBuffer();
+        fmt.format((Object) Long.valueOf(millis), buf, new FieldPosition(0));
+        assertEquals("2019-07-04", buf.toString());
+    }
+
+    // covers: format(Object,...) instanceof Calendar branch and format(Calendar) non-forced path
+    @Test
+    public void testFormatCalendarAndFormatObjectCalendar_consistentOutput() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2020, Calendar.FEBRUARY, 29, 0, 0, 0);
+        String direct = fmt.format(cal);
+        StringBuffer buf = new StringBuffer();
+        fmt.format((Object) cal, buf, new FieldPosition(0));
+        assertEquals("2020-02-29", direct);
+        assertEquals(direct, buf.toString());
+    }
+
+    // covers: format(Object,...) else branch with unsupported type -> IllegalArgumentException
+    @Test
+    public void testFormatObject_withUnsupportedType_throwsIllegalArgumentException() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd", UTC);
+        StringBuffer buf = new StringBuffer();
+        try {
+            fmt.format((Object) Integer.valueOf(5), buf, new FieldPosition(0));
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Integer"));
+        }
+    }
+
+    // covers: format(Object,...) else branch with null -> "<null>" message
+    @Test
+    public void testFormatObject_withNull_throwsIllegalArgumentExceptionMentioningNull() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd", UTC);
+        StringBuffer buf = new StringBuffer();
+        try {
+            fmt.format((Object) null, buf, new FieldPosition(0));
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("null"));
+        }
+    }
+
+    // covers: format(long)
+    @Test
+    public void testFormatLongMillis_returnsExpectedString() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2021, Calendar.NOVEMBER, 5, 13, 7, 9);
+        long millis = cal.getTimeInMillis();
+        assertEquals("2021-11-05", fmt.format(millis));
+    }
+
+    // covers: format(long, StringBuffer) appends to supplied buffer and returns same instance
+    @Test
+    public void testFormatLongMillisBuffer_appendsExpectedStringToSameBuffer() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2021, Calendar.NOVEMBER, 5, 13, 7, 9);
+        long millis = cal.getTimeInMillis();
+        StringBuffer buf = new StringBuffer("PREFIX-");
+        StringBuffer result = fmt.format(millis, buf);
+        assertSame(buf, result);
+        assertEquals("PREFIX-2021-11-05T13:07:09", result.toString());
+    }
+
+    // covers: format(Date, StringBuffer) appends and returns same instance
+    @Test
+    public void testFormatDateBuffer_appendsExpectedStringToSameBuffer() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2021, Calendar.NOVEMBER, 5, 0, 0, 0);
+        Date date = cal.getTime();
+        StringBuffer buf = new StringBuffer();
+        StringBuffer result = fmt.format(date, buf);
+        assertSame(buf, result);
+        assertEquals("2021-11-05", result.toString());
+    }
+
+    // covers: format(Calendar, StringBuffer) mTimeZoneForced branch clones calendar, doesn't mutate caller
+    @Test
+    public void testFormatCalendarBuffer_timeZoneForced_clonesAndDoesNotMutateOriginal() throws Throwable {
+        FastDateFormat forced = FastDateFormat.getInstance("yyyy-MM-dd", UTC);
+        TimeZone tokyo = TimeZone.getTimeZone("Asia/Tokyo");
+        Calendar original = new GregorianCalendar(tokyo);
+        original.clear();
+        original.set(2022, Calendar.JANUARY, 1, 0, 0, 0);
+        StringBuffer buf = new StringBuffer();
+        forced.format(original, buf);
+        assertEquals(tokyo, original.getTimeZone());
+        assertEquals("2021-12-31", buf.toString());
+    }
+
+    // covers: parseObject always resets position to 0 and returns null
+    @Test
+    public void testParseObject_alwaysReturnsNullAndResetsPositionToZero() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy");
+        ParsePosition pos = new ParsePosition(5);
+        pos.setErrorIndex(3);
+        Object result = fmt.parseObject("2023", pos);
+        assertNull(result);
+        assertEquals(0, pos.getIndex());
+        assertEquals(0, pos.getErrorIndex());
+    }
+
+    // covers: getPattern()
+    @Test
+    public void testGetPattern_returnsConstructedPattern() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("dd/MM/yyyy");
+        assertEquals("dd/MM/yyyy", fmt.getPattern());
+    }
+
+    // covers: getTimeZone()
+    @Test
+    public void testGetTimeZone_returnsConstructedTimeZone() throws Throwable {
+        TimeZone tz = TimeZone.getTimeZone("America/New_York");
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyyMM", tz);
+        assertEquals(tz, fmt.getTimeZone());
+    }
+
+    // covers: getLocale()
+    @Test
+    public void testGetLocale_returnsConstructedLocale() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyyMMdd", Locale.GERMANY);
+        assertEquals(Locale.GERMANY, fmt.getLocale());
+    }
+
+    // covers: getMaxLengthEstimate() computed from rule estimateLength() values
+    @Test
+    public void testGetMaxLengthEstimate_computesExpectedEstimate() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd");
+        assertEquals(10, fmt.getMaxLengthEstimate());
+    }
+
+    // covers: equals() true branch - all fields equal but different instances
+    @Test
+    public void testEquals_equalProperties_true() throws Throwable {
+        FastDateFormat a = new TestableFastDateFormat("yyyy-MM-dd", UTC, Locale.US);
+        FastDateFormat b = new TestableFastDateFormat("yyyy-MM-dd", UTC, Locale.US);
+        assertNotSame(a, b);
+        assertTrue(a.equals(b));
+    }
+
+    // covers: equals() false branch - different pattern
+    @Test
+    public void testEquals_differentPattern_false() throws Throwable {
+        FastDateFormat a = new TestableFastDateFormat("yyyy-MM-dd", UTC, Locale.US);
+        FastDateFormat c = new TestableFastDateFormat("dd-MM-yyyy", UTC, Locale.US);
+        assertFalse(a.equals(c));
+    }
+
+    // covers: equals() instanceof check false
+    @Test
+    public void testEquals_nonFastDateFormatObject_false() throws Throwable {
+        FastDateFormat a = new TestableFastDateFormat("yyyy-MM-dd", UTC, Locale.US);
+        assertFalse(a.equals("not a format"));
+    }
+
+    // covers: hashCode() consistent with equals()
+    @Test
+    public void testHashCode_equalObjects_sameHashCode() throws Throwable {
+        FastDateFormat a = new TestableFastDateFormat("yyyy-MM-dd", UTC, Locale.US);
+        FastDateFormat b = new TestableFastDateFormat("yyyy-MM-dd", UTC, Locale.US);
+        assertEquals(a.hashCode(), b.hashCode());
+    }
+
+    // covers: toString() debugging format
+    @Test
+    public void testToString_returnsExpectedDebugString() throws Throwable {
+        FastDateFormat a = new TestableFastDateFormat("abc", UTC, Locale.US);
+        assertEquals("FastDateFormat[abc]", a.toString());
+    }
+
+    // BUG TEST: pattern "y" (single letter) must format as FULL numeric year per SimpleDateFormat contract,
+    // not a two-digit year. Buggy code routes tokenLen<4 (including 1) to TwoDigitYearField.
+    @Test
+    public void testPattern_singleY_formatsFullYearNotTwoDigit() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("y", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2023, Calendar.JUNE, 15, 10, 0, 0);
+        assertEquals("2023", fmt.format(cal.getTime()));
+    }
+
+    // BUG TEST: pattern "yyy" (3 letters) must format as full numeric year (padded to >=3 digits),
+    // not a two-digit truncated year.
+    @Test
+    public void testPattern_threeY_formatsFullYearNotTwoDigit() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyy", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2023, Calendar.JUNE, 15, 10, 0, 0);
+        assertEquals("2023", fmt.format(cal.getTime()));
+    }
+
+    // baseline: pattern "yy" (exactly 2 letters) truncates to two-digit year in both versions
+    @Test
+    public void testPattern_twoY_formatsTwoDigitYearBaseline() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yy", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2023, Calendar.JUNE, 15, 10, 0, 0);
+        assertEquals("23", fmt.format(cal.getTime()));
+    }
+
+    // covers: TwelveHourField branch where HOUR==0 maps to 12
+    @Test
+    public void testPattern_twelveHour_midnightFormatsAsTwelve() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("h", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2023, Calendar.JANUARY, 1, 0, 0, 0);
+        assertEquals("12", fmt.format(cal.getTime()));
+    }
+
+    // covers: TwentyFourHourField branch where HOUR_OF_DAY==0 maps to 24
+    @Test
+    public void testPattern_twentyFourHour_midnightFormatsAsTwentyFour() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("k", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2023, Calendar.JANUARY, 1, 0, 0, 0);
+        assertEquals("24", fmt.format(cal.getTime()));
+    }
+
+    // covers: parsePattern default case -> illegal pattern component throws IllegalArgumentException
+    @Test
+    public void testPattern_illegalComponent_throwsIllegalArgumentException() throws Throwable {
+        try {
+            FastDateFormat.getInstance("Q");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Illegal pattern"));
+        }
+    }
+
+    // covers: '\'' case - StringLiteral (multi-char) and CharacterLiteral (escaped single quote)
+    @Test
+    public void testPattern_stringLiteralAndEscapedQuote_formatsLiteralText() throws Throwable {
+        FastDateFormat literal = FastDateFormat.getInstance("'Hello'", UTC);
+        FastDateFormat quote = FastDateFormat.getInstance("''", UTC);
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2023, Calendar.JANUARY, 1, 0, 0, 0);
+        assertEquals("Hello", literal.format(cal.getTime()));
+        assertEquals("'", quote.format(cal.getTime()));
+    }
+
+    // covers: TimeZoneNumberRule both colon (ZZ) and no-colon (Z) branches
+    @Test
+    public void testPattern_timeZoneNumberNoColonAndColon_formatsOffset() throws Throwable {
+        TimeZone fixed = TimeZone.getTimeZone("GMT+05:00");
+        FastDateFormat noColon = FastDateFormat.getInstance("Z", fixed);
+        FastDateFormat colon = FastDateFormat.getInstance("ZZ", fixed);
+        Calendar cal = new GregorianCalendar(fixed);
+        cal.clear();
+        cal.set(2023, Calendar.JUNE, 1, 0, 0, 0);
+        Date date = cal.getTime();
+        assertEquals("+0500", noColon.format(date));
+        assertEquals("+05:00", colon.format(date));
+    }
+
+    // covers: parsePattern() produces one Rule per field/literal token (letter run collapsed, literal split)
+    @Test
+    public void testParsePattern_mixedLiteralsAndFields_producesExpectedRuleCount() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd");
+        List rules = fmt.parsePattern();
+        assertEquals(5, rules.size());
+    }
+
+    // covers: parseToken() letter-run scanning and single non-repeating letter branch
+    @Test
+    public void testParseToken_repeatingLettersAndSingleLetter_returnsExpectedTokens() throws Throwable {
+        FastDateFormat fmt = FastDateFormat.getInstance("yyyy-MM-dd");
+        int[] idx1 = new int[] { 0 };
+        String token1 = fmt.parseToken("MMM-dd", idx1);
+        assertEquals("MMM", token1);
+        assertEquals(2, idx1[0]);
+
+        int[] idx2 = new int[] { 0 };
+        String token2 = fmt.parseToken("Ma", idx2);
+        assertEquals("M", token2);
+        assertEquals(0, idx2[0]);
+    }
+
+    // covers: readObject()/init() reinitialize transient rules correctly after serialization
+    @Test
+    public void testSerialization_roundTrip_preservesFormattingBehavior() throws Throwable {
+        FastDateFormat original = FastDateFormat.getInstance("yyyy-MM-dd", UTC);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(original);
+        oos.close();
+        ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+        ObjectInputStream ois = new ObjectInputStream(bais);
+        FastDateFormat restored = (FastDateFormat) ois.readObject();
+        ois.close();
+
+        Calendar cal = new GregorianCalendar(UTC);
+        cal.clear();
+        cal.set(2023, Calendar.AUGUST, 8, 0, 0, 0);
+        Date date = cal.getTime();
+        assertEquals(original.format(date), restored.format(date));
+        assertEquals("2023-08-08", restored.format(date));
+    }
+
+    /**
+     * Minimal subclass solely to expose the protected constructor for direct
+     * (non-cached) construction, used only to test equals()/hashCode()/toString().
+     */
+    private static class TestableFastDateFormat extends FastDateFormat {
+        TestableFastDateFormat(String pattern, TimeZone timeZone, Locale locale) {
+            super(pattern, timeZone, locale);
+        }
+    }
+}

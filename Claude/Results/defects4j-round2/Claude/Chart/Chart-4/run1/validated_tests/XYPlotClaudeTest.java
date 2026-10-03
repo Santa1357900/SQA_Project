@@ -1,0 +1,640 @@
+package org.jfree.chart.plot;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import org.junit.Before;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Collection;
+
+import org.jfree.chart.axis.AxisLocation;
+import org.jfree.chart.axis.NumberAxis;
+import org.jfree.chart.axis.ValueAxis;
+import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
+import org.jfree.chart.renderer.xy.XYItemRenderer;
+import org.jfree.chart.annotations.XYTextAnnotation;
+import org.jfree.chart.LegendItemCollection;
+import org.jfree.chart.util.Layer;
+import org.jfree.data.xy.DefaultXYDataset;
+import org.jfree.data.xy.XYDataset;
+import org.jfree.data.Range;
+
+public class XYPlotClaudeTest {
+
+    @Before
+    public void setUp() throws Throwable {
+        // no shared mutable state required
+    }
+
+    // default constructor: orientation, rendering order defaults
+    @Test
+    public void testDefaultConstructor_initialState() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertEquals(PlotOrientation.VERTICAL, plot.getOrientation());
+        assertEquals(DatasetRenderingOrder.REVERSE, plot.getDatasetRenderingOrder());
+        assertEquals(SeriesRenderingOrder.REVERSE, plot.getSeriesRenderingOrder());
+        assertEquals(1, plot.getWeight());
+        assertNull(plot.getDataset());
+        assertNull(plot.getRenderer());
+    }
+
+    // constructor with dataset/axes/renderer sets getters correctly
+    @Test
+    public void testFullConstructor_settersReflectValues() throws Throwable {
+        DefaultXYDataset dataset = new DefaultXYDataset();
+        NumberAxis domainAxis = new NumberAxis("X");
+        NumberAxis rangeAxis = new NumberAxis("Y");
+        XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer();
+        XYPlot plot = new XYPlot(dataset, domainAxis, rangeAxis, renderer);
+        assertSame(dataset, plot.getDataset());
+        assertSame(domainAxis, plot.getDomainAxis());
+        assertSame(rangeAxis, plot.getRangeAxis());
+        assertSame(renderer, plot.getRenderer());
+    }
+
+    // setOrientation(null) branch -> IllegalArgumentException
+    @Test
+    public void testSetOrientation_null_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.setOrientation(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setOrientation valid changes value
+    @Test
+    public void testSetOrientation_valid_changesOrientation() throws Throwable {
+        XYPlot plot = new XYPlot();
+        plot.setOrientation(PlotOrientation.HORIZONTAL);
+        assertEquals(PlotOrientation.HORIZONTAL, plot.getOrientation());
+    }
+
+    // setAxisOffset(null) -> IllegalArgumentException
+    @Test
+    public void testSetAxisOffset_null_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.setAxisOffset(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // getDomainAxis() with no parent returns null
+    @Test
+    public void testGetDomainAxis_noAxisNoParent_returnsNull() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertNull(plot.getDomainAxis());
+    }
+
+    // setDomainAxis(index, axis) then getDomainAxis(index)
+    @Test
+    public void testSetDomainAxis_indexed_getterReturnsAxis() throws Throwable {
+        XYPlot plot = new XYPlot();
+        NumberAxis axis1 = new NumberAxis("X1");
+        plot.setDomainAxis(1, axis1);
+        assertSame(axis1, plot.getDomainAxis(1));
+    }
+
+    // setDomainAxes array sets multiple axes
+    @Test
+    public void testSetDomainAxes_array_allSet() throws Throwable {
+        XYPlot plot = new XYPlot();
+        NumberAxis a0 = new NumberAxis("A0");
+        NumberAxis a1 = new NumberAxis("A1");
+        plot.setDomainAxes(new ValueAxis[] {a0, a1});
+        assertSame(a0, plot.getDomainAxis(0));
+        assertSame(a1, plot.getDomainAxis(1));
+    }
+
+    // default domain axis location
+    @Test
+    public void testGetDomainAxisLocation_default() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertEquals(AxisLocation.BOTTOM_OR_LEFT, plot.getDomainAxisLocation());
+    }
+
+    // setDomainAxisLocation(null) for index 0 throws
+    @Test
+    public void testSetDomainAxisLocation_nullIndex0_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.setDomainAxisLocation(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // getDomainAxisLocation(index) unset returns opposite of primary
+    @Test
+    public void testGetDomainAxisLocation_unsetIndex_returnsOpposite() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertEquals(AxisLocation.TOP_OR_RIGHT, plot.getDomainAxisLocation(1));
+    }
+
+    // domain axis count default is 1 then clearDomainAxes -> 0
+    @Test
+    public void testDomainAxisCount_defaultThenCleared() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertEquals(1, plot.getDomainAxisCount());
+        plot.clearDomainAxes();
+        assertEquals(0, plot.getDomainAxisCount());
+    }
+
+    // getRangeAxis() with no parent returns null
+    @Test
+    public void testGetRangeAxis_noAxisNoParent_returnsNull() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertNull(plot.getRangeAxis());
+    }
+
+    // setRangeAxis(axis) sets primary range axis
+    @Test
+    public void testSetRangeAxis_setsPrimaryAxis() throws Throwable {
+        XYPlot plot = new XYPlot();
+        NumberAxis axis = new NumberAxis("Y");
+        plot.setRangeAxis(axis);
+        assertSame(axis, plot.getRangeAxis());
+    }
+
+    // range axis count default 1 then clearRangeAxes -> 0
+    @Test
+    public void testRangeAxisCount_defaultThenCleared() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertEquals(1, plot.getRangeAxisCount());
+        plot.clearRangeAxes();
+        assertEquals(0, plot.getRangeAxisCount());
+    }
+
+    // getDataset(index) and setDataset(index, dataset)
+    @Test
+    public void testSetGetDataset_indexed() throws Throwable {
+        XYPlot plot = new XYPlot();
+        DefaultXYDataset dataset = new DefaultXYDataset();
+        plot.setDataset(0, dataset);
+        assertSame(dataset, plot.getDataset(0));
+        assertEquals(1, plot.getDatasetCount());
+    }
+
+    // indexOf finds known dataset and returns -1 for unknown
+    @Test
+    public void testIndexOf_knownAndUnknownDataset() throws Throwable {
+        XYPlot plot = new XYPlot();
+        DefaultXYDataset dataset = new DefaultXYDataset();
+        plot.setDataset(dataset);
+        assertEquals(0, plot.indexOf(dataset));
+        DefaultXYDataset other = new DefaultXYDataset();
+        assertEquals(-1, plot.indexOf(other));
+    }
+
+    // mapDatasetToDomainAxes with negative index throws
+    @Test
+    public void testMapDatasetToDomainAxes_negativeIndex_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        List axisIndices = new ArrayList();
+        axisIndices.add(new Integer(0));
+        try {
+            plot.mapDatasetToDomainAxes(-1, axisIndices);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // mapDatasetToDomainAxes with empty list throws
+    @Test
+    public void testMapDatasetToDomainAxes_emptyList_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        List axisIndices = new ArrayList();
+        try {
+            plot.mapDatasetToDomainAxes(0, axisIndices);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // mapDatasetToDomainAxis then getDomainAxisForDataset returns mapped axis
+    @Test
+    public void testMapDatasetToDomainAxis_getDomainAxisForDataset() throws Throwable {
+        XYPlot plot = new XYPlot();
+        NumberAxis axis2 = new NumberAxis("X2");
+        plot.setDomainAxis(1, axis2);
+        plot.setDataset(0, new DefaultXYDataset());
+        plot.mapDatasetToDomainAxis(0, 1);
+        assertSame(axis2, plot.getDomainAxisForDataset(0));
+    }
+
+    // getDomainAxisForDataset index out of bounds throws
+    @Test
+    public void testGetDomainAxisForDataset_indexOutOfBounds_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.getDomainAxisForDataset(5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // getRangeAxisForDataset index out of bounds throws
+    @Test
+    public void testGetRangeAxisForDataset_indexOutOfBounds_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.getRangeAxisForDataset(5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // getRendererCount / getRenderer(index) default
+    @Test
+    public void testGetRendererCount_default() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertEquals(1, plot.getRendererCount());
+        assertNull(plot.getRenderer(0));
+    }
+
+    // setRenderers array sets multiple renderers
+    @Test
+    public void testSetRenderers_array_allSet() throws Throwable {
+        XYPlot plot = new XYPlot();
+        XYLineAndShapeRenderer r0 = new XYLineAndShapeRenderer();
+        XYLineAndShapeRenderer r1 = new XYLineAndShapeRenderer();
+        plot.setRenderers(new XYItemRenderer[] {r0, r1});
+        assertSame(r0, plot.getRenderer(0));
+        assertSame(r1, plot.getRenderer(1));
+    }
+
+    // setDatasetRenderingOrder(null) throws
+    @Test
+    public void testSetDatasetRenderingOrder_null_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.setDatasetRenderingOrder(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setDatasetRenderingOrder valid value
+    @Test
+    public void testSetDatasetRenderingOrder_valid_setsOrder() throws Throwable {
+        XYPlot plot = new XYPlot();
+        plot.setDatasetRenderingOrder(DatasetRenderingOrder.FORWARD);
+        assertEquals(DatasetRenderingOrder.FORWARD, plot.getDatasetRenderingOrder());
+    }
+
+    // setSeriesRenderingOrder(null) throws
+    @Test
+    public void testSetSeriesRenderingOrder_null_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.setSeriesRenderingOrder(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // getIndexOf renderer
+    @Test
+    public void testGetIndexOf_renderer() throws Throwable {
+        XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer();
+        XYPlot plot = new XYPlot(null, null, null, renderer);
+        assertEquals(0, plot.getIndexOf(renderer));
+    }
+
+    // getRendererForDataset matches dataset returns correct renderer
+    @Test
+    public void testGetRendererForDataset_matched_returnsRenderer() throws Throwable {
+        DefaultXYDataset dataset = new DefaultXYDataset();
+        XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer();
+        XYPlot plot = new XYPlot(dataset, new NumberAxis("X"), new NumberAxis("Y"), renderer);
+        assertSame(renderer, plot.getRendererForDataset(dataset));
+    }
+
+    // getRendererForDataset with unmatched dataset returns null
+    @Test
+    public void testGetRendererForDataset_unmatched_returnsNull() throws Throwable {
+        XYPlot plot = new XYPlot();
+        DefaultXYDataset other = new DefaultXYDataset();
+        assertNull(plot.getRendererForDataset(other));
+    }
+
+    // weight getter/setter
+    @Test
+    public void testSetGetWeight() throws Throwable {
+        XYPlot plot = new XYPlot();
+        plot.setWeight(7);
+        assertEquals(7, plot.getWeight());
+    }
+
+    // domain gridlines visible default true and toggling
+    @Test
+    public void testDomainGridlinesVisible_defaultAndToggle() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertTrue(plot.isDomainGridlinesVisible());
+        plot.setDomainGridlinesVisible(false);
+        assertFalse(plot.isDomainGridlinesVisible());
+    }
+
+    // setDomainGridlineStroke(null) throws
+    @Test
+    public void testSetDomainGridlineStroke_null_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.setDomainGridlineStroke(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setRangeGridlinePaint(null) throws
+    @Test
+    public void testSetRangeGridlinePaint_null_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.setRangeGridlinePaint(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // quadrant origin null throws
+    @Test
+    public void testSetQuadrantOrigin_null_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.setQuadrantOrigin(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // getQuadrantPaint invalid index throws
+    @Test
+    public void testGetQuadrantPaint_invalidIndex_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.getQuadrantPaint(4);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setQuadrantPaint invalid index throws
+    @Test
+    public void testSetQuadrantPaint_invalidIndex_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.setQuadrantPaint(-1, java.awt.Color.RED);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // addDomainMarker(null) throws
+    @Test
+    public void testAddDomainMarker_null_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.addDomainMarker(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // addDomainMarker valid then getDomainMarkers contains it
+    @Test
+    public void testAddDomainMarker_valid_appearsInMarkers() throws Throwable {
+        XYPlot plot = new XYPlot();
+        ValueMarker marker = new ValueMarker(5.0);
+        plot.addDomainMarker(marker);
+        Collection markers = plot.getDomainMarkers(Layer.FOREGROUND);
+        assertTrue(markers.contains(marker));
+    }
+
+    // removeDomainMarker returns false when not present
+    @Test
+    public void testRemoveDomainMarker_notPresent_returnsFalse() throws Throwable {
+        XYPlot plot = new XYPlot();
+        ValueMarker marker = new ValueMarker(1.0);
+        assertFalse(plot.removeDomainMarker(marker));
+    }
+
+    // addRangeMarker valid then getRangeMarkers contains it
+    @Test
+    public void testAddRangeMarker_valid_appearsInMarkers() throws Throwable {
+        XYPlot plot = new XYPlot();
+        ValueMarker marker = new ValueMarker(2.0);
+        plot.addRangeMarker(marker);
+        Collection markers = plot.getRangeMarkers(Layer.FOREGROUND);
+        assertTrue(markers.contains(marker));
+    }
+
+    // addAnnotation(null) throws
+    @Test
+    public void testAddAnnotation_null_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.addAnnotation(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // addAnnotation valid then getAnnotations contains it, clearAnnotations empties list
+    @Test
+    public void testAddAnnotation_thenClear() throws Throwable {
+        XYPlot plot = new XYPlot();
+        XYTextAnnotation annotation = new XYTextAnnotation("label", 1.0, 2.0);
+        plot.addAnnotation(annotation);
+        assertTrue(plot.getAnnotations().contains(annotation));
+        plot.clearAnnotations();
+        assertTrue(plot.getAnnotations().isEmpty());
+    }
+
+    // removeAnnotation returns true when present, false when absent
+    @Test
+    public void testRemoveAnnotation_presentThenAbsent() throws Throwable {
+        XYPlot plot = new XYPlot();
+        XYTextAnnotation annotation = new XYTextAnnotation("label", 1.0, 2.0);
+        plot.addAnnotation(annotation);
+        assertTrue(plot.removeAnnotation(annotation));
+        assertFalse(plot.removeAnnotation(annotation));
+    }
+
+    // getLegendItems with fixed items returns same instance
+    @Test
+    public void testGetLegendItems_fixedItems_returnsSameInstance() throws Throwable {
+        XYPlot plot = new XYPlot();
+        LegendItemCollection items = new LegendItemCollection();
+        plot.setFixedLegendItems(items);
+        assertSame(items, plot.getLegendItems());
+    }
+
+    // getSeriesCount with null dataset returns 0, with dataset returns series count
+    @Test
+    public void testGetSeriesCount_nullAndWithDataset() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertEquals(0, plot.getSeriesCount());
+        DefaultXYDataset dataset = new DefaultXYDataset();
+        dataset.addSeries("S1", new double[][] {{1.0}, {2.0}});
+        plot.setDataset(dataset);
+        assertEquals(1, plot.getSeriesCount());
+    }
+
+    // domain crosshair value get/set
+    @Test
+    public void testDomainCrosshairValue_getSet() throws Throwable {
+        XYPlot plot = new XYPlot();
+        plot.setDomainCrosshairValue(3.5);
+        assertEquals(3.5, plot.getDomainCrosshairValue(), 0.0000001);
+    }
+
+    // setDomainCrosshairStroke(null) throws
+    @Test
+    public void testSetDomainCrosshairStroke_null_throwsException() throws Throwable {
+        XYPlot plot = new XYPlot();
+        try {
+            plot.setDomainCrosshairStroke(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // canSelectByPoint returns false, canSelectByRegion returns true
+    @Test
+    public void testCanSelect_pointFalseRegionTrue() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertFalse(plot.canSelectByPoint());
+        assertTrue(plot.canSelectByRegion());
+    }
+
+    // isDomainZoomable/isRangeZoomable both true
+    @Test
+    public void testIsZoomable_bothTrue() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertTrue(plot.isDomainZoomable());
+        assertTrue(plot.isRangeZoomable());
+    }
+
+    // getDomainAxisIndex known and unknown axis
+    @Test
+    public void testGetDomainAxisIndex_knownAndUnknown() throws Throwable {
+        NumberAxis axis = new NumberAxis("X");
+        XYPlot plot = new XYPlot(null, axis, null, null);
+        assertEquals(0, plot.getDomainAxisIndex(axis));
+        NumberAxis other = new NumberAxis("Other");
+        assertEquals(-1, plot.getDomainAxisIndex(other));
+    }
+
+    // BUG TEST: getDataRange must not NPE when renderer for dataset is null
+    @Test
+    public void testGetDataRange_datasetWithoutRenderer_noExceptionAndCorrectRange() throws Throwable {
+        DefaultXYDataset dataset = new DefaultXYDataset();
+        dataset.addSeries("S1", new double[][] {{1.0, 2.0, 3.0}, {10.0, 20.0, 30.0}});
+        NumberAxis domainAxis = new NumberAxis("X");
+        XYPlot plot = new XYPlot(dataset, domainAxis, new NumberAxis("Y"), null);
+        Range range = plot.getDataRange(domainAxis);
+        assertNotNull(range);
+        assertEquals(1.0, range.getLowerBound(), 0.0000001);
+        assertEquals(3.0, range.getUpperBound(), 0.0000001);
+    }
+
+    // getDataRange with axis not part of plot returns null
+    @Test
+    public void testGetDataRange_axisNotInPlot_returnsNull() throws Throwable {
+        XYPlot plot = new XYPlot();
+        NumberAxis unrelated = new NumberAxis("Unrelated");
+        assertNull(plot.getDataRange(unrelated));
+    }
+
+    // zoomDomainAxes with factor shrinks axis range
+    @Test
+    public void testZoomDomainAxes_factor_shrinksRange() throws Throwable {
+        NumberAxis domainAxis = new NumberAxis("X");
+        domainAxis.setRange(0.0, 100.0);
+        XYPlot plot = new XYPlot(null, domainAxis, null, null);
+        plot.zoomDomainAxes(0.5, null, null);
+        assertTrue(domainAxis.getRange().getLength() < 100.0);
+    }
+
+    // zoomDomainAxes with lower/upper percent sets exact bounds
+    @Test
+    public void testZoomDomainAxes_percent_setsExactBounds() throws Throwable {
+        NumberAxis domainAxis = new NumberAxis("X");
+        domainAxis.setRange(0.0, 100.0);
+        XYPlot plot = new XYPlot(null, domainAxis, null, null);
+        plot.zoomDomainAxes(0.25, 0.75, null, null);
+        assertEquals(25.0, domainAxis.getLowerBound(), 0.0000001);
+        assertEquals(75.0, domainAxis.getUpperBound(), 0.0000001);
+    }
+
+    // panDomainAxes when not pannable leaves axis unchanged
+    @Test
+    public void testPanDomainAxes_notPannable_noChange() throws Throwable {
+        NumberAxis domainAxis = new NumberAxis("X");
+        domainAxis.setRange(0.0, 100.0);
+        XYPlot plot = new XYPlot(null, domainAxis, null, null);
+        plot.panDomainAxes(0.1, null, null);
+        assertEquals(0.0, domainAxis.getLowerBound(), 0.0000001);
+        assertEquals(100.0, domainAxis.getUpperBound(), 0.0000001);
+    }
+
+    // panDomainAxes when pannable changes axis bounds
+    @Test
+    public void testPanDomainAxes_pannable_changesBounds() throws Throwable {
+        NumberAxis domainAxis = new NumberAxis("X");
+        domainAxis.setRange(0.0, 100.0);
+        XYPlot plot = new XYPlot(null, domainAxis, null, null);
+        plot.setDomainPannable(true);
+        plot.panDomainAxes(0.1, null, null);
+        assertTrue(domainAxis.getLowerBound() != 0.0);
+    }
+
+    // equals: same default state true, different weight false
+    @Test
+    public void testEquals_sameStateTrueDifferentWeightFalse() throws Throwable {
+        XYPlot p1 = new XYPlot();
+        XYPlot p2 = new XYPlot();
+        assertTrue(p1.equals(p2));
+        p2.setWeight(9);
+        assertFalse(p1.equals(p2));
+    }
+
+    // equals with null and unrelated type returns false
+    @Test
+    public void testEquals_nullAndUnrelatedType_false() throws Throwable {
+        XYPlot plot = new XYPlot();
+        assertFalse(plot.equals(null));
+        assertFalse(plot.equals("not a plot"));
+    }
+
+    // clone produces an equal but distinct plot
+    @Test
+    public void testClone_producesEqualDistinctInstance() throws Throwable {
+        XYPlot plot = new XYPlot();
+        Object clone = plot.clone();
+        assertNotSame(plot, clone);
+        assertTrue(plot.equals(clone));
+    }
+}

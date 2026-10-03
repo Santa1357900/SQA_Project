@@ -1,0 +1,19 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p JacksonCore -v 6f -w /tmp/claude-JacksonCore-6-9tg76fa5/fixed
+Checking out d9995147 to /tmp/claude-JacksonCore-6-9tg76fa5/fixed.......... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Backing up build file: /tmp/claude-JacksonCore-6-9tg76fa5/fixed/maven-build OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff d9995147:0d9cd9fa..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: JacksonCore-6f.................................. OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-JacksonCore-6-9tg76fa5/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

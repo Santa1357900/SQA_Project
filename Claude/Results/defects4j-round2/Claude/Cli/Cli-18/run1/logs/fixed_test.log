@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-18-1gdizjlm/Cli-18f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.apache.commons.cli.PosixParserClaudeTest::testBurstToken_invalidSecondChar_stopAtNonOptionFalse_addsOnlyThatCharPerContract
+  - org.apache.commons.cli.PosixParserClaudeTest::testBurstToken_invalidFirstChar_stopAtNonOptionFalse_addsOnlyThatCharPerContract
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_twoCharInvalidOption_stopAtNonOptionTrue_gobbleConsumesDoubleDashRaw
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_twoCharInvalidOption_stopAtNonOptionTrue_eatsRemainingRaw
+[exit 0]

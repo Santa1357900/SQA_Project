@@ -1,0 +1,465 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Codec (Defects4J bug Codec-13)
+package: org.apache.commons.codec.binary
+class_under_test: CharSequenceUtils
+test_class_to_write: CharSequenceUtilsClaudeTest
+</target>
+
+<project_notes>
+Commons Codec: อินพุตส่วนใหญ่เป็น byte[] หรือ String ระวังการเข้ารหัส charset ให้ระบุ "UTF-8" ชัดเจน
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.codec.binary;
+
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.Charset;
+
+import org.apache.commons.codec.CharEncoding;
+import org.apache.commons.codec.Charsets;
+
+/**
+ * Converts String to and from bytes using the encodings required by the Java specification. These encodings are
+ * specified in <a href="http://download.oracle.com/javase/6/docs/api/java/nio/charset/Charset.html">
+ * Standard charsets</a>.
+ *
+ * <p>This class is immutable and thread-safe.</p>
+ *
+ * @see CharEncoding
+ * @see <a href="http://download.oracle.com/javase/6/docs/api/java/nio/charset/Charset.html">Standard charsets</a>
+ * @version $Id$
+ * @since 1.4
+ */
+public class StringUtils {
+
+    /**
+     * <p>
+     * Compares two CharSequences, returning {@code true} if they represent equal sequences of characters.
+     * </p>
+     * 
+     * <p>
+     * {@code null}s are handled without exceptions. Two {@code null} references are considered to be equal. The
+     * comparison is case sensitive.
+     * </p>
+     * 
+     * <pre>
+     * StringUtils.equals(null, null)   = true
+     * StringUtils.equals(null, "abc")  = false
+     * StringUtils.equals("abc", null)  = false
+     * StringUtils.equals("abc", "abc") = true
+     * StringUtils.equals("abc", "ABC") = false
+     * </pre>
+     * 
+     * <p>
+     * Copied from Apache Commons Lang r1583482 on April 10, 2014 (day of 3.3.2 release).
+     * </p>
+     * 
+     * @see Object#equals(Object)
+     * @param cs1
+     *            the first CharSequence, may be {@code null}
+     * @param cs2
+     *            the second CharSequence, may be {@code null}
+     * @return {@code true} if the CharSequences are equal (case-sensitive), or both {@code null}
+     * @since 1.10
+     */
+
+    /**
+     * Calls {@link String#getBytes(Charset)}
+     *
+     * @param string
+     *            The string to encode (if null, return null).
+     * @param charset
+     *            The {@link Charset} to encode the {@code String}
+     * @return the encoded bytes
+     */
+    private static byte[] getBytes(final String string, final Charset charset) {
+        if (string == null) {
+            return null;
+        }
+        return string.getBytes(charset);
+    }
+
+    /**
+     * Encodes the given string into a sequence of bytes using the ISO-8859-1 charset, storing the result into a new
+     * byte array.
+     *
+     * @param string
+     *            the String to encode, may be {@code null}
+     * @return encoded bytes, or {@code null} if the input string was {@code null}
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#ISO_8859_1} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     * @see <a href="http://download.oracle.com/javase/6/docs/api/java/nio/charset/Charset.html">Standard charsets</a>
+     * @see #getBytesUnchecked(String, String)
+     */
+    public static byte[] getBytesIso8859_1(final String string) {
+        return getBytes(string, Charsets.ISO_8859_1);
+    }
+
+
+    /**
+     * Encodes the given string into a sequence of bytes using the named charset, storing the result into a new byte
+     * array.
+     * <p>
+     * This method catches {@link UnsupportedEncodingException} and rethrows it as {@link IllegalStateException}, which
+     * should never happen for a required charset name. Use this method when the encoding is required to be in the JRE.
+     * </p>
+     *
+     * @param string
+     *            the String to encode, may be {@code null}
+     * @param charsetName
+     *            The name of a required {@link java.nio.charset.Charset}
+     * @return encoded bytes, or {@code null} if the input string was {@code null}
+     * @throws IllegalStateException
+     *             Thrown when a {@link UnsupportedEncodingException} is caught, which should never happen for a
+     *             required charset name.
+     * @see CharEncoding
+     * @see String#getBytes(String)
+     */
+    public static byte[] getBytesUnchecked(final String string, final String charsetName) {
+        if (string == null) {
+            return null;
+        }
+        try {
+            return string.getBytes(charsetName);
+        } catch (final UnsupportedEncodingException e) {
+            throw StringUtils.newIllegalStateException(charsetName, e);
+        }
+    }
+
+    /**
+     * Encodes the given string into a sequence of bytes using the US-ASCII charset, storing the result into a new byte
+     * array.
+     *
+     * @param string
+     *            the String to encode, may be {@code null}
+     * @return encoded bytes, or {@code null} if the input string was {@code null}
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#US_ASCII} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     * @see <a href="http://download.oracle.com/javase/6/docs/api/java/nio/charset/Charset.html">Standard charsets</a>
+     * @see #getBytesUnchecked(String, String)
+     */
+    public static byte[] getBytesUsAscii(final String string) {
+        return getBytes(string, Charsets.US_ASCII);
+    }
+
+    /**
+     * Encodes the given string into a sequence of bytes using the UTF-16 charset, storing the result into a new byte
+     * array.
+     *
+     * @param string
+     *            the String to encode, may be {@code null}
+     * @return encoded bytes, or {@code null} if the input string was {@code null}
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#UTF_16} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     * @see <a href="http://download.oracle.com/javase/6/docs/api/java/nio/charset/Charset.html">Standard charsets</a>
+     * @see #getBytesUnchecked(String, String)
+     */
+    public static byte[] getBytesUtf16(final String string) {
+        return getBytes(string, Charsets.UTF_16);
+    }
+
+    /**
+     * Encodes the given string into a sequence of bytes using the UTF-16BE charset, storing the result into a new byte
+     * array.
+     *
+     * @param string
+     *            the String to encode, may be {@code null}
+     * @return encoded bytes, or {@code null} if the input string was {@code null}
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#UTF_16BE} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     * @see <a href="http://download.oracle.com/javase/6/docs/api/java/nio/charset/Charset.html">Standard charsets</a>
+     * @see #getBytesUnchecked(String, String)
+     */
+    public static byte[] getBytesUtf16Be(final String string) {
+        return getBytes(string, Charsets.UTF_16BE);
+    }
+
+    /**
+     * Encodes the given string into a sequence of bytes using the UTF-16LE charset, storing the result into a new byte
+     * array.
+     *
+     * @param string
+     *            the String to encode, may be {@code null}
+     * @return encoded bytes, or {@code null} if the input string was {@code null}
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#UTF_16LE} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     * @see <a href="http://download.oracle.com/javase/6/docs/api/java/nio/charset/Charset.html">Standard charsets</a>
+     * @see #getBytesUnchecked(String, String)
+     */
+    public static byte[] getBytesUtf16Le(final String string) {
+        return getBytes(string, Charsets.UTF_16LE);
+    }
+
+    /**
+     * Encodes the given string into a sequence of bytes using the UTF-8 charset, storing the result into a new byte
+     * array.
+     *
+     * @param string
+     *            the String to encode, may be {@code null}
+     * @return encoded bytes, or {@code null} if the input string was {@code null}
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#UTF_8} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     * @see <a href="http://download.oracle.com/javase/6/docs/api/java/nio/charset/Charset.html">Standard charsets</a>
+     * @see #getBytesUnchecked(String, String)
+     */
+    public static byte[] getBytesUtf8(final String string) {
+        return getBytes(string, Charsets.UTF_8);
+    }
+
+    private static IllegalStateException newIllegalStateException(final String charsetName,
+                                                                  final UnsupportedEncodingException e) {
+        return new IllegalStateException(charsetName + ": " + e);
+    }
+
+    /**
+     * Constructs a new <code>String</code> by decoding the specified array of bytes using the given charset.
+     *
+     * @param bytes
+     *            The bytes to be decoded into characters
+     * @param charset
+     *            The {@link Charset} to encode the {@code String}
+     * @return A new <code>String</code> decoded from the specified array of bytes using the given charset,
+     *         or {@code null} if the input byte array was {@code null}.
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#UTF_8} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     */
+    private static String newString(final byte[] bytes, final Charset charset) {
+        return bytes == null ? null : new String(bytes, charset);
+    }
+
+    /**
+     * Constructs a new <code>String</code> by decoding the specified array of bytes using the given charset.
+     * <p>
+     * This method catches {@link UnsupportedEncodingException} and re-throws it as {@link IllegalStateException}, which
+     * should never happen for a required charset name. Use this method when the encoding is required to be in the JRE.
+     * </p>
+     *
+     * @param bytes
+     *            The bytes to be decoded into characters, may be {@code null}
+     * @param charsetName
+     *            The name of a required {@link java.nio.charset.Charset}
+     * @return A new <code>String</code> decoded from the specified array of bytes using the given charset,
+     *         or {@code null} if the input byte array was {@code null}.
+     * @throws IllegalStateException
+     *             Thrown when a {@link UnsupportedEncodingException} is caught, which should never happen for a
+     *             required charset name.
+     * @see CharEncoding
+     * @see String#String(byte[], String)
+     */
+    public static String newString(final byte[] bytes, final String charsetName) {
+        if (bytes == null) {
+            return null;
+        }
+        try {
+            return new String(bytes, charsetName);
+        } catch (final UnsupportedEncodingException e) {
+            throw StringUtils.newIllegalStateException(charsetName, e);
+        }
+    }
+
+    /**
+     * Constructs a new <code>String</code> by decoding the specified array of bytes using the ISO-8859-1 charset.
+     *
+     * @param bytes
+     *            The bytes to be decoded into characters, may be {@code null}
+     * @return A new <code>String</code> decoded from the specified array of bytes using the ISO-8859-1 charset, or
+     *         {@code null} if the input byte array was {@code null}.
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#ISO_8859_1} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     */
+    public static String newStringIso8859_1(final byte[] bytes) {
+        return new String(bytes, Charsets.ISO_8859_1);
+    }
+
+    /**
+     * Constructs a new <code>String</code> by decoding the specified array of bytes using the US-ASCII charset.
+     *
+     * @param bytes
+     *            The bytes to be decoded into characters
+     * @return A new <code>String</code> decoded from the specified array of bytes using the US-ASCII charset,
+     *         or {@code null} if the input byte array was {@code null}.
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#US_ASCII} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     */
+    public static String newStringUsAscii(final byte[] bytes) {
+        return new String(bytes, Charsets.US_ASCII);
+    }
+
+    /**
+     * Constructs a new <code>String</code> by decoding the specified array of bytes using the UTF-16 charset.
+     *
+     * @param bytes
+     *            The bytes to be decoded into characters
+     * @return A new <code>String</code> decoded from the specified array of bytes using the UTF-16 charset
+     *         or {@code null} if the input byte array was {@code null}.
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#UTF_16} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     */
+    public static String newStringUtf16(final byte[] bytes) {
+        return new String(bytes, Charsets.UTF_16);
+    }
+
+    /**
+     * Constructs a new <code>String</code> by decoding the specified array of bytes using the UTF-16BE charset.
+     *
+     * @param bytes
+     *            The bytes to be decoded into characters
+     * @return A new <code>String</code> decoded from the specified array of bytes using the UTF-16BE charset,
+     *         or {@code null} if the input byte array was {@code null}.
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#UTF_16BE} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     */
+    public static String newStringUtf16Be(final byte[] bytes) {
+        return new String(bytes, Charsets.UTF_16BE);
+    }
+
+    /**
+     * Constructs a new <code>String</code> by decoding the specified array of bytes using the UTF-16LE charset.
+     *
+     * @param bytes
+     *            The bytes to be decoded into characters
+     * @return A new <code>String</code> decoded from the specified array of bytes using the UTF-16LE charset,
+     *         or {@code null} if the input byte array was {@code null}.
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#UTF_16LE} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     */
+    public static String newStringUtf16Le(final byte[] bytes) {
+        return new String(bytes, Charsets.UTF_16LE);
+    }
+
+    /**
+     * Constructs a new <code>String</code> by decoding the specified array of bytes using the UTF-8 charset.
+     *
+     * @param bytes
+     *            The bytes to be decoded into characters
+     * @return A new <code>String</code> decoded from the specified array of bytes using the UTF-8 charset,
+     *         or {@code null} if the input byte array was {@code null}.
+     * @throws NullPointerException
+     *             Thrown if {@link Charsets#UTF_8} is not initialized, which should never happen since it is
+     *             required by the Java platform specification.
+     * @since As of 1.7, throws {@link NullPointerException} instead of UnsupportedEncodingException
+     */
+    public static String newStringUtf8(final byte[] bytes) {
+        return newString(bytes, Charsets.UTF_8);
+    }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ CharSequenceUtilsClaudeTest ใน package org.apache.commons.codec.binary เพื่อทดสอบคลาส CharSequenceUtils ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.codec.binary;` เท่านั้น
+</instructions>

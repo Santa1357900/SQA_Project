@@ -1,0 +1,21 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Mockito -v 3b -w /tmp/claude-Mockito-3-jee_b54f/buggy
+Checking out 3eec7451 to /tmp/claude-Mockito-3-jee_b54f/buggy.............. OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+sed: -e expression #1, char 84: unterminated `s' command
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 3eec7451:4e9d7607..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Mockito-3b...................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Mockito-3-jee_b54f/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

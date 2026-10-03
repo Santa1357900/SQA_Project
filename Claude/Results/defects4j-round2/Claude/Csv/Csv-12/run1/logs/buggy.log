@@ -1,0 +1,20 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Csv -v 12b -w /tmp/claude-Csv-12-nsjdyo3x/buggy
+Checking out c81ad032 to /tmp/claude-Csv-12-nsjdyo3x/buggy................. OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Csv-12-nsjdyo3x/buggy/maven-build.xml... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff c81ad032:bc504117..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Csv-12b......................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Csv-12-nsjdyo3x/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

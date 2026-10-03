@@ -1,0 +1,14 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Collections-1-5s6houtp/Collections-1b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+WARNING: Some tests failed (see /tmp/claude-Collections-1-5s6houtp/buggy/failing_tests)!
+       Lines total: 491
+     Lines covered: 283
+  Conditions total: 376
+Conditions covered: 172
+     Line coverage: 57.6%
+Condition coverage: 45.7%
+[exit 0]

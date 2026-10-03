@@ -1,0 +1,285 @@
+package org.apache.commons.math.ode.nonstiff;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.apache.commons.math.ode.ExpandableStatefulODE;
+import org.apache.commons.math.ode.FirstOrderDifferentialEquations;
+import org.apache.commons.math.exception.MathIllegalArgumentException;
+
+class LinearGrowthEquationsCRT implements FirstOrderDifferentialEquations {
+    public int getDimension() {
+        return 1;
+    }
+    public void computeDerivatives(double t, double[] y, double[] yDot) {
+        yDot[0] = y[0];
+    }
+}
+
+class ConstantEquationsCRT implements FirstOrderDifferentialEquations {
+    public int getDimension() {
+        return 1;
+    }
+    public void computeDerivatives(double t, double[] y, double[] yDot) {
+        yDot[0] = 0.0;
+    }
+}
+
+class HeunTestIntegrator extends EmbeddedRungeKuttaIntegrator {
+
+    private final double absTol;
+    private final double relTol;
+
+    HeunTestIntegrator(boolean fsal, double minStep, double maxStep,
+                        double scalAbsoluteTolerance, double scalRelativeTolerance) {
+        super("heun-test", fsal, new double[] {1.0}, new double[][] {{1.0}},
+              new double[] {0.5, 0.5}, new EulerStepInterpolator(),
+              minStep, maxStep, scalAbsoluteTolerance, scalRelativeTolerance);
+        this.absTol = scalAbsoluteTolerance;
+        this.relTol = scalRelativeTolerance;
+    }
+
+    HeunTestIntegrator(boolean fsal, double minStep, double maxStep,
+                        double[] vecAbsoluteTolerance, double[] vecRelativeTolerance) {
+        super("heun-test-vec", fsal, new double[] {1.0}, new double[][] {{1.0}},
+              new double[] {0.5, 0.5}, new EulerStepInterpolator(),
+              minStep, maxStep, vecAbsoluteTolerance, vecRelativeTolerance);
+        this.absTol = vecAbsoluteTolerance[0];
+        this.relTol = vecRelativeTolerance[0];
+    }
+
+    public int getOrder() {
+        return 2;
+    }
+
+    protected double estimateError(double[][] yDotK, double[] y0, double[] y1, double h) {
+        double maxError = 0.0;
+        for (int j = 0; j < y0.length; ++j) {
+            double yEuler = y0[j] + h * yDotK[0][j];
+            double scale = absTol + relTol * Math.max(Math.abs(y0[j]), Math.abs(y1[j]));
+            double err = Math.abs(y1[j] - yEuler) / scale;
+            if (err > maxError) {
+                maxError = err;
+            }
+        }
+        return maxError;
+    }
+}
+
+public class EmbeddedRungeKuttaIntegratorClaudeTest {
+
+    // getOrder() must return the value supplied by the concrete subclass contract
+    @Test
+    public void testGetOrder_returnsConfiguredOrder() throws Throwable {
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 1.0, 1.0e-8, 1.0e-8);
+        assertEquals(2, integrator.getOrder());
+    }
+
+    // default safety factor set in constructor is 0.9
+    @Test
+    public void testGetSafety_defaultValue_returns0point9() throws Throwable {
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 1.0, 1.0e-8, 1.0e-8);
+        assertEquals(0.9, integrator.getSafety(), 1.0e-12);
+    }
+
+    // setSafety must update the stored value, returned unchanged by getSafety
+    @Test
+    public void testSetSafety_updatesStoredValue() throws Throwable {
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 1.0, 1.0e-8, 1.0e-8);
+        integrator.setSafety(0.5);
+        assertEquals(0.5, integrator.getSafety(), 1.0e-12);
+    }
+
+    // boundary value: setter performs no validation, negative value must be accepted as-is
+    @Test
+    public void testSetSafety_acceptsNegativeValueWithoutValidation() throws Throwable {
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 1.0, 1.0e-8, 1.0e-8);
+        integrator.setSafety(-5.0);
+        assertEquals(-5.0, integrator.getSafety(), 1.0e-12);
+    }
+
+    // default minimal reduction factor is 0.2
+    @Test
+    public void testGetMinReduction_defaultValue_returns0point2() throws Throwable {
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 1.0, 1.0e-8, 1.0e-8);
+        assertEquals(0.2, integrator.getMinReduction(), 1.0e-12);
+    }
+
+    // setMinReduction must update the stored value
+    @Test
+    public void testSetMinReduction_updatesStoredValue() throws Throwable {
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 1.0, 1.0e-8, 1.0e-8);
+        integrator.setMinReduction(0.3);
+        assertEquals(0.3, integrator.getMinReduction(), 1.0e-12);
+    }
+
+    // default maximal growth factor is 10.0
+    @Test
+    public void testGetMaxGrowth_defaultValue_returns10() throws Throwable {
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 1.0, 1.0e-8, 1.0e-8);
+        assertEquals(10.0, integrator.getMaxGrowth(), 1.0e-12);
+    }
+
+    // setMaxGrowth must update the stored value
+    @Test
+    public void testSetMaxGrowth_updatesStoredValue() throws Throwable {
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 1.0, 1.0e-8, 1.0e-8);
+        integrator.setMaxGrowth(5.0);
+        assertEquals(5.0, integrator.getMaxGrowth(), 1.0e-12);
+    }
+
+    // sanity check branch: target time equal to start time must be rejected
+    @Test
+    public void testIntegrate_sameStartAndTargetTime_throwsMathIllegalArgumentException() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 1.0, 1.0e-8, 1.0e-8);
+        try {
+            integrator.integrate(ode, 0.0);
+            fail("expected MathIllegalArgumentException");
+        } catch (MathIllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // a sufficiently large interval must not throw and must complete integration
+    @Test
+    public void testIntegrate_smallButSufficientInterval_doesNotThrow() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new ConstantEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {2.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-9, 1.0e-3, 1.0e-8, 1.0e-8);
+        integrator.integrate(ode, 1.0e-3);
+        assertEquals(2.0, ode.getCompleteState()[0], 1.0e-9);
+    }
+
+    // forward integration of dy/dt=y must approach the analytical exponential solution
+    @Test
+    public void testIntegrate_forwardLinearGrowth_matchesAnalyticalSolution() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 0.1, 1.0e-8, 1.0e-8);
+        integrator.integrate(ode, 1.0);
+        assertEquals(Math.exp(1.0), ode.getCompleteState()[0], 5.0e-3);
+    }
+
+    // after forward integration the final time must exactly reach the requested target
+    @Test
+    public void testIntegrate_forward_finalTimeReachesTargetExactly() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 0.1, 1.0e-8, 1.0e-8);
+        integrator.integrate(ode, 1.0);
+        assertEquals(1.0, ode.getTime(), 1.0e-9);
+    }
+
+    // backward integration (forward=false branch) of dy/dt=y must match analytical decay e^-1
+    @Test
+    public void testIntegrate_backwardLinearDecay_matchesAnalyticalSolution() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 0.1, 1.0e-8, 1.0e-8);
+        integrator.integrate(ode, -1.0);
+        assertEquals(Math.exp(-1.0), ode.getCompleteState()[0], 5.0e-3);
+    }
+
+    // after backward integration the final time must exactly reach the requested target
+    @Test
+    public void testIntegrate_backward_finalTimeReachesTargetExactly() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 0.1, 1.0e-8, 1.0e-8);
+        integrator.integrate(ode, -1.0);
+        assertEquals(-1.0, ode.getTime(), 1.0e-9);
+    }
+
+    // zero derivative everywhere: state must remain unchanged after many accepted steps
+    // this also exercises the maxGrowth clamp branch since estimated error is exactly zero
+    @Test
+    public void testIntegrate_constantEquation_stateUnchangedAfterMultipleSteps() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new ConstantEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {5.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 0.3, 1.0e-6, 1.0e-6);
+        integrator.integrate(ode, 2.0);
+        assertEquals(5.0, ode.getCompleteState()[0], 1.0e-9);
+    }
+
+    // vector tolerance constructor branch (vecAbsoluteTolerance != null) must also converge correctly
+    @Test
+    public void testIntegrate_vectorToleranceConstructor_matchesAnalyticalSolution() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 0.1,
+                new double[] {1.0e-8}, new double[] {1.0e-8});
+        integrator.integrate(ode, 1.0);
+        assertEquals(Math.exp(1.0), ode.getCompleteState()[0], 5.0e-3);
+    }
+
+    // fsal=true branch: first derivative reuse must not produce NaN and must keep growth positive
+    @Test
+    public void testIntegrate_fsalTrue_producesFiniteNonNanPositiveResult() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(true, 1.0e-8, 0.1, 1.0e-8, 1.0e-8);
+        integrator.integrate(ode, 1.0);
+        double result = ode.getCompleteState()[0];
+        assertFalse(Double.isNaN(result));
+        assertTrue(result > 0.0);
+    }
+
+    // very loose initial step guess relative to tight tolerance is likely to trigger the
+    // error>=1 rejection branch at least once; integration must still converge correctly
+    @Test
+    public void testIntegrate_tightToleranceLargeMaxStep_stepRejectionStillConverges() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-9, 5.0, 1.0e-9, 1.0e-9);
+        integrator.integrate(ode, 1.0);
+        assertEquals(Math.exp(1.0), ode.getCompleteState()[0], 5.0e-3);
+    }
+
+    // a custom (but still valid, <1) safety factor must not break convergence to the analytical value
+    @Test
+    public void testIntegrate_customSafetyFactor_stillConvergesWithinTolerance() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 0.1, 1.0e-8, 1.0e-8);
+        integrator.setSafety(0.5);
+        integrator.integrate(ode, 1.0);
+        assertEquals(Math.exp(1.0), ode.getCompleteState()[0], 5.0e-3);
+    }
+
+    // custom minReduction/maxGrowth within a safe, convergent range must still reach correct result
+    @Test
+    public void testIntegrate_customMinReductionAndMaxGrowth_stillConvergesWithinTolerance() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 0.1, 1.0e-8, 1.0e-8);
+        integrator.setMinReduction(0.3);
+        integrator.setMaxGrowth(5.0);
+        integrator.integrate(ode, 1.0);
+        assertEquals(Math.exp(1.0), ode.getCompleteState()[0], 5.0e-3);
+    }
+
+    // maxStep much larger than the requested interval must still land exactly on t and be accurate
+    @Test
+    public void testIntegrate_largeMaxStep_stillReachesTargetAccurately() throws Throwable {
+        ExpandableStatefulODE ode = new ExpandableStatefulODE(new LinearGrowthEquationsCRT());
+        ode.setTime(0.0);
+        ode.setCompleteState(new double[] {1.0});
+        HeunTestIntegrator integrator = new HeunTestIntegrator(false, 1.0e-8, 10.0, 1.0e-8, 1.0e-8);
+        integrator.integrate(ode, 1.0);
+        assertEquals(1.0, ode.getTime(), 1.0e-9);
+        assertEquals(Math.exp(1.0), ode.getCompleteState()[0], 5.0e-3);
+    }
+}

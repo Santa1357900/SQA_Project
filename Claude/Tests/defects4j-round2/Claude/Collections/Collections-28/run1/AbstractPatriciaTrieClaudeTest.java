@@ -1,0 +1,453 @@
+package org.apache.commons.collections4.trie;
+
+import java.util.ArrayList;
+import java.util.ConcurrentModificationException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.SortedMap;
+
+import org.apache.commons.collections4.OrderedMapIterator;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class AbstractPatriciaTrieClaudeTest {
+
+    private PatriciaTrie<Object> trie;
+
+    @Before
+    public void setUp() throws Throwable {
+        trie = new PatriciaTrie<Object>();
+    }
+
+    // put(): new key is inserted, old value null returned, size increases by one
+    @Test
+    public void testPut_newKey_returnsNullAndIncreasesSize() throws Throwable {
+        assertNull(trie.put("a", "v1"));
+        assertEquals(1, trie.size());
+        assertEquals("v1", trie.get("a"));
+    }
+
+    // put(): replacing an existing key returns the previous value, size unchanged
+    @Test
+    public void testPut_existingKey_returnsOldValueAndSizeUnchanged() throws Throwable {
+        trie.put("a", "v1");
+        Object old = trie.put("a", "v2");
+        assertEquals("v1", old);
+        assertEquals(1, trie.size());
+        assertEquals("v2", trie.get("a"));
+    }
+
+    // put(): lengthInBits==0 branch, empty string key is stored at the root node
+    @Test
+    public void testPut_emptyStringKey_storedAtRootAndRetrievable() throws Throwable {
+        assertNull(trie.put("", "rootValue"));
+        assertEquals(1, trie.size());
+        assertEquals("rootValue", trie.get(""));
+        assertTrue(trie.containsKey(""));
+    }
+
+    // put(): null key must throw NullPointerException per explicit check
+    @Test
+    public void testPut_nullKey_throwsNullPointerException() throws Throwable {
+        try {
+            trie.put((String) null, "v");
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+            // ok
+        }
+    }
+
+    // get(): missing key returns null, present key returns stored value
+    @Test
+    public void testGet_missingAndPresentKey() throws Throwable {
+        trie.put("a", "v1");
+        assertNull(trie.get("missing"));
+        assertEquals("v1", trie.get("a"));
+    }
+
+    // select(): with a single stored entry, any query must select that unique entry
+    @Test
+    public void testSelect_singleEntry_returnsThatEntry() throws Throwable {
+        trie.put("x", "v1");
+        Map.Entry<String, Object> entry = trie.select("y");
+        assertNotNull(entry);
+        assertEquals("x", entry.getKey());
+    }
+
+    // select(): empty trie has nothing to select, must return null
+    @Test
+    public void testSelect_emptyTrie_returnsNull() throws Throwable {
+        assertNull(trie.select("z"));
+    }
+
+    // selectKey()/selectValue(): delegate to select() and extract key/value
+    @Test
+    public void testSelectKeyAndValue_presentEntry() throws Throwable {
+        trie.put("x", "v1");
+        assertEquals("x", trie.selectKey("anything"));
+        assertEquals("v1", trie.selectValue("anything"));
+    }
+
+    // containsKey(): null returns false; present/absent keys are reported correctly
+    @Test
+    public void testContainsKey_nullAbsentPresent() throws Throwable {
+        trie.put("a", "v1");
+        assertFalse(trie.containsKey(null));
+        assertFalse(trie.containsKey("b"));
+        assertTrue(trie.containsKey("a"));
+    }
+
+    // entrySet(): size equals trie size and iteration yields all inserted entries
+    @Test
+    public void testEntrySet_sizeAndIterationCoverage() throws Throwable {
+        trie.put("a", "1");
+        trie.put("b", "2");
+        assertEquals(2, trie.entrySet().size());
+        List<String> keys = new ArrayList<String>();
+        for (Iterator<Map.Entry<String, Object>> it = trie.entrySet().iterator(); it.hasNext();) {
+            keys.add(it.next().getKey());
+        }
+        assertTrue(keys.contains("a") && keys.contains("b"));
+    }
+
+    // entrySet().remove(): removing an existing entry removes it from the trie
+    @Test
+    public void testEntrySet_removeExistingEntry() throws Throwable {
+        trie.put("a", "1");
+        Map.Entry<String, Object> toRemove = trie.entrySet().iterator().next();
+        assertTrue(trie.entrySet().remove(toRemove));
+        assertFalse(trie.containsKey("a"));
+    }
+
+    // keySet(): contains() reflects containsKey(); remove() removes from trie
+    @Test
+    public void testKeySet_containsAndRemove() throws Throwable {
+        trie.put("a", "1");
+        assertTrue(trie.keySet().contains("a"));
+        assertTrue(trie.keySet().remove("a"));
+        assertFalse(trie.containsKey("a"));
+    }
+
+    // values(): contains() finds a stored value
+    @Test
+    public void testValues_containsValue() throws Throwable {
+        trie.put("a", "v1");
+        assertTrue(trie.values().contains("v1"));
+        assertFalse(trie.values().contains("nope"));
+    }
+
+    // remove(): null key and missing key both return null, no change to size
+    @Test
+    public void testRemove_nullAndMissingKey_returnsNull() throws Throwable {
+        trie.put("a", "1");
+        assertNull(trie.remove(null));
+        assertNull(trie.remove("missing"));
+        assertEquals(1, trie.size());
+    }
+
+    // remove(): present key is removed and old value returned, size decreases
+    @Test
+    public void testRemove_presentKey_removesAndReturnsOldValue() throws Throwable {
+        trie.put("a", "v1");
+        Object removed = trie.remove("a");
+        assertEquals("v1", removed);
+        assertFalse(trie.containsKey("a"));
+        assertEquals(0, trie.size());
+    }
+
+    // clear(): resets size to zero and map becomes empty
+    @Test
+    public void testClear_resetsSizeToZeroAndEmpty() throws Throwable {
+        trie.put("a", "1");
+        trie.put("b", "2");
+        trie.clear();
+        assertEquals(0, trie.size());
+        assertTrue(trie.isEmpty());
+    }
+
+    // incrementSize()/decrementSize(): directly adjust the size counter
+    @Test
+    public void testIncrementDecrementSize_directCalls() throws Throwable {
+        int before = trie.size();
+        trie.incrementSize();
+        assertEquals(before + 1, trie.size());
+        trie.decrementSize();
+        assertEquals(before, trie.size());
+    }
+
+    // modCount: structural change (put) must increment the modification counter
+    @Test
+    public void testModCount_incrementsAfterStructuralChange() throws Throwable {
+        int before = trie.modCount;
+        trie.put("k", "v");
+        assertTrue(trie.modCount != before);
+    }
+
+    // firstKey(): empty trie must throw NoSuchElementException
+    @Test
+    public void testFirstKey_emptyTrie_throwsNoSuchElementException() throws Throwable {
+        try {
+            trie.firstKey();
+            fail("expected NoSuchElementException");
+        } catch (NoSuchElementException expected) {
+            // ok
+        }
+    }
+
+    // firstKey()/lastKey(): multiple entries are returned in sorted order
+    @Test
+    public void testFirstKeyLastKey_multipleEntries_sortedOrder() throws Throwable {
+        trie.put("c", "3");
+        trie.put("a", "1");
+        trie.put("b", "2");
+        assertEquals("a", trie.firstKey());
+        assertEquals("c", trie.lastKey());
+    }
+
+    // nextKey(): null key throws NullPointerException
+    @Test
+    public void testNextKey_nullKey_throwsNullPointerException() throws Throwable {
+        try {
+            trie.nextKey(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+            // ok
+        }
+    }
+
+    // nextKey(): last key has no successor (null); a middle key returns the next key
+    @Test
+    public void testNextKey_lastEntry_returnsNull_middleReturnsNext() throws Throwable {
+        trie.put("a", "1");
+        trie.put("b", "2");
+        trie.put("c", "3");
+        assertEquals("b", trie.nextKey("a"));
+        assertNull(trie.nextKey("c"));
+    }
+
+    // previousKey(): null key throws NullPointerException
+    @Test
+    public void testPreviousKey_nullKey_throwsNullPointerException() throws Throwable {
+        try {
+            trie.previousKey(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+            // ok
+        }
+    }
+
+    // previousKey(): first key has no predecessor (null); a middle key returns the previous key
+    @Test
+    public void testPreviousKey_firstEntry_returnsNull_middleReturnsPrevious() throws Throwable {
+        trie.put("a", "1");
+        trie.put("b", "2");
+        trie.put("c", "3");
+        assertEquals("b", trie.previousKey("c"));
+        assertNull(trie.previousKey("a"));
+    }
+
+    // mapIterator(): forward iteration must produce keys in ascending sorted order
+    @Test
+    public void testMapIterator_forwardIteration_sortedOrder() throws Throwable {
+        trie.put("c", "3");
+        trie.put("a", "1");
+        trie.put("b", "2");
+        OrderedMapIterator<String, Object> it = trie.mapIterator();
+        List<String> keys = new ArrayList<String>();
+        while (it.hasNext()) {
+            keys.add(it.next());
+        }
+        assertEquals("[a, b, c]", keys.toString());
+    }
+
+    // mapIterator(): replaying backwards after exhausting next() yields reverse order
+    @Test
+    public void testMapIterator_backwardAfterForward_reverseOrder() throws Throwable {
+        trie.put("a", "1");
+        trie.put("b", "2");
+        OrderedMapIterator<String, Object> it = trie.mapIterator();
+        while (it.hasNext()) {
+            it.next();
+        }
+        List<String> keys = new ArrayList<String>();
+        while (it.hasPrevious()) {
+            keys.add(it.previous());
+        }
+        assertEquals("[b, a]", keys.toString());
+    }
+
+    // mapIterator(): getKey() before any next() call must throw IllegalStateException
+    @Test
+    public void testMapIterator_getKeyBeforeNext_throwsIllegalStateException() throws Throwable {
+        trie.put("a", "1");
+        OrderedMapIterator<String, Object> it = trie.mapIterator();
+        try {
+            it.getKey();
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            // ok
+        }
+    }
+
+    // mapIterator(): setValue() updates the underlying trie's stored value
+    @Test
+    public void testMapIterator_setValue_updatesTrie() throws Throwable {
+        trie.put("a", "old");
+        OrderedMapIterator<String, Object> it = trie.mapIterator();
+        it.next();
+        it.setValue("new");
+        assertEquals("new", trie.get("a"));
+    }
+
+    // keySet().iterator(): structural modification during iteration triggers fail-fast
+    @Test
+    public void testKeySetIterator_concurrentModification_throwsCME() throws Throwable {
+        trie.put("a", "1");
+        Iterator<String> it = trie.keySet().iterator();
+        trie.put("b", "2");
+        try {
+            it.next();
+            fail("expected ConcurrentModificationException");
+        } catch (ConcurrentModificationException expected) {
+            // ok
+        }
+    }
+
+    // prefixMap(""): offsetLength==0 short-circuit must return this same Trie instance
+    @Test
+    public void testPrefixMap_emptyPrefix_returnsSameTrieInstance() throws Throwable {
+        trie.put("a", "1");
+        SortedMap<String, Object> view = trie.prefixMap("");
+        assertSame(trie, view);
+    }
+
+    // prefixMap(prefix): view must contain only keys that start with the given prefix
+    @Test
+    public void testPrefixMap_withPrefix_containsOnlyMatchingKeys() throws Throwable {
+        trie.put("ab", "1");
+        trie.put("ac", "2");
+        trie.put("b", "3");
+        SortedMap<String, Object> view = trie.prefixMap("a");
+        assertTrue(view.containsKey("ab") && view.containsKey("ac"));
+        assertFalse(view.containsKey("b"));
+    }
+
+    // headMap/subMap/tailMap: boundaries are from-inclusive and to-exclusive
+    @Test
+    public void testHeadMapSubMapTailMap_rangeBoundaries() throws Throwable {
+        trie.put("a", "1");
+        trie.put("b", "2");
+        trie.put("c", "3");
+        assertTrue(trie.headMap("b").containsKey("a") && !trie.headMap("b").containsKey("b"));
+        assertTrue(trie.subMap("a", "c").containsKey("a") && !trie.subMap("a", "c").containsKey("c"));
+        assertTrue(trie.tailMap("b").containsKey("b") && !trie.tailMap("b").containsKey("a"));
+    }
+
+    // RangeMap.put(): a key outside the configured range must throw IllegalArgumentException
+    @Test
+    public void testRangeMap_putOutOfRange_throwsIllegalArgumentException() throws Throwable {
+        SortedMap<String, Object> view = trie.headMap("b");
+        try {
+            view.put("c", "v");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // higherEntry(): strictly greater than given key; greatest key has no higher entry
+    @Test
+    public void testHigherEntry_strictlyGreater_andGreatestReturnsNull() throws Throwable {
+        trie.put("a", "1");
+        trie.put("b", "2");
+        trie.put("c", "3");
+        assertEquals("b", trie.higherEntry("a").getKey());
+        assertNull(trie.higherEntry("c"));
+    }
+
+    // ceilingEntry(): present key returns itself; absent key returns next greater
+    @Test
+    public void testCeilingEntry_presentAndAbsentKey() throws Throwable {
+        trie.put("a", "1");
+        trie.put("c", "3");
+        assertEquals("a", trie.ceilingEntry("a").getKey());
+        assertEquals("c", trie.ceilingEntry("b").getKey());
+    }
+
+    // lowerEntry(): strictly less than given key; least key has no lower entry
+    @Test
+    public void testLowerEntry_strictlyLess_andLeastReturnsNull() throws Throwable {
+        trie.put("a", "1");
+        trie.put("b", "2");
+        assertEquals("a", trie.lowerEntry("b").getKey());
+        assertNull(trie.lowerEntry("a"));
+    }
+
+    // floorEntry(): present key returns itself; absent key returns previous lesser
+    @Test
+    public void testFloorEntry_presentAndAbsentKey() throws Throwable {
+        trie.put("a", "1");
+        trie.put("c", "3");
+        assertEquals("c", trie.floorEntry("c").getKey());
+        assertEquals("a", trie.floorEntry("b").getKey());
+    }
+
+    // firstEntry()/lastEntry(): null on empty trie, correct bounds on non-empty trie
+    @Test
+    public void testFirstEntryLastEntry_emptyAndNonEmpty() throws Throwable {
+        assertNull(trie.firstEntry());
+        assertNull(trie.lastEntry());
+        trie.put("a", "1");
+        trie.put("b", "2");
+        assertEquals("a", trie.firstEntry().getKey());
+        assertEquals("b", trie.lastEntry().getKey());
+    }
+
+    // nextEntry(null): per contract, must return the first entry of the trie
+    @Test
+    public void testNextEntry_nullArgument_returnsFirstEntry() throws Throwable {
+        trie.put("a", "1");
+        trie.put("b", "2");
+        assertEquals(trie.firstEntry().getKey(), trie.nextEntry(null).getKey());
+    }
+
+    // previousEntry(): an entry with a null predecessor must throw IllegalArgumentException
+    @Test
+    public void testPreviousEntry_invalidPredecessor_throwsIllegalArgumentException() throws Throwable {
+        AbstractPatriciaTrie.TrieEntry<String, Object> detached =
+                new AbstractPatriciaTrie.TrieEntry<String, Object>("z", "v", 0);
+        detached.predecessor = null;
+        try {
+            trie.previousEntry(detached);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // TrieEntry constructor: fresh entry is non-empty and an external (leaf) node
+    @Test
+    public void testTrieEntry_constructorState() throws Throwable {
+        AbstractPatriciaTrie.TrieEntry<String, Object> entry =
+                new AbstractPatriciaTrie.TrieEntry<String, Object>("k", "v", 3);
+        assertFalse(entry.isEmpty());
+        assertTrue(entry.isExternalNode());
+        assertFalse(entry.isInternalNode());
+    }
+
+    // isValidUplink(): null is never valid; a non-empty entry with bitIndex<=from is valid
+    @Test
+    public void testIsValidUplink_variousConditions() throws Throwable {
+        AbstractPatriciaTrie.TrieEntry<String, Object> low =
+                new AbstractPatriciaTrie.TrieEntry<String, Object>("a", "v", 1);
+        AbstractPatriciaTrie.TrieEntry<String, Object> high =
+                new AbstractPatriciaTrie.TrieEntry<String, Object>("b", "v", 5);
+        assertFalse(AbstractPatriciaTrie.isValidUplink(null, high));
+        assertTrue(AbstractPatriciaTrie.isValidUplink(low, high));
+        assertFalse(AbstractPatriciaTrie.isValidUplink(high, low));
+    }
+}

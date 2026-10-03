@@ -1,0 +1,271 @@
+package com.fasterxml.jackson.databind.ser.std;
+
+import java.io.IOException;
+import java.io.StringWriter;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
+
+public class NumberSerializerClaudeTest {
+
+    private JsonFactory factory;
+
+    @Before
+    public void setUp() throws Throwable {
+        factory = new JsonFactory();
+    }
+
+    private String doSerialize(NumberSerializer ser, Number value) throws IOException {
+        StringWriter sw = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(sw);
+        ser.serialize(value, gen, null);
+        gen.flush();
+        gen.close();
+        return sw.toString();
+    }
+
+    // constructor: rawType == BigInteger.class -> _isInt true
+    @Test
+    public void testConstructor_BigIntegerClass_isIntTrue() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigInteger.class);
+        assertTrue(ser._isInt);
+    }
+
+    // constructor: rawType == BigDecimal.class -> _isInt false
+    @Test
+    public void testConstructor_BigDecimalClass_isIntFalse() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigDecimal.class);
+        assertFalse(ser._isInt);
+    }
+
+    // constructor: rawType == Integer.class -> _isInt false (not BigInteger)
+    @Test
+    public void testConstructor_IntegerClass_isIntFalse() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Integer.class);
+        assertFalse(ser._isInt);
+    }
+
+    // constructor: rawType == Number.class -> _isInt false
+    @Test
+    public void testConstructor_NumberClass_isIntFalse() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(Number.class);
+        assertFalse(ser._isInt);
+    }
+
+    // handledType() returns exact class passed to constructor (BigInteger)
+    @Test
+    public void testHandledType_ReturnsConstructorArgument_BigInteger() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigInteger.class);
+        assertEquals(BigInteger.class, ser.handledType());
+    }
+
+    // handledType() returns exact class passed to constructor (BigDecimal)
+    @Test
+    public void testHandledType_ReturnsConstructorArgument_BigDecimal() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigDecimal.class);
+        assertEquals(BigDecimal.class, ser.handledType());
+    }
+
+    // static instance is constructed for Number.class
+    @Test
+    public void testStaticInstance_HandledTypeIsNumberClass() throws Throwable {
+        assertEquals(Number.class, NumberSerializer.instance.handledType());
+    }
+
+    // static instance is non-null and _isInt false
+    @Test
+    public void testStaticInstance_NotNull() throws Throwable {
+        assertNotNull(NumberSerializer.instance);
+        assertFalse(NumberSerializer.instance._isInt);
+    }
+
+    // serialize: BigDecimal branch writes decimal number verbatim
+    @Test
+    public void testSerialize_BigDecimalValue_writesDecimalString() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigDecimal.class);
+        String out = doSerialize(ser, new BigDecimal("123.45"));
+        assertEquals("123.45", out);
+    }
+
+    // serialize: BigDecimal negative value branch
+    @Test
+    public void testSerialize_BigDecimalNegativeValue_writesNegativeDecimalString() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigDecimal.class);
+        String out = doSerialize(ser, new BigDecimal("-42.5"));
+        assertEquals("-42.5", out);
+    }
+
+    // serialize: BigInteger branch writes integer number verbatim
+    @Test
+    public void testSerialize_BigIntegerValue_writesIntegerString() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigInteger.class);
+        String out = doSerialize(ser, new BigInteger("12345678901234567890"));
+        assertEquals("12345678901234567890", out);
+    }
+
+    // serialize: BigInteger negative value branch
+    @Test
+    public void testSerialize_BigIntegerNegativeValue_writesNegativeIntegerString() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigInteger.class);
+        String out = doSerialize(ser, new BigInteger("-99999999999999999999"));
+        assertEquals("-99999999999999999999", out);
+    }
+
+    // serialize: Integer branch writes plain int value
+    @Test
+    public void testSerialize_IntegerValue_writesPlainNumber() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Integer.valueOf(5));
+        assertEquals("5", out);
+    }
+
+    // serialize: Integer MIN_VALUE edge case
+    @Test
+    public void testSerialize_IntegerMinValue_writesMinValue() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Integer.valueOf(Integer.MIN_VALUE));
+        assertEquals(String.valueOf(Integer.MIN_VALUE), out);
+    }
+
+    // serialize: Integer MAX_VALUE edge case
+    @Test
+    public void testSerialize_IntegerMaxValue_writesMaxValue() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Integer.valueOf(Integer.MAX_VALUE));
+        assertEquals(String.valueOf(Integer.MAX_VALUE), out);
+    }
+
+    // serialize: Long branch writes plain long value
+    @Test
+    public void testSerialize_LongValue_writesPlainNumber() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Long.valueOf(123456789L));
+        assertEquals("123456789", out);
+    }
+
+    // serialize: Long MIN_VALUE edge case
+    @Test
+    public void testSerialize_LongMinValue_writesMinValue() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Long.valueOf(Long.MIN_VALUE));
+        assertEquals(String.valueOf(Long.MIN_VALUE), out);
+    }
+
+    // serialize: Double branch writes plain double value
+    @Test
+    public void testSerialize_DoubleValue_writesPlainNumber() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Double.valueOf(3.14));
+        assertEquals("3.14", out);
+    }
+
+    // serialize: Double zero edge case
+    @Test
+    public void testSerialize_DoubleZero_writesZero() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Double.valueOf(0.0));
+        assertEquals("0.0", out);
+    }
+
+    // serialize: Float branch writes plain float value
+    @Test
+    public void testSerialize_FloatValue_writesPlainNumber() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Float.valueOf(2.5f));
+        assertEquals("2.5", out);
+    }
+
+    // serialize: Byte branch (Byte || Short) writes intValue, no cast to smaller type
+    @Test
+    public void testSerialize_ByteValue_writesAsInt() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Byte.valueOf((byte) 5));
+        assertEquals("5", out);
+    }
+
+    // serialize: Byte negative value branch
+    @Test
+    public void testSerialize_ByteNegativeValue_writesAsInt() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Byte.valueOf((byte) -5));
+        assertEquals("-5", out);
+    }
+
+    // serialize: Short branch writes intValue
+    @Test
+    public void testSerialize_ShortValue_writesAsInt() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Short.valueOf((short) 123));
+        assertEquals("123", out);
+    }
+
+    // serialize: Short negative value branch
+    @Test
+    public void testSerialize_ShortNegativeValue_writesAsInt() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        String out = doSerialize(ser, Short.valueOf((short) -123));
+        assertEquals("-123", out);
+    }
+
+    // serialize: fallback else branch uses value.toString() for unknown Number type
+    @Test
+    public void testSerialize_FallbackNumberType_writesToStringRepresentation() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        AtomicInteger value = new AtomicInteger(42);
+        String out = doSerialize(ser, value);
+        assertEquals(value.toString(), out);
+    }
+
+    // serialize: null value falls through all instanceof checks to else branch, toString() NPEs
+    @Test
+    public void testSerialize_NullValue_throwsNullPointerException() throws Throwable {
+        NumberSerializer ser = NumberSerializer.instance;
+        try {
+            doSerialize(ser, null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // getSchema: _isInt true (BigInteger) -> schema type "integer"
+    @Test
+    public void testGetSchema_BigIntegerInstance_typeIsInteger() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigInteger.class);
+        JsonNode schema = ser.getSchema(null, null);
+        assertNotNull(schema);
+        assertEquals("integer", schema.get("type").asText());
+    }
+
+    // getSchema: _isInt false (BigDecimal) -> schema type "number"
+    @Test
+    public void testGetSchema_BigDecimalInstance_typeIsNumber() throws Throwable {
+        NumberSerializer ser = new NumberSerializer(BigDecimal.class);
+        JsonNode schema = ser.getSchema(null, null);
+        assertNotNull(schema);
+        assertEquals("number", schema.get("type").asText());
+    }
+
+    // getSchema: Number.class instance -> schema type "number"
+    @Test
+    public void testGetSchema_NumberInstance_typeIsNumber() throws Throwable {
+        JsonNode schema = NumberSerializer.instance.getSchema(null, null);
+        assertNotNull(schema);
+        assertEquals("number", schema.get("type").asText());
+    }
+
+    // getSchema: required flag always passed as true
+    @Test
+    public void testGetSchema_RequiredFieldTrue() throws Throwable {
+        JsonNode schema = NumberSerializer.instance.getSchema(null, null);
+        assertNotNull(schema.get("required"));
+        assertTrue(schema.get("required").asBoolean());
+    }
+}

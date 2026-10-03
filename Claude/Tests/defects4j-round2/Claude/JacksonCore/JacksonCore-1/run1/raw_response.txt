@@ -1,0 +1,356 @@
+package com.fasterxml.jackson.core.io;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import java.math.BigDecimal;
+
+public class NumberInputClaudeTest
+{
+    // parseInt(char[],offset,len): single digit, len=1 branch (no nested ifs entered)
+    @Test
+    public void testParseIntCharArray_singleDigit_returnsDigit() throws Throwable
+    {
+        char[] digits = new char[] { '7' };
+        int result = NumberInput.parseInt(digits, 0, 1);
+        assertEquals(7, result);
+    }
+
+    // parseInt(char[],offset,len): full 9-digit path, all nested ifs entered
+    @Test
+    public void testParseIntCharArray_nineDigits_returnsFullNumber() throws Throwable
+    {
+        char[] digits = "123456789".toCharArray();
+        int result = NumberInput.parseInt(digits, 0, 9);
+        assertEquals(123456789, result);
+    }
+
+    // parseInt(char[],offset,len): non-zero offset, embedded digits in larger array
+    @Test
+    public void testParseIntCharArray_withOffset_readsCorrectSubrange() throws Throwable
+    {
+        char[] digits = "xx123yy".toCharArray();
+        int result = NumberInput.parseInt(digits, 2, 3);
+        assertEquals(123, result);
+    }
+
+    // parseInt(String): positive single digit, short-circuit path
+    @Test
+    public void testParseIntString_positiveSingleDigit() throws Throwable
+    {
+        assertEquals(5, NumberInput.parseInt("5"));
+    }
+
+    // parseInt(String): positive, exactly 9 digits (fast path boundary)
+    @Test
+    public void testParseIntString_positiveNineDigits() throws Throwable
+    {
+        assertEquals(123456789, NumberInput.parseInt("123456789"));
+    }
+
+    // parseInt(String): positive length>9 falls back to Integer.parseInt, equals MAX_VALUE
+    @Test
+    public void testParseIntString_positiveTenDigits_delegatesToJdkParse() throws Throwable
+    {
+        assertEquals(Integer.MAX_VALUE, NumberInput.parseInt("2147483647"));
+    }
+
+    // parseInt(String): negative single digit
+    @Test
+    public void testParseIntString_negativeSingleDigit() throws Throwable
+    {
+        assertEquals(-5, NumberInput.parseInt("-5"));
+    }
+
+    // parseInt(String): negative, 8-digit magnitude (length 9) fast path
+    @Test
+    public void testParseIntString_negativeEightDigitMagnitude() throws Throwable
+    {
+        assertEquals(-12345678, NumberInput.parseInt("-12345678"));
+    }
+
+    // parseInt(String): negative, 9-digit magnitude (length 10), boundary of fast path
+    @Test
+    public void testParseIntString_negativeNineDigitMagnitude() throws Throwable
+    {
+        assertEquals(-123456789, NumberInput.parseInt("-123456789"));
+    }
+
+    // parseInt(String): negative length 11 delegates to JDK, equals Integer.MIN_VALUE
+    @Test
+    public void testParseIntString_negativeElevenChars_equalsIntMin() throws Throwable
+    {
+        assertEquals(Integer.MIN_VALUE, NumberInput.parseInt("-2147483648"));
+    }
+
+    // parseInt(String): invalid non-digit char triggers fallback which throws
+    @Test
+    public void testParseIntString_invalidChar_throwsNumberFormatException() throws Throwable
+    {
+        try {
+            NumberInput.parseInt("12a45");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) { }
+    }
+
+    // parseLong(char[],offset,len): length 10 boundary (lower bound of contract)
+    @Test
+    public void testParseLongCharArray_lengthTen() throws Throwable
+    {
+        char[] digits = "1234567890".toCharArray();
+        long result = NumberInput.parseLong(digits, 0, 10);
+        assertEquals(1234567890L, result);
+    }
+
+    // parseLong(char[],offset,len): length 18 boundary (upper bound of contract)
+    @Test
+    public void testParseLongCharArray_lengthEighteen() throws Throwable
+    {
+        String s = "123456789012345678";
+        char[] digits = s.toCharArray();
+        long result = NumberInput.parseLong(digits, 0, 18);
+        assertEquals(Long.parseLong(s), result);
+    }
+
+    // parseLong(String): short string (<=9 chars) delegates to fast parseInt path
+    @Test
+    public void testParseLongString_shortDelegatesToParseInt() throws Throwable
+    {
+        assertEquals(123L, NumberInput.parseLong("123"));
+    }
+
+    // parseLong(String): length>9 delegates to Long.parseLong
+    @Test
+    public void testParseLongString_longerThanNine_delegatesToJdk() throws Throwable
+    {
+        assertEquals(12345678901L, NumberInput.parseLong("12345678901"));
+    }
+
+    // parseLong(String): negative Long.MIN_VALUE round trip
+    @Test
+    public void testParseLongString_longMinValue() throws Throwable
+    {
+        assertEquals(Long.MIN_VALUE, NumberInput.parseLong("-9223372036854775808"));
+    }
+
+    // inLongRange(char[],...): shorter length than comparison string => always true
+    @Test
+    public void testInLongRangeCharArray_shorterLength_true() throws Throwable
+    {
+        char[] digits = "123".toCharArray();
+        assertTrue(NumberInput.inLongRange(digits, 0, 3, false));
+    }
+
+    // inLongRange(char[],...): longer length (20 digits) than comparison string => always false
+    @Test
+    public void testInLongRangeCharArray_longerLength_false() throws Throwable
+    {
+        char[] digits = "12345678901234567890".toCharArray();
+        assertFalse(NumberInput.inLongRange(digits, 0, 20, false));
+    }
+
+    // inLongRange(char[],...): equal length, exactly equal to Long.MAX_VALUE => true (inclusive boundary)
+    @Test
+    public void testInLongRangeCharArray_equalToMax_true() throws Throwable
+    {
+        String maxStr = String.valueOf(Long.MAX_VALUE);
+        char[] digits = maxStr.toCharArray();
+        assertTrue(NumberInput.inLongRange(digits, 0, digits.length, false));
+    }
+
+    // inLongRange(char[],...): equal length, one more than Long.MAX_VALUE magnitude => false
+    @Test
+    public void testInLongRangeCharArray_oneMoreThanMax_false() throws Throwable
+    {
+        String oneMore = String.valueOf(Long.MIN_VALUE).substring(1); // abs(MIN_VALUE) = MAX_VALUE + 1
+        char[] digits = oneMore.toCharArray();
+        assertFalse(NumberInput.inLongRange(digits, 0, digits.length, false));
+    }
+
+    // inLongRange(String,...): negative=true, exactly equal to abs(Long.MIN_VALUE) => true
+    @Test
+    public void testInLongRangeString_negativeEqualToMinMagnitude_true() throws Throwable
+    {
+        String minNoSign = String.valueOf(Long.MIN_VALUE).substring(1);
+        assertTrue(NumberInput.inLongRange(minNoSign, true));
+    }
+
+    // inLongRange(String,...): negative=true, one more than abs(Long.MIN_VALUE) => false
+    @Test
+    public void testInLongRangeString_negativeOneMoreThanMinMagnitude_false() throws Throwable
+    {
+        assertFalse(NumberInput.inLongRange("9223372036854775809", true));
+    }
+
+    // parseAsInt: null input returns default
+    @Test
+    public void testParseAsInt_nullInput_returnsDefault() throws Throwable
+    {
+        assertEquals(77, NumberInput.parseAsInt(null, 77));
+    }
+
+    // parseAsInt: whitespace-only trims to empty, returns default
+    @Test
+    public void testParseAsInt_whitespaceOnly_returnsDefault() throws Throwable
+    {
+        assertEquals(5, NumberInput.parseAsInt("   ", 5));
+    }
+
+    // parseAsInt: leading '+' sign stripped and parsed correctly
+    @Test
+    public void testParseAsInt_plusSign_parsedCorrectly() throws Throwable
+    {
+        assertEquals(123, NumberInput.parseAsInt("+123", 0));
+    }
+
+    // parseAsInt: leading '-' sign handled correctly
+    @Test
+    public void testParseAsInt_minusSign_parsedCorrectly() throws Throwable
+    {
+        assertEquals(-123, NumberInput.parseAsInt("-123", 0));
+    }
+
+    // parseAsInt: decimal value coerced via parseDouble and truncated to int
+    @Test
+    public void testParseAsInt_decimalValue_truncatedToInt() throws Throwable
+    {
+        assertEquals(3, NumberInput.parseAsInt("3.9", 0));
+    }
+
+    // parseAsInt: fully invalid string falls through to default
+    @Test
+    public void testParseAsInt_invalidString_returnsDefault() throws Throwable
+    {
+        assertEquals(-1, NumberInput.parseAsInt("abc", -1));
+    }
+
+    // parseAsInt: all-digit string that overflows int returns default
+    @Test
+    public void testParseAsInt_overflowDigits_returnsDefault() throws Throwable
+    {
+        assertEquals(-5, NumberInput.parseAsInt("99999999999", -5));
+    }
+
+    // parseAsLong: null input returns default
+    @Test
+    public void testParseAsLong_nullInput_returnsDefault() throws Throwable
+    {
+        assertEquals(77L, NumberInput.parseAsLong(null, 77L));
+    }
+
+    // parseAsLong: leading '+' sign stripped and parsed correctly
+    @Test
+    public void testParseAsLong_plusSign_parsedCorrectly() throws Throwable
+    {
+        assertEquals(123L, NumberInput.parseAsLong("+123", 0L));
+    }
+
+    // parseAsLong: leading '-' sign handled correctly
+    @Test
+    public void testParseAsLong_minusSign_parsedCorrectly() throws Throwable
+    {
+        assertEquals(-123L, NumberInput.parseAsLong("-123", 0L));
+    }
+
+    // parseAsLong: decimal value coerced via parseDouble and truncated to long
+    @Test
+    public void testParseAsLong_decimalValue_truncatedToLong() throws Throwable
+    {
+        assertEquals(5L, NumberInput.parseAsLong("5.9", 0L));
+    }
+
+    // parseAsLong: fully invalid string falls through to default
+    @Test
+    public void testParseAsLong_invalidString_returnsDefault() throws Throwable
+    {
+        assertEquals(-1L, NumberInput.parseAsLong("abc", -1L));
+    }
+
+    // parseAsDouble: null input returns default
+    @Test
+    public void testParseAsDouble_nullInput_returnsDefault() throws Throwable
+    {
+        assertEquals(3.3, NumberInput.parseAsDouble(null, 3.3), 1e-9);
+    }
+
+    // parseAsDouble: empty (after trim) returns default
+    @Test
+    public void testParseAsDouble_emptyInput_returnsDefault() throws Throwable
+    {
+        assertEquals(2.2, NumberInput.parseAsDouble("", 2.2), 1e-9);
+    }
+
+    // parseAsDouble: valid numeric string parsed correctly
+    @Test
+    public void testParseAsDouble_validNumber_parsedCorrectly() throws Throwable
+    {
+        assertEquals(3.14, NumberInput.parseAsDouble("3.14", 0.0), 1e-9);
+    }
+
+    // parseAsDouble: invalid string returns default
+    @Test
+    public void testParseAsDouble_invalidString_returnsDefault() throws Throwable
+    {
+        assertEquals(9.9, NumberInput.parseAsDouble("xyz", 9.9), 1e-9);
+    }
+
+    // parseDouble: normal valid double string
+    @Test
+    public void testParseDouble_normalValue() throws Throwable
+    {
+        assertEquals(1.5, NumberInput.parseDouble("1.5"), 1e-9);
+    }
+
+    // parseDouble: documented special-case constant maps to Double.MIN_VALUE
+    @Test
+    public void testParseDouble_nastySmallDouble_returnsMinValue() throws Throwable
+    {
+        double result = NumberInput.parseDouble(NumberInput.NASTY_SMALL_DOUBLE);
+        assertEquals(Double.MIN_VALUE, result, 0.0);
+    }
+
+    // parseDouble: invalid string throws NumberFormatException
+    @Test
+    public void testParseDouble_invalidString_throwsNumberFormatException() throws Throwable
+    {
+        try {
+            NumberInput.parseDouble("notanumber");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) { }
+    }
+
+    // parseBigDecimal(String): valid decimal string parsed correctly
+    @Test
+    public void testParseBigDecimalString_validValue() throws Throwable
+    {
+        BigDecimal expected = new BigDecimal("123.45");
+        assertEquals(expected, NumberInput.parseBigDecimal("123.45"));
+    }
+
+    // parseBigDecimal(String): invalid string throws NumberFormatException
+    @Test
+    public void testParseBigDecimalString_invalidValue_throwsNumberFormatException() throws Throwable
+    {
+        try {
+            NumberInput.parseBigDecimal("not-a-decimal");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) { }
+    }
+
+    // parseBigDecimal(char[]): full-array delegate variant
+    @Test
+    public void testParseBigDecimalCharArray_fullArray() throws Throwable
+    {
+        char[] buffer = "42.5".toCharArray();
+        BigDecimal expected = new BigDecimal("42.5");
+        assertEquals(expected, NumberInput.parseBigDecimal(buffer));
+    }
+
+    // parseBigDecimal(char[],offset,len): substring within larger buffer
+    @Test
+    public void testParseBigDecimalCharArray_offsetAndLen() throws Throwable
+    {
+        char[] buffer = "xx42.5yy".toCharArray();
+        BigDecimal expected = new BigDecimal("42.5");
+        assertEquals(expected, NumberInput.parseBigDecimal(buffer, 2, 4));
+    }
+}

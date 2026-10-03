@@ -1,0 +1,278 @@
+package org.apache.commons.compress.utils;
+
+import java.util.Arrays;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ArchiveUtilsClaudeTest {
+
+    // matchAsciiBuffer(String,byte[],int,int): exact content & length match -> true
+    @Test
+    public void testMatchAsciiBuffer4Arg_exactMatch_true() throws Throwable {
+        byte[] buf = "abc".getBytes("US-ASCII");
+        assertTrue(ArchiveUtils.matchAsciiBuffer("abc", buf, 0, buf.length));
+    }
+
+    // matchAsciiBuffer(String,byte[],int,int): offset/length subset extraction matches
+    @Test
+    public void testMatchAsciiBuffer4Arg_offsetSubset_true() throws Throwable {
+        byte[] buf = "xxabcxx".getBytes("US-ASCII");
+        assertTrue(ArchiveUtils.matchAsciiBuffer("abc", buf, 2, 3));
+    }
+
+    // matchAsciiBuffer(String,byte[],int,int): content mismatch within minLen -> false
+    @Test
+    public void testMatchAsciiBuffer4Arg_contentMismatch_false() throws Throwable {
+        byte[] buf = "abx".getBytes("US-ASCII");
+        assertFalse(ArchiveUtils.matchAsciiBuffer("abc", buf, 0, buf.length));
+    }
+
+    // matchAsciiBuffer(String,byte[],int,int): different length with ignoreTrailingNulls=false -> false
+    @Test
+    public void testMatchAsciiBuffer4Arg_lengthMismatch_false() throws Throwable {
+        byte[] buf = "abcd".getBytes("US-ASCII");
+        assertFalse(ArchiveUtils.matchAsciiBuffer("abc", buf, 0, buf.length));
+    }
+
+    // matchAsciiBuffer(String,byte[]) 2-arg: full match -> true
+    @Test
+    public void testMatchAsciiBuffer2Arg_fullMatch_true() throws Throwable {
+        byte[] buf = "hello".getBytes("US-ASCII");
+        assertTrue(ArchiveUtils.matchAsciiBuffer("hello", buf));
+    }
+
+    // matchAsciiBuffer(String,byte[]) 2-arg: mismatch -> false
+    @Test
+    public void testMatchAsciiBuffer2Arg_mismatch_false() throws Throwable {
+        byte[] buf = "world".getBytes("US-ASCII");
+        assertFalse(ArchiveUtils.matchAsciiBuffer("hello", buf));
+    }
+
+    // toAsciiBytes: basic conversion produces correct ascii byte values
+    @Test
+    public void testToAsciiBytes_basic() throws Throwable {
+        byte[] result = ArchiveUtils.toAsciiBytes("abc");
+        assertTrue(Arrays.equals("abc".getBytes("US-ASCII"), result));
+    }
+
+    // toAsciiBytes: empty string -> zero length array
+    @Test
+    public void testToAsciiBytes_emptyString() throws Throwable {
+        byte[] result = ArchiveUtils.toAsciiBytes("");
+        assertEquals(0, result.length);
+    }
+
+    // toAsciiString(byte[]): basic conversion back to string
+    @Test
+    public void testToAsciiString1Arg_basic() throws Throwable {
+        byte[] buf = "abc".getBytes("US-ASCII");
+        assertEquals("abc", ArchiveUtils.toAsciiString(buf));
+    }
+
+    // toAsciiString(byte[]): empty array -> empty string
+    @Test
+    public void testToAsciiString1Arg_emptyArray() throws Throwable {
+        assertEquals("", ArchiveUtils.toAsciiString(new byte[0]));
+    }
+
+    // toAsciiString(byte[],int,int): offset/length extraction
+    @Test
+    public void testToAsciiString3Arg_offsetLength() throws Throwable {
+        byte[] buf = "xxabcxx".getBytes("US-ASCII");
+        assertEquals("abc", ArchiveUtils.toAsciiString(buf, 2, 3));
+    }
+
+    // isEqual(7-arg): identical full length content -> true, exercises length1==length2 branch
+    @Test
+    public void testIsEqual7Arg_identicalContentFullLength_true() throws Throwable {
+        byte[] b1 = new byte[]{1, 2, 3};
+        byte[] b2 = new byte[]{1, 2, 3};
+        assertTrue(ArchiveUtils.isEqual(b1, 0, 3, b2, 0, 3, false));
+    }
+
+    // isEqual(7-arg): mismatch within minLen loop -> false
+    @Test
+    public void testIsEqual7Arg_mismatchWithinMinLen_false() throws Throwable {
+        byte[] b1 = new byte[]{1, 2, 3};
+        byte[] b2 = new byte[]{1, 9, 3};
+        assertFalse(ArchiveUtils.isEqual(b1, 0, 3, b2, 0, 3, false));
+    }
+
+    // isEqual(7-arg): different lengths, ignoreTrailingNulls=false -> false
+    @Test
+    public void testIsEqual7Arg_differentLengthsIgnoreFalse_false() throws Throwable {
+        byte[] b1 = new byte[]{1, 2, 3};
+        byte[] b2 = new byte[]{1, 2};
+        assertFalse(ArchiveUtils.isEqual(b1, 0, 3, b2, 0, 2, false));
+    }
+
+    // isEqual(7-arg): buffer1 longer with trailing zeros, ignore=true -> true
+    @Test
+    public void testIsEqual7Arg_ignoreTrailingNullsBuffer1LongerZeros_true() throws Throwable {
+        byte[] b1 = new byte[]{1, 2, 0, 0};
+        byte[] b2 = new byte[]{1, 2};
+        assertTrue(ArchiveUtils.isEqual(b1, 0, 4, b2, 0, 2, true));
+    }
+
+    // isEqual(7-arg): buffer1 longer with trailing non-zero, ignore=true -> false
+    @Test
+    public void testIsEqual7Arg_ignoreTrailingNullsBuffer1LongerNonZero_false() throws Throwable {
+        byte[] b1 = new byte[]{1, 2, 3, 0};
+        byte[] b2 = new byte[]{1, 2};
+        assertFalse(ArchiveUtils.isEqual(b1, 0, 4, b2, 0, 2, true));
+    }
+
+    // isEqual(7-arg): buffer2 longer with trailing zeros, ignore=true -> true
+    @Test
+    public void testIsEqual7Arg_ignoreTrailingNullsBuffer2LongerZeros_true() throws Throwable {
+        byte[] b1 = new byte[]{1, 2};
+        byte[] b2 = new byte[]{1, 2, 0, 0};
+        assertTrue(ArchiveUtils.isEqual(b1, 0, 2, b2, 0, 4, true));
+    }
+
+    // isEqual(7-arg): buffer2 longer with trailing non-zero, ignore=true -> false
+    @Test
+    public void testIsEqual7Arg_ignoreTrailingNullsBuffer2LongerNonZero_false() throws Throwable {
+        byte[] b1 = new byte[]{1, 2};
+        byte[] b2 = new byte[]{1, 2, 5, 0};
+        assertFalse(ArchiveUtils.isEqual(b1, 0, 2, b2, 0, 4, true));
+    }
+
+    // isEqual(7-arg): non-zero offsets on both buffers -> true
+    @Test
+    public void testIsEqual7Arg_nonZeroOffsets_true() throws Throwable {
+        byte[] b1 = new byte[]{9, 9, 1, 2, 3};
+        byte[] b2 = new byte[]{1, 2, 3};
+        assertTrue(ArchiveUtils.isEqual(b1, 2, 3, b2, 0, 3, false));
+    }
+
+    // isEqual(6-arg, no ignore flag): equal content same length -> true
+    @Test
+    public void testIsEqual6Arg_sameLengthEqualContent_true() throws Throwable {
+        byte[] b1 = new byte[]{4, 5, 6};
+        byte[] b2 = new byte[]{4, 5, 6};
+        assertTrue(ArchiveUtils.isEqual(b1, 0, 3, b2, 0, 3));
+    }
+
+    // isEqual(6-arg, no ignore flag): different lengths -> false (defaults ignoreTrailingNulls=false)
+    @Test
+    public void testIsEqual6Arg_differentLength_false() throws Throwable {
+        byte[] b1 = new byte[]{4, 5, 6, 0};
+        byte[] b2 = new byte[]{4, 5, 6};
+        assertFalse(ArchiveUtils.isEqual(b1, 0, 4, b2, 0, 3));
+    }
+
+    // isEqual(2-arg): equal whole arrays -> true
+    @Test
+    public void testIsEqual2Arg_equalArrays_true() throws Throwable {
+        byte[] b1 = new byte[]{7, 8};
+        byte[] b2 = new byte[]{7, 8};
+        assertTrue(ArchiveUtils.isEqual(b1, b2));
+    }
+
+    // isEqual(2-arg): different content -> false
+    @Test
+    public void testIsEqual2Arg_differentArrays_false() throws Throwable {
+        byte[] b1 = new byte[]{7, 8};
+        byte[] b2 = new byte[]{7, 9};
+        assertFalse(ArchiveUtils.isEqual(b1, b2));
+    }
+
+    // isEqual(3-arg, ignoreTrailingNulls): trailing zeros ignored -> true
+    @Test
+    public void testIsEqual3Arg_ignoreTrue_trailingZeros_true() throws Throwable {
+        byte[] b1 = new byte[]{1, 2, 0};
+        byte[] b2 = new byte[]{1, 2};
+        assertTrue(ArchiveUtils.isEqual(b1, b2, true));
+    }
+
+    // isEqual(3-arg, ignoreTrailingNulls): same case but ignore=false -> false
+    @Test
+    public void testIsEqual3Arg_ignoreFalse_trailingZeros_false() throws Throwable {
+        byte[] b1 = new byte[]{1, 2, 0};
+        byte[] b2 = new byte[]{1, 2};
+        assertFalse(ArchiveUtils.isEqual(b1, b2, false));
+    }
+
+    // isEqualWithNull: buffer1 longer with trailing zero -> true (always ignores trailing nulls)
+    @Test
+    public void testIsEqualWithNull_trailingZero_true() throws Throwable {
+        byte[] b1 = new byte[]{3, 4, 0};
+        byte[] b2 = new byte[]{3, 4};
+        assertTrue(ArchiveUtils.isEqualWithNull(b1, 0, 3, b2, 0, 2));
+    }
+
+    // isEqualWithNull: buffer1 longer with trailing non-zero -> false
+    @Test
+    public void testIsEqualWithNull_trailingNonZero_false() throws Throwable {
+        byte[] b1 = new byte[]{3, 4, 9};
+        byte[] b2 = new byte[]{3, 4};
+        assertFalse(ArchiveUtils.isEqualWithNull(b1, 0, 3, b2, 0, 2));
+    }
+
+    // isArrayZero: size=0 performs zero iterations -> true regardless of content
+    @Test
+    public void testIsArrayZero_sizeZero_true() throws Throwable {
+        byte[] a = new byte[]{5, 6, 7};
+        assertTrue(ArchiveUtils.isArrayZero(a, 0));
+    }
+
+    // isArrayZero: all zero bytes within size -> true
+    @Test
+    public void testIsArrayZero_allZero_true() throws Throwable {
+        byte[] a = new byte[]{0, 0, 0};
+        assertTrue(ArchiveUtils.isArrayZero(a, 3));
+    }
+
+    // isArrayZero: first byte non-zero -> false immediately
+    @Test
+    public void testIsArrayZero_firstNonZero_false() throws Throwable {
+        byte[] a = new byte[]{1, 0, 0};
+        assertFalse(ArchiveUtils.isArrayZero(a, 3));
+    }
+
+    // isArrayZero: non-zero only at last checked index -> false, loop runs fully
+    @Test
+    public void testIsArrayZero_lastNonZero_false() throws Throwable {
+        byte[] a = new byte[]{0, 0, 2};
+        assertFalse(ArchiveUtils.isArrayZero(a, 3));
+    }
+
+    // sanitize: ISO control char replaced with '?'
+    @Test
+    public void testSanitize_controlCharReplaced() throws Throwable {
+        String result = ArchiveUtils.sanitize("a\nb");
+        assertEquals("a?b", result);
+    }
+
+    // sanitize: normal printable ASCII characters remain unchanged
+    @Test
+    public void testSanitize_normalCharsUnchanged() throws Throwable {
+        assertEquals("Hello123", ArchiveUtils.sanitize("Hello123"));
+    }
+
+    // sanitize: char in Unicode SPECIALS block replaced with '?'
+    @Test
+    public void testSanitize_specialsBlockReplaced() throws Throwable {
+        String result = ArchiveUtils.sanitize("a\uFFFFb");
+        assertEquals("a?b", result);
+    }
+
+    // sanitize: empty string input -> empty string output
+    @Test
+    public void testSanitize_emptyString() throws Throwable {
+        assertEquals("", ArchiveUtils.sanitize(""));
+    }
+
+    // sanitize: per Javadoc outcome must not be longer than 255 chars (bug-catching test)
+    @Test
+    public void testSanitize_longInputTruncatedTo255() throws Throwable {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 300; i++) {
+            sb.append('a');
+        }
+        String result = ArchiveUtils.sanitize(sb.toString());
+        assertTrue("sanitized output must be at most 255 chars", result.length() <= 255);
+    }
+}

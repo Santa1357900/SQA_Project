@@ -1,0 +1,312 @@
+package org.apache.commons.math.analysis.solvers;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.analysis.UnivariateFunction;
+import org.apache.commons.math.exception.NumberIsTooSmallException;
+import org.apache.commons.math.exception.NoBracketingException;
+
+public class BracketingNthOrderBrentSolverClaudeTest {
+
+    private static final double CBRT2 = 1.2599210498948732;
+
+    private UnivariateFunction linear(final double root) {
+        return new UnivariateFunction() {
+            public double value(double x) {
+                return x - root;
+            }
+        };
+    }
+
+    private UnivariateFunction sinFunction() {
+        return new UnivariateFunction() {
+            public double value(double x) {
+                return Math.sin(x);
+            }
+        };
+    }
+
+    private UnivariateFunction cubeMinusTwo() {
+        return new UnivariateFunction() {
+            public double value(double x) {
+                return x * x * x - 2.0;
+            }
+        };
+    }
+
+    private UnivariateFunction flatCube(final double root) {
+        return new UnivariateFunction() {
+            public double value(double x) {
+                double d = x - root;
+                return d * d * d;
+            }
+        };
+    }
+
+    private UnivariateFunction alwaysPositive() {
+        return new UnivariateFunction() {
+            public double value(double x) {
+                return x * x + 1.0;
+            }
+        };
+    }
+
+    private UnivariateFunction stepFunction() {
+        return new UnivariateFunction() {
+            public double value(double x) {
+                return x < 1.0 ? -1.0 : 1.0;
+            }
+        };
+    }
+
+    // default constructor => maximal order 5 (DEFAULT_MAXIMAL_ORDER)
+    @Test
+    public void testDefaultConstructor_hasMaximalOrderFive() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        assertEquals(5, solver.getMaximalOrder());
+    }
+
+    // two-arg constructor stores maximal order
+    @Test
+    public void testConstructorTwoArg_storesMaximalOrder() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-6, 3);
+        assertEquals(3, solver.getMaximalOrder());
+    }
+
+    // two-arg constructor: order < 2 throws NumberIsTooSmallException
+    @Test
+    public void testConstructorTwoArg_orderBelowTwo_throws() throws Throwable {
+        try {
+            new BracketingNthOrderBrentSolver(1e-6, 1);
+            fail("expected NumberIsTooSmallException");
+        } catch (NumberIsTooSmallException expected) {
+            // expected
+        }
+    }
+
+    // two-arg constructor: order exactly 2 is the allowed boundary
+    @Test
+    public void testConstructorTwoArg_orderExactlyTwo_allowed() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-6, 2);
+        assertEquals(2, solver.getMaximalOrder());
+    }
+
+    // three-arg constructor stores maximal order
+    @Test
+    public void testConstructorThreeArg_storesMaximalOrder() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-10, 1e-6, 4);
+        assertEquals(4, solver.getMaximalOrder());
+    }
+
+    // three-arg constructor: order < 2 throws
+    @Test
+    public void testConstructorThreeArg_orderBelowTwo_throws() throws Throwable {
+        try {
+            new BracketingNthOrderBrentSolver(1e-10, 1e-6, 0);
+            fail("expected NumberIsTooSmallException");
+        } catch (NumberIsTooSmallException expected) {
+            // expected
+        }
+    }
+
+    // four-arg constructor stores maximal order
+    @Test
+    public void testConstructorFourArg_storesMaximalOrder() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-10, 1e-6, 1e-12, 6);
+        assertEquals(6, solver.getMaximalOrder());
+    }
+
+    // four-arg constructor: order < 2 throws
+    @Test
+    public void testConstructorFourArg_orderBelowTwo_throws() throws Throwable {
+        try {
+            new BracketingNthOrderBrentSolver(1e-10, 1e-6, 1e-12, -1);
+            fail("expected NumberIsTooSmallException");
+        } catch (NumberIsTooSmallException expected) {
+            // expected
+        }
+    }
+
+    // custom maximal order is reported back by getMaximalOrder
+    @Test
+    public void testGetMaximalOrder_customOrderTen() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-6, 10);
+        assertEquals(10, solver.getMaximalOrder());
+    }
+
+    // doSolve: y[1]==0 branch -> perfect root at start value is returned directly
+    @Test
+    public void testDoSolve_startValueExactRoot_returnsStartValueDirectly() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(100, linear(1.0), -1.0, 3.0, 1.0, AllowedSolution.ANY_SIDE);
+        assertEquals(1.0, result, 0.0);
+    }
+
+    // doSolve: y[0]==0 branch -> perfect root at min endpoint is returned directly
+    @Test
+    public void testDoSolve_minExactRoot_returnsMin() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(100, linear(0.0), 0.0, 3.0, 1.0, AllowedSolution.ANY_SIDE);
+        assertEquals(0.0, result, 0.0);
+    }
+
+    // doSolve: y[2]==0 branch -> perfect root at max endpoint is returned directly
+    @Test
+    public void testDoSolve_maxExactRoot_returnsMax() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(100, linear(2.0), 0.0, 2.0, 1.0, AllowedSolution.ANY_SIDE);
+        assertEquals(2.0, result, 0.0);
+    }
+
+    // doSolve: no sign change anywhere -> NoBracketingException
+    @Test
+    public void testDoSolve_noBracketing_throwsNoBracketingException() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        try {
+            solver.solve(100, alwaysPositive(), -2.0, 2.0, 0.0, AllowedSolution.ANY_SIDE);
+            fail("expected NoBracketingException");
+        } catch (NoBracketingException expected) {
+            // expected
+        }
+    }
+
+    // doSolve: sign change between min and start -> nbPoints=2 branch, correct root found
+    @Test
+    public void testDoSolve_signChangeBetweenMinAndStart_findsRoot() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(200, linear(0.5), 0.0, 2.0, 1.0, AllowedSolution.ANY_SIDE);
+        assertEquals(0.5, result, 1e-5);
+    }
+
+    // doSolve: sign change between start and max -> nbPoints=3 branch, correct root found
+    @Test
+    public void testDoSolve_signChangeBetweenStartAndMax_findsRoot() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(200, linear(1.5), 0.0, 2.0, 1.0, AllowedSolution.ANY_SIDE);
+        assertEquals(1.5, result, 1e-5);
+    }
+
+    // AllowedSolution.LEFT_SIDE: contract requires result strictly left of the true root
+    @Test
+    public void testSolveAllowedSolution_leftSide_resultNotGreaterThanRoot() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(500, sinFunction(), 1.0, 5.0, 2.0, AllowedSolution.LEFT_SIDE);
+        assertTrue(result < Math.PI);
+        assertTrue(result > Math.PI - 1e-4);
+    }
+
+    // AllowedSolution.RIGHT_SIDE: contract requires result strictly right of the true root
+    @Test
+    public void testSolveAllowedSolution_rightSide_resultNotLessThanRoot() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(500, sinFunction(), 1.0, 5.0, 2.0, AllowedSolution.RIGHT_SIDE);
+        assertTrue(result > Math.PI);
+        assertTrue(result < Math.PI + 1e-4);
+    }
+
+    // AllowedSolution.BELOW_SIDE: contract requires f(result) <= 0
+    @Test
+    public void testSolveAllowedSolution_belowSide_functionValueNonPositive() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(500, sinFunction(), 1.0, 5.0, 2.0, AllowedSolution.BELOW_SIDE);
+        assertTrue(Math.sin(result) <= 1e-9);
+    }
+
+    // AllowedSolution.ABOVE_SIDE: contract requires f(result) >= 0
+    @Test
+    public void testSolveAllowedSolution_aboveSide_functionValueNonNegative() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(500, sinFunction(), 1.0, 5.0, 2.0, AllowedSolution.ABOVE_SIDE);
+        assertTrue(Math.sin(result) >= -1e-9);
+    }
+
+    // AllowedSolution.ANY_SIDE: result must be within the bracketing tolerance of the true root
+    @Test
+    public void testSolveAllowedSolution_anySide_closeToRoot() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(500, sinFunction(), 1.0, 5.0, 2.0, AllowedSolution.ANY_SIDE);
+        assertEquals(Math.PI, result, 1e-4);
+    }
+
+    // solve without AllowedSolution (defaults to ANY_SIDE) must still converge correctly
+    @Test
+    public void testSolve_withoutAllowedSolution_defaultsCorrectly() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(500, sinFunction(), 1.0, 5.0);
+        assertEquals(Math.PI, result, 1e-4);
+    }
+
+    // solve overload with explicit startValue and LEFT_SIDE allowed solution
+    @Test
+    public void testSolveWithStartValueOverload_allowedSolutionLeftSide() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(500, sinFunction(), 1.0, 5.0, 2.0, AllowedSolution.LEFT_SIDE);
+        assertTrue(result < Math.PI);
+        assertTrue(result > Math.PI - 1e-4);
+    }
+
+    // solve overload with explicit startValue, no AllowedSolution, must converge
+    @Test
+    public void testSolveWithStartValueOverload_noAllowedSolution() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(500, linear(0.5), 0.0, 2.0, 0.3);
+        assertEquals(0.5, result, 1e-5);
+    }
+
+    // maximalOrder=2 forces the "drop a point to insert new one" branch repeatedly
+    @Test
+    public void testDoSolve_maximalOrderTwo_forcesPointDropping_cubicRoot() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-9, 2);
+        double result = solver.solve(1000, cubeMinusTwo(), 0.0, 2.0, 1.0, AllowedSolution.ANY_SIDE);
+        assertEquals(CBRT2, result, 1e-6);
+    }
+
+    // flat cubic with skewed bracket exercises aging / rebalancing branches
+    @Test
+    public void testDoSolve_flatCubic_triggersAgingBranch_convergesToRoot() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(2000, flatCube(1.0), -1.0, 3.0, 2.5, AllowedSolution.ANY_SIDE);
+        assertEquals(1.0, result, 1e-3);
+    }
+
+    // step function with repeated equal y-values triggers NaN guess -> bisection fallback
+    @Test
+    public void testDoSolve_stepFunction_triggersNaNFallbackBisection() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(2000, stepFunction(), 0.0, 2.0, 0.5, AllowedSolution.ANY_SIDE);
+        assertEquals(1.0, result, 1e-2);
+    }
+
+    // negative root region with sign change after start value
+    @Test
+    public void testSolve_negativeRootLinearFunction_findsRoot() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(200, linear(-3.0), -5.0, 0.0, -4.0, AllowedSolution.ANY_SIDE);
+        assertEquals(-3.0, result, 1e-5);
+    }
+
+    // root at zero reached via full nbPoints=3 interpolation path
+    @Test
+    public void testSolve_rootAtZero_findsRootNearZero() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver();
+        double result = solver.solve(200, linear(0.0), -2.0, 3.0, -1.0, AllowedSolution.ANY_SIDE);
+        assertEquals(0.0, result, 1e-5);
+    }
+
+    // custom relative/absolute accuracy constructor path also converges correctly
+    @Test
+    public void testSolve_customAccuracyConstructor_findsRoot() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-10, 1e-8, 5);
+        double result = solver.solve(500, linear(0.5), 0.0, 2.0, 1.2, AllowedSolution.ANY_SIDE);
+        assertEquals(0.5, result, 1e-6);
+    }
+
+    // four-arg accuracy constructor path also converges correctly on a cubic root
+    @Test
+    public void testSolve_fourArgAccuracyConstructor_findsCubicRoot() throws Throwable {
+        BracketingNthOrderBrentSolver solver = new BracketingNthOrderBrentSolver(1e-10, 1e-7, 1e-10, 5);
+        double result = solver.solve(1000, cubeMinusTwo(), 0.0, 2.0, 1.0, AllowedSolution.ANY_SIDE);
+        assertEquals(CBRT2, result, 1e-6);
+    }
+}

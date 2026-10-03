@@ -1,0 +1,346 @@
+package org.apache.commons.lang;
+
+import java.io.StringWriter;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class EntitiesClaudeTest {
+
+    // addEntities populates from a package-scoped array; verify value+name resolve
+    @Test
+    public void testAddEntities_fromIso8859Array_entityValueAndNameResolve() throws Throwable {
+        Entities e = new Entities();
+        e.addEntities(Entities.ISO8859_1_ARRAY);
+        assertEquals(160, e.entityValue("nbsp"));
+        assertEquals("yen", e.entityName(165));
+    }
+
+    // addEntity adds a single name/value pair
+    @Test
+    public void testAddEntity_singlePair_entityValueAndNameResolve() throws Throwable {
+        Entities e = new Entities();
+        e.addEntity("custom", 12345);
+        assertEquals(12345, e.entityValue("custom"));
+        assertEquals("custom", e.entityName(12345));
+    }
+
+    // entityName known value branch
+    @Test
+    public void testEntityName_knownValue_returnsName() throws Throwable {
+        assertEquals("lt", Entities.XML.entityName(60));
+    }
+
+    // entityName unknown value branch returns null
+    @Test
+    public void testEntityName_unknownValue_returnsNull() throws Throwable {
+        Entities e = new Entities();
+        assertNull(e.entityName(99999));
+    }
+
+    // entityValue known name branch
+    @Test
+    public void testEntityValue_knownName_returnsValue() throws Throwable {
+        assertEquals(38, Entities.XML.entityValue("amp"));
+    }
+
+    // entityValue unknown name branch returns -1
+    @Test
+    public void testEntityValue_unknownName_returnsMinusOne() throws Throwable {
+        Entities e = new Entities();
+        assertEquals(-1, e.entityValue("doesNotExist"));
+    }
+
+    // escape: ascii chars with no matching entity stay unchanged
+    @Test
+    public void testEscape_asciiNoEntities_unchanged() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("Hello, World! 123", e.escape("Hello, World! 123"));
+    }
+
+    // escape: entityName!=null branch wraps with &name;
+    @Test
+    public void testEscape_knownEntityChar_wrappedWithAmpAndSemicolon() throws Throwable {
+        assertEquals("&lt;", Entities.XML.escape("<"));
+    }
+
+    // escape: char>0x7F with no entity produces numeric reference
+    @Test
+    public void testEscape_highUnicodeCharNoEntity_numericReference() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("&#169;", e.escape("\u00A9"));
+    }
+
+    // escape: empty string, loop runs zero times
+    @Test
+    public void testEscape_emptyString_returnsEmptyString() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("", e.escape(""));
+    }
+
+    // escape(Writer,String): multiple known entities resolved via writer
+    @Test
+    public void testEscapeWriter_knownEntities_writesEscapedOutput() throws Throwable {
+        StringWriter writer = new StringWriter();
+        Entities.XML.escape(writer, "<>&'\"");
+        assertEquals("&lt;&gt;&amp;&apos;&quot;", writer.toString());
+    }
+
+    // escape(Writer,String): char>0x7F with no entity writes numeric reference
+    @Test
+    public void testEscapeWriter_highUnicodeCharNoEntity_writesNumericReference() throws Throwable {
+        Entities e = new Entities();
+        StringWriter writer = new StringWriter();
+        e.escape(writer, "\u00A9");
+        assertEquals("&#169;", writer.toString());
+    }
+
+    // unescape: no ampersand returns input unchanged (fast path)
+    @Test
+    public void testUnescape_noAmpersand_returnsSameString() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("Hello World", e.unescape("Hello World"));
+    }
+
+    // unescape: named entity resolves to its character
+    @Test
+    public void testUnescape_namedEntity_resolvesToChar() throws Throwable {
+        assertEquals("&", Entities.XML.unescape("&amp;"));
+    }
+
+    // unescape: decimal numeric entity resolves to its character
+    @Test
+    public void testUnescape_decimalNumericEntity_resolvesToChar() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("A", e.unescape("&#65;"));
+    }
+
+    // unescape: hex numeric entity with lowercase x resolves correctly
+    @Test
+    public void testUnescape_hexNumericEntityLowercaseX_resolvesToChar() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("A", e.unescape("&#x41;"));
+    }
+
+    // unescape: hex numeric entity with uppercase X resolves correctly
+    @Test
+    public void testUnescape_hexNumericEntityUppercaseX_resolvesToChar() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("A", e.unescape("&#X41;"));
+    }
+
+    // unescape: unknown entity name is kept literally with & and ;
+    @Test
+    public void testUnescape_unknownEntityName_keptAsIs() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("&unknown;", e.unescape("&unknown;"));
+    }
+
+    // unescape: missing semicolon keeps '&' and rest literal
+    @Test
+    public void testUnescape_missingSemicolon_keptAsIs() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("&amp", e.unescape("&amp"));
+    }
+
+    // unescape: nested '&' before ';' triggers the "&...&...;" literal-keep branch
+    @Test
+    public void testUnescape_nestedAmpersandBeforeSemicolon_keptLiteral() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("&foo&bar;", e.unescape("&foo&bar;"));
+    }
+
+    // unescape: empty entity name ("&;") yields entityValue -1, kept literal
+    @Test
+    public void testUnescape_emptyEntityName_keptAsIs() throws Throwable {
+        Entities e = new Entities();
+        assertEquals("&;", e.unescape("&;"));
+    }
+
+    // unescape(Writer,String): no ampersand writes string unchanged
+    @Test
+    public void testUnescapeWriter_noAmpersand_writesSameString() throws Throwable {
+        Entities e = new Entities();
+        StringWriter writer = new StringWriter();
+        e.unescape(writer, "Hello World");
+        assertEquals("Hello World", writer.toString());
+    }
+
+    // unescape(Writer,String): named entity resolves to character
+    @Test
+    public void testUnescapeWriter_namedEntity_resolvesToChar() throws Throwable {
+        StringWriter writer = new StringWriter();
+        Entities.XML.unescape(writer, "&amp;");
+        assertEquals("&", writer.toString());
+    }
+
+    // unescape(Writer,String): decimal numeric entity resolves to character
+    @Test
+    public void testUnescapeWriter_decimalNumericEntity_resolvesToChar() throws Throwable {
+        Entities e = new Entities();
+        StringWriter writer = new StringWriter();
+        e.unescape(writer, "&#65;");
+        assertEquals("A", writer.toString());
+    }
+
+    // unescape(Writer,String): hex numeric entity with lowercase x resolves correctly
+    @Test
+    public void testUnescapeWriter_hexNumericEntityLowercaseX_resolvesToChar() throws Throwable {
+        Entities e = new Entities();
+        StringWriter writer = new StringWriter();
+        e.unescape(writer, "&#x41;");
+        assertEquals("A", writer.toString());
+    }
+
+    // unescape(Writer,String): unknown entity name kept literally
+    @Test
+    public void testUnescapeWriter_unknownEntityName_keptAsIs() throws Throwable {
+        Entities e = new Entities();
+        StringWriter writer = new StringWriter();
+        e.unescape(writer, "&unknown;");
+        assertEquals("&unknown;", writer.toString());
+    }
+
+    // unescape(Writer,String): missing semicolon keeps literal content
+    @Test
+    public void testUnescapeWriter_missingSemicolon_keptAsIs() throws Throwable {
+        Entities e = new Entities();
+        StringWriter writer = new StringWriter();
+        e.unescape(writer, "&amp");
+        assertEquals("&amp", writer.toString());
+    }
+
+    // unescape(Writer,String): nested '&' before ';' triggers literal-keep branch
+    @Test
+    public void testUnescapeWriter_nestedAmpersandBeforeSemicolon_keptLiteral() throws Throwable {
+        Entities e = new Entities();
+        StringWriter writer = new StringWriter();
+        e.unescape(writer, "&foo&bar;");
+        assertEquals("&foo&bar;", writer.toString());
+    }
+
+    // PrimitiveEntityMap: add then retrieve by name and by value
+    @Test
+    public void testPrimitiveEntityMap_addAndRetrieve_byNameAndValue() throws Throwable {
+        Entities.PrimitiveEntityMap map = new Entities.PrimitiveEntityMap();
+        map.add("foo", 100);
+        assertEquals(100, map.value("foo"));
+        assertEquals("foo", map.name(100));
+    }
+
+    // PrimitiveEntityMap: unknown name returns -1
+    @Test
+    public void testPrimitiveEntityMap_unknownName_returnsMinusOne() throws Throwable {
+        Entities.PrimitiveEntityMap map = new Entities.PrimitiveEntityMap();
+        assertEquals(-1, map.value("missing"));
+    }
+
+    // PrimitiveEntityMap: unknown value returns null
+    @Test
+    public void testPrimitiveEntityMap_unknownValue_returnsNull() throws Throwable {
+        Entities.PrimitiveEntityMap map = new Entities.PrimitiveEntityMap();
+        assertNull(map.name(999));
+    }
+
+    // HashEntityMap: add then retrieve by name and by value
+    @Test
+    public void testHashEntityMap_addAndRetrieve() throws Throwable {
+        Entities.HashEntityMap map = new Entities.HashEntityMap();
+        map.add("bar", 200);
+        assertEquals(200, map.value("bar"));
+        assertEquals("bar", map.name(200));
+    }
+
+    // TreeEntityMap: add then retrieve by name and by value
+    @Test
+    public void testTreeEntityMap_addAndRetrieve() throws Throwable {
+        Entities.TreeEntityMap map = new Entities.TreeEntityMap();
+        map.add("baz", 300);
+        assertEquals(300, map.value("baz"));
+        assertEquals("baz", map.name(300));
+    }
+
+    // LookupEntityMap: value < 256 uses the lookup-table branch
+    @Test
+    public void testLookupEntityMap_valueBelow256_usesLookupTable() throws Throwable {
+        Entities.LookupEntityMap map = new Entities.LookupEntityMap();
+        map.add("test", 100);
+        assertEquals("test", map.name(100));
+    }
+
+    // LookupEntityMap: value >= 256 falls back to super.name()
+    @Test
+    public void testLookupEntityMap_valueAbove256_usesSuperName() throws Throwable {
+        Entities.LookupEntityMap map = new Entities.LookupEntityMap();
+        map.add("big", 8364);
+        assertEquals("big", map.name(8364));
+    }
+
+    // ArrayEntityMap: add beyond initial growBy forces ensureCapacity growth
+    @Test
+    public void testArrayEntityMap_addBeyondGrowBy_growsAndRetrieves() throws Throwable {
+        Entities.ArrayEntityMap map = new Entities.ArrayEntityMap(2);
+        map.add("a", 1);
+        map.add("b", 2);
+        map.add("c", 3);
+        assertEquals(3, map.value("c"));
+        assertEquals("a", map.name(1));
+    }
+
+    // ArrayEntityMap: empty map, both loops run zero times
+    @Test
+    public void testArrayEntityMap_emptyMap_unknownNameAndValue() throws Throwable {
+        Entities.ArrayEntityMap map = new Entities.ArrayEntityMap();
+        assertEquals(-1, map.value("missing"));
+        assertNull(map.name(999));
+    }
+
+    // BinaryEntityMap: insertion in non-sorted order still binary-searchable afterwards
+    @Test
+    public void testBinaryEntityMap_addInOrder_nameFindsViaBinarySearch() throws Throwable {
+        Entities.BinaryEntityMap map = new Entities.BinaryEntityMap();
+        map.add("b", 20);
+        map.add("a", 10);
+        map.add("c", 30);
+        assertEquals("a", map.name(10));
+        assertEquals("b", map.name(20));
+        assertEquals("c", map.name(30));
+    }
+
+    // BinaryEntityMap: value not present returns null (index<0 branch)
+    @Test
+    public void testBinaryEntityMap_unknownValue_returnsNull() throws Throwable {
+        Entities.BinaryEntityMap map = new Entities.BinaryEntityMap();
+        map.add("x", 5);
+        assertNull(map.name(999));
+    }
+
+    // Bug: contract says inserting a duplicate value is a no-op, but when the
+    // duplicate is found exactly at index 0, add() wrongly proceeds to insert
+    // again instead of returning, corrupting state / throwing on the fixed index math.
+    @Test
+    public void testBinaryEntityMap_addDuplicateAtIndexZero_secondAddIgnored() throws Throwable {
+        Entities.BinaryEntityMap map = new Entities.BinaryEntityMap();
+        map.add("first", 100);
+        map.add("second", 100);
+        assertEquals("first", map.name(100));
+    }
+
+    // Control: duplicate value found at a non-zero index is correctly ignored
+    @Test
+    public void testBinaryEntityMap_addDuplicateAtNonZeroIndex_secondAddIgnored() throws Throwable {
+        Entities.BinaryEntityMap map = new Entities.BinaryEntityMap();
+        map.add("first", 100);
+        map.add("second", 200);
+        map.add("third", 200);
+        assertEquals("second", map.name(200));
+    }
+
+    // Static instances: known entity values per HTML/XML specifications
+    @Test
+    public void testStaticInstances_knownEntityValues() throws Throwable {
+        assertEquals(38, Entities.XML.entityValue("amp"));
+        assertEquals(39, Entities.XML.entityValue("apos"));
+        assertEquals(160, Entities.HTML32.entityValue("nbsp"));
+        assertEquals(8364, Entities.HTML40.entityValue("euro"));
+    }
+}

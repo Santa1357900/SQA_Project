@@ -1,0 +1,691 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Compress (Defects4J bug Compress-46)
+package: org.apache.commons.compress.archivers.zip
+class_under_test: X5455_ExtendedTimestamp
+test_class_to_write: X5455_ExtendedTimestampClaudeTest
+</target>
+
+<project_notes>
+Commons Compress: ใช้ ByteArrayInputStream/ByteArrayOutputStream แทนไฟล์จริง ปิด stream ด้วย try/finally
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.commons.compress.archivers.zip;
+
+import java.io.Serializable;
+import java.util.Date;
+import java.util.zip.ZipException;
+
+/**
+ * <p>An extra field that stores additional file and directory timestamp data
+ * for zip entries.   Each zip entry can include up to three timestamps
+ * (modify, access, create*).  The timestamps are stored as 32 bit signed
+ * integers representing seconds since UNIX epoch (Jan 1st, 1970, UTC).
+ * This field improves on zip's default timestamp granularity, since it
+ * allows one to store additional timestamps, and, in addition, the timestamps
+ * are stored using per-second granularity (zip's default behaviour can only store
+ * timestamps to the nearest <em>even</em> second).
+ * </p><p>
+ * Unfortunately, 32 (signed) bits can only store dates up to the year 2037,
+ * and so this extra field will eventually be obsolete.  Enjoy it while it lasts!
+ * </p>
+ * <ul>
+ * <li><b>modifyTime:</b>
+ * most recent time of file/directory modification
+ * (or file/dir creation if the entry has not been
+ * modified since it was created).
+ * </li>
+ * <li><b>accessTime:</b>
+ * most recent time file/directory was opened
+ * (e.g., read from disk).  Many people disable
+ * their operating systems from updating this value
+ * using the NOATIME mount option to optimize disk behaviour,
+ * and thus it's not always reliable.  In those cases
+ * it's always equal to modifyTime.
+ * </li>
+ * <li><b>*createTime:</b>
+ * modern linux file systems (e.g., ext2 and newer)
+ * do not appear to store a value like this, and so
+ * it's usually omitted altogether in the zip extra
+ * field.  Perhaps other unix systems track this.
+ * </li></ul>
+ * <p>
+ * We're using the field definition given in Info-Zip's source archive:
+ * zip-3.0.tar.gz/proginfo/extrafld.txt
+ * </p>
+ * <pre>
+ * Value         Size        Description
+ * -----         ----        -----------
+ * 0x5455        Short       tag for this extra block type ("UT")
+ * TSize         Short       total data size for this block
+ * Flags         Byte        info bits
+ * (ModTime)     Long        time of last modification (UTC/GMT)
+ * (AcTime)      Long        time of last access (UTC/GMT)
+ * (CrTime)      Long        time of original creation (UTC/GMT)
+ *
+ * Central-header version:
+ *
+ * Value         Size        Description
+ * -----         ----        -----------
+ * 0x5455        Short       tag for this extra block type ("UT")
+ * TSize         Short       total data size for this block
+ * Flags         Byte        info bits (refers to local header!)
+ * (ModTime)     Long        time of last modification (UTC/GMT)
+ * </pre>
+ * @since 1.5
+ */
+public class X5455_ExtendedTimestamp implements ZipExtraField, Cloneable, Serializable {
+    private static final ZipShort HEADER_ID = new ZipShort(0x5455);
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * The bit set inside the flags by when the last modification time
+     * is present in this extra field.
+     */
+    public static final byte MODIFY_TIME_BIT = 1;
+    /**
+     * The bit set inside the flags by when the lasr access time is
+     * present in this extra field.
+     */
+    public static final byte ACCESS_TIME_BIT = 2;
+    /**
+     * The bit set inside the flags by when the original creation time
+     * is present in this extra field.
+     */
+    public static final byte CREATE_TIME_BIT = 4;
+
+    // The 3 boolean fields (below) come from this flags byte.  The remaining 5 bits
+    // are ignored according to the current version of the spec (December 2012).
+    private byte flags;
+
+    // Note: even if bit1 and bit2 are set, the Central data will still not contain
+    // access/create fields:  only local data ever holds those!  This causes
+    // some of our implementation to look a little odd, with seemingly spurious
+    // != null and length checks.
+    private boolean bit0_modifyTimePresent;
+    private boolean bit1_accessTimePresent;
+    private boolean bit2_createTimePresent;
+
+    private ZipLong modifyTime;
+    private ZipLong accessTime;
+    private ZipLong createTime;
+
+    /**
+     * Constructor for X5455_ExtendedTimestamp.
+     */
+    public X5455_ExtendedTimestamp() {}
+
+    /**
+     * The Header-ID.
+     *
+     * @return the value for the header id for this extrafield
+     */
+    @Override
+    public ZipShort getHeaderId() {
+        return HEADER_ID;
+    }
+
+    /**
+     * Length of the extra field in the local file data - without
+     * Header-ID or length specifier.
+     *
+     * @return a <code>ZipShort</code> for the length of the data of this extra field
+     */
+    @Override
+    public ZipShort getLocalFileDataLength() {
+        return new ZipShort(1 +
+                (bit0_modifyTimePresent ? 4 : 0) +
+                (bit1_accessTimePresent && accessTime != null ? 4 : 0) +
+                (bit2_createTimePresent && createTime != null ? 4 : 0)
+        );
+    }
+
+    /**
+     * Length of the extra field in the local file data - without
+     * Header-ID or length specifier.
+     *
+     * <p>For X5455 the central length is often smaller than the
+     * local length, because central cannot contain access or create
+     * timestamps.</p>
+     *
+     * @return a <code>ZipShort</code> for the length of the data of this extra field
+     */
+    @Override
+    public ZipShort getCentralDirectoryLength() {
+        return new ZipShort(1 +
+                (bit0_modifyTimePresent ? 4 : 0)
+        );
+    }
+
+    /**
+     * The actual data to put into local file data - without Header-ID
+     * or length specifier.
+     *
+     * @return get the data
+     */
+    @Override
+    public byte[] getLocalFileDataData() {
+        final byte[] data = new byte[getLocalFileDataLength().getValue()];
+        int pos = 0;
+        data[pos++] = 0;
+        if (bit0_modifyTimePresent) {
+            data[0] |= MODIFY_TIME_BIT;
+            System.arraycopy(modifyTime.getBytes(), 0, data, pos, 4);
+            pos += 4;
+        }
+        if (bit1_accessTimePresent && accessTime != null) {
+            data[0] |= ACCESS_TIME_BIT;
+            System.arraycopy(accessTime.getBytes(), 0, data, pos, 4);
+            pos += 4;
+        }
+        if (bit2_createTimePresent && createTime != null) {
+            data[0] |= CREATE_TIME_BIT;
+            System.arraycopy(createTime.getBytes(), 0, data, pos, 4);
+            pos += 4; // NOSONAR - assignment as documentation
+        }
+        return data;
+    }
+
+    /**
+     * The actual data to put into central directory data - without Header-ID
+     * or length specifier.
+     *
+     * @return the central directory data
+     */
+    @Override
+    public byte[] getCentralDirectoryData() {
+        final byte[] centralData = new byte[getCentralDirectoryLength().getValue()];
+        final byte[] localData = getLocalFileDataData();
+
+        // Truncate out create & access time (last 8 bytes) from
+        // the copy of the local data we obtained:
+        System.arraycopy(localData, 0, centralData, 0, centralData.length);
+        return centralData;
+    }
+
+    /**
+     * Populate data from this array as if it was in local file data.
+     *
+     * @param data   an array of bytes
+     * @param offset the start offset
+     * @param length the number of bytes in the array from offset
+     * @throws java.util.zip.ZipException on error
+     */
+    @Override
+    public void parseFromLocalFileData(
+            final byte[] data, int offset, final int length
+    ) throws ZipException {
+        reset();
+        final int len = offset + length;
+        setFlags(data[offset++]);
+        if (bit0_modifyTimePresent) {
+            modifyTime = new ZipLong(data, offset);
+            offset += 4;
+        }
+
+        // Notice the extra length check in case we are parsing the shorter
+        // central data field (for both access and create timestamps).
+        if (bit1_accessTimePresent && offset + 4 <= len) {
+            accessTime = new ZipLong(data, offset);
+            offset += 4;
+        }
+        if (bit2_createTimePresent && offset + 4 <= len) {
+            createTime = new ZipLong(data, offset);
+            offset += 4; // NOSONAR - assignment as documentation
+        }
+    }
+
+    /**
+     * Doesn't do anything special since this class always uses the
+     * same parsing logic for both central directory and local file data.
+     */
+    @Override
+    public void parseFromCentralDirectoryData(
+            final byte[] buffer, final int offset, final int length
+    ) throws ZipException {
+        reset();
+        parseFromLocalFileData(buffer, offset, length);
+    }
+
+    /**
+     * Reset state back to newly constructed state.  Helps us make sure
+     * parse() calls always generate clean results.
+     */
+    private void reset() {
+        setFlags((byte) 0);
+        this.modifyTime = null;
+        this.accessTime = null;
+        this.createTime = null;
+    }
+
+    /**
+     * Sets flags byte.  The flags byte tells us which of the
+     * three datestamp fields are present in the data:
+     * <pre>
+     * bit0 - modify time
+     * bit1 - access time
+     * bit2 - create time
+     * </pre>
+     * Only first 3 bits of flags are used according to the
+     * latest version of the spec (December 2012).
+     *
+     * @param flags flags byte indicating which of the
+     *              three datestamp fields are present.
+     */
+    public void setFlags(final byte flags) {
+        this.flags = flags;
+        this.bit0_modifyTimePresent = (flags & MODIFY_TIME_BIT) == MODIFY_TIME_BIT;
+        this.bit1_accessTimePresent = (flags & ACCESS_TIME_BIT) == ACCESS_TIME_BIT;
+        this.bit2_createTimePresent = (flags & CREATE_TIME_BIT) == CREATE_TIME_BIT;
+    }
+
+    /**
+     * Gets flags byte.  The flags byte tells us which of the
+     * three datestamp fields are present in the data:
+     * <pre>
+     * bit0 - modify time
+     * bit1 - access time
+     * bit2 - create time
+     * </pre>
+     * Only first 3 bits of flags are used according to the
+     * latest version of the spec (December 2012).
+     *
+     * @return flags byte indicating which of the
+     *         three datestamp fields are present.
+     */
+    public byte getFlags() { return flags; }
+
+    /**
+     * Returns whether bit0 of the flags byte is set or not,
+     * which should correspond to the presence or absence of
+     * a modify timestamp in this particular zip entry.
+     *
+     * @return true if bit0 of the flags byte is set.
+     */
+    public boolean isBit0_modifyTimePresent() { return bit0_modifyTimePresent; }
+
+    /**
+     * Returns whether bit1 of the flags byte is set or not,
+     * which should correspond to the presence or absence of
+     * a "last access" timestamp in this particular zip entry.
+     *
+     * @return true if bit1 of the flags byte is set.
+     */
+    public boolean isBit1_accessTimePresent() { return bit1_accessTimePresent; }
+
+    /**
+     * Returns whether bit2 of the flags byte is set or not,
+     * which should correspond to the presence or absence of
+     * a create timestamp in this particular zip entry.
+     *
+     * @return true if bit2 of the flags byte is set.
+     */
+    public boolean isBit2_createTimePresent() { return bit2_createTimePresent; }
+
+    /**
+     * Returns the modify time (seconds since epoch) of this zip entry
+     * as a ZipLong object, or null if no such timestamp exists in the
+     * zip entry.
+     *
+     * @return modify time (seconds since epoch) or null.
+     */
+    public ZipLong getModifyTime() { return modifyTime; }
+
+    /**
+     * Returns the access time (seconds since epoch) of this zip entry
+     * as a ZipLong object, or null if no such timestamp exists in the
+     * zip entry.
+     *
+     * @return access time (seconds since epoch) or null.
+     */
+    public ZipLong getAccessTime() { return accessTime; }
+
+    /**
+     * <p>
+     * Returns the create time (seconds since epoch) of this zip entry
+     * as a ZipLong object, or null if no such timestamp exists in the
+     * zip entry.
+     * </p><p>
+     * Note: modern linux file systems (e.g., ext2)
+     * do not appear to store a "create time" value, and so
+     * it's usually omitted altogether in the zip extra
+     * field.  Perhaps other unix systems track this.
+     *
+     * @return create time (seconds since epoch) or null.
+     */
+    public ZipLong getCreateTime() { return createTime; }
+
+    /**
+     * Returns the modify time as a java.util.Date
+     * of this zip entry, or null if no such timestamp exists in the zip entry.
+     * The milliseconds are always zeroed out, since the underlying data
+     * offers only per-second precision.
+     *
+     * @return modify time as java.util.Date or null.
+     */
+    public Date getModifyJavaTime() {
+        return zipLongToDate(modifyTime);
+    }
+
+    /**
+     * Returns the access time as a java.util.Date
+     * of this zip entry, or null if no such timestamp exists in the zip entry.
+     * The milliseconds are always zeroed out, since the underlying data
+     * offers only per-second precision.
+     *
+     * @return access time as java.util.Date or null.
+     */
+    public Date getAccessJavaTime() {
+        return zipLongToDate(accessTime);
+    }
+
+    private static Date zipLongToDate(ZipLong unixTime) {
+        return unixTime != null ? new Date(unixTime.getIntValue() * 1000L) : null;
+    }
+
+    /**
+     * <p>
+     * Returns the create time as a a java.util.Date
+     * of this zip entry, or null if no such timestamp exists in the zip entry.
+     * The milliseconds are always zeroed out, since the underlying data
+     * offers only per-second precision.
+     * </p><p>
+     * Note: modern linux file systems (e.g., ext2)
+     * do not appear to store a "create time" value, and so
+     * it's usually omitted altogether in the zip extra
+     * field.  Perhaps other unix systems track this.
+     *
+     * @return create time as java.util.Date or null.
+     */
+    public Date getCreateJavaTime() {
+        return zipLongToDate(createTime);
+    }
+
+    /**
+     * <p>
+     * Sets the modify time (seconds since epoch) of this zip entry
+     * using a ZipLong object.
+     * </p><p>
+     * Note: the setters for flags and timestamps are decoupled.
+     * Even if the timestamp is not-null, it will only be written
+     * out if the corresponding bit in the flags is also set.
+     * </p>
+     *
+     * @param l ZipLong of the modify time (seconds per epoch)
+     */
+    public void setModifyTime(final ZipLong l) {
+        bit0_modifyTimePresent = l != null;
+        flags = (byte) (l != null ? (flags | MODIFY_TIME_BIT)
+                        : (flags & ~MODIFY_TIME_BIT));
+        this.modifyTime = l;
+    }
+
+    /**
+     * <p>
+     * Sets the access time (seconds since epoch) of this zip entry
+     * using a ZipLong object
+     * </p><p>
+     * Note: the setters for flags and timestamps are decoupled.
+     * Even if the timestamp is not-null, it will only be written
+     * out if the corresponding bit in the flags is also set.
+     * </p>
+     *
+     * @param l ZipLong of the access time (seconds per epoch)
+     */
+    public void setAccessTime(final ZipLong l) {
+        bit1_accessTimePresent = l != null;
+        flags = (byte) (l != null ? (flags | ACCESS_TIME_BIT)
+                        : (flags & ~ACCESS_TIME_BIT));
+        this.accessTime = l;
+    }
+
+    /**
+     * <p>
+     * Sets the create time (seconds since epoch) of this zip entry
+     * using a ZipLong object
+     * </p><p>
+     * Note: the setters for flags and timestamps are decoupled.
+     * Even if the timestamp is not-null, it will only be written
+     * out if the corresponding bit in the flags is also set.
+     * </p>
+     *
+     * @param l ZipLong of the create time (seconds per epoch)
+     */
+    public void setCreateTime(final ZipLong l) {
+        bit2_createTimePresent = l != null;
+        flags = (byte) (l != null ? (flags | CREATE_TIME_BIT)
+                        : (flags & ~CREATE_TIME_BIT));
+        this.createTime = l;
+    }
+
+    /**
+     * <p>
+     * Sets the modify time as a java.util.Date
+     * of this zip entry.  Supplied value is truncated to per-second
+     * precision (milliseconds zeroed-out).
+     * </p><p>
+     * Note: the setters for flags and timestamps are decoupled.
+     * Even if the timestamp is not-null, it will only be written
+     * out if the corresponding bit in the flags is also set.
+     * </p>
+     *
+     * @param d modify time as java.util.Date
+     */
+    public void setModifyJavaTime(final Date d) { setModifyTime(dateToZipLong(d)); }
+
+    /**
+     * <p>
+     * Sets the access time as a java.util.Date
+     * of this zip entry.  Supplied value is truncated to per-second
+     * precision (milliseconds zeroed-out).
+     * </p><p>
+     * Note: the setters for flags and timestamps are decoupled.
+     * Even if the timestamp is not-null, it will only be written
+     * out if the corresponding bit in the flags is also set.
+     * </p>
+     *
+     * @param d access time as java.util.Date
+     */
+    public void setAccessJavaTime(final Date d) { setAccessTime(dateToZipLong(d)); }
+
+    /**
+     * <p>
+     * Sets the create time as a java.util.Date
+     * of this zip entry.  Supplied value is truncated to per-second
+     * precision (milliseconds zeroed-out).
+     * </p><p>
+     * Note: the setters for flags and timestamps are decoupled.
+     * Even if the timestamp is not-null, it will only be written
+     * out if the corresponding bit in the flags is also set.
+     * </p>
+     *
+     * @param d create time as java.util.Date
+     */
+    public void setCreateJavaTime(final Date d) { setCreateTime(dateToZipLong(d)); }
+
+    /**
+     * Utility method converts java.util.Date (milliseconds since epoch)
+     * into a ZipLong (seconds since epoch).
+     * <p/>
+     * Also makes sure the converted ZipLong is not too big to fit
+     * in 32 unsigned bits.
+     *
+     * @param d java.util.Date to convert to ZipLong
+     * @return ZipLong
+     */
+    private static ZipLong dateToZipLong(final Date d) {
+        if (d == null) { return null; }
+
+        return unixTimeToZipLong(d.getTime() / 1000);
+    }
+
+    private static ZipLong unixTimeToZipLong(long l) {
+        final long TWO_TO_32 = 0x100000000L;
+        if (l >= TWO_TO_32) {
+            throw new IllegalArgumentException("X5455 timestamps must fit in a signed 32 bit integer: " + l);
+        }
+        return new ZipLong(l);
+    }
+
+    /**
+     * Returns a String representation of this class useful for
+     * debugging purposes.
+     *
+     * @return A String representation of this class useful for
+     *         debugging purposes.
+     */
+    @Override
+    public String toString() {
+        final StringBuilder buf = new StringBuilder();
+        buf.append("0x5455 Zip Extra Field: Flags=");
+        buf.append(Integer.toBinaryString(ZipUtil.unsignedIntToSignedByte(flags))).append(" ");
+        if (bit0_modifyTimePresent && modifyTime != null) {
+            final Date m = getModifyJavaTime();
+            buf.append(" Modify:[").append(m).append("] ");
+        }
+        if (bit1_accessTimePresent && accessTime != null) {
+            final Date a = getAccessJavaTime();
+            buf.append(" Access:[").append(a).append("] ");
+        }
+        if (bit2_createTimePresent && createTime != null) {
+            final Date c = getCreateJavaTime();
+            buf.append(" Create:[").append(c).append("] ");
+        }
+        return buf.toString();
+    }
+
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (o instanceof X5455_ExtendedTimestamp) {
+            final X5455_ExtendedTimestamp xf = (X5455_ExtendedTimestamp) o;
+
+            // The ZipLong==ZipLong clauses handle the cases where both are null.
+            // and only last 3 bits of flags matter.
+            return ((flags & 0x07) == (xf.flags & 0x07)) &&
+                    (modifyTime == xf.modifyTime || (modifyTime != null && modifyTime.equals(xf.modifyTime))) &&
+                    (accessTime == xf.accessTime || (accessTime != null && accessTime.equals(xf.accessTime))) &&
+                    (createTime == xf.createTime || (createTime != null && createTime.equals(xf.createTime)));
+        }
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        int hc = (-123 * (flags & 0x07)); // only last 3 bits of flags matter
+        if (modifyTime != null) {
+            hc ^= modifyTime.hashCode();
+        }
+        if (accessTime != null) {
+            // Since accessTime is often same as modifyTime,
+            // this prevents them from XOR negating each other.
+            hc ^= Integer.rotateLeft(accessTime.hashCode(), 11);
+        }
+        if (createTime != null) {
+            hc ^= Integer.rotateLeft(createTime.hashCode(), 22);
+        }
+        return hc;
+    }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ X5455_ExtendedTimestampClaudeTest ใน package org.apache.commons.compress.archivers.zip เพื่อทดสอบคลาส X5455_ExtendedTimestamp ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.compress.archivers.zip;` เท่านั้น
+</instructions>

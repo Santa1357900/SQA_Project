@@ -1,0 +1,478 @@
+package org.jfree.data.time;
+
+import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.List;
+import java.util.Collection;
+
+import org.jfree.data.general.SeriesException;
+
+public class TimeSeriesClaudeTest {
+
+    private Day day1;
+    private Day day2;
+    private Day day3;
+
+    @Before
+    public void setUp() throws Throwable {
+        day1 = new Day(1, 1, 2000);
+        day2 = new Day(2, 1, 2000);
+        day3 = new Day(3, 1, 2000);
+    }
+
+    // constructor(name) uses default domain/range descriptions and Day.class
+    @Test
+    public void testConstructor_defaults() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        assertEquals("Time", series.getDomainDescription());
+        assertEquals("Value", series.getRangeDescription());
+        assertEquals(Day.class, series.getTimePeriodClass());
+    }
+
+    // constructor(name, timePeriodClass) stores the supplied period class
+    @Test
+    public void testConstructor_withTimePeriodClass() throws Throwable {
+        TimeSeries series = new TimeSeries("S1", Year.class);
+        assertEquals(Year.class, series.getTimePeriodClass());
+    }
+
+    // setDomainDescription updates the stored description
+    @Test
+    public void testSetDomainDescription() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.setDomainDescription("NewDomain");
+        assertEquals("NewDomain", series.getDomainDescription());
+    }
+
+    // setRangeDescription updates the stored description
+    @Test
+    public void testSetRangeDescription() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.setRangeDescription("NewRange");
+        assertEquals("NewRange", series.getRangeDescription());
+    }
+
+    // empty series has zero item count
+    @Test
+    public void testGetItemCount_empty() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        assertEquals(0, series.getItemCount());
+    }
+
+    // getItems() returns an unmodifiable view of the data list
+    @Test
+    public void testGetItems_unmodifiable() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        List items = series.getItems();
+        try {
+            items.add(new TimeSeriesDataItem(day2, 2.0));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // default maximum item count is Integer.MAX_VALUE
+    @Test
+    public void testGetMaximumItemCount_default() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        assertEquals(Integer.MAX_VALUE, series.getMaximumItemCount());
+    }
+
+    // negative maximum item count throws IllegalArgumentException
+    @Test
+    public void testSetMaximumItemCount_negative_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        try {
+            series.setMaximumItemCount(-1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // reducing maximum item count below current size trims oldest items
+    @Test
+    public void testSetMaximumItemCount_trimsOldest() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.add(day2, 2.0);
+        series.add(day3, 3.0);
+        series.setMaximumItemCount(2);
+        assertEquals(2, series.getItemCount());
+        assertEquals(day2, series.getTimePeriod(0));
+    }
+
+    // default maximum item age is Long.MAX_VALUE
+    @Test
+    public void testGetMaximumItemAge_default() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        assertEquals(Long.MAX_VALUE, series.getMaximumItemAge());
+    }
+
+    // negative maximum item age throws IllegalArgumentException
+    @Test
+    public void testSetMaximumItemAge_negative_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        try {
+            series.setMaximumItemAge(-1L);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // setting maximum item age removes items older than the allowed span
+    @Test
+    public void testSetMaximumItemAge_removesOldItems() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.add(day2, 2.0);
+        series.add(day3, 3.0);
+        series.setMaximumItemAge(1L);
+        assertEquals(2, series.getItemCount());
+        assertEquals(day2, series.getTimePeriod(0));
+    }
+
+    // getDataItem(int) returns the item at the given index
+    @Test
+    public void testGetDataItem_int() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        TimeSeriesDataItem item = series.getDataItem(0);
+        assertEquals(day1, item.getPeriod());
+    }
+
+    // getDataItem(int) out of range throws IndexOutOfBoundsException
+    @Test
+    public void testGetDataItem_int_outOfRange_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        try {
+            series.getDataItem(0);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // getDataItem(period) returns the item matching the given period
+    @Test
+    public void testGetDataItem_period_found() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 5.0);
+        TimeSeriesDataItem item = series.getDataItem(day1);
+        assertEquals(5.0, item.getValue().doubleValue(), 1e-9);
+    }
+
+    // getTimePeriod(index) returns the correct period
+    @Test
+    public void testGetTimePeriod() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        assertEquals(day1, series.getTimePeriod(0));
+    }
+
+    // getTimePeriods() returns all periods currently in the series
+    @Test
+    public void testGetTimePeriods() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.add(day2, 2.0);
+        Collection periods = series.getTimePeriods();
+        assertEquals(2, periods.size());
+        assertTrue(periods.contains(day1));
+        assertTrue(periods.contains(day2));
+    }
+
+    // getIndex(null) throws IllegalArgumentException
+    @Test
+    public void testGetIndex_nullPeriod_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        try {
+            series.getIndex(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // getValue(period) returns null when the period is not present
+    @Test
+    public void testGetValue_period_notFound_returnsNull() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        assertNull(series.getValue(day2));
+    }
+
+    // getValue(index) returns the correct value
+    @Test
+    public void testGetValue_int() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 7.5);
+        assertEquals(7.5, series.getValue(0).doubleValue(), 1e-9);
+    }
+
+    // add(null item) throws IllegalArgumentException
+    @Test
+    public void testAdd_item_null_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        try {
+            series.add((TimeSeriesDataItem) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // adding an item whose period class differs from the series throws SeriesException
+    @Test
+    public void testAdd_item_wrongPeriodClass_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1", Day.class);
+        Year year = new Year(2000);
+        TimeSeriesDataItem item = new TimeSeriesDataItem(year, 1.0);
+        try {
+            series.add(item);
+            fail("expected SeriesException");
+        } catch (SeriesException expected) {
+        }
+    }
+
+    // adding a duplicate period throws SeriesException
+    @Test
+    public void testAdd_item_duplicatePeriod_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        try {
+            series.add(day1, 2.0);
+            fail("expected SeriesException");
+        } catch (SeriesException expected) {
+        }
+    }
+
+    // adding items out of order still keeps the series sorted by period
+    @Test
+    public void testAdd_item_insertion_maintainsOrder() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day2, 2.0);
+        series.add(day1, 1.0);
+        assertEquals(day1, series.getTimePeriod(0));
+        assertEquals(day2, series.getTimePeriod(1));
+    }
+
+    // add(period, Number) allows a null value
+    @Test
+    public void testAdd_periodValue_Number_null_allowed() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, (Number) null);
+        assertNull(series.getValue(0));
+    }
+
+    // update(period, value) throws SeriesException when period is absent
+    @Test
+    public void testUpdate_period_notFound_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        try {
+            series.update(day1, new Double(1.0));
+            fail("expected SeriesException");
+        } catch (SeriesException expected) {
+        }
+    }
+
+    // update(period, value) changes the value when period exists
+    @Test
+    public void testUpdate_period_found_updatesValue() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.update(day1, new Double(9.0));
+        assertEquals(9.0, series.getValue(day1).doubleValue(), 1e-9);
+    }
+
+    // update(index, value) changes the value at the given index
+    @Test
+    public void testUpdate_index() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.update(0, new Double(3.0));
+        assertEquals(3.0, series.getValue(0).doubleValue(), 1e-9);
+    }
+
+    // addAndOrUpdate merges another series, returning the overwritten values
+    @Test
+    public void testAddAndOrUpdate() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        TimeSeries other = new TimeSeries("S2");
+        other.add(day1, 99.0);
+        other.add(day2, 2.0);
+        TimeSeries overwritten = series.addAndOrUpdate(other);
+        assertEquals(1, overwritten.getItemCount());
+        assertEquals(1.0, overwritten.getValue(0).doubleValue(), 1e-9);
+        assertEquals(99.0, series.getValue(day1).doubleValue(), 1e-9);
+    }
+
+    // addOrUpdate on a brand new period returns null (nothing overwritten)
+    @Test
+    public void testAddOrUpdate_newPeriod_returnsNull() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        TimeSeriesDataItem overwritten = series.addOrUpdate(day1, 1.0);
+        assertNull(overwritten);
+        assertEquals(1, series.getItemCount());
+    }
+
+    // addOrUpdate on an existing period returns a copy of the old value
+    @Test
+    public void testAddOrUpdate_existingPeriod_returnsOldValue() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        TimeSeriesDataItem overwritten = series.addOrUpdate(day1, 5.0);
+        assertEquals(1.0, overwritten.getValue().doubleValue(), 1e-9);
+        assertEquals(5.0, series.getValue(day1).doubleValue(), 1e-9);
+    }
+
+    // clear() removes all items from the series
+    @Test
+    public void testClear_removesAllItems() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.add(day2, 2.0);
+        series.clear();
+        assertEquals(0, series.getItemCount());
+    }
+
+    // delete(period) removes the matching item
+    @Test
+    public void testDelete_period_removesMatchingItem() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.delete(day1);
+        assertEquals(0, series.getItemCount());
+    }
+
+    // delete(period) does nothing when the period is absent
+    @Test
+    public void testDelete_period_notFound_noChange() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.delete(day2);
+        assertEquals(1, series.getItemCount());
+    }
+
+    // delete(start, end) with end < start throws IllegalArgumentException
+    @Test
+    public void testDelete_startEnd_endLessThanStart_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        try {
+            series.delete(1, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // delete(start, end) removes the inclusive index range
+    @Test
+    public void testDelete_startEnd_removesRange() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.add(day2, 2.0);
+        series.add(day3, 3.0);
+        series.delete(0, 1);
+        assertEquals(1, series.getItemCount());
+        assertEquals(day3, series.getTimePeriod(0));
+    }
+
+    // clone() on an empty series must not throw and must yield an empty copy
+    @Test
+    public void testClone_emptySeries_noExceptionAndEmpty() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        TimeSeries clone = (TimeSeries) series.clone();
+        assertEquals(0, clone.getItemCount());
+    }
+
+    // clone() on a non-empty series produces an equal, distinct copy
+    @Test
+    public void testClone_nonEmptySeries_equalsOriginal() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.add(day2, 2.0);
+        TimeSeries clone = (TimeSeries) series.clone();
+        assertEquals(series, clone);
+        assertNotSame(series, clone);
+    }
+
+    // createCopy(start,end) with negative start throws IllegalArgumentException
+    @Test
+    public void testCreateCopy_negativeStart_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        try {
+            series.createCopy(-1, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // createCopy(start,end) with end < start throws IllegalArgumentException
+    @Test
+    public void testCreateCopy_endLessThanStart_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        try {
+            series.createCopy(1, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // createCopy(start,end) with a valid range returns the correct subset
+    @Test
+    public void testCreateCopy_validRange() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        series.add(day2, 2.0);
+        series.add(day3, 3.0);
+        TimeSeries copy = series.createCopy(1, 2);
+        assertEquals(2, copy.getItemCount());
+        assertEquals(day2, copy.getTimePeriod(0));
+    }
+
+    // createCopy(period,period) with null start throws IllegalArgumentException
+    @Test
+    public void testCreateCopy_periodRange_nullStart_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        try {
+            series.createCopy(null, day1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // createCopy(period,period) with start after end throws IllegalArgumentException
+    @Test
+    public void testCreateCopy_periodRange_startAfterEnd_throws() throws Throwable {
+        TimeSeries series = new TimeSeries("S1");
+        series.add(day1, 1.0);
+        try {
+            series.createCopy(day2, day1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // equals() returns true for two series with identical key and data
+    @Test
+    public void testEquals_sameState_true() throws Throwable {
+        TimeSeries s1 = new TimeSeries("S1");
+        s1.add(day1, 1.0);
+        TimeSeries s2 = new TimeSeries("S1");
+        s2.add(day1, 1.0);
+        assertTrue(s1.equals(s2));
+    }
+
+    // equals() returns false when item counts differ
+    @Test
+    public void testEquals_differentItemCount_false() throws Throwable {
+        TimeSeries s1 = new TimeSeries("S1");
+        s1.add(day1, 1.0);
+        TimeSeries s2 = new TimeSeries("S1");
+        assertFalse(s1.equals(s2));
+    }
+}

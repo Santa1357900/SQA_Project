@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-19-qu0dtiy6/Jsoup-19f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.jsoup.safety.WhitelistClaudeTest::testIsSafeAttribute_allPseudoTag_appliesEvenWhenTagHasOtherAttrs
+[exit 0]

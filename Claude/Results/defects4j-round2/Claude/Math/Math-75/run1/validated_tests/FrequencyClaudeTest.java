@@ -1,0 +1,474 @@
+package org.apache.commons.math.stat;
+
+import java.util.Comparator;
+import java.util.Iterator;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class FrequencyClaudeTest {
+
+    // Constructor: default table should be empty
+    @Test
+    public void testDefaultConstructor_emptyTable() throws Throwable {
+        Frequency f = new Frequency();
+        assertEquals(0L, f.getSumFreq());
+    }
+
+    // Constructor with comparator: valuesIterator must follow custom order
+    @Test
+    public void testConstructorWithComparator_customOrdering() throws Throwable {
+        Comparator<Long> comparator = new Comparator<Long>() {
+            public int compare(Long o1, Long o2) {
+                return o2.compareTo(o1);
+            }
+        };
+        Frequency f = new Frequency(comparator);
+        f.addValue(1L);
+        f.addValue(2L);
+        f.addValue(3L);
+        Iterator<Comparable<?>> it = f.valuesIterator();
+        assertEquals(Long.valueOf(3), it.next());
+        assertEquals(Long.valueOf(2), it.next());
+        assertEquals(Long.valueOf(1), it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // addValue(Comparable): new value -> count 1
+    @Test
+    public void testAddValueComparable_newValue_countIsOne() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue((Comparable<?>) "x");
+        assertEquals(1L, f.getCount((Comparable<?>) "x"));
+    }
+
+    // addValue(Comparable): duplicate value increments count
+    @Test
+    public void testAddValueComparable_duplicateValue_countIncrements() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue((Comparable<?>) "x");
+        f.addValue((Comparable<?>) "x");
+        assertEquals(2L, f.getCount((Comparable<?>) "x"));
+    }
+
+    // addValue(Comparable): Integer is stored internally as Long
+    @Test
+    public void testAddValueComparable_integerConvertedToLong() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue((Comparable<?>) Integer.valueOf(5));
+        assertEquals(1L, f.getCount(5L));
+    }
+
+    // addValue(Comparable): incomparable types -> IllegalArgumentException
+    @Test
+    public void testAddValueComparable_incomparableTypes_throwsIllegalArgumentException() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue((Comparable<?>) "hello");
+        try {
+            f.addValue((Comparable<?>) Integer.valueOf(5));
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // addValue(Object) deprecated: Comparable instance added successfully
+    @Test
+    public void testAddValueObject_comparableInstance_addsSuccessfully() throws Throwable {
+        Frequency f = new Frequency();
+        Object v = Integer.valueOf(7);
+        f.addValue(v);
+        assertEquals(1L, f.getCount(7));
+    }
+
+    // addValue(Object) deprecated: non-Comparable -> IllegalArgumentException
+    @Test
+    public void testAddValueObject_nonComparable_throwsIllegalArgumentException() throws Throwable {
+        Frequency f = new Frequency();
+        Object v = new Object();
+        try {
+            f.addValue(v);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // addValue(int) overload
+    @Test
+    public void testAddValueInt_incrementsCount() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(5);
+        f.addValue(5);
+        assertEquals(2L, f.getCount(5));
+    }
+
+    // addValue(Integer) deprecated overload
+    @Test
+    public void testAddValueIntegerDeprecated_incrementsCount() throws Throwable {
+        Frequency f = new Frequency();
+        Integer iv = Integer.valueOf(7);
+        f.addValue(iv);
+        assertEquals(1L, f.getCount(7));
+    }
+
+    // addValue(long) overload
+    @Test
+    public void testAddValueLong_incrementsCount() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(100L);
+        assertEquals(1L, f.getCount(100L));
+    }
+
+    // addValue(char) overload
+    @Test
+    public void testAddValueChar_incrementsCount() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue('a');
+        f.addValue('a');
+        assertEquals(2L, f.getCount('a'));
+    }
+
+    // clear(): resets sum of frequencies to zero
+    @Test
+    public void testClear_resetsSumFreqToZero() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(2);
+        f.clear();
+        assertEquals(0L, f.getSumFreq());
+    }
+
+    // valuesIterator(): empty table -> no elements
+    @Test
+    public void testValuesIterator_emptyTable_noElements() throws Throwable {
+        Frequency f = new Frequency();
+        Iterator<Comparable<?>> it = f.valuesIterator();
+        assertFalse(it.hasNext());
+    }
+
+    // valuesIterator(): multiple values returned in sorted (natural) order
+    @Test
+    public void testValuesIterator_multipleValues_sortedOrder() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(3);
+        f.addValue(1);
+        f.addValue(2);
+        Iterator<Comparable<?>> it = f.valuesIterator();
+        assertEquals(Long.valueOf(1), it.next());
+        assertEquals(Long.valueOf(2), it.next());
+        assertEquals(Long.valueOf(3), it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // getSumFreq(): empty table -> zero
+    @Test
+    public void testGetSumFreq_emptyTable_returnsZero() throws Throwable {
+        Frequency f = new Frequency();
+        assertEquals(0L, f.getSumFreq());
+    }
+
+    // getSumFreq(): sums across multiple distinct values and duplicates
+    @Test
+    public void testGetSumFreq_afterMultipleAdds() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(2);
+        f.addValue(2);
+        assertEquals(3L, f.getSumFreq());
+    }
+
+    // getCount(Object) deprecated must match getCount(Comparable)
+    @Test
+    public void testGetCountObjectDeprecated_matchesGetCountComparable() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(4);
+        f.addValue(4);
+        Object obj = Long.valueOf(4);
+        assertEquals(2L, f.getCount(obj));
+    }
+
+    // getCount(Comparable): value not present -> zero
+    @Test
+    public void testGetCountComparable_valueNotPresent_returnsZero() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        assertEquals(0L, f.getCount(Long.valueOf(99)));
+    }
+
+    // getCount(Comparable): Integer branch delegates to getCount(long)
+    @Test
+    public void testGetCountComparable_integerBranch() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(3);
+        f.addValue(3);
+        assertEquals(2L, f.getCount((Comparable<?>) Integer.valueOf(3)));
+    }
+
+    // getCount(int) overload
+    @Test
+    public void testGetCountInt_afterAdds() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(9);
+        assertEquals(1L, f.getCount(9));
+    }
+
+    // getCount(long) overload
+    @Test
+    public void testGetCountLong_afterAdds() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(9L);
+        assertEquals(1L, f.getCount(9L));
+    }
+
+    // getCount(char) overload
+    @Test
+    public void testGetCountChar_afterAdds() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue('z');
+        assertEquals(1L, f.getCount('z'));
+    }
+
+    // getPct(Comparable): empty table -> NaN
+    @Test
+    public void testGetPctComparable_emptyTable_returnsNaN() throws Throwable {
+        Frequency f = new Frequency();
+        assertTrue(Double.isNaN(f.getPct(Long.valueOf(1))));
+    }
+
+    // getPct(Comparable): correct proportion of total
+    @Test
+    public void testGetPctComparable_correctProportion() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(1);
+        f.addValue(2);
+        assertEquals(2.0 / 3.0, f.getPct(Long.valueOf(1)), 1e-9);
+    }
+
+    // getPct(Object) deprecated must equal getPct(Comparable), not getCumPct
+    // (catches a copy-paste bug where the deprecated method delegates to getCumPct)
+    @Test
+    public void testGetPctObjectDeprecated_shouldMatchGetPct_notCumPct() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(1);
+        f.addValue(2);
+        f.addValue(3);
+        Object obj = Integer.valueOf(2);
+        assertEquals(0.25, f.getPct(obj), 1e-9);
+    }
+
+    // getPct(int) overload
+    @Test
+    public void testGetPctInt_correctProportion() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(1);
+        f.addValue(2);
+        f.addValue(3);
+        assertEquals(0.5, f.getPct(1), 1e-9);
+    }
+
+    // getPct(char) overload
+    @Test
+    public void testGetPctChar_correctProportion() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue('a');
+        f.addValue('b');
+        assertEquals(0.5, f.getPct('a'), 1e-9);
+    }
+
+    // getCumFreq(Comparable): empty table -> zero
+    @Test
+    public void testGetCumFreqComparable_emptyTable_returnsZero() throws Throwable {
+        Frequency f = new Frequency();
+        assertEquals(0L, f.getCumFreq(5));
+    }
+
+    // getCumFreq(Comparable): value below first entry -> zero
+    @Test
+    public void testGetCumFreqComparable_belowFirstValue_returnsZero() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(5);
+        f.addValue(10);
+        assertEquals(0L, f.getCumFreq(1));
+    }
+
+    // getCumFreq(Comparable): value at or above last entry -> sum of all freq
+    @Test
+    public void testGetCumFreqComparable_atOrAboveLastValue_returnsSumFreq() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(5);
+        f.addValue(10);
+        assertEquals(f.getSumFreq(), f.getCumFreq(10));
+        assertEquals(f.getSumFreq(), f.getCumFreq(15));
+    }
+
+    // getCumFreq(Comparable): value in the middle of the distribution
+    @Test
+    public void testGetCumFreqComparable_middleValue() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(2);
+        f.addValue(2);
+        f.addValue(3);
+        assertEquals(3L, f.getCumFreq(2));
+    }
+
+    // getCumFreq(Comparable): Integer branch delegates to getCumFreq(long)
+    @Test
+    public void testGetCumFreqComparable_integerBranch() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(5);
+        f.addValue(5);
+        f.addValue(10);
+        assertEquals(2L, f.getCumFreq((Comparable<?>) Integer.valueOf(5)));
+    }
+
+    // getCumFreq(Comparable): incomparable type caught -> zero
+    @Test
+    public void testGetCumFreqComparable_notComparableType_returnsZero() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue((Comparable<?>) "a");
+        f.addValue((Comparable<?>) "b");
+        assertEquals(0L, f.getCumFreq(5));
+    }
+
+    // getCumFreq(Comparable): respects a custom (reverse) comparator
+    @Test
+    public void testGetCumFreqWithCustomComparator_reverseOrder() throws Throwable {
+        Comparator<Long> comparator = new Comparator<Long>() {
+            public int compare(Long o1, Long o2) {
+                return o2.compareTo(o1);
+            }
+        };
+        Frequency f = new Frequency(comparator);
+        f.addValue(1L);
+        f.addValue(2L);
+        f.addValue(3L);
+        assertEquals(2L, f.getCumFreq(2L));
+    }
+
+    // getCumFreq(Object) deprecated must match getCumFreq(Comparable)
+    @Test
+    public void testGetCumFreqObjectDeprecated_matchesGetCumFreqComparable() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(2);
+        f.addValue(2);
+        f.addValue(3);
+        Object obj = Long.valueOf(2);
+        assertEquals(3L, f.getCumFreq(obj));
+    }
+
+    // getCumFreq(int) overload
+    @Test
+    public void testGetCumFreqInt_correctValue() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(2);
+        assertEquals(2L, f.getCumFreq(2));
+    }
+
+    // getCumFreq(char) overload
+    @Test
+    public void testGetCumFreqChar_correctValue() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue('a');
+        f.addValue('b');
+        assertEquals(2L, f.getCumFreq('b'));
+    }
+
+    // getCumPct(Comparable): empty table -> NaN
+    @Test
+    public void testGetCumPctComparable_emptyTable_returnsNaN() throws Throwable {
+        Frequency f = new Frequency();
+        assertTrue(Double.isNaN(f.getCumPct(Long.valueOf(1))));
+    }
+
+    // getCumPct(Comparable): correct cumulative proportion
+    @Test
+    public void testGetCumPctComparable_correctValue() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(2);
+        f.addValue(2);
+        f.addValue(3);
+        assertEquals(0.75, f.getCumPct(2), 1e-9);
+    }
+
+    // getCumPct(Object) deprecated must match getCumPct(Comparable)
+    @Test
+    public void testGetCumPctObjectDeprecated_matchesGetCumPctComparable() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(2);
+        f.addValue(2);
+        f.addValue(3);
+        Object obj = Long.valueOf(2);
+        assertEquals(0.75, f.getCumPct(obj), 1e-9);
+    }
+
+    // getCumPct(int) overload
+    @Test
+    public void testGetCumPctInt_correctValue() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        f.addValue(2);
+        assertEquals(1.0, f.getCumPct(2), 1e-9);
+    }
+
+    // getCumPct(char) overload
+    @Test
+    public void testGetCumPctChar_correctValue() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue('a');
+        f.addValue('b');
+        assertEquals(0.5, f.getCumPct('a'), 1e-9);
+    }
+
+    // toString(): includes header row and the added value
+    @Test
+    public void testToString_containsHeaderAndValue() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(5);
+        f.addValue(5);
+        String s = f.toString();
+        assertTrue(s.contains("Value"));
+        assertTrue(s.contains("5"));
+    }
+
+    // equals(): same instance -> true
+    @Test
+    public void testEquals_sameInstance_true() throws Throwable {
+        Frequency f = new Frequency();
+        f.addValue(1);
+        assertTrue(f.equals(f));
+    }
+
+    // equals(): different type -> false
+    @Test
+    public void testEquals_differentType_false() throws Throwable {
+        Frequency f = new Frequency();
+        assertFalse(f.equals("not a frequency"));
+    }
+
+    // equals(): null argument -> false
+    @Test
+    public void testEquals_null_false() throws Throwable {
+        Frequency f = new Frequency();
+        assertFalse(f.equals(null));
+    }
+
+    // equals(): equal contents -> true, and hashCode consistent with equals
+    @Test
+    public void testEquals_equalContents_true_andHashCodeMatches() throws Throwable {
+        Frequency f1 = new Frequency();
+        Frequency f2 = new Frequency();
+        f1.addValue(1);
+        f1.addValue(2);
+        f2.addValue(1);
+        f2.addValue(2);
+        assertTrue(f1.equals(f2));
+        assertEquals(f1.hashCode(), f2.hashCode());
+    }
+}

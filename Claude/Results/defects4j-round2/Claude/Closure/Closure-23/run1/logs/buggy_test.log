@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-23-9dxc_acc/Closure-23b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testArrayAccess_indexBeyondLength_reportsOutOfBoundsError
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testArrayAccess_indexOne_foldsToSecondElement
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testArrayAccess_indexZero_foldsToFirstElement
+[exit 0]

@@ -1,0 +1,462 @@
+package org.jsoup.helper;
+
+import org.jsoup.Connection;
+import org.jsoup.parser.Parser;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.charset.IllegalCharsetNameException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+public class HttpConnectionClaudeTest {
+
+    // connect(String): valid url is parsed and set on the request
+    @Test
+    public void testConnectString_validUrl_setsUrlOnRequest() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/path");
+        assertNotNull(con);
+        assertEquals("http://example.com/path", con.request().url().toExternalForm());
+    }
+
+    // connect(URL): valid URL object is set directly on the request
+    @Test
+    public void testConnectURL_validUrl_setsUrlOnRequest() throws Throwable {
+        URL url = new URL("http://example.org/");
+        Connection con = HttpConnection.connect(url);
+        assertEquals(url.toExternalForm(), con.request().url().toExternalForm());
+    }
+
+    // url(String): empty string must throw per Validate.notEmpty contract
+    @Test
+    public void testUrlString_empty_throwsIllegalArgumentException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.url("");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // url(String): malformed url (no protocol) must throw IllegalArgumentException
+    @Test
+    public void testUrlString_malformed_throwsIllegalArgumentException() throws Throwable {
+        try {
+            HttpConnection.connect("not a valid url");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // url(URL): null must throw IllegalArgumentException per Validate.notNull
+    @Test
+    public void testUrlURL_null_throwsIllegalArgumentException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.url((URL) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // userAgent(String): null must throw IllegalArgumentException
+    @Test
+    public void testUserAgent_null_throwsIllegalArgumentException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.userAgent(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // userAgent(String): sets the User-Agent header value
+    @Test
+    public void testUserAgent_validValue_setsHeader() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.userAgent("MyAgent/1.0");
+        assertEquals("MyAgent/1.0", con.request().header("User-Agent"));
+    }
+
+    // timeout(int): negative millis must throw IllegalArgumentException
+    @Test
+    public void testTimeout_negative_throwsIllegalArgumentException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.timeout(-1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // timeout(int): zero means infinite and must be accepted
+    @Test
+    public void testTimeout_zero_isAccepted() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.timeout(0);
+        assertEquals(0, con.request().timeout());
+    }
+
+    // maxBodySize(int): negative bytes must throw IllegalArgumentException
+    @Test
+    public void testMaxBodySize_negative_throwsIllegalArgumentException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.maxBodySize(-1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // maxBodySize(int): zero means unlimited and must be accepted
+    @Test
+    public void testMaxBodySize_zero_isAccepted() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.maxBodySize(0);
+        assertEquals(0, con.request().maxBodySize());
+    }
+
+    // followRedirects(boolean): setter/getter roundtrip for false branch
+    @Test
+    public void testFollowRedirects_setFalse_getterReturnsFalse() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.followRedirects(false);
+        assertFalse(con.request().followRedirects());
+    }
+
+    // referrer(String): null must throw IllegalArgumentException
+    @Test
+    public void testReferrer_null_throwsIllegalArgumentException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.referrer(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // referrer(String): sets the Referer header value
+    @Test
+    public void testReferrer_validValue_setsRefererHeader() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.referrer("http://ref.example.com/");
+        assertEquals("http://ref.example.com/", con.request().header("Referer"));
+    }
+
+    // method(Method): null must throw IllegalArgumentException
+    @Test
+    public void testMethod_null_throwsIllegalArgumentException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.method(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // method(Method): POST is set correctly on the request
+    @Test
+    public void testMethod_post_setsMethodOnRequest() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.method(Connection.Method.POST);
+        assertEquals(Connection.Method.POST, con.request().method());
+    }
+
+    // ignoreHttpErrors(boolean) and ignoreContentType(boolean): true branch for both flags
+    @Test
+    public void testIgnoreFlags_setTrue_gettersReturnTrue() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.ignoreHttpErrors(true);
+        con.ignoreContentType(true);
+        assertTrue(con.request().ignoreHttpErrors());
+        assertTrue(con.request().ignoreContentType());
+    }
+
+    // data(String,String): entry is added and retrievable by key
+    @Test
+    public void testDataKeyValue_validEntry_retrievableByKey() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.data("name", "value1");
+        Connection.KeyVal kv = con.data("name");
+        assertNotNull(kv);
+        assertEquals("value1", kv.value());
+    }
+
+    // data(String,String): null value must throw IllegalArgumentException
+    @Test
+    public void testDataKeyValue_nullValue_throwsIllegalArgumentException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.data("name", null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // data(String,String,InputStream): adds file keyval with filename as value and stream set
+    @Test
+    public void testDataKeyFilenameInputStream_setsFilenameAndStream() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        InputStream is = new ByteArrayInputStream(new byte[] {1, 2, 3});
+        con.data("file", "test.txt", is);
+        Connection.KeyVal kv = con.data("file");
+        assertEquals("test.txt", kv.value());
+        assertTrue(kv.hasInputStream());
+    }
+
+    // data(String,String,InputStream,String): sets content type on the keyval
+    @Test
+    public void testDataKeyFilenameInputStreamContentType_setsContentType() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        InputStream is = new ByteArrayInputStream(new byte[] {1});
+        con.data("file", "a.bin", is, "application/zip");
+        Connection.KeyVal kv = con.data("file");
+        assertEquals("application/zip", kv.contentType());
+    }
+
+    // data(Map): null throws IllegalArgumentException; non-null map entries are added as data
+    @Test
+    public void testDataMap_nullThrows_andEntriesAdded() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.data((Map<String, String>) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+        Map<String, String> map = new LinkedHashMap<String, String>();
+        map.put("a", "1");
+        con.data(map);
+        assertEquals("1", con.data("a").value());
+    }
+
+    // data(String...): null array and odd-length pairs both must throw IllegalArgumentException
+    @Test
+    public void testDataVarargs_nullAndOddLength_throwIllegalArgumentException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.data((String[]) null);
+            fail("expected IllegalArgumentException for null array");
+        } catch (IllegalArgumentException expected) { }
+        try {
+            con.data("onlyKey");
+            fail("expected IllegalArgumentException for odd length");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // data(String...): even number of pairs are added as key/value data entries
+    @Test
+    public void testDataVarargs_evenPairs_addedCorrectly() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.data("k1", "v1", "k2", "v2");
+        assertEquals("v1", con.data("k1").value());
+        assertEquals("v2", con.data("k2").value());
+    }
+
+    // data(String): returns null when no matching key exists
+    @Test
+    public void testDataKey_notFound_returnsNull() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        assertNull(con.data("missing"));
+    }
+
+    // data(Collection): null throws IllegalArgumentException; entries from collection are added
+    @Test
+    public void testDataCollection_nullThrows_andEntriesAdded() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.data((Collection<Connection.KeyVal>) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+        List<Connection.KeyVal> list = new ArrayList<Connection.KeyVal>();
+        list.add(HttpConnection.KeyVal.create("c", "cv"));
+        con.data(list);
+        assertEquals("cv", con.data("c").value());
+    }
+
+    // requestBody(String): value is stored and retrievable from the request
+    @Test
+    public void testRequestBody_setAndGet() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.requestBody("hello=world");
+        assertEquals("hello=world", con.request().requestBody());
+    }
+
+    // header(String,String): value is set and retrievable via header(String)
+    @Test
+    public void testHeaderNameValue_setAndGet() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.header("X-Test", "abc");
+        assertEquals("abc", con.request().header("X-Test"));
+    }
+
+    // headers(Map): null throws IllegalArgumentException; entries are applied as headers
+    @Test
+    public void testHeadersMap_nullThrows_andEntriesAdded() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.headers(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+        Map<String, String> h = new LinkedHashMap<String, String>();
+        h.put("X-One", "1");
+        con.headers(h);
+        assertEquals("1", con.request().header("X-One"));
+    }
+
+    // cookie(String,String): value is set and retrievable via the concrete Request's cookie getter
+    @Test
+    public void testCookieNameValue_setAndGet() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.cookie("sid", "abc123");
+        HttpConnection.Request req = (HttpConnection.Request) con.request();
+        assertEquals("abc123", req.cookie("sid"));
+    }
+
+    // cookies(Map): null throws IllegalArgumentException; entries are applied as cookies
+    @Test
+    public void testCookiesMap_nullThrows_andEntriesAdded() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.cookies(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+        Map<String, String> c = new LinkedHashMap<String, String>();
+        c.put("sid", "xyz");
+        con.cookies(c);
+        HttpConnection.Request req = (HttpConnection.Request) con.request();
+        assertEquals("xyz", req.cookie("sid"));
+    }
+
+    // parser(Parser): custom parser instance is stored and retrievable
+    @Test
+    public void testParser_setCustomParser_retrievable() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        Parser xmlParser = Parser.xmlParser();
+        con.parser(xmlParser);
+        assertSame(xmlParser, con.request().parser());
+    }
+
+    // request(Request): replaces the internal request object
+    @Test
+    public void testRequestSetter_replacesRequest() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        HttpConnection.Request newReq = new HttpConnection.Request();
+        newReq.url(new URL("http://replaced.example.com/"));
+        con.request(newReq);
+        assertEquals("http://replaced.example.com/", con.request().url().toExternalForm());
+    }
+
+    // response(Response): replaces the internal response object
+    @Test
+    public void testResponseSetter_replacesResponse() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        HttpConnection.Response newRes = new HttpConnection.Response();
+        con.response(newRes);
+        assertSame(newRes, con.response());
+    }
+
+    // postDataCharset(String): a supported charset name is stored and retrievable
+    @Test
+    public void testPostDataCharset_validCharset_setAndGet() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        con.postDataCharset("UTF-8");
+        assertEquals("UTF-8", con.request().postDataCharset());
+    }
+
+    // postDataCharset(String): null must throw IllegalArgumentException
+    @Test
+    public void testPostDataCharset_null_throwsIllegalArgumentException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.postDataCharset(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // postDataCharset(String): unsupported charset name must throw IllegalCharsetNameException
+    @Test
+    public void testPostDataCharset_unsupportedCharset_throwsIllegalCharsetNameException() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        try {
+            con.postDataCharset("totally-bogus-charset-name");
+            fail("expected IllegalCharsetNameException");
+        } catch (IllegalCharsetNameException expected) { }
+    }
+
+    // Request(): default construction values match documented defaults
+    @Test
+    public void testDefaultRequest_hasExpectedDefaults() throws Throwable {
+        Connection con = HttpConnection.connect("http://example.com/");
+        Connection.Request req = con.request();
+        assertEquals(30000, req.timeout());
+        assertEquals(1024 * 1024, req.maxBodySize());
+        assertTrue(req.followRedirects());
+        assertEquals(Connection.Method.GET, req.method());
+        assertEquals("gzip", req.header("Accept-Encoding"));
+        assertEquals(HttpConnection.DEFAULT_UA, req.header("User-Agent"));
+    }
+
+    // encodeUrl(URL): spaces in the URL are percent-encoded
+    @Test
+    public void testEncodeUrl_withSpace_encodesToPercent20() throws Throwable {
+        URL u = new URL("http://example.com/a b");
+        URL encoded = HttpConnection.encodeUrl(u);
+        assertTrue(encoded.toExternalForm().indexOf("%20") >= 0);
+    }
+
+    // processResponseHeaders: Set-Cookie header value is parsed into a name/value cookie
+    @Test
+    public void testProcessResponseHeaders_parsesSetCookie() throws Throwable {
+        HttpConnection.Response res = new HttpConnection.Response();
+        Map<String, List<String>> headers = new LinkedHashMap<String, List<String>>();
+        List<String> vals = new ArrayList<String>();
+        vals.add("sessionid=abc123; Path=/");
+        headers.put("Set-Cookie", vals);
+        res.processResponseHeaders(headers);
+        assertEquals("abc123", res.cookie("sessionid"));
+    }
+
+    // KeyVal.create: toString format matches the "key=value" contract
+    @Test
+    public void testKeyValCreate_toStringFormat() throws Throwable {
+        Connection.KeyVal kv = HttpConnection.KeyVal.create("k", "v");
+        assertEquals("k=v", kv.toString());
+    }
+
+    // KeyVal.key(String): empty key must throw IllegalArgumentException
+    @Test
+    public void testKeyVal_emptyKey_throwsIllegalArgumentException() throws Throwable {
+        try {
+            HttpConnection.KeyVal.create("", "v");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // KeyVal.value(String): null value must throw IllegalArgumentException
+    @Test
+    public void testKeyVal_nullValue_throwsIllegalArgumentException() throws Throwable {
+        try {
+            HttpConnection.KeyVal.create("k", null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // KeyVal.contentType(String): empty content type must throw IllegalArgumentException
+    @Test
+    public void testKeyVal_contentTypeEmpty_throwsIllegalArgumentException() throws Throwable {
+        Connection.KeyVal kv = HttpConnection.KeyVal.create("k", "v");
+        try {
+            kv.contentType("");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // BUG: create(key,filename,stream) must reject a null InputStream per the
+    // "Data input stream must not be null" contract; buggy code validates the
+    // already-set 'value' field instead of the 'inputStream' parameter, so it
+    // silently accepts null here instead of throwing.
+    @Test
+    public void testKeyValCreate_nullInputStream_mustBeRejected() throws Throwable {
+        try {
+            HttpConnection.KeyVal.create("file", "name.txt", null);
+            fail("expected IllegalArgumentException for null input stream");
+        } catch (IllegalArgumentException expected) { }
+    }
+}

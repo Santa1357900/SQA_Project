@@ -1,0 +1,24 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p JacksonDatabind -v 1b -w /tmp/claude-JacksonDatabind-1-u7vyuxnk/buggy
+Checking out 88f44d87 to /tmp/claude-JacksonDatabind-1-u7vyuxnk/buggy...... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Correct Module ambiguity 1................................................. OK
+Correct Module ambiguity 2................................................. OK
+Correct Module ambiguity 3................................................. OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Backing up build file: /tmp/claude-JacksonDatabind-1-u7vyuxnk/buggy/maven-b OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 88f44d87:a1bb6f2d..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: JacksonDatabind-1b.............................. OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-JacksonDatabind-1-u7vyuxnk/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

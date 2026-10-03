@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-20-5f4p64ln/JxPath-20b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 7
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testComputeValue_rightNodeSet_singleElement_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testComputeValue_rightNodeSet_greaterOrEqual_noMatch_returnsFalse
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testComputeValue_rightNodeSet_lessThan_allSmaller_returnsFalse
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testComputeValue_rightNodeSet_greaterThan_someSmaller_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testComputeValue_rightNodeSet_lessThan_someLarger_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testComputeValue_rightNodeSet_lessOrEqual_matchFound_returnsTrue
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testComputeValue_rightNodeSet_greaterThan_allLarger_returnsFalse
+[exit 0]

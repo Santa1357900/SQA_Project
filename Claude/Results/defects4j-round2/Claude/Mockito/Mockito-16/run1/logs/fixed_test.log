@@ -1,0 +1,109 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Mockito-16-v0crak9j/Mockito-16f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /tmp/claude-Mockito-16-v0crak9j/fixed && ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-Mockito-16-v0crak9j/fixed -Dd4j.test.dir=/tmp/claude-Mockito-16-v0crak9j/fixed/.test_suite compile.gen.tests 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+compile:
+
+gradle.compile:
+
+ant.compile:
+
+clean:
+
+prepare:
+    [mkdir] Created dir: /tmp/claude-Mockito-16-v0crak9j/fixed/target/classes
+    [mkdir] Created dir: /tmp/claude-Mockito-16-v0crak9j/fixed/target/test-classes
+    [mkdir] Created dir: /tmp/claude-Mockito-16-v0crak9j/fixed/target/reports/junit
+
+compile:
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/build.xml:76: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 199 source files to /tmp/claude-Mockito-16-v0crak9j/fixed/target/classes
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 6
+    [javac] warning: [options] source value 6 is obsolete and will be removed in a future release
+    [javac] warning: [options] target value 1.6 is obsolete and will be removed in a future release
+    [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/configuration/DefaultMockitoConfiguration.java:7: warning: [deprecation] ReturnValues in org.mockito has been deprecated
+    [javac] import org.mockito.ReturnValues;
+    [javac]                   ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/configuration/IMockitoConfiguration.java:7: warning: [deprecation] ReturnValues in org.mockito has been deprecated
+    [javac] import org.mockito.ReturnValues;
+    [javac]                   ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/configuration/GlobalConfiguration.java:7: warning: [deprecation] ReturnValues in org.mockito has been deprecated
+    [javac] import org.mockito.ReturnValues;
+    [javac]                   ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/runners/JUnit44RunnerImpl.java:7: warning: [deprecation] InitializationError in org.junit.internal.runners has been deprecated
+    [javac] import org.junit.internal.runners.InitializationError;
+    [javac]                                  ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/runners/JUnit44RunnerImpl.java:8: warning: [deprecation] JUnit4ClassRunner in org.junit.internal.runners has been deprecated
+    [javac] import org.junit.internal.runners.JUnit4ClassRunner;
+    [javac]                                  ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/stubbing/answers/AnswerReturnValuesAdapter.java:9: warning: [deprecation] ReturnValues in org.mockito has been deprecated
+    [javac] import org.mockito.ReturnValues;
+    [javac]                   ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/util/Primitives.java:35: warning: [deprecation] Character(char) in Character has been deprecated
+    [javac]         wrapperReturnValues.put(Character.class, new Character((char) 0));
+    [javac]                                                  ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/util/Primitives.java:36: warning: [deprecation] Byte(byte) in Byte has been deprecated
+    [javac]         wrapperReturnValues.put(Byte.class, new Byte((byte) 0));
+    [javac]                                             ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/util/Primitives.java:37: warning: [deprecation] Short(short) in Short has been deprecated
+    [javac]         wrapperReturnValues.put(Short.class, new Short((short) 0));
+    [javac]                                              ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/util/Primitives.java:38: warning: [deprecation] Integer(int) in Integer has been deprecated
+    [javac]         wrapperReturnValues.put(Integer.class, new Integer(0));
+    [javac]                                                ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/util/Primitives.java:39: warning: [deprecation] Long(long) in Long has been deprecated
+    [javac]         wrapperReturnValues.put(Long.class, new Long(0));
+    [javac]                                             ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/util/Primitives.java:40: warning: [deprecation] Float(float) in Float has been deprecated
+    [javac]         wrapperReturnValues.put(Float.class, new Float(0));
+    [javac]                                              ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/util/Primitives.java:41: warning: [deprecation] Double(double) in Double has been deprecated
+    [javac]         wrapperReturnValues.put(Double.class, new Double(0));
+    [javac]                                               ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/MockitoAnnotations.java:99: warning: [deprecation] isAccessible() in AccessibleObject has been deprecated
+    [javac]                     boolean wasAccessible = field.isAccessible();
+    [javac]                                                  ^
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/configuration/ClassPathLoader.java:27: warning: [deprecation] newInstance() in Class has been deprecated
+    [javac]             return (IMockitoConfiguration) configClass.newInstance();
+    [javac]                                                       ^
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in class Class
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/src/org/mockito/internal/util/reflection/AccessibilityChanger.java:29: warning: [deprecation] isAccessible() in AccessibleObject has been deprecated
+    [javac]         wasAccessible = field.isAccessible();
+    [javac]                              ^
+    [javac] 20 warnings
+
+gradle.compile.mutants:
+
+ant.compile.mutants:
+     [exec] /home/pheerapat/defects4j/framework/projects/Mockito/chooseDepedencyVersion.sh: line 8: ./gradlew: No such file or directory
+
+compile.gen.tests:
+     [echo] classes.dir: /tmp/claude-Mockito-16-v0crak9j/fixed/target/classes
+     [echo] build.home: /tmp/claude-Mockito-16-v0crak9j/fixed/target
+    [mkdir] Created dir: /tmp/claude-Mockito-16-v0crak9j/fixed/.classes_testgen
+    [javac] /home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /tmp/claude-Mockito-16-v0crak9j/fixed/.classes_testgen
+    [javac] /tmp/claude-Mockito-16-v0crak9j/fixed/.test_suite/org/mockito/internal/MockitoCoreClaudeTest.java:45: error: method mock in class MockitoCore cannot be applied to given types;
+    [javac]         Object mockObj = mc.mock(List.class, new MockSettingsImpl());
+    [javac]                            ^
+    [javac]   required: Class<T>,MockSettings,boolean
+    [javac]   found: Class<List>,MockSettingsImpl
+    [javac]   reason: cannot infer type-variable(s) T
+    [javac]     (actual and formal argument lists differ in length)
+    [javac]   where T is a type-variable:
+    [javac]     T extends Object declared in method <T>mock(Class<T>,MockSettings,boolean)
+    [javac] Note: /tmp/claude-Mockito-16-v0crak9j/fixed/.test_suite/org/mockito/internal/MockitoCoreClaudeTest.java uses or overrides a deprecated API.
+    [javac] Note: Recompile with -Xlint:deprecation for details.
+    [javac] 1 error
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 6 seconds
+Cannot compile extracted test suite! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

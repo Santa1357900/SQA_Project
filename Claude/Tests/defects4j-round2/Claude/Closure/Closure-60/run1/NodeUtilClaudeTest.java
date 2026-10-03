@@ -1,0 +1,850 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.TernaryValue;
+import com.google.common.base.Predicates;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+public class NodeUtilClaudeTest {
+
+  private Node name(String s) {
+    return Node.newString(Token.NAME, s);
+  }
+
+  private Node str(String s) {
+    return Node.newString(Token.STRING, s);
+  }
+
+  private Node num(double d) {
+    return Node.newNumber(d);
+  }
+
+  private Node boolNode(boolean b) {
+    return new Node(b ? Token.TRUE : Token.FALSE);
+  }
+
+  private Node n(int type, Node... children) {
+    Node node = new Node(type);
+    for (int i = 0; i < children.length; i++) {
+      node.addChildToBack(children[i]);
+    }
+    return node;
+  }
+
+  // Covers AND/OR/NOT branches of getImpureBooleanValue
+  @Test
+  public void testGetImpureBooleanValue_andOrNot() throws Throwable {
+    assertEquals(TernaryValue.TRUE,
+        NodeUtil.getImpureBooleanValue(n(Token.AND, boolNode(true), boolNode(true))));
+    assertEquals(TernaryValue.TRUE,
+        NodeUtil.getImpureBooleanValue(n(Token.OR, boolNode(false), boolNode(true))));
+    assertEquals(TernaryValue.FALSE,
+        NodeUtil.getImpureBooleanValue(n(Token.NOT, boolNode(true))));
+  }
+
+  // Covers HOOK branch: equal branches return value, different branches UNKNOWN
+  @Test
+  public void testGetImpureBooleanValue_hookBranches() throws Throwable {
+    Node sameHook = n(Token.HOOK, name("c"), boolNode(true), boolNode(true));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getImpureBooleanValue(sameHook));
+    Node diffHook = n(Token.HOOK, name("c"), boolNode(true), boolNode(false));
+    assertEquals(TernaryValue.UNKNOWN, NodeUtil.getImpureBooleanValue(diffHook));
+  }
+
+  // Covers ARRAYLIT/OBJECTLIT branch ignoring side effects
+  @Test
+  public void testGetImpureBooleanValue_objectLitIgnoresSideEffects() throws Throwable {
+    Node obj = n(Token.OBJECTLIT);
+    assertEquals(TernaryValue.TRUE, NodeUtil.getImpureBooleanValue(obj));
+  }
+
+  // Covers STRING/NUMBER/NAME branches of getPureBooleanValue
+  @Test
+  public void testGetPureBooleanValue_stringNumberName() throws Throwable {
+    assertEquals(TernaryValue.FALSE, NodeUtil.getPureBooleanValue(str("")));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getPureBooleanValue(str("x")));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getPureBooleanValue(num(0)));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getPureBooleanValue(num(5)));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getPureBooleanValue(name("undefined")));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getPureBooleanValue(name("Infinity")));
+  }
+
+  // Covers ARRAYLIT branch of getPureBooleanValue (no side effects -> TRUE)
+  @Test
+  public void testGetPureBooleanValue_arrayLit() throws Throwable {
+    Node arr = n(Token.ARRAYLIT);
+    assertEquals(TernaryValue.TRUE, NodeUtil.getPureBooleanValue(arr));
+  }
+
+  // Covers NUMBER/NOT/ARRAYLIT/OBJECTLIT branches of getStringValue
+  @Test
+  public void testGetStringValue_variousTypes() throws Throwable {
+    assertEquals("5", NodeUtil.getStringValue(num(5)));
+    assertEquals("5.5", NodeUtil.getStringValue(num(5.5)));
+    assertEquals("false", NodeUtil.getStringValue(n(Token.NOT, boolNode(true))));
+    assertEquals("a,1", NodeUtil.getStringValue(n(Token.ARRAYLIT, str("a"), num(1))));
+    assertEquals("[object Object]", NodeUtil.getStringValue(n(Token.OBJECTLIT)));
+  }
+
+  // BUG-CATCHING TEST: Number("0x100000000") must equal 4294967296, not NaN,
+  // per JS Number() cast contract. Buggy code uses Integer.parseInt and overflows.
+  @Test
+  public void testGetStringNumberValue_hexOverflow_bug() throws Throwable {
+    Double result = NodeUtil.getStringNumberValue("0x100000000");
+    assertNotNull(result);
+    assertFalse(Double.isNaN(result.doubleValue()));
+    assertEquals(4294967296.0, result.doubleValue(), 1e-6);
+  }
+
+  // Covers empty string, whitespace, vertical-tab and normal numeric parsing
+  @Test
+  public void testGetStringNumberValue_basicCases() throws Throwable {
+    assertEquals(0.0, NodeUtil.getStringNumberValue("").doubleValue(), 0.0);
+    assertEquals(0.0, NodeUtil.getStringNumberValue("   ").doubleValue(), 0.0);
+    assertNull(NodeUtil.getStringNumberValue("abc\u000bdef"));
+    assertEquals(123.0, NodeUtil.getStringNumberValue(" 123 ").doubleValue(), 0.0);
+    assertEquals(16.0, NodeUtil.getStringNumberValue("0x10").doubleValue(), 0.0);
+  }
+
+  // Covers signed-hex-returns-null and Infinity exact-case vs lowercase branches
+  @Test
+  public void testGetStringNumberValue_signedHexAndInfinity() throws Throwable {
+    assertNull(NodeUtil.getStringNumberValue("-0x10"));
+    assertEquals(Double.valueOf(Double.POSITIVE_INFINITY),
+        NodeUtil.getStringNumberValue("Infinity").doubleValue(), 0.0);
+    assertNull(NodeUtil.getStringNumberValue("infinity"));
+  }
+
+  // Covers trimJsWhiteSpace trimming and isStrWhiteSpaceChar branches
+  @Test
+  public void testTrimJsWhiteSpaceAndIsStrWhiteSpaceChar() throws Throwable {
+    assertEquals("x", NodeUtil.trimJsWhiteSpace("  x  "));
+    assertEquals("", NodeUtil.trimJsWhiteSpace("   "));
+    assertEquals(TernaryValue.TRUE, NodeUtil.isStrWhiteSpaceChar(' '));
+    assertEquals(TernaryValue.FALSE, NodeUtil.isStrWhiteSpaceChar('a'));
+    assertEquals(TernaryValue.UNKNOWN, NodeUtil.isStrWhiteSpaceChar('\u000B'));
+  }
+
+  // Covers ASSIGN-parent and default (declaration) branches of getFunctionName
+  @Test
+  public void testGetFunctionName_assignAndDeclaration() throws Throwable {
+    Node qualified = n(Token.GETPROP, name("foo"), str("bar"));
+    Node fn1 = n(Token.FUNCTION, name(""), n(Token.LP), n(Token.BLOCK));
+    n(Token.ASSIGN, qualified, fn1);
+    assertEquals("foo.bar", NodeUtil.getFunctionName(fn1));
+
+    Node fn2 = n(Token.FUNCTION, name("baz"), n(Token.LP), n(Token.BLOCK));
+    n(Token.SCRIPT, fn2);
+    assertEquals("baz", NodeUtil.getFunctionName(fn2));
+  }
+
+  // Covers STRING-key branch of getNearestFunctionName
+  @Test
+  public void testGetNearestFunctionName_objectLitKey() throws Throwable {
+    Node fn = n(Token.FUNCTION, name(""), n(Token.LP), n(Token.BLOCK));
+    Node key = str("foo");
+    key.addChildToBack(fn);
+    n(Token.OBJECTLIT, key);
+    assertEquals("foo", NodeUtil.getNearestFunctionName(fn));
+  }
+
+  // Covers STRING/NUMBER/NAME-constants/default branches of isImmutableValue
+  @Test
+  public void testIsImmutableValue() throws Throwable {
+    assertTrue(NodeUtil.isImmutableValue(str("x")));
+    assertTrue(NodeUtil.isImmutableValue(num(5)));
+    assertTrue(NodeUtil.isImmutableValue(name("undefined")));
+    assertFalse(NodeUtil.isImmutableValue(name("x")));
+  }
+
+  // Covers ARRAYLIT branch of isLiteralValue: all-immutable true, one non-immutable false
+  @Test
+  public void testIsLiteralValue_arrayLit() throws Throwable {
+    Node allImmutable = n(Token.ARRAYLIT, num(1), str("a"));
+    assertTrue(NodeUtil.isLiteralValue(allImmutable, false));
+    Node notImmutable = n(Token.ARRAYLIT, num(1), name("x"));
+    assertFalse(NodeUtil.isLiteralValue(notImmutable, false));
+  }
+
+  // Covers literal branch and NAME-in-defines / not-in-defines branches
+  @Test
+  public void testIsValidDefineValue() throws Throwable {
+    Set<String> defines = new HashSet<String>();
+    defines.add("FOO");
+    assertTrue(NodeUtil.isValidDefineValue(str("x"), defines));
+    assertTrue(NodeUtil.isValidDefineValue(n(Token.ADD, str("a"), str("b")), defines));
+    assertTrue(NodeUtil.isValidDefineValue(name("FOO"), defines));
+    assertFalse(NodeUtil.isValidDefineValue(name("BAR"), defines));
+  }
+
+  // Covers isEmptyBlock true/false branches and isSimpleOperatorType true/false
+  @Test
+  public void testIsEmptyBlockAndIsSimpleOperatorType() throws Throwable {
+    assertTrue(NodeUtil.isEmptyBlock(n(Token.BLOCK)));
+    assertFalse(NodeUtil.isEmptyBlock(n(Token.BLOCK, n(Token.EXPR_RESULT, name("x")))));
+    assertTrue(NodeUtil.isSimpleOperatorType(Token.ADD));
+    assertFalse(NodeUtil.isSimpleOperatorType(Token.ASSIGN));
+  }
+
+  // Covers newExpr wrapping behavior
+  @Test
+  public void testNewExpr() throws Throwable {
+    Node child = name("x");
+    Node expr = NodeUtil.newExpr(child);
+    assertEquals(Token.EXPR_RESULT, expr.getType());
+    assertSame(child, expr.getFirstChild());
+  }
+
+  // Covers CALL/NEW pure-builtin vs side-effecting branches of mayHaveSideEffects
+  @Test
+  public void testMayHaveSideEffects_callAndNew() throws Throwable {
+    assertFalse(NodeUtil.mayHaveSideEffects(n(Token.CALL, name("Object"))));
+    assertTrue(NodeUtil.mayHaveSideEffects(n(Token.CALL, name("foo"))));
+    assertFalse(NodeUtil.mayHaveSideEffects(n(Token.NEW, name("Object"))));
+    assertTrue(NodeUtil.mayHaveSideEffects(n(Token.NEW, name("Foo"))));
+  }
+
+  // Covers precondition-exception branches of constructorCallHasSideEffects/functionCallHasSideEffects
+  @Test
+  public void testConstructorAndFunctionCallHasSideEffects_exceptions() throws Throwable {
+    try {
+      NodeUtil.constructorCallHasSideEffects(n(Token.CALL, name("x")));
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    try {
+      NodeUtil.functionCallHasSideEffects(n(Token.NEW, name("x")));
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Covers precondition-exception branches of callHasLocalResult/newHasLocalResult
+  @Test
+  public void testCallAndNewHasLocalResult_exceptions() throws Throwable {
+    try {
+      NodeUtil.callHasLocalResult(n(Token.NEW, name("x")));
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+    try {
+      NodeUtil.newHasLocalResult(n(Token.CALL, name("x")));
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Covers assignment-op, DELPROP, NAME-with-child and default-false branches
+  @Test
+  public void testNodeTypeMayHaveSideEffects() throws Throwable {
+    assertTrue(NodeUtil.nodeTypeMayHaveSideEffects(n(Token.ASSIGN, name("x"), num(1))));
+    assertTrue(NodeUtil.nodeTypeMayHaveSideEffects(n(Token.DELPROP, name("x"))));
+    Node nameWithChild = name("x");
+    nameWithChild.addChildToBack(num(1));
+    assertTrue(NodeUtil.nodeTypeMayHaveSideEffects(nameWithChild));
+    assertFalse(NodeUtil.nodeTypeMayHaveSideEffects(n(Token.ADD, num(1), num(2))));
+  }
+
+  // Covers constant-name false branch, non-constant NAME and CALL true branches
+  @Test
+  public void testCanBeSideEffected() throws Throwable {
+    Node constName = name("X");
+    constName.putBooleanProp(Node.IS_CONSTANT_NAME, true);
+    assertFalse(NodeUtil.canBeSideEffected(constName));
+    assertTrue(NodeUtil.canBeSideEffected(name("y")));
+    assertTrue(NodeUtil.canBeSideEffected(n(Token.CALL, name("f"))));
+  }
+
+  // Covers known-type and unknown-type(throws Error) branches of precedence
+  @Test
+  public void testPrecedence() throws Throwable {
+    assertEquals(11, NodeUtil.precedence(Token.ADD));
+    assertEquals(15, NodeUtil.precedence(Token.NAME));
+    boolean threw = false;
+    try {
+      NodeUtil.precedence(-9999);
+    } catch (Error expected) {
+      threw = true;
+    }
+    assertTrue(threw);
+  }
+
+  // Covers isNumericResult/isBooleanResult true/false branches
+  @Test
+  public void testIsNumericAndBooleanResult() throws Throwable {
+    assertTrue(NodeUtil.isNumericResult(n(Token.MUL, num(2), num(3))));
+    assertFalse(NodeUtil.isNumericResult(n(Token.ADD, str("a"), str("b"))));
+    assertTrue(NodeUtil.isBooleanResult(n(Token.EQ, num(1), num(2))));
+    assertFalse(NodeUtil.isBooleanResult(num(5)));
+  }
+
+  // Covers isUndefined/isNull/isNullOrUndefined branches
+  @Test
+  public void testIsUndefinedNullBoth() throws Throwable {
+    assertTrue(NodeUtil.isUndefined(name("undefined")));
+    assertTrue(NodeUtil.isUndefined(n(Token.VOID, num(0))));
+    assertTrue(NodeUtil.isNull(new Node(Token.NULL)));
+    assertTrue(NodeUtil.isNullOrUndefined(name("undefined")));
+    assertFalse(NodeUtil.isNullOrUndefined(name("x")));
+  }
+
+  // Covers mayBeString true/false branches via numeric and boolean results
+  @Test
+  public void testMayBeString() throws Throwable {
+    assertTrue(NodeUtil.mayBeString(str("a")));
+    assertFalse(NodeUtil.mayBeString(num(5)));
+    assertFalse(NodeUtil.mayBeString(n(Token.EQ, num(1), num(2))));
+  }
+
+  // Covers isAssociative/isCommutative true/false branches
+  @Test
+  public void testIsAssociativeCommutative() throws Throwable {
+    assertTrue(NodeUtil.isAssociative(Token.MUL));
+    assertFalse(NodeUtil.isAssociative(Token.ADD));
+    assertTrue(NodeUtil.isCommutative(Token.BITAND));
+    assertFalse(NodeUtil.isCommutative(Token.SUB));
+  }
+
+  // Covers isAssignmentOp true/false and getOpFromAssignmentOp valid/exception branches
+  @Test
+  public void testIsAssignmentOpAndGetOp() throws Throwable {
+    assertTrue(NodeUtil.isAssignmentOp(n(Token.ASSIGN_ADD, name("x"), num(1))));
+    assertFalse(NodeUtil.isAssignmentOp(n(Token.ADD, num(1), num(2))));
+    assertEquals(Token.ADD,
+        NodeUtil.getOpFromAssignmentOp(n(Token.ASSIGN_ADD, name("x"), num(1))));
+    try {
+      NodeUtil.getOpFromAssignmentOp(n(Token.ADD, num(1), num(2)));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // Covers isExpressionNode, isGet, isGetProp, isName, isNew, isVar
+  @Test
+  public void testIsExpressionNodeAndGetFamily() throws Throwable {
+    assertTrue(NodeUtil.isExpressionNode(n(Token.EXPR_RESULT, name("x"))));
+    Node gp = n(Token.GETPROP, name("a"), str("b"));
+    assertTrue(NodeUtil.isGet(gp));
+    assertTrue(NodeUtil.isGetProp(gp));
+    assertTrue(NodeUtil.isName(name("z")));
+    assertTrue(NodeUtil.isNew(n(Token.NEW, name("Foo"))));
+    assertTrue(NodeUtil.isVar(n(Token.VAR, name("x"))));
+  }
+
+  // Covers isVarDeclaration true/false branches
+  @Test
+  public void testIsVarDeclaration() throws Throwable {
+    Node vn = name("x");
+    n(Token.VAR, vn);
+    assertTrue(NodeUtil.isVarDeclaration(vn));
+    Node vn2 = name("y");
+    n(Token.ASSIGN, vn2, num(1));
+    assertFalse(NodeUtil.isVarDeclaration(vn2));
+  }
+
+  // Covers var/assign/else branches of getAssignedValue
+  @Test
+  public void testGetAssignedValue() throws Throwable {
+    Node vn3 = name("x");
+    Node valC = num(5);
+    vn3.addChildToBack(valC);
+    n(Token.VAR, vn3);
+    assertSame(valC, NodeUtil.getAssignedValue(vn3));
+
+    Node lhs = name("y");
+    Node rhs2 = num(10);
+    n(Token.ASSIGN, lhs, rhs2);
+    assertSame(rhs2, NodeUtil.getAssignedValue(lhs));
+
+    Node freeName = name("z");
+    n(Token.EXPR_RESULT, freeName);
+    assertNull(NodeUtil.getAssignedValue(freeName));
+  }
+
+  // Covers isString, isExprAssign, isAssign, isExprCall
+  @Test
+  public void testIsStringExprAssignAssignExprCall() throws Throwable {
+    assertTrue(NodeUtil.isString(str("x")));
+    Node assignExpr = n(Token.EXPR_RESULT, n(Token.ASSIGN, name("a"), num(1)));
+    assertTrue(NodeUtil.isExprAssign(assignExpr));
+    assertTrue(NodeUtil.isAssign(assignExpr.getFirstChild()));
+    Node callExpr = n(Token.EXPR_RESULT, n(Token.CALL, name("f")));
+    assertTrue(NodeUtil.isExprCall(callExpr));
+  }
+
+  // Covers 3-child(for-in) vs 4-child(regular for) branches of isForIn
+  @Test
+  public void testIsForIn() throws Throwable {
+    Node forIn = n(Token.FOR, name("x"), name("obj"), n(Token.BLOCK));
+    assertTrue(NodeUtil.isForIn(forIn));
+    Node forReg = n(Token.FOR, n(Token.EMPTY), n(Token.EMPTY), n(Token.EMPTY), n(Token.BLOCK));
+    assertFalse(NodeUtil.isForIn(forReg));
+  }
+
+  // Covers FOR/DO/non-loop branches of isLoopStructure and getLoopCodeBlock
+  @Test
+  public void testLoopStructureAndCodeBlock() throws Throwable {
+    Node forNode = n(Token.FOR, n(Token.EMPTY), n(Token.EMPTY), n(Token.EMPTY), n(Token.BLOCK));
+    assertTrue(NodeUtil.isLoopStructure(forNode));
+    assertSame(forNode.getLastChild(), NodeUtil.getLoopCodeBlock(forNode));
+    Node doNode = n(Token.DO, n(Token.BLOCK), name("cond"));
+    assertSame(doNode.getFirstChild(), NodeUtil.getLoopCodeBlock(doNode));
+    Node ifNode = n(Token.IF, name("x"), n(Token.BLOCK));
+    assertFalse(NodeUtil.isLoopStructure(ifNode));
+    assertNull(NodeUtil.getLoopCodeBlock(ifNode));
+  }
+
+  // Covers true/false branches of isControlStructure
+  @Test
+  public void testIsControlStructure() throws Throwable {
+    assertTrue(NodeUtil.isControlStructure(n(Token.IF, name("x"), n(Token.BLOCK))));
+    assertTrue(NodeUtil.isControlStructure(n(Token.SWITCH)));
+    assertFalse(NodeUtil.isControlStructure(n(Token.BLOCK)));
+  }
+
+  // Covers IF condition-vs-body branches of isControlStructureCodeBlock
+  @Test
+  public void testIsControlStructureCodeBlock() throws Throwable {
+    Node cond = name("x");
+    Node thenBranch = n(Token.BLOCK);
+    Node ifNode = n(Token.IF, cond, thenBranch);
+    assertFalse(NodeUtil.isControlStructureCodeBlock(ifNode, cond));
+    assertTrue(NodeUtil.isControlStructureCodeBlock(ifNode, thenBranch));
+  }
+
+  // Covers IF/DO/FOR(3)/FOR(4)/CASE branches of getConditionExpression
+  @Test
+  public void testGetConditionExpressionVariants() throws Throwable {
+    Node cond = name("c");
+    Node ifNode = n(Token.IF, cond, n(Token.BLOCK));
+    assertSame(cond, NodeUtil.getConditionExpression(ifNode));
+    Node doCond = name("dc");
+    Node doNode = n(Token.DO, n(Token.BLOCK), doCond);
+    assertSame(doCond, NodeUtil.getConditionExpression(doNode));
+    Node forIn = n(Token.FOR, name("x"), name("obj"), n(Token.BLOCK));
+    assertNull(NodeUtil.getConditionExpression(forIn));
+    Node forCond = name("fc");
+    Node forReg = n(Token.FOR, n(Token.EMPTY), forCond, n(Token.EMPTY), n(Token.BLOCK));
+    assertSame(forCond, NodeUtil.getConditionExpression(forReg));
+    Node caseNode = n(Token.CASE, num(1), n(Token.BLOCK));
+    assertNull(NodeUtil.getConditionExpression(caseNode));
+  }
+
+  // Covers the default throw branch of getConditionExpression
+  @Test
+  public void testGetConditionExpressionException() throws Throwable {
+    try {
+      NodeUtil.getConditionExpression(n(Token.BLOCK));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // Covers isStatementBlock true/false branches
+  @Test
+  public void testIsStatementBlock() throws Throwable {
+    assertTrue(NodeUtil.isStatementBlock(n(Token.BLOCK)));
+    assertTrue(NodeUtil.isStatementBlock(n(Token.SCRIPT)));
+    assertFalse(NodeUtil.isStatementBlock(n(Token.IF, name("x"), n(Token.BLOCK))));
+  }
+
+  // Covers isStatement true branch and precondition-exception for null parent
+  @Test
+  public void testIsStatementAndException() throws Throwable {
+    Node stmtNode = name("x");
+    n(Token.BLOCK, stmtNode);
+    assertTrue(NodeUtil.isStatement(stmtNode));
+    Node orphan = name("y");
+    try {
+      NodeUtil.isStatement(orphan);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Covers isSwitchCase, isReferenceName and isLabelName branches
+  @Test
+  public void testIsSwitchCaseReferenceNameLabelName() throws Throwable {
+    assertTrue(NodeUtil.isSwitchCase(n(Token.CASE, num(1), n(Token.BLOCK))));
+    assertTrue(NodeUtil.isSwitchCase(n(Token.DEFAULT, n(Token.BLOCK))));
+    assertFalse(NodeUtil.isSwitchCase(n(Token.BLOCK)));
+    assertTrue(NodeUtil.isReferenceName(name("x")));
+    assertFalse(NodeUtil.isReferenceName(name("")));
+    assertTrue(NodeUtil.isLabelName(Node.newString(Token.LABEL_NAME, "L")));
+    assertFalse(NodeUtil.isLabelName(name("x")));
+  }
+
+  // Covers isTryFinallyNode, hasFinally, getCatchBlock, hasCatchHandler branches
+  @Test
+  public void testTryFinallyCatchHandling() throws Throwable {
+    Node catchNode = n(Token.CATCH, name("e"), n(Token.BLOCK));
+    Node catchBlock = n(Token.BLOCK, catchNode);
+    Node tryBody = n(Token.BLOCK);
+    Node finallyBlock = n(Token.BLOCK);
+    Node tryNode = n(Token.TRY, tryBody, catchBlock, finallyBlock);
+    assertTrue(NodeUtil.hasFinally(tryNode));
+    assertTrue(NodeUtil.isTryFinallyNode(tryNode, finallyBlock));
+    assertSame(catchBlock, NodeUtil.getCatchBlock(tryNode));
+    assertTrue(NodeUtil.hasCatchHandler(catchBlock));
+  }
+
+  // Covers isStatementBlock-removal branch of removeChild
+  @Test
+  public void testRemoveChildFromBlock() throws Throwable {
+    Node stmt = n(Token.EXPR_RESULT, name("x"));
+    Node block = n(Token.BLOCK, stmt);
+    NodeUtil.removeChild(block, stmt);
+    assertFalse(block.hasChildren());
+  }
+
+  // Covers maybeAddFinally adding a missing finally block
+  @Test
+  public void testMaybeAddFinally() throws Throwable {
+    Node tryBody = n(Token.BLOCK);
+    Node catchBlock = n(Token.BLOCK);
+    Node tryNode = n(Token.TRY, tryBody, catchBlock);
+    assertFalse(NodeUtil.hasFinally(tryNode));
+    NodeUtil.maybeAddFinally(tryNode);
+    assertTrue(NodeUtil.hasFinally(tryNode));
+  }
+
+  // Covers tryMergeBlock merging children into statement-block parent
+  @Test
+  public void testTryMergeBlock() throws Throwable {
+    Node inner = n(Token.BLOCK, n(Token.EXPR_RESULT, name("a")),
+        n(Token.EXPR_RESULT, name("b")));
+    Node outer = n(Token.BLOCK, inner);
+    boolean merged = NodeUtil.tryMergeBlock(inner);
+    assertTrue(merged);
+    assertEquals(2, outer.getChildCount());
+  }
+
+  // Covers isCall, isCallOrNew, isFunction, getFunctionBody, isThis, isArrayLiteral
+  @Test
+  public void testIsCallFamily() throws Throwable {
+    Node call = n(Token.CALL, name("f"));
+    assertTrue(NodeUtil.isCall(call));
+    assertTrue(NodeUtil.isCallOrNew(call));
+    Node fn = n(Token.FUNCTION, name(""), n(Token.LP), n(Token.BLOCK));
+    assertTrue(NodeUtil.isFunction(fn));
+    assertSame(fn.getLastChild(), NodeUtil.getFunctionBody(fn));
+    assertTrue(NodeUtil.isThis(n(Token.THIS)));
+    assertTrue(NodeUtil.isArrayLiteral(n(Token.ARRAYLIT)));
+  }
+
+  // Covers containsFunction true/false and containsCall true/false branches
+  @Test
+  public void testContainsFunctionAndCall() throws Throwable {
+    Node fnInside = n(Token.FUNCTION, name(""), n(Token.LP), n(Token.BLOCK));
+    Node wrapper = n(Token.EXPR_RESULT, fnInside);
+    assertTrue(NodeUtil.containsFunction(wrapper));
+    assertFalse(NodeUtil.containsCall(wrapper));
+  }
+
+  // Covers THIS-reference true/false branches of referencesThis
+  @Test
+  public void testReferencesThis() throws Throwable {
+    Node body1 = n(Token.BLOCK, n(Token.EXPR_RESULT, n(Token.THIS)));
+    Node fn1 = n(Token.FUNCTION, name(""), n(Token.LP), body1);
+    assertTrue(NodeUtil.referencesThis(fn1));
+    Node body2 = n(Token.BLOCK, n(Token.EXPR_RESULT, name("x")));
+    Node fn2 = n(Token.FUNCTION, name(""), n(Token.LP), body2);
+    assertFalse(NodeUtil.referencesThis(fn2));
+  }
+
+  // Covers declaration-vs-expression branches of isFunctionDeclaration/isFunctionExpression
+  @Test
+  public void testFunctionDeclarationVsExpression() throws Throwable {
+    Node fnDecl = n(Token.FUNCTION, name("foo"), n(Token.LP), n(Token.BLOCK));
+    n(Token.SCRIPT, fnDecl);
+    assertTrue(NodeUtil.isFunctionDeclaration(fnDecl));
+    assertFalse(NodeUtil.isFunctionExpression(fnDecl));
+    Node fnExpr = n(Token.FUNCTION, name(""), n(Token.LP), n(Token.BLOCK));
+    n(Token.ASSIGN, name("x"), fnExpr);
+    assertFalse(NodeUtil.isFunctionDeclaration(fnExpr));
+    assertTrue(NodeUtil.isFunctionExpression(fnExpr));
+  }
+
+  // Covers SCRIPT-parent branch of isHoistedFunctionDeclaration
+  @Test
+  public void testIsHoistedFunctionDeclaration() throws Throwable {
+    Node fnDecl = n(Token.FUNCTION, name("foo"), n(Token.LP), n(Token.BLOCK));
+    n(Token.SCRIPT, fnDecl);
+    assertTrue(NodeUtil.isHoistedFunctionDeclaration(fnDecl));
+  }
+
+  // Covers isEmptyFunctionExpression true branch (expression + empty body)
+  @Test
+  public void testIsEmptyFunctionExpression() throws Throwable {
+    Node fnExpr = n(Token.FUNCTION, name(""), n(Token.LP), n(Token.BLOCK));
+    n(Token.ASSIGN, name("x"), fnExpr);
+    assertTrue(NodeUtil.isEmptyFunctionExpression(fnExpr));
+  }
+
+  // Covers "arguments"-referenced true/false branches of isVarArgsFunction
+  @Test
+  public void testIsVarArgsFunction() throws Throwable {
+    Node body1 = n(Token.BLOCK, n(Token.EXPR_RESULT, name("arguments")));
+    Node fn1 = n(Token.FUNCTION, name(""), n(Token.LP), body1);
+    assertTrue(NodeUtil.isVarArgsFunction(fn1));
+    Node body2 = n(Token.BLOCK, n(Token.EXPR_RESULT, name("x")));
+    Node fn2 = n(Token.FUNCTION, name(""), n(Token.LP), body2);
+    assertFalse(NodeUtil.isVarArgsFunction(fn2));
+  }
+
+  // Covers isFunctionObjectCall/Apply/CallOrApply and isSimpleFunctionObjectCall
+  @Test
+  public void testObjectCallMethods() throws Throwable {
+    Node callTarget = n(Token.GETPROP, name("foo"), str("call"));
+    Node call = n(Token.CALL, callTarget);
+    assertTrue(NodeUtil.isFunctionObjectCall(call));
+    assertFalse(NodeUtil.isFunctionObjectApply(call));
+    assertTrue(NodeUtil.isSimpleFunctionObjectCall(call));
+    Node applyTarget = n(Token.GETPROP, name("bar"), str("apply"));
+    Node applyCall = n(Token.CALL, applyTarget);
+    assertTrue(NodeUtil.isFunctionObjectApply(applyCall));
+    assertTrue(NodeUtil.isFunctionObjectCallOrApply(applyCall));
+  }
+
+  // Covers assign-lhs and var-decl branches of isVarOrSimpleAssignLhs
+  @Test
+  public void testIsVarOrSimpleAssignLhs() throws Throwable {
+    Node lhs = name("x");
+    Node assignNode = n(Token.ASSIGN, lhs, num(1));
+    assertTrue(NodeUtil.isVarOrSimpleAssignLhs(lhs, assignNode));
+    Node varName = name("y");
+    Node varNode = n(Token.VAR, varName);
+    assertTrue(NodeUtil.isVarOrSimpleAssignLhs(varName, varNode));
+  }
+
+  // Covers valid-type true branches and precondition-exception branch of isLValue
+  @Test
+  public void testIsLValue() throws Throwable {
+    Node varName = name("x");
+    n(Token.VAR, varName);
+    assertTrue(NodeUtil.isLValue(varName));
+    Node assignTarget = name("y");
+    n(Token.ASSIGN, assignTarget, num(1));
+    assertTrue(NodeUtil.isLValue(assignTarget));
+    try {
+      NodeUtil.isLValue(num(5));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // Covers STRING/GET/SET branches of isObjectLitKey/getObjectLitKeyName and exception branch
+  @Test
+  public void testObjectLitKeyAndName() throws Throwable {
+    Node keyStr = str("a");
+    Node valNode = num(1);
+    keyStr.addChildToBack(valNode);
+    Node objLit = n(Token.OBJECTLIT, keyStr);
+    assertTrue(NodeUtil.isObjectLitKey(keyStr, objLit));
+    assertEquals("a", NodeUtil.getObjectLitKeyName(keyStr));
+    assertTrue(NodeUtil.isGetOrSetKey(n(Token.GET)));
+    try {
+      NodeUtil.getObjectLitKeyName(num(1));
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Covers known-operator and unknown-operator(null/throws) branches of opToStr/opToStrNoFail
+  @Test
+  public void testOpToStrAndNoFail() throws Throwable {
+    assertEquals("+", NodeUtil.opToStr(Token.ADD));
+    assertEquals("&&", NodeUtil.opToStr(Token.AND));
+    assertNull(NodeUtil.opToStr(Token.BLOCK));
+    assertEquals("-", NodeUtil.opToStrNoFail(Token.SUB));
+    boolean threw = false;
+    try {
+      NodeUtil.opToStrNoFail(Token.BLOCK);
+    } catch (Error expected) {
+      threw = true;
+    }
+    assertTrue(threw);
+  }
+
+  // Covers containsType true/false branches and newFunctionNode structure
+  @Test
+  public void testContainsTypeAndNewFunctionNode() throws Throwable {
+    Node inner = n(Token.CALL, name("foo"));
+    Node outer = n(Token.EXPR_RESULT, inner);
+    assertTrue(NodeUtil.containsType(outer, Token.CALL));
+    assertFalse(NodeUtil.containsType(outer, Token.FUNCTION));
+    List<Node> params = new ArrayList<Node>();
+    params.add(name("a"));
+    params.add(name("b"));
+    Node body = n(Token.BLOCK);
+    Node fn = NodeUtil.newFunctionNode("foo", params, body, 1, 1);
+    assertEquals("foo", fn.getFirstChild().getString());
+    assertEquals(2, fn.getFirstChild().getNext().getChildCount());
+    assertSame(body, fn.getLastChild());
+  }
+
+  // Covers isConstantName false/true branches and copyNameAnnotations propagation
+  @Test
+  public void testIsConstantNameAndCopyAnnotations() throws Throwable {
+    Node src = name("X");
+    assertFalse(NodeUtil.isConstantName(src));
+    src.putBooleanProp(Node.IS_CONSTANT_NAME, true);
+    assertTrue(NodeUtil.isConstantName(src));
+    Node dest = name("Y");
+    NodeUtil.copyNameAnnotations(src, dest);
+    assertTrue(NodeUtil.isConstantName(dest));
+  }
+
+  // Covers getVarsDeclaredInBranch collecting NAME nodes under VAR
+  @Test
+  public void testGetVarsDeclaredInBranch() throws Throwable {
+    Node declA = name("a");
+    Node varNode = n(Token.VAR, declA);
+    Node block = n(Token.BLOCK, varNode);
+    Collection<Node> vars = NodeUtil.getVarsDeclaredInBranch(block);
+    assertEquals(1, vars.size());
+    assertSame(declA, vars.iterator().next());
+  }
+
+  // Covers newVarNode structure: VAR->NAME->value
+  @Test
+  public void testNewVarNode() throws Throwable {
+    Node val = num(5);
+    Node varNode = NodeUtil.newVarNode("x", val);
+    assertEquals(Token.VAR, varNode.getType());
+    assertEquals("x", varNode.getFirstChild().getString());
+    assertSame(val, varNode.getFirstChild().getFirstChild());
+  }
+
+  // Covers newUndefinedNode structure: VOID(NUMBER 0)
+  @Test
+  public void testNewUndefinedNode() throws Throwable {
+    Node ref = n(Token.BLOCK);
+    Node undef = NodeUtil.newUndefinedNode(ref);
+    assertEquals(Token.VOID, undef.getType());
+    assertEquals(0.0, undef.getFirstChild().getDouble(), 0.0);
+  }
+
+  // Covers free-call vs get-target branches of newCallNode (FREE_CALL flag)
+  @Test
+  public void testNewCallNode() throws Throwable {
+    Node target = name("foo");
+    Node arg = num(1);
+    Node call = NodeUtil.newCallNode(target, arg);
+    assertEquals(Token.CALL, call.getType());
+    assertTrue(call.getBooleanProp(Node.FREE_CALL));
+    assertSame(target, call.getFirstChild());
+    assertSame(arg, call.getFirstChild().getNext());
+    Node targetGet = n(Token.GETPROP, name("obj"), str("method"));
+    Node call2 = NodeUtil.newCallNode(targetGet);
+    assertFalse(call2.getBooleanProp(Node.FREE_CALL));
+  }
+
+  // Covers isNameReferenced and getNameReferenceCount branches
+  @Test
+  public void testNameReferenceCounting() throws Throwable {
+    Node tree = n(Token.BLOCK, n(Token.EXPR_RESULT, name("x")),
+        n(Token.EXPR_RESULT, name("x")), n(Token.EXPR_RESULT, name("y")));
+    assertTrue(NodeUtil.isNameReferenced(tree, "x"));
+    assertFalse(NodeUtil.isNameReferenced(tree, "z"));
+    assertEquals(2, NodeUtil.getNameReferenceCount(tree, "x"));
+  }
+
+  // Covers getCount with MatchNodeType and visitPreOrder traversal order/count
+  @Test
+  public void testGetCountAndVisitPreOrder() throws Throwable {
+    Node tree = n(Token.BLOCK, n(Token.EXPR_RESULT, num(1)), n(Token.EXPR_RESULT, num(2)));
+    int count = NodeUtil.getCount(tree, new NodeUtil.MatchNodeType(Token.NUMBER),
+        Predicates.<Node>alwaysTrue());
+    assertEquals(2, count);
+    final int[] visited = new int[1];
+    NodeUtil.visitPreOrder(tree, new NodeUtil.Visitor() {
+      public void visit(Node node) {
+        visited[0]++;
+      }
+    }, Predicates.<Node>alwaysTrue());
+    assertEquals(5, visited[0]);
+  }
+
+  // Covers getFunctionParameters structure
+  @Test
+  public void testGetFunctionParameters() throws Throwable {
+    Node p1 = name("a");
+    Node params = n(Token.LP, p1);
+    Node fn = n(Token.FUNCTION, name("f"), params, n(Token.BLOCK));
+    assertSame(params, NodeUtil.getFunctionParameters(fn));
+  }
+
+  // Covers getArgumentForFunction in-range and out-of-range branches
+  @Test
+  public void testGetArgumentForFunction() throws Throwable {
+    Node p1 = name("a");
+    Node p2 = name("b");
+    Node params = n(Token.LP, p1, p2);
+    Node fn = n(Token.FUNCTION, name("f"), params, n(Token.BLOCK));
+    assertSame(p1, NodeUtil.getArgumentForFunction(fn, 0));
+    assertSame(p2, NodeUtil.getArgumentForFunction(fn, 1));
+    assertNull(NodeUtil.getArgumentForFunction(fn, 2));
+  }
+
+  // Covers getArgumentForCallOrNew in-range branches
+  @Test
+  public void testGetArgumentForCallOrNew() throws Throwable {
+    Node arg1 = num(1);
+    Node arg2 = num(2);
+    Node call = n(Token.CALL, name("f"), arg1, arg2);
+    assertSame(arg1, NodeUtil.getArgumentForCallOrNew(call, 0));
+    assertSame(arg2, NodeUtil.getArgumentForCallOrNew(call, 1));
+  }
+
+  // Covers immutable-NAME, non-immutable-NAME branches of evaluatesToLocalValue
+  @Test
+  public void testEvaluatesToLocalValue() throws Throwable {
+    assertTrue(NodeUtil.evaluatesToLocalValue(num(5)));
+    assertTrue(NodeUtil.evaluatesToLocalValue(name("undefined")));
+    assertFalse(NodeUtil.evaluatesToLocalValue(name("x")));
+  }
+
+  // Covers getRootOfQualifiedName NAME-root, GETPROP-chain and precondition-exception branches
+  @Test
+  public void testGetRootOfQualifiedName() throws Throwable {
+    Node nameN = name("foo");
+    assertSame(nameN, NodeUtil.getRootOfQualifiedName(nameN));
+    Node qn = n(Token.GETPROP, name("foo"), str("bar"));
+    assertEquals("foo", NodeUtil.getRootOfQualifiedName(qn).getString());
+    try {
+      NodeUtil.getRootOfQualifiedName(num(5));
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Covers ASCII-true and non-ASCII-false branches of isLatin
+  @Test
+  public void testIsLatin() throws Throwable {
+    assertTrue(NodeUtil.isLatin("hello"));
+    assertFalse(NodeUtil.isLatin("h\u00e9llo"));
+  }
+
+  // Covers prototype-declaration detection and class-name/property-name extraction
+  @Test
+  public void testPrototypeHelpers() throws Throwable {
+    Node qualified = n(Token.GETPROP, n(Token.GETPROP, name("Foo"), str("prototype")),
+        str("bar"));
+    Node valueFn = n(Token.FUNCTION, name(""), n(Token.LP), n(Token.BLOCK));
+    Node assign = n(Token.ASSIGN, qualified, valueFn);
+    Node exprStmt = n(Token.EXPR_RESULT, assign);
+    assertTrue(NodeUtil.isPrototypePropertyDeclaration(exprStmt));
+    assertEquals("Foo", NodeUtil.getPrototypeClassName(qualified).getString());
+    assertEquals("bar", NodeUtil.getPrototypePropertyName(qualified));
+  }
+}

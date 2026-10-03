@@ -1,0 +1,20 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Jsoup -v 21f -w /tmp/claude-Jsoup-21-ni90eem6/fixed
+Checking out 249e5a8a to /tmp/claude-Jsoup-21-ni90eem6/fixed............... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Jsoup-21-ni90eem6/fixed/maven-build.xml. OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 249e5a8a:c744b9af..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Jsoup-21f....................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Jsoup-21-ni90eem6/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

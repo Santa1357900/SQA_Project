@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-18-8kbqomcg/JacksonDatabind-18f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - com.fasterxml.jackson.databind.MappingIteratorClaudeTest::testClose_afterExhaustion_noExceptionAndParserStaysNull
+  - com.fasterxml.jackson.databind.MappingIteratorClaudeTest::testHasNextValue_malformedJson_throwsJsonParseExceptionDirectly
+  - com.fasterxml.jackson.databind.MappingIteratorClaudeTest::testHasNext_malformedJson_wrapsAsPlainRuntimeException
+  - com.fasterxml.jackson.databind.MappingIteratorClaudeTest::testGetParser_afterExhaustion_returnsNull
+[exit 0]

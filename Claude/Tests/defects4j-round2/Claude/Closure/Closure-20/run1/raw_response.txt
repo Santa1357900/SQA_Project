@@ -1,0 +1,260 @@
+package com.google.javascript.jscomp;
+
+import com.google.javascript.rhino.IR;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class PeepholeSubstituteAlternateSyntaxClaudeTest {
+
+  // Runs the compiler with foldConstants enabled (activates PeepholeSubstituteAlternateSyntax)
+  // and returns the generated source.
+  private String optimize(String js) throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setFoldConstants(true);
+    SourceFile extern = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("input.js", js);
+    compiler.compile(extern, input, options);
+    return compiler.toSource();
+  }
+
+  private int countOccurrences(String s, String sub) {
+    int count = 0;
+    int idx = 0;
+    while ((idx = s.indexOf(sub, idx)) != -1) {
+      count++;
+      idx += sub.length();
+    }
+    return count;
+  }
+
+  // isPure(null) contract: null is considered pure.
+  @Test
+  public void testIsPure_nullNode_returnsTrue() throws Throwable {
+    PeepholeSubstituteAlternateSyntax opt = new PeepholeSubstituteAlternateSyntax(false);
+    assertTrue(opt.isPure(null));
+  }
+
+  // isPure on a NUMBER literal: cannot be side-effected and has no side effects.
+  @Test
+  public void testIsPure_numberLiteral_returnsTrue() throws Throwable {
+    PeepholeSubstituteAlternateSyntax opt = new PeepholeSubstituteAlternateSyntax(false);
+    assertTrue(opt.isPure(IR.number(5)));
+  }
+
+  // isPure on a STRING literal: cannot be side-effected and has no side effects.
+  @Test
+  public void testIsPure_stringLiteral_returnsTrue() throws Throwable {
+    PeepholeSubstituteAlternateSyntax opt = new PeepholeSubstituteAlternateSyntax(false);
+    assertTrue(opt.isPure(IR.string("hi")));
+  }
+
+  // containsUnicodeEscape for a plain ascii string should not report an escape.
+  @Test
+  public void testContainsUnicodeEscape_plainAscii_returnsFalse() throws Throwable {
+    assertFalse(PeepholeSubstituteAlternateSyntax.containsUnicodeEscape("hello"));
+  }
+
+  // tryReduceReturn NAME branch: "return undefined;" -> "return;"
+  @Test
+  public void testOptimizeSubtree_returnUndefined_reducedToBareReturn() throws Throwable {
+    String out = optimize("function f(){return undefined;}");
+    assertFalse(out.contains("undefined"));
+  }
+
+  // tryReduceReturn VOID branch (no side effect operand): "return void 0;" -> "return;"
+  @Test
+  public void testOptimizeSubtree_returnVoidZero_reducedToBareReturn() throws Throwable {
+    String out = optimize("function f(){return void 0;}");
+    assertFalse(out.contains("void"));
+  }
+
+  // tryReduceReturn VOID branch with side effects: call must be preserved, not dropped.
+  @Test
+  public void testOptimizeSubtree_returnVoidCall_callPreserved() throws Throwable {
+    String out = optimize("function foo(){} function f(){return void foo();}");
+    assertTrue(out.contains("foo("));
+  }
+
+  // tryMinimizeNot EQ->NE branch.
+  @Test
+  public void testOptimizeSubtree_notEq_convertsToNe() throws Throwable {
+    String out = optimize("var a,b,r;r=!(a==b);");
+    assertTrue(out.contains("!="));
+    assertFalse(out.contains("=="));
+  }
+
+  // tryMinimizeNot NE->EQ branch.
+  @Test
+  public void testOptimizeSubtree_notNe_convertsToEq() throws Throwable {
+    String out = optimize("var a,b,r;r=!(a!=b);");
+    assertTrue(out.contains("=="));
+    assertFalse(out.contains("!="));
+  }
+
+  // tryMinimizeNot SHEQ->SHNE branch.
+  @Test
+  public void testOptimizeSubtree_notSheq_convertsToShne() throws Throwable {
+    String out = optimize("var a,b,r;r=!(a===b);");
+    assertTrue(out.contains("!=="));
+    assertFalse(out.contains("==="));
+  }
+
+  // tryMinimizeNot SHNE->SHEQ branch.
+  @Test
+  public void testOptimizeSubtree_notShne_convertsToSheq() throws Throwable {
+    String out = optimize("var a,b,r;r=!(a!==b);");
+    assertTrue(out.contains("==="));
+    assertFalse(out.contains("!=="));
+  }
+
+  // tryMinimizeNot default branch: LT must NOT be converted (javadoc: !(x<NaN) != x>=NaN).
+  @Test
+  public void testOptimizeSubtree_notLessThan_notConverted() throws Throwable {
+    String out = optimize("var a,b,r;r=!(a<b);");
+    assertTrue(out.contains("<"));
+    assertTrue(out.contains("!"));
+  }
+
+  // tryMinimizeIf then-only branch: if(x)foo(); -> x&&foo();
+  @Test
+  public void testOptimizeSubtree_ifThenOnly_convertsToAnd() throws Throwable {
+    String out = optimize("var x;function foo(){}if(x)foo();");
+    assertTrue(out.contains("&&"));
+    assertFalse(out.contains("if("));
+  }
+
+  // tryMinimizeIf then-only-with-not branch: if(!x)foo(); -> x||foo();
+  @Test
+  public void testOptimizeSubtree_ifNotThenOnly_convertsToOr() throws Throwable {
+    String out = optimize("var x;function foo(){}if(!x)foo();");
+    assertTrue(out.contains("||"));
+    assertFalse(out.contains("if("));
+  }
+
+  // tryMinimizeIf both-branches-return branch: if(x)return 1;else return 2; -> return x?1:2;
+  @Test
+  public void testOptimizeSubtree_ifElseBothReturn_convertsToTernary() throws Throwable {
+    String out = optimize("function f(x){if(x){return 1;}else{return 2;}}");
+    assertTrue(out.contains("?"));
+    assertTrue(out.contains(":"));
+    assertFalse(out.contains("if("));
+  }
+
+  // tryMinimizeCondition NOT(NOT(x)) -> x branch, combined with then-only AND fold.
+  @Test
+  public void testOptimizeSubtree_doubleNegationCondition_removesDoubleNot() throws Throwable {
+    String out = optimize("var x;function foo(){}if(!!x)foo();");
+    assertFalse(out.contains("!!"));
+    assertFalse(out.contains("if("));
+  }
+
+  // tryMinimizeCondition OR branch: x||false -> x
+  @Test
+  public void testOptimizeSubtree_orFalse_removesFalseLiteral() throws Throwable {
+    String out = optimize("var x;function foo(){}if(x||false)foo();");
+    assertFalse(out.contains("false"));
+    assertFalse(out.contains("if("));
+  }
+
+  // tryMinimizeCondition AND branch: x&&true -> x
+  @Test
+  public void testOptimizeSubtree_andTrue_removesTrueLiteral() throws Throwable {
+    String out = optimize("var x;function foo(){}if(x&&true)foo();");
+    assertFalse(out.contains("true"));
+    assertFalse(out.contains("if("));
+  }
+
+  // tryMinimizeCondition HOOK branch: x?true:false -> x
+  @Test
+  public void testOptimizeSubtree_hookTrueFalse_reducesToCondition() throws Throwable {
+    String out = optimize("var x;function foo(){}if(x?true:false)foo();");
+    assertFalse(out.contains("true"));
+    assertFalse(out.contains("false"));
+    assertFalse(out.contains("if("));
+  }
+
+  // tryMinimizeCondition HOOK branch: x?false:true -> !x, then folded via if(!x)foo(); -> x||foo();
+  @Test
+  public void testOptimizeSubtree_hookFalseTrue_reducesToNotCondition() throws Throwable {
+    String out = optimize("var x;function foo(){}if(x?false:true)foo();");
+    assertFalse(out.contains("true"));
+    assertFalse(out.contains("false"));
+    assertTrue(out.contains("||"));
+  }
+
+  // tryFoldSimpleFunctionCall: String(a) -> ''+(a)
+  @Test
+  public void testOptimizeSubtree_stringCall_foldsToConcat() throws Throwable {
+    String out = optimize("var a,s;s=String(a);");
+    assertTrue(out.contains("+"));
+    assertFalse(out.contains("String("));
+  }
+
+  // trySplitComma: statement-level comma expression is split into two statements.
+  @Test
+  public void testOptimizeSubtree_commaExpression_splitIntoStatements() throws Throwable {
+    String out = optimize("var a,b;a=1,b=2;");
+    assertTrue(out.contains("a=1"));
+    assertTrue(out.contains("b=2"));
+    assertFalse(out.contains("1,b"));
+  }
+
+  // tryReplaceExitWithBreak: duplicate return inside while loop becomes break (javadoc example).
+  @Test
+  public void testOptimizeSubtree_whileWithDuplicateReturn_replacedWithBreak() throws Throwable {
+    String out = optimize("function f(){} function g(a){while(a){return f();}return f();}");
+    assertTrue(out.contains("break"));
+    assertEquals(1, countOccurrences(out, "f()"));
+  }
+
+  // tryReplaceExitWithBreak: duplicate throw inside while loop becomes break (javadoc example).
+  @Test
+  public void testOptimizeSubtree_whileWithDuplicateThrow_replacedWithBreak() throws Throwable {
+    String out = optimize("function g(a){while(a){throw 'ow';}throw 'ow';}");
+    assertTrue(out.contains("break"));
+    assertEquals(1, countOccurrences(out, "'ow'"));
+  }
+
+  // tryRemoveRedundantExit: duplicate return after if (no loop) is removed (javadoc example).
+  @Test
+  public void testOptimizeSubtree_ifWithDuplicateReturn_redundantRemoved() throws Throwable {
+    String out = optimize("function f(){} function g(a){if(a){return f();}return f();}");
+    assertEquals(1, countOccurrences(out, "f()"));
+  }
+
+  // Negative control: differing exits must NOT be merged/removed.
+  @Test
+  public void testOptimizeSubtree_ifWithDifferentReturns_notMerged() throws Throwable {
+    String out = optimize("function f(){} function h(){} function g(a){if(a){return f();}return h();}");
+    assertTrue(out.contains("f()"));
+    assertTrue(out.contains("h()"));
+  }
+
+  // tryReplaceIf OR-merge branch: if(x)return 1;if(y)return 1; -> if(x||y)return 1;
+  @Test
+  public void testOptimizeSubtree_ifIfSameReturn_mergedWithOr() throws Throwable {
+    String out = optimize("function f(x,y){if(x){return 1;}if(y){return 1;}}");
+    assertTrue(out.contains("||"));
+    assertEquals(1, countOccurrences(out, "return 1"));
+  }
+
+  // tryReplaceIf AND-merge branch: if(x)return 1;if(y)foo();else return 1; -> if(!x&&y)foo();else return 1;
+  @Test
+  public void testOptimizeSubtree_ifIfElseSameReturn_mergedWithAnd() throws Throwable {
+    String out = optimize("function foo(){} function f(x,y){if(x){return 1;}if(y){foo();}else{return 1;}}");
+    assertTrue(out.contains("&&"));
+    assertTrue(out.contains("foo("));
+    assertEquals(1, countOccurrences(out, "return 1"));
+  }
+
+  // tryReplaceIf hook-with-undefined branch: if(x)return; return 1; -> return x?void 0:1;
+  @Test
+  public void testOptimizeSubtree_ifEmptyReturnThenReturnValue_mergedWithHook() throws Throwable {
+    String out = optimize("function f(x){if(x){return;}return 1;}");
+    assertTrue(out.contains("?"));
+    assertTrue(out.contains(":"));
+    assertEquals(1, countOccurrences(out, "return"));
+  }
+}

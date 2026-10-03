@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-10-o_g3e1r3/JxPath-10b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testCompute_nodeSetVsNodeSetEqualBoundary_true
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testCompute_nodeSetLeftContainsMatchingElement_true
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testCompute_nodeSetVsNodeSetExistsMatch_true
+[exit 0]

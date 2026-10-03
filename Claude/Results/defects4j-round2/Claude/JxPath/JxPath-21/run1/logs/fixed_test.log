@@ -1,0 +1,54 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-21-3dlinbfh/JxPath-21f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /tmp/claude-JxPath-21-3dlinbfh/fixed && ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-JxPath-21-3dlinbfh/fixed -Dd4j.test.dir=/tmp/claude-JxPath-21-3dlinbfh/fixed/.test_suite compile.gen.tests 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+init:
+
+get-deps:
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/JxPath/lib/xerces/xerces/2.4.0/xerces-2.4.0.jar
+      [get] To: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/lib/xerces-2.4.0.jar
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/JxPath/lib/servletapi/servletapi/2.4/servletapi-2.4.jar
+      [get] To: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/lib/servletapi-2.4.jar
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/JxPath/lib/jspapi/jsp-api/2.0/jsp-api-2.0.jar
+      [get] To: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/lib/jsp-api-2.0.jar
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/JxPath/lib/xml-apis/xml-apis/2.0.2/xml-apis-2.0.2.jar
+      [get] To: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/lib/xml-apis-2.0.2.jar
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/JxPath/lib/jdom/jdom/1.0/jdom-1.0.jar
+      [get] To: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/lib/jdom-1.0.jar
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/JxPath/lib/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar
+      [get] To: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/lib/commons-beanutils-1.7.0.jar
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/JxPath/lib/commons-logging/commons-logging/1.1/commons-logging-1.1.jar
+      [get] To: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/lib/commons-logging-1.1.jar
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/JxPath/lib/junit/junit/3.8.1/junit-3.8.1.jar
+      [get] To: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/lib/junit-3.8.1.jar
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/JxPath/lib/mockrunner-0.4.1.jar
+      [get] To: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/lib/mockrunner-jdk1.3-j2ee1.3-0.4.jar
+
+compile:
+    [javac] /tmp/claude-JxPath-21-3dlinbfh/fixed/build.xml:36: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+
+compile.gen.tests:
+     [echo] classes.dir: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/classes
+     [echo] build.home: /tmp/claude-JxPath-21-3dlinbfh/fixed/target/classes/..
+    [mkdir] Created dir: /tmp/claude-JxPath-21-3dlinbfh/fixed/.classes_testgen
+    [javac] /home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /tmp/claude-JxPath-21-3dlinbfh/fixed/.classes_testgen
+    [javac] /tmp/claude-JxPath-21-3dlinbfh/fixed/.test_suite/org/apache/commons/jxpath/ri/model/beans/PropertyPointerClaudeTest.java:39: error: interface expected here
+    [javac]     private static class SucceedingFactory implements AbstractFactory {
+    [javac]                                                       ^
+    [javac] Note: /tmp/claude-JxPath-21-3dlinbfh/fixed/.test_suite/org/apache/commons/jxpath/ri/model/beans/PropertyPointerClaudeTest.java uses or overrides a deprecated API.
+    [javac] Note: Recompile with -Xlint:deprecation for details.
+    [javac] Note: /tmp/claude-JxPath-21-3dlinbfh/fixed/.test_suite/org/apache/commons/jxpath/ri/model/beans/PropertyPointerClaudeTest.java uses unchecked or unsafe operations.
+    [javac] Note: Recompile with -Xlint:unchecked for details.
+    [javac] Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+    [javac] 1 error
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 2 seconds
+Cannot compile extracted test suite! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

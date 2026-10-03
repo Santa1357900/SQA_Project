@@ -1,0 +1,504 @@
+package com.google.javascript.jscomp;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class AbstractCommandLineRunnerClaudeTest {
+
+  private static class TestRunner
+      extends AbstractCommandLineRunner<Compiler, CompilerOptions> {
+    TestRunner(PrintStream out, PrintStream err) {
+      super(out, err);
+    }
+
+    @Override
+    protected Compiler createCompiler() {
+      return new Compiler();
+    }
+
+    @Override
+    protected CompilerOptions createOptions() {
+      return new CompilerOptions();
+    }
+  }
+
+  private ByteArrayOutputStream outBuf;
+  private ByteArrayOutputStream errBuf;
+  private PrintStream outStream;
+  private PrintStream errStream;
+  private TestRunner runner;
+
+  @Before
+  public void setUp() throws Throwable {
+    outBuf = new ByteArrayOutputStream();
+    errBuf = new ByteArrayOutputStream();
+    outStream = new PrintStream(outBuf, true, "UTF-8");
+    errStream = new PrintStream(errBuf, true, "UTF-8");
+    runner = new TestRunner(outStream, errStream);
+  }
+
+  // createJsModules: valid "name:0" spec with no js files produces one module
+  @Test
+  public void testCreateJsModules_validSingleModuleZeroFiles_createsModule() throws Throwable {
+    List<String> specs = Arrays.asList("mod1:0");
+    List<String> jsFiles = new ArrayList<String>();
+    JSModule[] modules = AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+    assertEquals(1, modules.length);
+    assertEquals("mod1", modules[0].getName());
+  }
+
+  // createJsModules: dependency on a previously-declared module succeeds (parts.length==3 branch)
+  @Test
+  public void testCreateJsModules_validTwoModulesWithDependency_createsModulesInOrder()
+      throws Throwable {
+    List<String> specs = Arrays.asList("base:0", "dep:0:base");
+    List<String> jsFiles = new ArrayList<String>();
+    JSModule[] modules = AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+    assertEquals(2, modules.length);
+    assertEquals("base", modules[0].getName());
+    assertEquals("dep", modules[1].getName());
+  }
+
+  // createJsModules: spec with only 1 colon-part (no colon) is invalid (parts.length < 2)
+  @Test
+  public void testCreateJsModules_tooFewColonParts_throwsFlagUsageException() throws Throwable {
+    List<String> specs = Arrays.asList("justname");
+    List<String> jsFiles = new ArrayList<String>();
+    try {
+      AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("colon-delimited"));
+    }
+  }
+
+  // createJsModules: spec with 5 colon-parts is invalid (parts.length > 4)
+  @Test
+  public void testCreateJsModules_tooManyColonParts_throwsFlagUsageException() throws Throwable {
+    List<String> specs = Arrays.asList("a:b:c:d:e");
+    List<String> jsFiles = new ArrayList<String>();
+    try {
+      AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("colon-delimited"));
+    }
+  }
+
+  // createJsModules: module name starting with a digit is not a valid JS identifier
+  @Test
+  public void testCreateJsModules_invalidModuleName_throwsFlagUsageException() throws Throwable {
+    List<String> specs = Arrays.asList("1abc:0");
+    List<String> jsFiles = new ArrayList<String>();
+    try {
+      AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Invalid module name"));
+    }
+  }
+
+  // createJsModules: declaring the same module name twice is rejected
+  @Test
+  public void testCreateJsModules_duplicateModuleName_throwsFlagUsageException() throws Throwable {
+    List<String> specs = Arrays.asList("dup:0", "dup:0");
+    List<String> jsFiles = new ArrayList<String>();
+    try {
+      AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Duplicate module name"));
+    }
+  }
+
+  // createJsModules: non-numeric file count triggers NumberFormatException-catch branch
+  @Test
+  public void testCreateJsModules_nonNumericFileCount_throwsFlagUsageException() throws Throwable {
+    List<String> specs = Arrays.asList("m1:abc");
+    List<String> jsFiles = new ArrayList<String>();
+    try {
+      AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Invalid js file count"));
+    }
+  }
+
+  // createJsModules: a valid but negative file count (parses OK) is still rejected
+  @Test
+  public void testCreateJsModules_negativeFileCount_throwsFlagUsageException() throws Throwable {
+    List<String> specs = Arrays.asList("m1:-1");
+    List<String> jsFiles = new ArrayList<String>();
+    try {
+      AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Invalid js file count"));
+    }
+  }
+
+  // createJsModules: requesting more files than are available in jsFiles
+  @Test
+  public void testCreateJsModules_notEnoughJsFiles_throwsFlagUsageException() throws Throwable {
+    List<String> specs = Arrays.asList("m1:5");
+    List<String> jsFiles = new ArrayList<String>();
+    try {
+      AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Not enough js files"));
+    }
+  }
+
+  // createJsModules: dependency name that was never declared is unknown
+  @Test
+  public void testCreateJsModules_unknownDependency_throwsFlagUsageException() throws Throwable {
+    List<String> specs = Arrays.asList("m1:0:missingDep");
+    List<String> jsFiles = new ArrayList<String>();
+    try {
+      AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("unknown module"));
+    }
+  }
+
+  // createJsModules: leftover unassigned js files after processing all specs
+  @Test
+  public void testCreateJsModules_tooManyJsFilesSpecified_throwsFlagUsageException()
+      throws Throwable {
+    List<String> specs = Arrays.asList("m1:0");
+    List<String> jsFiles = Arrays.asList("a.js", "b.js");
+    try {
+      AbstractCommandLineRunner.createJsModules(specs, jsFiles);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Too many js files"));
+    }
+  }
+
+  // parseModuleWrappers: with no specs, every module gets an empty-string wrapper
+  @Test
+  public void testParseModuleWrappers_emptySpecs_initializesAllModulesWithEmptyWrapper()
+      throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1"), new JSModule("m2") };
+    Map<String, String> wrappers =
+        AbstractCommandLineRunner.parseModuleWrappers(new ArrayList<String>(), modules);
+    assertEquals("", wrappers.get("m1"));
+    assertEquals("", wrappers.get("m2"));
+  }
+
+  // parseModuleWrappers: a valid "name:wrapper" spec sets the wrapper string
+  @Test
+  public void testParseModuleWrappers_validSpec_setsWrapperForModule() throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1") };
+    List<String> specs = Arrays.asList("m1:(function(){%s})()");
+    Map<String, String> wrappers = AbstractCommandLineRunner.parseModuleWrappers(specs, modules);
+    assertEquals("(function(){%s})()", wrappers.get("m1"));
+  }
+
+  // parseModuleWrappers: spec without a colon separator is malformed
+  @Test
+  public void testParseModuleWrappers_missingColon_throwsFlagUsageException() throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1") };
+    List<String> specs = Arrays.asList("nocolonhere");
+    try {
+      AbstractCommandLineRunner.parseModuleWrappers(specs, modules);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("format"));
+    }
+  }
+
+  // parseModuleWrappers: spec references a module name that doesn't exist
+  @Test
+  public void testParseModuleWrappers_unknownModule_throwsFlagUsageException() throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1") };
+    List<String> specs = Arrays.asList("unknown:%s");
+    try {
+      AbstractCommandLineRunner.parseModuleWrappers(specs, modules);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("Unknown module"));
+    }
+  }
+
+  // parseModuleWrappers: wrapper missing the required %s placeholder is rejected
+  @Test
+  public void testParseModuleWrappers_missingPlaceholder_throwsFlagUsageException()
+      throws Throwable {
+    JSModule[] modules = new JSModule[] { new JSModule("m1") };
+    List<String> specs = Arrays.asList("m1:nowrapperhere");
+    try {
+      AbstractCommandLineRunner.parseModuleWrappers(specs, modules);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("%s"));
+    }
+  }
+
+  // writeOutput: placeholder in the middle emits prefix, code, then remaining suffix line
+  @Test
+  public void testWriteOutput_placeholderInMiddle_wrapsCodeWithPrefixAndSuffix()
+      throws Throwable {
+    ByteArrayOutputStream buf = new ByteArrayOutputStream();
+    PrintStream ps = new PrintStream(buf, true, "UTF-8");
+    AbstractCommandLineRunner.writeOutput(
+        ps, null, "var x=1;", "(function(){%output%})();", "%output%");
+    assertEquals("(function(){var x=1;})();\n", buf.toString("UTF-8"));
+  }
+
+  // writeOutput: placeholder at the very end of the wrapper prints an extra blank line
+  @Test
+  public void testWriteOutput_placeholderAtEnd_printsEmptyLineAfterCode() throws Throwable {
+    ByteArrayOutputStream buf = new ByteArrayOutputStream();
+    PrintStream ps = new PrintStream(buf, true, "UTF-8");
+    AbstractCommandLineRunner.writeOutput(ps, null, "CODE", "prefix:%output%", "%output%");
+    assertEquals("prefix:CODE\n", buf.toString("UTF-8"));
+  }
+
+  // writeOutput: wrapper without the placeholder prints the raw code directly, ignoring wrapper
+  @Test
+  public void testWriteOutput_noPlaceholder_printsCodeDirectly() throws Throwable {
+    ByteArrayOutputStream buf = new ByteArrayOutputStream();
+    PrintStream ps = new PrintStream(buf, true, "UTF-8");
+    AbstractCommandLineRunner.writeOutput(ps, null, "RAWCODE", "no placeholder here", "%output%");
+    assertEquals("RAWCODE\n", buf.toString("UTF-8"));
+  }
+
+  // writeOutput: placeholder at position 0 means no prefix is printed, only code + suffix
+  @Test
+  public void testWriteOutput_placeholderAtStart_printsSuffixOnly() throws Throwable {
+    ByteArrayOutputStream buf = new ByteArrayOutputStream();
+    PrintStream ps = new PrintStream(buf, true, "UTF-8");
+    AbstractCommandLineRunner.writeOutput(ps, null, "X", "%output% END", "%output%");
+    assertEquals("X END\n", buf.toString("UTF-8"));
+  }
+
+  // createDefineReplacements: literal "true" value takes the boolean branch, no exception
+  @Test
+  public void testCreateDefineReplacements_trueLiteral_doesNotThrow() throws Throwable {
+    List<String> defs = Arrays.asList("FOO=true");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(defs, options);
+    } catch (RuntimeException e) {
+      fail("valid boolean define should not throw: " + e.getMessage());
+    }
+  }
+
+  // createDefineReplacements: literal "false" value takes the boolean branch, no exception
+  @Test
+  public void testCreateDefineReplacements_falseLiteral_doesNotThrow() throws Throwable {
+    List<String> defs = Arrays.asList("FOO=false");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(defs, options);
+    } catch (RuntimeException e) {
+      fail("valid boolean define should not throw: " + e.getMessage());
+    }
+  }
+
+  // createDefineReplacements: a properly single-quoted string with no embedded quote is valid
+  @Test
+  public void testCreateDefineReplacements_quotedStringNoEmbeddedQuote_doesNotThrow()
+      throws Throwable {
+    List<String> defs = Arrays.asList("FOO='hello world'");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(defs, options);
+    } catch (RuntimeException e) {
+      fail("valid quoted string define should not throw: " + e.getMessage());
+    }
+  }
+
+  // createDefineReplacements: an empty quoted string ('') is a valid string literal
+  @Test
+  public void testCreateDefineReplacements_emptyQuotedString_doesNotThrow() throws Throwable {
+    List<String> defs = Arrays.asList("FOO=''");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(defs, options);
+    } catch (RuntimeException e) {
+      fail("valid empty quoted string define should not throw: " + e.getMessage());
+    }
+  }
+
+  // createDefineReplacements: a numeric value parses as a double literal
+  @Test
+  public void testCreateDefineReplacements_numericValue_doesNotThrow() throws Throwable {
+    List<String> defs = Arrays.asList("FOO=3.14");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(defs, options);
+    } catch (RuntimeException e) {
+      fail("valid numeric define should not throw: " + e.getMessage());
+    }
+  }
+
+  // createDefineReplacements: a bare name with no "=" is treated as boolean true
+  @Test
+  public void testCreateDefineReplacements_nameOnlyNoEquals_doesNotThrow() throws Throwable {
+    List<String> defs = Arrays.asList("SIMPLE_FLAG");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(defs, options);
+    } catch (RuntimeException e) {
+      fail("bare name define should not throw: " + e.getMessage());
+    }
+  }
+
+  // createDefineReplacements: value that is neither bool/quoted-string/number is invalid syntax
+  @Test
+  public void testCreateDefineReplacements_invalidNumericSyntax_throwsRuntimeException()
+      throws Throwable {
+    List<String> defs = Arrays.asList("NAME=abc123");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(defs, options);
+      fail("expected RuntimeException");
+    } catch (RuntimeException expected) {
+      assertTrue(expected.getMessage().contains("NAME=abc123"));
+    }
+  }
+
+  // createDefineReplacements: empty define name is invalid syntax
+  @Test
+  public void testCreateDefineReplacements_emptyDefName_throwsRuntimeException() throws Throwable {
+    List<String> defs = Arrays.asList("=value");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(defs, options);
+      fail("expected RuntimeException");
+    } catch (RuntimeException expected) {
+      assertTrue(expected.getMessage().contains("=value"));
+    }
+  }
+
+  // createDefineReplacements: single-quoted string containing an embedded quote is invalid
+  @Test
+  public void testCreateDefineReplacements_quotedStringWithEmbeddedQuote_throwsRuntimeException()
+      throws Throwable {
+    List<String> defs = Arrays.asList("NAME='a'b'");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(defs, options);
+      fail("expected RuntimeException");
+    } catch (RuntimeException expected) {
+      assertTrue(expected.getMessage().contains("NAME='a'b'"));
+    }
+  }
+
+  // createDefineReplacements: a quote that opens but never closes is invalid syntax
+  @Test
+  public void testCreateDefineReplacements_unterminatedQuote_throwsRuntimeException()
+      throws Throwable {
+    List<String> defs = Arrays.asList("NAME='unterminated");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      AbstractCommandLineRunner.createDefineReplacements(defs, options);
+      fail("expected RuntimeException");
+    } catch (RuntimeException expected) {
+      assertTrue(expected.getMessage().contains("NAME='unterminated"));
+    }
+  }
+
+  // setRunOptions: configured jsOutputFile is copied onto the options object
+  @Test
+  public void testSetRunOptions_jsOutputFileConfigured_setsOptionField() throws Throwable {
+    runner.getCommandLineConfig().setJsOutputFile("out.js");
+    CompilerOptions options = new CompilerOptions();
+    runner.setRunOptions(options);
+    assertEquals("out.js", options.jsOutputFile);
+  }
+
+  // setRunOptions: configured createSourceMap path is copied onto sourceMapOutputPath
+  @Test
+  public void testSetRunOptions_createSourceMapConfigured_setsSourceMapOutputPath()
+      throws Throwable {
+    runner.getCommandLineConfig().setCreateSourceMap("map.out");
+    CompilerOptions options = new CompilerOptions();
+    runner.setRunOptions(options);
+    assertEquals("map.out", options.sourceMapOutputPath);
+  }
+
+  // setRunOptions: an unsupported charset name triggers a FlagUsageException
+  @Test
+  public void testSetRunOptions_invalidCharset_throwsFlagUsageException() throws Throwable {
+    runner.getCommandLineConfig().setCharset("not-a-real-charset-xyz");
+    CompilerOptions options = new CompilerOptions();
+    try {
+      runner.setRunOptions(options);
+      fail("expected FlagUsageException");
+    } catch (AbstractCommandLineRunner.FlagUsageException expected) {
+      assertTrue(expected.getMessage().contains("not a valid charset"));
+    }
+  }
+
+  // getCommandLineConfig: always returns the same config instance for this runner
+  @Test
+  public void testGetCommandLineConfig_returnsSameInstanceAcrossCalls() throws Throwable {
+    AbstractCommandLineRunner.CommandLineConfig config = runner.getCommandLineConfig();
+    assertNotNull(config);
+    assertSame(config, runner.getCommandLineConfig());
+  }
+
+  // getCompiler: before doRun() is ever invoked, the compiler field is still null
+  @Test
+  public void testGetCompiler_beforeRun_returnsNull() throws Throwable {
+    assertNull(runner.getCompiler());
+  }
+
+  // getErrorPrintStream: returns exactly the PrintStream passed into the constructor
+  @Test
+  public void testGetErrorPrintStream_returnsConstructorErrStream() throws Throwable {
+    assertSame(errStream, runner.getErrorPrintStream());
+  }
+
+  // getDiagnosticGroups: default implementation returns a non-null DiagnosticGroups instance
+  @Test
+  public void testGetDiagnosticGroups_returnsNonNullInstance() throws Throwable {
+    DiagnosticGroups groups = runner.getDiagnosticGroups();
+    assertNotNull(groups);
+  }
+
+  // initOptionsFromFlags: an invalid --define entry propagates as a RuntimeException
+  @Test
+  public void testInitOptionsFromFlags_invalidDefine_throwsRuntimeException() throws Throwable {
+    runner.getCommandLineConfig().setDefine(Arrays.asList("BAD=notvalid!!"));
+    CompilerOptions options = new CompilerOptions();
+    try {
+      runner.initOptionsFromFlags(options);
+      fail("expected RuntimeException");
+    } catch (RuntimeException expected) {
+      assertTrue(expected.getMessage().contains("BAD=notvalid!!"));
+    }
+  }
+
+  // CommandLineConfig setters follow the builder pattern and return the same instance
+  @Test
+  public void testCommandLineConfigSetters_returnSameInstanceForChaining() throws Throwable {
+    AbstractCommandLineRunner.CommandLineConfig config =
+        new AbstractCommandLineRunner.CommandLineConfig();
+    AbstractCommandLineRunner.CommandLineConfig result = config.setJsOutputFile("x.js");
+    assertSame(config, result);
+    assertSame(config, config.setPrintTree(true));
+    assertSame(config, config.setCharset("UTF-8"));
+  }
+
+  // FlagUsageException: getMessage() returns exactly the message passed to the constructor
+  @Test
+  public void testFlagUsageException_getMessage_returnsProvidedMessage() throws Throwable {
+    AbstractCommandLineRunner.FlagUsageException ex =
+        new AbstractCommandLineRunner.FlagUsageException("custom message");
+    assertEquals("custom message", ex.getMessage());
+  }
+}

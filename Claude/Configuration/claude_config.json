@@ -1,0 +1,29 @@
+{
+  "experiment": "defects4j-round2",
+  "algorithm": "Claude",
+  "algorithm_version": "1.0.0",
+  "backend": "kku",
+  "kku": {
+    "base_url": "https://gen.ai.kku.ac.th/api",
+    "api_key_env": "KKU_API_KEY",
+    "workers": 2,
+    "_note": "key ใส่ใน .env (KKU_API_KEY หรือหลาย key: KKU_API_KEYS=a,b,c / KKU_API_KEY_2, ...) โควตาเป็นรายวันต่อ key; workers = จำนวน worker ต่อ 1 key (รวมไม่เกิน 8)"
+  },
+  "model": "claude-sonnet-5",
+  "max_tokens": 64000,
+  "thinking": "adaptive",
+  "effort": "high",
+  "max_attempts": 5,
+  "request_timeout_seconds": 3600,
+  "cli_command": "claude",
+  "cli_config_dir": "",
+  "generation_workers": 8,
+  "validation_workers": 12,
+  "_workers_note": "generation_workers ใช้กับ backend cli/api; validation_workers ตั้งตามเครื่องที่รัน (16C/32T, RAM 64GB) ประมาณ 1 งานต่อ 1-1.5 core",
+  "test_class_suffix": "ClaudeTest",
+  "prompt_files": {
+    "system": "Claude/Prompt/system_prompt.txt",
+    "user_template": "Claude/Prompt/template_prompt.txt",
+    "project_notes": "Claude/Configuration/project_notes.json"
+  }
+}

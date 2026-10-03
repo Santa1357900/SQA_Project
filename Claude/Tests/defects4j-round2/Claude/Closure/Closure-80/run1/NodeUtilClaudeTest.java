@@ -1,0 +1,397 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.TernaryValue;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+
+public class NodeUtilClaudeTest {
+
+  // Covers ASSIGN case: boolean value comes from RHS (last child)
+  @Test
+  public void testGetExpressionBooleanValue_assign_returnsRhsBoolean() throws Throwable {
+    Node assign = new Node(Token.ASSIGN, IR.name("x"));
+    assign.addChildToBack(IR.string("hello"));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getExpressionBooleanValue(assign));
+  }
+
+  // Covers COMMA case: boolean value comes from last expression
+  @Test
+  public void testGetExpressionBooleanValue_comma_returnsLastValue() throws Throwable {
+    Node comma = new Node(Token.COMMA, IR.string("x"));
+    comma.addChildToBack(IR.number(0));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getExpressionBooleanValue(comma));
+  }
+
+  // Covers NOT case: inverts boolean value of the operand
+  @Test
+  public void testGetExpressionBooleanValue_not_invertsValue() throws Throwable {
+    Node not = new Node(Token.NOT, IR.string(""));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getExpressionBooleanValue(not));
+  }
+
+  // Covers AND case: combines boolean values of both operands
+  @Test
+  public void testGetExpressionBooleanValue_and_combinesOperands() throws Throwable {
+    Node and = new Node(Token.AND, new Node(Token.TRUE));
+    and.addChildToBack(new Node(Token.FALSE));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getExpressionBooleanValue(and));
+  }
+
+  // Covers OR case: combines boolean values of both operands
+  @Test
+  public void testGetExpressionBooleanValue_or_combinesOperands() throws Throwable {
+    Node or = new Node(Token.OR, new Node(Token.FALSE));
+    or.addChildToBack(new Node(Token.TRUE));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getExpressionBooleanValue(or));
+  }
+
+  // Covers HOOK case: agreeing branches return that shared value
+  @Test
+  public void testGetExpressionBooleanValue_hook_agreeingBranches() throws Throwable {
+    Node hook = new Node(Token.HOOK, IR.name("cond"));
+    hook.addChildToBack(new Node(Token.TRUE));
+    hook.addChildToBack(new Node(Token.TRUE));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getExpressionBooleanValue(hook));
+  }
+
+  // Covers HOOK case: disagreeing branches return UNKNOWN
+  @Test
+  public void testGetExpressionBooleanValue_hook_disagreeingBranches() throws Throwable {
+    Node hook = new Node(Token.HOOK, IR.name("cond"));
+    hook.addChildToBack(new Node(Token.TRUE));
+    hook.addChildToBack(new Node(Token.FALSE));
+    assertEquals(TernaryValue.UNKNOWN, NodeUtil.getExpressionBooleanValue(hook));
+  }
+
+  // Covers STRING case: empty -> FALSE, non-empty -> TRUE
+  @Test
+  public void testGetBooleanValue_string_emptyVsNonEmpty() throws Throwable {
+    assertEquals(TernaryValue.FALSE, NodeUtil.getBooleanValue(IR.string("")));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getBooleanValue(IR.string("a")));
+  }
+
+  // Covers NUMBER case: zero -> FALSE, nonzero -> TRUE
+  @Test
+  public void testGetBooleanValue_number_zeroVsNonZero() throws Throwable {
+    assertEquals(TernaryValue.FALSE, NodeUtil.getBooleanValue(IR.number(0)));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getBooleanValue(IR.number(-1)));
+  }
+
+  // Covers NULL, FALSE, VOID cases: always FALSE
+  @Test
+  public void testGetBooleanValue_nullFalseVoid_alwaysFalse() throws Throwable {
+    assertEquals(TernaryValue.FALSE, NodeUtil.getBooleanValue(new Node(Token.NULL)));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getBooleanValue(new Node(Token.FALSE)));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getBooleanValue(new Node(Token.VOID, IR.number(0))));
+  }
+
+  // Covers NAME case: undefined/NaN -> FALSE, Infinity -> TRUE, other -> UNKNOWN
+  @Test
+  public void testGetBooleanValue_name_specialAndOther() throws Throwable {
+    assertEquals(TernaryValue.FALSE, NodeUtil.getBooleanValue(IR.name("undefined")));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getBooleanValue(IR.name("NaN")));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getBooleanValue(IR.name("Infinity")));
+    assertEquals(TernaryValue.UNKNOWN, NodeUtil.getBooleanValue(IR.name("foo")));
+  }
+
+  // Covers STRING and NAME cases of getStringValue
+  @Test
+  public void testGetStringValue_stringAndName() throws Throwable {
+    assertEquals("hi", NodeUtil.getStringValue(IR.string("hi")));
+    assertEquals("undefined", NodeUtil.getStringValue(IR.name("undefined")));
+    assertNull(NodeUtil.getStringValue(IR.name("foo")));
+  }
+
+  // Covers NUMBER case: integer formatted without decimal, non-integer keeps decimal
+  @Test
+  public void testGetStringValue_number_integerAndFraction() throws Throwable {
+    assertEquals("1", NodeUtil.getStringValue(IR.number(1.0)));
+    assertEquals(Double.toString(1.5), NodeUtil.getStringValue(IR.number(1.5)));
+  }
+
+  // Covers TRUE, FALSE, NULL, VOID cases
+  @Test
+  public void testGetStringValue_trueFalseNullVoid() throws Throwable {
+    assertEquals("true", NodeUtil.getStringValue(new Node(Token.TRUE)));
+    assertEquals("false", NodeUtil.getStringValue(new Node(Token.FALSE)));
+    assertEquals("null", NodeUtil.getStringValue(new Node(Token.NULL)));
+    assertEquals("undefined", NodeUtil.getStringValue(new Node(Token.VOID, IR.number(0))));
+  }
+
+  // Covers NOT case: known boolean child is reversed to its string form
+  @Test
+  public void testGetStringValue_not_reversesKnownBoolean() throws Throwable {
+    assertEquals("false", NodeUtil.getStringValue(new Node(Token.NOT, new Node(Token.TRUE))));
+    assertEquals("true", NodeUtil.getStringValue(new Node(Token.NOT, new Node(Token.FALSE))));
+  }
+
+  // Covers OBJECTLIT and ARRAYLIT cases
+  @Test
+  public void testGetStringValue_objectAndArrayLiterals() throws Throwable {
+    assertEquals("[object Object]", NodeUtil.getStringValue(new Node(Token.OBJECTLIT)));
+    Node arr = new Node(Token.ARRAYLIT, IR.number(1));
+    arr.addChildToBack(IR.number(2));
+    assertEquals("1,2", NodeUtil.getStringValue(arr));
+  }
+
+  // Covers getArrayElementStringValue: null/undefined elements become empty string
+  @Test
+  public void testGetArrayElementStringValue_nullOrUndefined_returnsEmpty() throws Throwable {
+    assertEquals("", NodeUtil.getArrayElementStringValue(new Node(Token.NULL)));
+    assertEquals("", NodeUtil.getArrayElementStringValue(new Node(Token.VOID, IR.number(0))));
+    assertEquals("5", NodeUtil.getArrayElementStringValue(IR.number(5)));
+  }
+
+  // Covers arrayToString: null element in the middle becomes an empty entry
+  @Test
+  public void testArrayToString_withNullAndUndefinedElements() throws Throwable {
+    Node arr = new Node(Token.ARRAYLIT, IR.number(1));
+    arr.addChildToBack(new Node(Token.NULL));
+    arr.addChildToBack(IR.number(3));
+    assertEquals("1,,3", NodeUtil.arrayToString(arr));
+  }
+
+  // Covers TRUE/FALSE/NULL cases of getNumberValue
+  @Test
+  public void testGetNumberValue_trueFalseNull() throws Throwable {
+    assertEquals(1.0, NodeUtil.getNumberValue(new Node(Token.TRUE)).doubleValue(), 1e-9);
+    assertEquals(0.0, NodeUtil.getNumberValue(new Node(Token.FALSE)).doubleValue(), 1e-9);
+    assertEquals(0.0, NodeUtil.getNumberValue(new Node(Token.NULL)).doubleValue(), 1e-9);
+  }
+
+  // Covers NAME cases: undefined/NaN -> NaN, Infinity -> +Infinity, other -> null
+  @Test
+  public void testGetNumberValue_name_specialAndOther() throws Throwable {
+    assertTrue(Double.isNaN(NodeUtil.getNumberValue(IR.name("undefined")).doubleValue()));
+    assertTrue(Double.isNaN(NodeUtil.getNumberValue(IR.name("NaN")).doubleValue()));
+    assertEquals(Double.valueOf(Double.POSITIVE_INFINITY), NodeUtil.getNumberValue(IR.name("Infinity")).doubleValue(), 0.0);
+    assertNull(NodeUtil.getNumberValue(IR.name("foo")));
+  }
+
+  // Covers NEG case: -Infinity name becomes negative infinity, others return null
+  @Test
+  public void testGetNumberValue_neg_infinityAndOther() throws Throwable {
+    Node negInf = new Node(Token.NEG, IR.name("Infinity"));
+    assertEquals(Double.valueOf(Double.NEGATIVE_INFINITY), NodeUtil.getNumberValue(negInf).doubleValue(), 0.0);
+    Node negOther = new Node(Token.NEG, IR.number(5));
+    assertNull(NodeUtil.getNumberValue(negOther));
+  }
+
+  // Covers STRING case of getNumberValue delegating to getStringNumberValue
+  @Test
+  public void testGetNumberValue_string_delegatesToStringNumberValue() throws Throwable {
+    assertEquals(42.0, NodeUtil.getNumberValue(IR.string("42")).doubleValue(), 1e-9);
+  }
+
+  // Covers getStringNumberValue: empty/whitespace-only strings yield 0
+  @Test
+  public void testGetStringNumberValue_emptyOrWhitespace_returnsZero() throws Throwable {
+    assertEquals(0.0, NodeUtil.getStringNumberValue("").doubleValue(), 1e-9);
+    assertEquals(0.0, NodeUtil.getStringNumberValue("   \t\n").doubleValue(), 1e-9);
+  }
+
+  // Covers getStringNumberValue: hex string parsed as base-16 integer
+  @Test
+  public void testGetStringNumberValue_hexString() throws Throwable {
+    assertEquals(16.0, NodeUtil.getStringNumberValue("0x10").doubleValue(), 1e-9);
+  }
+
+  // Covers getStringNumberValue: ordinary decimal parses, invalid text yields NaN
+  @Test
+  public void testGetStringNumberValue_decimalAndInvalid() throws Throwable {
+    assertEquals(3.14, NodeUtil.getStringNumberValue("3.14").doubleValue(), 1e-9);
+    assertTrue(Double.isNaN(NodeUtil.getStringNumberValue("abc").doubleValue()));
+  }
+
+  // Covers trimJsWhiteSpace: trims leading and trailing whitespace only
+  @Test
+  public void testTrimJsWhiteSpace_trimsBothEnds() throws Throwable {
+    assertEquals("hello world", NodeUtil.trimJsWhiteSpace("  \t hello world \n "));
+  }
+
+  // Covers getFunctionName default case: function declaration keeps its own name
+  @Test
+  public void testGetFunctionName_declaration_returnsOwnName() throws Throwable {
+    Node fn = NodeUtil.newFunctionNode("foo", new ArrayList<Node>(), IR.block(), 0, 0);
+    Node block = IR.block();
+    block.addChildToBack(fn);
+    assertEquals("foo", NodeUtil.getFunctionName(fn));
+  }
+
+  // Covers getFunctionName NAME case: var x = function(){} uses the variable's name
+  @Test
+  public void testGetFunctionName_varAssignment_usesVariableName() throws Throwable {
+    Node fn = NodeUtil.newFunctionNode("", new ArrayList<Node>(), IR.block(), 0, 0);
+    NodeUtil.newVarNode("myVar", fn);
+    assertEquals("myVar", NodeUtil.getFunctionName(fn));
+  }
+
+  // Covers getNearestFunctionName STRING case: object literal key name is used
+  @Test
+  public void testGetNearestFunctionName_objectLiteralKey() throws Throwable {
+    Node fn = NodeUtil.newFunctionNode("", new ArrayList<Node>(), IR.block(), 0, 0);
+    Node key = IR.string("myKey");
+    key.addChildToBack(fn);
+    assertEquals("myKey", NodeUtil.getNearestFunctionName(fn));
+  }
+
+  // Covers isImmutableValue: literals and special names true, mutable expressions false
+  @Test
+  public void testIsImmutableValue_literalsAndNonLiterals() throws Throwable {
+    assertTrue(NodeUtil.isImmutableValue(IR.string("x")));
+    assertTrue(NodeUtil.isImmutableValue(IR.name("undefined")));
+    assertFalse(NodeUtil.isImmutableValue(IR.name("x")));
+    assertFalse(NodeUtil.isImmutableValue(new Node(Token.OBJECTLIT)));
+  }
+
+  // Covers isLiteralValue ARRAYLIT: literal only if all children are literal
+  @Test
+  public void testI    public void testIsLiteralValue_arrayLiteralChildrenMatter() throws Throwable {
+    Node arr = new Node(Token.ARRAYLIT, IR.number(1));
+    assertTrue(NodeUtil.isLiteralValue(arr, false));
+    Node arr2 = new Node(Token.ARRAYLIT, IR.name("x"));
+    assertFalse(NodeUtil.isLiteralValue(arr2, false));
+  }
+
+  // Covers isValidDefineValue: literal valid, binary op of valid children valid, bare name invalid
+  @Test
+  public void testIsValidDefineValue_literalsAndOperators() throws Throwable {
+    HashSet<String> defines = new HashSet<String>();
+    assertTrue(NodeUtil.isValidDefineValue(IR.string("a"), defines));
+    Node add = new Node(Token.ADD, IR.number(1));
+    add.addChildToBack(IR.number(2));
+    assertTrue(NodeUtil.isValidDefineValue(add, defines));
+    assertFalse(NodeUtil.isValidDefineValue(IR.name("x"), defines));
+  }
+
+  // Covers isEmptyBlock: block with no children is empty, with a statement is not
+  @Test
+  public void testIsEmptyBlock_emptyVsNonEmpty() throws Throwable {
+    Node block = IR.block();
+    assertTrue(NodeUtil.isEmptyBlock(block));
+    Node block2 = new Node(Token.BLOCK, NodeUtil.newExpr(IR.name("x")));
+    assertFalse(NodeUtil.isEmptyBlock(block2));
+  }
+
+  // Covers isSimpleOperatorType: simple operators true, assignment/hook false
+  @Test
+  public void testIsSimpleOperatorType_simpleVsComplex() throws Throwable {
+    assertTrue(NodeUtil.isSimpleOperatorType(Token.ADD));
+    assertFalse(NodeUtil.isSimpleOperatorType(Token.ASSIGN));
+    assertFalse(NodeUtil.isSimpleOperatorType(Token.HOOK));
+  }
+
+  // Covers newExpr: wraps the given child in an EXPR_RESULT node
+  @Test
+  public void testNewExpr_wrapsChildInExprResult() throws Throwable {
+    Node call = NodeUtil.newCallNode(IR.name("foo"));
+    Node expr = NodeUtil.newExpr(call);
+    assertEquals(Token.EXPR_RESULT, expr.getType());
+    assertSame(call, expr.getFirstChild());
+  }
+
+  // Covers precedence: spot-checks per the documented precedence table
+  @Test
+  public void testPrecedence_matchesDocumentedTable() throws Throwable {
+    assertEquals(0, NodeUtil.precedence(Token.COMMA));
+    assertEquals(1, NodeUtil.precedence(Token.ASSIGN));
+    assertEquals(2, NodeUtil.precedence(Token.HOOK));
+    assertEquals(3, NodeUtil.precedence(Token.OR));
+    assertEquals(4, NodeUtil.precedence(Token.AND));
+    assertEquals(11, NodeUtil.precedence(Token.ADD));
+    assertEquals(12, NodeUtil.precedence(Token.MUL));
+    assertEquals(13, NodeUtil.precedence(Token.NOT));
+    assertEquals(15, NodeUtil.precedence(Token.NAME));
+  }
+
+  // Covers precedence default branch: unknown type throws an Error
+  @Test
+  public void testPrecedence_unknownType_throwsError() throws Throwable {
+    try {
+      NodeUtil.precedence(Token.CATCH);
+      fail("expected Error for unknown precedence");
+    } catch (Error expected) {
+    }
+  }
+
+  // Covers isAssociative/isCommutative: '+' is excluded per javadoc, '*' included
+  @Test
+  public void testIsAssociativeAndCommutative_addExcludedMulIncluded() throws Throwable {
+    assertFalse(NodeUtil.isAssociative(Token.ADD));
+    assertTrue(NodeUtil.isAssociative(Token.MUL));
+    assertFalse(NodeUtil.isCommutative(Token.ADD));
+    assertTrue(NodeUtil.isCommutative(Token.MUL));
+  }
+
+  // Covers isAssignmentOp true/false and getOpFromAssignmentOp mapping
+  @Test
+  public void testIsAssignmentOpAndGetOpFromAssignmentOp() throws Throwable {
+    Node assignAdd = new Node(Token.ASSIGN_ADD);
+    assertTrue(NodeUtil.isAssignmentOp(assignAdd));
+    assertFalse(NodeUtil.isAssignmentOp(IR.name("x")));
+    assertEquals(Token.ADD, NodeUtil.getOpFromAssignmentOp(assignAdd));
+  }
+
+  // Covers getOpFromAssignmentOp: non-assignment op throws IllegalArgumentException
+  @Test
+  public void testGetOpFromAssignmentOp_invalidOp_throws() throws Throwable {
+    try {
+      NodeUtil.getOpFromAssignmentOp(IR.name("x"));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // Covers constructorCallHasSideEffects: builtin ctor without side effects vs unknown ctor
+  @Test
+  public void testConstructorCallHasSideEffects_builtinVsUnknown() throws Throwable {
+    Node newArray = new Node(Token.NEW, IR.name("Array"));
+    assertFalse(NodeUtil.constructorCallHasSideEffects(newArray));
+    Node newFoo = new Node(Token.NEW, IR.name("Foo"));
+    assertTrue(NodeUtil.constructorCallHasSideEffects(newFoo));
+  }
+
+  // Covers constructorCallHasSideEffects: non-NEW node throws IllegalStateException
+  @Test
+  public void testConstructorCallHasSideEffects_nonNewNode_throws() throws Throwable {
+    try {
+      NodeUtil.constructorCallHasSideEffects(IR.name("x"));
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Covers functionCallHasSideEffects: Math.* calls have no side effects
+  @Test
+  public void testFunctionCallHasSideEffects_mathNamespace_noSideEffects() throws Throwable {
+    Node mathProp = new Node(Token.GETPROP, IR.name("Math"));
+    mathProp.addChildToBack(IR.string("max"));
+    Node call = NodeUtil.newCallNode(mathProp);
+    assertFalse(NodeUtil.functionCallHasSideEffects(call));
+  }
+
+  // Covers mayHaveSideEffects: pure literal has none, assignment to a name does
+  @Test
+  public void testMayHaveSideEffects_literalVsAssignment() throws Throwable {
+    assertFalse(NodeUtil.mayHaveSideEffects(IR.number(5)));
+    Node assign = new Node(Token.ASSIGN, IR.name("x"));
+    assign.addChildToBack(IR.number(1));
+    assertTrue(NodeUtil.mayHaveSideEffects(assign));
+  }
+
+  // Covers evaluatesToLocalValue: immutable literal is local, plain name is not
+  @Test
+  public void testEvaluatesToLocalValue_literalVsName() throws Throwable {
+    assertTrue(NodeUtil.evaluatesToLocalValue(IR.number(5)));
+    assertFalse(NodeUtil.evaluatesToLocalValue(IR.name("x")));
+  }
+}

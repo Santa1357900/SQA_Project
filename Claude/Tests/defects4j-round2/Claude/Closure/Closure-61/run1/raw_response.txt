@@ -1,0 +1,520 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.TernaryValue;
+
+public class NodeUtilClaudeTest {
+
+  private Node num(double d) { return Node.newNumber(d); }
+  private Node str(String s) { return Node.newString(Token.STRING, s); }
+  private Node name(String s) { return Node.newString(Token.NAME, s); }
+  private Node leaf(int type) { return new Node(type); }
+
+  // AND: TRUE && FALSE -> FALSE
+  @Test
+  public void testGetImpureBooleanValue_and_returnsFalse() throws Throwable {
+    Node n = new Node(Token.AND, leaf(Token.TRUE));
+    n.addChildToBack(leaf(Token.FALSE));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getImpureBooleanValue(n));
+  }
+
+  // OR: FALSE || TRUE -> TRUE
+  @Test
+  public void testGetImpureBooleanValue_or_returnsTrue() throws Throwable {
+    Node n = new Node(Token.OR, leaf(Token.FALSE));
+    n.addChildToBack(leaf(Token.TRUE));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getImpureBooleanValue(n));
+  }
+
+  // HOOK: both branches TRUE -> TRUE
+  @Test
+  public void testGetImpureBooleanValue_hookSameBranches_returnsThatValue() throws Throwable {
+    Node hook = new Node(Token.HOOK, name("x"));
+    hook.addChildToBack(leaf(Token.TRUE));
+    hook.addChildToBack(leaf(Token.TRUE));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getImpureBooleanValue(hook));
+  }
+
+  // HOOK: branches differ -> UNKNOWN
+  @Test
+  public void testGetImpureBooleanValue_hookDifferentBranches_returnsUnknown() throws Throwable {
+    Node hook = new Node(Token.HOOK, name("x"));
+    hook.addChildToBack(leaf(Token.TRUE));
+    hook.addChildToBack(leaf(Token.FALSE));
+    assertEquals(TernaryValue.UNKNOWN, NodeUtil.getImpureBooleanValue(hook));
+  }
+
+  // NOT inverts pure boolean value
+  @Test
+  public void testGetImpureBooleanValue_not_invertsValue() throws Throwable {
+    Node n = new Node(Token.NOT, leaf(Token.FALSE));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getImpureBooleanValue(n));
+  }
+
+  // ARRAYLIT: always TRUE (side effects ignored)
+  @Test
+  public void testGetImpureBooleanValue_arrayLit_alwaysTrue() throws Throwable {
+    assertEquals(TernaryValue.TRUE, NodeUtil.getImpureBooleanValue(leaf(Token.ARRAYLIT)));
+  }
+
+  // STRING and NUMBER pure boolean values
+  @Test
+  public void testGetPureBooleanValue_stringAndNumber() throws Throwable {
+    assertEquals(TernaryValue.FALSE, NodeUtil.getPureBooleanValue(str("")));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getPureBooleanValue(str("a")));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getPureBooleanValue(num(0)));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getPureBooleanValue(num(1)));
+  }
+
+  // NULL/FALSE/VOID -> FALSE
+  @Test
+  public void testGetPureBooleanValue_nullFalseVoid_returnsFalse() throws Throwable {
+    assertEquals(TernaryValue.FALSE, NodeUtil.getPureBooleanValue(leaf(Token.NULL)));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getPureBooleanValue(leaf(Token.FALSE)));
+    Node v = new Node(Token.VOID, num(0));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getPureBooleanValue(v));
+  }
+
+  // NAME special names and unknown name -> UNKNOWN
+  @Test
+  public void testGetPureBooleanValue_nameSpecialAndUnknown() throws Throwable {
+    assertEquals(TernaryValue.FALSE, NodeUtil.getPureBooleanValue(name("undefined")));
+    assertEquals(TernaryValue.FALSE, NodeUtil.getPureBooleanValue(name("NaN")));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getPureBooleanValue(name("Infinity")));
+    assertEquals(TernaryValue.UNKNOWN, NodeUtil.getPureBooleanValue(name("x")));
+  }
+
+  // TRUE and REGEXP -> TRUE
+  @Test
+  public void testGetPureBooleanValue_trueRegexp_returnsTrue() throws Throwable {
+    assertEquals(TernaryValue.TRUE, NodeUtil.getPureBooleanValue(leaf(Token.TRUE)));
+    assertEquals(TernaryValue.TRUE, NodeUtil.getPureBooleanValue(leaf(Token.REGEXP)));
+  }
+
+  // STRING/NUMBER/TRUE/FALSE/NULL String() casts
+  @Test
+  public void testGetStringValue_basicTypes() throws Throwable {
+    assertEquals("hello", NodeUtil.getStringValue(str("hello")));
+    assertEquals("5", NodeUtil.getStringValue(num(5)));
+    assertEquals("5.5", NodeUtil.getStringValue(num(5.5)));
+    assertEquals("true", NodeUtil.getStringValue(leaf(Token.TRUE)));
+    assertEquals("false", NodeUtil.getStringValue(leaf(Token.FALSE)));
+    assertEquals("null", NodeUtil.getStringValue(leaf(Token.NULL)));
+  }
+
+  // NAME special/unknown, VOID, NOT
+  @Test
+  public void testGetStringValue_nameVoidNot() throws Throwable {
+    assertEquals("undefined", NodeUtil.getStringValue(name("undefined")));
+    assertNull(NodeUtil.getStringValue(name("x")));
+    Node v = new Node(Token.VOID, num(0));
+    assertEquals("undefined", NodeUtil.getStringValue(v));
+    Node notTrue = new Node(Token.NOT, leaf(Token.TRUE));
+    assertEquals("false", NodeUtil.getStringValue(notTrue));
+  }
+
+  // getStringValue(double): integer vs fractional formatting
+  @Test
+  public void testGetStringValueDouble_integerAndFraction() throws Throwable {
+    assertEquals("1", NodeUtil.getStringValue(1.0));
+    assertEquals("1.5", NodeUtil.getStringValue(1.5));
+  }
+
+  // getArrayElementStringValue: undefined/EMPTY -> "", else getStringValue
+  @Test
+  public void testGetArrayElementStringValue_emptyCases() throws Throwable {
+    assertEquals("", NodeUtil.getArrayElementStringValue(name("undefined")));
+    assertEquals("", NodeUtil.getArrayElementStringValue(leaf(Token.EMPTY)));
+    assertEquals("5", NodeUtil.getArrayElementStringValue(num(5)));
+  }
+
+  // arrayToString joins with commas; empty array -> ""
+  @Test
+  public void testArrayToString_joinsElements() throws Throwable {
+    Node arr = new Node(Token.ARRAYLIT, num(1));
+    arr.addChildToBack(num(2));
+    assertEquals("1,2", NodeUtil.arrayToString(arr));
+    assertEquals("", NodeUtil.arrayToString(leaf(Token.ARRAYLIT)));
+  }
+
+  // getNumberValue: TRUE/FALSE/NULL/NUMBER
+  @Test
+  public void testGetNumberValue_trueFalseNullNumber() throws Throwable {
+    assertEquals(1.0, NodeUtil.getNumberValue(leaf(Token.TRUE)).doubleValue(), 1e-9);
+    assertEquals(0.0, NodeUtil.getNumberValue(leaf(Token.FALSE)).doubleValue(), 1e-9);
+    assertEquals(0.0, NodeUtil.getNumberValue(leaf(Token.NULL)).doubleValue(), 1e-9);
+    assertEquals(5.0, NodeUtil.getNumberValue(num(5)).doubleValue(), 1e-9);
+  }
+
+  // getNumberValue: NAME constants and unknown name -> null
+  @Test
+  public void testGetNumberValue_nameConstantsAndUnknown() throws Throwable {
+    assertTrue(Double.isNaN(NodeUtil.getNumberValue(name("undefined")).doubleValue()));
+    assertTrue(Double.isNaN(NodeUtil.getNumberValue(name("NaN")).doubleValue()));
+    assertEquals(Double.POSITIVE_INFINITY,
+        NodeUtil.getNumberValue(name("Infinity")).doubleValue(), 0.0);
+    assertNull(NodeUtil.getNumberValue(name("x")));
+  }
+
+  // NEG(Infinity) -> -Infinity; NEG(other name) -> null
+  @Test
+  public void testGetNumberValue_negInfinityAndOther() throws Throwable {
+    Node neg = new Node(Token.NEG, name("Infinity"));
+    assertEquals(Double.NEGATIVE_INFINITY, NodeUtil.getNumberValue(neg).doubleValue(), 0.0);
+    Node neg2 = new Node(Token.NEG, name("x"));
+    assertNull(NodeUtil.getNumberValue(neg2));
+  }
+
+  // getStringNumberValue: empty / whitespace-only -> 0
+  @Test
+  public void testGetStringNumberValue_emptyAndWhitespace() throws Throwable {
+    assertEquals(0.0, NodeUtil.getStringNumberValue("").doubleValue(), 0.0);
+    assertEquals(0.0, NodeUtil.getStringNumberValue("   ").doubleValue(), 0.0);
+  }
+
+  // Hex string conversion must follow Number() semantics even for values
+  // that overflow a signed 32-bit int (e.g. 0xFFFFFFFF == 4294967295).
+  @Test
+  public void testGetStringNumberValue_hexOverflow_matchesJsNumberCast() throws Throwable {
+    Double result = NodeUtil.getStringNumberValue("0xFFFFFFFF");
+    assertEquals(4294967295.0, result.doubleValue(), 0.0);
+  }
+
+  // Small hex values parse correctly
+  @Test
+  public void testGetStringNumberValue_smallHex() throws Throwable {
+    assertEquals(255.0, NodeUtil.getStringNumberValue("0xFF").doubleValue(), 0.0);
+    assertEquals(16.0, NodeUtil.getStringNumberValue("0x10").doubleValue(), 0.0);
+  }
+
+  // Non-numeric string -> NaN
+  @Test
+  public void testGetStringNumberValue_invalidReturnsNaN() throws Throwable {
+    Double r = NodeUtil.getStringNumberValue("abc");
+    assertTrue(Double.isNaN(r.doubleValue()));
+  }
+
+  // lowercase "infinity" -> null (ambiguous); "Infinity" -> +Infinity
+  @Test
+  public void testGetStringNumberValue_infinityVariants() throws Throwable {
+    assertNull(NodeUtil.getStringNumberValue("infinity"));
+    Double r = NodeUtil.getStringNumberValue("Infinity");
+    assertEquals(Double.POSITIVE_INFINITY, r.doubleValue(), 0.0);
+  }
+
+  // trimJsWhiteSpace trims leading/trailing JS whitespace; isStrWhiteSpaceChar variants
+  @Test
+  public void testTrimJsWhiteSpaceAndWhiteSpaceChar() throws Throwable {
+    assertEquals("abc", NodeUtil.trimJsWhiteSpace("  abc  "));
+    assertEquals("abc", NodeUtil.trimJsWhiteSpace("\t\nabc\r"));
+    assertEquals(TernaryValue.TRUE, NodeUtil.isStrWhiteSpaceChar(' '));
+    assertEquals(TernaryValue.FALSE, NodeUtil.isStrWhiteSpaceChar('a'));
+    assertEquals(TernaryValue.UNKNOWN, NodeUtil.isStrWhiteSpaceChar('\u000B'));
+  }
+
+  // function foo(){} as a statement -> own name
+  @Test
+  public void testGetFunctionName_statementDeclaration() throws Throwable {
+    Node fnName = Node.newString(Token.NAME, "foo");
+    Node fn = new Node(Token.FUNCTION, fnName);
+    fn.addChildToBack(new Node(Token.LP));
+    fn.addChildToBack(new Node(Token.BLOCK));
+    new Node(Token.BLOCK, fn);
+    assertEquals("foo", NodeUtil.getFunctionName(fn));
+  }
+
+  // var x = function(){} -> variable name
+  @Test
+  public void testGetFunctionName_varInitializer() throws Throwable {
+    Node fn = new Node(Token.FUNCTION, Node.newString(Token.NAME, ""));
+    fn.addChildToBack(new Node(Token.LP));
+    fn.addChildToBack(new Node(Token.BLOCK));
+    Node varName = Node.newString(Token.NAME, "x");
+    varName.addChildToBack(fn);
+    assertEquals("x", NodeUtil.getFunctionName(fn));
+  }
+
+  // obj.bar = function(){} -> qualified name
+  @Test
+  public void testGetFunctionName_qualifiedAssign() throws Throwable {
+    Node getprop = new Node(Token.GETPROP, Node.newString(Token.NAME, "obj"));
+    getprop.addChildToBack(Node.newString(Token.STRING, "bar"));
+    Node fn = new Node(Token.FUNCTION, Node.newString(Token.NAME, ""));
+    fn.addChildToBack(new Node(Token.LP));
+    fn.addChildToBack(new Node(Token.BLOCK));
+    Node assign = new Node(Token.ASSIGN, getprop);
+    assign.addChildToBack(fn);
+    assertEquals("obj.bar", NodeUtil.getFunctionName(fn));
+  }
+
+  // {'key1': function(){}} and {5: function(){}} forms
+  @Test
+  public void testGetNearestFunctionName_objectLitKeys() throws Throwable {
+    Node fn1 = new Node(Token.FUNCTION, Node.newString(Token.NAME, ""));
+    fn1.addChildToBack(new Node(Token.LP));
+    fn1.addChildToBack(new Node(Token.BLOCK));
+    Node key1 = Node.newString(Token.STRING, "key1");
+    key1.addChildToBack(fn1);
+    assertEquals("key1", NodeUtil.getNearestFunctionName(fn1));
+
+    Node fn2 = new Node(Token.FUNCTION, Node.newString(Token.NAME, ""));
+    fn2.addChildToBack(new Node(Token.LP));
+    fn2.addChildToBack(new Node(Token.BLOCK));
+    Node key2 = Node.newNumber(5);
+    key2.addChildToBack(fn2);
+    assertEquals("5", NodeUtil.getNearestFunctionName(fn2));
+  }
+
+  // isEmptyBlock: empty, only EMPTY children, non-empty, wrong type
+  @Test
+  public void testIsEmptyBlock_variants() throws Throwable {
+    assertTrue(NodeUtil.isEmptyBlock(new Node(Token.BLOCK)));
+    assertTrue(NodeUtil.isEmptyBlock(new Node(Token.BLOCK, leaf(Token.EMPTY))));
+    Node withStmt = new Node(Token.BLOCK, NodeUtil.newExpr(num(1)));
+    assertFalse(NodeUtil.isEmptyBlock(withStmt));
+    assertFalse(NodeUtil.isEmptyBlock(leaf(Token.TRUE)));
+  }
+
+  // isSimpleOperatorType: known simple ops vs assignment/call
+  @Test
+  public void testIsSimpleOperatorType_knownAndUnknown() throws Throwable {
+    assertTrue(NodeUtil.isSimpleOperatorType(Token.ADD));
+    assertTrue(NodeUtil.isSimpleOperatorType(Token.TYPEOF));
+    assertFalse(NodeUtil.isSimpleOperatorType(Token.ASSIGN));
+    assertFalse(NodeUtil.isSimpleOperatorType(Token.CALL));
+  }
+
+  // precedence table known values
+  @Test
+  public void testPrecedence_knownValues() throws Throwable {
+    assertEquals(0, NodeUtil.precedence(Token.COMMA));
+    assertEquals(1, NodeUtil.precedence(Token.ASSIGN));
+    assertEquals(2, NodeUtil.precedence(Token.HOOK));
+    assertEquals(15, NodeUtil.precedence(Token.NAME));
+  }
+
+  // precedence of an unhandled type throws Error
+  @Test
+  public void testPrecedence_unknownThrowsError() throws Throwable {
+    try {
+      NodeUtil.precedence(Token.SCRIPT);
+      fail("expected Error");
+    } catch (Error expected) {
+    }
+  }
+
+  // ADD numeric result depends on operand string-ness
+  @Test
+  public void testIsNumericResult_add_dependsOnOperands() throws Throwable {
+    Node addNum = new Node(Token.ADD, num(1));
+    addNum.addChildToBack(num(2));
+    assertTrue(NodeUtil.isNumericResult(addNum));
+    Node addStr = new Node(Token.ADD, num(1));
+    addStr.addChildToBack(str("a"));
+    assertFalse(NodeUtil.isNumericResult(addStr));
+  }
+
+  // Comparison ops always produce booleans
+  @Test
+  public void testIsBooleanResult_comparisons() throws Throwable {
+    Node eq = new Node(Token.EQ, num(1));
+    eq.addChildToBack(num(2));
+    assertTrue(NodeUtil.isBooleanResult(eq));
+    assertFalse(NodeUtil.isBooleanResult(num(1)));
+  }
+
+  // mayBeString: plain name is possibly a string, numeric literal is not
+  @Test
+  public void testMayBeString_nameVsNumber() throws Throwable {
+    assertTrue(NodeUtil.mayBeString(name("x")));
+    assertFalse(NodeUtil.mayBeString(num(5)));
+  }
+
+  // Associativity and commutativity classification
+  @Test
+  public void testIsAssociativeAndCommutative() throws Throwable {
+    assertTrue(NodeUtil.isAssociative(Token.MUL));
+    assertFalse(NodeUtil.isAssociative(Token.ADD));
+    assertTrue(NodeUtil.isCommutative(Token.BITAND));
+    assertFalse(NodeUtil.isCommutative(Token.SUB));
+  }
+
+  // isAssignmentOp and getOpFromAssignmentOp mapping
+  @Test
+  public void testIsAssignmentOpAndGetOpFromAssignmentOp() throws Throwable {
+    Node assignAdd = new Node(Token.ASSIGN_ADD, name("x"));
+    assertTrue(NodeUtil.isAssignmentOp(assignAdd));
+    assertFalse(NodeUtil.isAssignmentOp(new Node(Token.ADD, name("x"))));
+    assertEquals(Token.ADD, NodeUtil.getOpFromAssignmentOp(assignAdd));
+  }
+
+  // getOpFromAssignmentOp throws for a non-assignment op
+  @Test
+  public void testGetOpFromAssignmentOp_throwsForNonAssign() throws Throwable {
+    try {
+      NodeUtil.getOpFromAssignmentOp(new Node(Token.ADD, name("x")));
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // opToStr known operators and unknown -> null
+  @Test
+  public void testOpToStr_knownAndUnknown() throws Throwable {
+    assertEquals("+", NodeUtil.opToStr(Token.ADD));
+    assertEquals("&&", NodeUtil.opToStr(Token.AND));
+    assertNull(NodeUtil.opToStr(Token.SCRIPT));
+  }
+
+  // opToStrNoFail throws Error for an unknown operator
+  @Test
+  public void testOpToStrNoFail_throwsForUnknown() throws Throwable {
+    try {
+      NodeUtil.opToStrNoFail(Token.SCRIPT);
+      fail("expected Error");
+    } catch (Error expected) {
+    }
+  }
+
+  // isValidPropertyName: valid identifier, invalid start, reserved word
+  @Test
+  public void testIsValidPropertyName_andIsLatin() throws Throwable {
+    assertTrue(NodeUtil.isValidPropertyName("foo"));
+    assertFalse(NodeUtil.isValidPropertyName("1foo"));
+    assertFalse(NodeUtil.isValidPropertyName("var"));
+    assertTrue(NodeUtil.isLatin("abc"));
+    assertFalse(NodeUtil.isLatin("caf\u00e9"));
+  }
+
+  // isForIn (3-child FOR) and isLoopStructure classification
+  @Test
+  public void testIsForInAndLoopStructure() throws Throwable {
+    Node forIn = new Node(Token.FOR, name("x"));
+    forIn.addChildToBack(name("obj"));
+    forIn.addChildToBack(new Node(Token.BLOCK));
+    assertTrue(NodeUtil.isForIn(forIn));
+    assertTrue(NodeUtil.isLoopStructure(forIn));
+    assertTrue(NodeUtil.isLoopStructure(new Node(Token.WHILE, name("x"))));
+    assertFalse(NodeUtil.isLoopStructure(new Node(Token.BLOCK)));
+  }
+
+  // getLoopCodeBlock for WHILE/DO, and non-loop -> null
+  @Test
+  public void testGetLoopCodeBlock_variants() throws Throwable {
+    Node whileBody = new Node(Token.BLOCK);
+    Node whileNode = new Node(Token.WHILE, name("cond"));
+    whileNode.addChildToBack(whileBody);
+    assertSame(whileBody, NodeUtil.getLoopCodeBlock(whileNode));
+
+    Node doBody = new Node(Token.BLOCK);
+    Node doNode = new Node(Token.DO, doBody);
+    doNode.addChildToBack(name("cond"));
+    assertSame(doBody, NodeUtil.getLoopCodeBlock(doNode));
+    assertNull(NodeUtil.getLoopCodeBlock(new Node(Token.BLOCK)));
+  }
+
+  // IF: condition excluded from control-structure code block, body included
+  @Test
+  public void testIsControlStructureAndCodeBlock() throws Throwable {
+    Node cond = name("cond");
+    Node ifNode = new Node(Token.IF, cond);
+    Node thenBlock = new Node(Token.BLOCK);
+    ifNode.addChildToBack(thenBlock);
+    assertTrue(NodeUtil.isControlStructure(ifNode));
+    assertFalse(NodeUtil.isControlStructureCodeBlock(ifNode, cond));
+    assertTrue(NodeUtil.isControlStructureCodeBlock(ifNode, thenBlock));
+  }
+
+  // getConditionExpression for IF, 4-child FOR, and 3-child FOR(null)
+  @Test
+  public void testGetConditionExpression_variants() throws Throwable {
+    Node cond = name("cond");
+    Node ifNode = new Node(Token.IF, cond);
+    ifNode.addChildToBack(new Node(Token.BLOCK));
+    assertSame(cond, NodeUtil.getConditionExpression(ifNode));
+
+    Node forReg = new Node(Token.FOR, leaf(Token.EMPTY));
+    forReg.addChildToBack(cond);
+    forReg.addChildToBack(leaf(Token.EMPTY));
+    forReg.addChildToBack(new Node(Token.BLOCK));
+    assertSame(cond, NodeUtil.getConditionExpression(forReg));
+  }
+
+  // constructorCallHasSideEffects: builtin ctor vs arbitrary; wrong type throws
+  @Test
+  public void testConstructorCallHasSideEffects() throws Throwable {
+    Node arrCtor = new Node(Token.NEW, name("Array"));
+    assertFalse(NodeUtil.constructorCallHasSideEffects(arrCtor));
+    Node fooCtor = new Node(Token.NEW, name("Foo"));
+    assertTrue(NodeUtil.constructorCallHasSideEffects(fooCtor));
+    try {
+      NodeUtil.constructorCallHasSideEffects(name("x"));
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // functionCallHasSideEffects: builtin function vs arbitrary function
+  @Test
+  public void testFunctionCallHasSideEffects() throws Throwable {
+    Node builtinCall = new Node(Token.CALL, name("Object"));
+    assertFalse(NodeUtil.functionCallHasSideEffects(builtinCall));
+    Node otherCall = new Node(Token.CALL, name("doStuff"));
+    assertTrue(NodeUtil.functionCallHasSideEffects(otherCall));
+  }
+
+  // mayHaveSideEffects: literal/plain name have none, CALL and inited NAME do
+  @Test
+  public void testMayHaveSideEffects_variants() throws Throwable {
+    assertFalse(NodeUtil.mayHaveSideEffects(num(5)));
+    assertFalse(NodeUtil.mayHaveSideEffects(name("x")));
+    Node callNode = new Node(Token.CALL, name("foo"));
+    assertTrue(NodeUtil.mayHaveSideEffects(callNode));
+    Node initedName = name("x");
+    initedName.addChildToBack(num(1));
+    assertTrue(NodeUtil.mayHaveSideEffects(initedName));
+  }
+
+  // isFunctionDeclaration vs isFunctionExpression based on statement context
+  @Test
+  public void testIsFunctionDeclarationVsExpression() throws Throwable {
+    Node declFn = new Node(Token.FUNCTION, Node.newString(Token.NAME, "foo"));
+    declFn.addChildToBack(new Node(Token.LP));
+    declFn.addChildToBack(new Node(Token.BLOCK));
+    new Node(Token.BLOCK, declFn);
+    assertTrue(NodeUtil.isFunctionDeclaration(declFn));
+    assertFalse(NodeUtil.isFunctionExpression(declFn));
+
+    Node exprFn = new Node(Token.FUNCTION, Node.newString(Token.NAME, ""));
+    exprFn.addChildToBack(new Node(Token.LP));
+    exprFn.addChildToBack(new Node(Token.BLOCK));
+    Node varName = Node.newString(Token.NAME, "x");
+    varName.addChildToBack(exprFn);
+    assertTrue(NodeUtil.isFunctionExpression(exprFn));
+  }
+
+  // newCallNode: FREE_CALL flag true for plain name target, false for GETPROP
+  @Test
+  public void testNewCallNode_freeCallFlag() throws Throwable {
+    Node freeCall = NodeUtil.newCallNode(name("foo"));
+    assertTrue(freeCall.getBooleanProp(Node.FREE_CALL));
+    Node getprop = new Node(Token.GETPROP, name("obj"));
+    getprop.addChildToBack(str("bar"));
+    Node methodCall = NodeUtil.newCallNode(getprop);
+    assertFalse(methodCall.getBooleanProp(Node.FREE_CALL));
+  }
+
+  // isObjectCallMethod matches property name of a.f(...) call
+  @Test
+  public void testIsObjectCallMethod_matchesPropertyName() throws Throwable {
+    Node getprop = new Node(Token.GETPROP, name("a"));
+    getprop.addChildToBack(str("f"));
+    Node call = new Node(Token.CALL, getprop);
+    assertTrue(NodeUtil.isObjectCallMethod(call, "f"));
+    assertFalse(NodeUtil.isObjectCallMethod(call, "g"));
+  }
+}

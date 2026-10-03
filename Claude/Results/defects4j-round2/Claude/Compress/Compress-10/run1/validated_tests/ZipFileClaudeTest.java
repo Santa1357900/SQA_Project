@@ -1,0 +1,620 @@
+package org.apache.commons.compress.archivers.zip;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Enumeration;
+import java.util.zip.Deflater;
+import java.util.zip.ZipException;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ZipFileClaudeTest {
+
+    private static final class EntrySpec {
+        final String name;
+        final byte[] content;
+        final int method;
+        boolean utf8 = true;
+        String comment = "";
+        int localExtraLen = 0;
+
+        EntrySpec(String name, byte[] content, int method) {
+            this.name = name;
+            this.content = content;
+            this.method = method;
+        }
+    }
+
+    private static void writeShort(ByteArrayOutputStream out, int value) {
+        out.write(value & 0xFF);
+        out.write((value >> 8) & 0xFF);
+    }
+
+    private static void writeWord(ByteArrayOutputStream out, long value) {
+        out.write((int) (value & 0xFF));
+        out.write((int) ((value >> 8) & 0xFF));
+        out.write((int) ((value >> 16) & 0xFF));
+        out.write((int) ((value >> 24) & 0xFF));
+    }
+
+    private static byte[] deflate(byte[] data) {
+        Deflater deflater = new Deflater(Deflater.DEFAULT_COMPRESSION, true);
+        deflater.setInput(data);
+        deflater.finish();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buf = new byte[256];
+        while (!deflater.finished()) {
+            int n = deflater.deflate(buf);
+            baos.write(buf, 0, n);
+        }
+        deflater.end();
+        return baos.toByteArray();
+    }
+
+    private static byte[] readAllBytes(InputStream is) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buf = new byte[64];
+        int n;
+        while ((n = is.read(buf)) != -1) {
+            baos.write(buf, 0, n);
+        }
+        return baos.toByteArray();
+    }
+
+    private byte[] buildZip(EntrySpec[] specs, String encodingName) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        long[] offsets = new long[specs.length];
+        byte[][] fileBytesArr = new byte[specs.length][];
+        byte[][] nameBytesArr = new byte[specs.length][];
+        byte[][] commentBytesArr = new byte[specs.length][];
+
+        for (int i = 0; i < specs.length; i++) {
+            EntrySpec sp = specs[i];
+            offsets[i] = out.size();
+            byte[] nameBytes = sp.utf8 ? sp.name.getBytes("UTF-8") : sp.name.getBytes(encodingName);
+            byte[] commentBytes = sp.utf8 ? sp.comment.getBytes("UTF-8") : sp.comment.getBytes(encodingName);
+            byte[] fileBytes = (sp.method == ZipArchiveEntry.DEFLATED) ? deflate(sp.content) : sp.content;
+            nameBytesArr[i] = nameBytes;
+            commentBytesArr[i] = commentBytes;
+            fileBytesArr[i] = fileBytes;
+
+            out.write(ZipArchiveOutputStream.LFH_SIG);
+            writeShort(out, 20);
+            writeShort(out, sp.utf8 ? 0x0800 : 0);
+            writeShort(out, sp.method);
+            writeShort(out, 0);
+            writeShort(out, 0x21);
+            writeWord(out, 0);
+            writeWord(out, fileBytes.length);
+            writeWord(out, sp.content.length);
+            writeShort(out, nameBytes.length);
+            writeShort(out, sp.localExtraLen);
+            out.write(nameBytes);
+            for (int k = 0; k < sp.localExtraLen; k++) {
+                out.write(0);
+            }
+            out.write(fileBytes);
+        }
+
+        long cdStart = out.size();
+        for (int i = 0; i < specs.length; i++) {
+            EntrySpec sp = specs[i];
+            out.write(ZipArchiveOutputStream.CFH_SIG);
+            writeShort(out, 20);
+            writeShort(out, 20);
+            writeShort(out, sp.utf8 ? 0x0800 : 0);
+            writeShort(out, sp.method);
+            writeShort(out, 0);
+            writeShort(out, 0x21);
+            writeWord(out, 0);
+            writeWord(out, fileBytesArr[i].length);
+            writeWord(out, sp.content.length);
+            writeShort(out, nameBytesArr[i].length);
+            writeShort(out, 0);
+            writeShort(out, commentBytesArr[i].length);
+            writeShort(out, 0);
+            writeShort(out, 0);
+            writeWord(out, 0);
+            writeWord(out, offsets[i]);
+            out.write(nameBytesArr[i]);
+            out.write(commentBytesArr[i]);
+        }
+        long cdSize = out.size() - cdStart;
+
+        out.write(ZipArchiveOutputStream.EOCD_SIG);
+        writeShort(out, 0);
+        writeShort(out, 0);
+        writeShort(out, specs.length);
+        writeShort(out, specs.length);
+        writeWord(out, cdSize);
+        writeWord(out, cdStart);
+        writeShort(out, 0);
+
+        return out.toByteArray();
+    }
+
+    private File writeToTempFile(byte[] data) throws IOException {
+        File f = File.createTempFile("zipfileclaudetest", ".zip");
+        f.deleteOnExit();
+        FileOutputStream fos = new FileOutputStream(f);
+        try {
+            fos.write(data);
+        } finally {
+            fos.close();
+        }
+        return f;
+    }
+
+    // covers normal constructor path with one entry in the central directory (loop executes once)
+    @Test
+    public void testConstructorFile_singleStoredEntry_entryAccessible() throws Throwable {
+        byte[] content = "hello".getBytes("UTF-8");
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("a.txt", content, ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            ZipArchiveEntry ze = zf.getEntry("a.txt");
+            assertEquals("a.txt", ze.getName());
+            assertEquals(content.length, ze.getSize());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers getEncoding() returning exactly the encoding string passed to the constructor
+    @Test
+    public void testGetEncoding_explicitEncoding_returnsSameValue() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("a.txt", "x".getBytes("UTF-8"), ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            assertEquals("UTF-8", zf.getEncoding());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers ZipFile(String name) constructor delegating to the File-based constructor
+    @Test
+    public void testConstructorString_opensArchiveSuccessfully() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("a.txt", "x".getBytes("UTF-8"), ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f.getAbsolutePath());
+        try {
+            assertNotNull(zf.getEntry("a.txt"));
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers hasUTF8Flag branch decoding the name with UTF8_ZIP_ENCODING regardless of requested encoding
+    @Test
+    public void testConstructorFile_utf8Flag_decodesNameCorrectly() throws Throwable {
+        String name = "unicode-\u00fc.txt";
+        EntrySpec spec = new EntrySpec(name, "data".getBytes("UTF-8"), ZipArchiveEntry.STORED);
+        spec.utf8 = true;
+        EntrySpec[] specs = new EntrySpec[] { spec };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            ZipArchiveEntry ze = zf.getEntry(name);
+            assertNotNull(ze);
+            assertEquals(name, ze.getName());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers !hasUTF8Flag branch decoding the name with the requested (non-UTF8) encoding
+    @Test
+    public void testConstructorFile_nonUtf8Encoding_decodesLatin1NameCorrectly() throws Throwable {
+        String name = "caf\u00e9.txt";
+        EntrySpec spec = new EntrySpec(name, "data".getBytes("UTF-8"), ZipArchiveEntry.STORED);
+        spec.utf8 = false;
+        EntrySpec[] specs = new EntrySpec[] { spec };
+        File f = writeToTempFile(buildZip(specs, "ISO-8859-1"));
+        ZipFile zf = new ZipFile(f, "ISO-8859-1");
+        try {
+            ZipArchiveEntry ze = zf.getEntry(name);
+            assertNotNull(ze);
+            assertEquals(name, ze.getName());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers tryToLocateSignature failing to find EOCD -> "archive is not a ZIP archive"
+    @Test
+    public void testConstructorFile_tooShortToContainEOCD_throwsZipException() throws Throwable {
+        byte[] garbage = new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+        File f = writeToTempFile(garbage);
+        try {
+            new ZipFile(f, "UTF-8");
+            fail("expected ZipException");
+        } catch (ZipException expected) {
+            // expected
+        }
+    }
+
+    // covers the central directory while-loop executing zero times for an empty archive
+    @Test
+    public void testConstructorFile_emptyArchive_opensWithZeroEntries() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[0];
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            assertFalse(zf.getEntries().hasMoreElements());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers sig != CFH_SIG && startsWithLocalFileHeader() -> throws IOException (corrupt archive)
+    @Test
+    public void testConstructorFile_corruptArchiveWithLFHButNoCentralDir_throwsIOException() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] nameBytes = "a.txt".getBytes("UTF-8");
+        byte[] content = "X".getBytes("UTF-8");
+        out.write(ZipArchiveOutputStream.LFH_SIG);
+        writeShort(out, 20);
+        writeShort(out, 0);
+        writeShort(out, ZipArchiveEntry.STORED);
+        writeShort(out, 0);
+        writeShort(out, 0x21);
+        writeWord(out, 0);
+        writeWord(out, content.length);
+        writeWord(out, content.length);
+        writeShort(out, nameBytes.length);
+        writeShort(out, 0);
+        out.write(nameBytes);
+        out.write(content);
+        out.write(ZipArchiveOutputStream.EOCD_SIG);
+        writeShort(out, 0);
+        writeShort(out, 0);
+        writeShort(out, 1);
+        writeShort(out, 1);
+        writeWord(out, 0);
+        writeWord(out, 0);
+        writeShort(out, 0);
+        File f = writeToTempFile(out.toByteArray());
+        try {
+            new ZipFile(f, "UTF-8");
+            fail("expected IOException for corrupt archive");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().indexOf("corrupt") >= 0);
+        }
+    }
+
+    // covers close() being idempotent per Closeable contract
+    @Test
+    public void testClose_calledTwice_noExceptionAndEncodingStillAccessible() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("a.txt", "x".getBytes("UTF-8"), ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        zf.close();
+        zf.close();
+        assertEquals("UTF-8", zf.getEncoding());
+    }
+
+    // covers closeQuietly(null) branch doing nothing harmful
+    @Test
+    public void testCloseQuietly_null_doesNothing() throws Throwable {
+        ZipFile.closeQuietly(null);
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("a.txt", "x".getBytes("UTF-8"), ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            assertNotNull(zf.getEntry("a.txt"));
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers closeQuietly(zipfile) actually closing the underlying archive
+    @Test
+    public void testCloseQuietly_validZipFile_closesUnderlyingArchive() throws Throwable {
+        byte[] content = "data".getBytes("UTF-8");
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("a.txt", content, ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        ZipArchiveEntry ze = zf.getEntry("a.txt");
+        ZipFile.closeQuietly(zf);
+        InputStream is = zf.getInputStream(ze);
+        try {
+            is.read();
+            fail("expected IOException because archive is closed");
+        } catch (IOException expected) {
+            // expected
+        }
+    }
+
+    // covers getEntries() returning entries in central directory (insertion) order
+    @Test
+    public void testGetEntries_multipleEntries_returnsInCentralDirectoryOrder() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[] {
+            new EntrySpec("a.txt", "1".getBytes("UTF-8"), ZipArchiveEntry.STORED),
+            new EntrySpec("b.txt", "2".getBytes("UTF-8"), ZipArchiveEntry.STORED)
+        };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            Enumeration<ZipArchiveEntry> en = zf.getEntries();
+            ZipArchiveEntry first = en.nextElement();
+            ZipArchiveEntry second = en.nextElement();
+            assertEquals("a.txt", first.getName());
+            assertEquals("b.txt", second.getName());
+            assertFalse(en.hasMoreElements());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers getEntries() on a zero-entry archive
+    @Test
+    public void testGetEntries_emptyArchive_hasNoElements() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[0];
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            assertFalse(zf.getEntries().hasMoreElements());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers getEntriesInPhysicalOrder() sorting multiple entries by header offset ascending
+    @Test
+    public void testGetEntriesInPhysicalOrder_multipleEntries_containsAllEntries() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[] {
+            new EntrySpec("a.txt", "1".getBytes("UTF-8"), ZipArchiveEntry.STORED),
+            new EntrySpec("b.txt", "22".getBytes("UTF-8"), ZipArchiveEntry.STORED)
+        };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            Enumeration<ZipArchiveEntry> en = zf.getEntriesInPhysicalOrder();
+            ZipArchiveEntry first = en.nextElement();
+            ZipArchiveEntry second = en.nextElement();
+            assertEquals("a.txt", first.getName());
+            assertEquals("b.txt", second.getName());
+            assertFalse(en.hasMoreElements());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers getEntriesInPhysicalOrder() with exactly one entry (array of length 1)
+    @Test
+    public void testGetEntriesInPhysicalOrder_singleEntry_matchesEntry() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("only.txt", "z".getBytes("UTF-8"), ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            Enumeration<ZipArchiveEntry> en = zf.getEntriesInPhysicalOrder();
+            assertEquals("only.txt", en.nextElement().getName());
+            assertFalse(en.hasMoreElements());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers getEntry(name) returning the correct entry from nameMap
+    @Test
+    public void testGetEntry_existingName_returnsEntryWithCorrectSize() throws Throwable {
+        byte[] content = "123456789".getBytes("UTF-8");
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("sized.txt", content, ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            ZipArchiveEntry ze = zf.getEntry("sized.txt");
+            assertEquals(content.length, ze.getSize());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers getEntry(name) returning null when the name is absent from nameMap
+    @Test
+    public void testGetEntry_nonExistingName_returnsNull() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("a.txt", "x".getBytes("UTF-8"), ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            assertNull(zf.getEntry("missing.txt"));
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers canReadEntryData(ze) returning true for a basic STORED entry
+    @Test
+    public void testCanReadEntryData_storedEntry_returnsTrue() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("a.txt", "x".getBytes("UTF-8"), ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            assertTrue(zf.canReadEntryData(zf.getEntry("a.txt")));
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers canReadEntryData(ze) returning true for a basic DEFLATED entry
+    @Test
+    public void testCanReadEntryData_deflatedEntry_returnsTrue() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("a.bin", "abcdef".getBytes("UTF-8"), ZipArchiveEntry.DEFLATED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            assertTrue(zf.canReadEntryData(zf.getEntry("a.bin")));
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers BoundedInputStream.read() single-byte branch read fully then EOF
+    @Test
+    public void testGetInputStream_storedEntry_readByteByByte_matchesContent() throws Throwable {
+        byte[] content = "Hello".getBytes("UTF-8");
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("h.txt", content, ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            InputStream is = zf.getInputStream(zf.getEntry("h.txt"));
+            byte[] result = new byte[content.length];
+            for (int i = 0; i < content.length; i++) {
+                result[i] = (byte) is.read();
+            }
+            assertEquals(-1, is.read());
+            assertArrayEquals(content, result);
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers BoundedInputStream.read(byte[],off,len) returning exact length then EOF
+    @Test
+    public void testGetInputStream_storedEntry_readByteArray_matchesContentAndEOF() throws Throwable {
+        byte[] content = "HelloWorld".getBytes("UTF-8");
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("h2.txt", content, ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            InputStream is = zf.getInputStream(zf.getEntry("h2.txt"));
+            byte[] buf = new byte[100];
+            int n = is.read(buf, 0, buf.length);
+            assertEquals(content.length, n);
+            byte[] actual = new byte[n];
+            System.arraycopy(buf, 0, actual, 0, n);
+            assertArrayEquals(content, actual);
+            assertEquals(-1, is.read(buf, 0, buf.length));
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers DEFLATED case in getInputStream, including the dummy byte for nowrap Inflater
+    @Test
+    public void testGetInputStream_deflatedEntry_inflatesToOriginalContent() throws Throwable {
+        byte[] content = "The quick brown fox jumps over the lazy dog".getBytes("UTF-8");
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("d.txt", content, ZipArchiveEntry.DEFLATED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            InputStream is = zf.getInputStream(zf.getEntry("d.txt"));
+            byte[] result = readAllBytes(is);
+            assertArrayEquals(content, result);
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers STORED entry with zero-length content returning immediate EOF
+    @Test
+    public void testGetInputStream_emptyStoredEntry_immediateEOF() throws Throwable {
+        byte[] content = new byte[0];
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("empty.txt", content, ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            InputStream is = zf.getInputStream(zf.getEntry("empty.txt"));
+            assertEquals(-1, is.read());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers getInputStream(ze) returning null when the entry is not present in this ZipFile
+    @Test
+    public void testGetInputStream_entryNotInArchive_returnsNull() throws Throwable {
+        EntrySpec[] specs = new EntrySpec[] { new EntrySpec("a.txt", "x".getBytes("UTF-8"), ZipArchiveEntry.STORED) };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            ZipArchiveEntry stray = new ZipArchiveEntry();
+            assertNull(zf.getInputStream(stray));
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers correct dataOffset tracking for the second of two physically sequential entries
+    @Test
+    public void testGetInputStream_twoEntries_independentContent() throws Throwable {
+        byte[] c1 = "AAAA".getBytes("UTF-8");
+        byte[] c2 = "BBBBBB".getBytes("UTF-8");
+        EntrySpec[] specs = new EntrySpec[] {
+            new EntrySpec("first.bin", c1, ZipArchiveEntry.STORED),
+            new EntrySpec("second.bin", c2, ZipArchiveEntry.STORED)
+        };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            ZipArchiveEntry e1 = zf.getEntry("first.bin");
+            ZipArchiveEntry e2 = zf.getEntry("second.bin");
+            assertArrayEquals(c1, readAllBytes(zf.getInputStream(e1)));
+            assertArrayEquals(c2, readAllBytes(zf.getInputStream(e2)));
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers central directory comment field being decoded and stored on the entry
+    @Test
+    public void testGetEntry_entryWithComment_commentDecodedCorrectly() throws Throwable {
+        EntrySpec spec = new EntrySpec("c.txt", "data".getBytes("UTF-8"), ZipArchiveEntry.STORED);
+        spec.comment = "my comment";
+        EntrySpec[] specs = new EntrySpec[] { spec };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            ZipArchiveEntry ze = zf.getEntry("c.txt");
+            assertEquals("my comment", ze.getComment());
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers resolveLocalFileHeaderData correctly skipping a non-zero local extra field to find data offset
+    @Test
+    public void testConstructorFile_extraFieldInLocalHeader_contentReadCorrectly() throws Throwable {
+        byte[] content = "HelloWorld".getBytes("UTF-8");
+        EntrySpec spec = new EntrySpec("e.txt", content, ZipArchiveEntry.STORED);
+        spec.localExtraLen = 6;
+        EntrySpec[] specs = new EntrySpec[] { spec };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            ZipArchiveEntry ze = zf.getEntry("e.txt");
+            byte[] result = readAllBytes(zf.getInputStream(ze));
+            assertArrayEquals(content, result);
+        } finally {
+            zf.close();
+        }
+    }
+
+    // covers the default: case in getInputStream's switch -> ZipException for unsupported method
+    @Test
+    public void testGetInputStream_unsupportedCompressionMethod_throwsZipException() throws Throwable {
+        EntrySpec spec = new EntrySpec("u.bin", "abc".getBytes("UTF-8"), 99);
+        EntrySpec[] specs = new EntrySpec[] { spec };
+        File f = writeToTempFile(buildZip(specs, "UTF-8"));
+        ZipFile zf = new ZipFile(f, "UTF-8");
+        try {
+            ZipArchiveEntry ze = zf.getEntry("u.bin");
+            assertEquals(99, ze.getMethod());
+            try {
+                zf.getInputStream(ze);
+                fail("expected ZipException for unsupported compression method");
+            } catch (ZipException expected) {
+                // expected
+            }
+        } finally {
+            zf.close();
+        }
+    }
+}

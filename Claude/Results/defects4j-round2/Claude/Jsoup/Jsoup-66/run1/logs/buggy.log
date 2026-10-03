@@ -1,0 +1,20 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Jsoup -v 66b -w /tmp/claude-Jsoup-66-nmlku8an/buggy
+Checking out c324fabe to /tmp/claude-Jsoup-66-nmlku8an/buggy............... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Jsoup-66-nmlku8an/buggy/pom.xml......... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff c324fabe:22a17d24..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Jsoup-66b....................................... OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Jsoup-66-nmlku8an/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

@@ -1,0 +1,14 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Math-55-kvafkdzr/Math-55b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+WARNING: Some tests failed (see /tmp/claude-Math-55-kvafkdzr/buggy/failing_tests)!
+       Lines total: 116
+     Lines covered: 116
+  Conditions total: 48
+Conditions covered: 38
+     Line coverage: 100.0%
+Condition coverage: 79.2%
+[exit 0]

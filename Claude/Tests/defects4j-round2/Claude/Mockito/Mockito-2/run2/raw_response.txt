@@ -1,0 +1,199 @@
+package org.mockito.internal.util;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TimerClaudeTest {
+
+    // Before start() is called startTime is -1; with reasonable positive duration
+    // current time minus -1 is far greater than duration, so isCounting() should be false.
+    @Test
+    public void testIsCounting_beforeStart_withPositiveDuration_returnsFalse() throws Throwable {
+        Timer timer = new Timer(1000);
+        assertFalse(timer.isCounting());
+    }
+
+    // Before start(), with zero duration, isCounting() should also be false.
+    @Test
+    public void testIsCounting_beforeStart_withZeroDuration_returnsFalse() throws Throwable {
+        Timer timer = new Timer(0);
+        assertFalse(timer.isCounting());
+    }
+
+    // Before start(), with negative duration, isCounting() should be false.
+    @Test
+    public void testIsCounting_beforeStart_withNegativeDuration_returnsFalse() throws Throwable {
+        Timer timer = new Timer(-1);
+        assertFalse(timer.isCounting());
+    }
+
+    // Before start(), with huge duration (Long.MAX_VALUE), elapsed is far smaller, so isCounting() true.
+    @Test
+    public void testIsCounting_beforeStart_withMaxDuration_returnsTrue() throws Throwable {
+        Timer timer = new Timer(Long.MAX_VALUE);
+        assertTrue(timer.isCounting());
+    }
+
+    // After start(), with a reasonably large duration, timer should still be counting immediately.
+    @Test
+    public void testStart_thenIsCounting_withPositiveDuration_returnsTrue() throws Throwable {
+        Timer timer = new Timer(1000);
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // Core boundary case: a timer with zero duration has no time left to count,
+    // so immediately after start() it must report false (not still counting).
+    @Test
+    public void testStart_thenIsCounting_withZeroDuration_returnsFalse() throws Throwable {
+        Timer timer = new Timer(0);
+        timer.start();
+        assertFalse(timer.isCounting());
+    }
+
+    // After start(), with negative duration, isCounting() must be false since no time can elapse within a negative window.
+    @Test
+    public void testStart_thenIsCounting_withNegativeDuration_returnsFalse() throws Throwable {
+        Timer timer = new Timer(-5);
+        timer.start();
+        assertFalse(timer.isCounting());
+    }
+
+    // After start(), with Long.MAX_VALUE duration, timer should be counting.
+    @Test
+    public void testStart_thenIsCounting_withMaxDuration_returnsTrue() throws Throwable {
+        Timer timer = new Timer(Long.MAX_VALUE);
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // After start(), with Long.MIN_VALUE duration, elapsed (>=0) can never be within such a negative window, so false.
+    @Test
+    public void testStart_thenIsCounting_withMinDuration_returnsFalse() throws Throwable {
+        Timer timer = new Timer(Long.MIN_VALUE);
+        timer.start();
+        assertFalse(timer.isCounting());
+    }
+
+    // After sleeping well beyond the configured duration, isCounting() must be false.
+    @Test
+    public void testStart_thenSleepBeyondDuration_isCountingReturnsFalse() throws Throwable {
+        Timer timer = new Timer(2);
+        timer.start();
+        Thread.sleep(50);
+        assertFalse(timer.isCounting());
+    }
+
+    // While still well within the configured duration, isCounting() must be true.
+    @Test
+    public void testStart_thenSleepWithinDuration_isCountingReturnsTrue() throws Throwable {
+        Timer timer = new Timer(10000);
+        timer.start();
+        Thread.sleep(5);
+        assertTrue(timer.isCounting());
+    }
+
+    // Calling start() again resets the timer: even if previous duration had expired,
+    // a fresh start() with reasonable duration should make isCounting() true again.
+    @Test
+    public void testStart_calledTwice_resetsStartTime_isCountingTrueAgain() throws Throwable {
+        Timer timer = new Timer(10000);
+        timer.start();
+        Thread.sleep(5);
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // Restarting an already-expired timer should make it count again from zero elapsed time.
+    @Test
+    public void testStart_calledAfterExpiry_resetsTimer_isCountingTrueAgain() throws Throwable {
+        Timer timer = new Timer(2);
+        timer.start();
+        Thread.sleep(20);
+        assertFalse(timer.isCounting());
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // Zero duration timer remains false even after some time passes (never had counting time).
+    @Test
+    public void testIsCounting_zeroDuration_afterSleep_returnsFalse() throws Throwable {
+        Timer timer = new Timer(0);
+        timer.start();
+        Thread.sleep(10);
+        assertFalse(timer.isCounting());
+    }
+
+    // Negative duration timer remains false after some time passes.
+    @Test
+    public void testIsCounting_negativeDuration_afterSleep_returnsFalse() throws Throwable {
+        Timer timer = new Timer(-10);
+        timer.start();
+        Thread.sleep(10);
+        assertFalse(timer.isCounting());
+    }
+
+    // Large duration should consistently report true across multiple consecutive calls.
+    @Test
+    public void testIsCounting_multipleCallsConsistency_withLargeDuration_returnsTrueEachTime() throws Throwable {
+        Timer timer = new Timer(100000);
+        timer.start();
+        assertTrue(timer.isCounting());
+        assertTrue(timer.isCounting());
+        assertTrue(timer.isCounting());
+    }
+
+    // Zero duration timer should consistently report false across multiple consecutive calls.
+    @Test
+    public void testStart_withZeroDuration_thenImmediateMultipleChecks_consistentFalse() throws Throwable {
+        Timer timer = new Timer(0);
+        timer.start();
+        assertFalse(timer.isCounting());
+        assertFalse(timer.isCounting());
+    }
+
+    // Constructing timers with a variety of durations must not throw and must allow subsequent use.
+    @Test
+    public void testConstructor_withDifferentDurations_doesNotThrow() throws Throwable {
+        Timer timer1 = new Timer(0);
+        Timer timer2 = new Timer(Long.MAX_VALUE);
+        Timer timer3 = new Timer(Long.MIN_VALUE);
+        assertNotNull(timer1);
+        assertNotNull(timer2);
+        assertNotNull(timer3);
+    }
+
+    // A moderately small positive duration, after sleeping past it, should become false (not still counting).
+    @Test
+    public void testIsCounting_smallPositiveDuration_afterSleepPastIt_returnsFalse() throws Throwable {
+        Timer timer = new Timer(5);
+        timer.start();
+        Thread.sleep(30);
+        assertFalse(timer.isCounting());
+    }
+
+    // A moderately small positive duration, checked immediately, should be true (still counting).
+    @Test
+    public void testIsCounting_smallPositiveDuration_immediatelyAfterStart_returnsTrue() throws Throwable {
+        Timer timer = new Timer(5);
+        timer.start();
+        assertTrue(timer.isCounting());
+    }
+
+    // Verify isCounting() before start() with a small negative duration remains false (assert disabled path).
+    @Test
+    public void testIsCounting_beforeStart_withSmallNegativeDuration_returnsFalse() throws Throwable {
+        Timer timer = new Timer(-1);
+        assertFalse(timer.isCounting());
+    }
+
+    // After an expired timer, calling isCounting() multiple times should remain consistently false.
+    @Test
+    public void testIsCounting_afterExpiry_multipleCallsConsistentlyFalse() throws Throwable {
+        Timer timer = new Timer(2);
+        timer.start();
+        Thread.sleep(30);
+        assertFalse(timer.isCounting());
+        assertFalse(timer.isCounting());
+    }
+}

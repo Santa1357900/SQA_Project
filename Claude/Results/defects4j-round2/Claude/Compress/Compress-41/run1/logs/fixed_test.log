@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Compress-41-49hrr594/Compress-41f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.compress.archivers.zip.ZipArchiveInputStreamClaudeTest::testGetNextZipEntry_storedEntryWithDataDescriptorNoSignatureBeforeCentralDirectory_readsFullDataAndCorrectSize
+  - org.apache.commons.compress.archivers.zip.ZipArchiveInputStreamClaudeTest::testRead_storedEntryNoDataDescriptor_returnsExactContent
+[exit 0]

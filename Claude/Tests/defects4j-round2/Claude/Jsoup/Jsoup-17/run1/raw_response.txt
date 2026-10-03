@@ -1,0 +1,303 @@
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TreeBuilderStateClaudeTest {
+
+    // Initial: leading whitespace before <html> is ignored, parsing continues normally
+    @Test
+    public void testInitial_leadingWhitespace_ignoredBeforeHtml() throws Throwable {
+        Document doc = Jsoup.parse("  \n<html><head></head><body>ok</body></html>");
+        assertEquals("ok", doc.body().text());
+        assertNotNull(doc.head());
+    }
+
+    // Initial: doctype token creates html doc and transitions to BeforeHtml, rest parses fine
+    @Test
+    public void testInitial_doctype_transitionsBeforeHtml() throws Throwable {
+        Document doc = Jsoup.parse("<!DOCTYPE html><html><head></head><body>ok</body></html>");
+        assertEquals("html", doc.child(0).tagName());
+        assertEquals("ok", doc.body().text());
+    }
+
+    // Initial: non-doctype/non-comment token transitions to BeforeHtml and is reprocessed
+    @Test
+    public void testInitial_strayToken_reprocessedIntoBody() throws Throwable {
+        Document doc = Jsoup.parse("stray<html><body>ok</body></html>");
+        String text = doc.body().text();
+        assertTrue(text.indexOf("stray") >= 0);
+        assertTrue(text.indexOf("ok") >= 0);
+    }
+
+    // BeforeHtml: start tag html inserted, transitions BeforeHead
+    @Test
+    public void testBeforeHtml_startTagHtml_transitionsBeforeHead() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>T</title></head><body>b</body></html>");
+        assertEquals("T", doc.title());
+        assertEquals("b", doc.body().text());
+    }
+
+    // BeforeHead: start tag head sets head element, attributes preserved
+    @Test
+    public void testBeforeHead_startTagHead_setsHeadElementWithAttrs() throws Throwable {
+        Document doc = Jsoup.parse("<head id='h1'></head><body></body>");
+        assertEquals("h1", doc.head().attr("id"));
+    }
+
+    // BeforeHead: other start tag implies synthetic <head>, token reprocessed in InHead
+    @Test
+    public void testBeforeHead_otherStartTag_impliesHeadThenReprocesses() throws Throwable {
+        Document doc = Jsoup.parse("<html><title>T</title><body>b</body></html>");
+        assertEquals("T", doc.title());
+        assertEquals("b", doc.body().text());
+    }
+
+    // InHead: title handled as RCDATA, entities decoded but content not parsed as tags
+    @Test
+    public void testInHead_titleRcData_entitiesDecoded() throws Throwable {
+        Document doc = Jsoup.parse("<head><title>A&lt;b&gt;B</title></head><body></body>");
+        assertEquals("A<b>B", doc.title());
+    }
+
+    // InHead: style handled as rawtext, content preserved verbatim
+    @Test
+    public void testInHead_styleRawText_contentPreserved() throws Throwable {
+        Document doc = Jsoup.parse("<head><style>div{color:red}</style></head><body></body>");
+        Element style = doc.head().child(0);
+        assertEquals("style", style.tagName());
+        assertEquals("div{color:red}", style.data());
+    }
+
+    // InHead: script handled as rawtext, content preserved verbatim
+    @Test
+    public void testInHead_scriptRawText_contentPreserved() throws Throwable {
+        Document doc = Jsoup.parse("<head><script>var a = '<div>';</script></head><body></body>");
+        Element script = doc.head().child(0);
+        assertEquals("script", script.tagName());
+        assertEquals("var a = '<div>';", script.data());
+    }
+
+    // InHead: base tag inserted empty with href attribute
+    @Test
+    public void testInHead_baseTag_insertedEmptyWithHref() throws Throwable {
+        Document doc = Jsoup.parse("<head><base href='http://example.com/'></head><body></body>");
+        Element base = doc.head().child(0);
+        assertEquals("base", base.tagName());
+        assertEquals("http://example.com/", base.attr("href"));
+    }
+
+    // InHead: meta tag inserted empty with attribute preserved
+    @Test
+    public void testInHead_metaTag_insertedEmpty() throws Throwable {
+        Document doc = Jsoup.parse("<head><meta charset='utf-8'></head><body></body>");
+        Element meta = doc.head().child(0);
+        assertEquals("meta", meta.tagName());
+        assertEquals("utf-8", meta.attr("charset"));
+    }
+
+    // InHead: noscript transitions to InHeadNoscript, allows nested style via delegation
+    @Test
+    public void testInHead_noscript_allowsNestedStyle() throws Throwable {
+        Document doc = Jsoup.parse("<head><noscript><style>a{}</style></noscript></head><body></body>");
+        Element noscript = doc.head().child(0);
+        assertEquals("noscript", noscript.tagName());
+        assertEquals(1, noscript.children().size());
+        assertEquals("style", noscript.child(0).tagName());
+    }
+
+    // InHead: end tag head transitions AfterHead, body parses normally afterward
+    @Test
+    public void testInHead_endTagHead_transitionsAfterHead() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body>ok</body></html>");
+        assertEquals("ok", doc.body().text());
+    }
+
+    // AfterHead: start tag body inserted, framesetOk set false, attributes preserved
+    @Test
+    public void testAfterHead_startTagBody_insertsBodyWithAttrs() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body class='x'>hi</body></html>");
+        assertEquals("x", doc.body().attr("class"));
+        assertEquals("hi", doc.body().text());
+    }
+
+    // AfterHead: start tag frameset transitions InFrameset, frame inserted empty
+    @Test
+    public void testAfterHead_startTagFrameset_insertsFrame() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><frameset><frame src='a.html'></frameset></html>");
+        Element htmlEl = doc.child(0);
+        Element frameset = htmlEl.child(1);
+        assertEquals("frameset", frameset.tagName());
+        assertEquals("a.html", frameset.child(0).attr("src"));
+    }
+
+    // AfterHead: head-only tag after head closed reopens head implicitly for insertion
+    @Test
+    public void testAfterHead_headOnlyTag_reopensHeadImplicitly() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><base href='http://x/'><body></body></html>");
+        Element head = doc.head();
+        Element base = head.child(head.children().size() - 1);
+        assertEquals("base", base.tagName());
+        assertEquals("http://x/", base.attr("href"));
+    }
+
+    // AfterHead: other start tag implies synthetic <body> then inserts token
+    @Test
+    public void testAfterHead_otherStartTag_impliesBody() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><p>hi</p></html>");
+        Element body = doc.body();
+        assertEquals("p", body.child(0).tagName());
+        assertEquals("hi", body.child(0).text());
+    }
+
+    // InBody: heading start tag closes an open <p> via button-scope check
+    @Test
+    public void testInBody_heading_closesOpenParagraph() throws Throwable {
+        Document doc = Jsoup.parse("<body><p>first<h1>head</h1></body>");
+        Element body = doc.body();
+        assertEquals(2, body.children().size());
+        assertEquals("p", body.child(0).tagName());
+        assertEquals("h1", body.child(1).tagName());
+    }
+
+    // InBody: consecutive heading tags close the previous heading (siblings, not nested)
+    @Test
+    public void testInBody_consecutiveHeadings_closePrevious() throws Throwable {
+        Document doc = Jsoup.parse("<body><h1>A<h2>B</body>");
+        Element body = doc.body();
+        assertEquals(2, body.children().size());
+        assertEquals("h1", body.child(0).tagName());
+        assertEquals("h2", body.child(1).tagName());
+    }
+
+    // InBody: consecutive <li> tags close previous li (siblings, not nested)
+    @Test
+    public void testInBody_consecutiveLi_areSiblings() throws Throwable {
+        Document doc = Jsoup.parse("<body><li>A<li>B</body>");
+        Element body = doc.body();
+        assertEquals(2, body.children().size());
+        assertEquals("A", body.child(0).text());
+        assertEquals("B", body.child(1).text());
+    }
+
+    // InBody: end tag p with no open p creates an empty <p></p> then closes it
+    @Test
+    public void testInBody_endTagP_withoutOpenP_createsEmptyP() throws Throwable {
+        Document doc = Jsoup.parse("<body></p></body>");
+        Element body = doc.body();
+        assertEquals(1, body.children().size());
+        assertEquals("p", body.child(0).tagName());
+        assertEquals(0, body.child(0).childNodeSize());
+    }
+
+    // InBody: second <form> while a form element is still open is ignored (error, false)
+    @Test
+    public void testInBody_duplicateForm_ignoredKeepsFirst() throws Throwable {
+        Document doc = Jsoup.parse("<body><form id='f1'><form id='f2'></form></body>");
+        Element body = doc.body();
+        assertEquals(1, body.children().size());
+        assertEquals("f1", body.child(0).attr("id"));
+    }
+
+    // BUG ORACLE: InBody start tag "option": per HTML5, an open <option> must be popped
+    // before inserting a new one, so consecutive options are siblings, not nested.
+    @Test
+    public void testInBody_consecutiveOptions_secondPopsFirst_notNested() throws Throwable {
+        Document doc = Jsoup.parseBodyFragment("<option>A<option>B");
+        Element body = doc.body();
+        assertEquals(2, body.children().size());
+        assertEquals("option", body.child(0).tagName());
+        assertEquals("A", body.child(0).text());
+        assertEquals("option", body.child(1).tagName());
+        assertEquals("B", body.child(1).text());
+        assertEquals(0, body.child(0).childNodeSize());
+    }
+
+    // InBody: table start tag transitions InTable; td/th/tr auto-creates tbody wrapper
+    @Test
+    public void testInBody_table_autoInsertsTbodyRowCell() throws Throwable {
+        Document doc = Jsoup.parse("<body><table><tr><td>Cell</td></tr></table></body>");
+        Element table = doc.body().child(0);
+        Element tbody = table.child(0);
+        assertEquals("tbody", tbody.tagName());
+        Element td = tbody.child(0).child(0);
+        assertEquals("td", td.tagName());
+        assertEquals("Cell", td.text());
+    }
+
+    // InCaption: caption element inserted before table body content, closed to InTable
+    @Test
+    public void testInCaption_captionClosedProperly() throws Throwable {
+        Document doc = Jsoup.parse("<table><caption>Cap</caption><tr><td>D</td></tr></table>");
+        Element table = doc.body().child(0);
+        assertEquals("caption", table.child(0).tagName());
+        assertEquals("Cap", table.child(0).text());
+        Element tbody = table.child(1);
+        assertEquals("tbody", tbody.tagName());
+        assertEquals("D", tbody.child(0).child(0).text());
+    }
+
+    // InColumnGroup: col tags inserted empty inside colgroup
+    @Test
+    public void testInColumnGroup_colTagsInsertedEmpty() throws Throwable {
+        Document doc = Jsoup.parse("<table><colgroup><col><col></colgroup><tr><td>x</td></tr></table>");
+        Element table = doc.body().child(0);
+        Element colgroup = table.child(0);
+        assertEquals("colgroup", colgroup.tagName());
+        assertEquals(2, colgroup.children().size());
+        assertEquals("col", colgroup.child(0).tagName());
+    }
+
+    // InSelect: option tags inside a real <select> are correctly popped sequentially
+    @Test
+    public void testInSelect_optionTags_poppedSequentially() throws Throwable {
+        Document doc = Jsoup.parse("<select><option>A<option>B</select>");
+        Element select = doc.body().child(0);
+        assertEquals("select", select.tagName());
+        assertEquals(2, select.children().size());
+        assertEquals("A", select.child(0).text());
+        assertEquals("B", select.child(1).text());
+    }
+
+    // InSelectInTable: select inside a table cell transitions correctly, nests option
+    @Test
+    public void testInSelectInTable_selectInsideTableCell() throws Throwable {
+        Document doc = Jsoup.parse("<table><tr><td><select><option>A</option></select></td></tr></table>");
+        Element td = doc.body().child(0).child(0).child(0).child(0);
+        assertEquals("td", td.tagName());
+        Element select = td.child(0);
+        assertEquals("select", select.tagName());
+        assertEquals("A", select.child(0).text());
+    }
+
+    // AfterBody: content after </body> but before </html> is appended back into body
+    @Test
+    public void testAfterBody_trailingContent_appendedIntoBody() throws Throwable {
+        Document doc = Jsoup.parse("<html><body>Hi</body>more</html>");
+        String text = doc.body().text();
+        assertTrue(text.indexOf("Hi") >= 0);
+        assertTrue(text.indexOf("more") >= 0);
+    }
+
+    // AfterAfterBody: content after </html> is also reprocessed into body
+    @Test
+    public void testAfterAfterBody_trailingContent_appendedIntoBody() throws Throwable {
+        Document doc = Jsoup.parse("<html><body>Hi</body></html>tail");
+        String text = doc.body().text();
+        assertTrue(text.indexOf("Hi") >= 0);
+        assertTrue(text.indexOf("tail") >= 0);
+    }
+
+    // InFrameset/AfterFrameset: frameset document has no body; only head + frameset
+    @Test
+    public void testInFrameset_noBodyCreated() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><frameset><frame></frameset>\n</html>");
+        Element htmlEl = doc.child(0);
+        assertEquals(2, htmlEl.children().size());
+        assertEquals("head", htmlEl.child(0).tagName());
+        assertEquals("frameset", htmlEl.child(1).tagName());
+    }
+}

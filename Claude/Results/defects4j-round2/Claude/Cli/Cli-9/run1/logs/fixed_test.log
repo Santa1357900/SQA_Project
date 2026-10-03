@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-9-8wf2ow4d/Cli-9f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.cli.ParserClaudeTest::testParse_stopAtNonOptionUnknownDashOption_addsArgAndEatsRest
+  - org.apache.commons.cli.ParserClaudeTest::testParseProperties_multipleProperties_processesAllDespiteInvalidBooleanValue
+  - org.apache.commons.cli.ParserClaudeTest::testParse_unrecognizedOption_throwsUnrecognizedOptionException
+[exit 0]

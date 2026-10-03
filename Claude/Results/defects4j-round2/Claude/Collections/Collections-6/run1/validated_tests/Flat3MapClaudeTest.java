@@ -1,0 +1,555 @@
+package org.apache.commons.collections.map;
+
+import java.util.AbstractMap;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Set;
+
+import org.apache.commons.collections.MapIterator;
+import org.apache.commons.collections.ResettableIterator;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class Flat3MapClaudeTest {
+
+    // Constructor: default produces an empty map
+    @Test
+    public void testConstructorDefault_emptyMap() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        assertEquals(0, map.size());
+        assertTrue(map.isEmpty());
+    }
+
+    // Constructor: copies entries from supplied map via putAll
+    @Test
+    public void testConstructorWithMap_copiesEntries() throws Throwable {
+        HashMap src = new HashMap();
+        src.put("A", Integer.valueOf(1));
+        src.put("B", Integer.valueOf(2));
+        Flat3Map map = new Flat3Map(src);
+        assertEquals(2, map.size());
+        assertEquals(Integer.valueOf(1), map.get("A"));
+        assertEquals(Integer.valueOf(2), map.get("B"));
+    }
+
+    // Constructor: null map -> NullPointerException per javadoc
+    @Test
+    public void testConstructorWithMap_null_throwsNPE() throws Throwable {
+        try {
+            new Flat3Map(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // get: empty map returns null
+    @Test
+    public void testGet_emptyMap_returnsNull() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        assertNull(map.get("X"));
+    }
+
+    // get: size 3, non-null key branches (case3,2,1) all match
+    @Test
+    public void testGet_nonNullKey_size3_allMatch() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        assertEquals(Integer.valueOf(1), map.get("A"));
+        assertEquals(Integer.valueOf(2), map.get("B"));
+        assertEquals(Integer.valueOf(3), map.get("C"));
+    }
+
+    // get: null key branch
+    @Test
+    public void testGet_nullKey_found() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put(null, "nv");
+        assertEquals("nv", map.get(null));
+    }
+
+    // get: key not found with size > 0 returns null
+    @Test
+    public void testGet_keyNotFound_returnsNull() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        assertNull(map.get("Z"));
+    }
+
+    // size: flat mode and delegate mode (size>=4)
+    @Test
+    public void testSize_flatModeAndDelegateMode() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        assertEquals(0, map.size());
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        assertEquals(3, map.size());
+        map.put("D", Integer.valueOf(4));
+        assertEquals(4, map.size());
+    }
+
+    // isEmpty: true initially, false after insert
+    @Test
+    public void testIsEmpty_trueThenFalse() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        assertTrue(map.isEmpty());
+        map.put("A", Integer.valueOf(1));
+        assertFalse(map.isEmpty());
+    }
+
+    // containsKey: null key branch and non-null key branch
+    @Test
+    public void testContainsKey_nullAndNonNull() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put(null, "nv");
+        map.put("A", "av");
+        assertTrue(map.containsKey(null));
+        assertTrue(map.containsKey("A"));
+        assertFalse(map.containsKey("B"));
+    }
+
+    // containsValue: null value branch and non-null value branch
+    @Test
+    public void testContainsValue_nullAndNonNull() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", null);
+        map.put("B", "bv");
+        assertTrue(map.containsValue(null));
+        assertTrue(map.containsValue("bv"));
+        assertFalse(map.containsValue("zz"));
+    }
+
+    // put: sequential adds exercise case0, case1, case2 branches
+    @Test
+    public void testPut_sequentialAdds_size0to3() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        assertNull(map.put("A", Integer.valueOf(1)));
+        assertEquals(1, map.size());
+        assertNull(map.put("B", Integer.valueOf(2)));
+        assertEquals(2, map.size());
+        assertNull(map.put("C", Integer.valueOf(3)));
+        assertEquals(3, map.size());
+    }
+
+    // put: fourth entry triggers convertToMap (delegate mode, default branch)
+    @Test
+    public void testPut_fourthEntry_convertsToDelegate() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        assertNull(map.put("D", Integer.valueOf(4)));
+        assertEquals(4, map.size());
+        assertEquals(Integer.valueOf(1), map.get("A"));
+    }
+
+    // put: updating existing keys at size 3 returns old values (case3,2,1)
+    @Test
+    public void testPut_updateExistingKeys_size3() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        assertEquals(Integer.valueOf(3), map.put("C", Integer.valueOf(30)));
+        assertEquals(Integer.valueOf(2), map.put("B", Integer.valueOf(20)));
+        assertEquals(Integer.valueOf(1), map.put("A", Integer.valueOf(10)));
+        assertEquals(Integer.valueOf(30), map.get("C"));
+    }
+
+    // put: updating existing null key returns old value
+    @Test
+    public void testPut_updateExistingNullKey() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        assertNull(map.put(null, "x"));
+        assertEquals("x", map.put(null, "y"));
+        assertEquals("y", map.get(null));
+    }
+
+    // putAll: empty map leaves this map unchanged
+    @Test
+    public void testPutAll_emptyMap_noChange() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.putAll(new HashMap());
+        assertEquals(1, map.size());
+    }
+
+    // putAll: size < 4 stays flat, entries added individually
+    @Test
+    public void testPutAll_lessThan4_staysFlat() throws Throwable {
+        HashMap src = new HashMap();
+        src.put("A", Integer.valueOf(1));
+        src.put("B", Integer.valueOf(2));
+        Flat3Map map = new Flat3Map();
+        map.putAll(src);
+        assertEquals(2, map.size());
+        assertEquals(Integer.valueOf(1), map.get("A"));
+        assertEquals(Integer.valueOf(2), map.get("B"));
+    }
+
+    // putAll: size >= 4 forces convertToMap and delegate putAll
+    @Test
+    public void testPutAll_fourOrMore_convertsToDelegate() throws Throwable {
+        HashMap src = new HashMap();
+        src.put("A", Integer.valueOf(1));
+        src.put("B", Integer.valueOf(2));
+        src.put("C", Integer.valueOf(3));
+        src.put("D", Integer.valueOf(4));
+        Flat3Map map = new Flat3Map();
+        map.putAll(src);
+        assertEquals(4, map.size());
+        assertEquals(Integer.valueOf(4), map.get("D"));
+    }
+
+    // putAll: null map throws NullPointerException
+    @Test
+    public void testPutAll_null_throwsNPE() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        try {
+            map.putAll(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // remove: empty map returns null
+    @Test
+    public void testRemove_emptyMap_returnsNull() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        assertNull(map.remove("X"));
+    }
+
+    // remove: size3, direct key3 match (not shifted) returns correct value
+    @Test
+    public void testRemove_size3_removeKey3_correct() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        Object old = map.remove("C");
+        assertEquals(Integer.valueOf(3), old);
+        assertEquals(2, map.size());
+    }
+
+    // remove: size3, removing key2 must return value2 (old value of removed key), not value3
+    @Test
+    public void testRemove_size3_removeKey2_returnsOwnOldValue() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        Object old = map.remove("B");
+        assertEquals(Integer.valueOf(2), old);
+        assertEquals(2, map.size());
+        assertEquals(Integer.valueOf(1), map.get("A"));
+        assertEquals(Integer.valueOf(3), map.get("C"));
+    }
+
+    // remove: size3, removing key1 must return value1 (old value of removed key), not value3
+    @Test
+    public void testRemove_size3_removeKey1_returnsOwnOldValue() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        Object old = map.remove("A");
+        assertEquals(Integer.valueOf(1), old);
+        assertEquals(2, map.size());
+    }
+
+    // remove: size2, removing key1 must return value1 (old value of removed key), not value2
+    @Test
+    public void testRemove_size2_removeKey1_returnsOwnOldValue() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        Object old = map.remove("A");
+        assertEquals(Integer.valueOf(1), old);
+        assertEquals(1, map.size());
+        assertEquals(Integer.valueOf(2), map.get("B"));
+    }
+
+    // remove: size1, direct key1 match returns correct value
+    @Test
+    public void testRemove_size1_removeKey1_correct() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        Object old = map.remove("A");
+        assertEquals(Integer.valueOf(1), old);
+        assertEquals(0, map.size());
+    }
+
+    // remove: null-key branch, size3, removing key2 (null) must return its own old value
+    @Test
+    public void testRemove_nullKey_size3_removeKey2_returnsOwnOldValue() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put(null, Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        Object old = map.remove(null);
+        assertEquals(Integer.valueOf(2), old);
+        assertEquals(2, map.size());
+    }
+
+    // remove: key not found at size3 returns null, size unchanged
+    @Test
+    public void testRemove_keyNotFound_size3_returnsNull() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        assertNull(map.remove("Z"));
+        assertEquals(3, map.size());
+    }
+
+    // remove: delegate mode (size>=4) delegates correctly
+    @Test
+    public void testRemove_delegateMode_removesCorrectValue() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        map.put("D", Integer.valueOf(4));
+        Object old = map.remove("B");
+        assertEquals(Integer.valueOf(2), old);
+        assertEquals(3, map.size());
+    }
+
+    // clear: flat mode resets size and fields
+    @Test
+    public void testClear_flatMode_resetsToEmpty() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.clear();
+        assertEquals(0, map.size());
+        assertTrue(map.isEmpty());
+        assertNull(map.get("A"));
+    }
+
+    // clear: delegate mode clears and switches back to flat mode
+    @Test
+    public void testClear_delegateMode_switchesBackToFlat() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        map.put("D", Integer.valueOf(4));
+        map.clear();
+        assertEquals(0, map.size());
+        map.put("X", Integer.valueOf(9));
+        assertEquals(1, map.size());
+        assertEquals(Integer.valueOf(9), map.get("X"));
+    }
+
+    // mapIterator: empty map returns iterator with hasNext false
+    @Test
+    public void testMapIterator_emptyMap_hasNextFalse() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        MapIterator it = map.mapIterator();
+        assertFalse(it.hasNext());
+    }
+
+    // mapIterator: iterate all entries in flat mode
+    @Test
+    public void testMapIterator_iterateAllEntries() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        MapIterator it = map.mapIterator();
+        int count = 0;
+        while (it.hasNext()) {
+            Object key = it.next();
+            assertNotNull(key);
+            count++;
+        }
+        assertEquals(3, count);
+    }
+
+    // mapIterator: next() when exhausted throws NoSuchElementException
+    @Test
+    public void testMapIterator_next_whenExhausted_throwsNoSuchElement() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        MapIterator it = map.mapIterator();
+        try {
+            it.next();
+            fail("expected NoSuchElementException");
+        } catch (NoSuchElementException expected) {
+        }
+    }
+
+    // mapIterator: getKey() before next() throws IllegalStateException
+    @Test
+    public void testMapIterator_getKey_beforeNext_throwsIllegalState() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        MapIterator it = map.mapIterator();
+        try {
+            it.getKey();
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // mapIterator: remove() removes key1 entry, size and state updated
+    @Test
+    public void testMapIterator_removeViaIterator() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        MapIterator it = map.mapIterator();
+        it.next();
+        it.remove();
+        assertEquals(1, map.size());
+        assertFalse(map.containsKey("A"));
+        assertTrue(map.containsKey("B"));
+    }
+
+    // mapIterator: setValue() updates underlying map and returns old value
+    @Test
+    public void testMapIterator_setValue_updatesMapValue() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        MapIterator it = map.mapIterator();
+        it.next();
+        Object old = it.setValue(Integer.valueOf(99));
+        assertEquals(Integer.valueOf(1), old);
+        assertEquals(Integer.valueOf(99), map.get("A"));
+    }
+
+    // mapIterator: reset() via ResettableIterator allows re-iteration
+    @Test
+    public void testMapIterator_reset_allowsReiteration() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        MapIterator it = map.mapIterator();
+        it.next();
+        it.next();
+        assertFalse(it.hasNext());
+        ResettableIterator rit = (ResettableIterator) it;
+        rit.reset();
+        assertTrue(it.hasNext());
+    }
+
+    // entrySet: size() and iteration return all entries
+    @Test
+    public void testEntrySet_sizeAndIteration() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        map.put("C", Integer.valueOf(3));
+        Set entrySet = map.entrySet();
+        assertEquals(3, entrySet.size());
+        int count = 0;
+        Iterator iter = entrySet.iterator();
+        while (iter.hasNext()) {
+            Map.Entry e = (Map.Entry) iter.next();
+            assertNotNull(e.getKey());
+            count++;
+        }
+        assertEquals(3, count);
+    }
+
+    // entrySet: remove(Object) removes matching key from map
+    @Test
+    public void testEntrySet_remove_removesEntry() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        Set entrySet = map.entrySet();
+        Map.Entry entry = new AbstractMap.SimpleEntry("A", Integer.valueOf(1));
+        boolean removed = entrySet.remove(entry);
+        assertTrue(removed);
+        assertFalse(map.containsKey("A"));
+        assertEquals(1, map.size());
+    }
+
+    // keySet: contains() and remove() reflect map state
+    @Test
+    public void testKeySet_containsAndRemove() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        Set keySet = map.keySet();
+        assertTrue(keySet.contains("A"));
+        boolean removed = keySet.remove("B");
+        assertTrue(removed);
+        assertEquals(1, map.size());
+        assertFalse(map.containsKey("B"));
+    }
+
+    // values: contains() and iteration return all values
+    @Test
+    public void testValues_containsAndIteration() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        Collection values = map.values();
+        assertTrue(values.contains(Integer.valueOf(1)));
+        int count = 0;
+        Iterator it = values.iterator();
+        while (it.hasNext()) {
+            it.next();
+            count++;
+        }
+        assertEquals(2, count);
+    }
+
+    // clone: shallow clone is independent from later mutations of original
+    @Test
+    public void testClone_independentFromOriginal() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        Flat3Map cloned = (Flat3Map) map.clone();
+        assertEquals(2, cloned.size());
+        map.put("C", Integer.valueOf(3));
+        assertEquals(2, cloned.size());
+        assertEquals(Integer.valueOf(1), cloned.get("A"));
+    }
+
+    // equals: equal content true, different content false
+    @Test
+    public void testEquals_withEqualAndDifferentMap() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        HashMap other = new HashMap();
+        other.put("A", Integer.valueOf(1));
+        other.put("B", Integer.valueOf(2));
+        assertTrue(map.equals(other));
+        other.put("C", Integer.valueOf(3));
+        assertFalse(map.equals(other));
+    }
+
+    // hashCode: matches standard Map hashCode contract
+    @Test
+    public void testHashCode_matchesContract() throws Throwable {
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        map.put("B", Integer.valueOf(2));
+        HashMap other = new HashMap();
+        other.put("A", Integer.valueOf(1));
+        other.put("B", Integer.valueOf(2));
+        assertEquals(other.hashCode(), map.hashCode());
+    }
+
+    // toString: empty map "{}" and single entry formatting
+    @Test
+    public void testToString_formatting() throws Throwable {
+        Flat3Map empty = new Flat3Map();
+        assertEquals("{}", empty.toString());
+        Flat3Map map = new Flat3Map();
+        map.put("A", Integer.valueOf(1));
+        assertEquals("{A=1}", map.toString());
+    }
+}

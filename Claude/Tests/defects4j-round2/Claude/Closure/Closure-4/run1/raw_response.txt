@@ -1,0 +1,264 @@
+package com.google.javascript.rhino.jstype;
+
+import static org.junit.Assert.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.common.base.Predicate;
+import com.google.javascript.rhino.ErrorReporter;
+import com.google.javascript.rhino.IR;
+
+public class NamedTypeClaudeTest {
+
+  private JSTypeRegistry registry;
+  private List<String> warnings;
+  private List<String> errorMessages;
+  private ErrorReporter reporter;
+
+  @Before
+  public void setUp() throws Throwable {
+    warnings = new ArrayList<String>();
+    errorMessages = new ArrayList<String>();
+    reporter = new ErrorReporter() {
+      public void warning(String message, String sourceName, int line, int lineOffset) {
+        warnings.add(message);
+      }
+      public void error(String message, String sourceName, int line, int lineOffset) {
+        errorMessages.add(message);
+      }
+    };
+    registry = new JSTypeRegistry(reporter);
+  }
+
+  // covers constructor: Preconditions.checkNotNull(reference) throws on null
+  @Test
+  public void testConstructor_nullReference_throwsNullPointerException() throws Throwable {
+    try {
+      new NamedType(registry, null, "test.js", 1, 0);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // covers constructor: valid reference stored and retrievable
+  @Test
+  public void testConstructor_validReference_storesReferenceName() throws Throwable {
+    NamedType named = new NamedType(registry, "Foo", "test.js", 1, 0);
+    assertEquals("Foo", named.getReferenceName());
+  }
+
+  // covers constructor: empty string reference allowed (only null is rejected)
+  @Test
+  public void testConstructor_emptyStringReference_allowed() throws Throwable {
+    NamedType named = new NamedType(registry, "", "test.js", 0, 0);
+    assertEquals("", named.getReferenceName());
+  }
+
+  // covers defineProperty: unresolved branch always returns true and defers definition
+  @Test
+  public void testDefineProperty_beforeResolution_returnsTrueAndDefers() throws Throwable {
+    NamedType named = new NamedType(registry, ".Unresolved", "test.js", 1, 0);
+    JSType unknownType = registry.getNativeObjectType(JSTypeNative.UNKNOWN_TYPE);
+    boolean result = named.defineProperty("prop1", unknownType, true, IR.name("z"));
+    assertTrue(result);
+  }
+
+  // covers defineProperty called multiple times before resolution (loop over continuations)
+  @Test
+  public void testDefineProperty_multiplePropertiesBeforeResolution_allDeferred() throws Throwable {
+    NamedType named = new NamedType(registry, ".Unresolved", "test.js", 1, 0);
+    JSType unknownType = registry.getNativeObjectType(JSTypeNative.UNKNOWN_TYPE);
+    boolean r1 = named.defineProperty("propA", unknownType, true, IR.name("a"));
+    boolean r2 = named.defineProperty("propB", unknownType, false, IR.name("b"));
+    assertTrue(r1);
+    assertTrue(r2);
+  }
+
+  // covers defineProperty: resolved branch delegates to super.defineProperty
+  @Test
+  public void testDefineProperty_afterResolution_delegatesAndDefinesProperty() throws Throwable {
+    NamedType named = new NamedType(registry, "Object", "test.js", 1, 0);
+    named.resolveInternal(reporter, null);
+    JSType unknownType = registry.getNativeObjectType(JSTypeNative.UNKNOWN_TYPE);
+    boolean result = named.defineProperty("myCustomProp", unknownType, true, IR.name("x"));
+    assertTrue(result);
+    assertEquals(unknownType, named.getPropertyType("myCustomProp"));
+  }
+
+  // covers finishPropertyContinuations: deferred property committed once resolved
+  @Test
+  public void testDefineProperty_deferredThenResolved_propertyCommitted() throws Throwable {
+    NamedType named = new NamedType(registry, "Object", "test.js", 1, 0);
+    JSType unknownType = registry.getNativeObjectType(JSTypeNative.UNKNOWN_TYPE);
+    named.defineProperty("deferredProp", unknownType, true, IR.name("y"));
+    named.resolveInternal(reporter, null);
+    assertEquals(unknownType, named.getPropertyType("deferredProp"));
+  }
+
+  // covers getReferencedType javadoc: unknown before resolution
+  @Test
+  public void testGetReferencedType_beforeResolution_isUnknownType() throws Throwable {
+    NamedType named = new NamedType(registry, "Foo", "test.js", 1, 0);
+    assertTrue(named.getReferencedType().isUnknownType());
+  }
+
+  // covers getReferencedType after successful registry resolution
+  @Test
+  public void testGetReferencedType_afterResolutionViaRegistry_isNotUnknownType() throws Throwable {
+    NamedType named = new NamedType(registry, "Function", "test.js", 1, 0);
+    named.resolveInternal(reporter, null);
+    assertFalse(named.getReferencedType().isUnknownType());
+  }
+
+  // covers getReferencedType when unresolved and not forward-declared: remains unknown (unchanged)
+  @Test
+  public void testGetReferencedType_afterUnresolvedNotForwardDeclared_remainsUnknownType() throws Throwable {
+    NamedType named = new NamedType(registry, ".StillMissing", "test.js", 1, 0);
+    named.resolveInternal(reporter, null);
+    assertTrue(named.getReferencedType().isUnknownType());
+  }
+
+  // covers getReferenceName: returns exact reference passed to constructor
+  @Test
+  public void testGetReferenceName_returnsConstructorReference() throws Throwable {
+    NamedType named = new NamedType(registry, "my.Type.Name", "test.js", 1, 0);
+    assertEquals("my.Type.Name", named.getReferenceName());
+  }
+
+  // covers getReferenceName with dotted reference names
+  @Test
+  public void testGetReferenceName_dottedReference_returnsFullReference() throws Throwable {
+    NamedType named = new NamedType(registry, "goog.ui.Component", "test.js", 1, 0);
+    assertEquals("goog.ui.Component", named.getReferenceName());
+  }
+
+  // covers toStringHelper(true): returns reference regardless of annotations flag
+  @Test
+  public void testToStringHelper_forAnnotationsTrue_returnsReference() throws Throwable {
+    NamedType named = new NamedType(registry, "Foo.Bar", "test.js", 1, 0);
+    assertEquals("Foo.Bar", named.toStringHelper(true));
+  }
+
+  // covers toStringHelper(false): returns reference regardless of annotations flag
+  @Test
+  public void testToStringHelper_forAnnotationsFalse_returnsReference() throws Throwable {
+    NamedType named = new NamedType(registry, "Foo.Bar", "test.js", 1, 0);
+    assertEquals("Foo.Bar", named.toStringHelper(false));
+  }
+
+  // covers toStringHelper with dotted reference names commonly used for namespaced types
+  @Test
+  public void testToStringHelper_dottedReference_returnsFullReference() throws Throwable {
+    NamedType named = new NamedType(registry, "goog.ui.Component", "test.js", 1, 0);
+    assertEquals("goog.ui.Component", named.toStringHelper(true));
+  }
+
+  // covers hasReferenceName: always returns true for NamedType
+  @Test
+  public void testHasReferenceName_alwaysTrue() throws Throwable {
+    NamedType named = new NamedType(registry, "Foo", "test.js", 1, 0);
+    assertTrue(named.hasReferenceName());
+  }
+
+  // covers isNamedType: always true
+  @Test
+  public void testIsNamedType_alwaysTrue() throws Throwable {
+    NamedType named = new NamedType(registry, "Foo", "test.js", 1, 0);
+    assertTrue(named.isNamedType());
+  }
+
+  // covers isNominalType: always true
+  @Test
+  public void testIsNominalType_alwaysTrue() throws Throwable {
+    NamedType named = new NamedType(registry, "Foo", "test.js", 1, 0);
+    assertTrue(named.isNominalType());
+  }
+
+  // covers hashCode: matches reference.hashCode() contract
+  @Test
+  public void testHashCode_matchesReferenceStringHashCode() throws Throwable {
+    NamedType named = new NamedType(registry, "Foo", "test.js", 1, 0);
+    assertEquals("Foo".hashCode(), named.hashCode());
+  }
+
+  // covers hashCode: varies with reference string per String.hashCode() contract
+  @Test
+  public void testHashCode_differentReferences_haveDifferentHashCodes() throws Throwable {
+    NamedType a = new NamedType(registry, "Foo", "test.js", 1, 0);
+    NamedType b = new NamedType(registry, "Bar", "test.js", 1, 0);
+    assertEquals("Foo".hashCode(), a.hashCode());
+    assertEquals("Bar".hashCode(), b.hashCode());
+  }
+
+  // covers resolveViaRegistry branch: resolved = true, getReferencedType no longer unknown
+  @Test
+  public void testResolveInternal_referenceFoundInRegistry_resolvesReference() throws Throwable {
+    NamedType named = new NamedType(registry, "Object", "test.js", 1, 0);
+    named.resolveInternal(reporter, null);
+    assertTrue(named.isResolved());
+    assertFalse(named.getReferencedType().isUnknownType());
+  }
+
+  // covers resolveInternal: isResolved() becomes true after resolution regardless of outcome
+  @Test
+  public void testResolveInternal_isResolvedTrueAfterAnyResolution() throws Throwable {
+    NamedType named = new NamedType(registry, "Object", "test.js", 1, 0);
+    assertFalse(named.isResolved());
+    named.resolveInternal(reporter, null);
+    assertTrue(named.isResolved());
+  }
+
+  // covers handleUnresolvedType: not found in registry/properties, not forward-declared -> warning
+  @Test
+  public void testResolveInternal_referenceNotFoundNotForwardDeclared_warnsBadTypeAnnotation() throws Throwable {
+    NamedType named = new NamedType(registry, ".NoSuchType123", "test.js", 3, 4);
+    named.resolveInternal(reporter, null);
+    assertTrue(named.isResolved());
+    assertFalse(warnings.isEmpty());
+  }
+
+  // covers warning message content built from reference name
+  @Test
+  public void testResolveInternal_warningMessageContainsReferenceName() throws Throwable {
+    NamedType named = new NamedType(registry, ".AnotherMissing", "test.js", 1, 1);
+    named.resolveInternal(reporter, null);
+    assertFalse(warnings.isEmpty());
+    assertTrue(warnings.get(0).contains(".AnotherMissing"));
+  }
+
+  // covers setValidator: unresolved branch stores validator without invoking it
+  @Test
+  public void testSetValidator_beforeResolution_storesValidatorWithoutApplying() throws Throwable {
+    NamedType named = new NamedType(registry, ".Unresolved", "test.js", 1, 0);
+    final boolean[] applied = new boolean[1];
+    Predicate<JSType> validator = new Predicate<JSType>() {
+      public boolean apply(JSType input) {
+        applied[0] = true;
+        return true;
+      }
+    };
+    boolean result = named.setValidator(validator);
+    assertTrue(result);
+    assertFalse(applied[0]);
+  }
+
+  // covers setValidator: resolved branch delegates to super, applying validator immediately
+  @Test
+  public void testSetValidator_afterResolution_appliesValidatorImmediately() throws Throwable {
+    NamedType named = new NamedType(registry, "Object", "test.js", 1, 0);
+    named.resolveInternal(reporter, null);
+    final boolean[] applied = new boolean[1];
+    Predicate<JSType> validator = new Predicate<JSType>() {
+      public boolean apply(JSType input) {
+        applied[0] = true;
+        return true;
+      }
+    };
+    named.setValidator(validator);
+    assertTrue(applied[0]);
+  }
+}

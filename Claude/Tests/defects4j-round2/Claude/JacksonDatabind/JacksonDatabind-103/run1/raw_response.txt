@@ -1,0 +1,298 @@
+package com.fasterxml.jackson.databind;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Locale;
+import java.util.TimeZone;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.cfg.MapperConfig;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.fasterxml.jackson.databind.util.Converter;
+
+public class DatabindContextClaudeTest
+{
+    /**
+     * Minimal concrete subclass of DatabindContext used purely to exercise the
+     * concrete (non-abstract) logic defined in DatabindContext itself.
+     * Abstract members that are not exercised by the concrete methods under
+     * test are stubbed with deterministic, harmless values. The two methods
+     * whose contract is "produce a JsonMappingException" are implemented to
+     * throw a deterministic unchecked exception instead (since JsonMappingException's
+     * exact constructor API is not present in the given source), which still lets
+     * us verify that DatabindContext correctly invokes them on the expected branches.
+     */
+    public static class TestContext extends DatabindContext
+    {
+        private final TypeFactory _typeFactory;
+
+        public TestContext(TypeFactory tf) {
+            _typeFactory = tf;
+        }
+
+        public MapperConfig<?> getConfig() { return null; }
+
+        public AnnotationIntrospector getAnnotationIntrospector() { return null; }
+
+        public boolean isEnabled(MapperFeature feature) { return false; }
+
+        public boolean canOverrideAccessModifiers() { return false; }
+
+        public Class<?> getActiveView() { return null; }
+
+        public Locale getLocale() { return Locale.US; }
+
+        public TimeZone getTimeZone() { return TimeZone.getTimeZone("UTC"); }
+
+        public JsonFormat.Value getDefaultPropertyFormat(Class<?> baseType) { return null; }
+
+        public Object getAttribute(Object key) { return null; }
+
+        public DatabindContext setAttribute(Object key, Object value) { return this; }
+
+        protected JsonMappingException invalidTypeIdException(JavaType baseType, String typeId, String extraDesc) {
+            throw new IllegalArgumentException("invalidTypeId:" + typeId + ":" + extraDesc);
+        }
+
+        public TypeFactory getTypeFactory() { return _typeFactory; }
+
+        public <T> T reportBadDefinition(JavaType type, String msg) {
+            throw new IllegalArgumentException("badDefinition:" + msg);
+        }
+    }
+
+    private TestContext context;
+    private TypeFactory typeFactory;
+
+    @Before
+    public void setUp() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        typeFactory = mapper.getTypeFactory();
+        context = new TestContext(typeFactory);
+    }
+
+    // covers constructType: type == null branch
+    @Test
+    public void testConstructType_nullType_returnsNull() throws Throwable {
+        assertNull(context.constructType(null));
+    }
+
+    // covers constructType: non-null branch delegating to TypeFactory
+    @Test
+    public void testConstructType_nonNullType_delegatesToTypeFactory() throws Throwable {
+        JavaType result = context.constructType(String.class);
+        assertNotNull(result);
+        assertEquals(String.class, result.getRawClass());
+    }
+
+    // covers constructSpecializedType: optimization branch when raw classes are the same
+    @Test
+    public void testConstructSpecializedType_sameRawClass_returnsSameInstance() throws Throwable {
+        JavaType baseType = typeFactory.constructType(String.class);
+        JavaType result = context.constructSpecializedType(baseType, String.class);
+        assertSame(baseType, result);
+    }
+
+    // covers constructSpecializedType: branch delegating to getConfig() when raw class differs
+    @Test
+    public void testConstructSpecializedType_differentRawClass_delegatesToConfig() throws Throwable {
+        JavaType baseType = typeFactory.constructType(Object.class);
+        try {
+            context.constructSpecializedType(baseType, String.class);
+            fail("expected NullPointerException due to stubbed getConfig() == null");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // covers resolveSubType: subClass contains '<' and resulting type IS assignable to baseType
+    @Test
+    public void testResolveSubType_genericAssignable_returnsResolvedType() throws Throwable {
+        JavaType baseType = typeFactory.constructType(Collection.class);
+        JavaType result = context.resolveSubType(baseType, "java.util.ArrayList<java.lang.String>");
+        assertNotNull(result);
+        assertEquals(ArrayList.class, result.getRawClass());
+    }
+
+    // covers resolveSubType: subClass contains '<' but NOT assignable -> falls through to final throw
+    @Test
+    public void testResolveSubType_genericNotAssignable_throws() throws Throwable {
+        JavaType baseType = typeFactory.constructType(Integer.class);
+        try {
+            context.resolveSubType(baseType, "java.util.ArrayList<java.lang.String>");
+            fail("expected IllegalArgumentException from invalidTypeIdException stub");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers resolveSubType: no '<', findClass throws ClassNotFoundException -> returns null
+    @Test
+    public void testResolveSubType_classNotFound_returnsNull() throws Throwable {
+        JavaType baseType = typeFactory.constructType(Object.class);
+        JavaType result = context.resolveSubType(baseType, "no.such.ClassXyz123");
+        assertNull(result);
+    }
+
+    // covers resolveSubType: no '<', class found and assignable to baseType -> specialized type returned
+    @Test
+    public void testResolveSubType_nonGenericAssignable_returnsSpecializedType() throws Throwable {
+        JavaType baseType = typeFactory.constructType(Object.class);
+        JavaType result = context.resolveSubType(baseType, "java.lang.String");
+        assertNotNull(result);
+        assertEquals(String.class, result.getRawClass());
+    }
+
+    // covers resolveSubType: no '<', class found but NOT assignable to baseType -> final throw
+    @Test
+    public void testResolveSubType_nonGenericNotAssignable_throws() throws Throwable {
+        JavaType baseType = typeFactory.constructType(Integer.class);
+        try {
+            context.resolveSubType(baseType, "java.lang.String");
+            fail("expected IllegalArgumentException from invalidTypeIdException stub");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers converterInstance: converterDef == null -> returns null immediately
+    @Test
+    public void testConverterInstance_nullDef_returnsNull() throws Throwable {
+        assertNull(context.converterInstance(null, null));
+    }
+
+    // covers converterInstance: converterDef neither Converter nor Class -> IllegalStateException
+    @Test
+    public void testConverterInstance_invalidDefType_throwsIllegalState() throws Throwable {
+        try {
+            context.converterInstance(null, "not-a-class-or-converter");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // covers converterInstance: converterClass == Converter.None.class -> returns null
+    @Test
+    public void testConverterInstance_noneMarkerClass_returnsNull() throws Throwable {
+        assertNull(context.converterInstance(null, Converter.None.class));
+    }
+
+    // covers converterInstance: converterClass not assignable to Converter -> IllegalStateException
+    @Test
+    public void testConverterInstance_nonConverterClass_throwsIllegalState() throws Throwable {
+        try {
+            context.converterInstance(null, String.class);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // covers reportBadDefinition(Class,String): delegates to reportBadDefinition(JavaType,String) via constructType
+    @Test
+    public void testReportBadDefinitionClass_delegatesAndThrows() throws Throwable {
+        try {
+            context.reportBadDefinition(String.class, "bad-definition-message");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("bad-definition-message"));
+        }
+    }
+
+    // covers reportBadDefinition(Class,String) with null type -> constructType(null) still forwarded
+    @Test
+    public void testReportBadDefinitionClass_nullType_stillThrows() throws Throwable {
+        try {
+            context.reportBadDefinition((Class<?>) null, "msg-for-null-type");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("msg-for-null-type"));
+        }
+    }
+
+    // covers _format: msgArgs.length == 0 -> returns msg unchanged
+    @Test
+    public void testFormat_noArgs_returnsMsgUnchanged() throws Throwable {
+        assertEquals("plain message", context._format("plain message"));
+    }
+
+    // covers _format: msgArgs.length > 0 -> String.format applied
+    @Test
+    public void testFormat_withArgs_appliesStringFormat() throws Throwable {
+        assertEquals("value=5", context._format("value=%d", Integer.valueOf(5)));
+    }
+
+    // covers _truncate: desc == null -> returns ""
+    @Test
+    public void testTruncate_null_returnsEmptyString() throws Throwable {
+        assertEquals("", context._truncate(null));
+    }
+
+    // covers _truncate: short string (well under limit) -> returned unchanged
+    @Test
+    public void testTruncate_shortString_returnsUnchanged() throws Throwable {
+        assertEquals("short message", context._truncate("short message"));
+    }
+
+    // covers _truncate boundary: length exactly at MAX_ERROR_STR_LEN (500) -> not truncated
+    @Test
+    public void testTruncate_exactlyMaxLength_returnsUnchanged() throws Throwable {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 500; i++) {
+            sb.append('a');
+        }
+        String input = sb.toString();
+        assertEquals(input, context._truncate(input));
+    }
+
+    // covers _truncate: length exceeds MAX_ERROR_STR_LEN -> shortened output with separator, tail preserved
+    @Test
+    public void testTruncate_overMaxLength_truncatesWithSeparator() throws Throwable {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 500; i++) {
+            sb.append('a');
+        }
+        sb.append('Z');
+        String input = sb.toString();
+        String result = context._truncate(input);
+        assertTrue(result.length() < input.length());
+        assertTrue(result.indexOf("]...[") >= 0);
+        assertTrue(result.endsWith("Z"));
+    }
+
+    // covers _quotedString: desc == null -> returns "[N/A]"
+    @Test
+    public void testQuotedString_null_returnsNA() throws Throwable {
+        assertEquals("[N/A]", context._quotedString(null));
+    }
+
+    // covers _quotedString: desc != null -> wraps (truncated) description in quotes
+    @Test
+    public void testQuotedString_nonNull_returnsQuoted() throws Throwable {
+        assertEquals("\"abc\"", context._quotedString("abc"));
+    }
+
+    // covers _colonConcat: extra == null -> returns msgBase unchanged
+    @Test
+    public void testColonConcat_nullExtra_returnsMsgBaseUnchanged() throws Throwable {
+        assertEquals("base", context._colonConcat("base", null));
+    }
+
+    // covers _colonConcat: extra != null -> concatenated with ": "
+    @Test
+    public void testColonConcat_nonNullExtra_concatenatesWithColon() throws Throwable {
+        assertEquals("base: extra", context._colonConcat("base", "extra"));
+    }
+
+    // covers _desc: desc == null -> returns "[N/A]"
+    @Test
+    public void testDesc_null_returnsNA() throws Throwable {
+        assertEquals("[N/A]", context._desc(null));
+    }
+
+    // covers _desc: desc != null -> returns (truncated) description
+    @Test
+    public void testDesc_nonNull_returnsTruncatedDesc() throws Throwable {
+        assertEquals("abc", context._desc("abc"));
+    }
+}

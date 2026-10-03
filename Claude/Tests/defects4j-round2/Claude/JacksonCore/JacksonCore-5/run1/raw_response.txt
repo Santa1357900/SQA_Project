@@ -1,0 +1,301 @@
+package com.fasterxml.jackson.core;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class JsonPointerClaudeTest {
+
+    // compile(): null input -> EMPTY pointer marker
+    @Test
+    public void testCompile_nullInput_returnsEmptyPointer() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile(null);
+        assertTrue(ptr.matches());
+    }
+
+    // compile(): empty string input -> EMPTY pointer marker
+    @Test
+    public void testCompile_emptyStringInput_returnsEmptyPointer() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("");
+        assertTrue(ptr.matches());
+        assertEquals("", ptr.getMatchingProperty());
+    }
+
+    // compile(): input not starting with '/' -> IllegalArgumentException
+    @Test
+    public void testCompile_inputNotStartingWithSlash_throwsIllegalArgumentException() throws Throwable {
+        try {
+            JsonPointer.compile("foo");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains("start with"));
+        }
+    }
+
+    // compile(): "/" only -> single segment with empty name, next is EMPTY
+    @Test
+    public void testCompile_rootSlashOnly_returnsSegmentWithEmptyName() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/");
+        assertEquals("", ptr.getMatchingProperty());
+        assertFalse(ptr.matches());
+    }
+
+    // compile(): single segment path parses property name correctly
+    @Test
+    public void testCompile_singleSegment_parsesPropertyName() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/foo");
+        assertEquals("foo", ptr.getMatchingProperty());
+        assertFalse(ptr.matches());
+    }
+
+    // compile(): multiple segments, first segment + recursive tail parsing
+    @Test
+    public void testCompile_multipleSegments_parsesFirstAndTail() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/foo/bar");
+        assertEquals("foo", ptr.getMatchingProperty());
+        assertEquals("bar", ptr.tail().getMatchingProperty());
+        assertTrue(ptr.tail().tail().matches());
+    }
+
+    // compile(): escaped "~0" decodes to literal tilde
+    @Test
+    public void testCompile_escapedTildeZero_decodesToTilde() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/a~0b");
+        assertEquals("a~b", ptr.getMatchingProperty());
+    }
+
+    // compile(): escaped "~1" decodes to literal slash
+    @Test
+    public void testCompile_escapedTildeOne_decodesToSlash() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/a~1b");
+        assertEquals("a/b", ptr.getMatchingProperty());
+    }
+
+    // compile(): multiple quoted segments each decoded independently
+    @Test
+    public void testCompile_multipleQuotedSegments_decodesEachSegment() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/~1/~0");
+        assertEquals("/", ptr.getMatchingProperty());
+        assertEquals("~", ptr.tail().getMatchingProperty());
+    }
+
+    // valueOf(): alias delegates to compile(), equal results
+    @Test
+    public void testValueOf_delegatesToCompile_sameResultAsCompile() throws Throwable {
+        JsonPointer a = JsonPointer.valueOf("/x");
+        JsonPointer b = JsonPointer.compile("/x");
+        assertTrue(a.equals(b));
+        assertEquals("x", a.getMatchingProperty());
+    }
+
+    // matches(): EMPTY pointer (no next segment) returns true
+    @Test
+    public void testMatches_emptyPointer_returnsTrue() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("");
+        assertTrue(ptr.matches());
+    }
+
+    // matches(): non-empty pointer with a next segment returns false
+    @Test
+    public void testMatches_nonEmptyPointer_returnsFalse() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/foo");
+        assertFalse(ptr.matches());
+    }
+
+    // getMatchingProperty(): EMPTY pointer returns empty string
+    @Test
+    public void testGetMatchingProperty_emptyPointer_returnsEmptyString() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile(null);
+        assertEquals("", ptr.getMatchingProperty());
+    }
+
+    // getMatchingProperty(): nested segment returns correct name via tail
+    @Test
+    public void testGetMatchingProperty_namedSegment_returnsName() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/a/b");
+        assertEquals("b", ptr.tail().getMatchingProperty());
+    }
+
+    // getMatchingIndex(): EMPTY pointer returns -1
+    @Test
+    public void testGetMatchingIndex_emptyPointer_returnsNegativeOne() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("");
+        assertEquals(-1, ptr.getMatchingIndex());
+    }
+
+    // getMatchingIndex(): purely numeric segment returns parsed integer index
+    @Test
+    public void testGetMatchingIndex_numericSegment_returnsParsedIndex() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/123");
+        assertEquals(123, ptr.getMatchingIndex());
+    }
+
+    // getMatchingIndex(): non-numeric segment returns -1
+    @Test
+    public void testGetMatchingIndex_nonNumericSegment_returnsNegativeOne() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/abc");
+        assertEquals(-1, ptr.getMatchingIndex());
+    }
+
+    // Bug hunt: "_parseIndex" double-increments index (str.charAt(i++) inside for-loop with ++i),
+    // skipping the char at position 1; for "1a" this should be a non-numeric segment (-1) per contract,
+    // but the skipped check causes parseInt("1a") to be invoked, throwing NumberFormatException instead.
+    @Test
+    public void testGetMatchingIndex_nonDigitAtSkippedPosition_returnsNegativeOne() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/1a");
+        assertEquals(-1, ptr.getMatchingIndex());
+    }
+
+    // getMatchingIndex(): exactly 10 digits within Integer range returns parsed index
+    @Test
+    public void testGetMatchingIndex_tenDigitsWithinIntRange_returnsIndex() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/2147483647");
+        assertEquals(2147483647, ptr.getMatchingIndex());
+    }
+
+    // getMatchingIndex(): exactly 10 digits but overflowing Integer.MAX_VALUE returns -1
+    @Test
+    public void testGetMatchingIndex_tenDigitsOverflow_returnsNegativeOne() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/9999999999");
+        assertEquals(-1, ptr.getMatchingIndex());
+    }
+
+    // getMatchingIndex(): more than 10 digits is too long, returns -1
+    @Test
+    public void testGetMatchingIndex_elevenDigitsTooLong_returnsNegativeOne() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/12345678901");
+        assertEquals(-1, ptr.getMatchingIndex());
+    }
+
+    // mayMatchProperty(): property name field is never null, always true
+    @Test
+    public void testMayMatchProperty_alwaysTrueForAnySegment() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/123");
+        assertTrue(ptr.mayMatchProperty());
+    }
+
+    // mayMatchElement(): numeric segment index >= 0 returns true
+    @Test
+    public void testMayMatchElement_numericSegment_returnsTrue() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/123");
+        assertTrue(ptr.mayMatchElement());
+    }
+
+    // mayMatchElement(): non-numeric segment index -1 returns false
+    @Test
+    public void testMayMatchElement_nonNumericSegment_returnsFalse() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/abc");
+        assertFalse(ptr.mayMatchElement());
+    }
+
+    // matchProperty(): matching name with existing next segment returns the tail
+    @Test
+    public void testMatchProperty_matchingName_returnsTailPointer() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/foo/bar");
+        JsonPointer result = ptr.matchProperty("foo");
+        assertNotNull(result);
+        assertEquals("bar", result.getMatchingProperty());
+    }
+
+    // matchProperty(): non-matching name returns null
+    @Test
+    public void testMatchProperty_nonMatchingName_returnsNull() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/foo/bar");
+        assertNull(ptr.matchProperty("other"));
+    }
+
+    // matchProperty(): EMPTY pointer has null next segment, always returns null
+    @Test
+    public void testMatchProperty_emptyPointerNextSegmentNull_returnsNull() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("");
+        assertNull(ptr.matchProperty("foo"));
+    }
+
+    // matchElement(): matching numeric index returns the tail pointer
+    @Test
+    public void testMatchElement_matchingIndex_returnsTailPointer() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/0/foo");
+        JsonPointer result = ptr.matchElement(0);
+        assertNotNull(result);
+        assertEquals("foo", result.getMatchingProperty());
+    }
+
+    // matchElement(): non-matching index returns null
+    @Test
+    public void testMatchElement_nonMatchingIndex_returnsNull() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/0/foo");
+        assertNull(ptr.matchElement(1));
+    }
+
+    // matchElement(): negative index always returns null regardless of match
+    @Test
+    public void testMatchElement_negativeIndex_returnsNull() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/0/foo");
+        assertNull(ptr.matchElement(-1));
+    }
+
+    // tail(): returns the next segment pointer for a multi-segment path
+    @Test
+    public void testTail_returnsNextSegmentPointer() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/a/b");
+        assertEquals("b", ptr.tail().getMatchingProperty());
+    }
+
+    // tail(): EMPTY pointer's next segment field is null
+    @Test
+    public void testTail_emptyPointer_returnsNull() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("");
+        assertNull(ptr.tail());
+    }
+
+    // toString(): returns the original full input string representation
+    @Test
+    public void testToString_returnsOriginalInputString() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/a/b");
+        assertEquals("/a/b", ptr.toString());
+    }
+
+    // hashCode(): equal for two instances with same underlying string
+    @Test
+    public void testHashCode_equalForSameAsString() throws Throwable {
+        JsonPointer a = JsonPointer.compile("/x");
+        JsonPointer b = JsonPointer.compile("/x");
+        assertEquals(a.hashCode(), b.hashCode());
+    }
+
+    // equals(): same instance reference returns true
+    @Test
+    public void testEquals_sameInstance_returnsTrue() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/a");
+        assertTrue(ptr.equals(ptr));
+    }
+
+    // equals(): compared against null returns false
+    @Test
+    public void testEquals_null_returnsFalse() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/a");
+        assertFalse(ptr.equals(null));
+    }
+
+    // equals(): compared against a different type returns false
+    @Test
+    public void testEquals_differentType_returnsFalse() throws Throwable {
+        JsonPointer ptr = JsonPointer.compile("/a");
+        assertFalse(ptr.equals("/a"));
+    }
+
+    // equals(): two different instances built from the same path string are equal
+    @Test
+    public void testEquals_samePathDifferentInstances_returnsTrue() throws Throwable {
+        JsonPointer a = JsonPointer.compile("/a/b");
+        JsonPointer b = JsonPointer.compile("/a/b");
+        assertTrue(a.equals(b));
+    }
+
+    // equals(): two instances with different path strings are not equal
+    @Test
+    public void testEquals_differentPath_returnsFalse() throws Throwable {
+        JsonPointer a = JsonPointer.compile("/a/b");
+        JsonPointer b = JsonPointer.compile("/a/c");
+        assertFalse(a.equals(b));
+    }
+}

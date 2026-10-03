@@ -1,0 +1,303 @@
+package org.apache.commons.math.analysis.solvers;
+
+import org.apache.commons.math.analysis.UnivariateRealFunction;
+import org.apache.commons.math.ConvergenceException;
+import org.apache.commons.math.FunctionEvaluationException;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class UnivariateRealSolverUtilsClaudeTest {
+
+    // solve(f,x0,x1): normal case, f(x)=x-2 has root at 2 on [0,3]
+    @Test
+    public void solve_simpleLinearRoot_returnsRoot() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 2.0;
+            }
+        };
+        double root = UnivariateRealSolverUtils.solve(f, 0.0, 3.0);
+        assertEquals(2.0, root, 1e-5);
+    }
+
+    // solve(f,x0,x1): null function must throw IllegalArgumentException (setup check)
+    @Test
+    public void solve_nullFunction_throwsIllegalArgumentException() throws Throwable {
+        try {
+            UnivariateRealSolverUtils.solve((UnivariateRealFunction) null, 0.0, 3.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // solve(f,x0,x1,accuracy): normal case with explicit accuracy, f(x)=x-3 root at 3 on [1,5]
+    @Test
+    public void solveWithAccuracy_simpleLinearRoot_returnsRootWithinAccuracy() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 3.0;
+            }
+        };
+        double root = UnivariateRealSolverUtils.solve(f, 1.0, 5.0, 1e-3);
+        assertEquals(3.0, root, 1e-2);
+    }
+
+    // solve(f,x0,x1,accuracy): null function must throw IllegalArgumentException (setup check)
+    @Test
+    public void solveWithAccuracy_nullFunction_throwsIllegalArgumentException() throws Throwable {
+        try {
+            UnivariateRealSolverUtils.solve((UnivariateRealFunction) null, 1.0, 5.0, 1e-3);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // bracket(3-arg): null function delegates to 4-arg, must throw IllegalArgumentException
+    @Test
+    public void bracketThreeArg_nullFunction_throwsIllegalArgumentException() throws Throwable {
+        try {
+            UnivariateRealSolverUtils.bracket((UnivariateRealFunction) null, 0.0, -10.0, 10.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // bracket(3-arg): initial outside [lowerBound,upperBound] must throw IllegalArgumentException
+    @Test
+    public void bracketThreeArg_initialOutOfBounds_throwsIllegalArgumentException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        try {
+            UnivariateRealSolverUtils.bracket(f, -20.0, -10.0, 10.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // bracket(3-arg): basic success on first expansion, f(x)=x-0.5
+    @Test
+    public void bracketThreeArg_basicSuccess_returnsBracket() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 0.5;
+            }
+        };
+        double[] result = UnivariateRealSolverUtils.bracket(f, 0.0, -10.0, 10.0);
+        assertEquals(-1.0, result[0], 1e-9);
+        assertEquals(1.0, result[1], 1e-9);
+    }
+
+    // bracket(4-arg): null function must throw IllegalArgumentException
+    @Test
+    public void bracketFourArg_nullFunction_throwsIllegalArgumentException() throws Throwable {
+        try {
+            UnivariateRealSolverUtils.bracket((UnivariateRealFunction) null, 0.0, -10.0, 10.0, 10);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // bracket(4-arg): maximumIterations == 0 must throw IllegalArgumentException
+    @Test
+    public void bracketFourArg_zeroMaximumIterations_throwsIllegalArgumentException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        try {
+            UnivariateRealSolverUtils.bracket(f, 0.0, -10.0, 10.0, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // bracket(4-arg): negative maximumIterations must throw IllegalArgumentException
+    @Test
+    public void bracketFourArg_negativeMaximumIterations_throwsIllegalArgumentException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        try {
+            UnivariateRealSolverUtils.bracket(f, 0.0, -10.0, 10.0, -1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // bracket(4-arg): initial < lowerBound must throw IllegalArgumentException
+    @Test
+    public void bracketFourArg_initialLessThanLowerBound_throwsIllegalArgumentException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        try {
+            UnivariateRealSolverUtils.bracket(f, -11.0, -10.0, 10.0, 10);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // bracket(4-arg): initial > upperBound must throw IllegalArgumentException
+    @Test
+    public void bracketFourArg_initialGreaterThanUpperBound_throwsIllegalArgumentException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        try {
+            UnivariateRealSolverUtils.bracket(f, 11.0, -10.0, 10.0, 10);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // bracket(4-arg): lowerBound == upperBound must throw IllegalArgumentException
+    @Test
+    public void bracketFourArg_lowerBoundEqualsUpperBound_throwsIllegalArgumentException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        try {
+            UnivariateRealSolverUtils.bracket(f, 5.0, 5.0, 5.0, 10);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // bracket(4-arg): lowerBound > upperBound must throw IllegalArgumentException
+    @Test
+    public void bracketFourArg_lowerBoundGreaterThanUpperBound_throwsIllegalArgumentException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        try {
+            UnivariateRealSolverUtils.bracket(f, 0.0, 10.0, -10.0, 10);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // bracket(4-arg): success on the very first expansion step, f(x)=x-0.5
+    @Test
+    public void bracketFourArg_singleIterationSuccess_returnsBracket() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 0.5;
+            }
+        };
+        double[] result = UnivariateRealSolverUtils.bracket(f, 0.0, -10.0, 10.0, 10);
+        assertEquals(-1.0, result[0], 1e-9);
+        assertEquals(1.0, result[1], 1e-9);
+    }
+
+    // bracket(4-arg): several expansion iterations needed before f(a)*f(b)<0, f(x)=x-4.5
+    @Test
+    public void bracketFourArg_multipleIterationsFindsRoot_returnsBracket() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 4.5;
+            }
+        };
+        double[] result = UnivariateRealSolverUtils.bracket(f, 0.0, -100.0, 100.0, 20);
+        assertEquals(-5.0, result[0], 1e-9);
+        assertEquals(5.0, result[1], 1e-9);
+    }
+
+    // bracket(4-arg): a clamps at lowerBound while b keeps expanding (OR condition in loop guard)
+    @Test
+    public void bracketFourArg_boundaryClampingContinuesOnOtherSide_returnsBracket() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 10.5;
+            }
+        };
+        double[] result = UnivariateRealSolverUtils.bracket(f, 0.0, -3.0, 100.0, 50);
+        assertEquals(-3.0, result[0], 1e-9);
+        assertEquals(11.0, result[1], 1e-9);
+    }
+
+    // bracket(4-arg): both bounds exhausted without sign change, must throw ConvergenceException
+    @Test
+    public void bracketFourArg_boundsExhaustedNoRoot_throwsConvergenceException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return 1.0;
+            }
+        };
+        try {
+            UnivariateRealSolverUtils.bracket(f, 0.0, -2.0, 2.0, 10);
+            fail("expected ConvergenceException");
+        } catch (ConvergenceException expected) {
+        }
+    }
+
+    // bracket(4-arg): maximumIterations reached before root found, must throw ConvergenceException
+    @Test
+    public void bracketFourArg_maximumIterationsExceeded_throwsConvergenceException() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - 10.5;
+            }
+        };
+        try {
+            UnivariateRealSolverUtils.bracket(f, 0.0, -3.0, 100.0, 3);
+            fail("expected ConvergenceException");
+        } catch (ConvergenceException expected) {
+        }
+    }
+
+    // BUG HUNT: per 4-arg javadoc success condition is f(a)*f(b) <= 0, so an exact
+    // zero product at the boundary must succeed (not throw), f(x)=x, initial=1 -> a=0,b=2,f(a)=0
+    @Test
+    public void bracketFourArg_exactZeroProductAtBoundary_succeedsPerJavadoc() throws Throwable {
+        UnivariateRealFunction f = new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x;
+            }
+        };
+        double[] result = UnivariateRealSolverUtils.bracket(f, 1.0, -10.0, 10.0, 10);
+        assertEquals(0.0, result[0], 1e-9);
+        assertEquals(2.0, result[1], 1e-9);
+    }
+
+    // midpoint: simple positive range average
+    @Test
+    public void midpoint_positiveRange_returnsAverage() throws Throwable {
+        double m = UnivariateRealSolverUtils.midpoint(0.0, 10.0);
+        assertEquals(5.0, m, 1e-9);
+    }
+
+    // midpoint: symmetric negative/positive interval averages to zero
+    @Test
+    public void midpoint_symmetricNegativePositive_returnsZero() throws Throwable {
+        double m = UnivariateRealSolverUtils.midpoint(-10.0, 10.0);
+        assertEquals(0.0, m, 1e-9);
+    }
+
+    // midpoint: both values negative
+    @Test
+    public void midpoint_negativeRange_returnsAverage() throws Throwable {
+        double m = UnivariateRealSolverUtils.midpoint(-10.0, -4.0);
+        assertEquals(-7.0, m, 1e-9);
+    }
+
+    // midpoint: non-integer values
+    @Test
+    public void midpoint_nonIntegerValues_returnsAverage() throws Throwable {
+        double m = UnivariateRealSolverUtils.midpoint(2.5, 3.5);
+        assertEquals(3.0, m, 1e-9);
+    }
+}

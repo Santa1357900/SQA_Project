@@ -1,0 +1,271 @@
+package org.apache.commons.cli2;
+
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Comparator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Set;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+/**
+ * Tests for the Option interface contract as declared in the source
+ * (including its Javadoc). Since Option is an interface with no
+ * implementation body in this codebase, its "behavior" is verified via
+ * reflection against the method signatures and exceptions that the
+ * Javadoc and surrounding contract promise.
+ */
+public class OptionClaudeTest {
+
+    // Option must be declared as an interface
+    @Test
+    public void testOptionIsInterface() throws Throwable {
+        assertTrue(Option.class.isInterface());
+    }
+
+    // Option interface itself must be public
+    @Test
+    public void testOptionIsPublicInterface() throws Throwable {
+        assertTrue(Modifier.isPublic(Option.class.getModifiers()));
+    }
+
+    // process(WriteableCommandLine, ListIterator) must return void
+    @Test
+    public void testProcess_methodSignature_voidReturnType() throws Throwable {
+        Method m = Option.class.getMethod("process",
+            new Class[] { WriteableCommandLine.class, ListIterator.class });
+        assertEquals(void.class, m.getReturnType());
+    }
+
+    // process must declare exactly OptionException per Javadoc @throws
+    @Test
+    public void testProcess_declaresOptionExceptionOnly() throws Throwable {
+        Method m = Option.class.getMethod("process",
+            new Class[] { WriteableCommandLine.class, ListIterator.class });
+        Class[] exs = m.getExceptionTypes();
+        assertEquals(1, exs.length);
+        assertEquals(OptionException.class, exs[0]);
+    }
+
+    // process must accept a WriteableCommandLine and a ListIterator
+    @Test
+    public void testProcess_parameterTypesMatchContract() throws Throwable {
+        Method m = Option.class.getMethod("process",
+            new Class[] { WriteableCommandLine.class, ListIterator.class });
+        Class[] params = m.getParameterTypes();
+        assertEquals(2, params.length);
+        assertEquals(WriteableCommandLine.class, params[0]);
+        assertEquals(ListIterator.class, params[1]);
+    }
+
+    // defaults(WriteableCommandLine) must return void and declare no exceptions
+    @Test
+    public void testDefaults_methodSignature_voidNoException() throws Throwable {
+        Method m = Option.class.getMethod("defaults",
+            new Class[] { WriteableCommandLine.class });
+        assertEquals(void.class, m.getReturnType());
+        assertEquals(0, m.getExceptionTypes().length);
+    }
+
+    // defaults must accept exactly one WriteableCommandLine parameter
+    @Test
+    public void testDefaults_parameterTypeWriteableCommandLine() throws Throwable {
+        Method m = Option.class.getMethod("defaults",
+            new Class[] { WriteableCommandLine.class });
+        Class[] params = m.getParameterTypes();
+        assertEquals(1, params.length);
+        assertEquals(WriteableCommandLine.class, params[0]);
+    }
+
+    // canProcess(WriteableCommandLine, String) must return boolean, no exceptions
+    @Test
+    public void testCanProcessWithString_returnsBooleanNoException() throws Throwable {
+        Method m = Option.class.getMethod("canProcess",
+            new Class[] { WriteableCommandLine.class, String.class });
+        assertEquals(boolean.class, m.getReturnType());
+        assertEquals(0, m.getExceptionTypes().length);
+    }
+
+    // canProcess(WriteableCommandLine, ListIterator) must return boolean, no exceptions
+    @Test
+    public void testCanProcessWithListIterator_returnsBooleanNoException() throws Throwable {
+        Method m = Option.class.getMethod("canProcess",
+            new Class[] { WriteableCommandLine.class, ListIterator.class });
+        assertEquals(boolean.class, m.getReturnType());
+        assertEquals(0, m.getExceptionTypes().length);
+    }
+
+    // getTriggers() must return a Set, take no parameters, declare no exceptions
+    @Test
+    public void testGetTriggers_returnsSetNoParametersNoException() throws Throwable {
+        Method m = Option.class.getMethod("getTriggers", new Class[0]);
+        assertEquals(Set.class, m.getReturnType());
+        assertEquals(0, m.getParameterTypes().length);
+        assertEquals(0, m.getExceptionTypes().length);
+    }
+
+    // getPrefixes() must return a Set, take no parameters, declare no exceptions
+    @Test
+    public void testGetPrefixes_returnsSetNoParametersNoException() throws Throwable {
+        Method m = Option.class.getMethod("getPrefixes", new Class[0]);
+        assertEquals(Set.class, m.getReturnType());
+        assertEquals(0, m.getParameterTypes().length);
+        assertEquals(0, m.getExceptionTypes().length);
+    }
+
+    // validate(WriteableCommandLine) must return void
+    @Test
+    public void testValidate_voidReturnType() throws Throwable {
+        Method m = Option.class.getMethod("validate",
+            new Class[] { WriteableCommandLine.class });
+        assertEquals(void.class, m.getReturnType());
+    }
+
+    // validate must declare exactly OptionException per Javadoc @throws
+    @Test
+    public void testValidate_declaresOptionException() throws Throwable {
+        Method m = Option.class.getMethod("validate",
+            new Class[] { WriteableCommandLine.class });
+        Class[] exs = m.getExceptionTypes();
+        assertEquals(1, exs.length);
+        assertEquals(OptionException.class, exs[0]);
+    }
+
+    // validate must accept exactly one WriteableCommandLine parameter
+    @Test
+    public void testValidate_parameterTypeWriteableCommandLine() throws Throwable {
+        Method m = Option.class.getMethod("validate",
+            new Class[] { WriteableCommandLine.class });
+        Class[] params = m.getParameterTypes();
+        assertEquals(1, params.length);
+        assertEquals(WriteableCommandLine.class, params[0]);
+    }
+
+    // helpLines(int, Set, Comparator) must return a List
+    @Test
+    public void testHelpLines_returnsListWithThreeParams() throws Throwable {
+        Method m = Option.class.getMethod("helpLines",
+            new Class[] { int.class, Set.class, Comparator.class });
+        assertEquals(List.class, m.getReturnType());
+        assertEquals(3, m.getParameterTypes().length);
+    }
+
+    // helpLines must declare no checked exceptions per interface declaration
+    @Test
+    public void testHelpLines_noExceptionDeclared() throws Throwable {
+        Method m = Option.class.getMethod("helpLines",
+            new Class[] { int.class, Set.class, Comparator.class });
+        assertEquals(0, m.getExceptionTypes().length);
+    }
+
+    // appendUsage(StringBuffer, Set, Comparator) must return void with 3 params
+    @Test
+    public void testAppendUsage_voidReturnWithThreeParams() throws Throwable {
+        Method m = Option.class.getMethod("appendUsage",
+            new Class[] { StringBuffer.class, Set.class, Comparator.class });
+        assertEquals(void.class, m.getReturnType());
+        assertEquals(3, m.getParameterTypes().length);
+    }
+
+    // appendUsage must declare no checked exceptions
+    @Test
+    public void testAppendUsage_noExceptionDeclared() throws Throwable {
+        Method m = Option.class.getMethod("appendUsage",
+            new Class[] { StringBuffer.class, Set.class, Comparator.class });
+        assertEquals(0, m.getExceptionTypes().length);
+    }
+
+    // getPreferredName() must return a String and take no parameters
+    @Test
+    public void testGetPreferredName_returnsStringNoParams() throws Throwable {
+        Method m = Option.class.getMethod("getPreferredName", new Class[0]);
+        assertEquals(String.class, m.getReturnType());
+        assertEquals(0, m.getParameterTypes().length);
+    }
+
+    // getDescription() must return a String and take no parameters
+    @Test
+    public void testGetDescription_returnsStringNoParams() throws Throwable {
+        Method m = Option.class.getMethod("getDescription", new Class[0]);
+        assertEquals(String.class, m.getReturnType());
+        assertEquals(0, m.getParameterTypes().length);
+    }
+
+    // getId() must return primitive int
+    @Test
+    public void testGetId_returnsPrimitiveInt() throws Throwable {
+        Method m = Option.class.getMethod("getId", new Class[0]);
+        assertEquals(int.class, m.getReturnType());
+    }
+
+    // findOption(String) must return an Option and take a single String parameter
+    @Test
+    public void testFindOption_returnsOptionTypeWithStringParam() throws Throwable {
+        Method m = Option.class.getMethod("findOption",
+            new Class[] { String.class });
+        assertEquals(Option.class, m.getReturnType());
+        Class[] params = m.getParameterTypes();
+        assertEquals(1, params.length);
+        assertEquals(String.class, params[0]);
+    }
+
+    // isRequired() must return primitive boolean and take no parameters
+    @Test
+    public void testIsRequired_returnsPrimitiveBoolean() throws Throwable {
+        Method m = Option.class.getMethod("isRequired", new Class[0]);
+        assertEquals(boolean.class, m.getReturnType());
+        assertEquals(0, m.getParameterTypes().length);
+    }
+
+    // BUG-TARGET: Javadoc documents a getParent() contract; the method must exist
+    @Test
+    public void testGetParent_methodExistsPerJavadocContract() throws Throwable {
+        Method m = Option.class.getMethod("getParent", new Class[0]);
+        assertNotNull(m);
+    }
+
+    // BUG-TARGET: getParent() must return an Option per its Javadoc contract
+    @Test
+    public void testGetParent_returnTypeIsOption() throws Throwable {
+        Method m = Option.class.getMethod("getParent", new Class[0]);
+        assertEquals(Option.class, m.getReturnType());
+    }
+
+    // BUG-TARGET: Javadoc documents a setParent(Option) contract; the method must exist
+    @Test
+    public void testSetParent_methodExistsPerJavadocContract() throws Throwable {
+        Method m = Option.class.getMethod("setParent",
+            new Class[] { Option.class });
+        assertNotNull(m);
+    }
+
+    // BUG-TARGET: setParent(Option) must accept exactly one Option parameter
+    @Test
+    public void testSetParent_parameterTypeIsOption() throws Throwable {
+        Method m = Option.class.getMethod("setParent",
+            new Class[] { Option.class });
+        Class[] params = m.getParameterTypes();
+        assertEquals(1, params.length);
+        assertEquals(Option.class, params[0]);
+    }
+
+    // every declared method on the interface must be implicitly public and abstract
+    @Test
+    public void testAllDeclaredMethods_arePublicAndAbstract() throws Throwable {
+        Method[] methods = Option.class.getDeclaredMethods();
+        assertTrue(methods.length > 0);
+        for (int i = 0; i < methods.length; i++) {
+            int mods = methods[i].getModifiers();
+            assertTrue(Modifier.isPublic(mods));
+            assertTrue(Modifier.isAbstract(mods));
+        }
+    }
+
+    // the interface must not declare any constant fields
+    @Test
+    public void testOption_hasNoDeclaredFields() throws Throwable {
+        assertEquals(0, Option.class.getDeclaredFields().length);
+    }
+}

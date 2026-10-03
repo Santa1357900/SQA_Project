@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Collections-1-5s6houtp/Collections-1f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.collections.map.Flat3MapClaudeTest::testRemove_middleKeyShiftsEntries
+[exit 0]

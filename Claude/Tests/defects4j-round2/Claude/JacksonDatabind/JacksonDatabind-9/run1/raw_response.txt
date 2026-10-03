@@ -1,0 +1,280 @@
+package com.fasterxml.jackson.databind.ser.std;
+
+import static org.junit.Assert.*;
+
+import java.util.Date;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
+public class StdKeySerializerClaudeTest
+{
+    private ObjectMapper mapper;
+
+    public static class CustomKey {
+        private String id;
+        public CustomKey(String id) { this.id = id; }
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        @Override
+        public String toString() { return "Key-" + id; }
+    }
+
+    public static class EmptyToStringKey {
+        private String marker;
+        public String getMarker() { return marker; }
+        public void setMarker(String marker) { this.marker = marker; }
+        @Override
+        public String toString() { return ""; }
+    }
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    // constructor produces a usable, non-null instance
+    @Test
+    public void testConstructor_createsNonNullInstance() throws Throwable {
+        StdKeySerializer ser = new StdKeySerializer();
+        assertNotNull(ser);
+    }
+
+    // else branch: plain String key written as-is
+    @Test
+    public void testSerialize_stringKey_writesStringAsFieldName() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put("hello", "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("hello").asText());
+    }
+
+    // else branch: custom object key uses toString()
+    @Test
+    public void testSerialize_customObjectKey_usesToStringAsFieldName() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new CustomKey("42"), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("Key-42").asText());
+    }
+
+    // else branch: Integer key numeric string
+    @Test
+    public void testSerialize_integerKey_writesNumericString() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(Integer.valueOf(123), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("123").asText());
+    }
+
+    // edge: negative Integer key keeps minus sign
+    @Test
+    public void testSerialize_negativeIntegerKey_writesMinusSign() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(Integer.valueOf(-5), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("-5").asText());
+    }
+
+    // edge: zero Integer key
+    @Test
+    public void testSerialize_zeroIntegerKey_writesZeroString() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(Integer.valueOf(0), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("0").asText());
+    }
+
+    // else branch: Long key numeric string
+    @Test
+    public void testSerialize_longKey_writesNumericString() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(Long.valueOf(9999999999L), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("9999999999").asText());
+    }
+
+    // boundary: Long.MAX_VALUE key
+    @Test
+    public void testSerialize_maxLongKey_writesCorrectValue() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(Long.valueOf(Long.MAX_VALUE), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get(String.valueOf(Long.MAX_VALUE)).asText());
+    }
+
+    // boundary: Long.MIN_VALUE key
+    @Test
+    public void testSerialize_minLongKey_writesCorrectValue() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(Long.valueOf(Long.MIN_VALUE), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get(String.valueOf(Long.MIN_VALUE)).asText());
+    }
+
+    // else branch: Double key numeric string
+    @Test
+    public void testSerialize_doubleKey_writesNumericString() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(Double.valueOf(3.14), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("3.14").asText());
+    }
+
+    // else branch: Float key numeric string
+    @Test
+    public void testSerialize_floatKey_writesNumericString() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(Float.valueOf(2.5f), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("2.5").asText());
+    }
+
+    // else branch: Boolean.TRUE key toString
+    @Test
+    public void testSerialize_booleanKeyTrue_writesTrueString() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(Boolean.TRUE, "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("true").asText());
+    }
+
+    // else branch: Boolean.FALSE key toString
+    @Test
+    public void testSerialize_booleanKeyFalse_writesFalseString() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(Boolean.FALSE, "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("false").asText());
+    }
+
+    // edge: toString() returning empty string produces empty field name
+    @Test
+    public void testSerialize_emptyToStringKey_writesEmptyFieldName() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new EmptyToStringKey(), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("").asText());
+    }
+
+    // escaping: key containing a quote character round-trips correctly
+    @Test
+    public void testSerialize_keyWithQuoteCharacter_roundTripsCorrectly() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new CustomKey("a\"b"), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("Key-a\"b").asText());
+    }
+
+    // escaping: key containing a backslash round-trips correctly
+    @Test
+    public void testSerialize_keyWithBackslash_roundTripsCorrectly() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new CustomKey("a\\b"), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("Key-a\\b").asText());
+    }
+
+    // unicode: key with non-ASCII characters round-trips correctly
+    @Test
+    public void testSerialize_keyWithUnicodeCharacters_roundTripsCorrectly() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new CustomKey("\u65e5\u672c"), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("Key-\u65e5\u672c").asText());
+    }
+
+    // if branch: Date key at epoch, default config writes timestamp
+    @Test
+    public void testSerialize_dateKeyEpoch_writesZeroTimestampByDefault() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new Date(0L), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("0").asText());
+    }
+
+    // if branch: Date key with positive timestamp, default config writes timestamp
+    @Test
+    public void testSerialize_dateKeyPositiveTimestamp_writesTimestampByDefault() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new Date(1000L), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("1000").asText());
+    }
+
+    // if branch: Date key with negative timestamp (before epoch)
+    @Test
+    public void testSerialize_dateKeyNegativeTimestamp_writesNegativeNumber() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new Date(-500L), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("-500").asText());
+    }
+
+    // if branch: Date key with WRITE_DATE_KEYS_AS_TIMESTAMPS disabled must NOT be a raw number
+    @Test
+    public void testSerialize_dateKeyWithTimestampsDisabled_writesFormattedDateNotNumber() throws Throwable {
+        ObjectMapper formatMapper = new ObjectMapper();
+        formatMapper.disable(SerializationFeature.WRITE_DATE_KEYS_AS_TIMESTAMPS);
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new Date(0L), "v");
+        JsonNode root = formatMapper.readTree(formatMapper.writeValueAsString(map));
+        Iterator<String> names = root.fieldNames();
+        String fieldName = names.next();
+        assertFalse("0".equals(fieldName));
+        assertTrue(fieldName.contains("1970"));
+    }
+
+    // if branch: java.sql.Date subclass of java.util.Date is also treated as Date
+    @Test
+    public void testSerialize_sqlDateSubclass_treatedAsDateInstance() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new java.sql.Date(0L), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("v", root.get("0").asText());
+    }
+
+    // multiple entries: all keys present with correct values
+    @Test
+    public void testSerialize_multipleEntries_allKeysPresent() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new CustomKey("1"), "first");
+        map.put(new CustomKey("2"), "second");
+        map.put(new CustomKey("3"), "third");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals("first", root.get("Key-1").asText());
+        assertEquals("second", root.get("Key-2").asText());
+        assertEquals("third", root.get("Key-3").asText());
+    }
+
+    // multiple entries: insertion order is preserved in output
+    @Test
+    public void testSerialize_multipleEntriesOrder_preservesInsertionOrder() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put("a", "1");
+        map.put("b", "2");
+        map.put("c", "3");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        Iterator<String> names = root.fieldNames();
+        assertEquals("a", names.next());
+        assertEquals("b", names.next());
+        assertEquals("c", names.next());
+    }
+
+    // single entry map produces object with exactly one field
+    @Test
+    public void testSerialize_singleEntryMap_producesSingleFieldObject() throws Throwable {
+        Map<Object, String> map = new LinkedHashMap<Object, String>();
+        map.put(new CustomKey("solo"), "v");
+        JsonNode root = mapper.readTree(mapper.writeValueAsString(map));
+        assertEquals(1, root.size());
+        assertEquals("v", root.get("Key-solo").asText());
+    }
+}

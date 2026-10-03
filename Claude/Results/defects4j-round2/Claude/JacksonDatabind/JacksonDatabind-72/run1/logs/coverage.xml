@@ -1,0 +1,226 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.3191489361702128" branch-rate="0.3" lines-covered="15" lines-valid="47" branches-covered="3" branches-valid="10" complexity="1.5" version="2.0.3" timestamp="1790806319321">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="com.fasterxml.jackson.databind.deser.impl" line-rate="0.3191489361702128" branch-rate="0.3" complexity="1.5">
+			<classes>
+				<class name="com.fasterxml.jackson.databind.deser.impl.InnerClassProperty" filename="com/fasterxml/jackson/databind/deser/impl/InnerClassProperty.java" line-rate="0.3191489361702128" branch-rate="0.3" complexity="1.5">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lcom/fasterxml/jackson/databind/deser/SettableBeanProperty;Ljava/lang/reflect/Constructor;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="44" hits="21" branch="false"/>
+								<line number="45" hits="21" branch="false"/>
+								<line number="46" hits="21" branch="false"/>
+								<line number="47" hits="21" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Lcom/fasterxml/jackson/databind/deser/impl/InnerClassProperty;Lcom/fasterxml/jackson/databind/JsonDeserializer;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="66" hits="0" branch="false"/>
+								<line number="67" hits="0" branch="false"/>
+								<line number="68" hits="0" branch="false"/>
+								<line number="69" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Lcom/fasterxml/jackson/databind/deser/impl/InnerClassProperty;Lcom/fasterxml/jackson/databind/PropertyName;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="72" hits="0" branch="false"/>
+								<line number="73" hits="0" branch="false"/>
+								<line number="74" hits="0" branch="false"/>
+								<line number="75" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Lcom/fasterxml/jackson/databind/deser/impl/InnerClassProperty;Lcom/fasterxml/jackson/databind/introspect/AnnotatedConstructor;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="55" hits="0" branch="false"/>
+								<line number="56" hits="0" branch="false"/>
+								<line number="57" hits="0" branch="false"/>
+								<line number="58" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="59" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="60" hits="0" branch="false"/>
+								<line number="62" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="assignIndex" signature="(I)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="88" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="deserializeAndSet" signature="(Lcom/fasterxml/jackson/core/JsonParser;Lcom/fasterxml/jackson/databind/DeserializationContext;Ljava/lang/Object;)V" line-rate="0.6923076923076923" branch-rate="0.75">
+							<lines>
+								<line number="113" hits="23" branch="false"/>
+								<line number="115" hits="23" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="116" hits="2" branch="false"/>
+								<line number="117" hits="21" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="118" hits="0" branch="false"/>
+								<line number="121" hits="21" branch="false"/>
+								<line number="122" hits="0" branch="false"/>
+								<line number="123" hits="0" branch="false"/>
+								<line number="124" hits="0" branch="false"/>
+								<line number="125" hits="21" branch="false"/>
+								<line number="126" hits="21" branch="false"/>
+								<line number="128" hits="22" branch="false"/>
+								<line number="129" hits="22" branch="false"/>
+							</lines>
+						</method>
+						<method name="deserializeSetAndReturn" signature="(Lcom/fasterxml/jackson/core/JsonParser;Lcom/fasterxml/jackson/databind/DeserializationContext;Ljava/lang/Object;)Ljava/lang/Object;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="136" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getAnnotation" signature="(Ljava/lang/Class;)Ljava/lang/annotation/Annotation;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="98" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getMember" signature="()Lcom/fasterxml/jackson/databind/introspect/AnnotatedMember;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="101" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getPropertyIndex" signature="()I" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="91" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="readResolve" signature="()Ljava/lang/Object;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="157" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="set" signature="(Ljava/lang/Object;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="141" hits="22" branch="false"/>
+								<line number="142" hits="22" branch="false"/>
+							</lines>
+						</method>
+						<method name="setAndReturn" signature="(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="146" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="withName" signature="(Lcom/fasterxml/jackson/databind/PropertyName;)Lcom/fasterxml/jackson/databind/deser/SettableBeanProperty;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="withName" signature="(Lcom/fasterxml/jackson/databind/PropertyName;)Lcom/fasterxml/jackson/databind/deser/impl/InnerClassProperty;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="79" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="withValueDeserializer" signature="(Lcom/fasterxml/jackson/databind/JsonDeserializer;)Lcom/fasterxml/jackson/databind/deser/SettableBeanProperty;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="19" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="withValueDeserializer" signature="(Lcom/fasterxml/jackson/databind/JsonDeserializer;)Lcom/fasterxml/jackson/databind/deser/impl/InnerClassProperty;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="84" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeReplace" signature="()Ljava/lang/Object;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="162" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="163" hits="0" branch="false"/>
+								<line number="165" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="19" hits="0" branch="false"/>
+						<line number="44" hits="21" branch="false"/>
+						<line number="45" hits="21" branch="false"/>
+						<line number="46" hits="21" branch="false"/>
+						<line number="47" hits="21" branch="false"/>
+						<line number="55" hits="0" branch="false"/>
+						<line number="56" hits="0" branch="false"/>
+						<line number="57" hits="0" branch="false"/>
+						<line number="58" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="59" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="60" hits="0" branch="false"/>
+						<line number="62" hits="0" branch="false"/>
+						<line number="66" hits="0" branch="false"/>
+						<line number="67" hits="0" branch="false"/>
+						<line number="68" hits="0" branch="false"/>
+						<line number="69" hits="0" branch="false"/>
+						<line number="72" hits="0" branch="false"/>
+						<line number="73" hits="0" branch="false"/>
+						<line number="74" hits="0" branch="false"/>
+						<line number="75" hits="0" branch="false"/>
+						<line number="79" hits="0" branch="false"/>
+						<line number="84" hits="0" branch="false"/>
+						<line number="88" hits="0" branch="false"/>
+						<line number="91" hits="0" branch="false"/>
+						<line number="98" hits="0" branch="false"/>
+						<line number="101" hits="0" branch="false"/>
+						<line number="113" hits="23" branch="false"/>
+						<line number="115" hits="23" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="116" hits="2" branch="false"/>
+						<line number="117" hits="21" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="118" hits="0" branch="false"/>
+						<line number="121" hits="21" branch="false"/>
+						<line number="122" hits="0" branch="false"/>
+						<line number="123" hits="0" branch="false"/>
+						<line number="124" hits="0" branch="false"/>
+						<line number="125" hits="21" branch="false"/>
+						<line number="126" hits="21" branch="false"/>
+						<line number="128" hits="22" branch="false"/>
+						<line number="129" hits="22" branch="false"/>
+						<line number="136" hits="0" branch="false"/>
+						<line number="141" hits="22" branch="false"/>
+						<line number="142" hits="22" branch="false"/>
+						<line number="146" hits="0" branch="false"/>
+						<line number="157" hits="0" branch="false"/>
+						<line number="162" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="163" hits="0" branch="false"/>
+						<line number="165" hits="0" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

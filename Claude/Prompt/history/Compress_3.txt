@@ -1,0 +1,410 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Compress (Defects4J bug Compress-3)
+package: org.apache.commons.compress.archivers.tar
+class_under_test: TarArchiveOutputStream
+test_class_to_write: TarArchiveOutputStreamClaudeTest
+</target>
+
+<project_notes>
+Commons Compress: ใช้ ByteArrayInputStream/ByteArrayOutputStream แทนไฟล์จริง ปิด stream ด้วย try/finally
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.commons.compress.archivers.tar;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveOutputStream;
+
+/**
+ * The TarOutputStream writes a UNIX tar archive as an OutputStream.
+ * Methods are provided to put entries, and then write their contents
+ * by writing to this stream using write().
+ * @NotThreadSafe
+ */
+public class TarArchiveOutputStream extends ArchiveOutputStream {
+    /** Fail if a long file name is required in the archive. */
+    public static final int LONGFILE_ERROR = 0;
+
+    /** Long paths will be truncated in the archive. */
+    public static final int LONGFILE_TRUNCATE = 1;
+
+    /** GNU tar extensions are used to store long file names in the archive. */
+    public static final int LONGFILE_GNU = 2;
+
+    private long      currSize;
+    private String    currName;
+    private long      currBytes;
+    private final byte[]    recordBuf;
+    private int       assemLen;
+    private final byte[]    assemBuf;
+    protected final TarBuffer buffer;
+    private int       longFileMode = LONGFILE_ERROR;
+
+    private boolean closed = false;
+
+    /* Indicates if putArchiveEntry has been called without closeArchiveEntry */
+    
+    private final OutputStream out;
+
+    /**
+     * Constructor for TarInputStream.
+     * @param os the output stream to use
+     */
+    public TarArchiveOutputStream(OutputStream os) {
+        this(os, TarBuffer.DEFAULT_BLKSIZE, TarBuffer.DEFAULT_RCDSIZE);
+    }
+
+    /**
+     * Constructor for TarInputStream.
+     * @param os the output stream to use
+     * @param blockSize the block size to use
+     */
+    public TarArchiveOutputStream(OutputStream os, int blockSize) {
+        this(os, blockSize, TarBuffer.DEFAULT_RCDSIZE);
+    }
+
+    /**
+     * Constructor for TarInputStream.
+     * @param os the output stream to use
+     * @param blockSize the block size to use
+     * @param recordSize the record size to use
+     */
+    public TarArchiveOutputStream(OutputStream os, int blockSize, int recordSize) {
+        out = os;
+
+        this.buffer = new TarBuffer(os, blockSize, recordSize);
+        this.assemLen = 0;
+        this.assemBuf = new byte[recordSize];
+        this.recordBuf = new byte[recordSize];
+    }
+
+    /**
+     * Set the long file mode.
+     * This can be LONGFILE_ERROR(0), LONGFILE_TRUNCATE(1) or LONGFILE_GNU(2).
+     * This specifies the treatment of long file names (names >= TarConstants.NAMELEN).
+     * Default is LONGFILE_ERROR.
+     * @param longFileMode the mode to use
+     */
+    public void setLongFileMode(int longFileMode) {
+        this.longFileMode = longFileMode;
+    }
+
+
+    /**
+     * Ends the TAR archive without closing the underlying OutputStream.
+     * 
+     * An archive consists of a series of file entries terminated by an
+     * end-of-archive entry, which consists of two 512 blocks of zero bytes. 
+     * POSIX.1 requires two EOF records, like some other implementations.
+     * 
+     * @throws IOException on error
+     */
+    public void finish() throws IOException {
+        writeEOFRecord();
+        writeEOFRecord();
+    }
+
+    /**
+     * Ends the TAR archive and closes the underlying OutputStream.
+     * This means that finish() is called followed by calling the
+     * TarBuffer's close().
+     * @throws IOException on error
+     */
+    public void close() throws IOException {
+        if (!closed) {
+            finish();
+            buffer.close();
+            out.close();
+            closed = true;
+        }
+    }
+
+    /**
+     * Get the record size being used by this stream's TarBuffer.
+     *
+     * @return The TarBuffer record size.
+     */
+    public int getRecordSize() {
+        return buffer.getRecordSize();
+    }
+
+    /**
+     * Put an entry on the output stream. This writes the entry's
+     * header record and positions the output stream for writing
+     * the contents of the entry. Once this method is called, the
+     * stream is ready for calls to write() to write the entry's
+     * contents. Once the contents are written, closeArchiveEntry()
+     * <B>MUST</B> be called to ensure that all buffered data
+     * is completely written to the output stream.
+     *
+     * @param archiveEntry The TarEntry to be written to the archive.
+     * @throws IOException on error
+     * @throws ClassCastException if archiveEntry is not an instance of TarArchiveEntry
+     */
+    public void putArchiveEntry(ArchiveEntry archiveEntry) throws IOException {
+        TarArchiveEntry entry = (TarArchiveEntry) archiveEntry;
+        if (entry.getName().length() >= TarConstants.NAMELEN) {
+
+            if (longFileMode == LONGFILE_GNU) {
+                // create a TarEntry for the LongLink, the contents
+                // of which are the entry's name
+                TarArchiveEntry longLinkEntry = new TarArchiveEntry(TarConstants.GNU_LONGLINK,
+                                                                    TarConstants.LF_GNUTYPE_LONGNAME);
+
+                final byte[] nameBytes = entry.getName().getBytes(); // TODO is it correct to use the default charset here?
+                longLinkEntry.setSize(nameBytes.length + 1); // +1 for NUL
+                putArchiveEntry(longLinkEntry);
+                write(nameBytes);
+                write(0); // NUL terminator
+                closeArchiveEntry();
+            } else if (longFileMode != LONGFILE_TRUNCATE) {
+                throw new RuntimeException("file name '" + entry.getName()
+                                           + "' is too long ( > "
+                                           + TarConstants.NAMELEN + " bytes)");
+            }
+        }
+
+        entry.writeEntryHeader(recordBuf);
+        buffer.writeRecord(recordBuf);
+
+        currBytes = 0;
+
+        if (entry.isDirectory()) {
+            currSize = 0;
+        } else {
+            currSize = entry.getSize();
+        }
+        currName = entry.getName();
+    }
+
+    /**
+     * Close an entry. This method MUST be called for all file
+     * entries that contain data. The reason is that we must
+     * buffer data written to the stream in order to satisfy
+     * the buffer's record based writes. Thus, there may be
+     * data fragments still being assembled that must be written
+     * to the output stream before this entry is closed and the
+     * next entry written.
+     * @throws IOException on error
+     */
+    public void closeArchiveEntry() throws IOException {
+        if (assemLen > 0) {
+            for (int i = assemLen; i < assemBuf.length; ++i) {
+                assemBuf[i] = 0;
+            }
+
+            buffer.writeRecord(assemBuf);
+
+            currBytes += assemLen;
+            assemLen = 0;
+        }
+
+        if (currBytes < currSize) {
+            throw new IOException("entry '" + currName + "' closed at '"
+                                  + currBytes
+                                  + "' before the '" + currSize
+                                  + "' bytes specified in the header were written");
+        }
+    }
+
+    /**
+     * Writes bytes to the current tar archive entry. This method
+     * is aware of the current entry and will throw an exception if
+     * you attempt to write bytes past the length specified for the
+     * current entry. The method is also (painfully) aware of the
+     * record buffering required by TarBuffer, and manages buffers
+     * that are not a multiple of recordsize in length, including
+     * assembling records from small buffers.
+     *
+     * @param wBuf The buffer to write to the archive.
+     * @param wOffset The offset in the buffer from which to get bytes.
+     * @param numToWrite The number of bytes to write.
+     * @throws IOException on error
+     */
+    public void write(byte[] wBuf, int wOffset, int numToWrite) throws IOException {
+        if ((currBytes + numToWrite) > currSize) {
+            throw new IOException("request to write '" + numToWrite
+                                  + "' bytes exceeds size in header of '"
+                                  + currSize + "' bytes for entry '"
+                                  + currName + "'");
+
+            //
+            // We have to deal with assembly!!!
+            // The programmer can be writing little 32 byte chunks for all
+            // we know, and we must assemble complete records for writing.
+            // REVIEW Maybe this should be in TarBuffer? Could that help to
+            // eliminate some of the buffer copying.
+            //
+        }
+
+        if (assemLen > 0) {
+            if ((assemLen + numToWrite) >= recordBuf.length) {
+                int aLen = recordBuf.length - assemLen;
+
+                System.arraycopy(assemBuf, 0, recordBuf, 0,
+                                 assemLen);
+                System.arraycopy(wBuf, wOffset, recordBuf,
+                                 assemLen, aLen);
+                buffer.writeRecord(recordBuf);
+
+                currBytes += recordBuf.length;
+                wOffset += aLen;
+                numToWrite -= aLen;
+                assemLen = 0;
+            } else {
+                System.arraycopy(wBuf, wOffset, assemBuf, assemLen,
+                                 numToWrite);
+
+                wOffset += numToWrite;
+                assemLen += numToWrite;
+                numToWrite = 0;
+            }
+        }
+
+        //
+        // When we get here we have EITHER:
+        // o An empty "assemble" buffer.
+        // o No bytes to write (numToWrite == 0)
+        //
+        while (numToWrite > 0) {
+            if (numToWrite < recordBuf.length) {
+                System.arraycopy(wBuf, wOffset, assemBuf, assemLen,
+                                 numToWrite);
+
+                assemLen += numToWrite;
+
+                break;
+            }
+
+            buffer.writeRecord(wBuf, wOffset);
+
+            int num = recordBuf.length;
+
+            currBytes += num;
+            numToWrite -= num;
+            wOffset += num;
+        }
+    }
+
+    /**
+     * Write an EOF (end of archive) record to the tar archive.
+     * An EOF record consists of a record of all zeros.
+     */
+    private void writeEOFRecord() throws IOException {
+        for (int i = 0; i < recordBuf.length; ++i) {
+            recordBuf[i] = 0;
+        }
+
+        buffer.writeRecord(recordBuf);
+    }
+
+    // used to be implemented via FilterOutputStream
+    public void flush() throws IOException {
+        out.flush();
+    }
+
+    public ArchiveEntry createArchiveEntry(File inputFile, String entryName)
+            throws IOException {
+        return new TarArchiveEntry(inputFile, entryName);
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ TarArchiveOutputStreamClaudeTest ใน package org.apache.commons.compress.archivers.tar เพื่อทดสอบคลาส TarArchiveOutputStream ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.compress.archivers.tar;` เท่านั้น
+</instructions>

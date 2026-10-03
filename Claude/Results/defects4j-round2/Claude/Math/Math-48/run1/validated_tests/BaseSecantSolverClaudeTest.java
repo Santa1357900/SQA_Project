@@ -1,0 +1,277 @@
+package org.apache.commons.math.analysis.solvers;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.apache.commons.math.analysis.UnivariateRealFunction;
+
+public class BaseSecantSolverClaudeTest {
+
+    /** Concrete subclass exposing BaseSecantSolver's protected constructors for testing. */
+    private static class TestSecantSolver extends BaseSecantSolver {
+        TestSecantSolver(double absoluteAccuracy, Method method) {
+            super(absoluteAccuracy, method);
+        }
+        TestSecantSolver(double relativeAccuracy, double absoluteAccuracy, Method method) {
+            super(relativeAccuracy, absoluteAccuracy, method);
+        }
+        TestSecantSolver(double relativeAccuracy, double absoluteAccuracy,
+                          double functionValueAccuracy, Method method) {
+            super(relativeAccuracy, absoluteAccuracy, functionValueAccuracy, method);
+        }
+    }
+
+    private UnivariateRealFunction linearRootAtOne() {
+        return new UnivariateRealFunction() {
+            public double value(double x) {
+                return x - 1.0;
+            }
+        };
+    }
+
+    private UnivariateRealFunction quadraticMinusTwo() {
+        return new UnivariateRealFunction() {
+            public double value(double x) {
+                return x * x - 2.0;
+            }
+        };
+    }
+
+    private UnivariateRealFunction square() {
+        return new UnivariateRealFunction() {
+            public double value(double x) {
+                return x * x;
+            }
+        };
+    }
+
+    private UnivariateRealFunction constantPositive() {
+        return new UnivariateRealFunction() {
+            public double value(double x) {
+                return x + 5.0;
+            }
+        };
+    }
+
+    // Covers 2-arg constructor: absoluteAccuracy stored and retrievable.
+    @Test
+    public void testConstructorTwoArg_setsAbsoluteAccuracy() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-5, BaseSecantSolver.Method.REGULA_FALSI);
+        assertEquals(1e-5, solver.getAbsoluteAccuracy(), 1e-15);
+    }
+
+    // Covers 3-arg constructor: both relative and absolute accuracy stored.
+    @Test
+    public void testConstructorThreeArg_setsRelativeAndAbsoluteAccuracy() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-4, 1e-7, BaseSecantSolver.Method.ILLINOIS);
+        assertEquals(1e-4, solver.getRelativeAccuracy(), 1e-15);
+        assertEquals(1e-7, solver.getAbsoluteAccuracy(), 1e-15);
+    }
+
+    // Covers 4-arg constructor: functionValueAccuracy stored in addition to the others.
+    @Test
+    public void testConstructorFourArg_setsFunctionValueAccuracy() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-4, 1e-7, 1e-9, BaseSecantSolver.Method.PEGASUS);
+        assertEquals(1e-4, solver.getRelativeAccuracy(), 1e-15);
+        assertEquals(1e-7, solver.getAbsoluteAccuracy(), 1e-15);
+        assertEquals(1e-9, solver.getFunctionValueAccuracy(), 1e-15);
+    }
+
+    // Covers doSolve(): "if (f0 == 0.0) return x0;" early-return branch.
+    @Test
+    public void testDoSolve_fMinIsZero_returnsMinExactly() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-6, BaseSecantSolver.Method.REGULA_FALSI);
+        double result = solver.solve(10, linearRootAtOne(), 1.0, 5.0, AllowedSolution.ANY_SIDE);
+        assertEquals(1.0, result, 1e-12);
+    }
+
+    // Covers doSolve(): "if (f1 == 0.0) return x1;" early-return branch.
+    @Test
+    public void testDoSolve_fMaxIsZero_returnsMaxExactly() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-6, BaseSecantSolver.Method.ILLINOIS);
+        double result = solver.solve(10, linearRootAtOne(), -5.0, 1.0, AllowedSolution.ANY_SIDE);
+        assertEquals(1.0, result, 1e-12);
+    }
+
+    // f0==0 early-return must happen before verifyBracketing, even with a non-opposite-sign bracket.
+    @Test
+    public void testDoSolve_fMinZero_withNonOppositeSignBracket_returnsMinWithoutException() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-6, BaseSecantSolver.Method.PEGASUS);
+        double result = solver.solve(10, square(), 0.0, 2.0, AllowedSolution.ANY_SIDE);
+        assertEquals(0.0, result, 1e-12);
+    }
+
+    // Covers verifyBracketing(x0, x1) throwing when the interval does not bracket a root.
+    @Test
+    public void testDoSolve_nonBracketingInterval_throwsException() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-6, BaseSecantSolver.Method.REGULA_FALSI);
+        try {
+            solver.solve(10, constantPositive(), 1.0, 2.0, AllowedSolution.ANY_SIDE);
+            fail("expected exception: interval does not bracket a root");
+        } catch (RuntimeException expected) {
+            // verifyBracketing must reject a non-bracketing interval
+        }
+    }
+
+    // Linear function => secant step lands exactly on the root => "if (fx == 0.0) return x;" (REGULA_FALSI).
+    @Test
+    public void testDoSolve_linearFunction_regulaFalsi_returnsExactRoot() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-6, BaseSecantSolver.Method.REGULA_FALSI);
+        double result = solver.solve(10, linearRootAtOne(), 0.0, 2.0, AllowedSolution.ANY_SIDE);
+        assertEquals(1.0, result, 1e-9);
+    }
+
+    // Same exact-root path, ILLINOIS method (fx==0 return happens before the method switch).
+    @Test
+    public void testDoSolve_linearFunction_illinois_returnsExactRoot() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-6, BaseSecantSolver.Method.ILLINOIS);
+        double result = solver.solve(10, linearRootAtOne(), 0.0, 2.0, AllowedSolution.ANY_SIDE);
+        assertEquals(1.0, result, 1e-9);
+    }
+
+    // Same exact-root path, PEGASUS method.
+    @Test
+    public void testDoSolve_linearFunction_pegasus_returnsExactRoot() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-6, BaseSecantSolver.Method.PEGASUS);
+        double result = solver.solve(10, linearRootAtOne(), 0.0, 2.0, AllowedSolution.ANY_SIDE);
+        assertEquals(1.0, result, 1e-9);
+    }
+
+    // solve(maxEval,f,min,max,allowedSolution) must delegate using midpoint as startValue.
+    @Test
+    public void testSolve_fourArgOverload_delegatesWithMidpointStartValue() throws Throwable {
+        TestSecantSolver solverA = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        TestSecantSolver solverB = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        double a = solverA.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.ANY_SIDE);
+        double b = solverB.solve(1000, quadraticMinusTwo(), 0.0, 2.0, 1.0, AllowedSolution.ANY_SIDE);
+        assertEquals(a, b, 1e-12);
+    }
+
+    // solve(maxEval,f,min,max,startValue) (no allowedSolution) must default to AllowedSolution.ANY_SIDE.
+    @Test
+    public void testSolve_threeArgOverload_defaultsToAnySide() throws Throwable {
+        TestSecantSolver solverA = new TestSecantSolver(1e-6, BaseSecantSolver.Method.REGULA_FALSI);
+        TestSecantSolver solverB = new TestSecantSolver(1e-6, BaseSecantSolver.Method.REGULA_FALSI);
+        double a = solverA.solve(10, linearRootAtOne(), 0.0, 2.0, 0.3);
+        double b = solverB.solve(10, linearRootAtOne(), 0.0, 2.0, AllowedSolution.ANY_SIDE);
+        assertEquals(1.0, a, 1e-9);
+        assertEquals(a, b, 1e-12);
+    }
+
+    // doSolve() must ignore startValue entirely (it always iterates from getMin()/getMax()).
+    @Test
+    public void testSolve_startValueDoesNotAffectResult() throws Throwable {
+        TestSecantSolver solver1 = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        TestSecantSolver solver2 = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        double r1 = solver1.solve(1000, quadraticMinusTwo(), 0.0, 2.0, 0.1, AllowedSolution.ANY_SIDE);
+        double r2 = solver2.solve(1000, quadraticMinusTwo(), 0.0, 2.0, 1.9, AllowedSolution.ANY_SIDE);
+        assertEquals(r1, r2, 1e-12);
+    }
+
+    // Covers ILLINOIS same-side branch (f0 *= 0.5) and the ANY_SIDE final return, checked against true sqrt(2).
+    @Test
+    public void testDoSolve_illinoisQuadratic_anySide_convergesNearRoot() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        double result = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.ANY_SIDE);
+        assertEquals(Math.sqrt(2.0), result, 1e-6);
+    }
+
+    // LEFT_SIDE must return the under-approximation of the root (x <= root).
+    @Test
+    public void testDoSolve_illinoisQuadratic_leftSide_returnsUnderApproximation() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        double result = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.LEFT_SIDE);
+        assertTrue(result <= Math.sqrt(2.0) + 1e-6);
+        assertTrue(quadraticMinusTwo().value(result) <= 1e-6);
+    }
+
+    // RIGHT_SIDE must return the over-approximation of the root (x >= root).
+    @Test
+    public void testDoSolve_illinoisQuadratic_rightSide_returnsOverApproximation() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        double result = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.RIGHT_SIDE);
+        assertTrue(result >= Math.sqrt(2.0) - 1e-6);
+        assertTrue(quadraticMinusTwo().value(result) >= -1e-6);
+    }
+
+    // BELOW_SIDE must return a point whose function value is non-positive.
+    @Test
+    public void testDoSolve_illinoisQuadratic_belowSide_functionValueNonPositive() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        double result = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.BELOW_SIDE);
+        assertTrue(quadraticMinusTwo().value(result) <= 1e-6);
+    }
+
+    // ABOVE_SIDE must return a point whose function value is non-negative.
+    @Test
+    public void testDoSolve_illinoisQuadratic_aboveSide_functionValueNonNegative() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        double result = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.ABOVE_SIDE);
+        assertTrue(quadraticMinusTwo().value(result) >= -1e-6);
+    }
+
+    // Covers PEGASUS same-side branch (f0 *= f1/(f1+fx)) with ANY_SIDE, checked against true sqrt(2).
+    @Test
+    public void testDoSolve_pegasusQuadratic_anySide_convergesNearRoot() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.PEGASUS);
+        double result = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.ANY_SIDE);
+        assertEquals(Math.sqrt(2.0), result, 1e-6);
+    }
+
+    // PEGASUS + BELOW_SIDE: function value at the returned point must be non-positive.
+    @Test
+    public void testDoSolve_pegasusQuadratic_belowSide_functionValueNonPositive() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.PEGASUS);
+        double result = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.BELOW_SIDE);
+        assertTrue(quadraticMinusTwo().value(result) <= 1e-6);
+    }
+
+    // PEGASUS + ABOVE_SIDE: function value at the returned point must be non-negative.
+    @Test
+    public void testDoSolve_pegasusQuadratic_aboveSide_functionValueNonNegative() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.PEGASUS);
+        double result = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.ABOVE_SIDE);
+        assertTrue(quadraticMinusTwo().value(result) >= -1e-6);
+    }
+
+    // Negative-side bracket: root is -sqrt(2); exercises monotonic-decreasing-sign branch coverage.
+    @Test
+    public void testDoSolve_illinoisQuadratic_negativeInterval_convergesToNegativeRoot() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        double result = solver.solve(1000, quadraticMinusTwo(), -2.0, 0.0, AllowedSolution.ANY_SIDE);
+        assertEquals(-Math.sqrt(2.0), result, 1e-6);
+    }
+
+    // Relative-accuracy dominated termination: FastMath.max(rtol*|x1|, atol) branch, rtol dominant.
+    @Test
+    public void testDoSolve_relativeAccuracyDominant_convergesWithinRelativeTolerance() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-3, 1e-15, BaseSecantSolver.Method.ILLINOIS);
+        double result = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.ANY_SIDE);
+        assertEquals(Math.sqrt(2.0), result, 5e-2);
+    }
+
+    // Same solver instance reused across calls: the 'allowed' field must update correctly each time.
+    @Test
+    public void testDoSolve_sameInstanceReusedWithDifferentAllowedSolution() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.ILLINOIS);
+        double below = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.BELOW_SIDE);
+        double above = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, AllowedSolution.ABOVE_SIDE);
+        assertTrue(quadraticMinusTwo().value(below) <= 1e-6);
+        assertTrue(quadraticMinusTwo().value(above) >= -1e-6);
+    }
+
+    // solve(maxEval,f,min,max,startValue,allowedSolution): explicit RIGHT_SIDE path via the 5-arg overload.
+    @Test
+    public void testSolve_fiveArgOverload_rightSideWithArbitraryStartValue() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-9, BaseSecantSolver.Method.PEGASUS);
+        double result = solver.solve(1000, quadraticMinusTwo(), 0.0, 2.0, 0.05, AllowedSolution.RIGHT_SIDE);
+        assertTrue(result >= Math.sqrt(2.0) - 1e-6);
+    }
+
+    // The three-arg public solve(maxEval,f,min,max) overload (from the base contract) must also work correctly.
+    @Test
+    public void testSolve_publicThreeArgOverload_returnsExactRoot() throws Throwable {
+        TestSecantSolver solver = new TestSecantSolver(1e-6, BaseSecantSolver.Method.ILLINOIS);
+        double result = solver.solve(10, linearRootAtOne(), 0.0, 2.0, 0.5);
+        assertEquals(1.0, result, 1e-9);
+    }
+}

@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Lang-47-cu819qm6/Lang-47f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.lang.text.StrBuilderClaudeTest::testEquals_withNullOtherBuilder_shouldReturnFalsePerContract
+[exit 0]

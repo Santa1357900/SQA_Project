@@ -1,0 +1,334 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class PeepholeFoldConstantsClaudeTest {
+
+  // Helper: compiles the given JS snippet with only constant-folding enabled
+  // and returns the resulting generated source code.
+  private String fold(String js) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setFoldConstants(true);
+    List<SourceFile> externs = new ArrayList<SourceFile>();
+    List<SourceFile> inputs = new ArrayList<SourceFile>();
+    inputs.add(SourceFile.fromCode("test.js", js));
+    compiler.compile(externs, inputs, options);
+    return compiler.toSource();
+  }
+
+  // tryFoldTypeof: STRING literal -> "string"
+  @Test
+  public void testTryFoldTypeof_stringLiteral_returnsStringType() throws Throwable {
+    String out = fold("var a = typeof 'hi';");
+    assertTrue(out.contains("\"string\""));
+  }
+
+  // tryFoldTypeof: NUMBER literal -> "number"
+  @Test
+  public void testTryFoldTypeof_numberLiteral_returnsNumberType() throws Throwable {
+    String out = fold("var a = typeof 5;");
+    assertTrue(out.contains("\"number\""));
+  }
+
+  // tryFoldTypeof: TRUE/FALSE -> "boolean"
+  @Test
+  public void testTryFoldTypeof_booleanLiteral_returnsBooleanType() throws Throwable {
+    String out = fold("var a = typeof true;");
+    assertTrue(out.contains("\"boolean\""));
+  }
+
+  // tryFoldTypeof: NULL -> "object"
+  @Test
+  public void testTryFoldTypeof_nullLiteral_returnsObjectType() throws Throwable {
+    String out = fold("var a = typeof null;");
+    assertTrue(out.contains("\"object\""));
+  }
+
+  // tryFoldTypeof: ARRAYLIT -> "object"
+  @Test
+  public void testTryFoldTypeof_arrayLiteral_returnsObjectType() throws Throwable {
+    String out = fold("var a = typeof [1,2];");
+    assertTrue(out.contains("\"object\""));
+  }
+
+  // tryFoldTypeof: VOID -> "undefined"
+  @Test
+  public void testTryFoldTypeof_voidExpression_returnsUndefinedType() throws Throwable {
+    String out = fold("var a = typeof void 0;");
+    assertTrue(out.contains("\"undefined\""));
+  }
+
+  // tryFoldTypeof: non-literal argument -> not folded, typeof kept
+  @Test
+  public void testTryFoldTypeof_nonLiteralArgument_notFolded() throws Throwable {
+    String out = fold("var x; var a = typeof x;");
+    assertTrue(out.contains("typeof"));
+  }
+
+  // tryFoldUnaryOperator NOT branch: !true -> false
+  @Test
+  public void testTryFoldUnaryOperator_notTrue_foldsToFalse() throws Throwable {
+    String out = fold("var a = !true;");
+    assertTrue(out.contains("false"));
+  }
+
+  // tryFoldUnaryOperator NOT branch: !false -> true
+  @Test
+  public void testTryFoldUnaryOperator_notFalse_foldsToTrue() throws Throwable {
+    String out = fold("var a = !false;");
+    assertTrue(out.contains("true"));
+  }
+
+  // tryFoldUnaryOperator NEG branch (non-NAME child): -(2+3) -> -5
+  @Test
+  public void testTryFoldUnaryOperator_negNumericLiteral_foldsToNegative() throws Throwable {
+    String out = fold("var a = -(2+3);");
+    assertTrue(out.contains("-5"));
+  }
+
+  // tryFoldUnaryOperator NEG branch: NAME "Infinity" must not be folded
+  @Test
+  public void testTryFoldUnaryOperator_negInfinity_notFolded() throws Throwable {
+    String out = fold("var a = -Infinity;");
+    assertTrue(out.contains("Infinity"));
+  }
+
+  // tryFoldUnaryOperator NEG branch: NAME "NaN" folds to NaN (drops the minus)
+  @Test
+  public void testTryFoldUnaryOperator_negNaN_foldsToNaN() throws Throwable {
+    String out = fold("var a = -NaN;");
+    assertTrue(out.contains("NaN"));
+  }
+
+  // tryFoldUnaryOperator NEG branch: non-number operand triggers
+  // NEGATING_A_NON_NUMBER_ERROR, expression stays unfolded.
+  @Test
+  public void testTryFoldUnaryOperator_negNonNumber_notFoldedAndErrorReported() throws Throwable {
+    String out = fold("var a = -'abc';");
+    assertTrue(out.contains("abc"));
+  }
+
+  // tryFoldUnaryOperator BITNOT branch: ~5 -> -6
+  @Test
+  public void testTryFoldUnaryOperator_bitnotInteger_foldsToComplement() throws Throwable {
+    String out = fold("var a = ~5;");
+    assertTrue(out.contains("-6"));
+  }
+
+  // tryFoldInstanceof: immutable left value is never an instance -> false
+  @Test
+  public void testTryFoldInstanceof_immutableLeft_foldsToFalse() throws Throwable {
+    String out = fold("var a = (5 instanceof Object);");
+    assertTrue(out.contains("false"));
+  }
+
+  // tryFoldInstanceof: mutable object literal instanceof Object -> true
+  @Test
+  public void testTryFoldInstanceof_objectLiteralLeftAndObjectRight_foldsToTrue() throws Throwable {
+    String out = fold("var a = ({}) instanceof Object;");
+    assertTrue(out.contains("true"));
+  }
+
+  // tryFoldAssign: x = x + y -> x += y
+  @Test
+  public void testTryFoldAssign_xEqualsXPlusY_foldsToPlusEquals() throws Throwable {
+    String out = fold("var x, y; x = x + y;");
+    assertTrue(out.contains("+="));
+  }
+
+  // tryFoldAndOr: (TRUE || x) -> TRUE
+  @Test
+  public void testTryFoldAndOr_trueOrX_foldsToTrue() throws Throwable {
+    String out = fold("var x; var a = true || x;");
+    assertTrue(out.contains("true"));
+  }
+
+  // tryFoldAndOr: (FALSE && x) -> FALSE
+  @Test
+  public void testTryFoldAndOr_falseAndX_foldsToFalse() throws Throwable {
+    String out = fold("var x; var a = false && x;");
+    assertTrue(out.contains("false"));
+  }
+
+  // tryFoldAndOr: right-hand constant allowed to fold when parent is IF
+  @Test
+  public void testTryFoldAndOr_rightConstantInIfCondition_foldsConditionToTrue() throws Throwable {
+    String out = fold("var x, a; if (x || true) { a = 1; }");
+    assertTrue(out.contains("if(true)"));
+  }
+
+  // tryFoldAdd / tryFoldAddConstant: string concatenation of two literals
+  @Test
+  public void testTryFoldAdd_stringConcatLiterals_foldsToConcatenatedString() throws Throwable {
+    String out = fold("var a = 'foo' + 'bar';");
+    assertTrue(out.contains("foobar"));
+  }
+
+  // tryFoldAdd / tryFoldAddConstant: numeric literal addition
+  @Test
+  public void testTryFoldAdd_numericLiterals_foldsToSum() throws Throwable {
+    String out = fold("var a = 1 + 2;");
+    assertTrue(out.contains("a=3"));
+  }
+
+  // tryFoldArithmetic SUB branch
+  @Test
+  public void testTryFoldArithmetic_subtraction_foldsToDifference() throws Throwable {
+    String out = fold("var a = 10 - 3;");
+    assertTrue(out.contains("a=7"));
+  }
+
+  // tryFoldArithmetic MUL branch
+  @Test
+  public void testTryFoldArithmetic_multiplication_foldsToProduct() throws Throwable {
+    String out = fold("var a = 4 * 5;");
+    assertTrue(out.contains("a=20"));
+  }
+
+  // tryFoldArithmetic DIV branch
+  @Test
+  public void testTryFoldArithmetic_division_foldsToQuotient() throws Throwable {
+    String out = fold("var a = 10 / 2;");
+    assertTrue(out.contains("a=5"));
+  }
+
+  // tryFoldBitAndOr BITAND branch
+  @Test
+  public void testTryFoldBitAndOr_bitwiseAnd_foldsToResult() throws Throwable {
+    String out = fold("var a = 5 & 3;");
+    assertTrue(out.contains("a=1"));
+  }
+
+  // tryFoldBitAndOr BITOR branch
+  @Test
+  public void testTryFoldBitAndOr_bitwiseOr_foldsToResult() throws Throwable {
+    String out = fold("var a = 5 | 2;");
+    assertTrue(out.contains("a=7"));
+  }
+
+  // tryFoldShift LSH branch
+  @Test
+  public void testTryFoldShift_leftShift_foldsToResult() throws Throwable {
+    String out = fold("var a = 1 << 3;");
+    assertTrue(out.contains("a=8"));
+  }
+
+  // tryFoldShift RSH branch
+  @Test
+  public void testTryFoldShift_rightShift_foldsToResult() throws Throwable {
+    String out = fold("var a = 8 >> 2;");
+    assertTrue(out.contains("a=2"));
+  }
+
+  // tryFoldShift URSH branch: per ECMAScript (-1 >>> 0) must be the
+  // unsigned 32-bit representation 4294967295, not the signed int -1.
+  @Test
+  public void testTryFoldShift_unsignedRightShiftNegativeByZero_foldsToUnsigned32BitValue()
+      throws Throwable {
+    String out = fold("var a = -1 >>> 0;");
+    assertTrue(out.contains("4294967295"));
+  }
+
+  // tryFoldComparison NUMBER branch: LT
+  @Test
+  public void testTryFoldComparison_numericLessThan_foldsToTrue() throws Throwable {
+    String out = fold("var a = (3 < 5);");
+    assertTrue(out.contains("true"));
+  }
+
+  // tryFoldComparison STRING branch: EQ
+  @Test
+  public void testTryFoldComparison_stringEquality_foldsToTrue() throws Throwable {
+    String out = fold("var a = ('abc' == 'abc');");
+    assertTrue(out.contains("true"));
+  }
+
+  // tryFoldComparison NULL branch with undefinedRight, SHEQ op -> false
+  @Test
+  public void testTryFoldComparison_nullStrictEqualsUndefined_foldsToFalse() throws Throwable {
+    String out = fold("var a = (null === undefined);");
+    assertTrue(out.contains("false"));
+  }
+
+  // tryFoldComparison NAME branch: same name LT is always false
+  @Test
+  public void testTryFoldComparison_sameNameLessThan_foldsToFalse() throws Throwable {
+    String out = fold("var x; var a = (x < x);");
+    assertTrue(out.contains("false"));
+  }
+
+  // tryFoldStringJoin: all-string array joins to single folded string
+  @Test
+  public void testTryFoldStringJoin_simpleConcat_foldsToString() throws Throwable {
+    String out = fold("var a = ['a','b','c'].join('');");
+    assertTrue(out.contains("abc"));
+  }
+
+  // tryFoldStringJoin: numeric elements merged with separator
+  @Test
+  public void testTryFoldStringJoin_numericElementsWithSeparator_foldsToString() throws Throwable {
+    String out = fold("var a = [1,2,3].join('-');");
+    assertTrue(out.contains("1-2-3"));
+  }
+
+  // tryFoldStringJoin: empty array -> empty string literal
+  @Test
+  public void testTryFoldStringJoin_emptyArray_foldsToEmptyString() throws Throwable {
+    String out = fold("var a = [].join(',');");
+    assertTrue(out.contains("a=\"\""));
+  }
+
+  // tryFoldStringIndexOf: indexOf found
+  @Test
+  public void testTryFoldStringIndexOf_found_foldsToIndex() throws Throwable {
+    String out = fold("var a = 'abcdef'.indexOf('bc');");
+    assertTrue(out.contains("a=1"));
+  }
+
+  // tryFoldStringIndexOf: indexOf with fromIndex second argument
+  @Test
+  public void testTryFoldStringIndexOf_withFromIndex_foldsToIndex() throws Throwable {
+    String out = fold("var a = 'abcdefbc'.indexOf('bc', 3);");
+    assertTrue(out.contains("a=6"));
+  }
+
+  // tryFoldStringIndexOf: indexOf not found -> -1
+  @Test
+  public void testTryFoldStringIndexOf_notFound_foldsToNegativeOne() throws Throwable {
+    String out = fold("var a = 'abcdef'.indexOf('xyz');");
+    assertTrue(out.contains("a=-1"));
+  }
+
+  // tryFoldStringIndexOf: lastIndexOf branch
+  @Test
+  public void testTryFoldStringIndexOf_lastIndexOf_foldsToIndex() throws Throwable {
+    String out = fold("var a = 'abcabc'.lastIndexOf('bc');");
+    assertTrue(out.contains("a=4"));
+  }
+
+  // tryFoldGetElem: array index within range is replaced by the element
+  @Test
+  public void testTryFoldGetElem_arrayIndexInRange_foldsToElement() throws Throwable {
+    String out = fold("var a = [10,20,30][1];");
+    assertTrue(out.contains("a=20"));
+  }
+
+  // tryFoldGetProp: array literal .length folds to element count
+  @Test
+  public void testTryFoldGetProp_arrayLength_foldsToLength() throws Throwable {
+    String out = fold("var a = [1,2,3].length;");
+    assertTrue(out.contains("a=3"));
+  }
+
+  // tryFoldGetProp: string literal .length folds to character count
+  @Test
+  public void testTryFoldGetProp_stringLength_foldsToLength() throws Throwable {
+    String out = fold("var a = 'hello'.length;");
+    assertTrue(out.contains("a=5"));
+  }
+}

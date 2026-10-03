@@ -1,0 +1,340 @@
+package org.jfree.data.time;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TimePeriodValuesClaudeTest {
+
+    // Constructor: default domain/range descriptions applied
+    @Test
+    public void testConstructor_nameOnly_defaultDescriptions() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("Series1");
+        assertEquals("Time", s.getDomainDescription());
+        assertEquals("Value", s.getRangeDescription());
+    }
+
+    // Constructor: custom domain/range descriptions stored
+    @Test
+    public void testConstructor_nameDomainRange_descriptionsStored() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("Series1", "MyDomain", "MyRange");
+        assertEquals("MyDomain", s.getDomainDescription());
+        assertEquals("MyRange", s.getRangeDescription());
+    }
+
+    // Constructor: null name not permitted -> exception thrown
+    @Test
+    public void testConstructor_nullName_throwsException() throws Throwable {
+        try {
+            new TimePeriodValues((Comparable) null);
+            fail("expected exception for null name");
+        }
+        catch (IllegalArgumentException expected) {
+            // expected per "null not permitted" contract
+        }
+    }
+
+    // setDomainDescription: updates the stored domain description
+    @Test
+    public void testSetDomainDescription_changesValue_getterReflectsChange() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.setDomainDescription("NewDomain");
+        assertEquals("NewDomain", s.getDomainDescription());
+    }
+
+    // setRangeDescription: updates the stored range description
+    @Test
+    public void testSetRangeDescription_changesValue_getterReflectsChange() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.setRangeDescription("NewRange");
+        assertEquals("NewRange", s.getRangeDescription());
+    }
+
+    // getItemCount: empty series returns 0
+    @Test
+    public void testGetItemCount_emptySeries_returnsZero() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        assertEquals(0, s.getItemCount());
+    }
+
+    // getItemCount: after adding items returns correct count
+    @Test
+    public void testGetItemCount_afterAdds_returnsCorrectCount() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2000), 1.0);
+        s.add(new Year(2001), 2.0);
+        assertEquals(2, s.getItemCount());
+    }
+
+    // getDataItem: returns the item at specified index
+    @Test
+    public void testGetDataItem_validIndex_returnsCorrectItem() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        Year y = new Year(2000);
+        s.add(y, 5.0);
+        TimePeriodValue item = s.getDataItem(0);
+        assertEquals(5.0, item.getValue().doubleValue(), 1e-9);
+    }
+
+    // getTimePeriod: returns the period of item at index
+    @Test
+    public void testGetTimePeriod_validIndex_returnsCorrectPeriod() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        Year y = new Year(2003);
+        s.add(y, 1.0);
+        assertEquals(y, s.getTimePeriod(0));
+    }
+
+    // getValue: returns value for normal numeric entry
+    @Test
+    public void testGetValue_normalEntry_returnsCorrectValue() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2000), 9.5);
+        assertEquals(9.5, s.getValue(0).doubleValue(), 1e-9);
+    }
+
+    // getValue: null Number permitted and returned as-is
+    @Test
+    public void testGetValue_nullValueAdded_returnsNull() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2000), (Number) null);
+        assertNull(s.getValue(0));
+    }
+
+    // add(TimePeriodValue): null item not allowed -> exception
+    @Test
+    public void testAdd_nullItem_throwsIllegalArgumentException() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        try {
+            s.add((TimePeriodValue) null);
+            fail("expected IllegalArgumentException");
+        }
+        catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // add(TimePeriodValue): valid item is stored and retrievable
+    @Test
+    public void testAdd_validTimePeriodValue_itemStored() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        TimePeriodValue tpv = new TimePeriodValue(new Year(2000), 3.0);
+        s.add(tpv);
+        assertEquals(1, s.getItemCount());
+        assertEquals(3.0, s.getValue(0).doubleValue(), 1e-9);
+    }
+
+    // add(TimePeriod, double): value stored correctly
+    @Test
+    public void testAdd_periodAndDouble_valueStoredCorrectly() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2010), 42.0);
+        assertEquals(42.0, s.getValue(0).doubleValue(), 1e-9);
+    }
+
+    // add(TimePeriod, Number): non-null Number stored correctly
+    @Test
+    public void testAdd_periodAndNumber_valueStoredCorrectly() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2011), new Double(7.25));
+        assertEquals(7.25, s.getValue(0).doubleValue(), 1e-9);
+    }
+
+    // update: changes the value of an existing item
+    @Test
+    public void testUpdate_validIndex_valueChanged() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2000), 1.0);
+        s.update(0, new Double(99.0));
+        assertEquals(99.0, s.getValue(0).doubleValue(), 1e-9);
+    }
+
+    // delete: removes a single item (start == end)
+    @Test
+    public void testDelete_singleIndex_itemRemoved() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2000), 1.0);
+        s.add(new Year(2001), 2.0);
+        s.delete(0, 0);
+        assertEquals(1, s.getItemCount());
+        assertEquals(2.0, s.getValue(0).doubleValue(), 1e-9);
+    }
+
+    // delete: removes multiple items and recalculates bounds
+    @Test
+    public void testDelete_multipleIndices_boundsRecalculated() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2000), 1.0);
+        s.add(new Year(2010), 2.0);
+        s.add(new Year(2005), 3.0);
+        s.delete(0, 1);
+        assertEquals(1, s.getItemCount());
+        assertEquals(0, s.getMaxStartIndex());
+    }
+
+    // equals: same instance reference returns true
+    @Test
+    public void testEquals_sameInstance_returnsTrue() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        assertTrue(s.equals(s));
+    }
+
+    // equals: null argument returns false
+    @Test
+    public void testEquals_null_returnsFalse() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        assertFalse(s.equals(null));
+    }
+
+    // equals: different class type returns false
+    @Test
+    public void testEquals_differentClass_returnsFalse() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        assertFalse(s.equals("not a series"));
+    }
+
+    // equals: different series name returns false (via super.equals)
+    @Test
+    public void testEquals_differentName_returnsFalse() throws Throwable {
+        TimePeriodValues s1 = new TimePeriodValues("SeriesA");
+        TimePeriodValues s2 = new TimePeriodValues("SeriesB");
+        assertFalse(s1.equals(s2));
+    }
+
+    // equals: different domain description returns false
+    @Test
+    public void testEquals_differentDomainDescription_returnsFalse() throws Throwable {
+        TimePeriodValues s1 = new TimePeriodValues("S", "D1", "R");
+        TimePeriodValues s2 = new TimePeriodValues("S", "D2", "R");
+        assertFalse(s1.equals(s2));
+    }
+
+    // equals: different range description returns false
+    @Test
+    public void testEquals_differentRangeDescription_returnsFalse() throws Throwable {
+        TimePeriodValues s1 = new TimePeriodValues("S", "D", "R1");
+        TimePeriodValues s2 = new TimePeriodValues("S", "D", "R2");
+        assertFalse(s1.equals(s2));
+    }
+
+    // equals: different item count returns false
+    @Test
+    public void testEquals_differentItemCount_returnsFalse() throws Throwable {
+        TimePeriodValues s1 = new TimePeriodValues("S");
+        TimePeriodValues s2 = new TimePeriodValues("S");
+        s1.add(new Year(2000), 1.0);
+        assertFalse(s1.equals(s2));
+    }
+
+    // equals: same structure but different item value returns false
+    @Test
+    public void testEquals_differentItemValue_returnsFalse() throws Throwable {
+        TimePeriodValues s1 = new TimePeriodValues("S");
+        TimePeriodValues s2 = new TimePeriodValues("S");
+        s1.add(new Year(2000), 1.0);
+        s2.add(new Year(2000), 2.0);
+        assertFalse(s1.equals(s2));
+    }
+
+    // equals: identical name/descriptions/items returns true
+    @Test
+    public void testEquals_identicalContent_returnsTrue() throws Throwable {
+        TimePeriodValues s1 = new TimePeriodValues("S", "D", "R");
+        TimePeriodValues s2 = new TimePeriodValues("S", "D", "R");
+        s1.add(new Year(2000), 1.0);
+        s2.add(new Year(2000), 1.0);
+        assertTrue(s1.equals(s2));
+    }
+
+    // hashCode: same object returns consistent hash code across calls
+    @Test
+    public void testHashCode_sameObject_consistentAcrossCalls() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2000), 1.0);
+        int h1 = s.hashCode();
+        int h2 = s.hashCode();
+        assertEquals(h1, h2);
+    }
+
+    // clone: produces an equal but independent copy
+    @Test
+    public void testClone_populatedSeries_equalButIndependent() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2000), 1.0);
+        TimePeriodValues clone = (TimePeriodValues) s.clone();
+        assertTrue(s.equals(clone));
+        s.add(new Year(2001), 2.0);
+        assertEquals(1, clone.getItemCount());
+    }
+
+    // clone: empty series clones to an empty series
+    @Test
+    public void testClone_emptySeries_producesEmptyClone() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        TimePeriodValues clone = (TimePeriodValues) s.clone();
+        assertEquals(0, clone.getItemCount());
+    }
+
+    // createCopy: copies a subset range of items correctly
+    @Test
+    public void testCreateCopy_subsetRange_containsOnlySelectedItems() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2000), 1.0);
+        s.add(new Year(2001), 2.0);
+        s.add(new Year(2002), 3.0);
+        TimePeriodValues copy = s.createCopy(0, 1);
+        assertEquals(2, copy.getItemCount());
+        assertEquals(2.0, copy.getValue(1).doubleValue(), 1e-9);
+    }
+
+    // getMinStartIndex/getMaxStartIndex: -1 for empty series
+    @Test
+    public void testGetMinMaxStartIndex_emptySeries_returnsMinusOne() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        assertEquals(-1, s.getMinStartIndex());
+        assertEquals(-1, s.getMaxStartIndex());
+    }
+
+    // getMinStartIndex/getMaxStartIndex: correct indices after adds
+    @Test
+    public void testGetMinMaxStartIndex_afterAdds_correctIndices() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2005), 1.0);
+        s.add(new Year(2000), 2.0);
+        s.add(new Year(2010), 3.0);
+        assertEquals(1, s.getMinStartIndex());
+        assertEquals(2, s.getMaxStartIndex());
+    }
+
+    // getMinEndIndex/getMaxEndIndex: correct indices after adds
+    @Test
+    public void testGetMinMaxEndIndex_afterAdds_correctIndices() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2005), 1.0);
+        s.add(new Year(2000), 2.0);
+        s.add(new Year(2010), 3.0);
+        assertEquals(1, s.getMinEndIndex());
+        assertEquals(2, s.getMaxEndIndex());
+    }
+
+    // getMinMiddleIndex: correctly identifies item with smallest middle time
+    @Test
+    public void testGetMinMiddleIndex_afterInterleavedAdds_returnsCorrectIndex() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2020), 1.0);
+        s.add(new Year(2000), 2.0);
+        s.add(new Year(2010), 3.0);
+        assertEquals(1, s.getMinMiddleIndex());
+    }
+
+    // BUG HUNT: getMaxMiddleIndex must reflect the item with the largest
+    // middle time; buggy updateBounds() uses minMiddleIndex reference when
+    // updating maxMiddleIndex, causing an incorrect index to be returned.
+    @Test
+    public void testGetMaxMiddleIndex_afterInterleavedAdds_returnsIndexOfActualMaxMiddle() throws Throwable {
+        TimePeriodValues s = new TimePeriodValues("S");
+        s.add(new Year(2020), 1.0);
+        s.add(new Year(2000), 2.0);
+        s.add(new Year(2010), 3.0);
+        assertEquals(0, s.getMaxMiddleIndex());
+    }
+}

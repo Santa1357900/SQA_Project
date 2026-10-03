@@ -1,0 +1,308 @@
+package org.apache.commons.compress.archivers.zip;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class X7875_NewUnixClaudeTest {
+
+    private X7875_NewUnix xf;
+
+    @Before
+    public void setUp() throws Throwable {
+        xf = new X7875_NewUnix();
+    }
+
+    // constructor/reset: default uid/gid must be the typical first-user value documented in reset()
+    @Test
+    public void testConstructor_defaultState_hasTypicalUidGid() throws Throwable {
+        assertEquals(1000L, xf.getUID());
+        assertEquals(1000L, xf.getGID());
+    }
+
+    // getHeaderId: must always report the fixed 0x7875 tag from the spec
+    @Test
+    public void testGetHeaderId_returnsFixedTag0x7875() throws Throwable {
+        assertEquals(0x7875, xf.getHeaderId().getValue());
+    }
+
+    // setUID/getUID: zero boundary value round trip
+    @Test
+    public void testSetUID_getUID_zero() throws Throwable {
+        xf.setUID(0L);
+        assertEquals(0L, xf.getUID());
+    }
+
+    // setUID/getUID: 2^31 boundary explicitly called out in javadoc to avoid negative overflow
+    @Test
+    public void testSetUID_getUID_atTwoPow31Boundary() throws Throwable {
+        xf.setUID(2147483648L);
+        assertEquals(2147483648L, xf.getUID());
+    }
+
+    // setUID/getUID: full unsigned 32-bit max must round trip without going negative
+    @Test
+    public void testSetUID_getUID_maxUnsigned32() throws Throwable {
+        xf.setUID(4294967295L);
+        assertEquals(4294967295L, xf.getUID());
+    }
+
+    // setGID/getGID: zero boundary value round trip
+    @Test
+    public void testSetGID_getGID_zero() throws Throwable {
+        xf.setGID(0L);
+        assertEquals(0L, xf.getGID());
+    }
+
+    // setGID/getGID: full unsigned 32-bit max must round trip without going negative
+    @Test
+    public void testSetGID_getGID_maxUnsigned32() throws Throwable {
+        xf.setGID(4294967295L);
+        assertEquals(4294967295L, xf.getGID());
+    }
+
+    // getLocalFileDataLength: default uid/gid=1000 each need 2 bytes -> 3 + 2 + 2
+    @Test
+    public void testGetLocalFileDataLength_defaultUidGid1000_returns7() throws Throwable {
+        assertEquals(7, xf.getLocalFileDataLength().getValue());
+    }
+
+    // getLocalFileDataLength: zero uid/gid trims to MIN_LENGTH=1 each -> 3 + 1 + 1
+    @Test
+    public void testGetLocalFileDataLength_zeroUidGid_returns5() throws Throwable {
+        xf.setUID(0L);
+        xf.setGID(0L);
+        assertEquals(5, xf.getLocalFileDataLength().getValue());
+    }
+
+    // getLocalFileDataLength: value needing a sign padding byte (200) must still trim to 1 byte
+    @Test
+    public void testGetLocalFileDataLength_highBitByteTrimmedToOne_returns5() throws Throwable {
+        xf.setUID(200L);
+        xf.setGID(0L);
+        assertEquals(5, xf.getLocalFileDataLength().getValue());
+    }
+
+    // getLocalFileDataLength must always equal the actual produced local data array length
+    @Test
+    public void testGetLocalFileDataLength_matchesDataArrayLength_consistency() throws Throwable {
+        xf.setUID(123456L);
+        xf.setGID(7L);
+        assertEquals(xf.getLocalFileDataData().length, xf.getLocalFileDataLength().getValue());
+    }
+
+    // class javadoc states the central-header block has TSize fixed at (0), regardless of uid/gid size
+    @Test
+    public void testGetCentralDirectoryLength_perClassJavadoc_isZero() throws Throwable {
+        xf.setUID(99999L);
+        xf.setGID(88888L);
+        assertEquals(0, xf.getCentralDirectoryLength().getValue());
+    }
+
+    // getCentralDirectoryData: must always be an empty array per javadoc, regardless of uid/gid
+    @Test
+    public void testGetCentralDirectoryData_alwaysEmptyArray() throws Throwable {
+        xf.setUID(555555L);
+        xf.setGID(444444L);
+        assertEquals(0, xf.getCentralDirectoryData().length);
+    }
+
+    // getCentralDirectoryLength must match the actual central directory data length it describes
+    @Test
+    public void testGetCentralDirectoryData_consistentWithCentralDirectoryLength() throws Throwable {
+        xf.setUID(42L);
+        xf.setGID(84L);
+        assertEquals(xf.getCentralDirectoryData().length, xf.getCentralDirectoryLength().getValue());
+    }
+
+    // getLocalFileDataData: small single-byte uid/gid produce version,uidSize,uid,gidSize,gid layout
+    @Test
+    public void testGetLocalFileDataData_smallValues_correctLayout() throws Throwable {
+        xf.setUID(1L);
+        xf.setGID(2L);
+        byte[] expected = {1, 1, 1, 1, 2};
+        assertArrayEquals(expected, xf.getLocalFileDataData());
+    }
+
+    // getLocalFileDataData: multi-byte uid must be stored little-endian (reversed) per spec
+    @Test
+    public void testGetLocalFileDataData_multiByteLittleEndian() throws Throwable {
+        xf.setUID(258L);
+        xf.setGID(0L);
+        byte[] expected = {1, 2, 2, 1, 1, 0};
+        assertArrayEquals(expected, xf.getLocalFileDataData());
+    }
+
+    // getLocalFileDataData: zero uid/gid each trim to a single zero byte, not dropped entirely
+    @Test
+    public void testGetLocalFileDataData_zeroValues_minLengthOneEach() throws Throwable {
+        xf.setUID(0L);
+        xf.setGID(0L);
+        byte[] expected = {1, 1, 0, 1, 0};
+        assertArrayEquals(expected, xf.getLocalFileDataData());
+    }
+
+    // version field defaults to 1 per javadoc ("currently 1") and must appear as first data byte
+    @Test
+    public void testGetLocalFileDataData_defaultVersionByteIsOne() throws Throwable {
+        byte[] data = xf.getLocalFileDataData();
+        assertEquals(1, data[0]);
+    }
+
+    // parseFromLocalFileData: round trip of a well formed buffer restores uid/gid
+    @Test
+    public void testParseFromLocalFileData_roundTrip_restoresUidGid() throws Throwable {
+        byte[] data = {1, 1, 10, 1, 20};
+        xf.parseFromLocalFileData(data, 0, data.length);
+        assertEquals(10L, xf.getUID());
+        assertEquals(20L, xf.getGID());
+    }
+
+    // parseFromLocalFileData: offset parameter must be honored, skipping leading unrelated bytes
+    @Test
+    public void testParseFromLocalFileData_withNonZeroOffset_readsCorrectSegment() throws Throwable {
+        byte[] raw = {99, 99, 1, 1, 10, 1, 20, 55};
+        xf.parseFromLocalFileData(raw, 2, 5);
+        assertEquals(10L, xf.getUID());
+        assertEquals(20L, xf.getGID());
+    }
+
+    // parseFromLocalFileData: zero-length uid/gid fields must parse as the value zero
+    @Test
+    public void testParseFromLocalFileData_zeroSizeUidGid_resultsInZero() throws Throwable {
+        byte[] data = {1, 0, 0};
+        xf.parseFromLocalFileData(data, 0, data.length);
+        assertEquals(0L, xf.getUID());
+        assertEquals(0L, xf.getGID());
+    }
+
+    // parseFromLocalFileData calls reset() first, so stale state must be fully overwritten
+    @Test
+    public void testParseFromLocalFileData_resetsPreviousState() throws Throwable {
+        xf.setUID(555L);
+        xf.setGID(777L);
+        byte[] data = {1, 1, 1, 1, 2};
+        xf.parseFromLocalFileData(data, 0, data.length);
+        assertEquals(1L, xf.getUID());
+        assertEquals(2L, xf.getGID());
+    }
+
+    // parseFromCentralDirectoryData: javadoc says it does nothing, so prior state must be untouched
+    @Test
+    public void testParseFromCentralDirectoryData_doesNothing_stateUnchanged() throws Throwable {
+        xf.setUID(123L);
+        xf.setGID(456L);
+        byte[] data = new byte[0];
+        xf.parseFromCentralDirectoryData(data, 0, 0);
+        assertEquals(123L, xf.getUID());
+        assertEquals(456L, xf.getGID());
+    }
+
+    // toString: debugging representation must expose the current UID and GID values
+    @Test
+    public void testToString_containsUidAndGidValues() throws Throwable {
+        xf.setUID(111L);
+        xf.setGID(222L);
+        String s = xf.toString();
+        assertTrue(s.contains("UID=111"));
+        assertTrue(s.contains("GID=222"));
+    }
+
+    // clone: must produce a distinct but equal instance (Cloneable contract + overridden equals)
+    @Test
+    public void testClone_producesEqualButDistinctInstance() throws Throwable {
+        xf.setUID(5L);
+        xf.setGID(6L);
+        Object cloned = xf.clone();
+        assertTrue(cloned instanceof X7875_NewUnix);
+        assertNotSame(xf, cloned);
+        assertEquals(xf, cloned);
+    }
+
+    // equals: two default-constructed instances share version/uid/gid and must be equal
+    @Test
+    public void testEquals_sameDefaultValues_true() throws Throwable {
+        X7875_NewUnix other = new X7875_NewUnix();
+        assertTrue(xf.equals(other));
+    }
+
+    // equals: differing uid alone must break equality
+    @Test
+    public void testEquals_differentUid_false() throws Throwable {
+        X7875_NewUnix other = new X7875_NewUnix();
+        other.setUID(2000L);
+        assertFalse(xf.equals(other));
+    }
+
+    // equals: differing gid alone must break equality
+    @Test
+    public void testEquals_differentGid_false() throws Throwable {
+        X7875_NewUnix other = new X7875_NewUnix();
+        other.setGID(2000L);
+        assertFalse(xf.equals(other));
+    }
+
+    // equals: differing version (set via parse) alone must break equality
+    @Test
+    public void testEquals_differentVersion_false() throws Throwable {
+        byte[] data2 = {2, 2, -24, 3, 2, -24, 3};
+        X7875_NewUnix other = new X7875_NewUnix();
+        other.parseFromLocalFileData(data2, 0, data2.length);
+        assertFalse(xf.equals(other));
+    }
+
+    // equals: comparing against null must return false, never throw
+    @Test
+    public void testEquals_null_false() throws Throwable {
+        assertFalse(xf.equals(null));
+    }
+
+    // equals: comparing against an unrelated type must return false
+    @Test
+    public void testEquals_differentType_false() throws Throwable {
+        assertFalse(xf.equals(new Object()));
+    }
+
+    // hashCode: per the equals/hashCode contract, equal objects must share hash codes
+    @Test
+    public void testHashCode_equalObjects_sameHashCode() throws Throwable {
+        X7875_NewUnix other = new X7875_NewUnix();
+        assertEquals(xf.hashCode(), other.hashCode());
+    }
+
+    // trimLeadingZeroesForceMinLength: null input must short-circuit to null
+    @Test
+    public void testTrimLeadingZeroesForceMinLength_null_returnsNull() throws Throwable {
+        assertNull(X7875_NewUnix.trimLeadingZeroesForceMinLength(null));
+    }
+
+    // trimLeadingZeroesForceMinLength: empty array (0 loop iterations) must pad to a single zero byte
+    @Test
+    public void testTrimLeadingZeroesForceMinLength_emptyArray_returnsSingleZeroByte() throws Throwable {
+        byte[] result = X7875_NewUnix.trimLeadingZeroesForceMinLength(new byte[0]);
+        assertEquals(1, result.length);
+        assertEquals(0, result[0]);
+    }
+
+    // trimLeadingZeroesForceMinLength: all-zero multi-byte array must collapse to a single zero byte
+    @Test
+    public void testTrimLeadingZeroesForceMinLength_allZeros_trimsToMinLength() throws Throwable {
+        byte[] result = X7875_NewUnix.trimLeadingZeroesForceMinLength(new byte[]{0, 0, 0});
+        assertEquals(1, result.length);
+        assertEquals(0, result[0]);
+    }
+
+    // trimLeadingZeroesForceMinLength: array with no leading zero (0 loop iterations) stays unchanged
+    @Test
+    public void testTrimLeadingZeroesForceMinLength_noLeadingZeros_unchanged() throws Throwable {
+        byte[] result = X7875_NewUnix.trimLeadingZeroesForceMinLength(new byte[]{5, 6});
+        assertArrayEquals(new byte[]{5, 6}, result);
+    }
+
+    // trimLeadingZeroesForceMinLength: exactly one leading zero byte must be stripped
+    @Test
+    public void testTrimLeadingZeroesForceMinLength_singleLeadingZero_trimsOne() throws Throwable {
+        byte[] result = X7875_NewUnix.trimLeadingZeroesForceMinLength(new byte[]{0, 10});
+        assertArrayEquals(new byte[]{10}, result);
+    }
+}

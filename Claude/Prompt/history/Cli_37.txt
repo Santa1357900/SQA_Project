@@ -1,0 +1,787 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Cli (Defects4J bug Cli-37)
+package: org.apache.commons.cli
+class_under_test: DefaultParser
+test_class_to_write: DefaultParserClaudeTest
+</target>
+
+<project_notes>
+Commons CLI: Options/Option/CommandLineParser (PosixParser, GnuParser) เป็น API หลัก ระวัง Option constructor ที่รับ (String opt, boolean hasArg, String description)
+</project_notes>
+
+<source_code>
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.cli;
+
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Properties;
+
+/**
+ * Default parser.
+ * 
+ * @version $Id$
+ * @since 1.3
+ */
+public class DefaultParser implements CommandLineParser
+{
+    /** The command-line instance. */
+    protected CommandLine cmd;
+    
+    /** The current options. */
+    protected Options options;
+
+    /**
+     * Flag indicating how unrecognized tokens are handled. <tt>true</tt> to stop
+     * the parsing and add the remaining tokens to the args list.
+     * <tt>false</tt> to throw an exception. 
+     */
+    protected boolean stopAtNonOption;
+
+    /** The token currently processed. */
+    protected String currentToken;
+ 
+    /** The last option parsed. */
+    protected Option currentOption;
+ 
+    /** Flag indicating if tokens should no longer be analyzed and simply added as arguments of the command line. */
+    protected boolean skipParsing;
+ 
+    /** The required options and groups expected to be found when parsing the command line. */
+    protected List expectedOpts;
+ 
+    public CommandLine parse(Options options, String[] arguments) throws ParseException
+    {
+        return parse(options, arguments, null);
+    }
+
+    /**
+     * Parse the arguments according to the specified options and properties.
+     *
+     * @param options    the specified Options
+     * @param arguments  the command line arguments
+     * @param properties command line option name-value pairs
+     * @return the list of atomic option and value tokens
+     *
+     * @throws ParseException if there are any problems encountered
+     * while parsing the command line tokens.
+     */
+    public CommandLine parse(Options options, String[] arguments, Properties properties) throws ParseException
+    {
+        return parse(options, arguments, properties, false);
+    }
+
+    public CommandLine parse(Options options, String[] arguments, boolean stopAtNonOption) throws ParseException
+    {
+        return parse(options, arguments, null, stopAtNonOption);
+    }
+
+    /**
+     * Parse the arguments according to the specified options and properties.
+     *
+     * @param options         the specified Options
+     * @param arguments       the command line arguments
+     * @param properties      command line option name-value pairs
+     * @param stopAtNonOption if <tt>true</tt> an unrecognized argument stops
+     *     the parsing and the remaining arguments are added to the 
+     *     {@link CommandLine}s args list. If <tt>false</tt> an unrecognized
+     *     argument triggers a ParseException.
+     *
+     * @return the list of atomic option and value tokens
+     * @throws ParseException if there are any problems encountered
+     * while parsing the command line tokens.
+     */
+    public CommandLine parse(Options options, String[] arguments, Properties properties, boolean stopAtNonOption)
+            throws ParseException
+    {
+        this.options = options;
+        this.stopAtNonOption = stopAtNonOption;
+        skipParsing = false;
+        currentOption = null;
+        expectedOpts = new ArrayList(options.getRequiredOptions());
+
+        // clear the data from the groups
+        for (OptionGroup group : options.getOptionGroups())
+        {
+            group.setSelected(null);
+        }
+
+        cmd = new CommandLine();
+
+        if (arguments != null)
+        {
+            for (String argument : arguments)
+            {
+                handleToken(argument);
+            }
+        }
+
+        // check the arguments of the last option
+        checkRequiredArgs();
+
+        // add the default options
+        handleProperties(properties);
+
+        checkRequiredOptions();
+
+        return cmd;
+    }
+
+    /**
+     * Sets the values of Options using the values in <code>properties</code>.
+     *
+     * @param properties The value properties to be processed.
+     */
+    private void handleProperties(Properties properties) throws ParseException
+    {
+        if (properties == null)
+        {
+            return;
+        }
+
+        for (Enumeration<?> e = properties.propertyNames(); e.hasMoreElements();)
+        {
+            String option = e.nextElement().toString();
+
+            Option opt = options.getOption(option);
+            if (opt == null)
+            {
+                throw new UnrecognizedOptionException("Default option wasn't defined", option);
+            }
+
+            // if the option is part of a group, check if another option of the group has been selected
+            OptionGroup group = options.getOptionGroup(opt);
+            boolean selected = group != null && group.getSelected() != null;
+
+            if (!cmd.hasOption(option) && !selected)
+            {
+                // get the value from the properties
+                String value = properties.getProperty(option);
+
+                if (opt.hasArg())
+                {
+                    if (opt.getValues() == null || opt.getValues().length == 0)
+                    {
+                        opt.addValueForProcessing(value);
+                    }
+                }
+                else if (!("yes".equalsIgnoreCase(value)
+                        || "true".equalsIgnoreCase(value)
+                        || "1".equalsIgnoreCase(value)))
+                {
+                    // if the value is not yes, true or 1 then don't add the option to the CommandLine
+                    continue;
+                }
+
+                handleOption(opt);
+                currentOption = null;
+            }
+        }
+    }
+
+    /**
+     * Throws a {@link MissingOptionException} if all of the required options
+     * are not present.
+     *
+     * @throws MissingOptionException if any of the required Options
+     * are not present.
+     */
+    private void checkRequiredOptions() throws MissingOptionException
+    {
+        // if there are required options that have not been processed
+        if (!expectedOpts.isEmpty())
+        {
+            throw new MissingOptionException(expectedOpts);
+        }
+    }
+
+    /**
+     * Throw a {@link MissingArgumentException} if the current option
+     * didn't receive the number of arguments expected.
+     */
+    private void checkRequiredArgs() throws ParseException
+    {
+        if (currentOption != null && currentOption.requiresArg())
+        {
+            throw new MissingArgumentException(currentOption);
+        }
+    }
+
+    /**
+     * Handle any command line token.
+     *
+     * @param token the command line token to handle
+     * @throws ParseException
+     */
+    private void handleToken(String token) throws ParseException
+    {
+        currentToken = token;
+
+        if (skipParsing)
+        {
+            cmd.addArg(token);
+        }
+        else if ("--".equals(token))
+        {
+            skipParsing = true;
+        }
+        else if (currentOption != null && currentOption.acceptsArg() && isArgument(token))
+        {
+            currentOption.addValueForProcessing(Util.stripLeadingAndTrailingQuotes(token));
+        }
+        else if (token.startsWith("--"))
+        {
+            handleLongOption(token);
+        }
+        else if (token.startsWith("-") && !"-".equals(token))
+        {
+            handleShortAndLongOption(token);
+        }
+        else
+        {
+            handleUnknownToken(token);
+        }
+
+        if (currentOption != null && !currentOption.acceptsArg())
+        {
+            currentOption = null;
+        }
+    }
+
+    /**
+     * Returns true is the token is a valid argument.
+     *
+     * @param token
+     */
+    private boolean isArgument(String token)
+    {
+        return !isOption(token) || isNegativeNumber(token);
+    }
+
+    /**
+     * Check if the token is a negative number.
+     *
+     * @param token
+     */
+    private boolean isNegativeNumber(String token)
+    {
+        try
+        {
+            Double.parseDouble(token);
+            return true;
+        }
+        catch (NumberFormatException e)
+        {
+            return false;
+        }
+    }
+
+    /**
+     * Tells if the token looks like an option.
+     *
+     * @param token
+     */
+    private boolean isOption(String token)
+    {
+        return isLongOption(token) || isShortOption(token);
+    }
+
+    /**
+     * Tells if the token looks like a short option.
+     * 
+     * @param token
+     */
+    private boolean isShortOption(String token)
+    {
+        // short options (-S, -SV, -S=V, -SV1=V2, -S1S2)
+        return token.startsWith("-") && token.length() >= 2 && options.hasShortOption(token.substring(1, 2));
+
+        // remove leading "-" and "=value"
+    }
+
+    /**
+     * Tells if the token looks like a long option.
+     *
+     * @param token
+     */
+    private boolean isLongOption(String token)
+    {
+        if (!token.startsWith("-") || token.length() == 1)
+        {
+            return false;
+        }
+
+        int pos = token.indexOf("=");
+        String t = pos == -1 ? token : token.substring(0, pos);
+
+        if (!options.getMatchingOptions(t).isEmpty())
+        {
+            // long or partial long options (--L, -L, --L=V, -L=V, --l, --l=V)
+            return true;
+        }
+        else if (getLongPrefix(token) != null && !token.startsWith("--"))
+        {
+            // -LV
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Handles an unknown token. If the token starts with a dash an 
+     * UnrecognizedOptionException is thrown. Otherwise the token is added 
+     * to the arguments of the command line. If the stopAtNonOption flag 
+     * is set, this stops the parsing and the remaining tokens are added 
+     * as-is in the arguments of the command line.
+     *
+     * @param token the command line token to handle
+     */
+    private void handleUnknownToken(String token) throws ParseException
+    {
+        if (token.startsWith("-") && token.length() > 1 && !stopAtNonOption)
+        {
+            throw new UnrecognizedOptionException("Unrecognized option: " + token, token);
+        }
+
+        cmd.addArg(token);
+        if (stopAtNonOption)
+        {
+            skipParsing = true;
+        }
+    }
+
+    /**
+     * Handles the following tokens:
+     *
+     * --L
+     * --L=V
+     * --L V
+     * --l
+     *
+     * @param token the command line token to handle
+     */
+    private void handleLongOption(String token) throws ParseException
+    {
+        if (token.indexOf('=') == -1)
+        {
+            handleLongOptionWithoutEqual(token);
+        }
+        else
+        {
+            handleLongOptionWithEqual(token);
+        }
+    }
+
+    /**
+     * Handles the following tokens:
+     *
+     * --L
+     * -L
+     * --l
+     * -l
+     * 
+     * @param token the command line token to handle
+     */
+    private void handleLongOptionWithoutEqual(String token) throws ParseException
+    {
+        List<String> matchingOpts = options.getMatchingOptions(token);
+        if (matchingOpts.isEmpty())
+        {
+            handleUnknownToken(currentToken);
+        }
+        else if (matchingOpts.size() > 1)
+        {
+            throw new AmbiguousOptionException(token, matchingOpts);
+        }
+        else
+        {
+            handleOption(options.getOption(matchingOpts.get(0)));
+        }
+    }
+
+    /**
+     * Handles the following tokens:
+     *
+     * --L=V
+     * -L=V
+     * --l=V
+     * -l=V
+     *
+     * @param token the command line token to handle
+     */
+    private void handleLongOptionWithEqual(String token) throws ParseException
+    {
+        int pos = token.indexOf('=');
+
+        String value = token.substring(pos + 1);
+
+        String opt = token.substring(0, pos);
+
+        List<String> matchingOpts = options.getMatchingOptions(opt);
+        if (matchingOpts.isEmpty())
+        {
+            handleUnknownToken(currentToken);
+        }
+        else if (matchingOpts.size() > 1)
+        {
+            throw new AmbiguousOptionException(opt, matchingOpts);
+        }
+        else
+        {
+            Option option = options.getOption(matchingOpts.get(0));
+
+            if (option.acceptsArg())
+            {
+                handleOption(option);
+                currentOption.addValueForProcessing(value);
+                currentOption = null;
+            }
+            else
+            {
+                handleUnknownToken(currentToken);
+            }
+        }
+    }
+
+    /**
+     * Handles the following tokens:
+     *
+     * -S
+     * -SV
+     * -S V
+     * -S=V
+     * -S1S2
+     * -S1S2 V
+     * -SV1=V2
+     *
+     * -L
+     * -LV
+     * -L V
+     * -L=V
+     * -l
+     *
+     * @param token the command line token to handle
+     */
+    private void handleShortAndLongOption(String token) throws ParseException
+    {
+        String t = Util.stripLeadingHyphens(token);
+
+        int pos = t.indexOf('=');
+
+        if (t.length() == 1)
+        {
+            // -S
+            if (options.hasShortOption(t))
+            {
+                handleOption(options.getOption(t));
+            }
+            else
+            {
+                handleUnknownToken(token);
+            }
+        }
+        else if (pos == -1)
+        {
+            // no equal sign found (-xxx)
+            if (options.hasShortOption(t))
+            {
+                handleOption(options.getOption(t));
+            }
+            else if (!options.getMatchingOptions(t).isEmpty())
+            {
+                // -L or -l
+                handleLongOptionWithoutEqual(token);
+            }
+            else
+            {
+                // look for a long prefix (-Xmx512m)
+                String opt = getLongPrefix(t);
+
+                if (opt != null && options.getOption(opt).acceptsArg())
+                {
+                    handleOption(options.getOption(opt));
+                    currentOption.addValueForProcessing(t.substring(opt.length()));
+                    currentOption = null;
+                }
+                else if (isJavaProperty(t))
+                {
+                    // -SV1 (-Dflag)
+                    handleOption(options.getOption(t.substring(0, 1)));
+                    currentOption.addValueForProcessing(t.substring(1));
+                    currentOption = null;
+                }
+                else
+                {
+                    // -S1S2S3 or -S1S2V
+                    handleConcatenatedOptions(token);
+                }
+            }
+        }
+        else
+        {
+            // equal sign found (-xxx=yyy)
+            String opt = t.substring(0, pos);
+            String value = t.substring(pos + 1);
+
+            if (opt.length() == 1)
+            {
+                // -S=V
+                Option option = options.getOption(opt);
+                if (option != null && option.acceptsArg())
+                {
+                    handleOption(option);
+                    currentOption.addValueForProcessing(value);
+                    currentOption = null;
+                }
+                else
+                {
+                    handleUnknownToken(token);
+                }
+            }
+            else if (isJavaProperty(opt))
+            {
+                // -SV1=V2 (-Dkey=value)
+                handleOption(options.getOption(opt.substring(0, 1)));
+                currentOption.addValueForProcessing(opt.substring(1));
+                currentOption.addValueForProcessing(value);
+                currentOption = null;
+            }
+            else
+            {
+                // -L=V or -l=V
+                handleLongOptionWithEqual(token);
+            }
+        }
+    }
+
+    /**
+     * Search for a prefix that is the long name of an option (-Xmx512m)
+     *
+     * @param token
+     */
+    private String getLongPrefix(String token)
+    {
+        String t = Util.stripLeadingHyphens(token);
+
+        int i;
+        String opt = null;
+        for (i = t.length() - 2; i > 1; i--)
+        {
+            String prefix = t.substring(0, i);
+            if (options.hasLongOption(prefix))
+            {
+                opt = prefix;
+                break;
+            }
+        }
+        
+        return opt;
+    }
+
+    /**
+     * Check if the specified token is a Java-like property (-Dkey=value).
+     */
+    private boolean isJavaProperty(String token)
+    {
+        String opt = token.substring(0, 1);
+        Option option = options.getOption(opt);
+
+        return option != null && (option.getArgs() >= 2 || option.getArgs() == Option.UNLIMITED_VALUES);
+    }
+
+    private void handleOption(Option option) throws ParseException
+    {
+        // check the previous option before handling the next one
+        checkRequiredArgs();
+
+        option = (Option) option.clone();
+
+        updateRequiredOptions(option);
+
+        cmd.addOption(option);
+
+        if (option.hasArg())
+        {
+            currentOption = option;
+        }
+        else
+        {
+            currentOption = null;
+        }
+    }
+
+    /**
+     * Removes the option or its group from the list of expected elements.
+     *
+     * @param option
+     */
+    private void updateRequiredOptions(Option option) throws AlreadySelectedException
+    {
+        if (option.isRequired())
+        {
+            expectedOpts.remove(option.getKey());
+        }
+
+        // if the option is in an OptionGroup make that option the selected option of the group
+        if (options.getOptionGroup(option) != null)
+        {
+            OptionGroup group = options.getOptionGroup(option);
+
+            if (group.isRequired())
+            {
+                expectedOpts.remove(group);
+            }
+
+            group.setSelected(option);
+        }
+    }
+
+    /**
+     * Breaks <code>token</code> into its constituent parts
+     * using the following algorithm.
+     *
+     * <ul>
+     *  <li>ignore the first character ("<b>-</b>")</li>
+     *  <li>foreach remaining character check if an {@link Option}
+     *  exists with that id.</li>
+     *  <li>if an {@link Option} does exist then add that character
+     *  prepended with "<b>-</b>" to the list of processed tokens.</li>
+     *  <li>if the {@link Option} can have an argument value and there
+     *  are remaining characters in the token then add the remaining
+     *  characters as a token to the list of processed tokens.</li>
+     *  <li>if an {@link Option} does <b>NOT</b> exist <b>AND</b>
+     *  <code>stopAtNonOption</code> <b>IS</b> set then add the special token
+     *  "<b>--</b>" followed by the remaining characters and also
+     *  the remaining tokens directly to the processed tokens list.</li>
+     *  <li>if an {@link Option} does <b>NOT</b> exist <b>AND</b>
+     *  <code>stopAtNonOption</code> <b>IS NOT</b> set then add that
+     *  character prepended with "<b>-</b>".</li>
+     * </ul>
+     *
+     * @param token The current token to be <b>burst</b>
+     * at the first non-Option encountered.
+     * @throws ParseException if there are any problems encountered
+     *                        while parsing the command line token.
+     */
+    protected void handleConcatenatedOptions(String token) throws ParseException
+    {
+        for (int i = 1; i < token.length(); i++)
+        {
+            String ch = String.valueOf(token.charAt(i));
+
+            if (options.hasOption(ch))
+            {
+                handleOption(options.getOption(ch));
+
+                if (currentOption != null && token.length() != i + 1)
+                {
+                    // add the trail as an argument of the option
+                    currentOption.addValueForProcessing(token.substring(i + 1));
+                    break;
+                }
+            }
+            else
+            {
+                handleUnknownToken(stopAtNonOption && i > 1 ? token.substring(i) : token);
+                break;
+            }
+        }
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ DefaultParserClaudeTest ใน package org.apache.commons.cli เพื่อทดสอบคลาส DefaultParser ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.cli;` เท่านั้น
+</instructions>

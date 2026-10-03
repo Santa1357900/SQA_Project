@@ -1,0 +1,431 @@
+package org.joda.time.tz;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.io.BufferedReader;
+import java.io.StringReader;
+import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.DataOutputStream;
+import java.io.DataInputStream;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.StringTokenizer;
+
+import org.joda.time.Chronology;
+import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
+
+public class ZoneInfoCompilerClaudeTest {
+
+    private ZoneInfoCompiler zic;
+
+    @Before
+    public void setUp() throws Throwable {
+        zic = new ZoneInfoCompiler();
+    }
+
+    // covers default ThreadLocal value of verbose flag
+    @Test
+    public void testVerbose_defaultState_returnsFalse() throws Throwable {
+        assertFalse(ZoneInfoCompiler.verbose());
+    }
+
+    // covers lazy-init default field values of getStartOfYear()
+    @Test
+    public void testGetStartOfYear_defaults_matchSpecDefaults() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty = ZoneInfoCompiler.getStartOfYear();
+        assertEquals(1, dty.iMonthOfYear);
+        assertEquals(1, dty.iDayOfMonth);
+        assertEquals(0, dty.iDayOfWeek);
+        assertFalse(dty.iAdvanceDayOfWeek);
+        assertEquals(0, dty.iMillisOfDay);
+        assertEquals('w', dty.iZoneChar);
+    }
+
+    // covers singleton caching branch (if == null create else reuse)
+    @Test
+    public void testGetStartOfYear_calledTwice_returnsSameInstance() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear first = ZoneInfoCompiler.getStartOfYear();
+        ZoneInfoCompiler.DateTimeOfYear second = ZoneInfoCompiler.getStartOfYear();
+        assertSame(first, second);
+    }
+
+    // covers lazy-init and caching of getLenientISOChronology()
+    @Test
+    public void testGetLenientISOChronology_notNullAndCached() throws Throwable {
+        Chronology c1 = ZoneInfoCompiler.getLenientISOChronology();
+        Chronology c2 = ZoneInfoCompiler.getLenientISOChronology();
+        assertNotNull(c1);
+        assertSame(c1, c2);
+    }
+
+    // covers writeZoneInfoMap with an empty map (zero pool, zero mappings)
+    @Test
+    public void testWriteZoneInfoMap_emptyMap_writesZeroCounts() throws Throwable {
+        Map<String, DateTimeZone> zimap = new TreeMap<String, DateTimeZone>();
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        DataOutputStream dout = new DataOutputStream(bos);
+        ZoneInfoCompiler.writeZoneInfoMap(dout, zimap);
+        dout.flush();
+        DataInputStream din = new DataInputStream(new ByteArrayInputStream(bos.toByteArray()));
+        assertEquals(0, din.readShort());
+        assertEquals(0, din.readShort());
+    }
+
+    // covers pooling of shared ids between key and value id, alias sharing a zone
+    @Test
+    public void testWriteZoneInfoMap_aliasSharingZone_writesPoolAndMappings() throws Throwable {
+        Map<String, DateTimeZone> zimap = new TreeMap<String, DateTimeZone>();
+        DateTimeZone utc = DateTimeZone.forID("UTC");
+        zimap.put("UTC", utc);
+        zimap.put("Zulu", utc);
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        DataOutputStream dout = new DataOutputStream(bos);
+        ZoneInfoCompiler.writeZoneInfoMap(dout, zimap);
+        dout.flush();
+        DataInputStream din = new DataInputStream(new ByteArrayInputStream(bos.toByteArray()));
+        assertEquals(2, din.readShort());
+        assertEquals("UTC", din.readUTF());
+        assertEquals("Zulu", din.readUTF());
+        assertEquals(2, din.readShort());
+        assertEquals(0, din.readShort());
+        assertEquals(0, din.readShort());
+        assertEquals(1, din.readShort());
+        assertEquals(0, din.readShort());
+    }
+
+    // covers "minimum" keyword branch
+    @Test
+    public void testParseYear_minimumKeyword_returnsIntegerMin() throws Throwable {
+        assertEquals(Integer.MIN_VALUE, ZoneInfoCompiler.parseYear("minimum", 1999));
+    }
+
+    // covers "maximum" keyword branch
+    @Test
+    public void testParseYear_maximumKeyword_returnsIntegerMax() throws Throwable {
+        assertEquals(Integer.MAX_VALUE, ZoneInfoCompiler.parseYear("maximum", 1999));
+    }
+
+    // covers "only" keyword branch returning the supplied default
+    @Test
+    public void testParseYear_onlyKeyword_returnsDefaultValue() throws Throwable {
+        assertEquals(2005, ZoneInfoCompiler.parseYear("only", 2005));
+    }
+
+    // covers the fallback numeric parse branch
+    @Test
+    public void testParseYear_numericString_returnsParsedInt() throws Throwable {
+        assertEquals(1987, ZoneInfoCompiler.parseYear("1987", 0));
+    }
+
+    // covers month name parsing for both ends of the range
+    @Test
+    public void testParseMonth_abbreviations_correctValues() throws Throwable {
+        assertEquals(1, ZoneInfoCompiler.parseMonth("Jan"));
+        assertEquals(12, ZoneInfoCompiler.parseMonth("Dec"));
+    }
+
+    // covers ISO day-of-week numbering (Monday=1 .. Sunday=7)
+    @Test
+    public void testParseDayOfWeek_abbreviations_correctValues() throws Throwable {
+        assertEquals(1, ZoneInfoCompiler.parseDayOfWeek("Mon"));
+        assertEquals(7, ZoneInfoCompiler.parseDayOfWeek("Sun"));
+    }
+
+    // covers the "-" means null branch
+    @Test
+    public void testParseOptional_dash_returnsNull() throws Throwable {
+        assertNull(ZoneInfoCompiler.parseOptional("-"));
+    }
+
+    // covers the pass-through branch
+    @Test
+    public void testParseOptional_nonDash_returnsSameText() throws Throwable {
+        assertEquals("abc", ZoneInfoCompiler.parseOptional("abc"));
+    }
+
+    // covers positive h:m:s parsing
+    @Test
+    public void testParseTime_hourMinuteSecond_returnsCorrectMillis() throws Throwable {
+        assertEquals(9015000, ZoneInfoCompiler.parseTime("2:30:15"));
+    }
+
+    // covers the negative-prefix branch
+    @Test
+    public void testParseTime_negativePrefix_returnsNegativeMillis() throws Throwable {
+        assertEquals(-3600000, ZoneInfoCompiler.parseTime("-1:00"));
+    }
+
+    // covers the throw branch when nothing can be parsed
+    @Test
+    public void testParseTime_invalidText_throwsIllegalArgumentException() throws Throwable {
+        try {
+            ZoneInfoCompiler.parseTime("notatime");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers 's'/'S' -> standard time branch
+    @Test
+    public void testParseZoneChar_standardVariants_returnLowerS() throws Throwable {
+        assertEquals('s', ZoneInfoCompiler.parseZoneChar('s'));
+        assertEquals('s', ZoneInfoCompiler.parseZoneChar('S'));
+    }
+
+    // covers u/g/z UTC variants branch
+    @Test
+    public void testParseZoneChar_utcVariants_returnLowerU() throws Throwable {
+        assertEquals('u', ZoneInfoCompiler.parseZoneChar('u'));
+        assertEquals('u', ZoneInfoCompiler.parseZoneChar('G'));
+        assertEquals('u', ZoneInfoCompiler.parseZoneChar('z'));
+    }
+
+    // covers 'w' and default wall-time branch
+    @Test
+    public void testParseZoneChar_wallAndDefault_returnLowerW() throws Throwable {
+        assertEquals('w', ZoneInfoCompiler.parseZoneChar('w'));
+        assertEquals('w', ZoneInfoCompiler.parseZoneChar('X'));
+    }
+
+    // covers the early-return branch when ids do not match
+    @Test
+    public void testTest_idDoesNotMatchZoneId_returnsTrueImmediately() throws Throwable {
+        DateTimeZone utc = DateTimeZone.forID("UTC");
+        assertTrue(ZoneInfoCompiler.test("SomeOtherId", utc));
+    }
+
+    // covers the full transition scan for a zone with zero transitions
+    @Test
+    public void testTest_utcZoneNoTransitions_returnsTrue() throws Throwable {
+        DateTimeZone utc = DateTimeZone.forID("UTC");
+        assertTrue(ZoneInfoCompiler.test("UTC", utc));
+    }
+
+    // covers compile() with null sources and null output dir (no zones parsed)
+    @Test
+    public void testCompile_noSourcesNoOutputDir_returnsEmptyMap() throws Throwable {
+        Map<String, DateTimeZone> map = zic.compile(null, null);
+        assertNotNull(map);
+        assertTrue(map.isEmpty());
+    }
+
+    // covers blank-line and comment-line skip branches in parseDataFile
+    @Test
+    public void testParseDataFile_blankAndCommentLines_noZonesAdded() throws Throwable {
+        String text = "# just a comment\n\n   \n";
+        zic.parseDataFile(new BufferedReader(new StringReader(text)));
+        Map<String, DateTimeZone> map = zic.compile(null, null);
+        assertTrue(map.isEmpty());
+    }
+
+    // covers a simple Zone line with a fixed positive offset, no rules, no cutover
+    @Test
+    public void testParseDataFile_simpleFixedOffsetZone_offsetMatches() throws Throwable {
+        String text = "Zone Test/Fixed 2:00 - TST\n";
+        zic.parseDataFile(new BufferedReader(new StringReader(text)));
+        Map<String, DateTimeZone> map = zic.compile(null, null);
+        DateTimeZone tz = map.get("Test/Fixed");
+        assertNotNull(tz);
+        long instant = new DateTime(2000, 1, 1, 0, 0, DateTimeZone.UTC).getMillis();
+        assertEquals(7200000, tz.getOffset(instant));
+    }
+
+    // covers the negative-offset parseTime path flowing through Zone parsing
+    @Test
+    public void testParseDataFile_negativeOffsetZone_offsetMatches() throws Throwable {
+        String text = "Zone Test/Neg -5:00 - NST\n";
+        zic.parseDataFile(new BufferedReader(new StringReader(text)));
+        Map<String, DateTimeZone> map = zic.compile(null, null);
+        DateTimeZone tz = map.get("Test/Neg");
+        assertNotNull(tz);
+        long instant = new DateTime(2000, 1, 1, 0, 0, DateTimeZone.UTC).getMillis();
+        assertEquals(-18000000, tz.getOffset(instant));
+    }
+
+    // covers the inline '#' comment-stripping branch
+    @Test
+    public void testParseDataFile_trailingCommentStripped_parsesZoneCorrectly() throws Throwable {
+        String text = "Zone Test/Com 3:00 - TCM # trailing remark\n";
+        zic.parseDataFile(new BufferedReader(new StringReader(text)));
+        Map<String, DateTimeZone> map = zic.compile(null, null);
+        DateTimeZone tz = map.get("Test/Com");
+        assertNotNull(tz);
+        long instant = new DateTime(2000, 1, 1, 0, 0, DateTimeZone.UTC).getMillis();
+        assertEquals(10800000, tz.getOffset(instant));
+    }
+
+    // covers the whitespace-prefixed continuation line branch (zone.chain)
+    @Test
+    public void testParseDataFile_zoneContinuation_cutoverAppliesAtUntilYear() throws Throwable {
+        String text = "Zone Test/Multi 1:00 - XST 1950\n" + "    2:00 - XDT\n";
+        zic.parseDataFile(new BufferedReader(new StringReader(text)));
+        Map<String, DateTimeZone> map = zic.compile(null, null);
+        DateTimeZone tz = map.get("Test/Multi");
+        assertNotNull(tz);
+        long before = new DateTime(1900, 6, 1, 0, 0, DateTimeZone.UTC).getMillis();
+        long after = new DateTime(2000, 6, 1, 0, 0, DateTimeZone.UTC).getMillis();
+        assertEquals(3600000, tz.getOffset(before));
+        assertEquals(7200000, tz.getOffset(after));
+    }
+
+    // covers Rule/RuleSet application via a named rule set referenced by a Zone
+    @Test
+    public void testParseDataFile_zoneWithRecurringRules_dstOffsetChanges() throws Throwable {
+        String text = "Rule Test min max - Mar 1 0:00 1:00 D\n"
+                + "Rule Test min max - Oct 1 0:00 0:00 S\n"
+                + "Zone Test/DST 1:00 Test TST%sT\n";
+        zic.parseDataFile(new BufferedReader(new StringReader(text)));
+        Map<String, DateTimeZone> map = zic.compile(null, null);
+        DateTimeZone tz = map.get("Test/DST");
+        assertNotNull(tz);
+        long jan = new DateTime(2010, 1, 15, 0, 0, DateTimeZone.UTC).getMillis();
+        long jul = new DateTime(2010, 7, 15, 0, 0, DateTimeZone.UTC).getMillis();
+        long dec = new DateTime(2010, 12, 15, 0, 0, DateTimeZone.UTC).getMillis();
+        assertEquals(3600000, tz.getOffset(jan));
+        assertEquals(7200000, tz.getOffset(jul));
+        assertEquals(3600000, tz.getOffset(dec));
+    }
+
+    // covers the Link line parsing and the two-pass alias resolution
+    @Test
+    public void testParseDataFile_linkAlias_mapsToSameZone() throws Throwable {
+        String text = "Zone Test/Link1 1:00 - TLK\n" + "Link Test/Link1 Test/Alias1\n";
+        zic.parseDataFile(new BufferedReader(new StringReader(text)));
+        Map<String, DateTimeZone> map = zic.compile(null, null);
+        DateTimeZone original = map.get("Test/Link1");
+        DateTimeZone alias = map.get("Test/Alias1");
+        assertNotNull(alias);
+        assertSame(original, alias);
+    }
+
+    // covers the "Unknown line" branch (no Rule/Zone/Link token)
+    @Test
+    public void testParseDataFile_unknownLineToken_doesNotThrowAndNoZoneAdded() throws Throwable {
+        String text = "Foo Bar Baz\n";
+        zic.parseDataFile(new BufferedReader(new StringReader(text)));
+        Map<String, DateTimeZone> map = zic.compile(null, null);
+        assertTrue(map.isEmpty());
+    }
+
+    // covers a Rule-only file with no Zone referencing it
+    @Test
+    public void testParseDataFile_ruleLineOnlyWithoutZone_producesEmptyMap() throws Throwable {
+        String text = "Rule Test 2000 2001 - Mar 1 0:00 1:00 D\n";
+        zic.parseDataFile(new BufferedReader(new StringReader(text)));
+        Map<String, DateTimeZone> map = zic.compile(null, null);
+        assertTrue(map.isEmpty());
+    }
+
+    // covers the empty-tokenizer default-field branch of DateTimeOfYear
+    @Test
+    public void testDateTimeOfYear_noTokens_matchesNoArgDefaults() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty = new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer(""));
+        assertEquals(1, dty.iMonthOfYear);
+        assertEquals(1, dty.iDayOfMonth);
+        assertEquals(0, dty.iDayOfWeek);
+        assertFalse(dty.iAdvanceDayOfWeek);
+        assertEquals(0, dty.iMillisOfDay);
+        assertEquals('w', dty.iZoneChar);
+    }
+
+    // covers the month-only token branch, remaining fields stay default
+    @Test
+    public void testDateTimeOfYear_monthOnly_restFieldsDefault() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty = new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer("Mar"));
+        assertEquals(3, dty.iMonthOfYear);
+        assertEquals(1, dty.iDayOfMonth);
+        assertEquals(0, dty.iDayOfWeek);
+    }
+
+    // covers the plain-numeric-day branch (no day-of-week constraint)
+    @Test
+    public void testDateTimeOfYear_numericDay_noDayOfWeekConstraint() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty = new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer("Mar 15"));
+        assertEquals(15, dty.iDayOfMonth);
+        assertEquals(0, dty.iDayOfWeek);
+        assertFalse(dty.iAdvanceDayOfWeek);
+    }
+
+    // covers the "last<Day>" branch: day=-1, backward search (advance=false)
+    @Test
+    public void testDateTimeOfYear_lastDayOfWeek_dayIsMinusOneAdvanceFalse() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty = new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer("Mar lastSun"));
+        assertEquals(-1, dty.iDayOfMonth);
+        assertEquals(7, dty.iDayOfWeek);
+        assertFalse(dty.iAdvanceDayOfWeek);
+    }
+
+    // covers the "Day>=N" branch: forward search (advance=true)
+    @Test
+    public void testDateTimeOfYear_greaterEqualForm_advanceTrue() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty = new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer("Mar Sun>=8"));
+        assertEquals(8, dty.iDayOfMonth);
+        assertEquals(7, dty.iDayOfWeek);
+        assertTrue(dty.iAdvanceDayOfWeek);
+    }
+
+    // covers the "Day<=N" branch: backward search (advance=false)
+    @Test
+    public void testDateTimeOfYear_lessEqualForm_advanceFalse() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty = new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer("Mar Sun<=25"));
+        assertEquals(25, dty.iDayOfMonth);
+        assertEquals(7, dty.iDayOfWeek);
+        assertFalse(dty.iAdvanceDayOfWeek);
+    }
+
+    // covers the throw branch for an unparseable day specifier
+    @Test
+    public void testDateTimeOfYear_invalidDaySpec_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer("Mar FooBar"));
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers the time-with-suffix branch setting zoneChar to standard ('s')
+    @Test
+    public void testDateTimeOfYear_timeWithStandardSuffix_setsZoneCharS() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty =
+            new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer("Mar 15 2:00s"));
+        assertEquals('s', dty.iZoneChar);
+        assertEquals(7200000, dty.iMillisOfDay);
+    }
+
+    // covers the "24:00" branch when a day-of-week was already set (>=): advances one day
+    @Test
+    public void testDateTimeOfYear_24hWithPriorDayOfWeek_advancesToNextDay() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty =
+            new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer("Mar Sun>=8 24:00"));
+        assertEquals(3, dty.iMonthOfYear);
+        assertEquals(9, dty.iDayOfMonth);
+        assertEquals(1, dty.iDayOfWeek);
+        assertTrue(dty.iAdvanceDayOfWeek);
+    }
+
+    // covers the "24:00" branch with day==-1 (last), rolling into the next month/year
+    @Test
+    public void testDateTimeOfYear_24hWithLastDayOfWeek_rollsIntoNextMonthYear() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty =
+            new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer("Dec lastSun 24:00"));
+        assertEquals(1, dty.iMonthOfYear);
+        assertEquals(1, dty.iDayOfMonth);
+        assertEquals(1, dty.iDayOfWeek);
+        assertFalse(dty.iAdvanceDayOfWeek);
+    }
+
+    // Domain contract: a plain numeric day (no weekday clause) must not gain
+    // a spurious day-of-week constraint after 24:00 normalization.
+    @Test
+    public void testDateTimeOfYear_24hPlainDay_dayOfWeekStaysUnset() throws Throwable {
+        ZoneInfoCompiler.DateTimeOfYear dty =
+            new ZoneInfoCompiler.DateTimeOfYear(new StringTokenizer("Mar 15 24:00"));
+        assertEquals(3, dty.iMonthOfYear);
+        assertEquals(16, dty.iDayOfMonth);
+        assertEquals(0, dty.iDayOfWeek);
+    }
+}

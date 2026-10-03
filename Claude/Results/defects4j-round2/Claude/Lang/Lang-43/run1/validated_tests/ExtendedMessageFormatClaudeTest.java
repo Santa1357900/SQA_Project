@@ -1,0 +1,291 @@
+package org.apache.commons.lang.text;
+
+import java.text.FieldPosition;
+import java.text.Format;
+import java.text.ParsePosition;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ExtendedMessageFormatClaudeTest {
+
+    private static class RecordingFormatFactory implements FormatFactory {
+        String lastName;
+        String lastArgs;
+        Locale lastLocale;
+        Format toReturn;
+        RecordingFormatFactory(Format toReturn) {
+            this.toReturn = toReturn;
+        }
+        public Format getFormat(String name, String arguments, Locale locale) {
+            this.lastName = name;
+            this.lastArgs = arguments;
+            this.lastLocale = locale;
+            return toReturn;
+        }
+    }
+
+    private static class UpperFormat extends Format {
+        public StringBuffer format(Object obj, StringBuffer toAppendTo, FieldPosition pos) {
+            return toAppendTo.append(String.valueOf(obj).toUpperCase(Locale.US));
+        }
+        public Object parseObject(String source, ParsePosition pos) {
+            return source;
+        }
+    }
+
+    private static class LowerFormat extends Format {
+        public StringBuffer format(Object obj, StringBuffer toAppendTo, FieldPosition pos) {
+            return toAppendTo.append(String.valueOf(obj).toLowerCase(Locale.US));
+        }
+        public Object parseObject(String source, ParsePosition pos) {
+            return source;
+        }
+    }
+
+    // Constructor(pattern): registry stays null, default locale is applied
+    @Test
+    public void testConstructor_patternOnly_defaultLocaleUsed() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("hi {0}");
+        assertEquals(Locale.getDefault(), emf.getLocale());
+        assertEquals("hi x", emf.format(new Object[]{"x"}));
+    }
+
+    // Constructor(pattern, locale): given locale is stored and used for standard formats
+    @Test
+    public void testConstructor_patternAndLocale_setsGivenLocale() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0,number}", Locale.US);
+        assertEquals(Locale.US, emf.getLocale());
+        assertEquals("1,234", emf.format(new Object[]{new Integer(1234)}));
+    }
+
+    // Constructor(pattern, registry): default locale applied, registry path used
+    @Test
+    public void testConstructor_patternAndRegistry_defaultLocaleApplied() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0}", new HashMap());
+        assertEquals(Locale.getDefault(), emf.getLocale());
+        assertEquals("v", emf.format(new Object[]{"v"}));
+    }
+
+    // Constructor with null pattern and non-null registry: pattern.length() must NPE
+    @Test
+    public void testConstructor_nullPatternWithRegistry_throwsNullPointerException() throws Throwable {
+        try {
+            new ExtendedMessageFormat((String) null, new HashMap());
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // toPattern(): registry null branch, plain text round-trips unchanged
+    @Test
+    public void testToPattern_noRegistry_matchesStandardRoundTrip() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("Hello {0}!");
+        assertEquals("Hello {0}!", emf.toPattern());
+    }
+
+    // getFormat() returns null (unknown name) -> falls back to standard "number" format
+    @Test
+    public void testToPattern_withRegistryFormatNotFound_fallsBackToStandardNumberFormat() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0,number}", Locale.US, new HashMap());
+        assertEquals("{0,number}", emf.toPattern());
+        assertEquals("1,234", emf.format(new Object[]{new Integer(1234)}));
+    }
+
+    // getFormat() finds factory -> format description is stripped then reinserted by insertFormats
+    @Test
+    public void testToPattern_withRegistryCustomFormatFound_reinsertsFormatDescription() throws Throwable {
+        Map registry = new HashMap();
+        registry.put("upper", new RecordingFormatFactory(new UpperFormat()));
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0,upper}", registry);
+        assertEquals("{0,upper}", emf.toPattern());
+    }
+
+    // applyPattern: simple "{0}" with registry present, no format description
+    @Test
+    public void testApplyPattern_simpleArgumentIndexNoFormat_parsesAndFormatsArgument() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0}", new HashMap());
+        assertEquals("{0}", emf.toPattern());
+        assertEquals("raw", emf.format(new Object[]{"raw"}));
+    }
+
+    // readArgumentIndex: whitespace around the index must be stripped from the rebuilt pattern
+    @Test
+    public void testApplyPattern_whitespaceAroundArgumentIndex_isStrippedFromPattern() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{ 0 }", new HashMap());
+        assertEquals("{0}", emf.toPattern());
+        assertEquals("val", emf.format(new Object[]{"val"}));
+    }
+
+    // readArgumentIndex: multi-digit index parsed as a single integer, not digit-by-digit
+    @Test
+    public void testApplyPattern_multiDigitArgumentIndex_parsesCorrectly() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{10}", new HashMap());
+        assertEquals("{10}", emf.toPattern());
+    }
+
+    // getFormat() match -> custom Format from factory actually used for output
+    @Test
+    public void testApplyPattern_customFormatFound_usesFactoryFormatForOutput() throws Throwable {
+        Map registry = new HashMap();
+        registry.put("upper", new RecordingFormatFactory(new UpperFormat()));
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0,upper}", Locale.US, registry);
+        assertEquals("ABC", emf.format(new Object[]{"abc"}));
+    }
+
+    // getFormat(): no comma in description -> name is whole description, args stays null
+    @Test
+    public void testApplyPattern_formatDescriptionNameOnly_factoryReceivesNullArgs() throws Throwable {
+        Map registry = new HashMap();
+        RecordingFormatFactory factory = new RecordingFormatFactory(new UpperFormat());
+        registry.put("upper", factory);
+        new ExtendedMessageFormat("{0,upper}", Locale.US, registry);
+        assertEquals("upper", factory.lastName);
+        assertNull(factory.lastArgs);
+    }
+
+    // getFormat(): comma present -> name/args split and trimmed before reaching factory
+    @Test
+    public void testApplyPattern_formatDescriptionWithArgs_factoryReceivesTrimmedArgs() throws Throwable {
+        Map registry = new HashMap();
+        RecordingFormatFactory factory = new RecordingFormatFactory(new UpperFormat());
+        registry.put("upper", factory);
+        new ExtendedMessageFormat("{0,upper, someArgs }", Locale.US, registry);
+        assertEquals("upper", factory.lastName);
+        assertEquals("someArgs", factory.lastArgs);
+    }
+
+    // Multiple format elements: each custom factory format is applied to its own argument
+    @Test
+    public void testApplyPattern_multipleCustomFormatElements_appliesEachFactory() throws Throwable {
+        Map registry = new HashMap();
+        registry.put("upper", new RecordingFormatFactory(new UpperFormat()));
+        registry.put("lower", new RecordingFormatFactory(new LowerFormat()));
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0,upper}{1,lower}", Locale.US, registry);
+        assertEquals("ABCxyz", emf.format(new Object[]{"abc", "XYZ"}));
+    }
+
+    // Bug hunt: a quoted literal segment combined with a registry must not hang applyPattern
+    @Test(timeout = 4000)
+    public void testApplyPattern_quotedLiteralWithRegistry_formatsWithoutHanging() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("'Hi' {0}", new HashMap());
+        assertEquals("Hi X", emf.format(new Object[]{"X"}));
+    }
+
+    // registry == null: applyPattern delegates entirely to super.applyPattern
+    @Test
+    public void testApplyPattern_registryNull_delegatesToSuperApplyPattern() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("A{0}B", Locale.US, (Map) null);
+        emf.applyPattern("C{0}D");
+        assertEquals("C{0}D", emf.toPattern());
+    }
+
+    // Empty pattern with non-null registry: the parsing while-loop runs zero times
+    @Test
+    public void testApplyPattern_emptyPatternWithRegistry_producesEmptyPattern() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("", new HashMap());
+        assertEquals("", emf.toPattern());
+        assertEquals("", emf.format(new Object[0]));
+    }
+
+    // readArgumentIndex: non-digit char -> "Invalid format argument index" IllegalArgumentException
+    @Test
+    public void testApplyPattern_nonDigitArgumentIndex_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new ExtendedMessageFormat("{a}", new HashMap());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("Invalid format argument index") >= 0);
+        }
+    }
+
+    // readArgumentIndex: reaches end of pattern without a terminator -> "Unterminated format element"
+    @Test
+    public void testApplyPattern_unterminatedArgumentIndex_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new ExtendedMessageFormat("{0", new HashMap());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("Unterminated format element") >= 0);
+        }
+    }
+
+    // parseFormatDescription: no matching closing brace -> its own "Unterminated format element" throw
+    @Test
+    public void testApplyPattern_unterminatedFormatDescription_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new ExtendedMessageFormat("{0,abc", new HashMap());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("Unterminated format element") >= 0);
+        }
+    }
+
+    // applyPattern called again after registry is populated: re-parses using the new factory
+    @Test
+    public void testApplyPattern_calledAgainAfterRegistryUpdate_usesNewFactory() throws Throwable {
+        Map registry = new HashMap();
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0}", registry);
+        assertEquals("{0}", emf.toPattern());
+        registry.put("upper", new RecordingFormatFactory(new UpperFormat()));
+        emf.applyPattern("{0,upper}");
+        assertEquals("{0,upper}", emf.toPattern());
+        assertEquals("ABC", emf.format(new Object[]{"abc"}));
+    }
+
+    // origFormats loop: index without a custom format keeps default handling, other index is replaced
+    @Test
+    public void testApplyPattern_firstArgumentDefaultSecondArgumentCustom_onlySecondReplaced() throws Throwable {
+        Map registry = new HashMap();
+        registry.put("upper", new RecordingFormatFactory(new UpperFormat()));
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0}{1,upper}", Locale.US, registry);
+        assertEquals("rawABC", emf.format(new Object[]{"raw", "abc"}));
+    }
+
+    // setFormat is disabled and must always throw UnsupportedOperationException
+    @Test
+    public void testSetFormat_alwaysThrowsUnsupportedOperationException() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0}");
+        try {
+            emf.setFormat(0, new UpperFormat());
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // setFormatByArgumentIndex is disabled and must always throw UnsupportedOperationException
+    @Test
+    public void testSetFormatByArgumentIndex_alwaysThrowsUnsupportedOperationException() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0}");
+        try {
+            emf.setFormatByArgumentIndex(0, new UpperFormat());
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // setFormats is disabled and must always throw UnsupportedOperationException
+    @Test
+    public void testSetFormats_alwaysThrowsUnsupportedOperationException() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0}");
+        try {
+            emf.setFormats(new Format[]{new UpperFormat()});
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // setFormatsByArgumentIndex is disabled and must always throw UnsupportedOperationException
+    @Test
+    public void testSetFormatsByArgumentIndex_alwaysThrowsUnsupportedOperationException() throws Throwable {
+        ExtendedMessageFormat emf = new ExtendedMessageFormat("{0}");
+        try {
+            emf.setFormatsByArgumentIndex(new Format[]{new UpperFormat()});
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+}

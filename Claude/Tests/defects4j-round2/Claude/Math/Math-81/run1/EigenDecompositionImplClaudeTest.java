@@ -1,0 +1,398 @@
+package org.apache.commons.math.linear;
+
+import java.util.Arrays;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.util.MathUtils;
+
+public class EigenDecompositionImplClaudeTest {
+
+    private RealMatrix matrix(double[][] d) {
+        return MatrixUtils.createRealMatrix(d);
+    }
+
+    // Constructor: non-symmetric matrix must be rejected per javadoc contract
+    @Test
+    public void testConstructor_asymmetricMatrix_throwsInvalidMatrixException() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 1, 2 }, { 0, 1 } });
+        try {
+            new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+            fail("expected InvalidMatrixException");
+        } catch (InvalidMatrixException expected) {
+            // ok
+        }
+    }
+
+    // Diagonal matrix: computeSplits splits into single-row blocks (process1RowBlock x3)
+    @Test
+    public void testConstructor_diagonalMatrix_splitsAndSortsDescending() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 3, 0, 0 }, { 0, 1, 0 }, { 0, 0, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        double[] vals = eig.getRealEigenvalues();
+        assertEquals(3.0, vals[0], 1e-9);
+        assertEquals(2.0, vals[1], 1e-9);
+        assertEquals(1.0, vals[2], 1e-9);
+    }
+
+    // Tridiagonal array constructor, zero secondary -> three single-row blocks
+    @Test
+    public void testTridiagonalConstructor_zeroSecondary_sortsValuesDescending() throws Throwable {
+        double[] main = { 5, 2, 8 };
+        double[] secondary = { 0, 0 };
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(main, secondary, MathUtils.SAFE_MIN);
+        double[] vals = eig.getRealEigenvalues();
+        assertEquals(8.0, vals[0], 1e-9);
+        assertEquals(5.0, vals[1], 1e-9);
+        assertEquals(2.0, vals[2], 1e-9);
+    }
+
+    // Tridiagonal array constructor, nonzero secondary, n=2 -> process2RowsBlock
+    @Test
+    public void testTridiagonalConstructor_nonzeroSecondary_twoByTwo_matchesClosedForm() throws Throwable {
+        double[] main = { 2, 2 };
+        double[] secondary = { 1 };
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(main, secondary, MathUtils.SAFE_MIN);
+        double[] vals = eig.getRealEigenvalues();
+        assertEquals(3.0, vals[0], 1e-9);
+        assertEquals(1.0, vals[1], 1e-9);
+    }
+
+    // process1RowBlock: single 1x1 matrix, eigenvalue equals the only entry
+    @Test
+    public void test1x1Matrix_eigenvalueEqualsSingleEntry() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 7 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        assertEquals(1, eig.getRealEigenvalues().length);
+        assertEquals(7.0, eig.getRealEigenvalue(0), 1e-9);
+    }
+
+    // process2RowsBlock: nonzero off-diagonal, no split, exact characteristic roots
+    @Test
+    public void test2x2Matrix_offDiagonal_correctEigenvalues() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 1 }, { 1, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        double[] vals = eig.getRealEigenvalues();
+        assertEquals(3.0, vals[0], 1e-9);
+        assertEquals(1.0, vals[1], 1e-9);
+    }
+
+    // zero off-diagonal 2x2: computeSplits splits into single-row blocks
+    @Test
+    public void test2x2Matrix_zeroOffDiagonal_splitsIntoSingleRows() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 4, 0 }, { 0, 1 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        double[] vals = eig.getRealEigenvalues();
+        assertEquals(4.0, vals[0], 1e-9);
+        assertEquals(1.0, vals[1], 1e-9);
+    }
+
+    // process3RowsBlock: irreducible tridiagonal 3x3, three distinct closed-form roots
+    @Test
+    public void test3x3TridiagonalMatrix_distinctEigenvalues_matchClosedForm() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 1, 0 }, { 1, 2, 1 }, { 0, 1, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        double[] vals = eig.getRealEigenvalues();
+        assertEquals(2 + 2 * Math.cos(Math.PI / 4.0), vals[0], 1e-6);
+        assertEquals(2.0, vals[1], 1e-6);
+        assertEquals(2 + 2 * Math.cos(3 * Math.PI / 4.0), vals[2], 1e-6);
+    }
+
+    // identity 3x3: every symmetric matrix (even with repeated eigenvalues) must decompose
+    @Test
+    public void test3x3IdentityMatrix_repeatedEigenvalue_doesNotThrow() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        double[] vals = eig.getRealEigenvalues();
+        assertEquals(1.0, vals[0], 1e-9);
+        assertEquals(1.0, vals[1], 1e-9);
+        assertEquals(1.0, vals[2], 1e-9);
+    }
+
+    // general dqd/dqds block (n>3): eigenvalues of tridiagonal Toeplitz match known closed form
+    @Test
+    public void testGeneralBlock_tridiagonalToeplitz4x4_matchesClosedFormEigenvalues() throws Throwable {
+        double[] main = { 2, 2, 2, 2 };
+        double[] secondary = { 1, 1, 1 };
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(main, secondary, MathUtils.SAFE_MIN);
+        double[] vals = eig.getRealEigenvalues();
+        double[] expected = new double[4];
+        for (int k = 1; k <= 4; k++) {
+            expected[k - 1] = 2 + 2 * Math.cos(k * Math.PI / 5.0);
+        }
+        Arrays.sort(expected);
+        for (int i = 0; i < 4; i++) {
+            assertEquals(expected[3 - i], vals[i], 1e-6);
+        }
+    }
+
+    // determinant of general block must equal product of eigenvalues (recurrence value 5)
+    @Test
+    public void testGetDeterminant_tridiagonalToeplitz4x4_matchesRecurrenceValue() throws Throwable {
+        double[] main = { 2, 2, 2, 2 };
+        double[] secondary = { 1, 1, 1 };
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(main, secondary, MathUtils.SAFE_MIN);
+        assertEquals(5.0, eig.getDeterminant(), 1e-6);
+    }
+
+    // sum of eigenvalues must equal trace (mathematical identity independent of algorithm)
+    @Test
+    public void testGetRealEigenvalues_tridiagonalToeplitz4x4_sumEqualsTrace() throws Throwable {
+        double[] main = { 2, 2, 2, 2 };
+        double[] secondary = { 1, 1, 1 };
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(main, secondary, MathUtils.SAFE_MIN);
+        double[] vals = eig.getRealEigenvalues();
+        double sum = 0;
+        for (int i = 0; i < vals.length; i++) {
+            sum += vals[i];
+        }
+        assertEquals(8.0, sum, 1e-9);
+    }
+
+    // getRealEigenvalue(i) must be consistent with getRealEigenvalues() array
+    @Test
+    public void testGetRealEigenvalue_matchesArrayElements() throws Throwable {
+        double[] main = { 2, 2, 2, 2 };
+        double[] secondary = { 1, 1, 1 };
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(main, secondary, MathUtils.SAFE_MIN);
+        double[] vals = eig.getRealEigenvalues();
+        for (int i = 0; i < vals.length; i++) {
+            assertEquals(vals[i], eig.getRealEigenvalue(i), 1e-12);
+        }
+    }
+
+    // out-of-range index must throw ArrayIndexOutOfBoundsException
+    @Test
+    public void testGetRealEigenvalue_indexOutOfBounds_throwsArrayIndexOutOfBoundsException() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 1, 0 }, { 0, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        try {
+            eig.getRealEigenvalue(5);
+            fail("expected ArrayIndexOutOfBoundsException");
+        } catch (ArrayIndexOutOfBoundsException expected) {
+            // ok
+        }
+    }
+
+    // getD() must be diagonal with entries equal to sorted eigenvalues
+    @Test
+    public void testGetD_diagonalEntriesMatchSortedEigenvalues() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 1, 0 }, { 1, 2, 1 }, { 0, 1, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        RealMatrix d = eig.getD();
+        double[] vals = eig.getRealEigenvalues();
+        for (int i = 0; i < vals.length; i++) {
+            assertEquals(vals[i], d.getEntry(i, i), 1e-9);
+        }
+    }
+
+    // getD() off-diagonal entries must be zero
+    @Test
+    public void testGetD_offDiagonalEntriesAreZero() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 1, 0 }, { 1, 2, 1 }, { 0, 1, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        RealMatrix d = eig.getD();
+        assertEquals(0.0, d.getEntry(0, 1), 1e-9);
+        assertEquals(0.0, d.getEntry(1, 2), 1e-9);
+        assertEquals(0.0, d.getEntry(2, 0), 1e-9);
+    }
+
+    // eigenvectors returned by getV() must be unit-norm columns
+    @Test
+    public void testGetV_columnsAreUnitNorm() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 1, 0 }, { 1, 2, 1 }, { 0, 1, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        RealMatrix v = eig.getV();
+        double sumSq = 0;
+        for (int k = 0; k < v.getRowDimension(); k++) {
+            sumSq += v.getEntry(k, 0) * v.getEntry(k, 0);
+        }
+        assertEquals(1.0, sumSq, 1e-6);
+    }
+
+    // distinct eigenvectors returned by getV() must be mutually orthogonal
+    @Test
+    public void testGetV_columnsAreOrthogonal() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 1, 0 }, { 1, 2, 1 }, { 0, 1, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        RealMatrix v = eig.getV();
+        double dot = 0;
+        for (int k = 0; k < v.getRowDimension(); k++) {
+            dot += v.getEntry(k, 0) * v.getEntry(k, 1);
+        }
+        assertEquals(0.0, dot, 1e-6);
+    }
+
+    // getVT() must be the transpose of getV()
+    @Test
+    public void testGetVT_isTransposeOfV() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 1, 0 }, { 1, 2, 1 }, { 0, 1, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        RealMatrix v = eig.getV();
+        RealMatrix vt = eig.getVT();
+        assertEquals(v.getEntry(0, 1), vt.getEntry(1, 0), 1e-12);
+        assertEquals(v.getEntry(2, 0), vt.getEntry(0, 2), 1e-12);
+    }
+
+    // symmetric matrices have only real eigenvalues -> imaginary parts must all be zero
+    @Test
+    public void testGetImagEigenvalues_allZeroForSymmetricMatrix() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 1, 0 }, { 1, 2, 1 }, { 0, 1, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        double[] imag = eig.getImagEigenvalues();
+        for (int i = 0; i < imag.length; i++) {
+            assertEquals(0.0, imag[i], 1e-12);
+        }
+    }
+
+    // getImagEigenvalue(i) single-index accessor must also be zero
+    @Test
+    public void testGetImagEigenvalue_validIndex_isZero() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 1 }, { 1, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        assertEquals(0.0, eig.getImagEigenvalue(0), 1e-12);
+        assertEquals(0.0, eig.getImagEigenvalue(1), 1e-12);
+    }
+
+    // getEigenvector(i) must return a unit-norm vector of matching dimension
+    @Test
+    public void testGetEigenvector_isUnitNorm() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 1, 0 }, { 1, 2, 1 }, { 0, 1, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        RealVector v = eig.getEigenvector(0);
+        double sumSq = 0;
+        for (int i = 0; i < v.getDimension(); i++) {
+            sumSq += v.getEntry(i) * v.getEntry(i);
+        }
+        assertEquals(1.0, sumSq, 1e-6);
+    }
+
+    // out-of-range index on getEigenvector must throw ArrayIndexOutOfBoundsException
+    @Test
+    public void testGetEigenvector_indexOutOfBounds_throwsArrayIndexOutOfBoundsException() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 1, 0 }, { 0, 2 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        try {
+            eig.getEigenvector(9);
+            fail("expected ArrayIndexOutOfBoundsException");
+        } catch (ArrayIndexOutOfBoundsException expected) {
+            // ok
+        }
+    }
+
+    // determinant equals product of diagonal entries for a diagonal matrix
+    @Test
+    public void testGetDeterminant_diagonalMatrix_equalsProductOfDiagonal() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 4, 0 }, { 0, 1 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        assertEquals(4.0, eig.getDeterminant(), 1e-9);
+    }
+
+    // a singular matrix (one zero eigenvalue) must have determinant zero
+    @Test
+    public void testGetDeterminant_singularMatrix_isZero() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 1, 1 }, { 1, 1 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        assertEquals(0.0, eig.getDeterminant(), 1e-9);
+    }
+
+    // isNonSingular() must be true when no eigenvalue is zero
+    @Test
+    public void testSolver_isNonSingular_trueForNonSingularMatrix() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 0 }, { 0, 3 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        DecompositionSolver solver = eig.getSolver();
+        assertTrue(solver.isNonSingular());
+    }
+
+    // isNonSingular() must be false when an eigenvalue is exactly zero
+    @Test
+    public void testSolver_isNonSingular_falseForSingularMatrix() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 1, 1 }, { 1, 1 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        DecompositionSolver solver = eig.getSolver();
+        assertFalse(solver.isNonSingular());
+    }
+
+    // solve(double[]) must return the exact analytic solution of A x = b for diagonal A
+    @Test
+    public void testSolver_solveDoubleArray_diagonalMatrix_matchesAnalyticSolution() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 0 }, { 0, 3 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        double[] x = eig.getSolver().solve(new double[] { 2.0, 3.0 });
+        assertEquals(1.0, x[0], 1e-9);
+        assertEquals(1.0, x[1], 1e-9);
+    }
+
+    // mismatched vector length must throw IllegalArgumentException
+    @Test
+    public void testSolver_solveDoubleArray_dimensionMismatch_throwsIllegalArgumentException() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 0 }, { 0, 3 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        try {
+            eig.getSolver().solve(new double[] { 1.0 });
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // solving with a singular matrix must throw SingularMatrixException
+    @Test
+    public void testSolver_solveDoubleArray_singularMatrix_throwsSingularMatrixException() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 1, 1 }, { 1, 1 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        try {
+            eig.getSolver().solve(new double[] { 1.0, 1.0 });
+            fail("expected SingularMatrixException");
+        } catch (SingularMatrixException expected) {
+            // ok
+        }
+    }
+
+    // solve(RealVector) must give the same exact analytic solution as solve(double[])
+    @Test
+    public void testSolver_solveRealVector_diagonalMatrix_matchesAnalyticSolution() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 0 }, { 0, 3 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        RealVector b = new ArrayRealVector(new double[] { 2.0, 3.0 }, false);
+        RealVector x = eig.getSolver().solve(b);
+        assertEquals(1.0, x.getEntry(0), 1e-9);
+        assertEquals(1.0, x.getEntry(1), 1e-9);
+    }
+
+    // solve(RealMatrix) with identity RHS must produce the matrix inverse
+    @Test
+    public void testSolver_solveRealMatrix_diagonalMatrix_matchesInverse() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 0 }, { 0, 3 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        RealMatrix identity = matrix(new double[][] { { 1, 0 }, { 0, 1 } });
+        RealMatrix x = eig.getSolver().solve(identity);
+        assertEquals(0.5, x.getEntry(0, 0), 1e-9);
+        assertEquals(1.0 / 3.0, x.getEntry(1, 1), 1e-9);
+    }
+
+    // getInverse() of a diagonal matrix must be the diagonal matrix of reciprocals
+    @Test
+    public void testSolver_getInverse_diagonalMatrix_correctValues() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 2, 0 }, { 0, 4 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        RealMatrix inv = eig.getSolver().getInverse();
+        assertEquals(0.5, inv.getEntry(0, 0), 1e-9);
+        assertEquals(0.25, inv.getEntry(1, 1), 1e-9);
+    }
+
+    // getInverse() must throw SingularMatrixException for a singular matrix
+    @Test
+    public void testSolver_getInverse_singularMatrix_throwsSingularMatrixException() throws Throwable {
+        RealMatrix m = matrix(new double[][] { { 1, 1 }, { 1, 1 } });
+        EigenDecompositionImpl eig = new EigenDecompositionImpl(m, MathUtils.SAFE_MIN);
+        try {
+            eig.getSolver().getInverse();
+            fail("expected SingularMatrixException");
+        } catch (SingularMatrixException expected) {
+            // ok
+        }
+    }
+}

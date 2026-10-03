@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonCore-22-omruo5dt/JacksonCore-22f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - com.fasterxml.jackson.core.filter.FilteringParserDelegateClaudeTest::testNextToken_startArrayIncludeAll_matchCountIncrements
+  - com.fasterxml.jackson.core.filter.FilteringParserDelegateClaudeTest::testNextToken_singleMatchOnly_stopsAfterFirstMatch
+  - com.fasterxml.jackson.core.filter.FilteringParserDelegateClaudeTest::testNextToken_startObjectIncludeAll_matchCountIncrements
+[exit 0]

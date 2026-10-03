@@ -1,0 +1,292 @@
+package com.fasterxml.jackson.databind.deser;
+
+import java.io.IOException;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationConfig;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.InjectableValues;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.KeyDeserializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ResolvableDeserializer;
+import com.fasterxml.jackson.databind.UnresolvedForwardReference;
+
+public class DefaultDeserializationContextClaudeTest
+{
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "id")
+    public static class Node {
+        public int id;
+        public String name;
+        public Node next;
+    }
+
+    static class ResolvingDeser extends JsonDeserializer<Object> implements ResolvableDeserializer {
+        boolean resolved = false;
+        public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            return null;
+        }
+        public void resolve(DeserializationContext ctxt) throws JsonMappingException {
+            resolved = true;
+        }
+    }
+
+    static class ResolvingKeyDeser extends KeyDeserializer implements ResolvableDeserializer {
+        boolean resolved = false;
+        public Object deserializeKey(String key, DeserializationContext ctxt) throws IOException {
+            return key;
+        }
+        public void resolve(DeserializationContext ctxt) throws JsonMappingException {
+            resolved = true;
+        }
+    }
+
+    private ObjectMapper mapper;
+    private DefaultDeserializationContext.Impl ctx;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+        ctx = new DefaultDeserializationContext.Impl(BeanDeserializerFactory.instance);
+    }
+
+    // Covers copy(): getClass()==Impl.class branch returning a new independent Impl instance
+    @Test
+    public void testCopy_blueprint_returnsNewIndependentInstance() throws Throwable {
+        DefaultDeserializationContext copied = ctx.copy();
+        assertNotNull(copied);
+        assertNotSame(ctx, copied);
+        assertTrue(copied instanceof DefaultDeserializationContext.Impl);
+    }
+
+    // Covers copy() producing a fully functional blueprint usable to create instances
+    @Test
+    public void testCopy_resultIsFunctional_canCreateInstance() throws Throwable {
+        DefaultDeserializationContext copied = ctx.copy();
+        DeserializationConfig config = mapper.getDeserializationConfig();
+        JsonParser jp = mapper.getFactory().createParser("{}");
+        DefaultDeserializationContext instance = copied.createInstance(config, jp, null);
+        assertNotNull(instance);
+        jp.close();
+    }
+
+    // Covers with(factory): returns a new Impl bound to the given factory
+    @Test
+    public void testWith_returnsNewInstanceWithGivenFactory() throws Throwable {
+        DefaultDeserializationContext withFactory = ctx.with(BeanDeserializerFactory.instance);
+        assertNotNull(withFactory);
+        assertNotSame(ctx, withFactory);
+        assertTrue(withFactory instanceof DefaultDeserializationContext.Impl);
+    }
+
+    // Covers with(factory) called multiple times: no caching, distinct instances each time
+    @Test
+    public void testWith_multipleCalls_produceDistinctInstances() throws Throwable {
+        DefaultDeserializationContext with1 = ctx.with(BeanDeserializerFactory.instance);
+        DefaultDeserializationContext with2 = ctx.with(BeanDeserializerFactory.instance);
+        assertNotSame(with1, with2);
+    }
+
+    // Covers createInstance(config, jp, values) with null InjectableValues
+    @Test
+    public void testCreateInstance_returnsNewContextInstance() throws Throwable {
+        DeserializationConfig config = mapper.getDeserializationConfig();
+        JsonParser jp = mapper.getFactory().createParser("{}");
+        DefaultDeserializationContext instance = ctx.createInstance(config, jp, null);
+        assertNotNull(instance);
+        assertNotSame(ctx, instance);
+        jp.close();
+    }
+
+    // Covers createInstance(config, jp, values) with a concrete non-null InjectableValues
+    @Test
+    public void testCreateInstance_withInjectableValuesStd_returnsNewInstance() throws Throwable {
+        DeserializationConfig config = mapper.getDeserializationConfig();
+        JsonParser jp = mapper.getFactory().createParser("{}");
+        InjectableValues values = new InjectableValues.Std();
+        DefaultDeserializationContext instance = ctx.createInstance(config, jp, values);
+        assertNotNull(instance);
+        assertNotSame(ctx, instance);
+        jp.close();
+    }
+
+    // Covers checkUnresolvedObjectId(): early-return branch when _objectIds is null (no ids ever registered)
+    @Test
+    public void testCheckUnresolvedObjectId_noIds_returnsWithoutThrowing() throws Throwable {
+        ctx.checkUnresolvedObjectId();
+        assertNull(ctx._objectIds);
+    }
+
+    // Covers deserializerInstance(): deserDef == null returns null immediately
+    @Test
+    public void testDeserializerInstance_nullDeserDef_returnsNull() throws Throwable {
+        JsonDeserializer<Object> result = ctx.deserializerInstance(null, null);
+        assertNull(result);
+    }
+
+    // Covers deserializerInstance(): deserClass == JsonDeserializer.None.class returns null
+    @Test
+    public void testDeserializerInstance_noneMarkerClass_returnsNull() throws Throwable {
+        JsonDeserializer<Object> result = ctx.deserializerInstance(null, JsonDeserializer.None.class);
+        assertNull(result);
+    }
+
+    // Covers deserializerInstance(): deserDef instanceof JsonDeserializer returns same instance
+    @Test
+    public void testDeserializerInstance_instanceDeserDef_returnsSameInstance() throws Throwable {
+        JsonDeserializer<Object> customDeser = new JsonDeserializer<Object>() {
+            public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+                return null;
+            }
+        };
+        JsonDeserializer<Object> result = ctx.deserializerInstance(null, customDeser);
+        assertSame(customDeser, result);
+    }
+
+    // Covers deserializerInstance(): ResolvableDeserializer branch invokes resolve(this)
+    @Test
+    public void testDeserializerInstance_resolvableDeserializer_invokesResolve() throws Throwable {
+        ResolvingDeser deser = new ResolvingDeser();
+        JsonDeserializer<Object> result = ctx.deserializerInstance(null, deser);
+        assertSame(deser, result);
+        assertTrue(deser.resolved);
+    }
+
+    // Covers deserializerInstance(): deserDef not JsonDeserializer nor Class throws IllegalStateException
+    @Test
+    public void testDeserializerInstance_invalidType_throwsIllegalStateException() throws Throwable {
+        try {
+            ctx.deserializerInstance(null, "not-a-deserializer");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("AnnotationIntrospector returned deserializer definition"));
+        }
+    }
+
+    // Covers deserializerInstance(): Class not assignable to JsonDeserializer throws IllegalStateException
+    @Test
+    public void testDeserializerInstance_classNotAssignable_throwsIllegalStateException() throws Throwable {
+        try {
+            ctx.deserializerInstance(null, String.class);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("expected Class<JsonDeserializer>"));
+        }
+    }
+
+    // Covers keyDeserializerInstance(): deserDef == null returns null immediately
+    @Test
+    public void testKeyDeserializerInstance_nullDeserDef_returnsNull() throws Throwable {
+        KeyDeserializer result = ctx.keyDeserializerInstance(null, null);
+        assertNull(result);
+    }
+
+    // Covers keyDeserializerInstance(): deserClass == KeyDeserializer.None.class returns null
+    @Test
+    public void testKeyDeserializerInstance_noneMarkerClass_returnsNull() throws Throwable {
+        KeyDeserializer result = ctx.keyDeserializerInstance(null, KeyDeserializer.None.class);
+        assertNull(result);
+    }
+
+    // Covers keyDeserializerInstance(): deserDef instanceof KeyDeserializer returns same instance
+    @Test
+    public void testKeyDeserializerInstance_instanceDeserDef_returnsSameInstance() throws Throwable {
+        KeyDeserializer customKeyDeser = new KeyDeserializer() {
+            public Object deserializeKey(String key, DeserializationContext ctxt) throws IOException {
+                return key;
+            }
+        };
+        KeyDeserializer result = ctx.keyDeserializerInstance(null, customKeyDeser);
+        assertSame(customKeyDeser, result);
+    }
+
+    // Covers keyDeserializerInstance(): ResolvableDeserializer branch invokes resolve(this)
+    @Test
+    public void testKeyDeserializerInstance_resolvableDeserializer_invokesResolve() throws Throwable {
+        ResolvingKeyDeser deser = new ResolvingKeyDeser();
+        KeyDeserializer result = ctx.keyDeserializerInstance(null, deser);
+        assertSame(deser, result);
+        assertTrue(deser.resolved);
+    }
+
+    // Covers keyDeserializerInstance(): deserDef not KeyDeserializer nor Class throws IllegalStateException
+    @Test
+    public void testKeyDeserializerInstance_invalidType_throwsIllegalStateException() throws Throwable {
+        try {
+            ctx.keyDeserializerInstance(null, Integer.valueOf(5));
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("AnnotationIntrospector returned key deserializer definition"));
+        }
+    }
+
+    // Covers keyDeserializerInstance(): Class not assignable to KeyDeserializer throws IllegalStateException
+    @Test
+    public void testKeyDeserializerInstance_classNotAssignable_throwsIllegalStateException() throws Throwable {
+        try {
+            ctx.keyDeserializerInstance(null, String.class);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("expected Class<KeyDeserializer>"));
+        }
+    }
+
+    // Covers findObjectId(): first registration then reuse path resolving a backward reference to the same instance
+    @Test
+    public void testObjectIdentity_sharedReference_roundTrip_preservesSameInstance() throws Throwable {
+        String json = "{\"id\":1,\"name\":\"root\",\"next\":{\"id\":2,\"name\":\"child\",\"next\":1}}";
+        Node root = mapper.readValue(json, Node.class);
+        assertNotNull(root.next);
+        assertEquals(2, root.next.id);
+        assertSame(root, root.next.next);
+    }
+
+    // Covers checkUnresolvedObjectId() success path with deferred resolution across array elements
+    @Test
+    public void testObjectIdentity_forwardReferenceAcrossArray_resolvesAfterFullParse() throws Throwable {
+        String json = "[{\"id\":1,\"name\":\"first\",\"next\":2},{\"id\":2,\"name\":\"second\"}]";
+        Node[] nodes = mapper.readValue(json, Node[].class);
+        assertSame(nodes[1], nodes[0].next);
+        assertNull(nodes[1].next);
+    }
+
+    // Covers checkUnresolvedObjectId(): throwing branch when FAIL_ON_UNRESOLVED_OBJECT_IDS is enabled (default)
+    @Test
+    public void testObjectIdentity_unresolvedReference_throwsUnresolvedForwardReference() throws Throwable {
+        String json = "[{\"id\":1,\"name\":\"first\",\"next\":99}]";
+        try {
+            mapper.readValue(json, Node[].class);
+            fail("expected UnresolvedForwardReference");
+        } catch (UnresolvedForwardReference expected) {
+            assertTrue(expected.getMessage().contains("Unresolved forward references"));
+        }
+    }
+
+    // Covers checkUnresolvedObjectId(): early-return branch when FAIL_ON_UNRESOLVED_OBJECT_IDS is disabled
+    @Test
+    public void testObjectIdentity_unresolvedReference_featureDisabled_leavesPropertyNull() throws Throwable {
+        ObjectMapper m2 = new ObjectMapper();
+        m2.disable(DeserializationFeature.FAIL_ON_UNRESOLVED_OBJECT_IDS);
+        String json = "[{\"id\":1,\"name\":\"first\",\"next\":99}]";
+        Node[] nodes = m2.readValue(json, Node[].class);
+        assertNull(nodes[0].next);
+    }
+
+    // Covers findObjectId() reuse across multiple distinct ids forming a resolved reference cycle
+    @Test
+    public void testObjectIdentity_threeNodeCycle_resolvesAllReferences() throws Throwable {
+        String json = "[{\"id\":1,\"name\":\"A\",\"next\":2},{\"id\":2,\"name\":\"B\",\"next\":3},{\"id\":3,\"name\":\"C\",\"next\":1}]";
+        Node[] nodes = mapper.readValue(json, Node[].class);
+        assertSame(nodes[1], nodes[0].next);
+        assertSame(nodes[2], nodes[1].next);
+        assertSame(nodes[0], nodes[2].next);
+    }
+}

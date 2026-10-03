@@ -1,0 +1,184 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.9444444444444444" branch-rate="1.0" lines-covered="34" lines-valid="36" branches-covered="18" branches-valid="18" complexity="2.375" version="2.0.3" timestamp="1790846575561">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="org.apache.commons.compress.utils" line-rate="0.9444444444444444" branch-rate="1.0" complexity="2.375">
+			<classes>
+				<class name="org.apache.commons.compress.utils.IOUtils" filename="org/apache/commons/compress/utils/IOUtils.java" line-rate="0.9444444444444444" branch-rate="1.0" complexity="2.375">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="37" hits="0" branch="false"/>
+								<line number="38" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="closeQuietly" signature="(Ljava/io/Closeable;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="185" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="187" hits="2" branch="false"/>
+								<line number="188" hits="1" branch="false"/>
+								<line number="189" hits="1" branch="false"/>
+								<line number="191" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="copy" signature="(Ljava/io/InputStream;Ljava/io/OutputStream;)J" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="52" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="copy" signature="(Ljava/io/InputStream;Ljava/io/OutputStream;I)J" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="68" hits="9" branch="false"/>
+								<line number="69" hits="9" branch="false"/>
+								<line number="70" hits="9" branch="false"/>
+								<line number="71" hits="20" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="72" hits="11" branch="false"/>
+								<line number="73" hits="11" branch="false"/>
+								<line number="75" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="readFully" signature="(Ljava/io/InputStream;[B)I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="120" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="readFully" signature="(Ljava/io/InputStream;[BII)I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="141" hits="10" branch="true" condition-coverage="100% (6/6)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+										<condition number="2" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="142" hits="3" branch="false"/>
+								<line number="144" hits="7" branch="false"/>
+								<line number="145" hits="16" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="146" hits="10" branch="false"/>
+								<line number="147" hits="10" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="148" hits="1" branch="false"/>
+								<line number="150" hits="9" branch="false"/>
+								<line number="152" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="skip" signature="(Ljava/io/InputStream;J)J" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="95" hits="6" branch="false"/>
+								<line number="96" hits="13" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="97" hits="9" branch="false"/>
+								<line number="98" hits="9" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="99" hits="2" branch="false"/>
+								<line number="101" hits="7" branch="false"/>
+								<line number="102" hits="7" branch="false"/>
+								<line number="104" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="toByteArray" signature="(Ljava/io/InputStream;)[B" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="174" hits="3" branch="false"/>
+								<line number="175" hits="3" branch="false"/>
+								<line number="176" hits="2" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="37" hits="0" branch="false"/>
+						<line number="38" hits="0" branch="false"/>
+						<line number="52" hits="7" branch="false"/>
+						<line number="68" hits="9" branch="false"/>
+						<line number="69" hits="9" branch="false"/>
+						<line number="70" hits="9" branch="false"/>
+						<line number="71" hits="20" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="72" hits="11" branch="false"/>
+						<line number="73" hits="11" branch="false"/>
+						<line number="75" hits="7" branch="false"/>
+						<line number="95" hits="6" branch="false"/>
+						<line number="96" hits="13" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="97" hits="9" branch="false"/>
+						<line number="98" hits="9" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="99" hits="2" branch="false"/>
+						<line number="101" hits="7" branch="false"/>
+						<line number="102" hits="7" branch="false"/>
+						<line number="104" hits="6" branch="false"/>
+						<line number="120" hits="4" branch="false"/>
+						<line number="141" hits="10" branch="true" condition-coverage="100% (6/6)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+								<condition number="2" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="142" hits="3" branch="false"/>
+						<line number="144" hits="7" branch="false"/>
+						<line number="145" hits="16" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="146" hits="10" branch="false"/>
+						<line number="147" hits="10" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="148" hits="1" branch="false"/>
+						<line number="150" hits="9" branch="false"/>
+						<line number="152" hits="7" branch="false"/>
+						<line number="174" hits="3" branch="false"/>
+						<line number="175" hits="3" branch="false"/>
+						<line number="176" hits="2" branch="false"/>
+						<line number="185" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="187" hits="2" branch="false"/>
+						<line number="188" hits="1" branch="false"/>
+						<line number="189" hits="1" branch="false"/>
+						<line number="191" hits="3" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

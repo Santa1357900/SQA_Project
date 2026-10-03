@@ -1,0 +1,409 @@
+package com.fasterxml.jackson.databind.ser.std;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+
+public class JsonValueSerializerClaudeTest {
+
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    // ---- helper POJOs ----
+
+    public static class InnerBox {
+        public String data;
+        public InnerBox(String data) { this.data = data; }
+    }
+
+    public static class InnerBoxSerializer extends JsonSerializer<InnerBox> {
+        @Override
+        public void serialize(InnerBox value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            gen.writeStartObject();
+            gen.writeStringField("data", value.data);
+            gen.writeEndObject();
+        }
+        @Override
+        public void serializeWithType(InnerBox value, JsonGenerator gen, SerializerProvider serializers,
+                TypeSerializer typeSer) throws IOException {
+            typeSer.writeTypePrefixForObject(value, gen);
+            gen.writeStringField("data", value.data);
+            typeSer.writeTypeSuffixForObject(value, gen);
+        }
+    }
+
+    public static class UpperCaseSerializer extends JsonSerializer<String> {
+        @Override
+        public void serialize(String value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            gen.writeString(value.toUpperCase());
+        }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("nat")
+    public static class NaturalStringBean {
+        @JsonValue
+        public String getValue() { return "hello"; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("intnat")
+    public static class NaturalIntBean {
+        @JsonValue
+        public int getVal() { return 42; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("boolnat")
+    public static class NaturalBooleanBean {
+        @JsonValue
+        public boolean isFlag() { return true; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("doublenat")
+    public static class NaturalDoubleBean {
+        @JsonValue
+        public double getVal() { return 3.5; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("integernat")
+    public static class NaturalIntegerWrapperBean {
+        @JsonValue
+        public Integer getVal() { return Integer.valueOf(7); }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("zeronat")
+    public static class ZeroIntBean {
+        @JsonValue
+        public int getVal() { return 0; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("negdouble")
+    public static class NegativeDoubleBean {
+        @JsonValue
+        public double getVal() { return -1.5; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("upperNat")
+    public static class ExplicitNaturalTypedBean {
+        @JsonSerialize(using = UpperCaseSerializer.class)
+        @JsonValue
+        public String getValue() { return "abc"; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "@type")
+    @JsonTypeName("boxProp")
+    public static class PropBoxBean {
+        @JsonSerialize(using = InnerBoxSerializer.class)
+        @JsonValue
+        public InnerBox getValue() { return new InnerBox("hi"); }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("boxed")
+    public static class BoxedBean {
+        @JsonValue
+        public InnerBox getValue() { return new InnerBox("hi"); }
+    }
+
+    public static class SimpleBean {
+        @JsonValue
+        public String getValue() { return "plain"; }
+    }
+
+    public static class NullableBean {
+        @JsonValue
+        public String getValue() { return null; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("nullnat")
+    public static class NullableTypedBean {
+        @JsonValue
+        public String getValue() { return null; }
+    }
+
+    public static class ThrowingBean {
+        @JsonValue
+        public String getValue() { throw new IllegalStateException("kaboom"); }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.WRAPPER_ARRAY)
+    @JsonTypeName("throwtype")
+    public static class ThrowingTypedBean {
+        @JsonValue
+        public String getValue() { throw new IllegalStateException("kaboom2"); }
+    }
+
+    public static class ExplicitSerBean {
+        @JsonSerialize(using = UpperCaseSerializer.class)
+        @JsonValue
+        public String getValue() { return "abc"; }
+    }
+
+    public static class ExplicitSerNullBean {
+        @JsonSerialize(using = UpperCaseSerializer.class)
+        @JsonValue
+        public String getValue() { return null; }
+    }
+
+    public static class EmptyStringBean {
+        @JsonValue
+        public String getValue() { return ""; }
+    }
+
+    public static class SpecialCharBean {
+        @JsonValue
+        public String getValue() { return "a\"b\\c"; }
+    }
+
+    public static class UnicodeBean {
+        @JsonValue
+        public String getValue() { return "h\u00e9llo\u4e2d"; }
+    }
+
+    public static class MinIntBean {
+        @JsonValue
+        public int getValue() { return Integer.MIN_VALUE; }
+    }
+
+    public static class ParamBean {
+        private final String v;
+        public ParamBean(String v) { this.v = v; }
+        @JsonValue
+        public String getValue() { return v; }
+    }
+
+    public static class ListHolder {
+        public List<ParamBean> items;
+        public ListHolder(List<ParamBean> items) { this.items = items; }
+    }
+
+    public enum ColorEnum {
+        RED("r"), BLUE("b");
+        private final String code;
+        private ColorEnum(String c) { code = c; }
+        @JsonValue
+        public String getCode() { return code; }
+    }
+
+    // ---- Group A: createContextual / forced-type-info logic ----
+
+    // isNaturalTypeWithStdHandling: primitive/wrapper String -> true -> serializeWithType forces wrap
+    @Test
+    public void testCreateContextual_naturalString_forcesTypeWrapping() throws Throwable {
+        String json = mapper.writeValueAsString(new NaturalStringBean());
+        assertEquals("[\"nat\",\"hello\"]", json);
+    }
+
+    // primitive int branch of isNaturalTypeWithStdHandling -> forced wrap
+    @Test
+    public void testCreateContextual_naturalInt_forcesTypeWrapping() throws Throwable {
+        String json = mapper.writeValueAsString(new NaturalIntBean());
+        assertEquals("[\"intnat\",42]", json);
+    }
+
+    // primitive boolean branch of isNaturalTypeWithStdHandling -> forced wrap
+    @Test
+    public void testCreateContextual_naturalBoolean_forcesTypeWrapping() throws Throwable {
+        String json = mapper.writeValueAsString(new NaturalBooleanBean());
+        assertEquals("[\"boolnat\",true]", json);
+    }
+
+    // primitive double branch of isNaturalTypeWithStdHandling -> forced wrap
+    @Test
+    public void testCreateContextual_naturalDouble_forcesTypeWrapping() throws Throwable {
+        String json = mapper.writeValueAsString(new NaturalDoubleBean());
+        assertEquals("[\"doublenat\",3.5]", json);
+    }
+
+    // wrapper Integer.class branch (non-primitive path) of isNaturalTypeWithStdHandling
+    @Test
+    public void testCreateContextual_naturalIntegerWrapper_forcesTypeWrapping() throws Throwable {
+        String json = mapper.writeValueAsString(new NaturalIntegerWrapperBean());
+        assertEquals("[\"integernat\",7]", json);
+    }
+
+    // boundary value 0 through the forced natural-int path
+    @Test
+    public void testCreateContextual_naturalIntZeroBoundary_forcesTypeWrapping() throws Throwable {
+        String json = mapper.writeValueAsString(new ZeroIntBean());
+        assertEquals("[\"zeronat\",0]", json);
+    }
+
+    // negative double value through the forced natural-double path
+    @Test
+    public void testCreateContextual_naturalNegativeDouble_forcesTypeWrapping() throws Throwable {
+        String json = mapper.writeValueAsString(new NegativeDoubleBean());
+        assertEquals("[\"negdouble\",-1.5]", json);
+    }
+
+    // explicit @JsonSerialize(using=) on a natural (String) type still must force wrap
+    @Test
+    public void testCreateContextual_explicitSerializerNaturalType_stillForcesTypeWrapping() throws Throwable {
+        String json = mapper.writeValueAsString(new ExplicitNaturalTypedBean());
+        assertEquals("[\"upperNat\",\"ABC\"]", json);
+    }
+
+    // contract: forceTypeInformation must NOT apply to non-natural types even with explicit
+    // custom serializer + As.PROPERTY inclusion; type id must be embedded as a property, not array-wrapped
+    @Test
+    public void testCreateContextual_explicitSerializerNonNaturalType_usesPropertyStyleTypeInfo() throws Throwable {
+        String json = mapper.writeValueAsString(new PropBoxBean());
+        assertEquals("{\"@type\":\"boxProp\",\"data\":\"hi\"}", json);
+    }
+
+    // non-natural type with default (implicit) serializer must not use forced scalar wrapping
+    @Test
+    public void testCreateContextual_nonNaturalType_doesNotForceTypeWrapping() throws Throwable {
+        String json = mapper.writeValueAsString(new BoxedBean());
+        assertEquals("[\"boxed\",{\"data\":\"hi\"}]", json);
+    }
+
+    // ---- Group B: serialize() ----
+
+    // basic path: accessor value written directly via resolved serializer
+    @Test
+    public void testSerialize_simpleString_returnsAccessorValue() throws Throwable {
+        String json = mapper.writeValueAsString(new SimpleBean());
+        assertEquals("\"plain\"", json);
+    }
+
+    // value==null branch -> prov.defaultSerializeNull
+    @Test
+    public void testSerialize_nullValue_writesJsonNull() throws Throwable {
+        String json = mapper.writeValueAsString(new NullableBean());
+        assertEquals("null", json);
+    }
+
+    // exception thrown in accessor is unwrapped and rethrown via JsonMappingException.wrapWithPath
+    @Test
+    public void testSerialize_accessorThrows_wrapsExceptionWithPath() throws Throwable {
+        try {
+            mapper.writeValueAsString(new ThrowingBean());
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("kaboom"));
+        }
+    }
+
+    // explicit custom serializer is actually invoked in serialize()
+    @Test
+    public void testSerialize_explicitSerializer_appliesCustomSerializer() throws Throwable {
+        String json = mapper.writeValueAsString(new ExplicitSerBean());
+        assertEquals("\"ABC\"", json);
+    }
+
+    // null-value short circuit occurs even when an explicit custom serializer is configured
+    @Test
+    public void testSerialize_explicitSerializerWithNullValue_skipsSerializerAndWritesNull() throws Throwable {
+        String json = mapper.writeValueAsString(new ExplicitSerNullBean());
+        assertEquals("null", json);
+    }
+
+    // empty string boundary value
+    @Test
+    public void testSerialize_emptyString_returnsEmptyJsonString() throws Throwable {
+        String json = mapper.writeValueAsString(new EmptyStringBean());
+        assertEquals("\"\"", json);
+    }
+
+    // special characters (quote/backslash) round trip correctly through serialization
+    @Test
+    public void testSerialize_specialCharacters_roundTripsCorrectly() throws Throwable {
+        String json = mapper.writeValueAsString(new SpecialCharBean());
+        String back = mapper.readTree(json).asText();
+        assertEquals("a\"b\\c", back);
+    }
+
+    // unicode characters round trip correctly through serialization
+    @Test
+    public void testSerialize_unicodeCharacters_roundTripsCorrectly() throws Throwable {
+        String json = mapper.writeValueAsString(new UnicodeBean());
+        String back = mapper.readTree(json).asText();
+        assertEquals("h\u00e9llo\u4e2d", back);
+    }
+
+    // Integer.MIN_VALUE boundary value serialized as plain number
+    @Test
+    public void testSerialize_minIntegerBoundary_returnsExactValue() throws Throwable {
+        String json = mapper.writeValueAsString(new MinIntBean());
+        assertEquals(String.valueOf(Integer.MIN_VALUE), json);
+    }
+
+    // @JsonValue on enum constant is used for basic serialize()
+    @Test
+    public void testSerialize_enumWithJsonValue_usesAccessorResult() throws Throwable {
+        String json = mapper.writeValueAsString(ColorEnum.RED);
+        assertEquals("\"r\"", json);
+    }
+
+    // second enum constant to confirm per-instance accessor invocation (not cached wrongly)
+    @Test
+    public void testSerialize_secondEnumConstant_usesAccessorResult() throws Throwable {
+        String json = mapper.writeValueAsString(ColorEnum.BLUE);
+        assertEquals("\"b\"", json);
+    }
+
+    // multiple invocations (many-element loop at container level) each use accessor value
+    @Test
+    public void testSerialize_listOfBeans_serializesEachIndependently() throws Throwable {
+        List<ParamBean> list = new ArrayList<ParamBean>();
+        list.add(new ParamBean("a"));
+        list.add(new ParamBean("b"));
+        String json = mapper.writeValueAsString(new ListHolder(list));
+        assertEquals("{\"items\":[\"a\",\"b\"]}", json);
+    }
+
+    // zero-element loop case at container level
+    @Test
+    public void testSerialize_emptyListOfBeans_producesEmptyArray() throws Throwable {
+        List<ParamBean> list = new ArrayList<ParamBean>();
+        String json = mapper.writeValueAsString(new ListHolder(list));
+        assertEquals("{\"items\":[]}", json);
+    }
+
+    // ---- Group C: serializeWithType() ----
+
+    // value==null branch inside serializeWithType must not emit any type wrapping
+    @Test
+    public void testSerializeWithType_nullValue_writesNullWithoutTypeWrapping() throws Throwable {
+        String json = mapper.writeValueAsString(new NullableTypedBean());
+        assertEquals("null", json);
+    }
+
+    // exception thrown in accessor is unwrapped/rethrown through the serializeWithType path too
+    @Test
+    public void testSerializeWithType_accessorThrows_wrapsExceptionWithPath() throws Throwable {
+        try {
+            mapper.writeValueAsString(new ThrowingTypedBean());
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("kaboom2"));
+        }
+    }
+}

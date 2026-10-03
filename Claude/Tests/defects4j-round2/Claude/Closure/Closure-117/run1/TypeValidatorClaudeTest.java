@@ -1,0 +1,320 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+
+import java.util.Iterator;
+
+public class TypeValidatorClaudeTest {
+
+  private Compiler compiler;
+  private JSTypeRegistry registry;
+  private TypeValidator validator;
+  private NodeTraversal t;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    registry = compiler.getTypeRegistry();
+    validator = new TypeValidator(compiler);
+    validator.setShouldReport(false);
+
+    final NodeTraversal[] holder = new NodeTraversal[1];
+    Node root = IR.block();
+    NodeTraversal.traverse(compiler, root, new NodeTraversal.Callback() {
+      public boolean shouldTraverse(NodeTraversal nt, Node n, Node parent) {
+        holder[0] = nt;
+        return true;
+      }
+      public void visit(NodeTraversal nt, Node n, Node parent) {
+        holder[0] = nt;
+      }
+    });
+    t = holder[0];
+  }
+
+  private JSType ty(JSTypeNative n) {
+    return registry.getNativeType(n);
+  }
+
+  private int countMismatches() {
+    int count = 0;
+    Iterator<TypeValidator.TypeMismatch> it = validator.getMismatches().iterator();
+    while (it.hasNext()) {
+      it.next();
+      count++;
+    }
+    return count;
+  }
+
+  // getMismatches(): fresh validator has no recorded mismatches
+  @Test
+  public void testGetMismatches_initially_returnsEmpty() throws Throwable {
+    assertEquals(0, countMismatches());
+  }
+
+  // setShouldReport(true): toggling does not throw when no warning path is hit
+  @Test
+  public void testSetShouldReport_trueNoWarningTriggered_noException() throws Throwable {
+    validator.setShouldReport(true);
+    boolean result = validator.expectCanAssignTo(
+        t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), ty(JSTypeNative.NUMBER_TYPE), "msg");
+    assertTrue(result);
+  }
+
+  // expectValidTypeofName: reports directly, never touches the mismatches list
+  @Test
+  public void testExpectValidTypeofName_called_doesNotRegisterMismatch() throws Throwable {
+    validator.expectValidTypeofName(t, IR.name("x"), "frog");
+    assertEquals(0, countMismatches());
+  }
+
+  // expectObject: an object type matches object context -> returns true
+  @Test
+  public void testExpectObject_objectType_matchesReturnsTrue() throws Throwable {
+    boolean result = validator.expectObject(t, IR.name("x"), ty(JSTypeNative.OBJECT_TYPE), "msg");
+    assertTrue(result);
+    assertEquals(0, countMismatches());
+  }
+
+  // expectObject: null is not convertible to Object per ECMAScript ToObject -> returns false
+  @Test
+  public void testExpectObject_nullType_doesNotMatchReturnsFalse() throws Throwable {
+    boolean result = validator.expectObject(t, IR.name("x"), ty(JSTypeNative.NULL_TYPE), "msg");
+    assertFalse(result);
+  }
+
+  // expectActualObject: OBJECT_TYPE.isObject() true -> no mismatch recorded
+  @Test
+  public void testExpectActualObject_objectType_noMismatchRecorded() throws Throwable {
+    validator.expectActualObject(t, IR.name("x"), ty(JSTypeNative.OBJECT_TYPE), "msg");
+    assertEquals(0, countMismatches());
+  }
+
+  // expectActualObject: NUMBER_TYPE is not an object instance -> mismatch recorded
+  @Test
+  public void testExpectActualObject_numberType_mismatchRecorded() throws Throwable {
+    validator.expectActualObject(t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), "msg");
+    assertEquals(1, countMismatches());
+  }
+
+  // expectAnyObject: bottom object type is a subtype of OBJECT_TYPE -> no mismatch
+  @Test
+  public void testExpectAnyObject_objectType_noMismatchRecorded() throws Throwable {
+    validator.expectAnyObject(t, IR.name("x"), ty(JSTypeNative.OBJECT_TYPE), "msg");
+    assertEquals(0, countMismatches());
+  }
+
+  // expectAnyObject: a number never "contains" an object -> mismatch recorded
+  @Test
+  public void testExpectAnyObject_numberType_mismatchRecorded() throws Throwable {
+    validator.expectAnyObject(t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), "msg");
+    assertEquals(1, countMismatches());
+  }
+
+  // expectString: a string trivially matches string context -> no mismatch
+  @Test
+  public void testExpectString_stringType_noMismatchRecorded() throws Throwable {
+    validator.expectString(t, IR.name("x"), ty(JSTypeNative.STRING_TYPE), "msg");
+    assertEquals(0, countMismatches());
+  }
+
+  // expectString: a number is always convertible to a string (ToString) -> no mismatch
+  @Test
+  public void testExpectString_numberType_noMismatchRecorded() throws Throwable {
+    validator.expectString(t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), "msg");
+    assertEquals(0, countMismatches());
+  }
+
+  // expectNumber: a number trivially matches number context -> no mismatch
+  @Test
+  public void testExpectNumber_numberType_noMismatchRecorded() throws Throwable {
+    validator.expectNumber(t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), "msg");
+    assertEquals(0, countMismatches());
+  }
+
+  // expectNumber: a plain Object does not match number context -> mismatch recorded
+  @Test
+  public void testExpectNumber_objectType_mismatchRecorded() throws Throwable {
+    validator.expectNumber(t, IR.name("x"), ty(JSTypeNative.OBJECT_TYPE), "msg");
+    assertEquals(1, countMismatches());
+  }
+
+  // expectBitwiseable: a number matches number context -> no mismatch
+  @Test
+  public void testExpectBitwiseable_numberType_noMismatchRecorded() throws Throwable {
+    validator.expectBitwiseable(t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), "msg");
+    assertEquals(0, countMismatches());
+  }
+
+  // expectBitwiseable: a plain Object neither matches number context nor is a value type -> mismatch
+  @Test
+  public void testExpectBitwiseable_objectType_mismatchRecorded() throws Throwable {
+    validator.expectBitwiseable(t, IR.name("x"), ty(JSTypeNative.OBJECT_TYPE), "msg");
+    assertEquals(1, countMismatches());
+  }
+
+  // expectStringOrNumber: number matches number context -> no mismatch (short circuits)
+  @Test
+  public void testExpectStringOrNumber_numberType_noMismatchRecorded() throws Throwable {
+    validator.expectStringOrNumber(t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), "msg");
+    assertEquals(0, countMismatches());
+  }
+
+  // expectStringOrNumber: string matches string context -> no mismatch
+  @Test
+  public void testExpectStringOrNumber_stringType_noMismatchRecorded() throws Throwable {
+    validator.expectStringOrNumber(t, IR.name("x"), ty(JSTypeNative.STRING_TYPE), "msg");
+    assertEquals(0, countMismatches());
+  }
+
+  // expectNotNullOrUndefined: null type on a NAME node (not GETPROP) falls straight to mismatch -> false
+  @Test
+  public void testExpectNotNullOrUndefined_nullTypeOnNameNode_returnsFalse() throws Throwable {
+    boolean result = validator.expectNotNullOrUndefined(
+        t, IR.name("x"), ty(JSTypeNative.NULL_TYPE), "msg", ty(JSTypeNative.STRING_TYPE));
+    assertFalse(result);
+  }
+
+  // expectNotNullOrUndefined: a string is not a subtype of (null|undefined) -> meets expectation
+  @Test
+  public void testExpectNotNullOrUndefined_stringType_returnsTrue() throws Throwable {
+    boolean result = validator.expectNotNullOrUndefined(
+        t, IR.name("x"), ty(JSTypeNative.STRING_TYPE), "msg", ty(JSTypeNative.STRING_TYPE));
+    assertTrue(result);
+    assertEquals(0, countMismatches());
+  }
+
+  // expectNotNullOrUndefined: unknown type always bypasses the check -> returns true
+  @Test
+  public void testExpectNotNullOrUndefined_unknownType_returnsTrueBypassed() throws Throwable {
+    boolean result = validator.expectNotNullOrUndefined(
+        t, IR.name("x"), ty(JSTypeNative.UNKNOWN_TYPE), "msg", ty(JSTypeNative.STRING_TYPE));
+    assertTrue(result);
+  }
+
+  // expectSwitchMatchesCase: a type tested for shallow equality with itself -> no mismatch
+  @Test
+  public void testExpectSwitchMatchesCase_sameType_noMismatchRecorded() throws Throwable {
+    validator.expectSwitchMatchesCase(
+        t, IR.name("x"), ty(JSTypeNative.STRING_TYPE), ty(JSTypeNative.STRING_TYPE));
+    assertEquals(0, countMismatches());
+  }
+
+  // expectCanAssignToPropertyOf: rightType subtype of leftType short-circuits -> true, owner untouched
+  @Test
+  public void testExpectCanAssignToPropertyOf_subtypeMatches_returnsTrue() throws Throwable {
+    boolean result = validator.expectCanAssignToPropertyOf(
+        t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), ty(JSTypeNative.NUMBER_TYPE),
+        IR.name("owner"), "prop");
+    assertTrue(result);
+    assertEquals(0, countMismatches());
+  }
+
+  // expectCanAssignToPropertyOf: unrelated types -> mismatch recorded, returns false
+  @Test
+  public void testExpectCanAssignToPropertyOf_unrelatedTypes_mismatchRecorded() throws Throwable {
+    boolean result = validator.expectCanAssignToPropertyOf(
+        t, IR.name("x"), ty(JSTypeNative.STRING_TYPE), ty(JSTypeNative.NUMBER_TYPE),
+        IR.name("owner"), "prop");
+    assertFalse(result);
+    assertEquals(1, countMismatches());
+  }
+
+  // expectCanAssignTo: a type is always assignable to itself -> true, no mismatch
+  @Test
+  public void testExpectCanAssignTo_sameType_returnsTrueNoMismatch() throws Throwable {
+    boolean result = validator.expectCanAssignTo(
+        t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), ty(JSTypeNative.NUMBER_TYPE), "msg");
+    assertTrue(result);
+    assertEquals(0, countMismatches());
+  }
+
+  // expectCanAssignTo: string is not a subtype of number -> false, mismatch recorded
+  @Test
+  public void testExpectCanAssignTo_unrelatedTypes_returnsFalseMismatchRecorded() throws Throwable {
+    boolean result = validator.expectCanAssignTo(
+        t, IR.name("x"), ty(JSTypeNative.STRING_TYPE), ty(JSTypeNative.NUMBER_TYPE), "msg");
+    assertFalse(result);
+    assertEquals(1, countMismatches());
+  }
+
+  // expectCanAssignTo: Array is a subtype of Object -> true
+  @Test
+  public void testExpectCanAssignTo_arraySubtypeOfObject_returnsTrue() throws Throwable {
+    boolean result = validator.expectCanAssignTo(
+        t, IR.name("x"), ty(JSTypeNative.ARRAY_TYPE), ty(JSTypeNative.OBJECT_TYPE), "msg");
+    assertTrue(result);
+  }
+
+  // expectCanAssignTo: unknown type is always compatible -> true
+  @Test
+  public void testExpectCanAssignTo_unknownType_alwaysAssignableReturnsTrue() throws Throwable {
+    boolean result = validator.expectCanAssignTo(
+        t, IR.name("x"), ty(JSTypeNative.UNKNOWN_TYPE), ty(JSTypeNative.STRING_TYPE), "msg");
+    assertTrue(result);
+  }
+
+  // expectArgumentMatchesParameter: argType subtype of paramType -> no mismatch, message path skipped
+  @Test
+  public void testExpectArgumentMatchesParameter_subtypeMatches_noMismatchRecorded() throws Throwable {
+    validator.expectArgumentMatchesParameter(
+        t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), ty(JSTypeNative.NUMBER_TYPE),
+        IR.name("foo"), 1);
+    assertEquals(0, countMismatches());
+  }
+
+  // expectCanOverride: overriding type subtype of hidden type -> no mismatch
+  @Test
+  public void testExpectCanOverride_subtypeMatches_noMismatchRecorded() throws Throwable {
+    validator.expectCanOverride(
+        t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), ty(JSTypeNative.NUMBER_TYPE),
+        "prop", ty(JSTypeNative.OBJECT_TYPE));
+    assertEquals(0, countMismatches());
+  }
+
+  // expectCanOverride: unrelated types -> mismatch recorded via HIDDEN_PROPERTY_MISMATCH path
+  @Test
+  public void testExpectCanOverride_unrelatedTypes_mismatchRecorded() throws Throwable {
+    validator.expectCanOverride(
+        t, IR.name("x"), ty(JSTypeNative.STRING_TYPE), ty(JSTypeNative.NUMBER_TYPE),
+        "prop", ty(JSTypeNative.OBJECT_TYPE));
+    assertEquals(1, countMismatches());
+  }
+
+  // expectCanCast: casting a type to itself is always legal -> no mismatch
+  @Test
+  public void testExpectCanCast_sameType_noMismatchRecorded() throws Throwable {
+    validator.expectCanCast(t, IR.name("x"), ty(JSTypeNative.NUMBER_TYPE), ty(JSTypeNative.NUMBER_TYPE));
+    assertEquals(0, countMismatches());
+  }
+
+  // expectCanCast: casting between unrelated types (string <-> array) is invalid -> mismatch recorded
+  @Test
+  public void testExpectCanCast_unrelatedTypes_mismatchRecorded() throws Throwable {
+    validator.expectCanCast(t, IR.name("x"), ty(JSTypeNative.ARRAY_TYPE), ty(JSTypeNative.STRING_TYPE));
+    assertEquals(1, countMismatches());
+  }
+
+  // getReadableJSTypeName: a plain NAME node falls back to its own qualified name "x"
+  @Test
+  public void testGetReadableJSTypeName_nameNode_returnsQualifiedName() throws Throwable {
+    String name = validator.getReadableJSTypeName(IR.name("x"), false);
+    assertEquals("x", name);
+  }
+
+  // getReadableJSTypeName: a STRING node has no qualified name, falls back to type.toString()
+  @Test
+  public void testGetReadableJSTypeName_stringNode_returnsUnknownTypeToString() throws Throwable {
+    String expected = ty(JSTypeNative.UNKNOWN_TYPE).toString();
+    String name = validator.getReadableJSTypeName(IR.string("hello"), false);
+    assertEquals(expected, name);
+  }
+}

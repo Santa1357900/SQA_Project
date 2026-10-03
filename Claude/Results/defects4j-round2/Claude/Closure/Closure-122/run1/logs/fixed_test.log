@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-122-mppkcr6g/Closure-122f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - com.google.javascript.jscomp.parsing.IRFactoryClaudeTest::testBreakWithLabel_structure
+  - com.google.javascript.jscomp.parsing.IRFactoryClaudeTest::testBreakWithoutLabel_noChild
+  - com.google.javascript.jscomp.parsing.IRFactoryClaudeTest::testWhileLoop_structure
+  - com.google.javascript.jscomp.parsing.IRFactoryClaudeTest::testContinueWithLabel_structure
+[exit 0]

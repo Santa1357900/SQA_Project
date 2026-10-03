@@ -1,0 +1,230 @@
+package org.jsoup.nodes;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class DocumentTypeClaudeTest {
+
+    private Document.OutputSettings settings;
+
+    @Before
+    public void setUp() throws Throwable {
+        settings = new Document.OutputSettings();
+    }
+
+    // Constructor: verifies "name" attribute is set from constructor argument
+    @Test
+    public void testConstructor_setsNameAttribute() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "", "");
+        assertEquals("html", dt.attr("name"));
+    }
+
+    // Constructor: verifies "publicId" attribute is set from constructor argument
+    @Test
+    public void testConstructor_setsPublicIdAttribute() throws Throwable {
+        DocumentType dt = new DocumentType("html", "-//W3C//DTD HTML 4.01//EN", "", "");
+        assertEquals("-//W3C//DTD HTML 4.01//EN", dt.attr("publicId"));
+    }
+
+    // Constructor: verifies "systemId" attribute is set from constructor argument
+    @Test
+    public void testConstructor_setsSystemIdAttribute() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd", "");
+        assertEquals("http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd", dt.attr("systemId"));
+    }
+
+    // Constructor: empty string args result in empty (non-null) attribute values
+    @Test
+    public void testConstructor_emptyStrings_attributesEmpty() throws Throwable {
+        DocumentType dt = new DocumentType("", "", "", "");
+        assertEquals("", dt.attr("name"));
+        assertEquals("", dt.attr("publicId"));
+        assertEquals("", dt.attr("systemId"));
+    }
+
+    // nodeName(): always returns the fixed node name constant "#doctype"
+    @Test
+    public void testNodeName_returnsDoctypeConstant() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "", "");
+        assertEquals("#doctype", dt.nodeName());
+    }
+
+    // nodeName(): result is independent of the constructor arguments used
+    @Test
+    public void testNodeName_independentOfArguments() throws Throwable {
+        DocumentType dt = new DocumentType("customName", "pub", "sys", "base");
+        assertEquals("#doctype", dt.nodeName());
+    }
+
+    // outerHtmlHead: both publicId and systemId blank -> simple "<!DOCTYPE html>"
+    @Test
+    public void testOuterHtmlHead_bothIdsBlank_producesSimpleDoctype() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html>", accum.toString());
+    }
+
+    // outerHtmlHead: whitespace-only ids treated as blank -> simple doctype
+    @Test
+    public void testOuterHtmlHead_bothIdsWhitespace_treatedAsBlank() throws Throwable {
+        DocumentType dt = new DocumentType("html", "   ", "   ", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html>", accum.toString());
+    }
+
+    // outerHtmlHead: publicId only -> "PUBLIC" keyword with quoted id, no SYSTEM part
+    @Test
+    public void testOuterHtmlHead_publicIdOnly_producesPublicDoctype() throws Throwable {
+        DocumentType dt = new DocumentType("html", "-//W3C//DTD HTML 4.01//EN", "", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01//EN\">", accum.toString());
+    }
+
+    // outerHtmlHead (bug): systemId only must use "SYSTEM" keyword with quoted id per HTML5 doctype syntax
+    @Test
+    public void testOuterHtmlHead_systemIdOnly_producesSystemDoctype() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "about:legacy-compat", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html SYSTEM \"about:legacy-compat\">", accum.toString());
+    }
+
+    // outerHtmlHead (bug): both ids present must fully quote the systemId after the publicId
+    @Test
+    public void testOuterHtmlHead_bothIdsPresent_producesPublicAndSystemDoctype() throws Throwable {
+        DocumentType dt = new DocumentType("html", "-//W3C//DTD XHTML 1.0 Strict//EN",
+            "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">",
+            accum.toString());
+    }
+
+    // outerHtmlHead: appends to existing StringBuilder content rather than replacing it
+    @Test
+    public void testOuterHtmlHead_appendsToExistingAccumContent() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "", "");
+        StringBuilder accum = new StringBuilder("PREFIX-");
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("PREFIX-<!DOCTYPE html>", accum.toString());
+    }
+
+    // outerHtmlHead: depth parameter does not change output (no indentation logic applied)
+    @Test
+    public void testOuterHtmlHead_depthParameterIgnored() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "", "");
+        StringBuilder accumZero = new StringBuilder();
+        StringBuilder accumDeep = new StringBuilder();
+        dt.outerHtmlHead(accumZero, 0, settings);
+        dt.outerHtmlHead(accumDeep, 10, settings);
+        assertEquals(accumZero.toString(), accumDeep.toString());
+    }
+
+    // outerHtmlTail: appends no content to an initially empty accumulator
+    @Test
+    public void testOuterHtmlTail_appendsNothing() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlTail(accum, 0, settings);
+        assertEquals("", accum.toString());
+    }
+
+    // outerHtmlTail: leaves pre-existing accumulator content unchanged regardless of depth
+    @Test
+    public void testOuterHtmlTail_leavesExistingContentUnchanged() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "", "");
+        StringBuilder accum = new StringBuilder("existing");
+        dt.outerHtmlTail(accum, 5, settings);
+        assertEquals("existing", accum.toString());
+    }
+
+    // attr getter: publicId is retrievable via attr() after construction
+    @Test
+    public void testAttr_publicIdGetter_returnsSetValue() throws Throwable {
+        DocumentType dt = new DocumentType("html", "myPublicId", "", "");
+        assertEquals("myPublicId", dt.attr("publicId"));
+    }
+
+    // attr getter: systemId is retrievable via attr() after construction
+    @Test
+    public void testAttr_systemIdGetter_returnsSetValue() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "mySystemId", "");
+        assertEquals("mySystemId", dt.attr("systemId"));
+    }
+
+    // attr getter: unknown attribute key returns empty string, not null
+    @Test
+    public void testAttr_unknownAttribute_returnsEmptyString() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "", "");
+        assertEquals("", dt.attr("nonexistent"));
+    }
+
+    // outerHtmlHead: single-character publicId is still correctly quoted
+    @Test
+    public void testOuterHtmlHead_singleCharacterPublicId() throws Throwable {
+        DocumentType dt = new DocumentType("html", "x", "", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html PUBLIC \"x\">", accum.toString());
+    }
+
+    // outerHtmlHead (bug): single-character systemId still requires "SYSTEM" keyword and quotes
+    @Test
+    public void testOuterHtmlHead_singleCharacterSystemId() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "y", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html SYSTEM \"y\">", accum.toString());
+    }
+
+    // outerHtmlHead: the "name" attribute value never affects the literal "html" head output
+    @Test
+    public void testOuterHtmlHead_nameAttributeIgnoredInOutput() throws Throwable {
+        DocumentType dt = new DocumentType("customName", "", "", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html>", accum.toString());
+    }
+
+    // outerHtmlHead: publicId blank and systemId whitespace-only together -> simple doctype
+    @Test
+    public void testOuterHtmlHead_publicIdBlank_systemIdWhitespace_producesSimpleDoctype() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "   ", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html>", accum.toString());
+    }
+
+    // outerHtmlHead (bug): publicId whitespace-only with systemId present must still use SYSTEM branch
+    @Test
+    public void testOuterHtmlHead_publicIdWhitespace_systemIdPresent_producesSystemDoctype() throws Throwable {
+        DocumentType dt = new DocumentType("html", "   ", "sysOnly", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html SYSTEM \"sysOnly\">", accum.toString());
+    }
+
+    // outerHtmlHead: repeated calls on the same accumulator each append independently
+    @Test
+    public void testOuterHtmlHead_multipleCalls_accumulatesEachCall() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlHead(accum, 0, settings);
+        dt.outerHtmlHead(accum, 0, settings);
+        assertEquals("<!DOCTYPE html><!DOCTYPE html>", accum.toString());
+    }
+
+    // outerHtmlTail: repeated calls remain no-ops and never add content
+    @Test
+    public void testOuterHtmlTail_multipleCalls_stillEmpty() throws Throwable {
+        DocumentType dt = new DocumentType("html", "", "", "");
+        StringBuilder accum = new StringBuilder();
+        dt.outerHtmlTail(accum, 0, settings);
+        dt.outerHtmlTail(accum, 3, settings);
+        assertEquals("", accum.toString());
+    }
+}

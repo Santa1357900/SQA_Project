@@ -1,0 +1,196 @@
+﻿== [1/4] apt packages ==
+   JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+== [2/4] clone Defects4J ==
+== [3/4] Perl deps + init.sh (downloads build tools, ~5-10 min) ==
+!
+! Can't write to /usr/local/share/perl/5.40.1 and /usr/local/bin: Installing modules to /home/pheerapat/perl5
+! To turn off this warning, you have to do one of the following:
+!   - run me as a root or with --sudo option (to install to /usr/local/share/perl/5.40.1 and /usr/local/bin)
+!   - Configure local::lib in your existing shell to set PERL_MM_OPT etc.
+!   - Install local::lib by running the following commands
+!
+!         cpanm --local-lib=~/perl5 local::lib && eval $(perl -I ~/perl5/lib/perl5/ -Mlocal::lib)
+!
+Successfully installed List-SomeUtils-XS-0.59
+Successfully installed List-SomeUtils-0.59
+Successfully installed B-Keywords-1.29
+Successfully installed Pod-Parser-1.67
+Successfully installed YAML-PP-v0.41.0
+Successfully installed Task-Weaken-1.06
+Successfully installed Safe-Isa-1.000010
+Successfully installed PPI-1.291
+Successfully installed PPIx-Regexp-0.092
+Successfully installed PPIx-QuoteLike-0.024
+Successfully installed Perl-Tidy-20260826
+Successfully installed File-ShareDir-Install-0.14
+Successfully installed Class-Tiny-1.008
+Successfully installed Lingua-EN-Inflect-1.905
+Successfully installed Class-Inspector-1.36
+Successfully installed File-ShareDir-1.118
+Successfully installed Pod-Spell-1.27
+wsl : /usr/bin/tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.lastuseddate#PS'
+At line:1 char:302
++ ... tch {} } }; wsl -d Ubuntu -u root bash -c 'sed -i "s/\r$//" /mnt/e/Sa ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (/usr/bin/tar: I...astuseddate#PS':String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+/usr/bin/tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.lastuseddate#PS'
+Successfully installed Class-Data-Inheritable-0.10
+Successfully installed Devel-StackTrace-2.05
+Successfully installed Exception-Class-1.46
+Successfully installed Module-Pluggable-6.4
+Successfully installed File-Which-1.27
+Successfully installed Config-Tiny-2.30
+Successfully installed PPIx-Utils-0.004
+Successfully installed String-Format-1.18
+Successfully installed Perl-Critic-1.156
+26 distributions installed
+Checking system configuration ... 
+Setting up project repositories ... 
+
+Setting up Major ... 
+Downloading https://mutation-testing.org/downloads/major-3.0.1_jre11.zip
+curl: option : blank argument where content is expected
+curl: try 'curl --help' or 'curl --manual' for more information
+retrying curl https://mutation-testing.org/downloads/major-3.0.1_jre11.zip
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+
+  0      0   0      0   0      0      0      0                              0
+  0  6.95M   0   7842   0      0   7123      0   17:03   00:01   17:02   7129
+ 10  6.95M  10 742.0k   0      0 332.7k      0   00:21   00:02   00:19 332.8k
+100  6.95M 100  6.95M   0      0  2.37M      0   00:02   00:02         332.8k
+100  6.95M 100  6.95M   0      0  2.37M      0   00:02   00:02         332.8k
+100  6.95M 100  6.95M   0      0  2.37M      0   00:02   00:02         332.8k
+Downloaded https://mutation-testing.org/downloads/major-3.0.1_jre11.zip
+
+Setting up EvoSuite ... 
+Downloading https://github.com/EvoSuite/evosuite/releases/download/v1.1.0/evosuite-1.1.0.jar
+curl: option : blank argument where content is expected
+curl: try 'curl --help' or 'curl --manual' for more information
+retrying curl https://github.com/EvoSuite/evosuite/releases/download/v1.1.0/evosuite-1.1.0.jar
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+
+  0      0   0      0   0      0      0      0                              0
+100 17.00M 100 17.00M   0      0 14.61M      0   00:01   00:01              0
+100 17.00M 100 17.00M   0      0 14.61M      0   00:01   00:01              0
+100 17.00M 100 17.00M   0      0 14.61M      0   00:01   00:01              0
+Downloaded https://github.com/EvoSuite/evosuite/releases/download/v1.1.0/evosuite-1.1.0.jar
+Downloading https://github.com/EvoSuite/evosuite/releases/download/v1.1.0/evosuite-standalone-runtime-1.1.0.jar
+curl: option : blank argument where content is expected
+curl: try 'curl --help' or 'curl --manual' for more information
+retrying curl https://github.com/EvoSuite/evosuite/releases/download/v1.1.0/evosuite-standalone-runtime-1.1.0.jar
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+
+  0      0   0      0   0      0      0      0                              0
+100  6.88M 100  6.88M   0      0  8.14M      0                              0
+100  6.88M 100  6.88M   0      0  8.14M      0                              0
+100  6.88M 100  6.88M   0      0  8.14M      0                              0
+Downloaded https://github.com/EvoSuite/evosuite/releases/download/v1.1.0/evosuite-standalone-runtime-1.1.0.jar
+
+Setting up Randoop ... 
+Downloading https://github.com/randoop/randoop/releases/download/v4.3.4/randoop-4.3.4.zip
+curl: option : blank argument where content is expected
+curl: try 'curl --help' or 'curl --manual' for more information
+retrying curl https://github.com/randoop/randoop/releases/download/v4.3.4/randoop-4.3.4.zip
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+
+  0      0   0      0   0      0      0      0                              0
+100 21.18M 100 21.18M   0      0 14.90M      0   00:01   00:01              0
+100 21.18M 100 21.18M   0      0 14.90M      0   00:01   00:01              0
+100 21.18M 100 21.18M   0      0 14.90M      0   00:01   00:01              0
+Downloaded https://github.com/randoop/randoop/releases/download/v4.3.4/randoop-4.3.4.zip
+
+Setting up Gradle dependencies ... 
+Downloading https://defects4j.org/downloads/defects4j-gradle-dists-v3.zip
+curl: option : blank argument where content is expected
+curl: try 'curl --help' or 'curl --manual' for more information
+retrying curl https://defects4j.org/downloads/defects4j-gradle-dists-v3.zip
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+
+  0      0   0      0   0      0      0      0                              0
+  0 72.79M   0  55840   0      0  51508      0   24:42   00:01   24:41  51512
+  1 72.79M   1  1.36M   0      0 649.5k      0   01:54   00:02   01:52 649.7k
+ 22 72.79M  22 16.07M   0      0  4.91M      0   00:14   00:03   00:11  4.91M
+ 45 72.79M  45 32.92M   0      0  7.52M      0   00:09   00:04   00:05  7.52M
+ 68 72.79M  68 49.95M   0      0  9.10M      0   00:07   00:05   00:02  9.10M
+ 87 72.79M  87 63.35M   0      0  9.59M      0   00:07   00:06   00:01 11.47M
+100 72.79M 100 72.79M   0      0 10.28M      0   00:07   00:07         11.47M
+100 72.79M 100 72.79M   0      0 10.28M      0   00:07   00:07         11.47M
+100 72.79M 100 72.79M   0      0 10.28M      0   00:07   00:07         11.47M
+Downloaded https://defects4j.org/downloads/defects4j-gradle-dists-v3.zip
+Downloading https://defects4j.org/downloads/defects4j-gradle-deps-v3.zip
+curl: option : blank argument where content is expected
+curl: try 'curl --help' or 'curl --manual' for more information
+retrying curl https://defects4j.org/downloads/defects4j-gradle-deps-v3.zip
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+
+  0      0   0      0   0      0      0      0                              0
+  0 43.00M   0  39840   0      0  34681      0   21:40   00:01   21:39  34703
+  3 43.00M   3  1.51M   0      0 682.9k      0   01:04   00:02   01:02 683.3k
+ 16 43.00M  16  7.30M   0      0  2.22M      0   00:19   00:03   00:16  2.22M
+ 43 43.00M  43 18.88M   0      0  4.33M      0   00:09   00:04   00:05  4.33M
+ 76 43.00M  76 33.08M   0      0  6.16M      0   00:06   00:05   00:01  6.16M
+100 43.00M 100 43.00M   0      0  6.95M      0   00:06   00:06          6.16M
+100 43.00M 100 43.00M   0      0  6.95M      0   00:06   00:06          6.16M
+100 43.00M 100 43.00M   0      0  6.95M      0   00:06   00:06          6.16M
+Downloaded https://defects4j.org/downloads/defects4j-gradle-deps-v3.zip
+
+Setting up utility programs ... 
+Downloading https://github.com/jose/build-analyzer/releases/download/v0.0.1/build-analyzer-0.0.1.jar
+curl: option : blank argument where content is expected
+curl: try 'curl --help' or 'curl --manual' for more information
+retrying curl https://github.com/jose/build-analyzer/releases/download/v0.0.1/build-analyzer-0.0.1.jar
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0
+
+  0      0   0      0   0      0      0      0                              0
+100  4.47M 100  4.47M   0      0  5.56M      0                              0
+100  4.47M 100  4.47M   0      0  5.55M      0                              0
+100  4.47M 100  4.47M   0      0  5.55M      0                              0
+Downloaded https://github.com/jose/build-analyzer/releases/download/v0.0.1/build-analyzer-0.0.1.jar
+
+Defects4J successfully initialized.
+
+|------------------------------------------------------------------------|
+|                           Defects4J version 3                          |
+|------------------------------------------------------------------------|
+| PLEASE READ:                                                           |
+| https://github.com/rjust/defects4j/?tab=readme-ov-file#reproducibility |
+|------------------------------------------------------------------------|
+| Important changes:                                                     |
+|   * Java 11 is required                                                |
+|   * Randoop v4.3.3                                                     |
+|   * Major v3.0.1                                                       |
+|------------------------------------------------------------------------|
+== [4/4] shell profile ==
+== verify ==
+openjdk version "11.0.32.1" 2026-08-18
+Summary of configuration for Project: Lang
+--------------------------------------------------------------------------------
+    Script dir: /home/pheerapat/defects4j/framework
+      Base dir: /home/pheerapat/defects4j
+    Major root: /home/pheerapat/defects4j/major
+DONE

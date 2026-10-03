@@ -1,0 +1,319 @@
+package org.joda.time.format;
+
+import java.util.Locale;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.joda.time.Chronology;
+import org.joda.time.DateTimeField;
+import org.joda.time.DateTimeFieldType;
+import org.joda.time.DateTimeZone;
+import org.joda.time.IllegalFieldValueException;
+import org.joda.time.chrono.ISOChronology;
+
+public class DateTimeParserBucketClaudeTest {
+
+    private final Chronology UTC_CHRONO = ISOChronology.getInstanceUTC();
+
+    // covers deprecated 3-arg constructor delegating pivotYear=null
+    @Test
+    public void testConstructor_threeArg_pivotYearNull() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US);
+        assertNull(bucket.getPivotYear());
+    }
+
+    // covers deprecated 4-arg constructor delegating pivotYear value
+    @Test
+    public void testConstructor_fourArg_setsPivotYear() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US, Integer.valueOf(1950));
+        assertEquals(Integer.valueOf(1950), bucket.getPivotYear());
+    }
+
+    // covers 5-arg constructor: locale stored and zone derived from chronology (non-UTC)
+    @Test
+    public void testConstructor_fiveArg_setsLocaleAndZoneFromChronology() throws Throwable {
+        Chronology londonChrono = ISOChronology.getInstance(DateTimeZone.forID("Europe/London"));
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, londonChrono, Locale.UK, null, 1999);
+        assertEquals(Locale.UK, bucket.getLocale());
+        assertEquals(DateTimeZone.forID("Europe/London"), bucket.getZone());
+    }
+
+    // covers getChronology returning chronology converted to UTC
+    @Test
+    public void testGetChronology_returnsUTCVariant() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US, null, 2000);
+        assertEquals(DateTimeZone.UTC, bucket.getChronology().getZone());
+    }
+
+    // covers locale != null branch
+    @Test
+    public void testGetLocale_explicitLocalePreserved() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.FRANCE, null, 2000);
+        assertEquals(Locale.FRANCE, bucket.getLocale());
+    }
+
+    // covers locale == null branch using Locale.getDefault()
+    @Test
+    public void testGetLocale_nullUsesSystemDefault() throws Throwable {
+        Locale expected = Locale.getDefault();
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, null, null, 2000);
+        assertEquals(expected, bucket.getLocale());
+    }
+
+    // covers setPivotYear setter including reset to null
+    @Test
+    public void testSetPivotYear_updatesValue() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US, null, 2000);
+        bucket.setPivotYear(Integer.valueOf(1980));
+        assertEquals(Integer.valueOf(1980), bucket.getPivotYear());
+        bucket.setPivotYear(null);
+        assertNull(bucket.getPivotYear());
+    }
+
+    // covers setOffset setting offset value and clearing zone
+    @Test
+    public void testSetOffset_clearsZone() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L,
+                ISOChronology.getInstance(DateTimeZone.forID("Europe/London")), Locale.US, null, 2000);
+        bucket.setOffset(3600000);
+        assertEquals(3600000, bucket.getOffset());
+        assertNull(bucket.getZone());
+    }
+
+    // covers setZone with non-UTC zone branch, resetting offset to zero
+    @Test
+    public void testSetZone_nonUTC_resetsOffsetToZero() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US, null, 2000);
+        DateTimeZone paris = DateTimeZone.forID("Europe/Paris");
+        bucket.setZone(paris);
+        assertEquals(paris, bucket.getZone());
+        assertEquals(0, bucket.getOffset());
+    }
+
+    // covers setZone UTC special-case branch storing null internally
+    @Test
+    public void testSetZone_UTC_storesNullInternally() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L,
+                ISOChronology.getInstance(DateTimeZone.forID("Europe/Paris")), Locale.US, null, 2000);
+        bucket.setZone(DateTimeZone.UTC);
+        assertNull(bucket.getZone());
+    }
+
+    // covers saveField(DateTimeField,int) and single-field computeMillis path
+    @Test
+    public void testSaveField_dateTimeField_appliesOnComputeMillis() throws Throwable {
+        long instant = 0L;
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, UTC_CHRONO, Locale.US, null, 2000);
+        DateTimeField hourField = bucket.getChronology().hourOfDay();
+        bucket.saveField(hourField, 10);
+        long expected = hourField.set(instant, 10);
+        assertEquals(expected, bucket.computeMillis());
+    }
+
+    // covers saveField(DateTimeFieldType,int) overload
+    @Test
+    public void testSaveField_fieldType_int_appliesOnComputeMillis() throws Throwable {
+        long instant = 0L;
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, UTC_CHRONO, Locale.US, null, 2000);
+        bucket.saveField(DateTimeFieldType.minuteOfHour(), 45);
+        long expected = bucket.getChronology().minuteOfHour().set(instant, 45);
+        assertEquals(expected, bucket.computeMillis());
+    }
+
+    // covers saveField(DateTimeFieldType,String,Locale) overload with numeric text parsing
+    @Test
+    public void testSaveField_fieldType_text_parsesNumericValue() throws Throwable {
+        long instant = 0L;
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, UTC_CHRONO, Locale.US, null, 2000);
+        bucket.saveField(DateTimeFieldType.secondOfMinute(), "37", Locale.US);
+        long expected = bucket.getChronology().secondOfMinute().set(instant, 37);
+        assertEquals(expected, bucket.computeMillis());
+    }
+
+    // covers computeMillis branch auto-saving year=iDefaultYear(2000) when first field is month+day
+    @Test
+    public void testComputeMillis_monthDayOnly_usesDefaultYear2000() throws Throwable {
+        long instant = 0L;
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, UTC_CHRONO, Locale.US);
+        bucket.saveField(DateTimeFieldType.monthOfYear(), 6);
+        bucket.saveField(DateTimeFieldType.dayOfMonth(), 15);
+        Chronology c = bucket.getChronology();
+        long expected = c.dayOfMonth().set(c.monthOfYear().set(c.year().set(instant, 2000), 6), 15);
+        assertEquals(expected, bucket.computeMillis());
+    }
+
+    // covers boundary: first field duration == days triggers default year with a custom defaultYear
+    @Test
+    public void testComputeMillis_dayOnly_usesCustomDefaultYear() throws Throwable {
+        long instant = 0L;
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, UTC_CHRONO, Locale.US, null, 1975);
+        bucket.saveField(DateTimeFieldType.dayOfMonth(), 20);
+        Chronology c = bucket.getChronology();
+        long expected = c.dayOfMonth().set(c.year().set(instant, 1975), 20);
+        assertEquals(expected, bucket.computeMillis());
+    }
+
+    // covers boundary: first field duration shorter than days must NOT trigger default-year branch
+    @Test
+    public void testComputeMillis_hourOnly_doesNotApplyDefaultYear() throws Throwable {
+        long instant = 0L;
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, UTC_CHRONO, Locale.US, null, 1975);
+        bucket.saveField(DateTimeFieldType.hourOfDay(), 8);
+        Chronology c = bucket.getChronology();
+        long expected = c.hourOfDay().set(instant, 8);
+        assertEquals(expected, bucket.computeMillis());
+    }
+
+    // covers Javadoc contract: computeMillis is idempotent even after internal default-year insertion
+    @Test
+    public void testComputeMillis_idempotentAcrossRepeatedCalls() throws Throwable {
+        long instant = 0L;
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, UTC_CHRONO, Locale.US);
+        bucket.saveField(DateTimeFieldType.monthOfYear(), 9);
+        bucket.saveField(DateTimeFieldType.dayOfMonth(), 3);
+        long first = bucket.computeMillis();
+        long second = bucket.computeMillis();
+        assertEquals(first, second);
+    }
+
+    // covers SavedField.set resetFields branch applying roundFloor after the field is set
+    @Test
+    public void testComputeMillis_resetFieldsTrue_roundsFloorToHour() throws Throwable {
+        Chronology c = UTC_CHRONO;
+        long instant = c.minuteOfHour().set(c.hourOfDay().set(0L, 5), 30);
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, c, Locale.US, null, 2000);
+        bucket.saveField(DateTimeFieldType.hourOfDay(), 10);
+        long expectedBeforeFloor = c.hourOfDay().set(instant, 10);
+        long expected = c.hourOfDay().roundFloor(expectedBeforeFloor);
+        assertEquals(expected, bucket.computeMillis(true));
+    }
+
+    // covers default resetFields=false branch (no roundFloor applied)
+    @Test
+    public void testComputeMillis_resetFieldsFalse_noRounding() throws Throwable {
+        Chronology c = UTC_CHRONO;
+        long instant = c.minuteOfHour().set(c.hourOfDay().set(0L, 5), 30);
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, c, Locale.US, null, 2000);
+        bucket.saveField(DateTimeFieldType.hourOfDay(), 10);
+        long expected = c.hourOfDay().set(instant, 10);
+        assertEquals(expected, bucket.computeMillis(false));
+    }
+
+    // covers saveField array-growth branch (initial capacity 8) and last-write-wins ordering
+    @Test
+    public void testSaveField_moreThanInitialCapacity_growsArray() throws Throwable {
+        long instant = 0L;
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, UTC_CHRONO, Locale.US, null, 2000);
+        for (int i = 1; i <= 9; i++) {
+            bucket.saveField(DateTimeFieldType.hourOfDay(), i);
+        }
+        long expected = bucket.getChronology().hourOfDay().set(instant, 9);
+        assertEquals(expected, bucket.computeMillis());
+    }
+
+    // covers saveState/restoreState discarding fields saved after the saved state
+    @Test
+    public void testSaveStateRestoreState_discardsFieldsSavedAfterState() throws Throwable {
+        long instant = 0L;
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, UTC_CHRONO, Locale.US, null, 2000);
+        bucket.saveField(DateTimeFieldType.hourOfDay(), 5);
+        Object state = bucket.saveState();
+        bucket.saveField(DateTimeFieldType.hourOfDay(), 20);
+        boolean restored = bucket.restoreState(state);
+        assertTrue(restored);
+        long expected = bucket.getChronology().hourOfDay().set(instant, 5);
+        assertEquals(expected, bucket.computeMillis());
+    }
+
+    // covers restoreState instanceof-check failure branch (non SavedState object)
+    @Test
+    public void testRestoreState_nonSavedStateObject_returnsFalse() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US, null, 2000);
+        assertFalse(bucket.restoreState("not a state"));
+    }
+
+    // covers restoreState with null argument
+    @Test
+    public void testRestoreState_null_returnsFalse() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US, null, 2000);
+        assertFalse(bucket.restoreState(null));
+    }
+
+    // covers restoreState enclosing-instance mismatch branch
+    @Test
+    public void testRestoreState_stateFromDifferentBucket_returnsFalse() throws Throwable {
+        DateTimeParserBucket bucketA = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US, null, 2000);
+        DateTimeParserBucket bucketB = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US, null, 2000);
+        Object stateFromA = bucketA.saveState();
+        assertFalse(bucketB.restoreState(stateFromA));
+    }
+
+    // covers IllegalFieldValueException propagation path through computeMillis()
+    @Test
+    public void testComputeMillis_invalidFieldValue_throwsIllegalFieldValueException() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US, null, 2000);
+        bucket.saveField(DateTimeFieldType.monthOfYear(), 13);
+        try {
+            bucket.computeMillis();
+            fail("expected IllegalFieldValueException");
+        } catch (IllegalFieldValueException expected) {
+        }
+    }
+
+    // covers text-prepend branch inside catch block of computeMillis(resetFields,text)
+    @Test
+    public void testComputeMillis_withTextOnError_prependsTextToMessage() throws Throwable {
+        DateTimeParserBucket bucket = new DateTimeParserBucket(0L, UTC_CHRONO, Locale.US, null, 2000);
+        bucket.saveField(DateTimeFieldType.monthOfYear(), 13);
+        try {
+            bucket.computeMillis(false, "13/15/2000");
+            fail("expected IllegalFieldValueException");
+        } catch (IllegalFieldValueException expected) {
+            assertTrue(expected.getMessage().indexOf("13/15/2000") >= 0);
+        }
+    }
+
+    // covers zone-offset-transition gap detection branch, throwing IllegalArgumentException
+    @Test
+    public void testComputeMillis_localTimeInDstGap_throwsIllegalArgumentException() throws Throwable {
+        Chronology c = UTC_CHRONO;
+        long instant = c.year().set(0L, 2007);
+        instant = c.monthOfYear().set(instant, 3);
+        instant = c.dayOfMonth().set(instant, 25);
+        instant = c.hourOfDay().set(instant, 1);
+        instant = c.minuteOfHour().set(instant, 30);
+        Chronology londonChrono = ISOChronology.getInstance(DateTimeZone.forID("Europe/London"));
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, londonChrono, Locale.US, null, 2000);
+        try {
+            bucket.computeMillis();
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers normal (non-gap) zone branch of computeMillis using getOffsetFromLocal
+    @Test
+    public void testComputeMillis_zoneOffsetFromLocal_normalInstant() throws Throwable {
+        Chronology c = UTC_CHRONO;
+        long instant = c.year().set(0L, 2007);
+        instant = c.monthOfYear().set(instant, 6);
+        instant = c.dayOfMonth().set(instant, 15);
+        instant = c.hourOfDay().set(instant, 12);
+        DateTimeZone london = DateTimeZone.forID("Europe/London");
+        Chronology londonChrono = ISOChronology.getInstance(london);
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, londonChrono, Locale.US, null, 2000);
+        int offset = london.getOffsetFromLocal(instant);
+        long expected = instant - offset;
+        assertEquals(expected, bucket.computeMillis());
+    }
+
+    // covers iZone==null offset-subtraction branch with zero saved fields
+    @Test
+    public void testComputeMillis_offsetBranch_noSavedFields() throws Throwable {
+        long instant = 123456789L;
+        DateTimeParserBucket bucket = new DateTimeParserBucket(instant, UTC_CHRONO, Locale.US, null, 2000);
+        bucket.setOffset(60000);
+        assertEquals(instant - 60000, bucket.computeMillis());
+    }
+}

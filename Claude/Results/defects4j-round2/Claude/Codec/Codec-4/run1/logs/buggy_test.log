@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Codec-4-afylih2d/Codec-4b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.codec.binary.Base64ClaudeTest::testEncodeObject_byteArrayInput_returnsEncodedBytes
+  - org.apache.commons.codec.binary.Base64ClaudeTest::testBase64Constructor_noArgLongInput_shouldNotChunkPerJavadoc
+  - org.apache.commons.codec.binary.Base64ClaudeTest::testEncodeToString_threeByteInput_knownVector
+[exit 0]

@@ -1,0 +1,289 @@
+package com.google.javascript.jscomp;
+
+import java.util.List;
+
+import com.google.common.collect.Lists;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TypedScopeCreatorClaudeTest {
+
+  private Result compile(String externsJs, String js) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+    List<SourceFile> externs = Lists.newArrayList(
+        SourceFile.fromCode("externs.js", externsJs));
+    List<SourceFile> inputs = Lists.newArrayList(
+        SourceFile.fromCode("test.js", js));
+    return compiler.compile(externs, inputs, options);
+  }
+
+  private Result compile(String js) {
+    return compile("", js);
+  }
+
+  private boolean containsMessage(Result result, String substring) {
+    for (int i = 0; i < result.errors.length; i++) {
+      if (result.errors[i].toString().contains(substring)) {
+        return true;
+      }
+    }
+    for (int i = 0; i < result.warnings.length; i++) {
+      if (result.warnings[i].toString().contains(substring)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Covers static field initialization: DELEGATE_PROXY_SUFFIX via ObjectType.createDelegateSuffix
+  @Test
+  public void testDelegateProxySuffix_isDefinedConstant() throws Throwable {
+    assertNotNull(TypedScopeCreator.DELEGATE_PROXY_SUFFIX);
+    assertTrue(TypedScopeCreator.DELEGATE_PROXY_SUFFIX.length() > 0);
+  }
+
+  // Covers all static DiagnosticType field initializations used by createScope's error paths
+  @Test
+  public void testDiagnosticTypeConstants_areInitialized() throws Throwable {
+    assertNotNull(TypedScopeCreator.MALFORMED_TYPEDEF);
+    assertNotNull(TypedScopeCreator.ENUM_INITIALIZER);
+    assertNotNull(TypedScopeCreator.CTOR_INITIALIZER);
+    assertNotNull(TypedScopeCreator.IFACE_INITIALIZER);
+    assertNotNull(TypedScopeCreator.CONSTRUCTOR_EXPECTED);
+    assertNotNull(TypedScopeCreator.UNKNOWN_LENDS);
+    assertNotNull(TypedScopeCreator.LENDS_ON_NON_OBJECT);
+  }
+
+  // Covers createScope's basic global VAR path with a simple, untyped declaration
+  @Test
+  public void testCreateScope_simpleVarDeclaration_noErrors() throws Throwable {
+    Result result = compile("var x = 1;");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers getDeclaredTypeInAnnotation path: @type mismatched against literal initializer
+  @Test
+  public void testDefineName_typedVarWithWrongInitializer_reportsIssue() throws Throwable {
+    Result result = compile("/** @type {number} */\nvar x = 'hello';");
+    assertTrue(result.errors.length + result.warnings.length > 0);
+  }
+
+  // Covers defineSlot's CTOR_INITIALIZER branch: constructor declared without initial value
+  @Test
+  public void testDefineSlot_ctorWithoutInitializer_reportsCtorInitializerWarning()
+      throws Throwable {
+    Result result = compile("/** @constructor */\nvar Foo;");
+    assertTrue(containsMessage(result, "must be initialized at declaration"));
+  }
+
+  // Covers defineSlot's CTOR_INITIALIZER branch: properly initialized constructor, no warning
+  @Test
+  public void testDefineSlot_ctorProperlyInitialized_noCtorInitializerWarning()
+      throws Throwable {
+    Result result = compile("/** @constructor */\nvar Foo = function() {};");
+    assertFalse(containsMessage(result, "must be initialized at declaration"));
+  }
+
+  // Covers the !isExtern guard on CTOR_INITIALIZER: extern declarations must not warn
+  @Test
+  public void testDefineSlot_ctorDeclaredInExterns_noCtorInitializerWarning()
+      throws Throwable {
+    Result result = compile("/** @constructor */\nvar Foo;", "var x = 1;");
+    assertFalse(containsMessage(result, "must be initialized at declaration"));
+  }
+
+  // Covers defineSlot's IFACE_INITIALIZER branch: interface declared without initial value
+  @Test
+  public void testDefineSlot_ifaceWithoutInitializer_reportsIfaceInitializerWarning()
+      throws Throwable {
+    Result result = compile("/** @interface */\nvar Foo;");
+    assertTrue(containsMessage(result, "must be initialized at declaration"));
+  }
+
+  // Covers defineSlot's IFACE_INITIALIZER branch: properly initialized interface, no warning
+  @Test
+  public void testDefineSlot_ifaceProperlyInitialized_noIfaceInitializerWarning()
+      throws Throwable {
+    Result result = compile("/** @interface */\nvar Foo = function() {};");
+    assertFalse(containsMessage(result, "must be initialized at declaration"));
+  }
+
+  // Covers defineSlot's ENUM_INITIALIZER branch: enum initialized with a non-objlit, non-alias value
+  @Test
+  public void testDefineSlot_enumWithNumberInitializer_reportsEnumInitializerWarning()
+      throws Throwable {
+    Result result = compile("/** @enum {number} */\nvar Foo = 1;");
+    assertTrue(containsMessage(result, "enum initializer must be an object literal"));
+  }
+
+  // Covers defineSlot's ENUM_INITIALIZER branch: valid object literal initializer, no warning
+  @Test
+  public void testDefineSlot_enumWithObjectLiteral_noEnumInitializerWarning() throws Throwable {
+    Result result = compile("/** @enum {number} */\nvar Foo = {A: 1, B: 2};");
+    assertFalse(containsMessage(result, "enum initializer must be an object literal"));
+  }
+
+  // Covers createEnumTypeFromNodes aliasing branch: enum aliased by qualified name, valid initializer
+  @Test
+  public void testDefineSlot_enumAliasedByQualifiedName_noEnumInitializerWarning()
+      throws Throwable {
+    Result result = compile(
+        "/** @enum {number} */\nvar Foo = {A: 1};\n"
+        + "/** @enum {number} */\nvar Bar = Foo;");
+    assertFalse(containsMessage(result, "enum initializer must be an object literal"));
+  }
+
+  // Covers defineVar's MULTIPLE_VAR_DEF branch: JSDoc present with more than one child in VAR
+  @Test
+  public void testDefineVar_multipleVarsWithJsDoc_reportsIssue() throws Throwable {
+    Result result = compile("/** @type {number} */\nvar x = 1, y = 2;");
+    assertTrue(result.errors.length + result.warnings.length > 0);
+  }
+
+  // Covers defineVar: multiple vars without JSDoc must not trigger MULTIPLE_VAR_DEF
+  @Test
+  public void testDefineVar_multipleVarsWithoutJsDoc_noErrors() throws Throwable {
+    Result result = compile("var x = 1, y = 2;");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers defineObjectLiteral's @lends branch: lends name not declared in scope
+  @Test
+  public void testDefineObjectLiteral_lendsOnUndeclaredName_reportsUnknownLendsWarning()
+      throws Throwable {
+    Result result = compile("/** @lends {NotDeclared} */\n({foo: 1});");
+    assertTrue(containsMessage(result, "not declared before @lends annotation"));
+  }
+
+  // Covers defineObjectLiteral's @lends branch: lends target type is not a subtype of Object
+  @Test
+  public void testDefineObjectLiteral_lendsOnNonObjectType_reportsLendsOnNonObjectWarning()
+      throws Throwable {
+    Result result = compile(
+        "/** @type {number} */\nvar x = 1;\n/** @lends {x} */\n({foo: 1});");
+    assertTrue(containsMessage(result, "May only lend properties to object types"));
+  }
+
+  // Covers defineObjectLiteral's @lends branch: lends target is a valid object type, no warnings
+  @Test
+  public void testDefineObjectLiteral_lendsOnValidObjectType_noLendsWarnings() throws Throwable {
+    Result result = compile(
+        "/** @type {!Object} */\nvar x = {};\n/** @lends {x} */\n({foo: 1});");
+    assertFalse(containsMessage(result, "May only lend properties to object types"));
+    assertFalse(containsMessage(result, "not declared before @lends annotation"));
+  }
+
+  // Covers createFunctionTypeFromNodes + FunctionTypeBuilder param inference: wrong argument type
+  @Test
+  public void testFunctionParamType_wrongArgumentType_reportsIssue() throws Throwable {
+    Result result = compile(
+        "/** @param {number} a */\nfunction f(a) {}\nf('str');");
+    assertTrue(result.errors.length + result.warnings.length > 0);
+  }
+
+  // Covers createFunctionTypeFromNodes + FunctionTypeBuilder param inference: correct argument type
+  @Test
+  public void testFunctionParamType_correctArgumentType_noErrors() throws Throwable {
+    Result result = compile(
+        "/** @param {number} a */\nfunction f(a) {}\nf(1);");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers defineCatch: catch parameter declaration in a local scope
+  @Test
+  public void testDefineCatch_catchParameterDeclaration_compilesSuccessfully() throws Throwable {
+    Result result = compile("try { throw 1; } catch (e) { var x = e; }");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers GlobalScopeBuilder.checkForTypedef: valid typedef usage resolves correctly
+  @Test
+  public void testCheckForTypedef_correctUsage_noErrors() throws Throwable {
+    Result result = compile(
+        "/** @typedef {number} */\nvar MyNum;\n/** @type {MyNum} */\nvar x = 5;");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers GlobalScopeBuilder.checkForTypedef: typedef resolved type mismatched with usage
+  @Test
+  public void testCheckForTypedef_wrongUsage_reportsIssue() throws Throwable {
+    Result result = compile(
+        "/** @typedef {number} */\nvar MyNum;\n/** @type {MyNum} */\nvar x = 'str';");
+    assertTrue(result.errors.length + result.warnings.length > 0);
+  }
+
+  // Covers defineSlot's special-case "Window" branch involving GLOBAL_THIS prototype rewiring
+  @Test
+  public void testDefineSlot_windowConstructorSpecialCase_compilesSuccessfully()
+      throws Throwable {
+    Result result = compile(
+        "/** @constructor */\nfunction Window() {}\nvar w = new Window();");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers processObjectLitProperties: explicitly typed object literal key declared correctly
+  @Test
+  public void testProcessObjectLitProperties_declaredKeyType_noErrors() throws Throwable {
+    Result result = compile(
+        "var obj = {\n/** @type {number} */\na: 1\n};\nvar n = obj.a;");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers processObjectLitProperties: assignment violating a declared object literal key type
+  @Test
+  public void testProcessObjectLitProperties_wrongAssignmentToDeclaredKey_reportsIssue()
+      throws Throwable {
+    Result result = compile(
+        "var obj = {\n/** @type {number} */\na: 1\n};\nobj.a = 'str';");
+    assertTrue(result.errors.length + result.warnings.length > 0);
+  }
+
+  // Covers resolveStubDeclarations: stub GETPROP declaration without initializer resolves to unknown
+  @Test
+  public void testResolveStubDeclarations_stubPropertyWithoutValue_noErrors() throws Throwable {
+    Result result = compile(
+        "/** @constructor */\nfunction Foo() {}\nFoo.prototype.bar;\n"
+        + "var f = new Foo();\nvar n = f.bar;");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers LocalScopeBuilder.build: simple local variable declared inside a function scope
+  @Test
+  public void testLocalScopeBuilder_localVariableDeclaration_noErrors() throws Throwable {
+    Result result = compile("function f() {\nvar y = 1;\nreturn y;\n}");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers maybeDeclareQualifiedName: prototype method declaration and usage via new instance
+  @Test
+  public void testMaybeDeclareQualifiedName_prototypeMethodDeclaration_noErrors()
+      throws Throwable {
+    Result result = compile(
+        "/** @constructor */\nfunction Foo() {}\n"
+        + "Foo.prototype.bar = function() { return 1; };\n"
+        + "var f = new Foo();\nvar n = f.bar();");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers shouldTraverse's hoisted function declaration branch: call before textual declaration
+  @Test
+  public void testShouldTraverse_hoistedFunctionCalledBeforeDeclaration_noErrors()
+      throws Throwable {
+    Result result = compile("f();\nfunction f() {}");
+    assertTrue(result.success);
+    assertEquals(0, result.errors.length);
+  }
+}

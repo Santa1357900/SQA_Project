@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Lang-20-j_vf0y7r/Lang-20f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.lang3.StringUtilsClaudeTest::testIndexOfIgnoreCase_emptySearchStrBeyondLength_returnsStrLength
+  - org.apache.commons.lang3.StringUtilsClaudeTest::testChomp_newlineVariants
+  - org.apache.commons.lang3.StringUtilsClaudeTest::testReplaceEachRepeatedly_cyclicReplacement_throwsIllegalArgumentException
+[exit 0]

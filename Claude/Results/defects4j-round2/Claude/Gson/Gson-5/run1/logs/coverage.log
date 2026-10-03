@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Gson-5-txcqr8ak/Gson-5b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 150
+     Lines covered: 143
+  Conditions total: 89
+Conditions covered: 74
+     Line coverage: 95.3%
+Condition coverage: 83.1%
+[exit 0]

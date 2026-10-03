@@ -1,0 +1,392 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ClosureReverseAbstractInterpreterClaudeTest {
+
+  private static final String HELPERS =
+      "var goog = {};\n" +
+      "goog.isArray = function(v) { return true; };\n" +
+      "goog.isObject = function(v) { return true; };\n" +
+      "goog.isString = function(v) { return true; };\n" +
+      "goog.isNumber = function(v) { return true; };\n" +
+      "goog.isBoolean = function(v) { return true; };\n" +
+      "goog.isFunction = function(v) { return true; };\n" +
+      "goog.isDef = function(v) { return true; };\n" +
+      "goog.isNull = function(v) { return true; };\n" +
+      "goog.isDefAndNotNull = function(v) { return true; };\n" +
+      "/** @param {string} s */\n" +
+      "function takesString(s) {}\n" +
+      "/** @param {number} n */\n" +
+      "function takesNumber(n) {}\n" +
+      "/** @param {boolean} b */\n" +
+      "function takesBoolean(b) {}\n" +
+      "/** @param {Array} a */\n" +
+      "function takesArray(a) {}\n" +
+      "/** @param {Function} fn */\n" +
+      "function takesFunction(fn) {}\n" +
+      "/** @param {Object} o */\n" +
+      "function takesObject(o) {}\n" +
+      "/** @param {null} n */\n" +
+      "function takesNull(n) {}\n";
+
+  // Compiles HELPERS + testCode with type checking escalated to errors.
+  private boolean compileSucceeds(String testCode) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+    options.setWarningLevel(DiagnosticGroups.CHECK_TYPES, CheckLevel.ERROR);
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", HELPERS + testCode);
+    Result result = compiler.compile(externs, input, options);
+    return result.success;
+  }
+
+  // restricters["isDef"], outcome=true removes undefined -> string-only use succeeds
+  @Test
+  public void testIsDef_true_removesUndefined_succeeds() throws Throwable {
+    String code =
+        "/** @param {string|undefined} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isDef(x)) { takesString(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isDef"], outcome=false returns null (no narrowing) -> union still unsafe
+  @Test
+  public void testIsDef_false_noNarrowing_fails() throws Throwable {
+    String code =
+        "/** @param {string|undefined} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isDef(x)) {} else { takesString(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // restricters["isNull"], outcome=true always restricts to exactly NULL_TYPE
+  @Test
+  public void testIsNull_true_restrictsToNull_succeeds() throws Throwable {
+    String code =
+        "/** @param {string|null} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isNull(x)) { takesNull(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isNull"], outcome=true excludes string from the restricted type
+  @Test
+  public void testIsNull_true_excludesString_fails() throws Throwable {
+    String code =
+        "/** @param {string|null} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isNull(x)) { takesString(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // restricters["isNull"], outcome=false removes null via getRestrictedWithoutNull
+  @Test
+  public void testIsNull_false_removesNull_succeeds() throws Throwable {
+    String code =
+        "/** @param {string|null} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isNull(x)) {} else { takesString(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isDefAndNotNull"], outcome=true removes both null and undefined
+  @Test
+  public void testIsDefAndNotNull_true_removesNullAndUndefined_succeeds() throws Throwable {
+    String code =
+        "/** @param {string|null|undefined} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isDefAndNotNull(x)) { takesString(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isDefAndNotNull"], outcome=false returns null (no narrowing)
+  @Test
+  public void testIsDefAndNotNull_false_noNarrowing_fails() throws Throwable {
+    String code =
+        "/** @param {string|null|undefined} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isDefAndNotNull(x)) {} else { takesString(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // restricters["isString"], outcome=true restricts union to the string member
+  @Test
+  public void testIsString_true_restrictsToString_succeeds() throws Throwable {
+    String code =
+        "/** @param {string|number} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isString(x)) { takesString(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isString"], outcome=true excludes the number member
+  @Test
+  public void testIsString_true_excludesNumber_fails() throws Throwable {
+    String code =
+        "/** @param {string|number} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isString(x)) { takesNumber(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // restricters["isString"], outcome=false restricts union to the number member
+  @Test
+  public void testIsString_false_restrictsToNumber_succeeds() throws Throwable {
+    String code =
+        "/** @param {string|number} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isString(x)) {} else { takesNumber(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isBoolean"], outcome=true restricts union to the boolean member
+  @Test
+  public void testIsBoolean_true_restrictsToBoolean_succeeds() throws Throwable {
+    String code =
+        "/** @param {boolean|number} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isBoolean(x)) { takesBoolean(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isBoolean"], outcome=false restricts union to the number member
+  @Test
+  public void testIsBoolean_false_restrictsToNumber_succeeds() throws Throwable {
+    String code =
+        "/** @param {boolean|number} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isBoolean(x)) {} else { takesNumber(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isBoolean"], outcome=false excludes the boolean member
+  @Test
+  public void testIsBoolean_false_excludesBoolean_fails() throws Throwable {
+    String code =
+        "/** @param {boolean|number} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isBoolean(x)) {} else { takesBoolean(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // restricters["isNumber"], outcome=true restricts union to the number member
+  @Test
+  public void testIsNumber_true_restrictsToNumber_succeeds() throws Throwable {
+    String code =
+        "/** @param {number|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isNumber(x)) { takesNumber(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isNumber"], outcome=true excludes the string member
+  @Test
+  public void testIsNumber_true_excludesString_fails() throws Throwable {
+    String code =
+        "/** @param {number|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isNumber(x)) { takesString(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // restricters["isNumber"], outcome=false restricts union to the string member
+  @Test
+  public void testIsNumber_false_restrictsToString_succeeds() throws Throwable {
+    String code =
+        "/** @param {number|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isNumber(x)) {} else { takesString(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isFunction"], outcome=true restricts union to the Function member
+  @Test
+  public void testIsFunction_true_restrictsToFunction_succeeds() throws Throwable {
+    String code =
+        "/** @param {Function|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isFunction(x)) { takesFunction(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isFunction"], outcome=false restricts union to the string member
+  @Test
+  public void testIsFunction_false_restrictsToString_succeeds() throws Throwable {
+    String code =
+        "/** @param {Function|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isFunction(x)) {} else { takesString(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restricters["isFunction"], outcome=false excludes the Function member
+  @Test
+  public void testIsFunction_false_excludesFunction_fails() throws Throwable {
+    String code =
+        "/** @param {Function|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isFunction(x)) {} else { takesFunction(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // restrictToArrayVisitor via restricters["isArray"], outcome=true restricts to Array
+  @Test
+  public void testIsArray_true_restrictsToArray_succeeds() throws Throwable {
+    String code =
+        "/** @param {Array|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isArray(x)) { takesArray(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restrictToNotArrayVisitor via restricters["isArray"], outcome=false restricts to string
+  @Test
+  public void testIsArray_false_restrictsToString_succeeds() throws Throwable {
+    String code =
+        "/** @param {Array|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isArray(x)) {} else { takesString(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restrictToNotArrayVisitor, outcome=false excludes the Array member
+  @Test
+  public void testIsArray_false_excludesArray_fails() throws Throwable {
+    String code =
+        "/** @param {Array|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isArray(x)) {} else { takesArray(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // restrictToObjectVisitor via restricters["isObject"], outcome=true keeps only object member
+  @Test
+  public void testIsObject_true_restrictsToObject_succeeds() throws Throwable {
+    String code =
+        "/** @param {Array|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isObject(x)) { takesObject(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restrictToNotObjectVisitor via restricters["isObject"], outcome=false keeps string member
+  @Test
+  public void testIsObject_false_restrictsToString_succeeds() throws Throwable {
+    String code =
+        "/** @param {Array|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isObject(x)) {} else { takesString(x); }\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+
+  // restrictToNotObjectVisitor, outcome=false excludes the Array (object) member
+  @Test
+  public void testIsObject_false_excludesObject_fails() throws Throwable {
+    String code =
+        "/** @param {Array|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.isObject(x)) {} else { takesObject(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // getPreciserScopeKnowingConditionOutcome: left name is not "goog" -> no narrowing applied
+  @Test
+  public void testNonGoogNamespace_noNarrowing_fails() throws Throwable {
+    String code =
+        "var other = {};\n" +
+        "other.isArray = function(v) { return true; };\n" +
+        "/** @param {Array|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (other.isArray(x)) { takesArray(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // getPreciserScopeKnowingConditionOutcome: method name not present in restricters map
+  @Test
+  public void testUnknownGoogMethod_noNarrowing_fails() throws Throwable {
+    String code =
+        "goog.foo = function(v) { return true; };\n" +
+        "/** @param {Array|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.foo(x)) { takesArray(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // getPreciserScopeKnowingConditionOutcome: condition.getChildCount() != 2 skips narrowing
+  @Test
+  public void testExtraArgument_noNarrowing_fails() throws Throwable {
+    String code =
+        "/** @param {Array|string} x\n @param {*} y */\n" +
+        "function f(x, y) {\n" +
+        "  if (goog.isArray(x, y)) { takesArray(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // getPreciserScopeKnowingConditionOutcome: callee not a GETPROP skips narrowing
+  @Test
+  public void testCalleeNotGetProp_noNarrowing_fails() throws Throwable {
+    String code =
+        "function isArrayLike(v) { return true; }\n" +
+        "/** @param {Array|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (isArrayLike(x)) { takesArray(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // getPreciserScopeKnowingConditionOutcome: callee.getFirstChild() not NAME skips narrowing
+  @Test
+  public void testNestedGetProp_noNarrowing_fails() throws Throwable {
+    String code =
+        "goog.bar = {};\n" +
+        "goog.bar.isArray = function(v) { return true; };\n" +
+        "/** @param {Array|string} x */\n" +
+        "function f(x) {\n" +
+        "  if (goog.bar.isArray(x)) { takesArray(x); }\n" +
+        "}\n";
+    assertFalse(compileSucceeds(code));
+  }
+
+  // Baseline sanity check: directly matching type assignment always succeeds
+  @Test
+  public void testBaseline_matchingTypeAssignment_succeeds() throws Throwable {
+    String code =
+        "/** @param {string} x */\n" +
+        "function f(x) {\n" +
+        "  takesString(x);\n" +
+        "}\n";
+    assertTrue(compileSucceeds(code));
+  }
+}

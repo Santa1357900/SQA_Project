@@ -1,0 +1,281 @@
+package org.jsoup.helper;
+
+import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.Test;
+
+import org.jsoup.Jsoup;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.w3c.dom.Comment;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+public class W3CDomClaudeTest {
+
+    private W3CDom w3c;
+
+    @Before
+    public void setUp() throws Throwable {
+        w3c = new W3CDom();
+    }
+
+    // Constructor: factory field must be initialized to a usable instance
+    @Test
+    public void testConstructor_factoryFieldInitialized() throws Throwable {
+        assertNotNull(w3c.factory);
+    }
+
+    // fromJsoup: Validate.notNull(in) branch must reject null input
+    @Test
+    public void testFromJsoup_nullInput_throwsRuntimeException() throws Throwable {
+        try {
+            w3c.fromJsoup(null);
+            fail("expected exception for null input");
+        } catch (RuntimeException expected) {
+            // Validate.notNull rejects null
+        }
+    }
+
+    // fromJsoup: simple doc produces root element "html"
+    @Test
+    public void testFromJsoup_simpleDocument_rootElementIsHtml() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p>Hello</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        assertEquals("html", out.getDocumentElement().getTagName());
+    }
+
+    // convert: !StringUtil.isBlank(location) branch -> documentURI set to base uri
+    @Test
+    public void testFromJsoup_locationSet_setsDocumentURI() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p>Hi</p>", "http://example.com/");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        assertEquals("http://example.com/", out.getDocumentURI());
+    }
+
+    // convert: blank location branch -> documentURI left unset (null)
+    @Test
+    public void testFromJsoup_locationBlank_documentURINotSet() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p>Hi</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        assertNull(out.getDocumentURI());
+    }
+
+    // head(): TextNode branch appends text content
+    @Test
+    public void testConvert_textNode_appendsTextContent() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p>a  b</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element p = (Element) out.getElementsByTagName("p").item(0);
+        assertEquals("a  b", p.getTextContent());
+    }
+
+    // head(): Comment branch appends w3c Comment node with same data
+    @Test
+    public void testConvert_commentNode_appendsCommentWithData() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<body><!-- note --><p>x</p></body>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        NodeList bodyChildren = out.getElementsByTagName("body").item(0).getChildNodes();
+        boolean found = false;
+        for (int i = 0; i < bodyChildren.getLength(); i++) {
+            Node n = bodyChildren.item(i);
+            if (n.getNodeType() == Node.COMMENT_NODE) {
+                found = true;
+                assertTrue(((Comment) n).getData().indexOf("note") >= 0);
+            }
+        }
+        assertTrue(found);
+    }
+
+    // head(): DataNode branch (script content) appends raw data as text
+    @Test
+    public void testConvert_dataNodeScript_appendsRawData() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<script>var a = 1;</script>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element script = (Element) out.getElementsByTagName("script").item(0);
+        assertEquals("var a = 1;", script.getTextContent());
+    }
+
+    // copyAttributes: normal valid attribute name copied unchanged
+    @Test
+    public void testConvert_normalAttribute_copiedToElement() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p id='test'>Hi</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element p = (Element) out.getElementsByTagName("p").item(0);
+        assertEquals("test", p.getAttribute("id"));
+    }
+
+    // copyAttributes: invalid characters stripped from attribute key
+    @Test
+    public void testConvert_attributeWithInvalidChars_sanitizedKey() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p foo!bar='val'>Hi</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element p = (Element) out.getElementsByTagName("p").item(0);
+        assertEquals("val", p.getAttribute("foobar"));
+        assertFalse(p.hasAttribute("foo!bar"));
+    }
+
+    // copyAttributes: attribute name entirely invalid chars sanitizes to empty
+    // string; a valid XML attribute name must never be empty, so it must be
+    // safely dropped rather than crash the conversion (bug hunting test)
+    @Test
+    public void testConvert_attributeAllInvalidChars_notAddedAndNoException() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p !!!='val'>Hi</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element p = (Element) out.getElementsByTagName("p").item(0);
+        assertEquals(0, p.getAttributes().getLength());
+    }
+
+
+
+    // Namespace: element declaring default xmlns receives that namespace itself
+    @Test
+    public void testConvert_elementDeclaringXmlns_getsThatNamespace() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<div xmlns='urn:test'>x</div>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element div = (Element) out.getElementsByTagName("div").item(0);
+        assertEquals("urn:test", div.getNamespaceURI());
+    }
+
+    // Namespace: prefixed child element resolves namespace registered by ancestor
+    @Test
+    public void testConvert_namespacePrefixedElement_resolvesRegisteredNamespace() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse(
+            "<ns:root xmlns:ns='urn:custom'><ns:child>C</ns:child></ns:root>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element child = (Element) out.getElementsByTagName("ns:child").item(0);
+        assertEquals("urn:custom", child.getNamespaceURI());
+    }
+
+    // Traversal: multiple siblings preserve source order
+    @Test
+    public void testConvert_multipleChildren_preservesOrder() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<ul><li>A</li><li>B</li><li>C</li></ul>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        NodeList lis = out.getElementsByTagName("li");
+        assertEquals(3, lis.getLength());
+        assertEquals("A", lis.item(0).getTextContent());
+        assertEquals("C", lis.item(2).getTextContent());
+    }
+
+    // Traversal: nested element becomes child of its parent in w3c tree
+    @Test
+    public void testConvert_nestedElement_parentChildRelationship() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<div><p>Text</p></div>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element div = (Element) out.getElementsByTagName("div").item(0);
+        Element p = (Element) div.getElementsByTagName("p").item(0);
+        assertEquals("Text", p.getTextContent());
+    }
+
+    // Traversal: deep nesting (3 levels) is fully walked
+    @Test
+    public void testConvert_deeplyNested_textReachable() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<div><div><div>Deep</div></div></div>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        NodeList divs = out.getElementsByTagName("div");
+        assertEquals(3, divs.getLength());
+        assertEquals("Deep", divs.item(2).getTextContent());
+    }
+
+    // Traversal: empty element has no child nodes (0-iteration case)
+    @Test
+    public void testConvert_emptyElement_noChildNodes() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<body><p></p></body>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element p = (Element) out.getElementsByTagName("p").item(0);
+        assertEquals(0, p.getChildNodes().getLength());
+    }
+
+    // copyAttributes: multiple attributes all copied (loop with many iterations)
+    @Test
+    public void testConvert_multipleAttributes_allCopied() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p id='i1' class='c1' title='t1'>Hi</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element p = (Element) out.getElementsByTagName("p").item(0);
+        assertEquals(3, p.getAttributes().getLength());
+        assertEquals("i1", p.getAttribute("id"));
+        assertEquals("c1", p.getAttribute("class"));
+        assertEquals("t1", p.getAttribute("title"));
+    }
+
+    // convert(): writes into a caller-supplied w3c Document instance
+    @Test
+    public void testConvert_appliesToProvidedDocumentInstance() throws Throwable {
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        dbf.setNamespaceAware(true);
+        DocumentBuilder db = dbf.newDocumentBuilder();
+        Document out = db.newDocument();
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p>Direct</p>");
+        w3c.convert(jsoupDoc, out);
+        assertEquals("html", out.getDocumentElement().getTagName());
+    }
+
+    // asString: serializes converted document, text content present in output
+    @Test
+    public void testAsString_simpleDocument_containsText() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p>Hello</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        String result = w3c.asString(out);
+        assertTrue(result.indexOf("Hello") >= 0);
+    }
+
+    // asString: serialized output preserves attribute value
+    @Test
+    public void testAsString_withAttribute_containsAttributeString() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p id='test'>Hi</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        String result = w3c.asString(out);
+        assertTrue(result.indexOf("test") >= 0);
+    }
+
+    // fromJsoup: works on body-fragment-parsed documents, producing full html root
+    @Test
+    public void testFromJsoup_bodyFragment_convertsCorrectly() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parseBodyFragment("<p>Frag</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        assertEquals("html", out.getDocumentElement().getTagName());
+    }
+
+    // fromJsoup: each call creates a fresh Document instance (builder.newDocument())
+    @Test
+    public void testFromJsoup_returnsNewDocumentInstanceEachCall() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p>Hi</p>");
+        Document out1 = w3c.fromJsoup(jsoupDoc);
+        Document out2 = w3c.fromJsoup(jsoupDoc);
+        assertNotSame(out1, out2);
+    }
+
+    // head(): DataNode branch for style tag also copies raw data content
+    @Test
+    public void testConvert_dataNodeStyle_appendsRawData() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<style>p{color:red}</style>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element style = (Element) out.getElementsByTagName("style").item(0);
+        assertEquals("p{color:red}", style.getTextContent());
+    }
+
+    // updateNamespaces: colon in attribute key (allowed char) is preserved, not stripped
+    @Test
+    public void testConvert_attributeKeyWithColon_preserved() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<p data-x:y='v'>Hi</p>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element p = (Element) out.getElementsByTagName("p").item(0);
+        assertEquals("v", p.getAttribute("data-x:y"));
+    }
+
+    // tail(): after undescending from a leaf element, sibling text is attached to shared parent
+    @Test
+    public void testConvert_siblingElementsAfterTail_correctParent() throws Throwable {
+        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse("<div><p>One</p><p>Two</p></div>");
+        Document out = w3c.fromJsoup(jsoupDoc);
+        Element div = (Element) out.getElementsByTagName("div").item(0);
+        NodeList ps = div.getElementsByTagName("p");
+        assertEquals(2, ps.getLength());
+        assertEquals("Two", ps.item(1).getTextContent());
+    }
+}

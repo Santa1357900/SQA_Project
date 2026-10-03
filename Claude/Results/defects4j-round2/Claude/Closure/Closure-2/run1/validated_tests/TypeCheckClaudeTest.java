@@ -1,0 +1,243 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+public class TypeCheckClaudeTest {
+
+  // Helper: compiles a single JS source with type checking enabled and
+  // returns the Result (errors/warnings) produced by the pipeline.
+  private Result compile(String js) throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    return compiler.compile(externs, input, options);
+  }
+
+
+
+  // Covers Token.CAST: downcast to a subtype is legal, no errors.
+  @Test
+  public void testCast_subtypeNarrowing_noErrors() throws Throwable {
+    Result result = compile(
+        "/** @constructor */\n function Foo() {}\n" +
+        "/** @constructor @extends {Foo} */\n function Bar() {}\n" +
+        "var f = new Foo();\n" +
+        "var b = /** @type {Bar} */ (f);\n");
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers visitVar: declared type mismatch on initialization reports a warning.
+  @Test
+  public void testVar_declaredTypeMismatch_reportsWarning() throws Throwable {
+    Result result = compile(
+        "/** @type {string} */\n var x;\n x = 5;\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers visitVar: matching declared type, no diagnostics produced.
+  @Test
+  public void testVar_matchingDeclaredType_noDiagnostics() throws Throwable {
+    Result result = compile(
+        "/** @type {number} */\n var x;\n x = 5;\n");
+    assertEquals(0, result.errors.length);
+    assertEquals(0, result.warnings.length);
+  }
+
+  // Covers visitNew: calling 'new' on a non-constructor type reports NOT_A_CONSTRUCTOR.
+  @Test
+  public void testNew_onNonConstructorType_reportsWarning() throws Throwable {
+    Result result = compile("var x = 5;\n new x();\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers visitCall: calling a non-callable (number) value reports NOT_CALLABLE.
+  @Test
+  public void testCall_onNonCallableType_reportsWarning() throws Throwable {
+    Result result = compile("var x = 5;\n x();\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers visitCall: constructor invoked without 'new' reports CONSTRUCTOR_NOT_CALLABLE.
+  @Test
+  public void testCall_constructorWithoutNew_reportsWarning() throws Throwable {
+    Result result = compile(
+        "/** @constructor */\n function Foo() {}\n Foo();\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers visitParameterList: too few arguments reports WRONG_ARGUMENT_COUNT.
+  @Test
+  public void testCall_wrongArgumentCount_reportsWarning() throws Throwable {
+    Result result = compile(
+        "/** @param {number} a */\n function foo(a) {}\n foo();\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+
+
+  // Covers Token.INSTANCEOF: non-object right operand reports a warning.
+  @Test
+  public void testInstanceof_nonObjectRightOperand_reportsWarning() throws Throwable {
+    Result result = compile(
+        "var a = 1;\n var b = 2;\n var c = (a instanceof b);\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers Token.SHEQ deterministic test branch: always-false comparison reports a warning.
+  @Test
+  public void testShallowEquals_alwaysFalseComparison_reportsWarning() throws Throwable {
+    Result result = compile("var r = (true === 5);\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers Token.LT numeric-comparison branch: valid numeric comparison has no errors.
+  @Test
+  public void testLessThan_numericComparison_noErrors() throws Throwable {
+    Result result = compile("var a = 1;\n var b = 2;\n var c = (a < b);\n");
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers Token.LT string-context branch: valid string comparison has no errors.
+  @Test
+  public void testLessThan_stringComparison_noErrors() throws Throwable {
+    Result result = compile("var a = 'foo';\n var b = 'bar';\n var c = (a < b);\n");
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers Token.BITNOT: applying bitwise not to an object type reports BIT_OPERATION.
+  @Test
+  public void testBitnot_onObjectType_reportsWarning() throws Throwable {
+    Result result = compile("var o = {};\n var r = ~o;\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers Token.DELPROP: delete always types to boolean, no errors for plain object.
+  @Test
+  public void testDelprop_onPlainObject_noErrors() throws Throwable {
+    Result result = compile("var o = {};\n var r = delete o.a;\n");
+    assertEquals(0, result.errors.length);
+  }
+
+
+
+
+
+  // Covers visitObjLitKey: unquoted key on a @dict literal reports ILLEGAL_OBJLIT_KEY.
+  @Test
+  public void testObjLitKey_unquotedOnDict_reportsWarning() throws Throwable {
+    Result result = compile("var d = /** @dict */ {b: 2};\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers visitGetProp: accessing a property on a dict via '.' reports ILLEGAL_PROPERTY_ACCESS.
+  @Test
+  public void testGetProp_dotAccessOnDict_reportsWarning() throws Throwable {
+    Result result = compile(
+        "var d = /** @dict */ {'a': 1};\n var x = d.a;\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+
+
+
+
+  // Covers visitInterfaceGetprop: non-empty interface method body reports a warning.
+  @Test
+  public void testInterface_nonEmptyMethodBody_reportsWarning() throws Throwable {
+    Result result = compile(
+        "/** @interface */\n function Foo() {};\n" +
+        "Foo.prototype.bar = function() { return 1; };\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+
+
+
+
+  // Covers checkDeclaredPropertyInheritance: @override with no superclass property reports UNKNOWN_OVERRIDE.
+  @Test
+  public void testOverride_noSuperclassProperty_reportsWarning() throws Throwable {
+    Result result = compile(
+        "/** @constructor */\n function Foo() {}\n" +
+        "/** @override */\n Foo.prototype.bar = function() {};\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers checkDeclaredPropertyInheritance: incompatible override type reports HIDDEN_SUPERCLASS_PROPERTY_MISMATCH.
+  @Test
+  public void testOverride_incompatibleType_reportsWarning() throws Throwable {
+    Result result = compile(
+        "/** @constructor */\n function A() {}\n" +
+        "/** @type {string} */\n A.prototype.x = '';\n" +
+        "/** @constructor @extends {A} */\n function B() {}\n" +
+        "/** @override @type {number} */\n B.prototype.x = 5;\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers ensureTyped: @implicitCast annotation used outside externs reports ILLEGAL_IMPLICIT_CAST.
+  @Test
+  public void testImplicitCast_outsideExterns_reportsWarning() throws Throwable {
+    Result result = compile(
+        "/** @constructor */\n function Foo() {}\n" +
+        "/**\n * @type {string}\n * @implicitCast\n */\n Foo.prototype.bar;\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Covers visitFunction interface-implementation path: valid implementation has no errors.
+  @Test
+  public void testImplements_validImplementation_noErrors() throws Throwable {
+    Result result = compile(
+        "/** @interface */\n function Foo() {}\n" +
+        "Foo.prototype.bar = function() {};\n" +
+        "/** @constructor @implements {Foo} */\n function Baz() {}\n" +
+        "Baz.prototype.bar = function() { return 1; };\n");
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers checkInterfaceConflictProperties: >1 extended interfaces, both valid, no errors.
+  @Test
+  public void testInterface_extendsTwoValidInterfaces_noErrors() throws Throwable {
+    Result result = compile(
+        "/** @interface */\n function A() {}\n A.prototype.x = function(){};\n" +
+        "/** @interface */\n function B() {}\n B.prototype.y = function(){};\n" +
+        "/** @interface\n * @extends {A}\n * @extends {B}\n */\n function C() {}\n");
+    assertEquals(0, result.errors.length);
+  }
+
+  // Covers checkInterfaceConflictProperties: conflicting property types across super
+  // interfaces reports INCOMPATIBLE_EXTENDED_PROPERTY_TYPE.
+  @Test
+  public void testInterface_extendsConflictingPropertyTypes_reportsWarning() throws Throwable {
+    Result result = compile(
+        "/** @interface */\n function A() {}\n /** @type {string} */\n A.prototype.x;\n" +
+        "/** @interface */\n function B() {}\n /** @type {number} */\n B.prototype.x;\n" +
+        "/** @interface\n * @extends {A}\n * @extends {B}\n */\n function C() {}\n");
+    assertTrue(result.warnings.length > 0);
+  }
+
+  // Bug-revealing test: checkInterfaceConflictProperties calls
+  // implicitProto.getOwnPropertyNames() without checking implicitProto for null
+  // (the comment explicitly says this "shouldn't crash"). An interface that
+  // extends two unresolved/undefined types should not throw an unhandled
+  // exception; on the buggy version this throws an NPE, on the fixed version
+  // compilation completes and reports diagnostics instead.
+  @Test
+  public void testInterface_extendsMultipleUnresolvedTypes_doesNotCrash() throws Throwable {
+    Result result = compile(
+        "/** @interface\n" +
+        " * @extends {UndefinedInterfaceA}\n" +
+        " * @extends {UndefinedInterfaceB}\n" +
+        " */\n function Baz() {}\n");
+    assertTrue(result.errors.length > 0 || result.warnings.length > 0);
+  }
+
+  // Covers visitFunction: FUNCTION node typing always results in a function type or unknown.
+  @Test
+  public void testFunctionDeclaration_typedWithoutCrash_noErrors() throws Throwable {
+    Result result = compile("function foo(a, b) { return a + b; }\n");
+    assertEquals(0, result.errors.length);
+  }
+}

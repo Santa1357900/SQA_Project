@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-69-56w2sbbc/JacksonDatabind-69f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - com.fasterxml.jackson.databind.deser.impl.CreatorCollectorClaudeTest::testAddIntCreatorDeprecated_oneArg_BUG_mustDelegateToIntSlotNotBoolean
+  - com.fasterxml.jackson.databind.deser.impl.CreatorCollectorClaudeTest::testAddLongCreatorDeprecated_oneArg_BUG_mustDelegateToLongSlotNotBoolean
+  - com.fasterxml.jackson.databind.deser.impl.CreatorCollectorClaudeTest::testAddDoubleCreatorDeprecated_oneArg_BUG_mustDelegateToDoubleSlotNotBoolean
+  - com.fasterxml.jackson.databind.deser.impl.CreatorCollectorClaudeTest::testSetDefaultCreator_validCreator_hasDefaultCreatorTrue
+[exit 0]

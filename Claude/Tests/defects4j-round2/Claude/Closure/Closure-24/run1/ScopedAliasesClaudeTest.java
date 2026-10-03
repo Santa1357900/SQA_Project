@@ -1,0 +1,275 @@
+package com.google.javascript.jscomp;
+
+import java.util.List;
+import com.google.common.collect.Lists;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ScopedAliasesClaudeTest {
+
+  private Compiler compiler;
+
+  private Result compile(String js) {
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.closurePass = true;
+    List<SourceFile> externs = Lists.newArrayList();
+    List<SourceFile> inputs = Lists.newArrayList();
+    inputs.add(SourceFile.fromCode("test.js", js));
+    return compiler.compile(externs, inputs, options);
+  }
+
+  // Constant used to recognize goog.scope() calls, per field name/Javadoc.
+  @Test
+  public void testScopingMethodNameConstant_isGoogScope() throws Throwable {
+    assertEquals("goog.scope", ScopedAliases.SCOPING_METHOD_NAME);
+  }
+
+  // Simple alias reference is rewritten to the fully qualified name.
+  @Test
+  public void testSimpleAlias_replacesUsageWithQualifiedName() throws Throwable {
+    String js = "goog.scope(function() { var dom = goog.dom; dom.foo(); });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    assertTrue(compiler.toSource().contains("goog.dom.foo()"));
+  }
+
+  // Transitive alias chain (alias of an alias) is fully resolved, per class Javadoc example.
+  @Test
+  public void testTransitiveAlias_resolvesFullChain() throws Throwable {
+    String js = "goog.scope(function() { var dom = goog.dom; var DIV = dom.TagName.DIV; "
+        + "dom.createElement(DIV); });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    assertTrue(compiler.toSource().contains("goog.dom.createElement(goog.dom.TagName.DIV)"));
+  }
+
+  // Multi-segment qualified name alias (goog.a.b.c) is accepted and rewritten.
+  @Test
+  public void testMultiPropertyQualifiedNameAlias_replacesUsage() throws Throwable {
+    String js = "goog.scope(function() { var c = goog.a.b.c; c.d(); });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    assertTrue(compiler.toSource().contains("goog.a.b.c.d()"));
+  }
+
+  // A plain NAME (no dots) is itself a qualified name and can be aliased.
+  @Test
+  public void testSimpleNameAlias_replacesUsage() throws Throwable {
+    String js = "goog.scope(function() { var g = goog; g.foo(); });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    assertTrue(compiler.toSource().contains("goog.foo()"));
+  }
+
+  // Empty goog.scope block collapses away entirely, leaving no trace of the call.
+  @Test
+  public void testEmptyScopeBlock_isRemoved() throws Throwable {
+    String js = "goog.scope(function() {});";
+    Result r = compile(js);
+    assertTrue(r.success);
+    assertFalse(compiler.toSource().contains("goog.scope"));
+  }
+
+  // Two independent goog.scope blocks are each processed, aliases cleared between them.
+  @Test
+  public void testMultipleGoogScopeBlocks_processedIndependently() throws Throwable {
+    String js = "goog.scope(function() { var a = goog.a; a.foo(); }); "
+        + "goog.scope(function() { var b = goog.b; b.bar(); });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    String src = compiler.toSource();
+    assertTrue(src.contains("goog.a.foo()"));
+    assertTrue(src.contains("goog.b.bar()"));
+    assertFalse(src.contains("goog.scope"));
+  }
+
+  // Multi-declarator var statement (var a = ..., b = ...;) is fully removed once both aliases apply.
+  @Test
+  public void testMultiDeclaratorVarStatement_bothAliasesRemoved() throws Throwable {
+    String js = "goog.scope(function() { var a = goog.a, b = goog.b; a.foo(); b.bar(); });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    String src = compiler.toSource();
+    assertFalse(src.contains("var a"));
+    assertFalse(src.contains("var b"));
+    assertTrue(src.contains("goog.a.foo()"));
+    assertTrue(src.contains("goog.b.bar()"));
+  }
+
+  // A function declaration (not a var) inside goog.scope is not flagged as a non-alias local.
+  @Test
+  public void testFunctionDeclarationInsideScope_notFlaggedAsNonAliasLocal() throws Throwable {
+    String js = "goog.scope(function() { var dom = goog.dom; function f() { dom.foo(); } f(); });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    assertTrue(compiler.toSource().contains("goog.dom.foo()"));
+  }
+
+  // Alias usages inside nested function expressions (scope depth > 2) are still rewritten.
+  @Test
+  public void testNestedFunctionExpression_aliasStillReplaced() throws Throwable {
+    String js = "goog.scope(function() { var dom = goog.dom; goog.x = function() { dom.foo(); }; });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    assertTrue(compiler.toSource().contains("goog.dom.foo()"));
+  }
+
+  // Code outside any goog.scope block is left untouched (shouldTraverse skips global functions).
+  @Test
+  public void testCodeOutsideScope_unaffected() throws Throwable {
+    String js = "function outerFn(){ var a=1; return a; }";
+    Result r = compile(js);
+    assertTrue(r.success);
+    assertTrue(compiler.toSource().contains("function outerFn"));
+  }
+
+  // goog.scope call assigned to a var (not alone in an ExprResult) triggers USED_IMPROPERLY.
+  @Test
+  public void testScopeCallAssignedToVar_reportsUsedImproperly() throws Throwable {
+    String js = "var x = goog.scope(function() {});";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // goog.scope call missing its function argument triggers HAS_BAD_PARAMETERS (childCount != 2).
+  @Test
+  public void testScopeCallMissingArgument_reportsBadParameters() throws Throwable {
+    String js = "goog.scope();";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // goog.scope call with an extra argument triggers HAS_BAD_PARAMETERS (childCount != 2).
+  @Test
+  public void testScopeCallExtraArgument_reportsBadParameters() throws Throwable {
+    String js = "goog.scope(function() {}, 5);";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // Named function argument to goog.scope triggers HAS_BAD_PARAMETERS.
+  @Test
+  public void testScopeCallNamedFunction_reportsBadParameters() throws Throwable {
+    String js = "goog.scope(function foo() {});";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // Function argument to goog.scope with parameters triggers HAS_BAD_PARAMETERS.
+  @Test
+  public void testScopeCallFunctionWithParams_reportsBadParameters() throws Throwable {
+    String js = "goog.scope(function(a) {});";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // Using 'this' at the top level of a goog.scope block triggers REFERENCES_THIS.
+  @Test
+  public void testScopeReferencesThis_reportsError() throws Throwable {
+    String js = "goog.scope(function() { this.foo(); });";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // Using 'return' at the top level of a goog.scope block triggers USES_RETURN.
+  @Test
+  public void testScopeUsesReturn_reportsError() throws Throwable {
+    String js = "goog.scope(function() { return; });";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // Using 'throw' at the top level of a goog.scope block triggers USES_THROW.
+  @Test
+  public void testScopeUsesThrow_reportsError() throws Throwable {
+    String js = "goog.scope(function() { throw 'e'; });";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // Reassigning an alias variable after its declaration triggers ALIAS_REDEFINED.
+  @Test
+  public void testAliasRedefined_reportsError() throws Throwable {
+    String js = "goog.scope(function() { var x = goog.dom; x = goog.events; });";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // A local var whose value is a non-qualified-name literal triggers NON_ALIAS_LOCAL.
+  @Test
+  public void testNonAliasLocal_numberLiteral_reportsError() throws Throwable {
+    String js = "goog.scope(function() { var x = 5; });";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // A local var with no initializer at all triggers NON_ALIAS_LOCAL.
+  @Test
+  public void testNonAliasLocal_noInitializer_reportsError() throws Throwable {
+    String js = "goog.scope(function() { var x; });";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // A local var initialized to a call expression (not a qualified name) triggers NON_ALIAS_LOCAL.
+  @Test
+  public void testNonAliasLocal_callExpression_reportsError() throws Throwable {
+    String js = "goog.scope(function() { var x = goog.get(); });";
+    Result r = compile(js);
+    assertFalse(r.success);
+    assertTrue(r.errors.length >= 1);
+  }
+
+  // @type JSDoc annotation referencing an alias exercises fixTypeNode without producing errors.
+  @Test
+  public void testTypeAnnotationReferencesAlias_noErrors() throws Throwable {
+    String js = "goog.scope(function() { var Bar = goog.Bar; "
+        + "/** @type {Bar} */ goog.x = 1; });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    assertEquals(0, r.errors.length);
+  }
+
+  // A valid goog.scope block with multiple alias usages compiles cleanly and rewrites all uses.
+  @Test
+  public void testValidScopeBlock_multipleUsages_success() throws Throwable {
+    String js = "goog.scope(function() { var a = goog.a; a.m1(); a.m2(); });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    String src = compiler.toSource();
+    assertTrue(src.contains("goog.a.m1()"));
+    assertTrue(src.contains("goog.a.m2()"));
+  }
+
+  // An alias that is declared but never used is still removed, with no residual goog.scope call.
+  @Test
+  public void testUnusedAlias_stillRemovedWithoutCrash() throws Throwable {
+    String js = "goog.scope(function() { var a = goog.a; });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    String src = compiler.toSource();
+    assertFalse(src.contains("var a"));
+    assertFalse(src.contains("goog.scope"));
+  }
+
+  // A call that is not literally "goog.scope" is not recognized and its contents are untouched.
+  @Test
+  public void testNonMatchingCallName_notProcessed() throws Throwable {
+    String js = "goog2.scope(function() { var x = 1; });";
+    Result r = compile(js);
+    assertTrue(r.success);
+    assertTrue(compiler.toSource().contains("goog2.scope(function"));
+  }
+}

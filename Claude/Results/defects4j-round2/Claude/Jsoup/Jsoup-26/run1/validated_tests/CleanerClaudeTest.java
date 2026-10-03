@@ -1,0 +1,261 @@
+package org.jsoup.safety;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+public class CleanerClaudeTest {
+
+    // Constructor: Validate.notNull branch -- null whitelist must throw
+    @Test
+    public void testConstructor_nullWhitelist_throwsException() throws Throwable {
+        try {
+            new Cleaner(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Constructor: valid whitelist succeeds and cleaner is usable afterwards
+    @Test
+    public void testConstructor_validWhitelist_succeeds() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.none());
+        Document dirty = Jsoup.parse("<p>Hi</p>");
+        Document clean = cleaner.clean(dirty);
+        assertNotNull(clean);
+    }
+
+    // clean(): Validate.notNull branch on document argument
+    @Test
+    public void testClean_nullDocument_throwsException() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.none());
+        try {
+            cleaner.clean(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // isValid(): Validate.notNull branch on document argument
+    @Test
+    public void testIsValid_nullDocument_throwsException() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.none());
+        try {
+            cleaner.isValid(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Branch: whitelist.isSafeTag false for every tag (none()) -> tags stripped, text kept
+    @Test
+    public void testClean_noneWhitelist_removesAllTagsKeepsText() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.none());
+        Document dirty = Jsoup.parse("<p>Hello <b>World</b></p>");
+        Document clean = cleaner.clean(dirty);
+        assertEquals("Hello World", clean.body().text());
+        assertEquals(0, clean.body().children().size());
+    }
+
+    // Branch: simpleText() allows the tag but no attribute is ever safe -> attribute stripped
+    @Test
+    public void testClean_simpleTextWhitelist_keepsTagStripsAttribute() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.simpleText());
+        Document dirty = Jsoup.parse("<p>Hello <b class=\"x\">World</b></p>");
+        Document clean = cleaner.clean(dirty);
+        Elements bTags = clean.body().getElementsByTag("b");
+        assertEquals(1, bTags.size());
+        assertFalse(bTags.get(0).hasAttr("class"));
+        assertEquals("Hello World", clean.body().text());
+    }
+
+    // Branch: basic() keeps safe href, discards unsafe onclick, and enforces rel=nofollow
+    @Test
+    public void testClean_basicWhitelist_keepsHrefDiscardsOnclickEnforcesRel() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parse("<a href=\"http://example.com\" onclick=\"alert(1)\">Link</a>");
+        Document clean = cleaner.clean(dirty);
+        Elements aTags = clean.body().getElementsByTag("a");
+        assertEquals(1, aTags.size());
+        Element a = aTags.get(0);
+        assertEquals("http://example.com", a.attr("href"));
+        assertFalse(a.hasAttr("onclick"));
+        assertEquals("nofollow", a.attr("rel"));
+    }
+
+    // Branch: basic() discards an unsafe tag but its text content is preserved
+    @Test
+    public void testClean_basicWhitelist_discardsUnsafeTagKeepsText() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parse("<foo>bar</foo>");
+        Document clean = cleaner.clean(dirty);
+        assertEquals(0, clean.body().getElementsByTag("foo").size());
+        assertEquals("bar", clean.body().text());
+    }
+
+    // Branch: recursing into an unsafe tag still finds and preserves a safe child element
+    @Test
+    public void testClean_basicWhitelist_unsafeTagWithSafeChild_childPreserved() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parse("<foo><b>bold</b></foo>");
+        Document clean = cleaner.clean(dirty);
+        assertEquals(0, clean.body().getElementsByTag("foo").size());
+        assertEquals(1, clean.body().getElementsByTag("b").size());
+        assertEquals("bold", clean.body().text());
+    }
+
+    // The original dirty document must not be modified by clean()
+    @Test
+    public void testClean_originalDocumentUnmodified() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.none());
+        Document dirty = Jsoup.parse("<p>Hello</p>");
+        cleaner.clean(dirty);
+        assertEquals(1, dirty.body().getElementsByTag("p").size());
+    }
+
+    // clean() must return a distinct Document instance from the input
+    @Test
+    public void testClean_returnsNewDocumentInstance() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.none());
+        Document dirty = Jsoup.parse("<p>Hello</p>");
+        Document clean = cleaner.clean(dirty);
+        assertNotSame(dirty, clean);
+    }
+
+    // Loop: multiple sibling nodes are all copied, preserving order
+    @Test
+    public void testClean_multipleSiblingsPreservedInOrder() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parse("<b>One</b> <b>Two</b> <b>Three</b>");
+        Document clean = cleaner.clean(dirty);
+        assertEquals(3, clean.body().getElementsByTag("b").size());
+        assertEquals("One Two Three", clean.body().text());
+    }
+
+    // Loop with 0 iterations: an empty body produces an empty clean body
+    @Test
+    public void testClean_emptyBody_producesEmptyCleanBody() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parse("");
+        Document clean = cleaner.clean(dirty);
+        assertEquals("", clean.body().text());
+        assertEquals(0, clean.body().children().size());
+    }
+
+    // relaxed() allows img tag together with its src attribute
+    @Test
+    public void testClean_relaxedWhitelist_allowsImgWithSrc() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.relaxed());
+        Document dirty = Jsoup.parse("<img src=\"http://example.com/i.jpg\">");
+        Document clean = cleaner.clean(dirty);
+        Elements imgs = clean.body().getElementsByTag("img");
+        assertEquals(1, imgs.size());
+        assertEquals("http://example.com/i.jpg", imgs.get(0).attr("src"));
+    }
+
+    // basicWithImages() allows img/src but discards an unsafe attribute like onerror
+    @Test
+    public void testClean_basicWithImagesWhitelist_discardsUnsafeAttribute() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basicWithImages());
+        Document dirty = Jsoup.parse("<img src=\"http://example.com/i.jpg\" onerror=\"alert(1)\">");
+        Document clean = cleaner.clean(dirty);
+        Elements imgs = clean.body().getElementsByTag("img");
+        assertEquals(1, imgs.size());
+        assertFalse(imgs.get(0).hasAttr("onerror"));
+    }
+
+    // Nested safe elements (div > p > b) are all preserved under relaxed()
+    @Test
+    public void testClean_relaxedWhitelist_nestedSafeElementsPreserved() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.relaxed());
+        Document dirty = Jsoup.parse("<div><p><b>Nested</b></p></div>");
+        Document clean = cleaner.clean(dirty);
+        assertEquals(1, clean.body().getElementsByTag("div").size());
+        assertEquals(1, clean.body().getElementsByTag("p").size());
+        assertEquals(1, clean.body().getElementsByTag("b").size());
+        assertEquals("Nested", clean.body().text());
+    }
+
+    // isValid(): fully compliant content has zero discards -> true
+    @Test
+    public void testIsValid_compliantDocument_returnsTrue() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parseBodyFragment("<b>bold</b>");
+        assertTrue(cleaner.isValid(dirty));
+    }
+
+    // isValid(): a disallowed tag must cause a discard -> false
+    @Test
+    public void testIsValid_unsafeTag_returnsFalse() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parseBodyFragment("<script>alert(1)</script>");
+        assertFalse(cleaner.isValid(dirty));
+    }
+
+    // isValid(): a disallowed attribute must cause a discard -> false
+    @Test
+    public void testIsValid_unsafeAttribute_returnsFalse() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parseBodyFragment("<a href=\"http://example.com\" onclick=\"alert(1)\">Link</a>");
+        assertFalse(cleaner.isValid(dirty));
+    }
+
+    // isValid() must not modify the original document while validating
+    @Test
+    public void testIsValid_doesNotModifyOriginalDocument() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parseBodyFragment("<script>alert(1)</script>");
+        cleaner.isValid(dirty);
+        assertEquals(1, dirty.body().getElementsByTag("script").size());
+    }
+
+    // isValid(): plain text with no tags under none() whitelist has nothing to discard -> true
+    @Test
+    public void testIsValid_noneWhitelistPlainText_returnsTrue() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.none());
+        Document dirty = Jsoup.parseBodyFragment("Just plain text");
+        assertTrue(cleaner.isValid(dirty));
+    }
+
+    // isValid(): any tag under none() whitelist must be discarded -> false
+    @Test
+    public void testIsValid_noneWhitelistWithTag_returnsFalse() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.none());
+        Document dirty = Jsoup.parseBodyFragment("<p>Text</p>");
+        assertFalse(cleaner.isValid(dirty));
+    }
+
+    // TextNode branch: whitespace-separated text between safe elements is preserved
+    @Test
+    public void testClean_whitespaceBetweenElementsPreserved() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parse("<b>A</b>   <b>B</b>");
+        Document clean = cleaner.clean(dirty);
+        assertTrue(clean.body().html().contains("A"));
+        assertTrue(clean.body().html().contains("B"));
+    }
+
+    // Deep recursion: several nested unsafe wrapper tags are all stripped, inner text remains
+    @Test
+    public void testClean_deeplyNestedUnsafeTags_textFlattened() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.none());
+        Document dirty = Jsoup.parse("<div><span><i>deep text</i></span></div>");
+        Document clean = cleaner.clean(dirty);
+        assertEquals("deep text", clean.body().text());
+        assertEquals(0, clean.body().children().size());
+    }
+
+    // Non-element/non-text child (script data) is dropped entirely, unrelated safe content kept
+    @Test
+    public void testClean_basicWhitelist_scriptTagAndContentRemoved() throws Throwable {
+        Cleaner cleaner = new Cleaner(Whitelist.basic());
+        Document dirty = Jsoup.parse("<script>alert(1)</script><p>Safe</p>");
+        Document clean = cleaner.clean(dirty);
+        assertEquals(0, clean.body().getElementsByTag("script").size());
+        assertEquals("Safe", clean.body().text());
+    }
+}

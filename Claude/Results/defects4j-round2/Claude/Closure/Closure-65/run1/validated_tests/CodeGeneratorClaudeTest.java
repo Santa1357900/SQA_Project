@@ -1,0 +1,258 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.nio.charset.CharsetEncoder;
+import com.google.common.base.Charsets;
+
+public class CodeGeneratorClaudeTest {
+
+  // isSimpleNumber: 0 iterations ของลูป (string ว่าง) -> ต้องเป็น false เพราะ len>0 เป็น false
+  @Test
+  public void testIsSimpleNumber_emptyString_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber(""));
+  }
+
+  // isSimpleNumber: ทุกตัวอักษรเป็นเลข -> true
+  @Test
+  public void testIsSimpleNumber_allDigits_returnsTrue() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("12345"));
+  }
+
+  // isSimpleNumber: ตัวเลขหลักเดียว -> true (ลูป 1 รอบ)
+  @Test
+  public void testIsSimpleNumber_singleDigit_returnsTrue() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("9"));
+  }
+
+  // isSimpleNumber: มีตัวอักษรปน -> false (branch c>'9')
+  @Test
+  public void testIsSimpleNumber_containsLetter_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("12a34"));
+  }
+
+  // isSimpleNumber: มีเครื่องหมายลบนำหน้า -> false (branch c<'0')
+  @Test
+  public void testIsSimpleNumber_leadingMinusSign_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("-5"));
+  }
+
+  // isSimpleNumber: มีช่องว่างปน -> false
+  @Test
+  public void testIsSimpleNumber_containsSpace_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("1 2"));
+  }
+
+  // getSimpleNumber: เลขง่ายธรรมดา -> คืนค่าตัวเลขที่ parse ได้
+  @Test
+  public void testGetSimpleNumber_simpleDigits_returnsNumericValue() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("123");
+    assertEquals(123.0, result, 0.0);
+  }
+
+  // getSimpleNumber: isSimpleNumber เป็น false -> NaN ทันที
+  @Test
+  public void testGetSimpleNumber_nonDigitString_returnsNaN() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("12a3");
+    assertTrue(Double.isNaN(result));
+  }
+
+  // getSimpleNumber: เลขนำหน้าด้วยศูนย์ -> parseLong ตัดศูนย์นำหน้าออก
+  @Test
+  public void testGetSimpleNumber_leadingZeros_returnsParsedValue() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("007");
+    assertEquals(7.0, result, 0.0);
+  }
+
+  // getSimpleNumber: "0" -> คืนค่า 0.0
+  @Test
+  public void testGetSimpleNumber_zero_returnsZero() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("0");
+    assertEquals(0.0, result, 0.0);
+  }
+
+  // getSimpleNumber: ค่าต่ำกว่า MAX_POSITIVE_INTEGER_NUMBER หนึ่งหน่วย -> ยังเป็นตัวเลขได้
+  @Test
+  public void testGetSimpleNumber_belowMaxPositiveIntegerNumber_returnsNumericValue() throws Throwable {
+    long max = (long) NodeUtil.MAX_POSITIVE_INTEGER_NUMBER;
+    double result = CodeGenerator.getSimpleNumber(Long.toString(max - 1));
+    assertEquals((double) (max - 1), result, 0.0);
+  }
+
+
+
+  // getSimpleNumber: ค่ามากกว่า MAX_POSITIVE_INTEGER_NUMBER หนึ่งหน่วย -> ต้องเป็น NaN เพราะไม่ปลอดภัยต่อ double
+  @Test
+  public void testGetSimpleNumber_aboveMaxPositiveIntegerNumber_returnsNaN() throws Throwable {
+    long max = (long) NodeUtil.MAX_POSITIVE_INTEGER_NUMBER;
+    double result = CodeGenerator.getSimpleNumber(Long.toString(max + 1));
+    assertTrue(Double.isNaN(result));
+  }
+
+  // getSimpleNumber: ตัวเลขยาวเกิน Long.parseLong รับได้ -> catch NumberFormatException -> NaN
+  @Test
+  public void testGetSimpleNumber_overflowLong_returnsNaN() throws Throwable {
+    double result = CodeGenerator.getSimpleNumber("99999999999999999999999999");
+    assertTrue(Double.isNaN(result));
+  }
+
+  // identifierEscape: สตริงเป็น latin ล้วน -> คืนค่าเดิมไม่เปลี่ยนแปลง
+  @Test
+  public void testIdentifierEscape_latinOnlyString_returnsUnchanged() throws Throwable {
+    String result = CodeGenerator.identifierEscape("testName123");
+    assertEquals("testName123", result);
+  }
+
+  // identifierEscape: ตัวควบคุมที่ขอบ c<=0x1F รวมกับตัวที่ไม่ใช่ latin -> ทั้งคู่ถูก escape เป็น \\uXXXX
+  @Test
+  public void testIdentifierEscape_controlCharWithNonLatin_returnsEscaped() throws Throwable {
+    String input = "\u001F\u00e9";
+    String result = CodeGenerator.identifierEscape(input);
+    String expected = "\\" + "u001f" + "\\" + "u00e9";
+    assertEquals(expected, result);
+  }
+
+  // identifierEscape: ตัวอักษรที่ขอบพิมพ์ได้ (0x20 และ 0x7E) ยังคงเป็นตัวอักษรเดิม
+  @Test
+  public void testIdentifierEscape_printableBoundaryWithNonLatin_appendsLiteral() throws Throwable {
+    String input = "\u0020\u007e\u00e9";
+    String result = CodeGenerator.identifierEscape(input);
+    String expected = " ~" + "\\" + "u00e9";
+    assertEquals(expected, result);
+  }
+
+  // identifierEscape: ตัวอักษร DEL (0x7F) อยู่นอกช่วง c<0x7F -> ถูก escape
+  @Test
+  public void testIdentifierEscape_delCharWithNonLatin_returnsEscaped() throws Throwable {
+    String input = "\u007f\u00e9";
+    String result = CodeGenerator.identifierEscape(input);
+    String expected = "\\" + "u007f" + "\\" + "u00e9";
+    assertEquals(expected, result);
+  }
+
+  // escapeToDoubleQuotedJsString: มีเครื่องหมาย double quote ตรงกับตัวคั่น -> ต้อง escape
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withDoubleQuote_escapesQuote() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a\"b");
+    assertEquals("\"a\\\"b\"", result);
+  }
+
+  // escapeToDoubleQuotedJsString: single quote ไม่ตรงกับตัวคั่น -> ไม่ต้อง escape
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withSingleQuote_unescaped() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a'b");
+    assertEquals("\"a'b\"", result);
+  }
+
+  // escapeToDoubleQuotedJsString: ตัวอักษรขึ้นบรรทัดใหม่ -> \\n
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withNewline_escapesNewline() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a\nb");
+    assertEquals("\"a\\nb\"", result);
+  }
+
+  // escapeToDoubleQuotedJsString: tab -> \\t
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withTab_escapesTab() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a\tb");
+    assertEquals("\"a\\tb\"", result);
+  }
+
+  // escapeToDoubleQuotedJsString: carriage return -> \\r
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withCarriageReturn_escapesCR() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a\rb");
+    assertEquals("\"a\\rb\"", result);
+  }
+
+
+
+  // escapeToDoubleQuotedJsString: backslash -> ต้อง escape เป็นสองตัว
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withBackslash_escapesBackslash() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a\\b");
+    assertEquals("\"a\\\\b\"", result);
+  }
+
+  // escapeToDoubleQuotedJsString: '>' หลัง "--" -> escape เป็น \\>
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withDashDashGreaterThan_escapesGreaterThan() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("x-->y");
+    assertEquals("\"x--\\>y\"", result);
+  }
+
+  // escapeToDoubleQuotedJsString: '>' หลัง "]]" -> escape เป็น \\>
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withBracketBracketGreaterThan_escapesGreaterThan() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("x]]>y");
+    assertEquals("\"x]]\\>y\"", result);
+  }
+
+  // escapeToDoubleQuotedJsString: '>' ที่ไม่ตรง pattern -> ไม่ escape
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withPlainGreaterThan_unchanged() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a>b");
+    assertEquals("\"a>b\"", result);
+  }
+
+  // escapeToDoubleQuotedJsString: '<' ตามด้วย "/script" -> escape เป็น <\\
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withScriptCloseTag_escapesLessThan() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a</script>b");
+    assertEquals("\"a<\\/script>b\"", result);
+  }
+
+  // escapeToDoubleQuotedJsString: '<' ตามด้วย "!--" -> escape เป็น <\\
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withCommentOpen_escapesLessThan() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a<!--b");
+    assertEquals("\"a<\\!--b\"", result);
+  }
+
+  // escapeToDoubleQuotedJsString: ตัวอักษรนอก ASCII (outputCharsetEncoder เป็น null) -> escape เป็น \\uXXXX
+  @Test
+  public void testEscapeToDoubleQuotedJsString_withNonAsciiChar_escapesUnicode() throws Throwable {
+    String result = CodeGenerator.escapeToDoubleQuotedJsString("a\u00e9b");
+    String expected = "\"a" + "\\" + "u00e9b\"";
+    assertEquals(expected, result);
+  }
+
+  // regexpEscape: สตริงปกติไม่มีอักขระพิเศษ -> ครอบด้วย '/'
+  @Test
+  public void testRegexpEscape_plainString_wrapsWithSlashes() throws Throwable {
+    String result = CodeGenerator.regexpEscape("abc");
+    assertEquals("/abc/", result);
+  }
+
+  // regexpEscape: backslash ยังคงเป็น backslash ตัวเดียว (ไม่ถูกเพิ่มเป็นสองตัว)
+  @Test
+  public void testRegexpEscape_withBackslash_preservesBackslash() throws Throwable {
+    String result = CodeGenerator.regexpEscape("a\\b");
+    assertEquals("/a\\b/", result);
+  }
+
+  // regexpEscape: double quote ไม่ถูก escape เพราะตัวคั่นคือ '/'
+  @Test
+  public void testRegexpEscape_withDoubleQuote_leftUnescaped() throws Throwable {
+    String result = CodeGenerator.regexpEscape("a\"b");
+    assertEquals("/a\"b/", result);
+  }
+
+  // regexpEscape(String,CharsetEncoder): encoder เข้ารหัสได้ -> อักขระเดิมถูกเก็บไว้
+  @Test
+  public void testRegexpEscape_withCharsetEncoderCanEncode_appendsLiteral() throws Throwable {
+    CharsetEncoder encoder = Charsets.US_ASCII.newEncoder();
+    String result = CodeGenerator.regexpEscape("abc", encoder);
+    assertEquals("/abc/", result);
+  }
+
+  // regexpEscape(String,CharsetEncoder): encoder เข้ารหัสไม่ได้ -> ต้อง escape เป็น \\uXXXX
+  @Test
+  public void testRegexpEscape_withCharsetEncoderCannotEncode_escapesUnicode() throws Throwable {
+    CharsetEncoder encoder = Charsets.US_ASCII.newEncoder();
+    String result = CodeGenerator.regexpEscape("a\u00e9b", encoder);
+    String expected = "/a" + "\\" + "u00e9b/";
+    assertEquals(expected, result);
+  }
+}

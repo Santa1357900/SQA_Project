@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JxPath-8-xnq4wfl9/JxPath-8b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testGreaterThan_leftNodeSet_emptyCollection_returnsFalse
+  - org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpressionClaudeTest::testGreaterThan_leftNodeSet_noMatch_returnsFalse
+[exit 0]

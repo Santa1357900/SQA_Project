@@ -1,0 +1,234 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import com.google.javascript.rhino.Node;
+
+import com.google.common.collect.Lists;
+
+import java.util.List;
+
+public class CollapsePropertiesClaudeTest {
+
+  private Compiler lastCompiler;
+
+  private String runCollapse(String js) {
+    return runCollapse(js, "", false, true);
+  }
+
+  private String runCollapse(String js, String externsCode,
+      boolean collapseExternTypes, boolean inlineAliases) {
+    Compiler compiler = new Compiler();
+    lastCompiler = compiler;
+    CompilerOptions options = new CompilerOptions();
+    List<SourceFile> externs = Lists.newArrayList(
+        SourceFile.fromCode("externs.js", externsCode));
+    List<SourceFile> inputs = Lists.newArrayList(
+        SourceFile.fromCode("test.js", js));
+    compiler.init(externs, inputs, options);
+    compiler.parse();
+    Node root = compiler.getRoot();
+    Node externsRoot = root.getFirstChild();
+    Node mainRoot = root.getLastChild();
+    CollapseProperties pass =
+        new CollapseProperties(compiler, collapseExternTypes, inlineAliases);
+    pass.process(externsRoot, mainRoot);
+    return compiler.toSource(mainRoot);
+  }
+
+  // process(): simple object-literal property gets flattened to a global var (a.b -> a$b)
+  @Test
+  public void testProcess_simpleObjectLiteralProperty_collapsesToGlobalVar() throws Throwable {
+    String output = runCollapse("var a = {}; a.b = 1;");
+    assertTrue(output.contains("a$b"));
+    assertFalse(output.contains("a.b"));
+  }
+
+  // process(): three level namespace a.b.c collapses entirely to a$b$c
+  @Test
+  public void testProcess_threeLevelNamespace_collapsesAllLevelsToDollarName() throws Throwable {
+    String output = runCollapse("var a = {}; a.b = {}; a.b.c = 1;");
+    assertTrue(output.contains("a$b$c"));
+    assertFalse(output.contains("a.b.c"));
+  }
+
+  // flattenPrefixes(): deep (depth 4) prefix flattening of a.b.c.d used both as declaration and ref
+  @Test
+  public void testProcess_deepPrefixFlattening_multipleDepthLevels() throws Throwable {
+    String output = runCollapse(
+        "var a = {}; a.b = {}; a.b.c = {}; a.b.c.d = 1; var e = a.b.c.d;");
+    assertTrue(output.contains("a$b$c$d"));
+    assertFalse(output.contains("a.b"));
+  }
+
+  // flattenReferencesTo(): a read reference to a collapsible property is flattened too
+  @Test
+  public void testProcess_propertyReadReference_flattenedToDollarName() throws Throwable {
+    String output = runCollapse("var a = {}; a.b = 1; var c = a.b;");
+    assertTrue(output.contains("a$b"));
+    assertFalse(output.contains("a.b"));
+  }
+
+  // updateObjLitOrFunctionDeclarationAtAssignNode(): function value assigned to a property collapses too
+  @Test
+  public void testProcess_functionAssignedToProperty_collapsesToGlobalFunctionVar() throws Throwable {
+    String output = runCollapse("var a = {}; a.b = function() { return 1; };");
+    assertTrue(output.contains("a$b"));
+    assertFalse(output.contains("a.b"));
+  }
+
+  // flattenNameRef(): call target on a nested namespace function is flattened (Javadoc example)
+  @Test
+  public void testProcess_callOnNestedNamespaceFunction_flattensCallTarget() throws Throwable {
+    String output = runCollapse(
+        "var goog = {}; goog.events = {}; goog.events.handleEvent = function(){};"
+        + " goog.events.handleEvent();");
+    assertTrue(output.contains("goog$events$handleEvent()"));
+    assertFalse(output.contains("goog.events"));
+  }
+
+  // Javadoc safety rule: aliasing a namespace ("c = a; c.b = 5;") prevents collapsing of a.b
+  @Test
+  public void testProcess_namespaceAliasing_preventsPropertyCollapse() throws Throwable {
+    String output = runCollapse("var a = {b: 0}; var c = a; c.b = 5;");
+    assertTrue(output.contains("a.b"));
+    assertFalse(output.contains("a$b"));
+  }
+
+  // checkNamespaces(): aliasing a namespace must report UNSAFE_NAMESPACE_WARNING
+  @Test
+  public void testCheckNamespaces_aliasing_generatesWarning() throws Throwable {
+    runCollapse("var a = {b: 0}; var c = a; c.b = 5;");
+    assertTrue(lastCompiler.getWarningCount() >= 1);
+  }
+
+  // Javadoc safety rule: redefining a namespace more than once prevents collapsing its props
+  @Test
+  public void testProcess_namespaceRedefinedTwice_preventsPropertyCollapse() throws Throwable {
+    String output = runCollapse("var a = {}; a = {}; a.b = 1;");
+    assertTrue(output.contains("a.b"));
+    assertFalse(output.contains("a$b"));
+  }
+
+  // checkNamespaces(): redefining a namespace must report NAMESPACE_REDEFINED_WARNING
+  @Test
+  public void testCheckNamespaces_redefinition_generatesWarning() throws Throwable {
+    runCollapse("var a = {}; a = {}; a.b = 1;");
+    assertTrue(lastCompiler.getWarningCount() >= 1);
+  }
+
+  // inlineAliasIfPossible(): single global write + well-defined local alias gets inlined, enabling collapse
+  @Test
+  public void testProcess_inlineAliasIfPossible_localWellDefinedAlias_inlinedAndCollapsed()
+      throws Throwable {
+    String output = runCollapse(
+        "var a = {b: 1}; function f() { var c = a; return c.b; }");
+    assertTrue(output.contains("a$b"));
+  }
+
+  // process(): with inlineAliases=false the inlining step is skipped but basic collapsing still works
+  @Test
+  public void testProcess_inlineAliasesDisabled_basicCollapseStillWorks() throws Throwable {
+    String output = runCollapse("var a = {}; a.b = 1;", "", false, false);
+    assertTrue(output.contains("a$b"));
+    assertFalse(output.contains("a.b"));
+  }
+
+  // process(): collapsePropertiesOnExternTypes=true branch still collapses ordinary main-code namespace
+  @Test
+  public void testProcess_collapsePropertiesOnExternTypesTrue_mainNamespaceStillCollapses()
+      throws Throwable {
+    String output = runCollapse("var a = {}; a.b = 1;", "", true, true);
+    assertTrue(output.contains("a$b"));
+  }
+
+  // checkForHosedThisReferences() via ASSIGN declaration: function with bare 'this' triggers UNSAFE_THIS
+  @Test
+  public void testUpdateObjLitOrFunctionDeclarationAtAssignNode_functionValue_checksForHosedThis()
+      throws Throwable {
+    runCollapse("var a = {}; a.b = function() { return this; };");
+    assertTrue(lastCompiler.getWarningCount() >= 1);
+  }
+
+  // declareVarsForObjLitValues(): object literal key whose value is a function with 'this' triggers UNSAFE_THIS
+  @Test
+  public void testDeclareVarsForObjLitValues_functionKeyValue_checksForHosedThis() throws Throwable {
+    runCollapse("var a = {b: function() { return this; }};");
+    assertTrue(lastCompiler.getWarningCount() >= 1);
+  }
+
+  // declareVarsForObjLitValues(): loop runs for every identifier key in the object literal
+  @Test
+  public void testDeclareVarsForObjLitValues_multipleIdentifierKeys_allCollapsed() throws Throwable {
+    String output = runCollapse("var a = {b: 1, c: 2};");
+    assertTrue(output.contains("a$b"));
+    assertTrue(output.contains("a$c"));
+  }
+
+  // declareVarsForObjLitValues(): non-identifier keys use the arbitrary name counter (a$1, a$2)
+  @Test
+  public void testDeclareVarsForObjLitValues_nonIdentifierKeys_useArbitraryNameCounter()
+      throws Throwable {
+    String output = runCollapse("var a = {'x-y': 1, 'p-q': 2};");
+    assertTrue(output.contains("a$1"));
+    assertTrue(output.contains("a$2"));
+  }
+
+  // updateFunctionDeclarationAtFunctionNode(): global function with a property set only in local scope
+  @Test
+  public void testUpdateFunctionDeclarationAtFunctionNode_propertySetOnlyLocally_stubCreated()
+      throws Throwable {
+    String output = runCollapse("function a() {} function f() { a.b = 1; }");
+    assertTrue(output.contains("a$b"));
+    assertFalse(output.contains("a.b"));
+  }
+
+  // addStubsForUndeclaredProperties() via object-literal namespace: Javadoc "stubs for properties added late"
+  @Test
+  public void testAddStubsForUndeclaredProperties_viaAssignNamespace_stubCreatedForLocalOnlyProp()
+      throws Throwable {
+    String output = runCollapse("var a = {}; function f() { a.b = 1; }");
+    assertTrue(output.contains("a$b"));
+    assertFalse(output.contains("a.b"));
+  }
+
+  // appendPropForAlias(): '$' inside a property name is encoded as "$0" per the documented rule
+  @Test
+  public void testAppendPropForAlias_dollarSignInPropertyName_encodedAsDollarZero()
+      throws Throwable {
+    String output = runCollapse("var a = {}; a.$b = 1;");
+    assertTrue(output.contains("a$$0b"));
+  }
+
+  // process(): empty program means zero global names, both main loops run zero times without error
+  @Test
+  public void testProcess_emptyProgram_noNamesNoOutputChange() throws Throwable {
+    String output = runCollapse("");
+    assertEquals("", output.trim());
+  }
+
+  // process(): a plain primitive global variable is not a namespace, so nothing gets collapsed
+  @Test
+  public void testProcess_plainPrimitiveVariable_notTreatedAsNamespace() throws Throwable {
+    String output = runCollapse("var a = 1;");
+    assertTrue(output.contains("a"));
+    assertFalse(output.contains("$"));
+  }
+
+  // process(): a bare global function declaration with no properties causes no stubs and no crash
+  @Test
+  public void testProcess_functionDeclarationNoProperties_remainsIntact() throws Throwable {
+    String output = runCollapse("function a() { return 1; }");
+    assertTrue(output.contains("function a"));
+    assertFalse(output.contains("$"));
+  }
+
+  // process(): an uninitialized global var declaration is handled without collapsing or crashing
+  @Test
+  public void testProcess_uninitializedVariable_noCollapseAttempted() throws Throwable {
+    String output = runCollapse("var a; a = 5;");
+    assertTrue(output.contains("a"));
+    assertFalse(output.contains("$"));
+  }
+}

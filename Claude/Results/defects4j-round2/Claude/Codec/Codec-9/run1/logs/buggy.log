@@ -1,0 +1,17 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Codec -v 9b -w /tmp/claude-Codec-9-upqdc2kk/buggy
+Checking out c5291ab1 to /tmp/claude-Codec-9-upqdc2kk/buggy................ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Run post-checkout hook..................................................... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff c5291ab1:b396c535..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Codec-9b........................................ OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Codec-9-upqdc2kk/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

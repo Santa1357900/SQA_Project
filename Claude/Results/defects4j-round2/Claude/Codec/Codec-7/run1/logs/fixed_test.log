@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Codec-7-ttbms4hi/Codec-7f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.codec.binary.Base64ClaudeTest::testEncodeBase64String_knownValue_withTrailingCRLF
+  - org.apache.commons.codec.binary.Base64ClaudeTest::testStreamingEncode_exactLineBoundary_noDuplicateSeparator
+[exit 0]

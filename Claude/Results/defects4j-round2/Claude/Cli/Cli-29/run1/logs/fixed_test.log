@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-29-g2ptgh__/Cli-29f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.apache.commons.cli.UtilClaudeTest::testStripLeadingAndTrailingQuotes_onlyTrailingQuote_stripsTrailing
+  - org.apache.commons.cli.UtilClaudeTest::testStripLeadingAndTrailingQuotes_onlyLeadingQuote_stripsLeading
+  - org.apache.commons.cli.UtilClaudeTest::testStripLeadingAndTrailingQuotes_doubleQuotesEachSide_stripsOneEach
+  - org.apache.commons.cli.UtilClaudeTest::testStripLeadingAndTrailingQuotes_singleQuoteChar_returnsEmpty
+[exit 0]

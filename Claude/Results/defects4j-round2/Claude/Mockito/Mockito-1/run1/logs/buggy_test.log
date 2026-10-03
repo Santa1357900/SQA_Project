@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Mockito-1-0dhhd5h5/Mockito-1b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.mockito.internal.invocation.InvocationMatcherClaudeTest::testCaptureArgumentsFrom_varargsMethod_shouldCaptureWithoutThrowing
+[exit 0]

@@ -1,0 +1,334 @@
+package org.apache.commons.math.stat.clustering;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Random;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.exception.ConvergenceException;
+
+public class KMeansPlusPlusClustererClaudeTest {
+
+    private static final class TestPoint implements Clusterable<TestPoint> {
+        private final double value;
+
+        TestPoint(final double value) {
+            this.value = value;
+        }
+
+        public double getValue() {
+            return value;
+        }
+
+        public double distanceFrom(final TestPoint p) {
+            return Math.abs(this.value - p.value);
+        }
+
+        public TestPoint centroidOf(final Collection<TestPoint> points) {
+            double sum = 0.0;
+            int count = 0;
+            for (TestPoint p : points) {
+                sum += p.value;
+                count++;
+            }
+            return new TestPoint(sum / count);
+        }
+
+        public boolean equals(final Object other) {
+            if (!(other instanceof TestPoint)) {
+                return false;
+            }
+            return Double.doubleToLongBits(value) ==
+                   Double.doubleToLongBits(((TestPoint) other).value);
+        }
+
+        public int hashCode() {
+            final long bits = Double.doubleToLongBits(value);
+            return (int) (bits ^ (bits >>> 32));
+        }
+    }
+
+    private static final class FixedRandom extends Random {
+        private final int fixedInt;
+        private final double fixedDouble;
+
+        FixedRandom(final int fixedInt, final double fixedDouble) {
+            super(0L);
+            this.fixedInt = fixedInt;
+            this.fixedDouble = fixedDouble;
+        }
+
+        public int nextInt(final int bound) {
+            return fixedInt;
+        }
+
+        public double nextDouble() {
+            return fixedDouble;
+        }
+    }
+
+    // ครอบคลุม constructor 1 อาร์กิวเมนต์: default strategy (LARGEST_VARIANCE) จึงไม่ throw เมื่อมี empty cluster
+    @Test
+    public void testConstructorOneArg_defaultStrategyNotError_noExceptionOnEmptyCluster() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(0.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer =
+            new KMeansPlusPlusClusterer<TestPoint>(new FixedRandom(0, 0.0));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 2, 1);
+        assertEquals(2, result.size());
+    }
+
+    // ครอบคลุม constructor 2 อาร์กิวเมนต์กับ EmptyClusterStrategy.ERROR: ต้อง throw ConvergenceException เมื่อมี cluster ว่าง
+    @Test
+    public void testConstructorTwoArg_errorStrategy_throwsConvergenceExceptionOnEmptyCluster() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(0.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(
+            new FixedRandom(0, 0.0), KMeansPlusPlusClusterer.EmptyClusterStrategy.ERROR);
+        try {
+            clusterer.cluster(points, 2, 1);
+            fail("expected ConvergenceException");
+        } catch (ConvergenceException expected) {
+            // expected
+        }
+    }
+
+    // ครอบคลุม k=1: while loop ใน chooseInitialCenters ไม่ทำงาน ได้ cluster เดียวที่มีทุกจุด
+    @Test
+    public void testCluster_kEqualsOne_singleClusterContainsAllPoints() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(1.0));
+        points.add(new TestPoint(3.0));
+        points.add(new TestPoint(5.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(new Random(7L));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 1, 10);
+        assertEquals(1, result.size());
+        assertEquals(3, result.get(0).getPoints().size());
+    }
+
+    // ครอบคลุม maxIterations=0: for loop ไม่ทำงานเลย คืนค่า cluster เริ่มต้นจาก chooseInitialCenters ทันที
+    @Test
+    public void testCluster_maxIterationsZero_returnsWithoutIterating() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(2.0));
+        points.add(new TestPoint(2.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer =
+            new KMeansPlusPlusClusterer<TestPoint>(new FixedRandom(0, 0.0));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 1, 0);
+        assertEquals(1, result.size());
+        assertEquals(2.0, result.get(0).getCenter().getValue(), 1e-9);
+    }
+
+    // ครอบคลุม branch newCenter.equals(center)==true: centroid เท่ากับ center เดิม จึงคืนค่าทันทีโดยไม่วนซ้ำต่อ
+    @Test
+    public void testCluster_convergesImmediately_whenCentroidUnchanged() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(5.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(new Random(1L));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 1, 100);
+        assertEquals(5.0, result.get(0).getCenter().getValue(), 1e-9);
+        assertEquals(1, result.get(0).getPoints().size());
+    }
+
+    // ครอบคลุม maxIterations ติดลบ: max = Integer.MAX_VALUE จนกว่าจะ converge
+    @Test
+    public void testCluster_negativeMaxIterations_runsUntilConvergence() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(4.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(new Random(3L));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 1, -1);
+        assertEquals(2.0, result.get(0).getCenter().getValue(), 1e-9);
+    }
+
+    // ล่าบั๊ก: chooseInitialCenters ใช้ตัวแปร sum เป็น int ทำให้ D(x)^2 สะสมถูกตัดทศนิยม จุดที่สองที่เลือกจึงผิดจากการสุ่มถ่วงน้ำหนักตามสัญญา
+    @Test
+    public void testCluster_weightedInitialCenterSelection_usesSquaredDistanceSum() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(0.5));
+        points.add(new TestPoint(1.5));
+        KMeansPlusPlusClusterer<TestPoint> clusterer =
+            new KMeansPlusPlusClusterer<TestPoint>(new FixedRandom(0, 0.05));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 2, 0);
+        assertEquals(2, result.size());
+        assertEquals(0.5, result.get(1).getCenter().getValue(), 1e-9);
+    }
+
+    // ครอบคลุม case LARGEST_VARIANCE ของ switch เมื่อ cluster ว่าง: ต้องไม่ throw และคืนจำนวน cluster ตาม k
+    @Test
+    public void testCluster_emptyClusterStrategyLargestVariance_reassignsWithoutException() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(0.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(
+            new FixedRandom(0, 0.0), KMeansPlusPlusClusterer.EmptyClusterStrategy.LARGEST_VARIANCE);
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 2, 1);
+        assertEquals(2, result.size());
+    }
+
+    // ครอบคลุม case LARGEST_POINTS_NUMBER ของ switch เมื่อ cluster ว่าง: ต้องไม่ throw และคืนจำนวน cluster ตาม k
+    @Test
+    public void testCluster_emptyClusterStrategyLargestPointsNumber_reassignsWithoutException() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(0.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(
+            new FixedRandom(0, 0.0), KMeansPlusPlusClusterer.EmptyClusterStrategy.LARGEST_POINTS_NUMBER);
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 2, 1);
+        assertEquals(2, result.size());
+    }
+
+    // ครอบคลุม case FARTHEST_POINT ของ switch เมื่อ cluster ว่าง: ต้องไม่ throw และคืนจำนวน cluster ตาม k
+    @Test
+    public void testCluster_emptyClusterStrategyFarthestPoint_reassignsWithoutException() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(0.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(
+            new FixedRandom(0, 0.0), KMeansPlusPlusClusterer.EmptyClusterStrategy.FARTHEST_POINT);
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 2, 1);
+        assertEquals(2, result.size());
+    }
+
+    // ครอบคลุม integration: สองกลุ่มจุดที่แยกห่างกันชัดเจน ต้อง converge เป็นสอง center ที่ต่างกันมาก
+    @Test
+    public void testCluster_twoSeparatedGroups_convergesToTwoDistinctClusters() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(1.0));
+        points.add(new TestPoint(2.0));
+        points.add(new TestPoint(100.0));
+        points.add(new TestPoint(101.0));
+        points.add(new TestPoint(102.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(new Random(42L));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 2, 20);
+        assertEquals(2, result.size());
+        double distance = result.get(0).getCenter().distanceFrom(result.get(1).getCenter());
+        assertTrue(distance > 50.0);
+    }
+
+    // ครอบคลุม k เท่ากับจำนวนจุดที่แตกต่างกันทั้งหมด: แต่ละจุดควรได้ cluster ของตัวเอง
+    @Test
+    public void testCluster_kEqualsNumberOfDistinctPoints_eachPointOwnCluster() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(10.0));
+        points.add(new TestPoint(20.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(new Random(5L));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 3, 20);
+        assertEquals(3, result.size());
+        int total = 0;
+        for (Cluster<TestPoint> c : result) {
+            assertEquals(1, c.getPoints().size());
+            total += c.getPoints().size();
+        }
+        assertEquals(3, total);
+    }
+
+    // ครอบคลุม single point / single cluster: centroid ของจุดเดียวต้องเท่ากับจุดนั้นเอง
+    @Test
+    public void testCluster_singlePointSingleCluster_centerMatchesPoint() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(7.25));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(new Random(9L));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 1, 5);
+        assertEquals(7.25, result.get(0).getCenter().getValue(), 1e-9);
+    }
+
+    // ครอบคลุม maxIterations=1 พอดี: วน 1 รอบแล้วออกจาก for-loop ตามธรรมชาติไปคืนค่าที่ return สุดท้ายของเมธอด
+    @Test
+    public void testCluster_maxIterationsOne_appliesSingleIterationThenStops() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(2.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(new Random(11L));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 1, 1);
+        assertEquals(1.0, result.get(0).getCenter().getValue(), 1e-9);
+        assertEquals(2, result.get(0).getPoints().size());
+    }
+
+    // ครอบคลุม k=3 กับสามกลุ่มจุดที่แยกกันชัดเจน และ maxIterations มากพอให้ converge
+    @Test
+    public void testCluster_threeDistinctGroupsKEqualsThree_resultsInThreeClusters() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(1.0));
+        points.add(new TestPoint(50.0));
+        points.add(new TestPoint(51.0));
+        points.add(new TestPoint(200.0));
+        points.add(new TestPoint(201.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(new Random(13L));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 3, 20);
+        int total = 0;
+        for (Cluster<TestPoint> c : result) {
+            total += c.getPoints().size();
+        }
+        assertEquals(3, result.size());
+        assertEquals(6, total);
+    }
+
+    // ครอบคลุม enum values(): ต้องมีครบ 4 ค่าตามที่ประกาศตามลำดับ
+    @Test
+    public void testEmptyClusterStrategy_valuesContainsFourConstantsInOrder() throws Throwable {
+        KMeansPlusPlusClusterer.EmptyClusterStrategy[] values =
+            KMeansPlusPlusClusterer.EmptyClusterStrategy.values();
+        assertEquals(4, values.length);
+        assertEquals(KMeansPlusPlusClusterer.EmptyClusterStrategy.LARGEST_VARIANCE, values[0]);
+        assertEquals(KMeansPlusPlusClusterer.EmptyClusterStrategy.ERROR, values[3]);
+    }
+
+    // ครอบคลุม enum valueOf(): คืนค่าคงที่ที่ตรงกับชื่อ
+    @Test
+    public void testEmptyClusterStrategy_valueOf_returnsMatchingConstant() throws Throwable {
+        KMeansPlusPlusClusterer.EmptyClusterStrategy strategy =
+            KMeansPlusPlusClusterer.EmptyClusterStrategy.valueOf("FARTHEST_POINT");
+        assertEquals(KMeansPlusPlusClusterer.EmptyClusterStrategy.FARTHEST_POINT, strategy);
+    }
+
+    // ครอบคลุม enum valueOf() กับชื่อที่ไม่มีอยู่จริง: ต้อง throw IllegalArgumentException ตามสัญญาของ Enum
+    @Test
+    public void testEmptyClusterStrategy_valueOf_invalidName_throwsIllegalArgumentException() throws Throwable {
+        try {
+            KMeansPlusPlusClusterer.EmptyClusterStrategy.valueOf("NOT_A_STRATEGY");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // ครอบคลุม invariant: ผลรวมจำนวนจุดในทุก cluster หลังทำงานเสร็จต้องเท่ากับจำนวนจุด input เสมอ
+    @Test
+    public void testCluster_allPointsPreservedAfterClustering_totalCountMatches() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(0.1));
+        points.add(new TestPoint(9.9));
+        points.add(new TestPoint(10.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer = new KMeansPlusPlusClusterer<TestPoint>(new Random(17L));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 2, 15);
+        int total = 0;
+        for (Cluster<TestPoint> c : result) {
+            total += c.getPoints().size();
+        }
+        assertEquals(4, total);
+    }
+
+    // ครอบคลุม getNearestCluster tie-break (strict <): จุดสองจุดที่ระยะเท่ากันต้องไปอยู่ cluster แรกเท่านั้น cluster ที่สองว่าง
+    @Test
+    public void testCluster_tiedDistances_assignsToFirstClusterOnly() throws Throwable {
+        List<TestPoint> points = new ArrayList<TestPoint>();
+        points.add(new TestPoint(0.0));
+        points.add(new TestPoint(0.0));
+        KMeansPlusPlusClusterer<TestPoint> clusterer =
+            new KMeansPlusPlusClusterer<TestPoint>(new FixedRandom(0, 0.0));
+        List<Cluster<TestPoint>> result = clusterer.cluster(points, 2, 0);
+        assertEquals(2, result.get(0).getPoints().size());
+        assertEquals(0, result.get(1).getPoints().size());
+    }
+}

@@ -1,0 +1,392 @@
+package org.mockito.internal.configuration;
+
+import java.lang.reflect.Field;
+import java.util.HashSet;
+import java.util.Set;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.mockito.exceptions.base.MockitoException;
+
+public class DefaultInjectionEngineClaudeTest {
+
+    private DefaultInjectionEngine engine;
+
+    public static class ServiceX {}
+    public static class ServiceY {}
+    public static class ServiceA {}
+    public static class ServiceB {}
+    public static class ServiceC {}
+    public static class ServiceSuper {}
+    public static class ServiceSub extends ServiceSuper {}
+    public interface ServiceInterface {}
+
+    public static class TargetSimple {
+        public ServiceX serviceX;
+    }
+
+    public static class TargetNoMatch {
+        public ServiceY serviceY;
+    }
+
+    public static class TargetSuperField {
+        public ServiceSuper serviceSuper;
+    }
+
+    public static class TargetHierarchyBase {
+        public ServiceA baseServiceA;
+    }
+
+    public static class TargetHierarchySub extends TargetHierarchyBase {
+        public ServiceB subServiceB;
+    }
+
+    public static class TargetOrder {
+        public ServiceSuper serviceSuper;
+        public ServiceSub serviceSub;
+    }
+
+    public static class TargetSetter {
+        private ServiceX serviceX;
+        public void setServiceX(ServiceX serviceX) { this.serviceX = serviceX; }
+        public ServiceX getServiceX() { return serviceX; }
+    }
+
+    public static class TargetMultiField {
+        public ServiceX serviceX1;
+        public ServiceX serviceX2;
+    }
+
+    public static class TargetEmpty {
+    }
+
+    public static class ThreeLevelBase {
+        public ServiceA a;
+    }
+
+    public static class ThreeLevelMid extends ThreeLevelBase {
+        public ServiceB b;
+    }
+
+    public static class ThreeLevelSub extends ThreeLevelMid {
+        public ServiceC c;
+    }
+
+    public static class Holder {
+        public TargetSimple targetSimple;
+        public TargetNoMatch targetNoMatch;
+        public TargetSuperField targetSuperField;
+        public TargetHierarchySub targetHierarchySub;
+        public TargetOrder targetOrder;
+        public TargetSetter targetSetter;
+        public TargetMultiField targetMultiField;
+        public TargetEmpty targetEmpty;
+        public ThreeLevelSub threeLevelSub;
+        public ServiceInterface serviceInterface;
+        public TargetSimple targetSimpleA;
+        public TargetSimple targetSimpleB;
+    }
+
+    @Before
+    public void setUp() throws Throwable {
+        engine = new DefaultInjectionEngine();
+    }
+
+    // outer for-loop zero iterations: empty injectMocksFields set must be a no-op, no exception
+    @Test
+    public void testInjectMocksOnFields_emptyFieldsSet_noOp() throws Throwable {
+        Holder holder = new Holder();
+        Set<Field> fields = new HashSet<Field>();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(new ServiceX());
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertNull(holder.targetSimple);
+    }
+
+    // single field, single exact-type candidate: mock gets injected
+    @Test
+    public void testInjectMocksOnFields_singleFieldSingleTypeMatch_injectsMock() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetSimple");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceX mock = new ServiceX();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mock);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertNotNull(holder.targetSimple);
+        assertSame(mock, holder.targetSimple.serviceX);
+    }
+
+    // no candidate by type: field initialized but inner field stays null, no exception
+    @Test
+    public void testInjectMocksOnFields_noTypeMatch_fieldStaysNull() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetNoMatch");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(new ServiceX());
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertNotNull(holder.targetNoMatch);
+        assertNull(holder.targetNoMatch.serviceY);
+    }
+
+    // empty mocks set: target still initialized but no candidate exists anywhere, no exception
+    @Test
+    public void testInjectMocksOnFields_emptyMocksSet_fieldsStayNull() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetSimple");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        Set<Object> mocks = new HashSet<Object>();
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertNotNull(holder.targetSimple);
+        assertNull(holder.targetSimple.serviceX);
+    }
+
+    // while-loop class hierarchy traversal: fields from subclass AND superclass both injected
+    @Test
+    public void testInjectMocksOnFields_hierarchyFields_bothLevelsInjected() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetHierarchySub");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceA mockA = new ServiceA();
+        ServiceB mockB = new ServiceB();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mockA);
+        mocks.add(mockB);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertSame(mockA, holder.targetHierarchySub.baseServiceA);
+        assertSame(mockB, holder.targetHierarchySub.subServiceB);
+    }
+
+    // setter injection path: value reaches field via setter, observable through getter
+    @Test
+    public void testInjectMocksOnFields_setterAvailable_valueReflectedViaGetter() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetSetter");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceX mock = new ServiceX();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mock);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertSame(mock, holder.targetSetter.getServiceX());
+    }
+
+    // supertypesLast comparator: sub-type field must be processed before super-type field
+    @Test
+    public void testInjectMocksOnFields_subtypeFieldProcessedBeforeSupertypeField_onlySubFieldInjected() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetOrder");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceSub onlyMock = new ServiceSub();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(onlyMock);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertSame(onlyMock, holder.targetOrder.serviceSub);
+        assertNull(holder.targetOrder.serviceSuper);
+    }
+
+    // same type twice, one mock: mock injected exactly once, consumed afterwards (not duplicated)
+    @Test
+    public void testInjectMocksOnFields_twoFieldsSameType_exactlyOneReceivesMock() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetMultiField");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceX mock = new ServiceX();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mock);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        boolean first = holder.targetMultiField.serviceX1 == mock;
+        boolean second = holder.targetMultiField.serviceX2 == mock;
+        assertTrue(first || second);
+        assertFalse(first && second);
+    }
+
+    // "copy mocks set" per @InjectMocks field: two separate target fields both get the same mock independently
+    @Test
+    public void testInjectMocksOnFields_twoInjectMocksFieldsSameType_bothGetIndependentCopyOfMock() throws Throwable {
+        Holder holder = new Holder();
+        Field fieldA = Holder.class.getDeclaredField("targetSimpleA");
+        Field fieldB = Holder.class.getDeclaredField("targetSimpleB");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(fieldA);
+        fields.add(fieldB);
+        ServiceX mock = new ServiceX();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mock);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertSame(mock, holder.targetSimpleA.serviceX);
+        assertSame(mock, holder.targetSimpleB.serviceX);
+    }
+
+    // FieldInitializer failure path (interface field cannot be instantiated) must surface as MockitoException
+    @Test
+    public void testInjectMocksOnFields_fieldTypeIsInterface_throwsMockitoException() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("serviceInterface");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        Set<Object> mocks = new HashSet<Object>();
+        try {
+            engine.injectMocksOnFields(fields, mocks, holder);
+            fail("expected MockitoException");
+        } catch (MockitoException expected) {
+        }
+    }
+
+    // type-based matching uses assignability: a subtype mock satisfies a supertype-typed field
+    @Test
+    public void testInjectMocksOnFields_supertypeField_acceptsSubtypeMock() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetSuperField");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceSub mock = new ServiceSub();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mock);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertSame(mock, holder.targetSuperField.serviceSuper);
+    }
+
+    // existing non-null @InjectMocks instance must be reused (identity preserved), not replaced
+    @Test
+    public void testInjectMocksOnFields_existingNonNullInstance_reusedNotReplaced() throws Throwable {
+        Holder holder = new Holder();
+        TargetSimple preset = new TargetSimple();
+        holder.targetSimple = preset;
+        Field field = Holder.class.getDeclaredField("targetSimple");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceX mock = new ServiceX();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mock);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertSame(preset, holder.targetSimple);
+        assertSame(mock, holder.targetSimple.serviceX);
+    }
+
+    // caller-supplied mocks set must not be mutated since engine works on an internal copy
+    @Test
+    public void testInjectMocksOnFields_originalMocksSet_notMutatedAfterCall() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetSimple");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceX mock = new ServiceX();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mock);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertEquals(1, mocks.size());
+        assertTrue(mocks.contains(mock));
+    }
+
+    // while-loop runs more than one extra iteration: 3-level class hierarchy, all levels injected
+    @Test
+    public void testInjectMocksOnFields_threeLevelHierarchy_allFieldsInjected() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("threeLevelSub");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceA mockA = new ServiceA();
+        ServiceB mockB = new ServiceB();
+        ServiceC mockC = new ServiceC();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mockA);
+        mocks.add(mockB);
+        mocks.add(mockC);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertSame(mockA, holder.threeLevelSub.a);
+        assertSame(mockB, holder.threeLevelSub.b);
+        assertSame(mockC, holder.threeLevelSub.c);
+    }
+
+    // orderedInstanceFieldsFrom with zero declared fields: no exception, no injection target
+    @Test
+    public void testInjectMocksOnFields_targetClassWithNoFields_noExceptionNoInjection() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetEmpty");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(new ServiceX());
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertNotNull(holder.targetEmpty);
+    }
+
+    // outer for-loop with multiple heterogeneous @InjectMocks fields processed in one call
+    @Test
+    public void testInjectMocksOnFields_multipleInjectMocksFieldsDifferentTypes_bothInjectedIndependently() throws Throwable {
+        Holder holder = new Holder();
+        Field fieldSimple = Holder.class.getDeclaredField("targetSimple");
+        Field fieldSuper = Holder.class.getDeclaredField("targetSuperField");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(fieldSimple);
+        fields.add(fieldSuper);
+        ServiceX mockX = new ServiceX();
+        ServiceSub mockSub = new ServiceSub();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mockX);
+        mocks.add(mockSub);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertSame(mockX, holder.targetSimple.serviceX);
+        assertSame(mockSub, holder.targetSuperField.serviceSuper);
+    }
+
+    // unrelated extra mocks present do not block correct unambiguous matches in a hierarchy
+    @Test
+    public void testInjectMocksOnFields_extraUnrelatedMockPresent_correctFieldsStillInjected() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetHierarchySub");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceA mockA = new ServiceA();
+        ServiceB mockB = new ServiceB();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mockA);
+        mocks.add(mockB);
+        mocks.add(new ServiceC());
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertSame(mockA, holder.targetHierarchySub.baseServiceA);
+        assertSame(mockB, holder.targetHierarchySub.subServiceB);
+    }
+
+    // two unambiguous candidates of related types: each field gets its own exact-type match
+    @Test
+    public void testInjectMocksOnFields_bothSuperAndSubMocksAvailable_eachFieldGetsOwnMatch() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetOrder");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        ServiceSuper mockSuper = new ServiceSuper();
+        ServiceSub mockSub = new ServiceSub();
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(mockSuper);
+        mocks.add(mockSub);
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertSame(mockSub, holder.targetOrder.serviceSub);
+        assertSame(mockSuper, holder.targetOrder.serviceSuper);
+    }
+
+    // only unrelated mock types available across a whole hierarchy: every level stays null, no exception
+    @Test
+    public void testInjectMocksOnFields_onlyUnrelatedMockType_allHierarchyFieldsStayNull() throws Throwable {
+        Holder holder = new Holder();
+        Field field = Holder.class.getDeclaredField("targetHierarchySub");
+        Set<Field> fields = new HashSet<Field>();
+        fields.add(field);
+        Set<Object> mocks = new HashSet<Object>();
+        mocks.add(new ServiceC());
+        engine.injectMocksOnFields(fields, mocks, holder);
+        assertNotNull(holder.targetHierarchySub);
+        assertNull(holder.targetHierarchySub.baseServiceA);
+        assertNull(holder.targetHierarchySub.subServiceB);
+    }
+}

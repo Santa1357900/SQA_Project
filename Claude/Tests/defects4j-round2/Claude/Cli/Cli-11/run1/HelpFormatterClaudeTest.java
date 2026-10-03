@@ -1,0 +1,504 @@
+package org.apache.commons.cli;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.util.Comparator;
+
+public class HelpFormatterClaudeTest {
+
+    // setWidth / getWidth
+    @Test
+    public void testSetWidth_getWidth_returnsSetValue() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        hf.setWidth(100);
+        assertEquals(100, hf.getWidth());
+    }
+
+    // default width constant
+    @Test
+    public void testGetWidth_defaultValue_returnsDefaultWidth() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertEquals(HelpFormatter.DEFAULT_WIDTH, hf.getWidth());
+    }
+
+    // setLeftPadding / getLeftPadding
+    @Test
+    public void testSetLeftPadding_getLeftPadding_returnsSetValue() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        hf.setLeftPadding(5);
+        assertEquals(5, hf.getLeftPadding());
+    }
+
+    // setDescPadding / getDescPadding
+    @Test
+    public void testSetDescPadding_getDescPadding_returnsSetValue() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        hf.setDescPadding(7);
+        assertEquals(7, hf.getDescPadding());
+    }
+
+    // setSyntaxPrefix / getSyntaxPrefix
+    @Test
+    public void testSetSyntaxPrefix_getSyntaxPrefix_returnsSetValue() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        hf.setSyntaxPrefix("run: ");
+        assertEquals("run: ", hf.getSyntaxPrefix());
+    }
+
+    // setNewLine / getNewLine
+    @Test
+    public void testSetNewLine_getNewLine_returnsSetValue() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        hf.setNewLine("\n");
+        assertEquals("\n", hf.getNewLine());
+    }
+
+    // setOptPrefix / getOptPrefix
+    @Test
+    public void testSetOptPrefix_getOptPrefix_returnsSetValue() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        hf.setOptPrefix("/");
+        assertEquals("/", hf.getOptPrefix());
+    }
+
+    // setLongOptPrefix / getLongOptPrefix
+    @Test
+    public void testSetLongOptPrefix_getLongOptPrefix_returnsSetValue() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        hf.setLongOptPrefix("==");
+        assertEquals("==", hf.getLongOptPrefix());
+    }
+
+    // setArgName / getArgName
+    @Test
+    public void testSetArgName_getArgName_returnsSetValue() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        hf.setArgName("VALUE");
+        assertEquals("VALUE", hf.getArgName());
+    }
+
+    // getOptionComparator default should never be null
+    @Test
+    public void testGetOptionComparator_default_notNull() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertNotNull(hf.getOptionComparator());
+    }
+
+    // setOptionComparator(null) branch: resets to default comparator
+    @Test
+    public void testSetOptionComparator_null_resetsToDefaultComparator() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        hf.setOptionComparator(null);
+        Comparator comparator = hf.getOptionComparator();
+        assertNotNull(comparator);
+        Option a = new Option("z", false, "z desc");
+        Option b = new Option("a", false, "a desc");
+        assertTrue(comparator.compare(a, b) > 0);
+    }
+
+    // setOptionComparator(custom) branch: uses provided comparator instance
+    @Test
+    public void testSetOptionComparator_custom_usesProvidedComparator() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Comparator reverseComparator = new Comparator() {
+            public int compare(Object o1, Object o2) {
+                Option opt1 = (Option) o1;
+                Option opt2 = (Option) o2;
+                return opt2.getKey().compareToIgnoreCase(opt1.getKey());
+            }
+        };
+        hf.setOptionComparator(reverseComparator);
+        assertSame(reverseComparator, hf.getOptionComparator());
+    }
+
+    // default OptionComparator orders alphabetically ignoring case
+    @Test
+    public void testOptionComparator_compareIgnoringCase_ordersAlphabetically() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Comparator comparator = hf.getOptionComparator();
+        Option a = new Option("a", false, "a desc");
+        Option b = new Option("B", false, "b desc");
+        assertTrue(comparator.compare(a, b) < 0);
+    }
+
+    // printHelp: null cmdLineSyntax must throw IllegalArgumentException
+    @Test
+    public void testPrintHelp_nullCmdLineSyntax_throwsIllegalArgumentException() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        try {
+            hf.printHelp(pw, 80, null, null, options, 1, 3, null, false);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // printHelp: empty cmdLineSyntax must throw IllegalArgumentException
+    @Test
+    public void testPrintHelp_emptyCmdLineSyntax_throwsIllegalArgumentException() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        try {
+            hf.printHelp(pw, 80, "", null, options, 1, 3, null, false);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // autoUsage=false branch: plain syntax printed, no option usage clause
+    @Test
+    public void testPrintHelp_autoUsageFalse_printsPlainSyntax() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        options.addOption("a", false, "a option");
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printHelp(pw, 80, "myapp", null, options, 1, 3, null, false);
+        pw.flush();
+        String output = sw.toString();
+        assertTrue(output.startsWith("usage: myapp"));
+        assertFalse(output.contains("[-a]"));
+    }
+
+    // autoUsage=true branch: generated usage clause includes options
+    @Test
+    public void testPrintHelp_autoUsageTrue_printsGeneratedUsage() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        options.addOption("a", false, "a option");
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printHelp(pw, 80, "myapp", null, options, 1, 3, null, true);
+        pw.flush();
+        assertTrue(sw.toString().contains("[-a]"));
+    }
+
+    // header and footer non-blank: both should appear in output
+    @Test
+    public void testPrintHelp_withHeaderAndFooter_includesBothInOutput() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        options.addOption("a", false, "a option");
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printHelp(pw, 80, "myapp", "HEADERTEXT", options, 1, 3, "FOOTERTEXT", false);
+        pw.flush();
+        String output = sw.toString();
+        assertTrue(output.contains("HEADERTEXT"));
+        assertTrue(output.contains("FOOTERTEXT"));
+    }
+
+    // header/footer blank (trim length 0): must be skipped entirely
+    @Test
+    public void testPrintHelp_withBlankHeaderAndFooter_excludesBoth() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        options.addOption("a", false, "a option");
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printHelp(pw, 80, "myapp", "   ", options, 1, 3, "   ", false);
+        pw.flush();
+        String output = sw.toString();
+        String nl = hf.getNewLine();
+        assertFalse(output.contains(nl + nl));
+    }
+
+    // two-arg overload writes to System.out via internal PrintWriter
+    @Test
+    public void testPrintHelp_twoArgOverload_writesToSystemOut() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        options.addOption("a", false, "a option");
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        PrintStream original = System.out;
+        System.setOut(new PrintStream(bos));
+        try {
+            hf.printHelp("myapp", options);
+        } finally {
+            System.setOut(original);
+        }
+        assertTrue(bos.toString().startsWith("usage: myapp"));
+    }
+
+    // four-arg overload (header, options, footer) writes header/footer content
+    @Test
+    public void testPrintHelp_fourArgOverloadWithHeaderFooter_includesContent() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        options.addOption("a", false, "a option");
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        PrintStream original = System.out;
+        System.setOut(new PrintStream(bos));
+        try {
+            hf.printHelp("myapp", "HEADERX", options, "FOOTERX");
+        } finally {
+            System.setOut(original);
+        }
+        String output = bos.toString();
+        assertTrue(output.contains("HEADERX"));
+        assertTrue(output.contains("FOOTERX"));
+    }
+
+    // OptionGroup required=true: no surrounding brackets, options separated by " | "
+    @Test
+    public void testPrintUsage_withOptionGroupRequired_noBrackets() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        OptionGroup group = new OptionGroup();
+        group.addOption(new Option("a", false, "opt a"));
+        group.addOption(new Option("b", false, "opt b"));
+        group.setRequired(true);
+        options.addOptionGroup(group);
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printUsage(pw, 80, "myapp", options);
+        pw.flush();
+        String output = sw.toString();
+        assertTrue(output.contains("-a | -b"));
+        assertFalse(output.contains("["));
+    }
+
+    // OptionGroup required=false (default): wrapped in square brackets
+    @Test
+    public void testPrintUsage_withOptionGroupNotRequired_wrappedInBrackets() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        OptionGroup group = new OptionGroup();
+        group.addOption(new Option("a", false, "opt a"));
+        group.addOption(new Option("b", false, "opt b"));
+        options.addOptionGroup(group);
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printUsage(pw, 80, "myapp", options);
+        pw.flush();
+        assertTrue(sw.toString().contains("[-a | -b]"));
+    }
+
+    // required standalone option: no brackets
+    @Test
+    public void testPrintUsage_withRequiredOption_noBrackets() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        Option opt = new Option("r", false, "required opt");
+        opt.setRequired(true);
+        options.addOption(opt);
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printUsage(pw, 80, "myapp", options);
+        pw.flush();
+        String output = sw.toString();
+        assertTrue(output.contains("-r"));
+        assertFalse(output.contains("[-r]"));
+    }
+
+    // optional option with arg: brackets plus argName rendering
+    @Test
+    public void testPrintUsage_withOptionalOptionWithArg_bracketsAndArgName() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        Option opt = new Option("f", true, "file opt");
+        opt.setArgName("FILE");
+        options.addOption(opt);
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printUsage(pw, 80, "myapp", options);
+        pw.flush();
+        assertTrue(sw.toString().contains("[-f <FILE>]"));
+    }
+
+    // simple printUsage(pw,width,cmdLineSyntax): prepends syntax prefix, no wrap
+    @Test
+    public void testPrintUsage_simpleCmdLineSyntax_prependsSyntaxPrefix() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printUsage(pw, 80, "myapp -a -b");
+        pw.flush();
+        String nl = hf.getNewLine();
+        assertEquals("usage: myapp -a -b" + nl, sw.toString());
+    }
+
+    // printOptions renders option flag and description text
+    @Test
+    public void testPrintOptions_rendersOptionDescriptions() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        options.addOption("a", false, "the a option");
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printOptions(pw, 80, options, 1, 3);
+        pw.flush();
+        String output = sw.toString();
+        assertTrue(output.contains("-a"));
+        assertTrue(output.contains("the a option"));
+    }
+
+    // zero options: for-loop executes zero iterations, output is just newline
+    @Test
+    public void testPrintOptions_noOptions_producesEmptyOutput() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printOptions(pw, 80, options, 1, 3);
+        pw.flush();
+        assertEquals(hf.getNewLine(), sw.toString());
+    }
+
+    // printWrapped: text fits width, no wrapping occurs
+    @Test
+    public void testPrintWrapped_shortText_noWrap() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printWrapped(pw, 20, "hello world");
+        pw.flush();
+        assertEquals("hello world" + hf.getNewLine(), sw.toString());
+    }
+
+    // printWrapped: tab character forces an early wrap point
+    @Test
+    public void testPrintWrapped_withTabCharacter_wrapsAtTab() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        hf.printWrapped(pw, 20, "abc\tdef");
+        pw.flush();
+        String nl = hf.getNewLine();
+        assertEquals("abc" + nl + "def" + nl, sw.toString());
+    }
+
+    // renderOptions: option.getOpt()==null branch, only long opt prefix shown
+    @Test
+    public void testRenderOptions_optionWithoutShortOpt_usesLongOptPrefixOnly() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        options.addOption(null, "longonly", false, "long only description");
+        StringBuffer sb = new StringBuffer();
+        hf.renderOptions(sb, 80, options, 1, 3);
+        assertTrue(sb.toString().contains("--longonly"));
+    }
+
+    // renderOptions: short + long opt combined via comma
+    @Test
+    public void testRenderOptions_optionWithShortAndLongOpt_combinesBoth() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        options.addOption("v", "verbose", false, "verbose description");
+        StringBuffer sb = new StringBuffer();
+        hf.renderOptions(sb, 80, options, 1, 3);
+        assertTrue(sb.toString().contains("-v,--verbose"));
+    }
+
+    // renderOptions: hasArgName() true branch shows <ARGNAME>
+    @Test
+    public void testRenderOptions_optionWithArgName_showsArgNameBrackets() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        Options options = new Options();
+        Option opt = new Option("f", true, "file description");
+        opt.setArgName("FILE");
+        options.addOption(opt);
+        StringBuffer sb = new StringBuffer();
+        hf.renderOptions(sb, 80, options, 1, 3);
+        assertTrue(sb.toString().contains("<FILE>"));
+    }
+
+    // renderWrappedText: findWrapPos returns -1 immediately, no wrapping
+    @Test
+    public void testRenderWrappedText_textFitsWidth_noWrapping() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        StringBuffer sb = new StringBuffer();
+        hf.renderWrappedText(sb, 20, 0, "hello world");
+        assertEquals("hello world", sb.toString());
+    }
+
+    // renderWrappedText: multiple wrap iterations produce several lines
+    @Test
+    public void testRenderWrappedText_longTextWrapsMultipleLines() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        StringBuffer sb = new StringBuffer();
+        hf.renderWrappedText(sb, 8, 0, "one two three four five");
+        String nl = hf.getNewLine();
+        assertEquals("one two" + nl + "three" + nl + "four" + nl + "five", sb.toString());
+    }
+
+    // findWrapPos: newline found within width, returns position after newline
+    @Test
+    public void testFindWrapPos_newlineWithinWidth_returnsPositionAfterNewline() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertEquals(4, hf.findWrapPos("abc\ndef", 10, 0));
+    }
+
+    // findWrapPos: tab found within width, returns position after tab
+    @Test
+    public void testFindWrapPos_tabWithinWidth_returnsPositionAfterTab() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertEquals(4, hf.findWrapPos("abc\tdef", 10, 0));
+    }
+
+    // findWrapPos: whitespace found scanning backward before the limit
+    @Test
+    public void testFindWrapPos_whitespaceBeforeLimit_returnsWhitespacePosition() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertEquals(5, hf.findWrapPos("hello world foo bar", 5, 0));
+    }
+
+    // Bug hunt: no whitespace found scanning forward to end of text must
+    // return -1 without evaluating charAt(text.length())
+    @Test
+    public void testFindWrapPos_noWhitespaceAfterLimit_returnsMinusOne() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertEquals(-1, hf.findWrapPos("1234567890", 5, 0));
+    }
+
+    // createPadding: zero length yields empty string
+    @Test
+    public void testCreatePadding_zeroLength_returnsEmptyString() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertEquals("", hf.createPadding(0));
+    }
+
+    // createPadding: positive length yields that many spaces
+    @Test
+    public void testCreatePadding_positiveLength_returnsSpaces() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertEquals("     ", hf.createPadding(5));
+    }
+
+    // rtrim: null input returns null
+    @Test
+    public void testRtrim_nullInput_returnsNull() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertNull(hf.rtrim(null));
+    }
+
+    // rtrim: empty string returns empty string
+    @Test
+    public void testRtrim_emptyString_returnsEmpty() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertEquals("", hf.rtrim(""));
+    }
+
+    // rtrim: trailing whitespace is removed
+    @Test
+    public void testRtrim_trailingWhitespace_removesTrailing() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertEquals("hello", hf.rtrim("hello   "));
+    }
+
+    // rtrim: no trailing whitespace leaves string unchanged
+    @Test
+    public void testRtrim_noTrailingWhitespace_unchanged() throws Throwable {
+        HelpFormatter hf = new HelpFormatter();
+        assertEquals("hello", hf.rtrim("hello"));
+    }
+}

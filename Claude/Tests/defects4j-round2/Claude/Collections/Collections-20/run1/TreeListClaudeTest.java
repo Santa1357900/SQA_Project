@@ -1,0 +1,493 @@
+package org.apache.commons.collections.list;
+
+import java.util.ArrayList;
+import java.util.ConcurrentModificationException;
+import java.util.Iterator;
+import java.util.ListIterator;
+import java.util.NoSuchElementException;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TreeListClaudeTest {
+
+    // constructor ไม่มี argument ต้องได้ลิสต์ว่าง
+    @Test
+    public void testConstructor_default_emptyList() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        assertEquals(0, list.size());
+        assertFalse(list.iterator().hasNext());
+    }
+
+    // constructor ที่รับ Collection ต้อง copy สมาชิกมาตามลำดับ
+    @Test
+    public void testConstructor_withCollection_copiesAllElements() throws Throwable {
+        ArrayList<String> src = new ArrayList<String>();
+        src.add("a");
+        src.add("b");
+        TreeList<String> list = new TreeList<String>(src);
+        assertEquals(2, list.size());
+        assertEquals("a", list.get(0));
+        assertEquals("b", list.get(1));
+    }
+
+    // constructor ที่รับ Collection null ต้อง throw NullPointerException ตาม javadoc
+    @Test
+    public void testConstructor_withNullCollection_throwsNPE() throws Throwable {
+        try {
+            new TreeList<String>(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) { }
+    }
+
+    // get() กับ index ที่ถูกต้องหลายตำแหน่ง
+    @Test
+    public void testGet_validIndices_returnsCorrectElements() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        list.add(2, "c");
+        assertEquals("a", list.get(0));
+        assertEquals("b", list.get(1));
+        assertEquals("c", list.get(2));
+    }
+
+    // get() ที่ index == size() ต้อง throw IndexOutOfBoundsException (ขอบบน)
+    @Test
+    public void testGet_indexEqualsSize_throwsIndexOutOfBounds() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        try {
+            list.get(1);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+    }
+
+    // get() ที่ index เป็นลบต้อง throw IndexOutOfBoundsException (ขอบล่าง)
+    @Test
+    public void testGet_negativeIndex_throwsIndexOutOfBounds() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        try {
+            list.get(-1);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+    }
+
+    // size() ต้องสะท้อนจำนวนหลัง add/remove
+    @Test
+    public void testSize_reflectsAddsAndRemoves() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        assertEquals(0, list.size());
+        list.add(0, "a");
+        list.add(1, "b");
+        assertEquals(2, list.size());
+        list.remove(0);
+        assertEquals(1, list.size());
+    }
+
+    // iterator() ต้องคืนสมาชิกตามลำดับดัชนีจนหมด
+    @Test
+    public void testIterator_returnsElementsInOrder() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        list.add(2, "c");
+        Iterator<String> it = list.iterator();
+        assertEquals("a", it.next());
+        assertEquals("b", it.next());
+        assertEquals("c", it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // listIterator() ไม่มี argument ต้องเริ่มที่ตำแหน่ง 0
+    @Test
+    public void testListIteratorNoArg_startsAtBeginning() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        ListIterator<String> it = list.listIterator();
+        assertEquals(0, it.nextIndex());
+        assertFalse(it.hasPrevious());
+    }
+
+    // listIterator(fromIndex) ที่ fromIndex == size() เป็นค่าขอบที่อนุญาต, hasNext ต้องเป็น false
+    @Test
+    public void testListIterator_fromIndexEqualsSize_hasNextFalse() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        list.add(2, "c");
+        ListIterator<String> it = list.listIterator(3);
+        assertFalse(it.hasNext());
+        assertTrue(it.hasPrevious());
+        assertEquals(2, it.previousIndex());
+    }
+
+    // listIterator(fromIndex) ที่ fromIndex ติดลบต้อง throw IndexOutOfBoundsException
+    @Test
+    public void testListIterator_fromIndexNegative_throws() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        try {
+            list.listIterator(-1);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+    }
+
+    // listIterator(fromIndex) ที่ fromIndex > size() ต้อง throw IndexOutOfBoundsException
+    @Test
+    public void testListIterator_fromIndexGreaterThanSize_throws() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        try {
+            list.listIterator(2);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+    }
+
+    // indexOf() พบสมาชิก ต้องคืนตำแหน่งที่ถูกต้อง
+    @Test
+    public void testIndexOf_elementPresent_returnsIndex() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        list.add(2, "c");
+        assertEquals(1, list.indexOf("b"));
+    }
+
+    // indexOf() ไม่พบสมาชิก ต้องคืน -1
+    @Test
+    public void testIndexOf_elementAbsent_returnsMinusOne() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        assertEquals(-1, list.indexOf("z"));
+    }
+
+    // indexOf() บน root == null (ลิสต์ว่าง) ต้องคืน -1
+    @Test
+    public void testIndexOf_emptyList_returnsMinusOne() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        assertEquals(-1, list.indexOf("a"));
+    }
+
+    // indexOf() กับค่า null ในลิสต์ ต้องใช้สาขา value==null ในการเปรียบเทียบ
+    @Test
+    public void testIndexOf_nullElement_found() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, null);
+        list.add(1, "x");
+        assertEquals(0, list.indexOf(null));
+    }
+
+    // contains() ต้องอิง indexOf() ทั้งกรณีพบและไม่พบ
+    @Test
+    public void testContains_trueAndFalse() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        assertTrue(list.contains("a"));
+        assertFalse(list.contains("b"));
+    }
+
+    // toArray() กับลิสต์ว่าง ต้องได้ array ความยาว 0
+    @Test
+    public void testToArray_emptyList_returnsEmptyArray() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        Object[] array = list.toArray();
+        assertEquals(0, array.length);
+    }
+
+    // toArray() กับลิสต์ที่มีสมาชิก ต้องเรียงตามดัชนี
+    @Test
+    public void testToArray_nonEmptyList_returnsElementsInOrder() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        list.add(2, "c");
+        Object[] array = list.toArray();
+        assertArrayEquals(new Object[] {"a", "b", "c"}, array);
+    }
+
+    // add(index,obj) ที่ปลาย, ที่หัว, และกลางลิสต์ ครอบคลุม insertOnLeft/insertOnRight
+    @Test
+    public void testAdd_atEndAndBeginningAndMiddle() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "b");
+        list.add(0, "a");
+        list.add(2, "d");
+        list.add(2, "c");
+        assertEquals("a", list.get(0));
+        assertEquals("b", list.get(1));
+        assertEquals("c", list.get(2));
+        assertEquals("d", list.get(3));
+    }
+
+    // add(index,obj) กับ index ไม่ถูกต้อง (ติดลบ และมากกว่า size) ต้อง throw
+    @Test
+    public void testAdd_indexOutOfBounds_throws() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        try {
+            list.add(-1, "x");
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+        try {
+            list.add(2, "x");
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+    }
+
+    // set(index,obj) ต้องคืนค่าเก่าและแทนที่ค่าใหม่ที่ตำแหน่งนั้น
+    @Test
+    public void testSet_validIndex_replacesAndReturnsOld() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        String old = list.set(1, "B");
+        assertEquals("b", old);
+        assertEquals("B", list.get(1));
+    }
+
+    // set(index,obj) กับ index ไม่ถูกต้อง ต้อง throw IndexOutOfBoundsException
+    @Test
+    public void testSet_indexOutOfBounds_throws() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        try {
+            list.set(1, "x");
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+        try {
+            list.set(-1, "x");
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+    }
+
+    // set(index,obj) บนลิสต์ว่าง (size()-1 == -1) ต้อง throw
+    @Test
+    public void testSet_emptyList_throws() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        try {
+            list.set(0, "x");
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+    }
+
+    // remove(index) ต้องคืนค่าที่ถูกลบและลด size ลง
+    @Test
+    public void testRemove_validIndex_returnsRemovedElement() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        list.add(2, "c");
+        String removed = list.remove(1);
+        assertEquals("b", removed);
+        assertEquals(2, list.size());
+        assertEquals("c", list.get(1));
+    }
+
+    // remove(index) กับ index ไม่ถูกต้อง ต้อง throw IndexOutOfBoundsException
+    @Test
+    public void testRemove_indexOutOfBounds_throws() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        try {
+            list.remove(1);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+        try {
+            list.remove(-1);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+    }
+
+    // clear() ต้องทำให้ root เป็น null และ size เป็น 0
+    @Test
+    public void testClear_emptiesList() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        list.clear();
+        assertEquals(0, list.size());
+        assertFalse(list.iterator().hasNext());
+    }
+
+    // TreeListIterator.next() บนลิสต์ว่าง ต้อง throw NoSuchElementException
+    @Test
+    public void testListIteratorNext_exhausted_throwsNoSuchElement() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        ListIterator<String> it = list.listIterator();
+        assertFalse(it.hasNext());
+        try {
+            it.next();
+            fail("expected NoSuchElementException");
+        } catch (NoSuchElementException expected) { }
+    }
+
+    // TreeListIterator.previous() ที่ตำแหน่งเริ่มต้น ต้อง throw NoSuchElementException
+    @Test
+    public void testListIteratorPrevious_atStart_throwsNoSuchElement() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        ListIterator<String> it = list.listIterator(0);
+        assertFalse(it.hasPrevious());
+        try {
+            it.previous();
+            fail("expected NoSuchElementException");
+        } catch (NoSuchElementException expected) { }
+    }
+
+    // remove() โดยไม่เรียก next()/previous() ก่อน ต้อง throw IllegalStateException
+    @Test
+    public void testListIteratorRemove_withoutCurrent_throwsIllegalState() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        ListIterator<String> it = list.listIterator(0);
+        try {
+            it.remove();
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) { }
+    }
+
+    // set() โดยไม่มี current node ต้อง throw IllegalStateException
+    @Test
+    public void testListIteratorSet_withoutCurrent_throwsIllegalState() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        ListIterator<String> it = list.listIterator(0);
+        try {
+            it.set("x");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) { }
+    }
+
+    // remove() หลัง next() (nextIndex != currentIndex) ต้องลบตัวที่ถูก next() มาและเลื่อน index ถูกต้อง
+    @Test
+    public void testListIteratorRemoveAfterNext_updatesListAndIndex() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        list.add(2, "c");
+        ListIterator<String> it = list.listIterator(0);
+        assertEquals("a", it.next());
+        it.remove();
+        assertEquals(2, list.size());
+        assertEquals("b", list.get(0));
+        assertEquals("b", it.next());
+    }
+
+    // remove() หลัง previous() (nextIndex == currentIndex) ต้องลบตัวที่ถูก previous() มา
+    @Test
+    public void testListIteratorRemoveAfterPrevious_updatesListAndIndex() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        list.add(2, "c");
+        ListIterator<String> it = list.listIterator(3);
+        assertEquals("c", it.previous());
+        it.remove();
+        assertEquals(2, list.size());
+        assertEquals("b", list.get(1));
+        assertEquals("b", it.previous());
+    }
+
+    // set() หลัง next() ต้องแก้ไขค่าของ node ปัจจุบันในลิสต์จริง
+    @Test
+    public void testListIteratorSetAfterNext_replacesValue() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        ListIterator<String> it = list.listIterator(0);
+        it.next();
+        it.set("Z");
+        assertEquals("Z", list.get(0));
+    }
+
+    // add(obj) ของ iterator ต้องแทรกที่ nextIndex ปัจจุบัน และเคลียร์ current (set ต่อไปต้อง throw)
+    @Test
+    public void testListIteratorAdd_insertsElementAndAdvancesIndex() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        ListIterator<String> it = list.listIterator(1);
+        it.add("X");
+        assertEquals(3, list.size());
+        assertEquals("X", list.get(1));
+        assertEquals(2, it.nextIndex());
+        try {
+            it.set("y");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) { }
+    }
+
+    // nextIndex()/previousIndex() ต้องสัมพันธ์กันเสมอ (previousIndex = nextIndex - 1)
+    @Test
+    public void testListIteratorNextIndexAndPreviousIndex() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        list.add(2, "c");
+        ListIterator<String> it = list.listIterator(1);
+        assertEquals(1, it.nextIndex());
+        assertEquals(0, it.previousIndex());
+    }
+
+    // แก้ไขโครงสร้างลิสต์หลังสร้าง iterator ต้องทำให้ next() throw ConcurrentModificationException
+    @Test
+    public void testListIteratorConcurrentModification_throwsOnNext() throws Throwable {
+        TreeList<String> list = new TreeList<String>();
+        list.add(0, "a");
+        list.add(1, "b");
+        ListIterator<String> it = list.listIterator(0);
+        list.add(0, "z");
+        try {
+            it.next();
+            fail("expected ConcurrentModificationException");
+        } catch (ConcurrentModificationException expected) { }
+    }
+
+    // ลำดับ append 15 ตัวแล้วลบจากหัวซ้ำ ๆ และแทรกหัวใหม่ เทียบกับ ArrayList oracle
+    // (ครอบคลุม removeSelf หลายรูปแบบโครงสร้าง AVL ที่อาจคำนวณ relativePosition ผิดพลาด)
+    @Test
+    public void testAddRemoveSequence_ascendingThenFrontRemovals_matchesArrayListOracle() throws Throwable {
+        TreeList<Integer> tree = new TreeList<Integer>();
+        ArrayList<Integer> ref = new ArrayList<Integer>();
+        for (int i = 0; i < 15; i++) {
+            tree.add(i, Integer.valueOf(i));
+            ref.add(i, Integer.valueOf(i));
+        }
+        for (int i = 0; i < 10; i++) {
+            tree.remove(0);
+            ref.remove(0);
+        }
+        for (int i = 0; i < 5; i++) {
+            tree.add(0, Integer.valueOf(1000 + i));
+            ref.add(0, Integer.valueOf(1000 + i));
+        }
+        assertEquals(ref.size(), tree.size());
+        assertEquals(ref, tree);
+    }
+
+    // แทรก/ลบกลางลิสต์สลับกันหลายรอบแล้วลบจนว่าง เทียบกับ ArrayList oracle
+    @Test
+    public void testAddRemoveSequence_mixedMiddleOperations_matchesArrayListOracle() throws Throwable {
+        TreeList<Integer> tree = new TreeList<Integer>();
+        ArrayList<Integer> ref = new ArrayList<Integer>();
+        for (int i = 0; i < 20; i++) {
+            tree.add(tree.size(), Integer.valueOf(i));
+            ref.add(ref.size(), Integer.valueOf(i));
+        }
+        for (int i = 0; i < 8; i++) {
+            int idx = ref.size() / 2;
+            tree.remove(idx);
+            ref.remove(idx);
+            tree.add(idx, Integer.valueOf(500 + i));
+            ref.add(idx, Integer.valueOf(500 + i));
+        }
+        while (ref.size() > 0) {
+            tree.remove(ref.size() - 1);
+            ref.remove(ref.size() - 1);
+        }
+        assertEquals(ref, tree);
+    }
+}

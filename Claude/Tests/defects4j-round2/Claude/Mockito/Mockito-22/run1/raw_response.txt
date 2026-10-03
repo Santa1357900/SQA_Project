@@ -1,0 +1,214 @@
+package org.mockito.internal.matchers;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class EqualityClaudeTest {
+
+    // areEqual: o1==null && o2==null branch -> true
+    @Test
+    public void testAreEqual_bothNull_returnsTrue() throws Throwable {
+        assertTrue(Equality.areEqual(null, null));
+    }
+
+    // areEqual: o1==null, o2 not null -> false
+    @Test
+    public void testAreEqual_firstNullSecondNotNull_returnsFalse() throws Throwable {
+        assertFalse(Equality.areEqual(null, "x"));
+    }
+
+    // areEqual: o1 not null, o2==null -> false
+    @Test
+    public void testAreEqual_firstNotNullSecondNull_returnsFalse() throws Throwable {
+        assertFalse(Equality.areEqual("x", null));
+    }
+
+    // areEqual: both non-null, non-array, equals() true
+    @Test
+    public void testAreEqual_bothNonNullEqualStrings_returnsTrue() throws Throwable {
+        assertTrue(Equality.areEqual("abc", new String("abc")));
+    }
+
+    // areEqual: both non-null, non-array, equals() false
+    @Test
+    public void testAreEqual_bothNonNullDifferentStrings_returnsFalse() throws Throwable {
+        assertFalse(Equality.areEqual("abc", "xyz"));
+    }
+
+    // areEqual: o1 is array, o2 is not array -> isArray(o2) false -> false
+    @Test
+    public void testAreEqual_firstArraySecondNonArray_returnsFalse() throws Throwable {
+        assertFalse(Equality.areEqual(new int[] {1}, "str"));
+    }
+
+    // areEqual: o1 not array -> falls to equals() branch; non-array.equals(array) is false
+    @Test
+    public void testAreEqual_firstNonArraySecondArray_returnsFalse() throws Throwable {
+        assertFalse(Equality.areEqual("str", new int[] {1}));
+    }
+
+    // areEqual: both arrays, same length, equal elements -> true
+    @Test
+    public void testAreEqual_bothArraysEqualElements_returnsTrue() throws Throwable {
+        assertTrue(Equality.areEqual(new int[] {1, 2, 3}, new int[] {1, 2, 3}));
+    }
+
+    // areEqual: both arrays, different lengths -> false
+    @Test
+    public void testAreEqual_bothArraysDifferentLengths_returnsFalse() throws Throwable {
+        assertFalse(Equality.areEqual(new int[] {1, 2}, new int[] {1, 2, 3}));
+    }
+
+    // areEqual: both arrays, same length, one element differs -> false
+    @Test
+    public void testAreEqual_bothArraysSameLengthDifferentElements_returnsFalse() throws Throwable {
+        assertFalse(Equality.areEqual(new int[] {1, 2, 3}, new int[] {1, 9, 3}));
+    }
+
+    // areEqual: nested arrays with equal content -> true (recursive comparison)
+    @Test
+    public void testAreEqual_nestedArraysEqual_returnsTrue() throws Throwable {
+        Object[] a = new Object[] {new int[] {1, 2}, "x"};
+        Object[] b = new Object[] {new int[] {1, 2}, "x"};
+        assertTrue(Equality.areEqual(a, b));
+    }
+
+    // areEqual: nested arrays with different content -> false
+    @Test
+    public void testAreEqual_nestedArraysDifferent_returnsFalse() throws Throwable {
+        Object[] a = new Object[] {new int[] {1, 2}};
+        Object[] b = new Object[] {new int[] {1, 3}};
+        assertFalse(Equality.areEqual(a, b));
+    }
+
+    // areEqual: arrays containing matching null elements -> true
+    @Test
+    public void testAreEqual_arraysWithNullElementsBothNull_returnsTrue() throws Throwable {
+        Object[] a = new Object[] {null, "x"};
+        Object[] b = new Object[] {null, "x"};
+        assertTrue(Equality.areEqual(a, b));
+    }
+
+    // areEqual: arrays where one element is null and the other isn't -> false
+    @Test
+    public void testAreEqual_arraysWithNullVsNonNullElement_returnsFalse() throws Throwable {
+        Object[] a = new Object[] {null};
+        Object[] b = new Object[] {"x"};
+        assertFalse(Equality.areEqual(a, b));
+    }
+
+    // areEqual: cross-type arrays (int[] vs Integer[]) with equal boxed values -> true
+    @Test
+    public void testAreEqual_intArrayVsIntegerArraySameValues_returnsTrue() throws Throwable {
+        int[] a = new int[] {1, 2, 3};
+        Integer[] b = new Integer[] {Integer.valueOf(1), Integer.valueOf(2), Integer.valueOf(3)};
+        assertTrue(Equality.areEqual(a, b));
+    }
+
+    // areEqual: both empty arrays (0-element loop) -> true regardless of component type
+    @Test
+    public void testAreEqual_bothEmptyArrays_returnsTrue() throws Throwable {
+        assertTrue(Equality.areEqual(new int[0], new String[0]));
+    }
+
+    // areEqual: single-element arrays with matching element -> true
+    @Test
+    public void testAreEqual_singleElementArraysEqual_returnsTrue() throws Throwable {
+        assertTrue(Equality.areEqual(new int[] {5}, new int[] {5}));
+    }
+
+    // areEqual: same object reference, non-array, equals() reflexive -> true
+    @Test
+    public void testAreEqual_sameObjectReference_returnsTrue() throws Throwable {
+        Object o = new Object();
+        assertTrue(Equality.areEqual(o, o));
+    }
+
+    // areArraysEqual: equal arrays -> true (lengths && elements both true)
+    @Test
+    public void testAreArraysEqual_equalArrays_returnsTrue() throws Throwable {
+        assertTrue(Equality.areArraysEqual(new int[] {1, 2}, new int[] {1, 2}));
+    }
+
+    // areArraysEqual: different length arrays -> false via length short-circuit
+    @Test
+    public void testAreArraysEqual_differentLengthArrays_returnsFalse() throws Throwable {
+        assertFalse(Equality.areArraysEqual(new int[] {1}, new int[] {1, 2}));
+    }
+
+    // areArraysEqual: same length but differing elements -> false
+    @Test
+    public void testAreArraysEqual_sameLengthDifferentElements_returnsFalse() throws Throwable {
+        assertFalse(Equality.areArraysEqual(new int[] {1, 2}, new int[] {1, 3}));
+    }
+
+    // areArrayLengthsEqual: equal lengths -> true
+    @Test
+    public void testAreArrayLengthsEqual_equalLengths_returnsTrue() throws Throwable {
+        assertTrue(Equality.areArrayLengthsEqual(new int[] {1, 2, 3}, new int[] {4, 5, 6}));
+    }
+
+    // areArrayLengthsEqual: different lengths -> false
+    @Test
+    public void testAreArrayLengthsEqual_differentLengths_returnsFalse() throws Throwable {
+        assertFalse(Equality.areArrayLengthsEqual(new int[] {1}, new int[] {1, 2}));
+    }
+
+    // areArrayLengthsEqual: both zero-length arrays -> true
+    @Test
+    public void testAreArrayLengthsEqual_zeroLengthArrays_returnsTrue() throws Throwable {
+        assertTrue(Equality.areArrayLengthsEqual(new int[0], new int[0]));
+    }
+
+    // areArrayElementsEqual: loop runs 0 times on empty arrays -> true
+    @Test
+    public void testAreArrayElementsEqual_emptyArrays_returnsTrue() throws Throwable {
+        assertTrue(Equality.areArrayElementsEqual(new int[0], new int[0]));
+    }
+
+    // areArrayElementsEqual: loop runs 1 time, element matches -> true
+    @Test
+    public void testAreArrayElementsEqual_singleMatchingElement_returnsTrue() throws Throwable {
+        assertTrue(Equality.areArrayElementsEqual(new int[] {7}, new int[] {7}));
+    }
+
+    // areArrayElementsEqual: loop runs multiple times, all elements match -> true
+    @Test
+    public void testAreArrayElementsEqual_multipleElementsAllMatch_returnsTrue() throws Throwable {
+        assertTrue(Equality.areArrayElementsEqual(new int[] {1, 2, 3}, new int[] {1, 2, 3}));
+    }
+
+    // areArrayElementsEqual: mismatch at first index -> false (early return)
+    @Test
+    public void testAreArrayElementsEqual_firstElementMismatch_returnsFalse() throws Throwable {
+        assertFalse(Equality.areArrayElementsEqual(new int[] {1, 2, 3}, new int[] {9, 2, 3}));
+    }
+
+    // areArrayElementsEqual: mismatch at last index only -> false
+    @Test
+    public void testAreArrayElementsEqual_lastElementMismatch_returnsFalse() throws Throwable {
+        assertFalse(Equality.areArrayElementsEqual(new int[] {1, 2, 3}, new int[] {1, 2, 9}));
+    }
+
+    // isArray: array object -> true
+    @Test
+    public void testIsArray_withArrayObject_returnsTrue() throws Throwable {
+        assertTrue(Equality.isArray(new int[] {1, 2}));
+    }
+
+    // isArray: non-array object -> false
+    @Test
+    public void testIsArray_withNonArrayObject_returnsFalse() throws Throwable {
+        assertFalse(Equality.isArray("hello"));
+    }
+
+    // isArray: null argument -> NullPointerException (o.getClass() on null)
+    @Test
+    public void testIsArray_withNullArgument_throwsNullPointerException() throws Throwable {
+        try {
+            Equality.isArray(null);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+}

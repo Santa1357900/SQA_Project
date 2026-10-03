@@ -1,0 +1,496 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Jsoup (Defects4J bug Jsoup-11)
+package: org.jsoup.select
+class_under_test: Selector
+test_class_to_write: SelectorClaudeTest
+</target>
+
+<project_notes>
+Jsoup: ใช้ Jsoup.parse(String) และ Jsoup.parseBodyFragment(String) เป็นทางเข้า import org.jsoup.nodes.* และ org.jsoup.parser.* ให้ครบ
+</project_notes>
+
+<source_code>
+package org.jsoup.select;
+
+
+import org.jsoup.helper.StringUtil;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Element;
+import org.jsoup.parser.TokenQueue;
+
+import java.util.Collection;
+import java.util.LinkedHashSet;
+
+/**
+ CSS-like element selector, that finds elements matching a query.
+
+ <h2>Selector syntax</h2>
+ A selector is a chain of simple selectors, seperated by combinators. Selectors are case insensitive (including against
+ elements, attributes, and attribute values).
+ <p/>
+ The universal selector (*) is implicit when no element selector is supplied (i.e. {@code *.header} and {@code .header}
+ is equivalent).
+
+ <table>
+  <tr><th>Pattern</th><th>Matches</th><th>Example</th></tr>
+  <tr><td><code>*</code></td><td>any element</td><td><code>*</code></td></tr>
+  <tr><td><code>tag</code></td><td>elements with the given tag name</td><td><code>div</code></td></tr>
+  <tr><td><code>ns|E</code></td><td>elements of type E in the namespace <i>ns</i></td><td><code>fb|name</code> finds <code>&lt;fb:name></code> elements</td></tr>
+  <tr><td><code>#id</code></td><td>elements with attribute ID of "id"</td><td><code>div#wrap</code>, <code>#logo</code></td></tr>
+  <tr><td><code>.class</code></td><td>elements with a class name of "class"</td><td><code>div.left</code>, <code>.result</code></td></tr>
+  <tr><td><code>[attr]</code></td><td>elements with an attribute named "attr" (with any value)</td><td><code>a[href]</code>, <code>[title]</code></td></tr>
+  <tr><td><code>[^attrPrefix]</code></td><td>elements with an attribute name starting with "attrPrefix". Use to find elements with HTML5 datasets</td><td><code>[^data-]</code>, <code>div[^data-]</code></td></tr>
+  <tr><td><code>[attr=val]</code></td><td>elements with an attribute named "attr", and value equal to "val"</td><td><code>img[width=500]</code>, <code>a[rel=nofollow]</code></td></tr>
+  <tr><td><code>[attr^=valPrefix]</code></td><td>elements with an attribute named "attr", and value starting with "valPrefix"</td><td><code>a[href^=http:]</code></code></td></tr>
+  <tr><td><code>[attr$=valSuffix]</code></td><td>elements with an attribute named "attr", and value ending with "valSuffix"</td><td><code>img[src$=.png]</code></td></tr>
+  <tr><td><code>[attr*=valContaining]</code></td><td>elements with an attribute named "attr", and value containing "valContaining"</td><td><code>a[href*=/search/]</code></td></tr>
+  <tr><td><code>[attr~=<em>regex</em>]</code></td><td>elements with an attribute named "attr", and value matching the regular expression</td><td><code>img[src~=(?i)\\.(png|jpe?g)]</code></td></tr>
+  <tr><td></td><td>The above may be combined in any order</td><td><code>div.header[title]</code></td></tr>
+  <tr><td><td colspan="3"><h3>Combinators</h3></td></tr>
+  <tr><td><code>E F</code></td><td>an F element descended from an E element</td><td><code>div a</code>, <code>.logo h1</code></td></tr>
+  <tr><td><code>E > F</code></td><td>an F direct child of E</td><td><code>ol > li</code></td></tr>
+  <tr><td><code>E + F</code></td><td>an F element immediately preceded by sibling E</td><td><code>li + li</code>, <code>div.head + div</code></td></tr>
+  <tr><td><code>E ~ F</code></td><td>an F element preceded by sibling E</td><td><code>h1 ~ p</code></td></tr>
+  <tr><td><code>E, F, G</code></td><td>all matching elements E, F, or G</td><td><code>a[href], div, h3</code></td></tr>
+  <tr><td><td colspan="3"><h3>Pseudo selectors</h3></td></tr>
+  <tr><td><code>:lt(<em>n</em>)</code></td><td>elements whose sibling index is less than <em>n</em></td><td><code>td:lt(3)</code> finds the first 2 cells of each row</td></tr>
+  <tr><td><code>:gt(<em>n</em>)</code></td><td>elements whose sibling index is greater than <em>n</em></td><td><code>td:gt(1)</code> finds cells after skipping the first two</td></tr>
+  <tr><td><code>:eq(<em>n</em>)</code></td><td>elements whose sibling index is equal to <em>n</em></td><td><code>td:eq(0)</code> finds the first cell of each row</td></tr>
+  <tr><td><code>:has(<em>selector</em>)</code></td><td>elements that contains at least one element matching the <em>selector</em></td><td><code>div:has(p)</code> finds divs that contain p elements </td></tr>
+  <tr><td><code>:not(<em>selector</em>)</code></td><td>elements that do not match the <em>selector</em></td><code>div:not(.logo)</code> finds all divs that do not have the "logo" class</td></tr>
+  <tr><td><code>:contains(<em>text</em>)</code></td><td>elements that contains the specified text. The search is case insensitive. The text may appear in the found element, or any of its descendants.</td><td><code>p:contains(jsoup)</code> finds p elements containing the text "jsoup".</td></tr>
+  <tr><td><code>:matches(<em>regex</em>)</code></td><td>elements whose text matches the specified regular expression. The text may appear in the found element, or any of its descendants.</td><td><code>td:matches(\\d+)</code> finds table cells containing digits. <code>div:matches((?i)login)</code> finds divs containing the text, case insensitively.</td></tr>
+  <tr><td><code>:containsOwn(<em>text</em>)</code></td><td>elements that directly contains the specified text. The search is case insensitive. The text must appear in the found element, not any of its descendants.</td><td><code>p:containsOwn(jsoup)</code> finds p elements with own text "jsoup".</td></tr>
+  <tr><td><code>:matchesOwn(<em>regex</em>)</code></td><td>elements whose own text matches the specified regular expression. The text must appear in the found element, not any of its descendants.</td><td><code>td:matchesOwn(\\d+)</code> finds table cells directly containing digits. <code>div:matchesOwn((?i)login)</code> finds divs containing the text, case insensitively.</td></tr>
+  <tr><td></td><td>The above may be combined in any order and with other selectors</td><td><code>.light:contains(name):eq(0)</code></td></tr>
+  </table>
+
+ @see Element#select(String)
+ @author Jonathan Hedley, jonathan@hedley.net */
+public class Selector {
+    private final static String[] combinators = {",", ">", "+", "~", " "};
+    private final Element root;
+    private final LinkedHashSet<Element> elements; // LHS for unique and ordered elements
+    private final String query;
+    private final TokenQueue tq;
+
+    private Selector(String query, Element root) {
+        Validate.notNull(query);
+        query = query.trim();
+        Validate.notEmpty(query);
+        Validate.notNull(root);
+
+        this.elements = new LinkedHashSet<Element>();
+        this.query = query;
+        this.root = root;
+        this.tq = new TokenQueue(query);
+    }
+
+    /**
+     Find elements matching selector.
+     @param query CSS selector
+     @param root root element to descend into
+     @return matching elements, empty if not
+     */
+    public static Elements select(String query, Element root) {
+        return new Selector(query, root).select();
+    }
+
+    /**
+     Find elements matching selector.
+     @param query CSS selector
+     @param roots root elements to descend into
+     @return matching elements, empty if not
+     */
+    public static Elements select(String query, Iterable<Element> roots) {
+        Validate.notEmpty(query);
+        Validate.notNull(roots);
+        LinkedHashSet<Element> elements = new LinkedHashSet<Element>();
+
+        for (Element root : roots) {
+            elements.addAll(select(query, root));
+        }
+        return new Elements(elements);
+    }
+
+    private Elements select() {
+        tq.consumeWhitespace();
+        
+        if (tq.matchesAny(combinators)) { // if starts with a combinator, use root as elements
+            elements.add(root);
+            combinator(tq.consume().toString());
+        } else {
+            addElements(findElements()); // chomp first element matcher off queue 
+        }            
+               
+        while (!tq.isEmpty()) {
+            // hierarchy and extras
+            boolean seenWhite = tq.consumeWhitespace();
+            
+            if (tq.matchChomp(",")) { // group or
+                while (!tq.isEmpty()) {
+                    String subQuery = tq.chompTo(",");
+                    elements.addAll(select(subQuery, root));
+                }
+            } else if (tq.matchesAny(combinators)) {
+                combinator(tq.consume().toString());
+            } else if (seenWhite) {
+                combinator(" ");
+            } else { // E.class, E#id, E[attr] etc. AND
+                Elements candidates = findElements(); // take next el, #. etc off queue
+                intersectElements(filterForSelf(elements, candidates));
+            }
+        }
+        return new Elements(elements);
+    }
+    
+    private void combinator(String combinator) {
+        tq.consumeWhitespace();
+        String subQuery = tq.consumeToAny(combinators); // support multi > childs
+        
+        Elements output;
+        if (combinator.equals(">"))
+            output = filterForChildren(elements, select(subQuery, elements));
+        else if (combinator.equals(" "))
+            output = filterForDescendants(elements, select(subQuery, elements));
+        else if (combinator.equals("+"))
+            output = filterForAdjacentSiblings(elements, select(subQuery, root));
+        else if (combinator.equals("~"))
+            output = filterForGeneralSiblings(elements, select(subQuery, root));
+        else
+            throw new IllegalStateException("Unknown combinator: " + combinator);
+        
+        elements.clear(); elements.addAll(output);
+    }
+    
+    private Elements findElements() {
+        if (tq.matchChomp("#")) {
+            return byId();
+        } else if (tq.matchChomp(".")) {
+            return byClass();
+        } else if (tq.matchesWord()) {
+            return byTag();
+        } else if (tq.matches("[")) {
+            return byAttribute();
+        } else if (tq.matchChomp("*")) {
+            return allElements();
+        } else if (tq.matchChomp(":lt(")) {
+            return indexLessThan();
+        } else if (tq.matchChomp(":gt(")) {
+            return indexGreaterThan();
+        } else if (tq.matchChomp(":eq(")) {
+            return indexEquals();
+        } else if (tq.matches(":has(")) {
+            return has();
+        } else if (tq.matches(":contains(")) {
+            return contains(false);
+        } else if (tq.matches(":containsOwn(")) {
+            return contains(true);
+        } else if (tq.matches(":matches(")) {
+            return matches(false);
+        } else if (tq.matches(":matchesOwn(")) {
+            return matches(true);
+        } else { // unhandled
+            throw new SelectorParseException("Could not parse query '%s': unexpected token at '%s'", query, tq.remainder());
+        }
+    }
+    
+    private void addElements(Collection<Element> add) {
+        elements.addAll(add);
+    }
+    
+    private void intersectElements(Collection<Element> intersect) {
+        elements.retainAll(intersect);
+    }
+
+    private Elements byId() {
+        String id = tq.consumeCssIdentifier();
+        Validate.notEmpty(id);
+
+        Element found = root.getElementById(id);
+        Elements byId = new Elements();
+        if(found != null)
+            byId.add(found);
+        return byId;
+    }
+
+    private Elements byClass() {
+        String className = tq.consumeCssIdentifier();
+        Validate.notEmpty(className);
+
+        return root.getElementsByClass(className);
+    }
+
+    private Elements byTag() {
+        String tagName = tq.consumeElementSelector();
+        Validate.notEmpty(tagName);
+        
+        // namespaces: if element name is "abc:def", selector must be "abc|def", so flip:
+        if (tagName.contains("|"))
+            tagName = tagName.replace("|", ":");
+        return root.getElementsByTag(tagName);
+    }
+
+    private Elements byAttribute() {
+        TokenQueue cq = new TokenQueue(tq.chompBalanced('[', ']')); // content queue
+        String key = cq.consumeToAny("=", "!=", "^=", "$=", "*=", "~="); // eq, not, start, end, contain, match, (no val)
+        Validate.notEmpty(key);
+        cq.consumeWhitespace();
+
+        if (cq.isEmpty()) {
+            return key.startsWith("^") ? root.getElementsByAttributeStarting(key.substring(1)) : root.getElementsByAttribute(key);
+        } else {
+            if (cq.matchChomp("="))
+                return root.getElementsByAttributeValue(key, cq.remainder());
+
+            else if (cq.matchChomp("!="))
+                return root.getElementsByAttributeValueNot(key, cq.remainder());
+
+            else if (cq.matchChomp("^="))
+                return root.getElementsByAttributeValueStarting(key, cq.remainder());
+
+            else if (cq.matchChomp("$="))
+                return root.getElementsByAttributeValueEnding(key, cq.remainder());
+
+            else if (cq.matchChomp("*="))
+                return root.getElementsByAttributeValueContaining(key, cq.remainder());
+            
+            else if (cq.matchChomp("~="))
+                return root.getElementsByAttributeValueMatching(key, cq.remainder());
+            
+            else
+                throw new SelectorParseException("Could not parse attribute query '%s': unexpected token at '%s'", query, cq.remainder());
+        }
+    }
+
+    private Elements allElements() {
+        return root.getAllElements();
+    }
+    
+    // pseudo selectors :lt, :gt, :eq
+    private Elements indexLessThan() {
+        return root.getElementsByIndexLessThan(consumeIndex());
+    }
+    
+    private Elements indexGreaterThan() {
+        return root.getElementsByIndexGreaterThan(consumeIndex());
+    }
+    
+    private Elements indexEquals() {
+        return root.getElementsByIndexEquals(consumeIndex());
+    }
+
+    private int consumeIndex() {
+        String indexS = tq.chompTo(")").trim();
+        Validate.isTrue(StringUtil.isNumeric(indexS), "Index must be numeric");
+        return Integer.parseInt(indexS);
+    }
+
+    // pseudo selector :has(el)
+    private Elements has() {
+        tq.consume(":has");
+        String subQuery = tq.chompBalanced('(',')');
+        Validate.notEmpty(subQuery, ":has(el) subselect must not be empty");
+
+        return filterForParentsOfDescendants(elements, select(subQuery, elements));
+    }
+    
+    // pseudo selector :contains(text), containsOwn(text)
+    private Elements contains(boolean own) {
+        tq.consume(own ? ":containsOwn" : ":contains");
+        String searchText = TokenQueue.unescape(tq.chompBalanced('(',')'));
+        Validate.notEmpty(searchText, ":contains(text) query must not be empty");
+        
+        return own ? root.getElementsContainingOwnText(searchText) : root.getElementsContainingText(searchText);
+    }
+    
+    // :matches(regex), matchesOwn(regex)
+    private Elements matches(boolean own) {
+        tq.consume(own? ":matchesOwn" : ":matches");
+        String regex = tq.chompBalanced('(', ')'); // don't unescape, as regex bits will be escaped
+        Validate.notEmpty(regex, ":matches(regex) query must not be empty");
+        
+        return own ? root.getElementsMatchingOwnText(regex) : root.getElementsMatchingText(regex);
+    }
+
+    // :not(selector)
+
+
+    // direct child descendants
+    private static Elements filterForChildren(Collection<Element> parents, Collection<Element> candidates) {
+        Elements children = new Elements();
+        CHILD: for (Element c : candidates) {
+            for (Element p : parents) {
+                if (c.parent() != null && c.parent().equals(p)) {
+                    children.add(c);
+                    continue CHILD;
+                }
+            }
+        }
+        return children;
+    }
+    
+    // children or lower descendants. input candidates stemmed from found elements, so are either a descendant 
+    // or the original element; so check that parent is not child
+    private static Elements filterForDescendants(Collection<Element> parents, Collection<Element> candidates) {
+        Elements children = new Elements();
+        CHILD: for (Element c : candidates) {
+            for (Element p : parents) {
+                if (c.equals(p)) {
+                    continue CHILD;
+                }
+            }
+            children.add(c);
+        }
+        return children;
+    }
+
+    // implements :has(el). Finds elements that contain the matched elements
+    private static Elements filterForParentsOfDescendants(Collection<Element> parents, Collection<Element> children) {
+        Elements filteredParents = new Elements();
+        for (Element p : parents) {
+            for (Element c : children) {
+                if (c.parents().contains(p)) {
+                    filteredParents.add(p);
+                }
+            }
+        }
+        return filteredParents;
+    }
+    
+    // adjacent siblings
+    private static Elements filterForAdjacentSiblings(Collection<Element> elements, Collection<Element> candidates) {
+        Elements siblings = new Elements();
+        SIBLING: for (Element c: candidates) {
+            for (Element e: elements) {
+                if (!e.parent().equals(c.parent()))
+                    continue;
+                Element previousSib = c.previousElementSibling();
+                if (previousSib != null && previousSib.equals(e)) {
+                    siblings.add(c);
+                    continue SIBLING;
+                }
+            }
+        }
+        return siblings;
+    }
+    
+    // preceeding siblings
+    private static Elements filterForGeneralSiblings(Collection<Element> elements, Collection<Element> candidates) {
+        Elements output = new Elements();
+        SIBLING: for (Element c: candidates) {
+            for (Element e: elements) {
+                if (!e.parent().equals(c.parent()))
+                    continue;
+                int ePos = e.elementSiblingIndex();
+                int cPos = c.elementSiblingIndex();
+                if (cPos > ePos) {
+                    output.add(c);
+                    continue SIBLING;
+                }
+            }
+        }
+        return output;
+    }
+    
+    // union of both sets, for e.class type selectors
+    private static Elements filterForSelf(Collection<Element> parents, Collection<Element> candidates) {
+        Elements children = new Elements();
+        CHILD: for (Element c : candidates) {
+            for (Element p : parents) {
+                if (c.equals(p)) {
+                    children.add(c);
+                    continue CHILD;
+                }
+            }   
+        }
+        return children;
+    }
+
+    // exclude set. package open so that Elements can implement .not() selector.
+
+    public static class SelectorParseException extends IllegalStateException {
+        public SelectorParseException(String msg, Object... params) {
+            super(String.format(msg, params));
+        }
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ SelectorClaudeTest ใน package org.jsoup.select เพื่อทดสอบคลาส Selector ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.jsoup.select;` เท่านั้น
+</instructions>

@@ -1,0 +1,46 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-147-qzmn0cs6/Closure-147f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /tmp/claude-Closure-147-qzmn0cs6/fixed && ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-Closure-147-qzmn0cs6/fixed -Dd4j.test.dir=/tmp/claude-Closure-147-qzmn0cs6/fixed/.test_suite compile.gen.tests 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+compile:
+    [javac] /tmp/claude-Closure-147-qzmn0cs6/fixed/build.xml:53: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] /tmp/claude-Closure-147-qzmn0cs6/fixed/build.xml:58: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+
+compile.gen.tests:
+     [echo] classes.dir: /tmp/claude-Closure-147-qzmn0cs6/fixed/build/classes
+     [echo] build.home: /tmp/claude-Closure-147-qzmn0cs6/fixed/build
+    [mkdir] Created dir: /tmp/claude-Closure-147-qzmn0cs6/fixed/.classes_testgen
+    [javac] /home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /tmp/claude-Closure-147-qzmn0cs6/fixed/.classes_testgen
+    [javac] warning: [options] bootstrap class path not set in conjunction with -source 6
+    [javac] warning: [options] source value 6 is obsolete and will be removed in a future release
+    [javac] warning: [options] target value 1.6 is obsolete and will be removed in a future release
+    [javac] warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+    [javac] /tmp/claude-Closure-147-qzmn0cs6/fixed/.test_suite/com/google/javascript/jscomp/CheckGlobalThisClaudeTest.java:15: error: no suitable method found for compile(SourceFile,SourceFile,CompilerOptions)
+    [javac]         compiler.compile(externs, input, options);
+    [javac]                 ^
+    [javac]     method Compiler.compile(JSSourceFile,JSSourceFile,CompilerOptions) is not applicable
+    [javac]       (argument mismatch; SourceFile cannot be converted to JSSourceFile)
+    [javac]     method Compiler.compile(JSSourceFile,JSSourceFile[],CompilerOptions) is not applicable
+    [javac]       (argument mismatch; SourceFile cannot be converted to JSSourceFile)
+    [javac]     method Compiler.compile(JSSourceFile,JSModule[],CompilerOptions) is not applicable
+    [javac]       (argument mismatch; SourceFile cannot be converted to JSSourceFile)
+    [javac]     method Compiler.compile(JSSourceFile[],JSSourceFile[],CompilerOptions) is not applicable
+    [javac]       (argument mismatch; SourceFile cannot be converted to JSSourceFile[])
+    [javac]     method Compiler.compile(List<JSSourceFile>,List<JSSourceFile>,CompilerOptions) is not applicable
+    [javac]       (argument mismatch; SourceFile cannot be converted to List<JSSourceFile>)
+    [javac]     method Compiler.compile(JSSourceFile[],JSModule[],CompilerOptions) is not applicable
+    [javac]       (argument mismatch; SourceFile cannot be converted to JSSourceFile[])
+    [javac] Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+    [javac] 1 error
+    [javac] 4 warnings
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 2 seconds
+Cannot compile extracted test suite! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

@@ -1,0 +1,517 @@
+package org.jsoup.parser;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+
+public class HtmlTreeBuilderClaudeTest {
+
+    private HtmlTreeBuilder tb;
+
+    private Element el(String tagName) {
+        return new Element(Tag.valueOf(tagName, ParseSettings.htmlDefault), "http://example.com/");
+    }
+
+    @Before
+    public void setUp() throws Throwable {
+        tb = new HtmlTreeBuilder();
+        tb.initialiseParse(new StringReader(""), "http://example.com/", ParseErrorList.noTracking(), ParseSettings.htmlDefault);
+    }
+
+    // defaultSettings() ต้องคืนค่า ParseSettings.htmlDefault เสมอ
+    @Test
+    public void testDefaultSettings_returnsHtmlDefaultParseSettings() throws Throwable {
+        assertSame(ParseSettings.htmlDefault, tb.defaultSettings());
+    }
+
+    // initialiseParse ต้องตั้งค่า state=Initial, framesetOk=true, fragmentParsing=false
+    @Test
+    public void testInitialiseParse_setsInitialStateFramesetOkAndNotFragmentParsing() throws Throwable {
+        assertSame(HtmlTreeBuilderState.Initial, tb.state());
+        assertTrue(tb.framesetOk());
+        assertFalse(tb.isFragmentParsing());
+    }
+
+    // parseFragment(context=null) ต้องตั้ง fragmentParsing=true และคืน doc.childNodes()
+    @Test
+    public void testParseFragment_nullContext_setsFragmentParsingAndReturnsDocChildNodes() throws Throwable {
+        List<Node> nodes = tb.parseFragment("hi", null, "http://example.com/", ParseErrorList.noTracking(), ParseSettings.htmlDefault);
+        assertTrue(tb.isFragmentParsing());
+        assertNotNull(nodes);
+    }
+
+    // parseFragment(context=body) ต้องคืน root.childNodes() ที่มี TextNode ของข้อความ
+    @Test
+    public void testParseFragment_bodyContext_returnsRootChildNodesWithTextNode() throws Throwable {
+        Element body = el("body");
+        List<Node> nodes = tb.parseFragment("Hello", body, "http://example.com/", ParseErrorList.noTracking(), ParseSettings.htmlDefault);
+        assertEquals(1, nodes.size());
+        assertTrue(nodes.get(0) instanceof TextNode);
+        assertEquals("Hello", ((TextNode) nodes.get(0)).text());
+    }
+
+    // BUG: context เป็น "td" ที่ตำแหน่ง root (last=true) ต้อง fallback เป็น InBody ตาม spec ไม่ใช่ InCell
+    @Test
+    public void testResetInsertionMode_fragmentRootTdContext_mustResetToInBody_notInCell() throws Throwable {
+        Element context = el("td");
+        tb.parseFragment("x", context, "http://example.com/", ParseErrorList.noTracking(), ParseSettings.htmlDefault);
+        assertSame(HtmlTreeBuilderState.InBody, tb.state());
+    }
+
+    // context ที่ไม่ตรงกับแท็กพิเศษใด ๆ ต้องตกไปที่ else-if(last) -> InBody
+    @Test
+    public void testResetInsertionMode_fragmentRootUnrecognizedTag_fallsBackToInBody() throws Throwable {
+        Element context = el("span");
+        tb.parseFragment("", context, "http://example.com/", ParseErrorList.noTracking(), ParseSettings.htmlDefault);
+        assertSame(HtmlTreeBuilderState.InBody, tb.state());
+    }
+
+    // transition()/state() ต้องสะท้อนค่าที่ตั้งล่าสุดเสมอ
+    @Test
+    public void testTransitionAndState_reflectsLastTransition() throws Throwable {
+        tb.transition(HtmlTreeBuilderState.InBody);
+        assertSame(HtmlTreeBuilderState.InBody, tb.state());
+        tb.transition(HtmlTreeBuilderState.InTable);
+        assertSame(HtmlTreeBuilderState.InTable, tb.state());
+    }
+
+    // markInsertionMode() ต้องบันทึก state ขณะนั้นไว้ใน originalState()
+    @Test
+    public void testMarkInsertionMode_and_originalState_capturesStateAtMarkTime() throws Throwable {
+        tb.transition(HtmlTreeBuilderState.InCell);
+        tb.markInsertionMode();
+        tb.transition(HtmlTreeBuilderState.InRow);
+        assertSame(HtmlTreeBuilderState.InCell, tb.originalState());
+        assertSame(HtmlTreeBuilderState.InRow, tb.state());
+    }
+
+    // framesetOk(boolean)/framesetOk() setter-getter
+    @Test
+    public void testFramesetOk_setterAndGetter() throws Throwable {
+        assertTrue(tb.framesetOk());
+        tb.framesetOk(false);
+        assertFalse(tb.framesetOk());
+    }
+
+    // getDocument() ต้องไม่เป็น null หลัง initialiseParse
+    @Test
+    public void testGetDocument_afterInitialiseParse_isNotNull() throws Throwable {
+        assertNotNull(tb.getDocument());
+    }
+
+    // getBaseUri() ต้องสะท้อน baseUri ที่ส่งเข้า initialiseParse
+    @Test
+    public void testGetBaseUri_reflectsBaseUriPassedToInitialiseParse() throws Throwable {
+        assertEquals("http://example.com/", tb.getBaseUri());
+    }
+
+    // maybeSetBaseUri: href ว่าง -> ไม่เปลี่ยน baseUri (early return branch)
+    @Test
+    public void testMaybeSetBaseUri_noHref_baseUriUnchanged() throws Throwable {
+        String originalBaseUri = tb.getBaseUri();
+        Element base = el("base");
+        tb.maybeSetBaseUri(base);
+        assertEquals(originalBaseUri, tb.getBaseUri());
+    }
+
+    // maybeSetBaseUri: href ไม่ว่าง -> เปลี่ยนครั้งแรก, ครั้งถัดไปถูกเพิกเฉยด้วย baseUriSetFromDoc
+    @Test
+    public void testMaybeSetBaseUri_withHref_updatesOnceThenIgnoresFurtherBase() throws Throwable {
+        Element base1 = el("base");
+        base1.attr("href", "http://first-base.example/");
+        tb.maybeSetBaseUri(base1);
+        assertEquals("http://first-base.example/", tb.getBaseUri());
+
+        Element base2 = el("base");
+        base2.attr("href", "http://second-base.example/");
+        tb.maybeSetBaseUri(base2);
+        assertEquals("http://first-base.example/", tb.getBaseUri());
+    }
+
+    // push/pop/getStack ต้องทำงานแบบ LIFO
+    @Test
+    public void testPushPopGetStack_lifoOrder() throws Throwable {
+        Element a = el("a");
+        Element b = el("b");
+        tb.push(a);
+        tb.push(b);
+        assertSame(b, tb.pop());
+        assertEquals(1, tb.getStack().size());
+        assertSame(a, tb.getStack().get(0));
+    }
+
+    // onStack(el) ต้อง true เมื่ออยู่บน stack, false เมื่อไม่อยู่
+    @Test
+    public void testOnStack_trueAndFalse() throws Throwable {
+        Element a = el("a");
+        assertFalse(tb.onStack(a));
+        tb.push(a);
+        assertTrue(tb.onStack(a));
+    }
+
+    // getFromStack(name) ต้องคืนตัวที่อยู่บนสุดที่ชื่อตรงกัน หรือ null เมื่อไม่พบ
+    @Test
+    public void testGetFromStack_returnsTopMostMatchOrNullWhenAbsent() throws Throwable {
+        tb.push(el("div"));
+        Element topDiv = el("div");
+        tb.push(topDiv);
+        assertSame(topDiv, tb.getFromStack("div"));
+        assertNull(tb.getFromStack("table"));
+    }
+
+    // removeFromStack ต้องคืน true เมื่อสำเร็จ และ false เมื่อไม่พบ element
+    @Test
+    public void testRemoveFromStack_trueWhenPresentFalseOtherwise() throws Throwable {
+        Element a = el("a");
+        tb.push(a);
+        assertTrue(tb.removeFromStack(a));
+        assertFalse(tb.onStack(a));
+        assertFalse(tb.removeFromStack(a));
+    }
+
+    // popStackToClose(String) ต้อง pop ไปเรื่อย ๆ จนกว่าจะเจอและ pop ชื่อที่ตรงกัน
+    @Test
+    public void testPopStackToClose_singleName_popsThroughMatch() throws Throwable {
+        tb.push(el("a"));
+        tb.push(el("b"));
+        tb.push(el("c"));
+        tb.popStackToClose("b");
+        assertEquals(1, tb.getStack().size());
+        assertEquals("a", tb.getStack().get(0).nodeName());
+    }
+
+    // popStackToClose(String...) ต้องหยุดเมื่อพบชื่อใดชื่อหนึ่งในอาเรย์
+    @Test
+    public void testPopStackToClose_varargNames_popsOnFirstMatchingName() throws Throwable {
+        tb.push(el("a"));
+        tb.push(el("b"));
+        tb.push(el("c"));
+        tb.popStackToClose("x", "b");
+        assertEquals(1, tb.getStack().size());
+    }
+
+    // popStackToBefore ต้องหยุดก่อนชื่อที่ตรงกัน (ชื่อนั้นยังอยู่บน stack)
+    @Test
+    public void testPopStackToBefore_keepsMatchedElementOnStack() throws Throwable {
+        tb.push(el("a"));
+        tb.push(el("b"));
+        tb.push(el("c"));
+        tb.popStackToBefore("b");
+        assertEquals(2, tb.getStack().size());
+        assertEquals("b", tb.getStack().get(1).nodeName());
+    }
+
+    // clearStackToTableContext ต้องหยุดที่ "table" หรือ "html"
+    @Test
+    public void testClearStackToTableContext_stopsAtTableOrHtml() throws Throwable {
+        tb.push(el("html"));
+        tb.push(el("table"));
+        tb.push(el("tbody"));
+        tb.push(el("td"));
+        tb.clearStackToTableContext();
+        assertEquals(2, tb.getStack().size());
+        assertEquals("table", tb.getStack().get(1).nodeName());
+    }
+
+    // aboveOnStack ต้องคืนตัวที่อยู่ใต้ตัวที่ระบุ และโยน IndexOutOfBoundsException เมื่อระบุตัวล่างสุด
+    @Test
+    public void testAboveOnStack_returnsElementBelow_andThrowsAtBottom() throws Throwable {
+        Element a = el("a");
+        Element b = el("b");
+        tb.push(a);
+        tb.push(b);
+        assertSame(a, tb.aboveOnStack(b));
+        try {
+            tb.aboveOnStack(a);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+    }
+
+    // insertOnStackAfter ต้องแทรกต่อจาก element ที่ระบุ และโยน IllegalArgumentException เมื่อไม่พบบน stack
+    @Test
+    public void testInsertOnStackAfter_insertsAfterGiven_andThrowsWhenNotOnStack() throws Throwable {
+        Element a = el("a");
+        Element b = el("b");
+        Element c = el("c");
+        tb.push(a);
+        tb.push(b);
+        tb.insertOnStackAfter(a, c);
+        assertSame(c, tb.getStack().get(1));
+        try {
+            tb.insertOnStackAfter(el("x"), el("y"));
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // replaceOnStack ต้องแทนที่ element ที่ตำแหน่งเดิม
+    @Test
+    public void testReplaceOnStack_replacesElementKeepingPosition() throws Throwable {
+        Element a = el("a");
+        Element b = el("b");
+        Element c = el("c");
+        tb.push(a);
+        tb.push(b);
+        tb.replaceOnStack(a, c);
+        assertSame(c, tb.getStack().get(0));
+        assertSame(b, tb.getStack().get(1));
+    }
+
+    // resetInsertionMode: top="select" -> InSelect, top="tr" -> InRow
+    @Test
+    public void testResetInsertionMode_selectAndTrBranches() throws Throwable {
+        tb.push(el("html"));
+        tb.push(el("select"));
+        tb.resetInsertionMode();
+        assertSame(HtmlTreeBuilderState.InSelect, tb.state());
+
+        tb.push(el("table"));
+        tb.push(el("tr"));
+        tb.resetInsertionMode();
+        assertSame(HtmlTreeBuilderState.InRow, tb.state());
+    }
+
+    // resetInsertionMode: tbody/thead/tfoot -> InTableBody, caption -> InCaption, colgroup -> InColumnGroup, table -> InTable
+    @Test
+    public void testResetInsertionMode_tableBodyCaptionColgroupTableBranches() throws Throwable {
+        tb.push(el("html"));
+        tb.push(el("table"));
+        tb.push(el("tbody"));
+        tb.resetInsertionMode();
+        assertSame(HtmlTreeBuilderState.InTableBody, tb.state());
+
+        tb.push(el("caption"));
+        tb.resetInsertionMode();
+        assertSame(HtmlTreeBuilderState.InCaption, tb.state());
+
+        tb.push(el("colgroup"));
+        tb.resetInsertionMode();
+        assertSame(HtmlTreeBuilderState.InColumnGroup, tb.state());
+
+        tb.push(el("table"));
+        tb.resetInsertionMode();
+        assertSame(HtmlTreeBuilderState.InTable, tb.state());
+    }
+
+    // resetInsertionMode: body -> InBody, frameset -> InFrameset, html(headElement null) -> BeforeHead
+    @Test
+    public void testResetInsertionMode_bodyFramesetHtmlBranches() throws Throwable {
+        tb.push(el("html"));
+        tb.push(el("body"));
+        tb.resetInsertionMode();
+        assertSame(HtmlTreeBuilderState.InBody, tb.state());
+
+        tb.push(el("frameset"));
+        tb.resetInsertionMode();
+        assertSame(HtmlTreeBuilderState.InFrameset, tb.state());
+
+        tb.push(el("bogus"));
+        tb.push(el("html"));
+        tb.resetInsertionMode();
+        assertSame(HtmlTreeBuilderState.BeforeHead, tb.state());
+    }
+
+    // inScope: true เมื่อพบ target ก่อน, false เมื่อเจอ boundary(table) ก่อน
+    @Test
+    public void testInScope_trueWhenPresent_falseWhenBoundaryReachedFirst() throws Throwable {
+        tb.push(el("table"));
+        tb.push(el("div"));
+        assertTrue(tb.inScope("div"));
+
+        tb.push(el("span"));
+        assertFalse(tb.inScope("ul"));
+    }
+
+    // inTableScope: true เมื่อพบ target, false เมื่อเจอ boundary(table/html) ก่อน
+    @Test
+    public void testInTableScope_trueWhenPresent_falseAtHtmlBoundary() throws Throwable {
+        tb.push(el("html"));
+        tb.push(el("table"));
+        tb.push(el("tr"));
+        assertTrue(tb.inTableScope("table"));
+        assertFalse(tb.inTableScope("div"));
+    }
+
+    // inSelectScope: true เมื่อพบ target ผ่าน optgroup/option, false เมื่อเจอ element อื่นปิดกั้น
+    @Test
+    public void testInSelectScope_trueWhenPresent_falseWhenNonSelectScopeElementBlocks() throws Throwable {
+        tb.push(el("select"));
+        tb.push(el("option"));
+        assertTrue(tb.inSelectScope("select"));
+
+        tb.push(el("div"));
+        assertFalse(tb.inSelectScope("select"));
+    }
+
+    // setHeadElement/getHeadElement, setFosterInserts/isFosterInserts, pendingTableCharacters group
+    @Test
+    public void testMiscSettersGetters_headElement_fosterInserts_pendingTableCharacters() throws Throwable {
+        Element head = el("head");
+        tb.setHeadElement(head);
+        assertSame(head, tb.getHeadElement());
+        tb.setFosterInserts(true);
+        assertTrue(tb.isFosterInserts());
+        List<String> custom = new ArrayList<String>();
+        custom.add("abc");
+        tb.setPendingTableCharacters(custom);
+        assertSame(custom, tb.getPendingTableCharacters());
+        tb.newPendingTableCharacters();
+        assertTrue(tb.getPendingTableCharacters().isEmpty());
+    }
+
+    // insertForm (ผ่านการ parse <form>) ต้องตั้ง formElement ได้ และ setFormElement(null) ต้องเคลียร์ได้
+    @Test
+    public void testFormElement_setGetViaParsingAndManualOverride() throws Throwable {
+        tb.parseFragment("<form></form>", null, "http://example.com/", ParseErrorList.noTracking(), ParseSettings.htmlDefault);
+        assertNotNull(tb.getFormElement());
+        tb.setFormElement(null);
+        assertNull(tb.getFormElement());
+    }
+
+    // generateImpliedEndTags() ต้อง pop ไปเรื่อย ๆ ตราบใดที่ current อยู่ใน TagSearchEndTags
+    @Test
+    public void testGenerateImpliedEndTags_popsEndTagElementsUntilNonMatching() throws Throwable {
+        tb.push(el("div"));
+        tb.push(el("p"));
+        tb.push(el("dd"));
+        tb.generateImpliedEndTags();
+        assertEquals(1, tb.getStack().size());
+        assertEquals("div", tb.getStack().get(0).nodeName());
+    }
+
+    // generateImpliedEndTags(excludeTag) ต้องไม่ pop ถ้า current คือ excludeTag อยู่แล้ว
+    @Test
+    public void testGenerateImpliedEndTags_withExcludeTagMatchingCurrent_doesNothing() throws Throwable {
+        tb.push(el("div"));
+        tb.push(el("li"));
+        tb.generateImpliedEndTags("li");
+        assertEquals(2, tb.getStack().size());
+    }
+
+    // isSpecial(el) ต้อง true สำหรับแท็กใน TagSearchSpecial เช่น div, false สำหรับ span
+    @Test
+    public void testIsSpecial_trueForKnownSpecialTag_falseForOrdinaryTag() throws Throwable {
+        assertTrue(tb.isSpecial(el("div")));
+        assertFalse(tb.isSpecial(el("span")));
+    }
+
+    // lastFormattingElement/removeLastFormattingElement ต้องคืน null เมื่อ list ว่าง และคืน element เมื่อมี
+    @Test
+    public void testLastFormattingElement_and_removeLastFormattingElement_emptyReturnsNull() throws Throwable {
+        assertNull(tb.lastFormattingElement());
+        assertNull(tb.removeLastFormattingElement());
+
+        Element a = el("b");
+        tb.pushActiveFormattingElements(a);
+        assertSame(a, tb.lastFormattingElement());
+        assertSame(a, tb.removeLastFormattingElement());
+        assertNull(tb.lastFormattingElement());
+    }
+
+    // pushActiveFormattingElements ต้องลบตัวเก่าสุดออก (Noah's Ark) เมื่อซ้ำกันครบ 3 ตัวก่อนเพิ่มตัวที่ 4
+    @Test
+    public void testPushActiveFormattingElements_noahsArkRemovesEarliestOnFourthDuplicate() throws Throwable {
+        Element a1 = el("a");
+        Element a2 = el("a");
+        Element a3 = el("a");
+        Element a4 = el("a");
+        tb.pushActiveFormattingElements(a1);
+        tb.pushActiveFormattingElements(a2);
+        tb.pushActiveFormattingElements(a3);
+        tb.pushActiveFormattingElements(a4);
+        assertFalse(tb.isInActiveFormattingElements(a1));
+        assertTrue(tb.isInActiveFormattingElements(a4));
+    }
+
+    // clearFormattingElementsToLastMarker ต้องหยุดทันทีที่เจอ marker (null) และคงรายการก่อนหน้าไว้
+    @Test
+    public void testClearFormattingElementsToLastMarker_stopsAfterMarker() throws Throwable {
+        Element b = el("b");
+        tb.pushActiveFormattingElements(b);
+        tb.insertMarkerToFormattingElements();
+        tb.pushActiveFormattingElements(el("i"));
+        tb.clearFormattingElementsToLastMarker();
+        assertSame(b, tb.lastFormattingElement());
+    }
+
+    // removeFromActiveFormattingElements ต้องลบ element ที่ระบุออกจากรายการ
+    @Test
+    public void testRemoveFromActiveFormattingElements_removesGivenElement() throws Throwable {
+        Element b = el("b");
+        tb.pushActiveFormattingElements(b);
+        tb.removeFromActiveFormattingElements(b);
+        assertFalse(tb.isInActiveFormattingElements(b));
+    }
+
+    // isInActiveFormattingElements ต้อง false ก่อน push และ true หลัง push
+    @Test
+    public void testIsInActiveFormattingElements_trueAndFalse() throws Throwable {
+        Element b = el("b");
+        assertFalse(tb.isInActiveFormattingElements(b));
+        tb.pushActiveFormattingElements(b);
+        assertTrue(tb.isInActiveFormattingElements(b));
+    }
+
+    // getActiveFormattingElement ต้องหาได้ก่อนเจอ marker และคืน null เมื่อเจอ marker ก่อนพบชื่อนั้น
+    @Test
+    public void testGetActiveFormattingElement_findsBeforeMarker_stopsAtMarker() throws Throwable {
+        tb.insertMarkerToFormattingElements();
+        Element b = el("b");
+        tb.pushActiveFormattingElements(b);
+        assertSame(b, tb.getActiveFormattingElement("b"));
+        assertNull(tb.getActiveFormattingElement("i"));
+    }
+
+    // replaceActiveFormattingElement ต้องแทนที่ตัวเดิมด้วยตัวใหม่ที่ตำแหน่งเดิม
+    @Test
+    public void testReplaceActiveFormattingElement_replacesAtSamePosition() throws Throwable {
+        Element b = el("b");
+        Element i = el("i");
+        tb.pushActiveFormattingElements(b);
+        tb.replaceActiveFormattingElement(b, i);
+        assertSame(i, tb.lastFormattingElement());
+        assertFalse(tb.isInActiveFormattingElements(b));
+    }
+
+    // insertInFosterParent: table มี parent -> แทรกก่อน table ด้วย before()
+    @Test
+    public void testInsertInFosterParent_tableHasParent_insertsBeforeTable() throws Throwable {
+        Element div = el("div");
+        Element table = el("table");
+        div.appendChild(table);
+        tb.push(table);
+        TextNode text = new TextNode("x", "http://example.com/");
+        tb.insertInFosterParent(text);
+        assertSame(text, div.childNodes().get(0));
+        assertSame(table, div.childNodes().get(1));
+    }
+
+    // insertInFosterParent: ไม่มี table บน stack -> ใช้ stack.get(0) เป็น foster parent
+    @Test
+    public void testInsertInFosterParent_noTableOnStack_appendsToStackBottomElement() throws Throwable {
+        Element root = el("div");
+        tb.push(root);
+        TextNode text = new TextNode("y", "http://example.com/");
+        tb.insertInFosterParent(text);
+        assertSame(text, root.childNodes().get(0));
+    }
+
+    // insertInFosterParent: table ไม่มี parent -> ใช้ aboveOnStack(table) เป็น foster parent
+    @Test
+    public void testInsertInFosterParent_tableWithoutParent_appendsAboveOnStackElement() throws Throwable {
+        Element div = el("div");
+        Element table = el("table");
+        tb.push(div);
+        tb.push(table);
+        TextNode text = new TextNode("z", "http://example.com/");
+        tb.insertInFosterParent(text);
+        assertSame(text, div.childNodes().get(0));
+    }
+}

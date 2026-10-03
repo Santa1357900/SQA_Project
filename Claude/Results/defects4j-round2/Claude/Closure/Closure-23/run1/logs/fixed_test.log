@@ -1,0 +1,19 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-23-9dxc_acc/Closure-23f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 13
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testNot_emptyString_foldsToTrue
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testComparison_differentStrings_foldsToFalse
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testNeg_nonNumberOperand_reportsError
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testInstanceof_immutableLeftOperand_foldsToFalse
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testArrayAccess_assignmentTarget_notFolded
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testComparison_lessThanNumbers_foldsToTrue
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testComparison_equalStrings_foldsToTrue
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testAndOr_trueOr_shortCircuitsToTrue
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testComparison_equalNumbersLessThan_foldsToFalse
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testInstanceof_objectLiteralAgainstObject_foldsToTrue
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testLeftChildOp_associativeMultiplication_foldsTrailingConstants
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testReduceVoid_nonZeroLiteral_normalizesToVoidZero
+  - com.google.javascript.jscomp.PeepholeFoldConstantsClaudeTest::testNot_trueLiteral_foldsToFalse
+[exit 0]

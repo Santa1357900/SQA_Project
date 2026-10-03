@@ -1,0 +1,3 @@
+testCallsRealMethods_serializationRoundTrip_succeeds(org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest)
+testCallsRealMethods_isInstanceOfSerializable(org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest)
+testCallsRealMethods_isInstanceOfAnswer(org.mockito.internal.stubbing.answers.CallsRealMethodsClaudeTest)

@@ -1,0 +1,414 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.common.base.Supplier;
+import com.google.javascript.rhino.Node;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+
+public class FunctionInjectorClaudeTest {
+
+  private Compiler compiler;
+  private Supplier<String> safeNameIdSupplier;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    safeNameIdSupplier = new Supplier<String>() {
+      private int counter = 0;
+      @Override
+      public String get() {
+        return String.valueOf(counter++);
+      }
+    };
+  }
+
+  private Node parse(String js) {
+    Node n = compiler.parseTestCode(js);
+    assertEquals(0, compiler.getErrorCount());
+    return n;
+  }
+
+  // Constructor: null compiler must trigger Preconditions.checkNotNull -> NullPointerException
+  @Test
+  public void testConstructor_nullCompiler_throwsNullPointerException() throws Throwable {
+    try {
+      new FunctionInjector(null, safeNameIdSupplier, false, false, false);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // Constructor: null supplier must trigger Preconditions.checkNotNull -> NullPointerException
+  @Test
+  public void testConstructor_nullSupplier_throwsNullPointerException() throws Throwable {
+    try {
+      new FunctionInjector(compiler, null, false, false, false);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // Constructor: valid arguments construct a usable instance
+  @Test
+  public void testConstructor_validArguments_createsInjector() throws Throwable {
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertNotNull(injector);
+  }
+
+
+
+  // isDirectCallNodeReplacementPossible: empty function body is always directly replaceable
+  @Test
+  public void testIsDirectCallNodeReplacementPossible_emptyBody_true() throws Throwable {
+    Node script = parse("function foo() {}");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertTrue(injector.isDirectCallNodeReplacementPossible(fnNode));
+  }
+
+  // isDirectCallNodeReplacementPossible: single return with a value is directly replaceable
+  @Test
+  public void testIsDirectCallNodeReplacementPossible_singleReturnWithValue_true() throws Throwable {
+    Node script = parse("function foo() { return 1; }");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertTrue(injector.isDirectCallNodeReplacementPossible(fnNode));
+  }
+
+  // isDirectCallNodeReplacementPossible: single return without a value is not replaceable
+  @Test
+  public void testIsDirectCallNodeReplacementPossible_singleReturnNoValue_false() throws Throwable {
+    Node script = parse("function foo() { return; }");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertFalse(injector.isDirectCallNodeReplacementPossible(fnNode));
+  }
+
+  // isDirectCallNodeReplacementPossible: single non-return statement is not replaceable
+  @Test
+  public void testIsDirectCallNodeReplacementPossible_singleNonReturnStatement_false() throws Throwable {
+    Node script = parse("function foo() { bar(); }");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertFalse(injector.isDirectCallNodeReplacementPossible(fnNode));
+  }
+
+  // isDirectCallNodeReplacementPossible: more than one statement is not replaceable
+  @Test
+  public void testIsDirectCallNodeReplacementPossible_twoStatements_false() throws Throwable {
+    Node script = parse("function foo() { var a = 1; return a; }");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertFalse(injector.isDirectCallNodeReplacementPossible(fnNode));
+  }
+
+  // doesFunctionMeetMinimumRequirements: direct reference to "arguments" disqualifies the function
+  @Test
+  public void testDoesFunctionMeetMinimumRequirements_referencesArguments_false() throws Throwable {
+    Node script = parse("function foo() { return arguments[0]; }");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertFalse(injector.doesFunctionMeetMinimumRequirements("foo", fnNode));
+  }
+
+  // doesFunctionMeetMinimumRequirements: reference to "eval" disqualifies the function
+  @Test
+  public void testDoesFunctionMeetMinimumRequirements_referencesEval_false() throws Throwable {
+    Node script = parse("function foo() { return eval('1'); }");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertFalse(injector.doesFunctionMeetMinimumRequirements("foo", fnNode));
+  }
+
+  // doesFunctionMeetMinimumRequirements: a reference matching the supplied fnName disqualifies it
+  @Test
+  public void testDoesFunctionMeetMinimumRequirements_referencesFnName_false() throws Throwable {
+    Node script = parse("function foo() { return bar(); }");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertFalse(injector.doesFunctionMeetMinimumRequirements("bar", fnNode));
+  }
+
+  // doesFunctionMeetMinimumRequirements: self recursive call via the function's own name disqualifies it
+  @Test
+  public void testDoesFunctionMeetMinimumRequirements_referencesRecursionName_false() throws Throwable {
+    Node script = parse("function foo() { return foo(); }");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertFalse(injector.doesFunctionMeetMinimumRequirements("", fnNode));
+  }
+
+  // doesFunctionMeetMinimumRequirements: ordinary function meets the minimum requirements
+  @Test
+  public void testDoesFunctionMeetMinimumRequirements_normalFunction_true() throws Throwable {
+    Node script = parse("function foo(a) { return a + 1; }");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    assertTrue(injector.doesFunctionMeetMinimumRequirements("foo", fnNode));
+  }
+
+  // canInlineReferenceToFunction: direct call, no args/params, DIRECT mode is allowed
+  @Test
+  public void testCanInlineReferenceToFunction_directCallNoArgsNoParams_YES() throws Throwable {
+    Node script = parse("function foo() { return 1; } foo();");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, false, false);
+    assertEquals(FunctionInjector.CanInlineResult.YES, result);
+  }
+
+  // canInlineReferenceToFunction: body not directly replaceable (2 statements) -> NO
+  @Test
+  public void testCanInlineReferenceToFunction_directCallBodyNotInlinable_NO() throws Throwable {
+    Node script = parse("function foo(a) { var b = 1; return a + b; } foo(1);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, false, false);
+    assertEquals(FunctionInjector.CanInlineResult.NO, result);
+  }
+
+  // canInlineReferenceToFunction: referencesThis=true on a plain direct call is unsupported -> NO
+  @Test
+  public void testCanInlineReferenceToFunction_referencesThisDirectCall_NO() throws Throwable {
+    Node script = parse("function foo(a) { return a; } foo(1);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, true, false);
+    assertEquals(FunctionInjector.CanInlineResult.NO, result);
+  }
+
+  // canInlineReferenceToFunction: ".apply" call sites are never supported -> NO
+  @Test
+  public void testCanInlineReferenceToFunction_applyCall_NO() throws Throwable {
+    Node script = parse("function foo() { return 1; } fn.apply(this, []);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, false, false);
+    assertEquals(FunctionInjector.CanInlineResult.NO, result);
+  }
+
+  // canInlineReferenceToFunction: ".call" without literal "this" arg, non-strict -> unsupported -> NO
+  @Test
+  public void testCanInlineReferenceToFunction_callWithoutExplicitThisNotStrict_NO() throws Throwable {
+    Node script = parse("function foo(a) { return a; } foo.call(1);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, false, false);
+    assertEquals(FunctionInjector.CanInlineResult.NO, result);
+  }
+
+  // canInlineReferenceToFunction: ".call" without literal "this", assumeStrictThis bypasses
+  // isSupportedCallType but direct inlining still requires an explicit "this" arg -> NO
+  @Test
+  public void testCanInlineReferenceToFunction_callWithoutExplicitThisStrictBypass_NO() throws Throwable {
+    Node script = parse("function foo(a) { return a; } foo.call(1);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, true, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, false, false);
+    assertEquals(FunctionInjector.CanInlineResult.NO, result);
+  }
+
+  // canInlineReferenceToFunction: ".call" with explicit "this" argument is supported -> YES
+  @Test
+  public void testCanInlineReferenceToFunction_callWithExplicitThis_YES() throws Throwable {
+    Node script = parse("function foo(a) { return a; } foo.call(this, 1);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, true, false);
+    assertEquals(FunctionInjector.CanInlineResult.YES, result);
+  }
+
+  // canInlineReferenceToFunction: side-effecting arg referenced twice in body -> NO (javadoc example)
+  @Test
+  public void testCanInlineReferenceToFunction_sideEffectArgReferencedTwice_NO() throws Throwable {
+    Node script = parse("function foo(a) { return a + a; } foo(i++);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, false, false);
+    assertEquals(FunctionInjector.CanInlineResult.NO, result);
+  }
+
+  // canInlineReferenceToFunction: argument that is itself a call may have side effects -> NO
+  @Test
+  public void testCanInlineReferenceToFunction_sideEffectArgNestedCall_NO() throws Throwable {
+    Node script = parse("function foo(a) { return a; } foo(bar());");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, false, false);
+    assertEquals(FunctionInjector.CanInlineResult.NO, result);
+  }
+
+  // canInlineReferenceToFunction: containsFunctions=true but assumeMinimumCapture bypasses
+  // the scope check (t is never dereferenced) and inlining proceeds -> YES
+  @Test
+  public void testCanInlineReferenceToFunction_containsFunctionsWithMinimumCapture_YES() throws Throwable {
+    Node script = parse("function foo(a) { return (function(){return 1;})(); } foo(1);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, true);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, false, true);
+    assertEquals(FunctionInjector.CanInlineResult.YES, result);
+  }
+
+  // canInlineReferenceToFunction: literal args matching params with no side effects -> YES
+  @Test
+  public void testCanInlineReferenceToFunction_literalArgsMatchingParams_YES() throws Throwable {
+    Node script = parse("function add(a, b) { return a + b; } add(1, 2);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, false, false);
+    assertEquals(FunctionInjector.CanInlineResult.YES, result);
+  }
+
+  // canInlineReferenceToFunction: an extra literal argument beyond the params is still fine -> YES
+  @Test
+  public void testCanInlineReferenceToFunction_extraLiteralArgNoSideEffects_YES() throws Throwable {
+    Node script = parse("function one(a) { return a; } one(1, 2);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    FunctionInjector.CanInlineResult result = injector.canInlineReferenceToFunction(
+        null, callNode, fnNode, new HashSet<String>(),
+        FunctionInjector.InliningMode.DIRECT, false, false);
+    assertEquals(FunctionInjector.CanInlineResult.YES, result);
+  }
+
+  // maybePrepareCall: a simple statement call site requires no rewriting; structure is preserved
+  @Test
+  public void testMaybePrepareCall_simpleCall_structurePreserved() throws Throwable {
+    Node script = parse("foo();");
+    Node callNode = script.getFirstChild().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    injector.maybePrepareCall(callNode);
+    assertTrue(callNode.getParent().isExprResult());
+  }
+
+  // maybePrepareCall: a var-declaration call site requires no rewriting; structure is preserved
+  @Test
+  public void testMaybePrepareCall_varDeclAssignment_structurePreserved() throws Throwable {
+    Node script = parse("var x = foo();");
+    Node callNode = script.getFirstChild().getFirstChild().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    injector.maybePrepareCall(callNode);
+    assertTrue(callNode.getParent().getParent().isVar());
+  }
+
+  // maybePrepareCall: a simple assignment call site requires no rewriting; structure is preserved
+  @Test
+  public void testMaybePrepareCall_simpleAssignment_structurePreserved() throws Throwable {
+    Node script = parse("x = foo();");
+    Node callNode = script.getFirstChild().getFirstChild().getLastChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    injector.maybePrepareCall(callNode);
+    assertTrue(callNode.getParent().getParent().isExprResult());
+  }
+
+  // inline: with an un-normalized compiler life cycle stage the precondition must fail
+  @Test
+  public void testInline_notNormalized_throwsIllegalStateException() throws Throwable {
+    Node script = parse("function foo(a) { return a; } foo(1);");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    try {
+      injector.inline(callNode, "foo", fnNode, FunctionInjector.InliningMode.DIRECT);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // inliningLowersCost: zero references always lowers cost (trivial early-return contract)
+  @Test
+  public void testInliningLowersCost_noReferences_true() throws Throwable {
+    Node script = parse("function foo() { return 1; }");
+    Node fnNode = script.getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    Collection<FunctionInjector.Reference> refs = new ArrayList<FunctionInjector.Reference>();
+    boolean result = injector.inliningLowersCost(
+        null, fnNode, refs, new HashSet<String>(), true, false);
+    assertTrue(result);
+  }
+
+  // inliningLowersCost: a single removable direct-inlined reference always lowers cost
+  @Test
+  public void testInliningLowersCost_singleRemovableDirectReference_true() throws Throwable {
+    Node script = parse("function foo() { return 1; } foo();");
+    Node fnNode = script.getFirstChild();
+    Node callNode = fnNode.getNext().getFirstChild();
+    FunctionInjector injector =
+        new FunctionInjector(compiler, safeNameIdSupplier, false, false, false);
+    Collection<FunctionInjector.Reference> refs = new ArrayList<FunctionInjector.Reference>();
+    refs.add(new FunctionInjector.Reference(
+        callNode, null, FunctionInjector.InliningMode.DIRECT));
+    boolean result = injector.inliningLowersCost(
+        null, fnNode, refs, new HashSet<String>(), true, false);
+    assertTrue(result);
+  }
+}

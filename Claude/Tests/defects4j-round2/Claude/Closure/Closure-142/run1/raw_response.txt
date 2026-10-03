@@ -1,0 +1,211 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CoalesceVariableNamesClaudeTest {
+
+  private Compiler compiler;
+  private CompilerOptions options;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    options = new CompilerOptions();
+    options.setCoalesceVariableNames(true);
+  }
+
+  private String compileAndGetSource(String js) {
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    Result result = compiler.compile(externs, input, options);
+    assertTrue(result.success);
+    return compiler.toSource();
+  }
+
+  // Constructor with usePseudoNames=false must build a usable CompilerPass instance.
+  @Test
+  public void testConstructor_withUsePseudoNamesFalse_implementsCompilerPass() throws Throwable {
+    CoalesceVariableNames pass = new CoalesceVariableNames(compiler, false);
+    assertTrue(pass instanceof CompilerPass);
+  }
+
+  // Constructor with usePseudoNames=true must also build without error.
+  @Test
+  public void testConstructor_withUsePseudoNamesTrue_createsInstanceWithoutError() throws Throwable {
+    CoalesceVariableNames pass = new CoalesceVariableNames(compiler, true);
+    assertNotNull(pass);
+  }
+
+  // Javadoc canonical example: sequential non-overlapping vars get coalesced, var decl removed.
+  @Test
+  public void testProcess_javadocExample_coalescesVariableAndReassignsValue() throws Throwable {
+    String js = "function f(print){var xx=1;print(xx);var yy=2;print(yy);}";
+    String out = compileAndGetSource(js);
+    assertFalse(out.contains("yy"));
+  }
+
+  // Three sequential, pairwise non-interfering locals should all merge into one name.
+  @Test
+  public void testProcess_threeSequentialNonInterferingLocals_allMergeToFirstName() throws Throwable {
+    String js = "function f(cb){var xx=1;cb(xx);var yy=2;cb(yy);var zz=3;cb(zz);}";
+    String out = compileAndGetSource(js);
+    assertFalse(out.contains("yy"));
+    assertFalse(out.contains("zz"));
+  }
+
+  // Two variables live at the same program point (used together) must never be coalesced.
+  @Test
+  public void testProcess_simultaneouslyLiveVariables_remainDistinct() throws Throwable {
+    String js = "function f(cb){var xx=1;var yy=2;cb(xx+yy);}";
+    String out = compileAndGetSource(js);
+    assertTrue(out.contains("xx"));
+    assertTrue(out.contains("yy"));
+  }
+
+  // Global-scope variables are never touched (enterScope returns early for the global scope).
+  @Test
+  public void testProcess_globalScopeVariables_areNeverCoalesced() throws Throwable {
+    String js = "var xx=1;var yy=2;";
+    String out = compileAndGetSource(js);
+    assertTrue(out.contains("var xx"));
+    assertTrue(out.contains("var yy"));
+  }
+
+  // A variable captured by a nested closure is escaped and must keep its original name.
+  @Test
+  public void testProcess_variableCapturedByNestedClosure_isNotCoalesced() throws Throwable {
+    String js = "function f(cb){var xx=1;var mk=function(){return xx;};cb(mk);var yy=2;cb(yy);}";
+    String out = compileAndGetSource(js);
+    assertTrue(out.contains("return xx"));
+  }
+
+  // A function with only one local variable has nothing to coalesce with; decl stays.
+  @Test
+  public void testProcess_singleLocalVariable_declarationIsRetained() throws Throwable {
+    String js = "function f(cb){var xx=1;cb(xx);}";
+    String out = compileAndGetSource(js);
+    assertTrue(out.contains("var xx"));
+  }
+
+  // A var dead after an if/else join can coalesce with a variable declared after the join.
+  @Test
+  public void testProcess_variableLiveAcrossIfElseBranches_coalescesAfterMergePoint() throws Throwable {
+    String js = "function f(cb,cond){var xx=1;if(cond){cb(xx);}else{cb(xx);}var yy=2;cb(yy);}";
+    String out = compileAndGetSource(js);
+    assertFalse(out.contains("yy"));
+  }
+
+  // FOR-IN loop variable can be coalesced; removeVarDeclaration must drop the var keyword.
+  @Test
+  public void testProcess_forInLoopVariable_coalescedAndVarKeywordRemoved() throws Throwable {
+    String js = "function f(cb,oo){var xx=1;cb(xx);for(var yy in oo){cb(yy);}}";
+    String out = compileAndGetSource(js);
+    assertFalse(out.contains("yy"));
+  }
+
+  // The internal name of a named function expression must never be renamed by coalescing.
+  @Test
+  public void testProcess_namedFunctionExpressionName_isNeverRenamed() throws Throwable {
+    String js = "function f(cb){var xx=1;cb(xx);var gg=function helperName(){return 1;};cb(gg);}";
+    String out = compileAndGetSource(js);
+    assertFalse(out.contains("gg"));
+    assertTrue(out.contains("helperName"));
+  }
+
+  // Two parameters (both parented by LP) must never be coalesced with each other.
+  @Test
+  public void testProcess_multipleLPParameters_neverCoalescedWithEachOther() throws Throwable {
+    String js = "function f(cb,aa,bb){cb(aa);cb(bb);}";
+    String out = compileAndGetSource(js);
+    assertTrue(out.contains("aa"));
+    assertTrue(out.contains("bb"));
+  }
+
+  // A dead parameter can be coalesced with a later-declared local variable.
+  @Test
+  public void testProcess_parameterCoalescedWithLaterDeclaredLocal() throws Throwable {
+    String js = "function f(cb,pp){cb(pp);var yy=1;cb(yy);}";
+    String out = compileAndGetSource(js);
+    assertFalse(out.contains("yy"));
+  }
+
+  // DO-WHILE loop (one or more iterations) must compile successfully without crashing.
+  @Test
+  public void testProcess_doWhileLoopVariable_compilesSuccessfully() throws Throwable {
+    String js = "function f(cb){var xx=0;do{cb(xx);xx=xx+1;}while(xx<3);}";
+    String out = compileAndGetSource(js);
+    assertTrue(out.contains("xx"));
+  }
+
+  // Each function scope gets its own independent coloring; sibling scopes don't interfere.
+  @Test
+  public void testProcess_twoSiblingFunctionScopes_coloredIndependently() throws Throwable {
+    String js = "function f(cb){var xx=1;cb(xx);var yy=2;cb(yy);}"
+        + "function g(cb){var vv=1;cb(vv);var ww=2;cb(ww);}";
+    String out = compileAndGetSource(js);
+    assertFalse(out.contains("yy"));
+    assertFalse(out.contains("ww"));
+  }
+
+  // A var declared inside an if-block body is still function-scoped and can coalesce.
+  @Test
+  public void testProcess_variableInsideIfBlockBody_hoistedAndCoalescedWithOuter() throws Throwable {
+    String js = "function f(cb,cond){var xx=1;cb(xx);if(cond){var yy=2;cb(yy);}}";
+    String out = compileAndGetSource(js);
+    assertFalse(out.contains("yy"));
+  }
+
+  // Two variables used together across a while loop body must stay distinct (interfere).
+  @Test
+  public void testProcess_whileLoopVariablesUsedTogether_remainDistinct() throws Throwable {
+    String js = "function f(cb){var xx=0;var yy=0;while(xx<5){yy=yy+xx;xx=xx+1;}cb(yy);}";
+    String out = compileAndGetSource(js);
+    assertTrue(out.contains("xx"));
+    assertTrue(out.contains("yy"));
+  }
+
+  // Classic FOR-loop init variable coalesces; the resulting assign must not be EXPR-wrapped.
+  @Test
+  public void testProcess_forLoopInitVariable_coalescedWithoutExprWrapper() throws Throwable {
+    String js = "function f(cb){var xx=1;cb(xx);for(var yy=0;yy<5;yy=yy+1){cb(yy);}}";
+    String out = compileAndGetSource(js);
+    assertFalse(out.contains("yy"));
+  }
+
+  // Simple valid program must compile successfully with the pass enabled.
+  @Test
+  public void testProcess_resultSuccess_trueForSimpleValidProgram() throws Throwable {
+    String js = "function f(cb){var xx=1;cb(xx);}";
+    String out = compileAndGetSource(js);
+    assertTrue(out.contains("xx"));
+  }
+
+  // A closure created inside a loop capturing the loop variable must not crash compilation.
+  @Test
+  public void testProcess_nestedFunctionInsideLoop_doesNotCrashCompilation() throws Throwable {
+    String js = "function outer(cb){for(var ii=0;ii<3;ii=ii+1){"
+        + "var hh=function(){return ii;};cb(hh);}}";
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    Result result = compiler.compile(externs, input, options);
+    assertTrue(result.success);
+  }
+
+  // A variable reassigned before a later declared variable can still coalesce once dead.
+  @Test
+  public void testProcess_variableReassignedBeforeSecondDeclaration_coalesces() throws Throwable {
+    String js = "function f(cb){var xx=1;xx=xx+1;cb(xx);var yy=2;cb(yy);}";
+    String out = compileAndGetSource(js);
+    assertFalse(out.contains("yy"));
+  }
+
+  // A function with zero local variables (empty scope) must compile without error.
+  @Test
+  public void testProcess_functionWithNoLocalVariables_compilesWithoutError() throws Throwable {
+    String js = "function f(){return 1;}";
+    String out = compileAndGetSource(js);
+    assertTrue(out.contains("return"));
+  }
+}

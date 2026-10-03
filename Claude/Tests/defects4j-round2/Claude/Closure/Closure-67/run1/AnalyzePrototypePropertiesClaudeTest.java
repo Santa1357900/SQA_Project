@@ -1,0 +1,383 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+
+import java.util.Collection;
+import java.util.Deque;
+import java.util.List;
+
+public class AnalyzePrototypePropertiesClaudeTest {
+
+  private Compiler compiler;
+
+  private Node[] parse(String externsCode, String js) {
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    List<SourceFile> externs = Lists.newArrayList();
+    externs.add(SourceFile.fromCode("externs.js", externsCode));
+    List<SourceFile> inputs = Lists.newArrayList();
+    inputs.add(SourceFile.fromCode("test.js", js));
+    compiler.init(externs, inputs, options);
+    Node root = compiler.parseInputs();
+    Node externsRoot = root.getFirstChild();
+    Node mainRoot = root.getLastChild();
+    return new Node[] {externsRoot, mainRoot};
+  }
+
+  private Node[] parse(String js) {
+    return parse("", js);
+  }
+
+  private AnalyzePrototypeProperties.NameInfo findInfo(
+      Collection<AnalyzePrototypeProperties.NameInfo> infos, String name) {
+    for (AnalyzePrototypeProperties.NameInfo info : infos) {
+      if (info.name.equals(name)) {
+        return info;
+      }
+    }
+    return null;
+  }
+
+  // covers constructor loop creating IMPLICITLY_USED_PROPERTIES with moduleGraph == null branch
+  @Test
+  public void testConstructor_implicitLengthProperty_existsButNotReferenced() throws Throwable {
+    compiler = new Compiler();
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    AnalyzePrototypeProperties.NameInfo lengthInfo = findInfo(pass.getAllNameInfo(), "length");
+    assertNotNull(lengthInfo);
+    assertFalse(lengthInfo.isReferenced());
+  }
+
+  // covers all three IMPLICITLY_USED_PROPERTIES entries created in constructor
+  @Test
+  public void testConstructor_allImplicitProperties_exist() throws Throwable {
+    compiler = new Compiler();
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    Collection<AnalyzePrototypeProperties.NameInfo> infos = pass.getAllNameInfo();
+    assertNotNull(findInfo(infos, "length"));
+    assertNotNull(findInfo(infos, "toString"));
+    assertNotNull(findInfo(infos, "valueOf"));
+  }
+
+  // covers process() FixedPointGraphTraversal propagating reference from externNode
+  @Test
+  public void testProcess_emptySource_implicitPropertiesReferencedAfterFixedPoint() throws Throwable {
+    Node[] roots = parse("");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo lengthInfo = findInfo(pass.getAllNameInfo(), "length");
+    assertTrue(lengthInfo.isReferenced());
+  }
+
+  // covers that declaring a prototype property alone does not mark it referenced
+  @Test
+  public void testProcess_unreferencedPrototypeProperty_notReferenced() throws Throwable {
+    Node[] roots = parse("function Foo() {}\nFoo.prototype.bar = function() { return 1; };");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo barInfo = findInfo(pass.getAllNameInfo(), "bar");
+    assertFalse(barInfo.isReferenced());
+  }
+
+  // covers GETPROP usage branch (propName != "prototype") connecting usage to declared property
+  @Test
+  public void testProcess_declaredPrototypePropertyUsedElsewhere_referenced() throws Throwable {
+    Node[] roots = parse(
+        "function Foo() {}\n" +
+        "Foo.prototype.bar = function() { return 1; };\n" +
+        "var f = new Foo();\n" +
+        "f.bar();");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo barInfo = findInfo(pass.getAllNameInfo(), "bar");
+    assertTrue(barInfo.isReferenced());
+  }
+
+  // covers processPrototypeParent GETPROP case creating an AssignmentProperty declaration
+  @Test
+  public void testProcess_prototypePropertyDeclaration_assignmentPropertyRecorded() throws Throwable {
+    Node[] roots = parse("function Foo() {}\nFoo.prototype.bar = function() { return 1; };");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo barInfo = findInfo(pass.getAllNameInfo(), "bar");
+    Deque<AnalyzePrototypeProperties.Symbol> decls = barInfo.getDeclarations();
+    assertEquals(1, decls.size());
+    assertTrue(decls.getFirst() instanceof AnalyzePrototypeProperties.AssignmentProperty);
+  }
+
+  // covers processPrototypeParent ASSIGN case and OBJECTLIT-to-prototype exclusion branch
+  @Test
+  public void testProcess_literalPropertyAssignment_notReferencedAndDeclarationsRecorded() throws Throwable {
+    Node[] roots = parse(
+        "function Foo() {}\n" +
+        "Foo.prototype = {bar: function() { return 1; }, baz: function() { return 2; }};");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    Collection<AnalyzePrototypeProperties.NameInfo> infos = pass.getAllNameInfo();
+    assertFalse(findInfo(infos, "bar").isReferenced());
+    assertFalse(findInfo(infos, "baz").isReferenced());
+    assertEquals(1, findInfo(infos, "bar").getDeclarations().size());
+  }
+
+  // covers OBJECTLIT branch treating non-prototype object literal keys as property uses
+  @Test
+  public void testProcess_plainObjectLiteral_propertiesMarkedAsUsed() throws Throwable {
+    Node[] roots = parse("var x = {a: 1, b: 2};");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    Collection<AnalyzePrototypeProperties.NameInfo> infos = pass.getAllNameInfo();
+    assertTrue(findInfo(infos, "a").isReferenced());
+    assertTrue(findInfo(infos, "b").isReferenced());
+  }
+
+  // covers !propNameNode.isQuotedString() guard skipping quoted object literal keys
+  @Test
+  public void testProcess_objectLiteralQuotedKey_notTrackedAsNameInfo() throws Throwable {
+    Node[] roots = parse("var x = {'a': 1};");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    Collection<AnalyzePrototypeProperties.NameInfo> infos = pass.getAllNameInfo();
+    assertNull(findInfo(infos, "a"));
+  }
+
+  // covers processGlobalFunctionDeclaration returning false for usage, triggering addGlobalUseOfSymbol
+  @Test
+  public void testProcess_globalFunctionDeclarationCalled_referenced() throws Throwable {
+    Node[] roots = parse("function foo() { return 1; }\nfoo();");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo fooInfo = findInfo(pass.getAllNameInfo(), "foo");
+    assertTrue(fooInfo.isReferenced());
+  }
+
+  // covers anchorUnusedVars == false leaving an unused global function unreferenced
+  @Test
+  public void testProcess_globalFunctionDeclarationNotCalled_notReferenced() throws Throwable {
+    Node[] roots = parse("function foo() { return 1; }");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo fooInfo = findInfo(pass.getAllNameInfo(), "foo");
+    assertFalse(fooInfo.isReferenced());
+  }
+
+  // covers anchorUnusedVars == true forcing addGlobalUseOfSymbol regardless of usage
+  @Test
+  public void testProcess_anchorUnusedVarsTrue_globalFunctionAlwaysReferenced() throws Throwable {
+    Node[] roots = parse("function foo() { return 1; }");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, true);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo fooInfo = findInfo(pass.getAllNameInfo(), "foo");
+    assertTrue(fooInfo.isReferenced());
+  }
+
+  // covers isGlobalFunctionDeclaration FUNCTION-parent-is-NAME branch for var assignment, called
+  @Test
+  public void testProcess_varAssignedFunctionCalled_referenced() throws Throwable {
+    Node[] roots = parse("var foo = function() { return 1; };\nfoo();");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo fooInfo = findInfo(pass.getAllNameInfo(), "foo");
+    assertTrue(fooInfo.isReferenced());
+  }
+
+  // covers unreferenced var-assigned function with anchorUnusedVars == false
+  @Test
+  public void testProcess_varAssignedFunctionNotCalled_notReferenced() throws Throwable {
+    Node[] roots = parse("var foo = function() { return 1; };");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo fooInfo = findInfo(pass.getAllNameInfo(), "foo");
+    assertFalse(fooInfo.isReferenced());
+  }
+
+  // covers readClosureVariables marking when a nested function reads an outer non-global local
+  @Test
+  public void testProcess_nestedFunctionReadsOuterLocalVariable_readsClosureVariablesTrue() throws Throwable {
+    Node[] roots = parse(
+        "function outer() { var x = 1; function inner() { return x; } }");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo outerInfo = findInfo(pass.getAllNameInfo(), "outer");
+    assertTrue(outerInfo.readsClosureVariables());
+  }
+
+  // covers that reading a global variable does not set readClosureVariables (var.isGlobal() branch)
+  @Test
+  public void testProcess_nestedFunctionReadsGlobalVariable_readsClosureVariablesFalse() throws Throwable {
+    Node[] roots = parse(
+        "var g = 1;\nfunction outer() { function inner() { return g; } }");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo outerInfo = findInfo(pass.getAllNameInfo(), "outer");
+    assertFalse(outerInfo.readsClosureVariables());
+  }
+
+  // covers that reading a variable within the same scope does not set readClosureVariables
+  @Test
+  public void testProcess_functionReadsOwnLocalVariable_readsClosureVariablesFalse() throws Throwable {
+    Node[] roots = parse("function outer() { var x = 1; return x; }");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo outerInfo = findInfo(pass.getAllNameInfo(), "outer");
+    assertFalse(outerInfo.readsClosureVariables());
+  }
+
+  // covers ProcessExternProperties traversal connecting externNode to extern-declared properties
+  @Test
+  public void testProcess_canModifyExternsFalse_externPropertyReferenced() throws Throwable {
+    Node[] roots = parse("var ExternType;\nExternType.prototype.bar;\n", "");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, false, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo barInfo = findInfo(pass.getAllNameInfo(), "bar");
+    assertTrue(barInfo.isReferenced());
+  }
+
+  // covers canModifyExterns == true skipping ProcessExternProperties traversal entirely
+  @Test
+  public void testProcess_canModifyExternsTrue_externPropertyNotProcessed() throws Throwable {
+    Node[] roots = parse("var ExternType;\nExternType.prototype.bar;\n", "");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    assertNull(findInfo(pass.getAllNameInfo(), "bar"));
+  }
+
+  // covers getAllNameInfo() merging propertyNameInfo and varNameInfo maps
+  @Test
+  public void testProcess_getAllNameInfo_includesBothPropertyAndVarInfos() throws Throwable {
+    Node[] roots = parse(
+        "function Foo() {}\nFoo.prototype.bar = function() {};\nfunction baz() {}");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    Collection<AnalyzePrototypeProperties.NameInfo> infos = pass.getAllNameInfo();
+    assertNotNull(findInfo(infos, "bar"));
+    assertNotNull(findInfo(infos, "baz"));
+  }
+
+  // covers Deque accumulation when the same prototype property is assigned more than once
+  @Test
+  public void testProcess_multiplePrototypePropertyDeclarations_declarationsAccumulate() throws Throwable {
+    Node[] roots = parse(
+        "function Foo() {}\n" +
+        "Foo.prototype.bar = function() { return 1; };\n" +
+        "Foo.prototype.bar = function() { return 2; };");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo barInfo = findInfo(pass.getAllNameInfo(), "bar");
+    assertEquals(2, barInfo.getDeclarations().size());
+  }
+
+  // covers that non-global (nested) function declarations are pushed as anonymousNode only
+  @Test
+  public void testProcess_localNestedFunction_notTrackedAsVarNameInfo() throws Throwable {
+    Node[] roots = parse(
+        "function outerFn() { function innerFn() {} innerFn(); } outerFn();");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    assertNull(findInfo(pass.getAllNameInfo(), "innerFn"));
+  }
+
+  // covers addSymbolUse creating a NameInfo with no declarations at all
+  @Test
+  public void testProcess_propertyUsedButNeverDeclared_declarationsEmpty() throws Throwable {
+    Node[] roots = parse("function Foo() {}\nvar f = new Foo();\nf.bar();");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo barInfo = findInfo(pass.getAllNameInfo(), "bar");
+    assertTrue(barInfo.isReferenced());
+    assertTrue(barInfo.getDeclarations().isEmpty());
+  }
+
+  // covers LiteralProperty.getPrototype() and getValue() returning correct nodes
+  @Test
+  public void testLiteralProperty_getPrototypeAndValue_correctNodes() throws Throwable {
+    Node[] roots = parse("function Foo() {}\nFoo.prototype = {bar: function() { return 1; }};");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo barInfo = findInfo(pass.getAllNameInfo(), "bar");
+    AnalyzePrototypeProperties.LiteralProperty prop =
+        (AnalyzePrototypeProperties.LiteralProperty) barInfo.getDeclarations().getFirst();
+    assertEquals(Token.GETPROP, prop.getPrototype().getType());
+    assertEquals(Token.FUNCTION, prop.getValue().getType());
+  }
+
+  // covers AssignmentProperty.remove() removing the EXPR statement from the script
+  @Test
+  public void testAssignmentProperty_remove_removesExprStatementFromScript() throws Throwable {
+    Node[] roots = parse("function Foo() {}\nFoo.prototype.bar = function() { return 1; };");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo barInfo = findInfo(pass.getAllNameInfo(), "bar");
+    AnalyzePrototypeProperties.AssignmentProperty prop =
+        (AnalyzePrototypeProperties.AssignmentProperty) barInfo.getDeclarations().getFirst();
+    Node scriptNode = roots[1].getFirstChild();
+    Node beforeLast = scriptNode.getLastChild();
+    prop.remove();
+    assertNotSame(beforeLast, scriptNode.getLastChild());
+    assertEquals(Token.FUNCTION, scriptNode.getLastChild().getType());
+  }
+
+  // covers LiteralProperty.remove() removing the key from the object literal map
+  @Test
+  public void testLiteralProperty_remove_removesKeyFromObjectLiteral() throws Throwable {
+    Node[] roots = parse(
+        "function Foo() {}\nFoo.prototype = {bar: function(){}, baz: function(){}};");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo barInfo = findInfo(pass.getAllNameInfo(), "bar");
+    AnalyzePrototypeProperties.LiteralProperty prop =
+        (AnalyzePrototypeProperties.LiteralProperty) barInfo.getDeclarations().getFirst();
+    Node objectLit = prop.getPrototype().getNext();
+    assertEquals("bar", objectLit.getFirstChild().getString());
+    prop.remove();
+    assertEquals("baz", objectLit.getFirstChild().getString());
+  }
+
+  // covers GlobalFunction.remove() when parent.getType() == FUNCTION branch
+  @Test
+  public void testGlobalFunction_remove_removesFunctionDeclarationFromScript() throws Throwable {
+    Node[] roots = parse("function foo() { return 1; }");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo fooInfo = findInfo(pass.getAllNameInfo(), "foo");
+    AnalyzePrototypeProperties.GlobalFunction globalFunc =
+        (AnalyzePrototypeProperties.GlobalFunction) fooInfo.getDeclarations().getFirst();
+    Node scriptNode = roots[1].getFirstChild();
+    assertNotNull(scriptNode.getFirstChild());
+    globalFunc.remove();
+    assertNull(scriptNode.getFirstChild());
+  }
+
+  // covers GlobalFunction.getFunctionNode() if-branch for a named function declaration
+  @Test
+  public void testGlobalFunction_getFunctionNode_namedFunctionDeclaration_returnsFunctionNode() throws Throwable {
+    Node[] roots = parse("function foo() { return 1; }");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo fooInfo = findInfo(pass.getAllNameInfo(), "foo");
+    AnalyzePrototypeProperties.GlobalFunction globalFunc =
+        (AnalyzePrototypeProperties.GlobalFunction) fooInfo.getDeclarations().getFirst();
+    Node functionNode = globalFunc.getFunctionNode();
+    assertNotNull(functionNode);
+    assertEquals(Token.FUNCTION, functionNode.getType());
+  }
+
+  // covers GlobalFunction.getFunctionNode() else-branch for a var-assigned anonymous function
+  @Test
+  public void testGlobalFunction_getFunctionNode_varAssignedFunction_returnsFunctionNode() throws Throwable {
+    Node[] roots = parse("var foo = function() { return 1; };");
+    AnalyzePrototypeProperties pass = new AnalyzePrototypeProperties(compiler, null, true, false);
+    pass.process(roots[0], roots[1]);
+    AnalyzePrototypeProperties.NameInfo fooInfo = findInfo(pass.getAllNameInfo(), "foo");
+    AnalyzePrototypeProperties.GlobalFunction globalFunc =
+        (AnalyzePrototypeProperties.GlobalFunction) fooInfo.getDeclarations().getFirst();
+    Node functionNode = globalFunc.getFunctionNode();
+    assertNotNull(functionNode);
+    assertEquals(Token.FUNCTION, functionNode.getType());
+  }
+}

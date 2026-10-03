@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-22-nieacuku/Cli-22b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_doubleDashAlone_addsExactlyOnce
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_doubleDashWithTrailingPlainArgs_passesThroughRemaining
+[exit 0]

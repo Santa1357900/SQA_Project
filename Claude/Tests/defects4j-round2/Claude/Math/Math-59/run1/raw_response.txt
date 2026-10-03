@@ -1,0 +1,391 @@
+package org.apache.commons.math.util;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class FastMathClaudeTest {
+
+    // sqrt: normal positive input returns correct mathematical root
+    @Test
+    public void testSqrt_positiveValue_returnsCorrectRoot() throws Throwable {
+        assertEquals(2.0, FastMath.sqrt(4.0), 1e-12);
+    }
+
+    // sqrt: negative input is a domain error, must return NaN
+    @Test
+    public void testSqrt_negativeValue_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.sqrt(-1.0)));
+    }
+
+    // cosh: x == 0 special path returns exactly 1.0
+    @Test
+    public void testCosh_zero_returnsOne() throws Throwable {
+        assertEquals(1.0, FastMath.cosh(0.0), 1e-12);
+    }
+
+    // cosh: NaN input branch (x != x) propagates NaN unchanged
+    @Test
+    public void testCosh_NaN_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.cosh(Double.NaN)));
+    }
+
+    // cosh: x > 20.0 branch uses exp(x)/2, must match true hyperbolic cosine
+    @Test
+    public void testCosh_largePositive_matchesMathCosh() throws Throwable {
+        double expected = Math.cosh(21.0);
+        double delta = Math.abs(expected) * 1e-6;
+        assertEquals(expected, FastMath.cosh(21.0), delta);
+    }
+
+    // sinh: x == 0 branch returns 0 directly
+    @Test
+    public void testSinh_zero_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.sinh(0.0), 1e-12);
+    }
+
+    // sinh: NaN input branch propagates NaN
+    @Test
+    public void testSinh_NaN_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.sinh(Double.NaN)));
+    }
+
+    // tanh: x > 20.0 branch returns exactly 1.0 per hyperbolic tangent asymptote
+    @Test
+    public void testTanh_largePositive_returnsOne() throws Throwable {
+        assertEquals(1.0, FastMath.tanh(25.0), 1e-12);
+    }
+
+    // tanh: x < -20 branch returns exactly -1.0
+    @Test
+    public void testTanh_largeNegative_returnsNegativeOne() throws Throwable {
+        assertEquals(-1.0, FastMath.tanh(-25.0), 1e-12);
+    }
+
+    // acosh: acosh(1) = log(1+sqrt(0)) = log(1) = 0
+    @Test
+    public void testAcosh_one_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.acosh(1.0), 1e-9);
+    }
+
+    // asinh: zero input, non-negative branch, lowest polynomial range
+    @Test
+    public void testAsinh_zero_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.asinh(0.0), 1e-12);
+    }
+
+    // atanh: zero input, non-negative branch, lowest polynomial range
+    @Test
+    public void testAtanh_zero_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.atanh(0.0), 1e-12);
+    }
+
+    // signum: positive branch
+    @Test
+    public void testSignum_positiveValue_returnsOne() throws Throwable {
+        assertEquals(1.0, FastMath.signum(5.0), 1e-12);
+    }
+
+    // signum: negative branch
+    @Test
+    public void testSignum_negativeValue_returnsNegativeOne() throws Throwable {
+        assertEquals(-1.0, FastMath.signum(-5.0), 1e-12);
+    }
+
+    // signum: positive zero branch
+    @Test
+    public void testSignum_zero_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.signum(0.0), 1e-12);
+    }
+
+    // signum: NaN branch inside the else expression
+    @Test
+    public void testSignum_NaN_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.signum(Double.NaN)));
+    }
+
+    // Bug hunt: per IEEE-754 / Math.signum contract, signum(-0.0) must keep the
+    // negative sign of zero; compare raw bits since assertEquals(double) with
+    // delta cannot distinguish -0.0 from 0.0
+    @Test
+    public void testSignum_negativeZero_preservesNegativeSign() throws Throwable {
+        double result = FastMath.signum(-0.0);
+        long expectedBits = Double.doubleToLongBits(-0.0);
+        long actualBits = Double.doubleToLongBits(result);
+        assertEquals(expectedBits, actualBits);
+    }
+
+    // nextUp: result must be strictly greater than input
+    @Test
+    public void testNextUp_positiveValue_returnsNextGreater() throws Throwable {
+        assertTrue(FastMath.nextUp(1.0) > 1.0);
+    }
+
+    // exp: exp(0) == 1 exactly, intVal == 0 lookup path
+    @Test
+    public void testExp_zero_returnsOne() throws Throwable {
+        assertEquals(1.0, FastMath.exp(0.0), 1e-12);
+    }
+
+    // expm1: x == 0.0 branch returns x directly
+    @Test
+    public void testExpm1_zero_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.expm1(0.0), 1e-12);
+    }
+
+    // log: log(1) must be 0, exp==0 special quick-polynomial branch (0.99,1.01)
+    @Test
+    public void testLog_one_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.log(1.0), 1e-9);
+    }
+
+    // log: negative argument (sign bit set, x != 0) must return NaN
+    @Test
+    public void testLog_negativeValue_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.log(-1.0)));
+    }
+
+    // log: x == 0 branch (zero/subnormal path) must return -Infinity
+    @Test
+    public void testLog_zero_returnsNegativeInfinity() throws Throwable {
+        double result = FastMath.log(0.0);
+        assertTrue(Double.isInfinite(result));
+        assertTrue(result < 0.0);
+    }
+
+    // log1p: x == 0 falls to small-|x| Taylor branch, must return 0
+    @Test
+    public void testLog1p_zero_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.log1p(0.0), 1e-12);
+    }
+
+    // log1p: x == -1 branch returns x/0.0 which is -Infinity
+    @Test
+    public void testLog1p_negativeOne_returnsNegativeInfinity() throws Throwable {
+        double result = FastMath.log1p(-1.0);
+        assertTrue(Double.isInfinite(result));
+        assertTrue(result < 0.0);
+    }
+
+    // log10: log10(100) must be 2
+    @Test
+    public void testLog10_hundred_returnsTwo() throws Throwable {
+        assertEquals(2.0, FastMath.log10(100.0), 1e-9);
+    }
+
+    // pow: y == 0.0 branch always returns 1.0, regardless of base
+    @Test
+    public void testPow_zeroExponent_returnsOne() throws Throwable {
+        assertEquals(1.0, FastMath.pow(5.0, 0.0), 1e-12);
+    }
+
+    // pow: x == 0 (positive zero) with y > 0 branch returns 0.0
+    @Test
+    public void testPow_baseZeroPositiveExponent_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.pow(0.0, 5.0), 1e-12);
+    }
+
+    // pow: x < 0 with even integer exponent delegates to pow(-x,y), positive result
+    @Test
+    public void testPow_negativeBaseEvenIntegerExponent_returnsPositiveResult() throws Throwable {
+        assertEquals(16.0, FastMath.pow(-2.0, 4.0), 1e-6);
+    }
+
+    // pow: x < 0 with non-integer exponent branch must return NaN
+    @Test
+    public void testPow_negativeBaseNonIntegerExponent_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.pow(-2.0, 0.5)));
+    }
+
+    // pow: general log/exp based computation path for positive base
+    @Test
+    public void testPow_twoPowTen_returns1024() throws Throwable {
+        assertEquals(1024.0, FastMath.pow(2.0, 10.0), 1e-6);
+    }
+
+    // sin: zero input, positive-zero branch returns 0.0
+    @Test
+    public void testSin_zero_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.sin(0.0), 1e-12);
+    }
+
+    // cos: zero input, quadrant 0 path (cosQ) must equal 1.0
+    @Test
+    public void testCos_zero_returnsOne() throws Throwable {
+        assertEquals(1.0, FastMath.cos(0.0), 1e-9);
+    }
+
+    // tan: zero input, positive-zero branch returns 0.0
+    @Test
+    public void testTan_zero_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.tan(0.0), 1e-12);
+    }
+
+    // atan: atan(1) must equal pi/4
+    @Test
+    public void testAtan_one_matchesPiOverFour() throws Throwable {
+        assertEquals(Math.PI / 4.0, FastMath.atan(1.0), 1e-9);
+    }
+
+    // atan2: standard quadrant check against JDK reference implementation
+    @Test
+    public void testAtan2_matchesMathAtan2() throws Throwable {
+        assertEquals(Math.atan2(1.0, 1.0), FastMath.atan2(1.0, 1.0), 1e-9);
+    }
+
+    // asin: x > 1.0 domain-error branch must return NaN
+    @Test
+    public void testAsin_outOfRange_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.asin(2.0)));
+    }
+
+    // asin: x == 1.0 special-case branch returns pi/2 exactly
+    @Test
+    public void testAsin_one_returnsPiOverTwo() throws Throwable {
+        assertEquals(Math.PI / 2.0, FastMath.asin(1.0), 1e-12);
+    }
+
+    // acos: x > 1.0 domain-error branch must return NaN
+    @Test
+    public void testAcos_outOfRange_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.acos(2.0)));
+    }
+
+    // acos: x == 1.0 special-case branch returns 0 exactly
+    @Test
+    public void testAcos_one_returnsZero() throws Throwable {
+        assertEquals(0.0, FastMath.acos(1.0), 1e-12);
+    }
+
+    // cbrt: positive perfect cube
+    @Test
+    public void testCbrt_eight_returnsTwo() throws Throwable {
+        assertEquals(2.0, FastMath.cbrt(8.0), 1e-9);
+    }
+
+    // cbrt: negative perfect cube, sign must be preserved
+    @Test
+    public void testCbrt_negativeEight_returnsNegativeTwo() throws Throwable {
+        assertEquals(-2.0, FastMath.cbrt(-8.0), 1e-9);
+    }
+
+    // toRadians: 180 degrees must convert to pi radians
+    @Test
+    public void testToRadians_180_matchesPi() throws Throwable {
+        assertEquals(Math.PI, FastMath.toRadians(180.0), 1e-9);
+    }
+
+    // toDegrees: pi radians must convert to 180 degrees
+    @Test
+    public void testToDegrees_pi_matches180() throws Throwable {
+        assertEquals(180.0, FastMath.toDegrees(Math.PI), 1e-9);
+    }
+
+    // abs overloads: negative branch for int/long/float/double all return positive magnitude
+    @Test
+    public void testAbsOverloads_negativeValues_returnPositive() throws Throwable {
+        assertEquals(5, FastMath.abs(-5));
+        assertEquals(5L, FastMath.abs(-5L));
+        assertEquals(5.0f, FastMath.abs(-5.0f), 1e-6f);
+        assertEquals(5.0, FastMath.abs(-5.0), 1e-9);
+    }
+
+    // ulp: positive finite value must have a strictly positive ulp
+    @Test
+    public void testUlp_one_returnsPositiveValue() throws Throwable {
+        assertTrue(FastMath.ulp(1.0) > 0.0);
+    }
+
+    // nextAfter: d == 0 special branch returns Double.MIN_VALUE toward positive direction
+    @Test
+    public void testNextAfter_zeroTowardPositive_returnsMinValue() throws Throwable {
+        assertEquals(Double.MIN_VALUE, FastMath.nextAfter(0.0, 1.0), 0.0);
+    }
+
+    // nextAfter: NaN input short-circuit branch returns NaN unchanged
+    @Test
+    public void testNextAfter_NaN_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.nextAfter(Double.NaN, 1.0)));
+    }
+
+    // floor: positive fractional value rounds toward negative infinity
+    @Test
+    public void testFloor_positiveFraction_roundsDown() throws Throwable {
+        assertEquals(1.0, FastMath.floor(1.5), 1e-12);
+    }
+
+    // floor: negative fractional value, decrement branch (x < 0 && y != x)
+    @Test
+    public void testFloor_negativeFraction_roundsDown() throws Throwable {
+        assertEquals(-2.0, FastMath.floor(-1.5), 1e-12);
+    }
+
+    // floor: NaN short-circuit branch
+    @Test
+    public void testFloor_NaN_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.floor(Double.NaN)));
+    }
+
+    // ceil: negative fraction between -1 and 0 must yield negative zero
+    @Test
+    public void testCeil_negativeFraction_roundsUp() throws Throwable {
+        assertEquals(-1.0, FastMath.ceil(-1.5), 1e-12);
+    }
+
+    // rint: halfway cases round to the nearest even integer
+    @Test
+    public void testRint_halfway_roundsToEven() throws Throwable {
+        assertEquals(2.0, FastMath.rint(2.5), 1e-12);
+        assertEquals(4.0, FastMath.rint(3.5), 1e-12);
+    }
+
+    // round(double): ties round up toward positive infinity
+    @Test
+    public void testRoundDouble_halfway_roundsUp() throws Throwable {
+        assertEquals(3L, FastMath.round(2.5));
+        assertEquals(0L, FastMath.round(-0.5));
+    }
+
+    // round(float): delegates to Math.round(float)
+    @Test
+    public void testRoundFloat_halfway_roundsUp() throws Throwable {
+        assertEquals(3, FastMath.round(2.5f));
+    }
+
+    // min/max int: both branches of the ternary
+    @Test
+    public void testMinMaxInt_bothBranches() throws Throwable {
+        assertEquals(1, FastMath.min(1, 2));
+        assertEquals(2, FastMath.max(1, 2));
+    }
+
+    // min/max long: both branches of the ternary
+    @Test
+    public void testMinMaxLong_bothBranches() throws Throwable {
+        assertEquals(1L, FastMath.min(1L, 2L));
+        assertEquals(2L, FastMath.max(1L, 2L));
+    }
+
+    // min(double,double): NaN operand must trigger the isNaN branch
+    @Test
+    public void testMinDouble_withNaN_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.min(Double.NaN, 1.0)));
+    }
+
+    // max(double,double): NaN operand must trigger the isNaN branch
+    @Test
+    public void testMaxDouble_withNaN_returnsNaN() throws Throwable {
+        assertTrue(Double.isNaN(FastMath.max(Double.NaN, 1.0)));
+    }
+
+    // min(float,float): NaN operand must trigger the isNaN branch
+    @Test
+    public void testMinFloat_withNaN_returnsNaN() throws Throwable {
+        assertTrue(Float.isNaN(FastMath.min(Float.NaN, 1.0f)));
+    }
+
+    // max(float,float): NaN operand must trigger the isNaN branch
+    @Test
+    public void testMaxFloat_withNaN_returnsNaN() throws Throwable {
+        assertTrue(Float.isNaN(FastMath.max(Float.NaN, 1.0f)));
+    }
+}

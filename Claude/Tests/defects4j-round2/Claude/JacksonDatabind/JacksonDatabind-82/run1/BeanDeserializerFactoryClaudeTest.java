@@ -1,0 +1,465 @@
+package com.fasterxml.jackson.databind.deser;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIgnoreType;
+import com.fasterxml.jackson.annotation.JsonInject;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+
+import com.fasterxml.jackson.databind.InjectableValues;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
+import com.fasterxml.jackson.databind.cfg.DeserializerFactoryConfig;
+
+public class BeanDeserializerFactoryClaudeTest {
+
+    // ---- helper POJOs ----
+
+    public static class SubFactory extends BeanDeserializerFactory {
+        public SubFactory(DeserializerFactoryConfig config) { super(config); }
+    }
+
+    public static abstract class AbstractThing {
+        public String name;
+    }
+
+    public interface ThingInterface {
+        String getName();
+    }
+
+    public static class ValueBean {
+        private final String name;
+        private final int age;
+        public ValueBean(String name, int age) { this.name = name; this.age = age; }
+        public String getName() { return name; }
+        public int getAge() { return age; }
+    }
+
+    @JsonDeserialize(builder = ValueBuilder.class)
+    public static class ValueBeanHolder {
+        // marker not used, actual annotation placed directly on target below
+    }
+
+    @JsonDeserialize(builder = ValueBuilder.class)
+    public static class ValueBeanAnnotated {
+        private final String name;
+        private final int age;
+        public ValueBeanAnnotated(String name, int age) { this.name = name; this.age = age; }
+        public String getName() { return name; }
+        public int getAge() { return age; }
+    }
+
+    public static class ValueBuilder {
+        private String name;
+        private int age;
+        public ValueBuilder withName(String name) { this.name = name; return this; }
+        public ValueBuilder withAge(int age) { this.age = age; return this; }
+        public ValueBeanAnnotated build() { return new ValueBeanAnnotated(name, age); }
+    }
+
+    @JsonDeserialize(builder = ValueBuilder2.class)
+    public static class ValueBean2 {
+        private final String name;
+        public ValueBean2(String name) { this.name = name; }
+        public String getName() { return name; }
+    }
+
+    @JsonPOJOBuilder(buildMethodName = "create", withPrefix = "set")
+    public static class ValueBuilder2 {
+        private String name;
+        public ValueBuilder2 setName(String name) { this.name = name; return this; }
+        public ValueBean2 create() { return new ValueBean2(name); }
+    }
+
+    public static class SimpleBean {
+        private String name;
+        private int age;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public int getAge() { return age; }
+        public void setAge(int age) { this.age = age; }
+    }
+
+    public static class FieldBean {
+        public String label;
+    }
+
+    public static class CreatorBean {
+        private final String name;
+        private final int age;
+        @JsonCreator
+        public CreatorBean(@JsonProperty("name") String name, @JsonProperty("age") int age) {
+            this.name = name;
+            this.age = age;
+        }
+        public String getName() { return name; }
+        public int getAge() { return age; }
+    }
+
+    public static class CollectionBean {
+        private List<String> items = new ArrayList<String>();
+        public List<String> getItems() { return items; }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class IgnoreUnknownBean {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    @JsonIgnoreProperties({"secret"})
+    public static class ExplicitIgnoreBean {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class StrictBean {
+        private String name;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class AnySetterMethodBean {
+        private String name;
+        private Map<String, Object> extra = new HashMap<String, Object>();
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        @JsonAnySetter
+        public void addExtra(String key, Object value) { extra.put(key, value); }
+        public Map<String, Object> getExtra() { return extra; }
+    }
+
+    public static class AnySetterFieldBean {
+        public String name;
+        @JsonAnySetter
+        public Map<String, Object> extra = new HashMap<String, Object>();
+    }
+
+    @JsonIgnoreType
+    public static class IgnorableType {
+        public String data;
+    }
+
+    public static class ContainerBean {
+        public String name;
+        public IgnorableType ignoredField;
+    }
+
+    public static class Parent {
+        public String name;
+        @JsonManagedReference
+        public Child child;
+    }
+
+    public static class Child {
+        public String name;
+        @JsonBackReference
+        public Parent parent;
+    }
+
+    public static class InjectBean {
+        @JsonInject
+        public String injected;
+        public String name;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "id")
+    public static class IdBean {
+        public String name;
+        public IdBean nested;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    public static class PropIdBean {
+        public String id;
+        public String name;
+        public PropIdBean ref;
+    }
+
+    public static class MyException extends Exception {
+        public MyException(String message) { super(message); }
+    }
+
+    public static class DetailedException extends Exception {
+        private String detail;
+        public DetailedException(String message) { super(message); }
+        public String getDetail() { return detail; }
+        public void setDetail(String detail) { this.detail = detail; }
+    }
+
+    // ---- tests ----
+
+    // covers: public static final field 'instance' is available and non-null
+    @Test
+    public void testInstance_isNotNull() throws Throwable {
+        assertNotNull(BeanDeserializerFactory.instance);
+    }
+
+    // covers: 'instance' is a singleton reference
+    @Test
+    public void testInstance_isSingletonReference() throws Throwable {
+        BeanDeserializerFactory a = BeanDeserializerFactory.instance;
+        BeanDeserializerFactory b = BeanDeserializerFactory.instance;
+        assertSame(a, b);
+    }
+
+    // covers: withConfig branch where _factoryConfig == config -> returns same instance
+    @Test
+    public void testWithConfig_sameConfigReference_returnsSameInstance() throws Throwable {
+        DeserializerFactoryConfig cfg = new DeserializerFactoryConfig();
+        BeanDeserializerFactory factory = new BeanDeserializerFactory(cfg);
+        DeserializerFactory result = factory.withConfig(cfg);
+        assertSame(factory, result);
+    }
+
+    // covers: withConfig branch where config differs -> new BeanDeserializerFactory instance
+    @Test
+    public void testWithConfig_differentConfigReference_returnsNewInstance() throws Throwable {
+        DeserializerFactoryConfig cfg1 = new DeserializerFactoryConfig();
+        DeserializerFactoryConfig cfg2 = new DeserializerFactoryConfig();
+        BeanDeserializerFactory factory = new BeanDeserializerFactory(cfg1);
+        DeserializerFactory result = factory.withConfig(cfg2);
+        assertNotSame(factory, result);
+        assertTrue(result instanceof BeanDeserializerFactory);
+    }
+
+    // covers: withConfig branch where getClass() != BeanDeserializerFactory.class -> throws IllegalStateException
+    @Test
+    public void testWithConfig_subclassInstance_throwsIllegalStateException() throws Throwable {
+        DeserializerFactoryConfig cfg1 = new DeserializerFactoryConfig();
+        DeserializerFactoryConfig cfg2 = new DeserializerFactoryConfig();
+        SubFactory sub = new SubFactory(cfg1);
+        try {
+            sub.withConfig(cfg2);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // covers: createBeanDeserializer abstract-type path without registered resolver -> exception
+    @Test
+    public void testAbstractTypeNoImpl_throwsJsonMappingException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            mapper.readValue("{\"name\":\"x\"}", AbstractThing.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // covers: createBeanDeserializer abstract-type path for interface types -> exception
+    @Test
+    public void testInterfaceType_throwsJsonMappingException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            mapper.readValue("{\"name\":\"x\"}", ThingInterface.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // covers: buildBuilderBasedDeserializer with default build method name "build"
+    @Test
+    public void testBuilderBasedDeserializer_defaultBuildMethod() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        ValueBeanAnnotated bean = mapper.readValue("{\"name\":\"Hank\",\"age\":50}", ValueBeanAnnotated.class);
+        assertEquals("Hank", bean.getName());
+        assertEquals(50, bean.getAge());
+    }
+
+    // covers: buildBuilderBasedDeserializer with custom build method name via JsonPOJOBuilder.Value
+    @Test
+    public void testBuilderBasedDeserializer_customBuildMethodName() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        ValueBean2 bean = mapper.readValue("{\"name\":\"Ivy\"}", ValueBean2.class);
+        assertEquals("Ivy", bean.getName());
+    }
+
+    // covers: buildBeanDeserializer/addBeanProps normal setter-based path
+    @Test
+    public void testSimpleBean_settersUsed_valuesMapped() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleBean bean = mapper.readValue("{\"name\":\"Alice\",\"age\":30}", SimpleBean.class);
+        assertEquals("Alice", bean.getName());
+        assertEquals(30, bean.getAge());
+    }
+
+    // covers: addBeanProps field-based property path (propDef.hasField())
+    @Test
+    public void testBeanWithPublicField_fieldPropertyMapped() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        FieldBean bean = mapper.readValue("{\"label\":\"hello\"}", FieldBean.class);
+        assertEquals("hello", bean.label);
+    }
+
+    // covers: addBeanProps creator-property path (hasCreatorProps && propDef.hasConstructorParameter())
+    @Test
+    public void testCreatorProperty_viaJsonCreator_constructedCorrectly() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        CreatorBean bean = mapper.readValue("{\"name\":\"Kay\",\"age\":22}", CreatorBean.class);
+        assertEquals("Kay", bean.getName());
+        assertEquals(22, bean.getAge());
+    }
+
+    // covers: constructSetterlessProperty path (useGettersAsSetters && Collection type)
+    @Test
+    public void testGettersAsSetters_collectionPopulatedViaGetter() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(MapperFeature.USE_GETTERS_AS_SETTERS, true);
+        CollectionBean bean = mapper.readValue("{\"items\":[\"a\",\"b\"]}", CollectionBean.class);
+        assertEquals(2, bean.getItems().size());
+        assertEquals("a", bean.getItems().get(0));
+        assertEquals("b", bean.getItems().get(1));
+    }
+
+    // covers: addBeanProps ignorals branch with ignoreUnknown=true
+    @Test
+    public void testIgnoreUnknownTrue_extraProperty_noException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        IgnoreUnknownBean bean = mapper.readValue(
+                "{\"name\":\"Bob\",\"extra\":\"ignored\"}", IgnoreUnknownBean.class);
+        assertEquals("Bob", bean.getName());
+    }
+
+    // covers: addBeanProps explicit ignored property list branch
+    @Test
+    public void testExplicitIgnoreProperties_ignoredPropertyNotFailing() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        ExplicitIgnoreBean bean = mapper.readValue(
+                "{\"name\":\"Carl\",\"secret\":\"shh\"}", ExplicitIgnoreBean.class);
+        assertEquals("Carl", bean.getName());
+    }
+
+    // covers: baseline contract - unknown property without ignoral configured throws
+    @Test
+    public void testUnknownProperty_defaultConfig_throwsJsonMappingException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            mapper.readValue("{\"name\":\"Dan\",\"unknownField\":1}", StrictBean.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+        }
+    }
+
+    // covers: constructAnySetter via AnnotatedMethod mutator
+    @Test
+    public void testAnySetterMethod_extraProperties_capturedInMap() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        AnySetterMethodBean bean = mapper.readValue(
+                "{\"name\":\"Eve\",\"foo\":\"bar\",\"num\":42}", AnySetterMethodBean.class);
+        assertEquals("Eve", bean.getName());
+        assertEquals("bar", bean.getExtra().get("foo"));
+        assertEquals(Integer.valueOf(42), bean.getExtra().get("num"));
+    }
+
+    // covers: constructAnySetter via AnnotatedField mutator (findAnySetterField branch)
+    @Test
+    public void testAnySetterField_extraProperties_capturedInMap() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        AnySetterFieldBean bean = mapper.readValue(
+                "{\"name\":\"Fay\",\"x\":\"y\",\"z\":\"w\"}", AnySetterFieldBean.class);
+        assertEquals("Fay", bean.name);
+        assertEquals("y", bean.extra.get("x"));
+        assertEquals("w", bean.extra.get("z"));
+    }
+
+    // covers: filterBeanProps / isIgnorableType branch via @JsonIgnoreType
+    @Test
+    public void testJsonIgnoreType_propertyOfIgnorableTypeSkipped() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        ContainerBean bean = mapper.readValue(
+                "{\"name\":\"j\",\"ignoredField\":{\"data\":\"whatever\"}}", ContainerBean.class);
+        assertEquals("j", bean.name);
+        assertNull(bean.ignoredField);
+    }
+
+    // covers: addReferenceProperties managed/back reference linking
+    @Test
+    public void testManagedBackReference_parentLinkedToChild() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        Parent parent = mapper.readValue(
+                "{\"name\":\"p\",\"child\":{\"name\":\"c\"}}", Parent.class);
+        assertNotNull(parent.child);
+        assertSame(parent, parent.child.parent);
+    }
+
+    // covers: addInjectables path
+    @Test
+    public void testJsonInject_injectedValueSet() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        InjectableValues.Std iv = new InjectableValues.Std();
+        iv.addValue(String.class, "injectedValue");
+        mapper.setInjectableValues(iv);
+        InjectBean bean = mapper.readValue("{\"name\":\"g\"}", InjectBean.class);
+        assertEquals("injectedValue", bean.injected);
+        assertEquals("g", bean.name);
+    }
+
+    // covers: addObjectIdReader else-branch (non-PropertyGenerator)
+    @Test
+    public void testObjectIdInfo_defaultIntSequenceGenerator_roundTrip() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"id\":1,\"name\":\"n1\",\"nested\":{\"id\":2,\"name\":\"n2\",\"nested\":null}}";
+        IdBean bean = mapper.readValue(json, IdBean.class);
+        assertEquals("n1", bean.name);
+        assertNotNull(bean.nested);
+        assertEquals("n2", bean.nested.name);
+    }
+
+    // covers: addObjectIdReader PropertyGenerator branch, resolving reference to same instance
+    @Test
+    public void testObjectIdInfo_propertyGenerator_referenceResolvedToSameInstance() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "[{\"id\":\"A\",\"name\":\"first\",\"ref\":null},"
+                + "{\"id\":\"B\",\"name\":\"second\",\"ref\":\"A\"}]";
+        PropIdBean[] beans = mapper.readValue(json, PropIdBean[].class);
+        assertEquals("first", beans[0].name);
+        assertEquals("second", beans[1].name);
+        assertSame(beans[0], beans[1].ref);
+    }
+
+    // covers: buildThrowableDeserializer - "message" ignorable, set via constructor instead
+    @Test
+    public void testThrowable_messagePassedToConstructor() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        MyException ex = mapper.readValue("{\"message\":\"boom\"}", MyException.class);
+        assertEquals("boom", ex.getMessage());
+    }
+
+    // covers: buildThrowableDeserializer - "localizedMessage" explicitly ignored, no exception
+    @Test
+    public void testThrowable_localizedMessageIgnored_noException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        MyException ex = mapper.readValue(
+                "{\"message\":\"boom\",\"localizedMessage\":\"boom localized\"}", MyException.class);
+        assertEquals("boom", ex.getMessage());
+    }
+
+    // covers: buildThrowableDeserializer addBeanProps path for a normal custom setter property
+    @Test
+    public void testThrowable_customProperty_deserializedViaSetter() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        DetailedException ex = mapper.readValue(
+                "{\"message\":\"boom\",\"detail\":\"extra info\"}", DetailedException.class);
+        assertEquals("boom", ex.getMessage());
+        assertEquals("extra info", ex.getDetail());
+    }
+}

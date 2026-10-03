@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-77-5stuy5jz/Math-77b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.math.linear.ArrayRealVectorClaudeTest::testGetLInfNorm_maxAbsoluteValue_bugCheck
+  - org.apache.commons.math.linear.ArrayRealVectorClaudeTest::testGetLInfNorm_withNegativeValues_bugCheck
+[exit 0]

@@ -1,0 +1,407 @@
+package org.apache.commons.collections;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Properties;
+import java.util.Vector;
+
+public class ExtendedPropertiesClaudeTest {
+
+    private ExtendedProperties ep;
+
+    @Before
+    public void setUp() throws Throwable {
+        ep = new ExtendedProperties();
+    }
+
+    // interpolate(): ${var} substituted with defined property value
+    @Test
+    public void testInterpolate_definedVariable_substitutesValue() throws Throwable {
+        ep.addProperty("name", "world");
+        String result = ep.interpolate("hello ${name}");
+        assertEquals("hello world", result);
+    }
+
+    // interpolate(): undefined variable is left as ${var} placeholder
+    @Test
+    public void testInterpolate_undefinedVariable_keepsPlaceholder() throws Throwable {
+        String result = ep.interpolate("hello ${missing}");
+        assertEquals("hello ${missing}", result);
+    }
+
+    // interpolateHelper(): circular reference a->b->a must throw IllegalStateException
+    @Test
+    public void testGetString_circularInterpolation_throwsIllegalStateException() throws Throwable {
+        ep.addProperty("a", "${b}");
+        ep.addProperty("b", "${a}");
+        try {
+            ep.getString("a");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // getInclude(): default value when never set
+    @Test
+    public void testGetSetInclude_defaultValue_isInclude() throws Throwable {
+        assertEquals("include", ep.getInclude());
+    }
+
+    // setInclude(null): hack converts to "" internally -> getInclude() returns null
+    @Test
+    public void testSetInclude_null_getIncludeReturnsNull() throws Throwable {
+        ep.setInclude(null);
+        assertNull(ep.getInclude());
+    }
+
+    // load(): simple key=value line parsed and stored
+    @Test
+    public void testLoad_basicKeyValue_parsesCorrectly() throws Throwable {
+        String data = "key=value\n";
+        ep.load(new ByteArrayInputStream(data.getBytes()));
+        assertEquals("value", ep.getString("key"));
+        assertTrue(ep.isInitialized());
+    }
+
+    // load(): comment and blank lines are skipped by PropertiesReader
+    @Test
+    public void testLoad_commentsAndBlankLines_areSkipped() throws Throwable {
+        String data = "# comment\n\nkey=value\n";
+        ep.load(new ByteArrayInputStream(data.getBytes()));
+        Iterator it = ep.getKeys();
+        assertTrue(it.hasNext());
+        assertEquals("key", it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // load(): trailing backslash continues value onto next line
+    @Test
+    public void testLoad_lineContinuation_concatenatesValue() throws Throwable {
+        String data = "key=part1\\\npart2\n";
+        ep.load(new ByteArrayInputStream(data.getBytes()));
+        assertEquals("part1part2", ep.getString("key"));
+    }
+
+    // load(): comma separated value becomes multiple entries
+    @Test
+    public void testLoad_commaSeparatedValue_createsMultipleEntries() throws Throwable {
+        String data = "key=a,b\n";
+        ep.load(new ByteArrayInputStream(data.getBytes()));
+        String[] arr = ep.getStringArray("key");
+        assertEquals(2, arr.length);
+        assertEquals("a", arr[0]);
+        assertEquals("b", arr[1]);
+    }
+
+    // load(): include key pointing to a non-existent file is silently skipped
+    @Test
+    public void testLoad_includeNonexistentFile_isSkippedSilently() throws Throwable {
+        String data = "include=/no/such/file/zzz.properties\nkey=value\n";
+        ep.load(new ByteArrayInputStream(data.getBytes()));
+        assertNull(ep.getProperty("include"));
+        assertEquals("value", ep.getString("key"));
+    }
+
+    // getProperty(): missing key with no defaults returns null
+    @Test
+    public void testGetProperty_missingKeyNoDefaults_returnsNull() throws Throwable {
+        assertNull(ep.getProperty("missing"));
+    }
+
+    // addProperty(): single value stored as String and marks initialized
+    @Test
+    public void testAddProperty_singleValue_storedAsStringAndInitializes() throws Throwable {
+        assertFalse(ep.isInitialized());
+        ep.addProperty("k", "v");
+        assertEquals("v", ep.getString("k"));
+        assertTrue(ep.isInitialized());
+    }
+
+    // addProperty(): second add for same key converts String to Vector of two
+    @Test
+    public void testAddProperty_duplicateKey_createsVectorOfTwo() throws Throwable {
+        ep.addProperty("k", "v1");
+        ep.addProperty("k", "v2");
+        Vector v = ep.getVector("k");
+        assertEquals(2, v.size());
+        assertEquals("v1", v.get(0));
+        assertEquals("v2", v.get(1));
+    }
+
+    // addProperty(): third add appends to existing List branch
+    @Test
+    public void testAddProperty_thirdValue_appendsToExistingList() throws Throwable {
+        ep.addProperty("k", "v1");
+        ep.addProperty("k", "v2");
+        ep.addProperty("k", "v3");
+        assertEquals(3, ep.getVector("k").size());
+    }
+
+    // addProperty(): comma-containing string is split via PropertiesTokenizer
+    @Test
+    public void testAddProperty_commaSeparatedString_splitsIntoTokens() throws Throwable {
+        ep.addProperty("list", "a,b,c");
+        String[] arr = ep.getStringArray("list");
+        assertEquals(3, arr.length);
+        assertEquals("a", arr[0]);
+        assertEquals("c", arr[2]);
+    }
+
+    // addProperty(): backslash-escaped comma is kept literal, not split
+    @Test
+    public void testAddProperty_escapedComma_keepsCommaLiteral() throws Throwable {
+        ep.addProperty("key", "a\\,b");
+        assertEquals("a,b", ep.getString("key"));
+    }
+
+    // setProperty(): clears prior value before adding, no accumulation
+    @Test
+    public void testSetProperty_replacesExistingValue_notAccumulated() throws Throwable {
+        ep.addProperty("k", "old");
+        ep.setProperty("k", "new");
+        assertEquals("new", ep.getString("k"));
+    }
+
+    // save(): writes header and key=value line for String value
+    @Test
+    public void testSave_stringValueWithHeader_writesKeyEqualsValue() throws Throwable {
+        ep.addProperty("k", "v");
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ep.save(out, "HEADER");
+        String result = out.toString();
+        assertTrue(result.indexOf("HEADER") >= 0);
+        assertTrue(result.indexOf("k=v") >= 0);
+    }
+
+    // combine(): overwrites existing key and adds new key from other instance
+    @Test
+    public void testCombine_overwritesAndMergesKeys() throws Throwable {
+        ep.addProperty("a", "old");
+        ExtendedProperties other = new ExtendedProperties();
+        other.addProperty("a", "new");
+        other.addProperty("b", "val");
+        ep.combine(other);
+        assertEquals("new", ep.getString("a"));
+        assertEquals("val", ep.getString("b"));
+    }
+
+    // clearProperty(): removes key from both map and keysAsListed
+    @Test
+    public void testClearProperty_existingKey_removesFromKeysAndMap() throws Throwable {
+        ep.addProperty("k", "v");
+        ep.clearProperty("k");
+        assertNull(ep.getProperty("k"));
+        assertFalse(ep.getKeys().hasNext());
+    }
+
+    // getKeys(): preserves insertion order
+    @Test
+    public void testGetKeys_multipleAdds_preservesInsertionOrder() throws Throwable {
+        ep.addProperty("first", "1");
+        ep.addProperty("second", "2");
+        Iterator it = ep.getKeys();
+        assertEquals("first", it.next());
+        assertEquals("second", it.next());
+    }
+
+    // getKeys(prefix): only keys starting with prefix are returned
+    @Test
+    public void testGetKeysPrefix_matchingKeys_returnsOnlyMatches() throws Throwable {
+        ep.addProperty("db.driver", "x");
+        ep.addProperty("other", "y");
+        Iterator it = ep.getKeys("db");
+        assertEquals("db.driver", it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // subset(): dotted key has prefix and separating dot stripped
+    @Test
+    public void testSubset_dottedPrefix_stripsPrefixAndDot() throws Throwable {
+        ep.addProperty("db.driver", "x");
+        ExtendedProperties sub = ep.subset("db");
+        assertEquals("x", sub.getString("driver"));
+    }
+
+    // subset(): no matching keys returns null
+    @Test
+    public void testSubset_noMatchingPrefix_returnsNull() throws Throwable {
+        ep.addProperty("other", "x");
+        assertNull(ep.subset("db"));
+    }
+
+    // getString(key,default): missing key returns interpolated default value
+    @Test
+    public void testGetString_missingKeyWithDefault_returnsDefault() throws Throwable {
+        assertEquals("def", ep.getString("missing", "def"));
+    }
+
+    // getString(): List value returns first element
+    @Test
+    public void testGetString_listValue_returnsFirstElement() throws Throwable {
+        ep.addProperty("k", "a");
+        ep.addProperty("k", "b");
+        assertEquals("a", ep.getString("k"));
+    }
+
+    // getString(): non-String/List value throws ClassCastException
+    @Test
+    public void testGetString_nonStringNonListValue_throwsClassCastException() throws Throwable {
+        ep.put("k", new Integer(5));
+        try {
+            ep.getString("k");
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // getProperties(): valid "k=v,k2=v2" tokens parsed into Properties
+    @Test
+    public void testGetProperties_validTokens_parsesKeyValuePairs() throws Throwable {
+        ep.addProperty("conf", "a=1,b=2");
+        Properties props = ep.getProperties("conf");
+        assertEquals("1", props.getProperty("a"));
+        assertEquals("2", props.getProperty("b"));
+    }
+
+    // getProperties(): token without '=' throws IllegalArgumentException
+    @Test
+    public void testGetProperties_malformedToken_throwsIllegalArgumentException() throws Throwable {
+        ep.addProperty("conf", "novalue");
+        try {
+            ep.getProperties("conf");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // getStringArray(): missing key with no defaults returns empty array
+    @Test
+    public void testGetStringArray_missingKeyNoDefaults_returnsEmptyArray() throws Throwable {
+        String[] arr = ep.getStringArray("missing");
+        assertEquals(0, arr.length);
+    }
+
+    // getBoolean(): valid "yes" keyword maps to true
+    @Test
+    public void testGetBoolean_validTrueKeyword_returnsTrue() throws Throwable {
+        ep.addProperty("flag", "yes");
+        assertTrue(ep.getBoolean("flag"));
+    }
+
+    // getBoolean(key): missing key throws NoSuchElementException
+    @Test
+    public void testGetBoolean_missingKey_throwsNoSuchElementException() throws Throwable {
+        try {
+            ep.getBoolean("missing");
+            fail("expected NoSuchElementException");
+        } catch (NoSuchElementException expected) {
+        }
+    }
+
+    // getBoolean(key, boolean default): missing key returns primitive default
+    @Test
+    public void testGetBoolean_withPrimitiveDefault_missingKeyReturnsDefault() throws Throwable {
+        assertFalse(ep.getBoolean("missing", false));
+    }
+
+
+
+    // getBoolean(): non-Boolean/non-String value throws ClassCastException
+    @Test
+    public void testGetBoolean_nonBooleanNonStringValue_throwsClassCastException() throws Throwable {
+        ep.put("flag", new Integer(1));
+        try {
+            ep.getBoolean("flag", Boolean.FALSE);
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // testBoolean(): recognized keywords are case-insensitively normalized
+    @Test
+    public void testTestBoolean_validKeywordsCaseInsensitive_returnsTrueFalseString() throws Throwable {
+        assertEquals("true", ep.testBoolean("TRUE"));
+        assertEquals("false", ep.testBoolean("No"));
+    }
+
+    // testBoolean(): unrecognized keyword returns null
+    @Test
+    public void testTestBoolean_invalidKeyword_returnsNull() throws Throwable {
+        assertNull(ep.testBoolean("maybe"));
+    }
+
+    // getByte(): invalid numeric format throws NumberFormatException
+    @Test
+    public void testGetByte_invalidFormat_throwsNumberFormatException() throws Throwable {
+        ep.addProperty("b", "notanumber");
+        try {
+            ep.getByte("b");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+        }
+    }
+
+    // getInteger(): valid numeric string parsed to int
+    @Test
+    public void testGetInteger_validValue_returnsParsedInt() throws Throwable {
+        ep.addProperty("i", "7");
+        assertEquals(7, ep.getInteger("i"));
+    }
+
+    // getLong(): valid numeric string parsed to long
+    @Test
+    public void testGetLong_validValue_returnsParsedLong() throws Throwable {
+        ep.addProperty("l", "123456789012");
+        assertEquals(123456789012L, ep.getLong("l"));
+    }
+
+    // getFloat(): valid numeric string parsed to float
+    @Test
+    public void testGetFloat_validValue_returnsParsedFloat() throws Throwable {
+        ep.addProperty("f", "3.5");
+        assertEquals(3.5f, ep.getFloat("f"), 0.0001f);
+    }
+
+    // convertProperties(): copies entries from java.util.Properties
+    @Test
+    public void testConvertProperties_fromJavaUtilProperties_copiesValues() throws Throwable {
+        Properties p = new Properties();
+        p.setProperty("a", "1");
+        ExtendedProperties converted = ExtendedProperties.convertProperties(p);
+        assertEquals("1", converted.getString("a"));
+    }
+
+    // put(): returns previous value for an existing key
+    @Test
+    public void testPut_existingKey_returnsPreviousValue() throws Throwable {
+        ep.put("k", "old");
+        Object old = ep.put("k", "new");
+        assertEquals("old", old);
+    }
+
+    // putAll(): copies entries from a plain (non-ExtendedProperties) Map
+    @Test
+    public void testPutAll_plainMap_copiesEntries() throws Throwable {
+        Map map = new Hashtable();
+        map.put("k", "v");
+        ep.putAll(map);
+        assertEquals("v", ep.getString("k"));
+    }
+
+    // remove(): returns old value and clears the property
+    @Test
+    public void testRemove_existingKey_returnsOldValueAndClearsEntry() throws Throwable {
+        ep.addProperty("k", "v");
+        Object old = ep.remove("k");
+        assertEquals("v", old);
+        assertNull(ep.getProperty("k"));
+    }
+}

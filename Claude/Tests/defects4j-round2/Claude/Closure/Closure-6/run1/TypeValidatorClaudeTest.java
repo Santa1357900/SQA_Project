@@ -1,0 +1,374 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import static com.google.javascript.rhino.jstype.JSTypeNative.ARRAY_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.BOOLEAN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NULL_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.NUMBER_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.OBJECT_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.STRING_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.UNKNOWN_TYPE;
+import static com.google.javascript.rhino.jstype.JSTypeNative.VOID_TYPE;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.Iterator;
+
+public class TypeValidatorClaudeTest {
+
+  private Compiler compiler;
+  private JSTypeRegistry registry;
+  private TypeValidator validator;
+  private NodeTraversal traversal;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    validator = new TypeValidator(compiler);
+    // Avoid relying on an uninitialized Compiler's report() infrastructure.
+    validator.setShouldReport(false);
+    registry = compiler.getTypeRegistry();
+    traversal = new NodeTraversal(compiler, new NodeTraversal.Callback() {
+      public boolean shouldTraverse(NodeTraversal t, Node n, Node parent) {
+        return true;
+      }
+      public void visit(NodeTraversal t, Node n, Node parent) {}
+    });
+  }
+
+  private JSType type(JSTypeNative nativeType) {
+    return registry.getNativeType(nativeType);
+  }
+
+  private boolean hasMismatch() {
+    return validator.getMismatches().iterator().hasNext();
+  }
+
+  // Covers: constructor initializes an empty mismatches collection.
+  @Test
+  public void testGetMismatches_initiallyEmpty() throws Throwable {
+    Iterator<TypeValidator.TypeMismatch> it = validator.getMismatches().iterator();
+    assertFalse(it.hasNext());
+  }
+
+  // Covers: expectObject true branch - object type matches object context.
+  @Test
+  public void testExpectObject_objectType_noMismatch() throws Throwable {
+    boolean result = validator.expectObject(traversal, IR.name("x"), type(OBJECT_TYPE), "msg");
+    assertTrue(result);
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectObject false branch - null type does not match object context.
+  @Test
+  public void testExpectObject_nullType_mismatch() throws Throwable {
+    boolean result = validator.expectObject(traversal, IR.name("x"), type(NULL_TYPE), "msg");
+    assertFalse(result);
+    assertTrue(hasMismatch());
+  }
+
+  // Covers: expectObject true branch on ARRAY_TYPE.
+  @Test
+  public void testExpectObject_arrayType_noMismatch() throws Throwable {
+    boolean result = validator.expectObject(traversal, IR.name("x"), type(ARRAY_TYPE), "msg");
+    assertTrue(result);
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectActualObject false branch - number is not isObject().
+  @Test
+  public void testExpectActualObject_numberType_addsMismatch() throws Throwable {
+    validator.expectActualObject(traversal, IR.name("x"), type(NUMBER_TYPE), "msg");
+    assertTrue(hasMismatch());
+  }
+
+  // Covers: expectActualObject true branch - OBJECT_TYPE.isObject() is true.
+  @Test
+  public void testExpectActualObject_objectType_noMismatch() throws Throwable {
+    validator.expectActualObject(traversal, IR.name("x"), type(OBJECT_TYPE), "msg");
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectAnyObject true branch - NO_OBJECT_TYPE is a subtype of OBJECT_TYPE.
+  @Test
+  public void testExpectAnyObject_objectType_noMismatch() throws Throwable {
+    validator.expectAnyObject(traversal, IR.name("x"), type(OBJECT_TYPE), "msg");
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectAnyObject false branch - number type can never contain an object.
+  @Test
+  public void testExpectAnyObject_numberType_mismatch() throws Throwable {
+    validator.expectAnyObject(traversal, IR.name("x"), type(NUMBER_TYPE), "msg");
+    assertTrue(hasMismatch());
+  }
+
+  // Covers: expectString true branch - string matches string context trivially.
+  @Test
+  public void testExpectString_stringType_noMismatch() throws Throwable {
+    validator.expectString(traversal, IR.name("x"), type(STRING_TYPE), "msg");
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectNumber true branch - number matches number context trivially.
+  @Test
+  public void testExpectNumber_numberType_noMismatch() throws Throwable {
+    validator.expectNumber(traversal, IR.name("x"), type(NUMBER_TYPE), "msg");
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectNumber false branch - plain object does not match number context.
+  @Test
+  public void testExpectNumber_objectType_mismatch() throws Throwable {
+    validator.expectNumber(traversal, IR.name("x"), type(OBJECT_TYPE), "msg");
+    assertTrue(hasMismatch());
+  }
+
+  // Covers: expectBitwiseable true branch via matchesNumberContext (number).
+  @Test
+  public void testExpectBitwiseable_numberType_noMismatch() throws Throwable {
+    validator.expectBitwiseable(traversal, IR.name("x"), type(NUMBER_TYPE), "msg");
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectBitwiseable true branch via allValueTypes union (void).
+  @Test
+  public void testExpectBitwiseable_voidType_noMismatch() throws Throwable {
+    validator.expectBitwiseable(traversal, IR.name("x"), type(VOID_TYPE), "msg");
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectBitwiseable true branch via allValueTypes union (string).
+  @Test
+  public void testExpectBitwiseable_stringType_noMismatch() throws Throwable {
+    validator.expectBitwiseable(traversal, IR.name("x"), type(STRING_TYPE), "msg");
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectBitwiseable false branch - object is neither numeric nor a value type.
+  @Test
+  public void testExpectBitwiseable_objectType_mismatch() throws Throwable {
+    validator.expectBitwiseable(traversal, IR.name("x"), type(OBJECT_TYPE), "msg");
+    assertTrue(hasMismatch());
+  }
+
+  // Covers: expectStringOrNumber true branch - number matches number context.
+  @Test
+  public void testExpectStringOrNumber_numberType_noMismatch() throws Throwable {
+    validator.expectStringOrNumber(traversal, IR.name("x"), type(NUMBER_TYPE), "msg");
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectNotNullOrUndefined true branch - number is not subtype of null|undefined.
+  @Test
+  public void testExpectNotNullOrUndefined_numberType_returnsTrue() throws Throwable {
+    boolean result = validator.expectNotNullOrUndefined(
+        traversal, IR.name("x"), type(NUMBER_TYPE), "msg", type(NUMBER_TYPE));
+    assertTrue(result);
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectNotNullOrUndefined false branch - null type on a non-GETPROP node.
+  @Test
+  public void testExpectNotNullOrUndefined_nullType_returnsFalseAndMismatch() throws Throwable {
+    boolean result = validator.expectNotNullOrUndefined(
+        traversal, IR.name("x"), type(NULL_TYPE), "msg", type(OBJECT_TYPE));
+    assertFalse(result);
+    assertTrue(hasMismatch());
+  }
+
+  // Covers: expectNotNullOrUndefined true branch - unknown type is exempt.
+  @Test
+  public void testExpectNotNullOrUndefined_unknownType_returnsTrue() throws Throwable {
+    boolean result = validator.expectNotNullOrUndefined(
+        traversal, IR.name("x"), type(UNKNOWN_TYPE), "msg", type(OBJECT_TYPE));
+    assertTrue(result);
+  }
+
+  // Covers: expectSwitchMatchesCase true branch - identical types can be tested for equality.
+  @Test
+  public void testExpectSwitchMatchesCase_matchingTypes_noMismatch() throws Throwable {
+    validator.expectSwitchMatchesCase(traversal, IR.block(), type(NUMBER_TYPE), type(NUMBER_TYPE));
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectIndexMatch precondition failure - non-GETELEM node throws.
+  @Test
+  public void testExpectIndexMatch_notGetElemNode_throwsIllegalStateException() throws Throwable {
+    try {
+      validator.expectIndexMatch(traversal, IR.name("x"), type(OBJECT_TYPE), type(STRING_TYPE));
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Covers: expectCanAssignToPropertyOf true branch - compatible types.
+  @Test
+  public void testExpectCanAssignToPropertyOf_compatibleTypes_returnsTrue() throws Throwable {
+    Node owner = IR.name("obj");
+    boolean result = validator.expectCanAssignToPropertyOf(
+        traversal, IR.name("n"), type(NUMBER_TYPE), type(NUMBER_TYPE), owner, "prop");
+    assertTrue(result);
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectCanAssignToPropertyOf false branch - incompatible types, unknown owner.
+  @Test
+  public void testExpectCanAssignToPropertyOf_incompatibleTypes_returnsFalse() throws Throwable {
+    Node owner = IR.name("obj");
+    boolean result = validator.expectCanAssignToPropertyOf(
+        traversal, IR.name("n"), type(STRING_TYPE), type(NUMBER_TYPE), owner, "prop");
+    assertFalse(result);
+    assertTrue(hasMismatch());
+  }
+
+  // Covers: expectCanAssignTo true branch - compatible types.
+  @Test
+  public void testExpectCanAssignTo_compatibleTypes_returnsTrue() throws Throwable {
+    boolean result = validator.expectCanAssignTo(
+        traversal, IR.name("n"), type(NUMBER_TYPE), type(NUMBER_TYPE), "msg");
+    assertTrue(result);
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectCanAssignTo false branch - incompatible primitive types.
+  @Test
+  public void testExpectCanAssignTo_incompatibleTypes_returnsFalse() throws Throwable {
+    boolean result = validator.expectCanAssignTo(
+        traversal, IR.name("n"), type(STRING_TYPE), type(NUMBER_TYPE), "msg");
+    assertFalse(result);
+    assertTrue(hasMismatch());
+  }
+
+  // Covers: expectArgumentMatchesParameter true branch - compatible argument type.
+  @Test
+  public void testExpectArgumentMatchesParameter_compatible_noMismatch() throws Throwable {
+    Node callNode = IR.block();
+    validator.expectArgumentMatchesParameter(
+        traversal, IR.number(1), type(NUMBER_TYPE), type(NUMBER_TYPE), callNode, 1);
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectCanOverride true branch - overriding type compatible with hidden type.
+  @Test
+  public void testExpectCanOverride_compatible_noRegistration() throws Throwable {
+    validator.expectCanOverride(
+        traversal, IR.name("n"), type(NUMBER_TYPE), type(NUMBER_TYPE), "prop", type(OBJECT_TYPE));
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectCanOverride false branch - incompatible override registers a mismatch.
+  @Test
+  public void testExpectCanOverride_incompatible_registersMismatch() throws Throwable {
+    validator.expectCanOverride(
+        traversal, IR.name("n"), type(STRING_TYPE), type(NUMBER_TYPE), "prop", type(OBJECT_TYPE));
+    assertTrue(hasMismatch());
+  }
+
+  // Covers: expectCanCast true branch - identical types are assignable both ways.
+  @Test
+  public void testExpectCanCast_subtypeCast_noMismatch() throws Throwable {
+    validator.expectCanCast(traversal, IR.name("n"), type(NUMBER_TYPE), type(NUMBER_TYPE));
+    assertFalse(hasMismatch());
+  }
+
+  // Covers: expectCanCast false branch - unrelated primitive types register INVALID_CAST mismatch.
+  @Test
+  public void testExpectCanCast_incompatibleTypes_registersMismatch() throws Throwable {
+    validator.expectCanCast(traversal, IR.name("n"), type(STRING_TYPE), type(NUMBER_TYPE));
+    assertTrue(hasMismatch());
+  }
+
+  // Covers: getReadableJSTypeName fallback to Node.getQualifiedName() for a plain NAME node.
+  @Test
+  public void testGetReadableJSTypeName_nameNodeNoType_returnsQualifiedName() throws Throwable {
+    Node n = IR.name("foo");
+    String name = validator.getReadableJSTypeName(n, false);
+    assertEquals("foo", name);
+  }
+
+  // Covers: getReadableJSTypeName dereference=true branch still falls back to qualified name.
+  @Test
+  public void testGetReadableJSTypeName_dereferenceTrueNoType_returnsQualifiedName() throws Throwable {
+    Node n = IR.name("bar");
+    String name = validator.getReadableJSTypeName(n, true);
+    assertEquals("bar", name);
+  }
+
+  // Covers: static diagnostic type fields are properly defined (class initialization).
+  @Test
+  public void testDiagnosticTypes_areDefined() throws Throwable {
+    assertNotNull(TypeValidator.TYPE_MISMATCH_WARNING);
+    assertNotNull(TypeValidator.INVALID_CAST);
+    assertNotNull(TypeValidator.MISSING_EXTENDS_TAG_WARNING);
+    assertNotNull(TypeValidator.DUP_VAR_DECLARATION);
+    assertNotNull(TypeValidator.HIDDEN_PROPERTY_MISMATCH);
+    assertNotNull(TypeValidator.INTERFACE_METHOD_NOT_IMPLEMENTED);
+    assertNotNull(TypeValidator.HIDDEN_INTERFACE_PROPERTY_MISMATCH);
+    assertNotNull(TypeValidator.UNKNOWN_TYPEOF_VALUE);
+    assertNotNull(TypeValidator.ILLEGAL_PROPERTY_ACCESS);
+    assertNotNull(TypeValidator.ALL_DIAGNOSTICS);
+  }
+
+  // Covers: TypeMismatch.equals is symmetric regardless of argument order.
+  @Test
+  public void testTypeMismatch_equalsSymmetric() throws Throwable {
+    TypeValidator.TypeMismatch m1 =
+        new TypeValidator.TypeMismatch(type(NUMBER_TYPE), type(STRING_TYPE), null);
+    TypeValidator.TypeMismatch m2 =
+        new TypeValidator.TypeMismatch(type(STRING_TYPE), type(NUMBER_TYPE), null);
+    assertTrue(m1.equals(m2));
+    assertTrue(m2.equals(m1));
+  }
+
+  // Covers: TypeMismatch.equals returns false for differing type pairs.
+  @Test
+  public void testTypeMismatch_notEqualsDifferentTypes() throws Throwable {
+    TypeValidator.TypeMismatch m1 =
+        new TypeValidator.TypeMismatch(type(NUMBER_TYPE), type(STRING_TYPE), null);
+    TypeValidator.TypeMismatch m2 =
+        new TypeValidator.TypeMismatch(type(NUMBER_TYPE), type(BOOLEAN_TYPE), null);
+    assertFalse(m1.equals(m2));
+  }
+
+  // Covers: TypeMismatch.toString formats both type names.
+  @Test
+  public void testTypeMismatch_toString_containsTypeNames() throws Throwable {
+    TypeValidator.TypeMismatch m =
+        new TypeValidator.TypeMismatch(type(NUMBER_TYPE), type(STRING_TYPE), null);
+    String s = m.toString();
+    assertTrue(s.contains("number"));
+    assertTrue(s.contains("string"));
+  }
+
+  // Covers: getMismatches accumulates multiple distinct violations across calls.
+  @Test
+  public void testGetMismatches_accumulatesMultipleMismatches() throws Throwable {
+    validator.expectActualObject(traversal, IR.name("a"), type(NUMBER_TYPE), "m1");
+    validator.expectCanAssignTo(traversal, IR.name("b"), type(STRING_TYPE), type(NUMBER_TYPE), "m2");
+    int count = 0;
+    Iterator<TypeValidator.TypeMismatch> it = validator.getMismatches().iterator();
+    while (it.hasNext()) {
+      it.next();
+      count++;
+    }
+    assertEquals(2, count);
+  }
+
+  // Covers: setShouldReport(false) still allows mismatches to be recorded.
+  @Test
+  public void testSetShouldReport_falseStillRegistersMismatch() throws Throwable {
+    validator.setShouldReport(false);
+    boolean result = validator.expectCanAssignTo(
+        traversal, IR.name("n"), type(STRING_TYPE), type(NUMBER_TYPE), "msg");
+    assertFalse(result);
+    assertTrue(hasMismatch());
+  }
+}

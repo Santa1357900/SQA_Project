@@ -1,0 +1,893 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Chart (Defects4J bug Chart-16)
+package: org.jfree.data.category
+class_under_test: DefaultIntervalCategoryDataset
+test_class_to_write: DefaultIntervalCategoryDatasetClaudeTest
+</target>
+
+<project_notes>
+JFreeChart: สร้าง dataset ด้วย DefaultCategoryDataset / DefaultXYDataset / TimeSeries ที่มีอยู่จริง หลีกเลี่ยงการวาดจริงด้วย Graphics2D ถ้าจำเป็นให้ใช้ new BufferedImage(10,10,BufferedImage.TYPE_INT_RGB).createGraphics()
+</project_notes>
+
+<source_code>
+/* ===========================================================
+ * JFreeChart : a free chart library for the Java(tm) platform
+ * ===========================================================
+ *
+ * (C) Copyright 2000-2008, by Object Refinery Limited and Contributors.
+ *
+ * Project Info:  http://www.jfree.org/jfreechart/index.html
+ *
+ * This library is free software; you can redistribute it and/or modify it 
+ * under the terms of the GNU Lesser General Public License as published by 
+ * the Free Software Foundation; either version 2.1 of the License, or 
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful, but 
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY 
+ * or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public 
+ * License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, 
+ * USA.  
+ *
+ * [Java is a trademark or registered trademark of Sun Microsystems, Inc. 
+ * in the United States and other countries.]
+ *
+ * -----------------------------------
+ * DefaultIntervalCategoryDataset.java
+ * -----------------------------------
+ * (C) Copyright 2002-2008, by Jeremy Bowman and Contributors.
+ *
+ * Original Author:  Jeremy Bowman;
+ * Contributor(s):   David Gilbert (for Object Refinery Limited);
+ *
+ * Changes
+ * -------
+ * 29-Apr-2002 : Version 1, contributed by Jeremy Bowman (DG);
+ * 24-Oct-2002 : Amendments for changes made to the dataset interface (DG);
+ * ------------- JFREECHART 1.0.x ---------------------------------------------
+ * 08-Mar-2007 : Added equals() and clone() overrides (DG);
+ * 20-Jun-2007 : Removed deprecated code (DG);
+ * 25-Feb-2008 : Fix for the special case where the dataset is empty, see bug 
+ *               1897580 (DG)
+ *
+ */
+
+package org.jfree.data.category;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.ResourceBundle;
+
+import org.jfree.data.DataUtilities;
+import org.jfree.data.UnknownKeyException;
+import org.jfree.data.general.AbstractSeriesDataset;
+
+/**
+ * A convenience class that provides a default implementation of the
+ * {@link IntervalCategoryDataset} interface.
+ * <p>
+ * The standard constructor accepts data in a two dimensional array where the
+ * first dimension is the series, and the second dimension is the category.
+ */
+public class DefaultIntervalCategoryDataset extends AbstractSeriesDataset
+        implements IntervalCategoryDataset {
+
+    /** The series keys. */
+    private Comparable[] seriesKeys;
+
+    /** The category keys. */
+    private Comparable[] categoryKeys;
+
+    /** Storage for the start value data. */
+    private Number[][] startData;
+
+    /** Storage for the end value data. */
+    private Number[][] endData;
+
+    /**
+     * Creates a new dataset using the specified data values and automatically
+     * generated series and category keys.
+     *
+     * @param starts  the starting values for the intervals (<code>null</code>
+     *                not permitted).
+     * @param ends  the ending values for the intervals (<code>null</code> not
+     *                permitted).
+     */
+    public DefaultIntervalCategoryDataset(double[][] starts, double[][] ends) {
+        this(DataUtilities.createNumberArray2D(starts),
+                DataUtilities.createNumberArray2D(ends));
+    }
+
+    /**
+     * Constructs a dataset and populates it with data from the array.
+     * <p>
+     * The arrays are indexed as data[series][category].  Series and category
+     * names are automatically generated - you can change them using the
+     * {@link #setSeriesKeys(Comparable[])} and 
+     * {@link #setCategoryKeys(Comparable[])} methods.
+     *
+     * @param starts  the start values data.
+     * @param ends  the end values data.
+     */
+    public DefaultIntervalCategoryDataset(Number[][] starts, Number[][] ends) {
+        this(null, null, starts, ends);
+    }
+
+    /**
+     * Constructs a DefaultIntervalCategoryDataset, populates it with data
+     * from the arrays, and uses the supplied names for the series.
+     * <p>
+     * Category names are generated automatically ("Category 1", "Category 2",
+     * etc).
+     *
+     * @param seriesNames  the series names (if <code>null</code>, series names
+     *         will be generated automatically).
+     * @param starts  the start values data, indexed as data[series][category].
+     * @param ends  the end values data, indexed as data[series][category].
+     */
+    public DefaultIntervalCategoryDataset(String[] seriesNames,
+                                          Number[][] starts,
+                                          Number[][] ends) {
+
+        this(seriesNames, null, starts, ends);
+
+    }
+
+    /**
+     * Constructs a DefaultIntervalCategoryDataset, populates it with data
+     * from the arrays, and uses the supplied names for the series and the
+     * supplied objects for the categories.
+     *
+     * @param seriesKeys  the series keys (if <code>null</code>, series keys
+     *         will be generated automatically).
+     * @param categoryKeys  the category keys (if <code>null</code>, category 
+     *         keys will be generated automatically).
+     * @param starts  the start values data, indexed as data[series][category].
+     * @param ends  the end values data, indexed as data[series][category].
+     */
+    public DefaultIntervalCategoryDataset(Comparable[] seriesKeys,
+                                          Comparable[] categoryKeys,
+                                          Number[][] starts,
+                                          Number[][] ends) {
+
+        this.startData = starts;
+        this.endData = ends;
+
+        if (starts != null && ends != null) {
+
+            String baseName = "org.jfree.data.resources.DataPackageResources";
+            ResourceBundle resources = ResourceBundle.getBundle(baseName);
+
+            int seriesCount = starts.length;
+            if (seriesCount != ends.length) {
+                String errMsg = "DefaultIntervalCategoryDataset: the number "
+                    + "of series in the start value dataset does "
+                    + "not match the number of series in the end "
+                    + "value dataset.";
+                throw new IllegalArgumentException(errMsg);
+            }
+            if (seriesCount > 0) {
+
+                // set up the series names...
+                if (seriesKeys != null) {
+
+                    if (seriesKeys.length != seriesCount) {
+                        throw new IllegalArgumentException(
+                                "The number of series keys does not "
+                                + "match the number of series in the data.");
+                    }
+
+                    this.seriesKeys = seriesKeys;
+                }
+                else {
+                    String prefix = resources.getString(
+                            "series.default-prefix") + " ";
+                    this.seriesKeys = generateKeys(seriesCount, prefix);
+                }
+
+                // set up the category names...
+                int categoryCount = starts[0].length;
+                if (categoryCount != ends[0].length) {
+                    String errMsg = "DefaultIntervalCategoryDataset: the "
+                                + "number of categories in the start value "
+                                + "dataset does not match the number of "
+                                + "categories in the end value dataset.";
+                    throw new IllegalArgumentException(errMsg);
+                }
+                if (categoryKeys != null) {
+                    if (categoryKeys.length != categoryCount) {
+                        throw new IllegalArgumentException(
+                                "The number of category keys does not match "
+                                + "the number of categories in the data.");
+                    }
+                    this.categoryKeys = categoryKeys;
+                }
+                else {
+                    String prefix = resources.getString(
+                            "categories.default-prefix") + " ";
+                    this.categoryKeys = generateKeys(categoryCount, prefix);
+                }
+
+            }
+            else {
+                this.seriesKeys = null;
+                this.categoryKeys = null;
+            }
+        }
+
+    }
+
+    /**
+     * Returns the number of series in the dataset (possibly zero).
+     *
+     * @return The number of series in the dataset.
+     * 
+     * @see #getRowCount()
+     * @see #getCategoryCount()
+     */
+    public int getSeriesCount() {
+        int result = 0;
+        if (this.startData != null) {
+            result = this.startData.length;
+        }
+        return result;
+    }
+
+    /**
+     * Returns a series index.
+     *
+     * @param seriesKey  the series key.
+     *
+     * @return The series index.
+     * 
+     * @see #getRowIndex(Comparable)
+     * @see #getSeriesKey(int)
+     */
+    public int getSeriesIndex(Comparable seriesKey) {
+        int result = -1;
+        for (int i = 0; i < this.seriesKeys.length; i++) {
+            if (seriesKey.equals(this.seriesKeys[i])) {
+                result = i;
+                break;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Returns the name of the specified series.
+     *
+     * @param series  the index of the required series (zero-based).
+     *
+     * @return The name of the specified series.
+     * 
+     * @see #getSeriesIndex(Comparable)
+     */
+    public Comparable getSeriesKey(int series) {
+        if ((series >= getSeriesCount()) || (series < 0)) {
+            throw new IllegalArgumentException("No such series : " + series);
+        }
+        return this.seriesKeys[series];
+    }
+
+    /**
+     * Sets the names of the series in the dataset.
+     *
+     * @param seriesKeys  the new keys (<code>null</code> not permitted, the 
+     *         length of the array must match the number of series in the 
+     *         dataset).
+     *         
+     * @see #setCategoryKeys(Comparable[])
+     */
+    public void setSeriesKeys(Comparable[] seriesKeys) {
+        if (seriesKeys == null) {
+            throw new IllegalArgumentException("Null 'seriesKeys' argument.");
+        }
+        if (seriesKeys.length != getSeriesCount()) {
+            throw new IllegalArgumentException(
+                    "The number of series keys does not match the data.");
+        }
+        this.seriesKeys = seriesKeys;
+        fireDatasetChanged();
+    }
+
+    /**
+     * Returns the number of categories in the dataset.
+     *
+     * @return The number of categories in the dataset.
+     * 
+     * @see #getColumnCount()
+     */
+    public int getCategoryCount() {
+        int result = 0;
+        if (this.startData != null) {
+            if (getSeriesCount() > 0) {
+                result = this.startData[0].length;
+            }
+        }
+        return result;
+    }
+    
+    /**
+     * Returns a list of the categories in the dataset.  This method supports 
+     * the {@link CategoryDataset} interface.
+     *
+     * @return A list of the categories in the dataset.
+     * 
+     * @see #getRowKeys()
+     */
+    public List getColumnKeys() {
+        // the CategoryDataset interface expects a list of categories, but
+        // we've stored them in an array...
+        if (this.categoryKeys == null) {
+            return new ArrayList();
+        }
+        else {
+            return Collections.unmodifiableList(Arrays.asList(
+                    this.categoryKeys));
+        }
+    }
+
+    /**
+     * Sets the categories for the dataset.
+     *
+     * @param categoryKeys  an array of objects representing the categories in 
+     *                      the dataset.
+     *                      
+     * @see #getRowKeys()
+     * @see #setSeriesKeys(Comparable[])
+     */
+    public void setCategoryKeys(Comparable[] categoryKeys) {
+        if (categoryKeys == null) {
+            throw new IllegalArgumentException("Null 'categoryKeys' argument.");
+        }
+        if (categoryKeys.length != this.startData[0].length) {
+            throw new IllegalArgumentException(
+                    "The number of categories does not match the data.");
+        }
+        for (int i = 0; i < categoryKeys.length; i++) {
+            if (categoryKeys[i] == null) {
+                throw new IllegalArgumentException(
+                    "DefaultIntervalCategoryDataset.setCategoryKeys(): "
+                    + "null category not permitted.");
+            }
+        }
+        this.categoryKeys = categoryKeys;
+        fireDatasetChanged();
+    }
+
+    /**
+     * Returns the data value for one category in a series.
+     * <P>
+     * This method is part of the CategoryDataset interface.  Not particularly
+     * meaningful for this class...returns the end value.
+     * 
+     * @param series    The required series (zero based index).
+     * @param category  The required category.
+     * 
+     * @return The data value for one category in a series (null possible).
+     * 
+     * @see #getEndValue(Comparable, Comparable)
+     */
+    public Number getValue(Comparable series, Comparable category) {
+        int seriesIndex = getSeriesIndex(series);
+        if (seriesIndex < 0) {
+            throw new UnknownKeyException("Unknown 'series' key.");
+        }
+        int itemIndex = getColumnIndex(category);
+        if (itemIndex < 0) {
+            throw new UnknownKeyException("Unknown 'category' key.");
+        }
+        return getValue(seriesIndex, itemIndex);
+    }
+
+    /**
+     * Returns the data value for one category in a series.
+     * <P>
+     * This method is part of the CategoryDataset interface.  Not particularly
+     * meaningful for this class...returns the end value.
+     *
+     * @param series  the required series (zero based index).
+     * @param category  the required category.
+     *
+     * @return The data value for one category in a series (null possible).
+     * 
+     * @see #getEndValue(int, int)
+     */
+    public Number getValue(int series, int category) {
+        return getEndValue(series, category);
+    }
+
+    /**
+     * Returns the start data value for one category in a series.
+     *
+     * @param series  the required series.
+     * @param category  the required category.
+     *
+     * @return The start data value for one category in a series 
+     *         (possibly <code>null</code>).
+     *         
+     * @see #getStartValue(int, int)
+     */
+    public Number getStartValue(Comparable series, Comparable category) {
+        int seriesIndex = getSeriesIndex(series);
+        if (seriesIndex < 0) {
+            throw new UnknownKeyException("Unknown 'series' key.");
+        }
+        int itemIndex = getColumnIndex(category);
+        if (itemIndex < 0) {
+            throw new UnknownKeyException("Unknown 'category' key.");
+        }
+        return getStartValue(seriesIndex, itemIndex);
+    }
+
+    /**
+     * Returns the start data value for one category in a series.
+     *
+     * @param series  the required series (zero based index).
+     * @param category  the required category.
+     *
+     * @return The start data value for one category in a series 
+     *         (possibly <code>null</code>).
+     *         
+     * @see #getStartValue(Comparable, Comparable)
+     */
+    public Number getStartValue(int series, int category) {
+
+        // check arguments...
+        if ((series < 0) || (series >= getSeriesCount())) {
+            throw new IllegalArgumentException(
+                "DefaultIntervalCategoryDataset.getValue(): "
+                + "series index out of range.");
+        }
+
+        if ((category < 0) || (category >= getCategoryCount())) {
+            throw new IllegalArgumentException(
+                "DefaultIntervalCategoryDataset.getValue(): "
+                + "category index out of range.");
+        }
+
+        // fetch the value...
+        return this.startData[series][category];
+
+    }
+
+    /**
+     * Returns the end data value for one category in a series.
+     *
+     * @param series  the required series.
+     * @param category  the required category.
+     *
+     * @return The end data value for one category in a series (null possible).
+     * 
+     * @see #getEndValue(int, int)
+     */
+    public Number getEndValue(Comparable series, Comparable category) {
+        int seriesIndex = getSeriesIndex(series);
+        if (seriesIndex < 0) {
+            throw new UnknownKeyException("Unknown 'series' key.");
+        }
+        int itemIndex = getColumnIndex(category);
+        if (itemIndex < 0) {
+            throw new UnknownKeyException("Unknown 'category' key.");
+        }
+        return getEndValue(seriesIndex, itemIndex);
+    }
+
+    /**
+     * Returns the end data value for one category in a series.
+     *
+     * @param series  the required series (zero based index).
+     * @param category  the required category.
+     *
+     * @return The end data value for one category in a series (null possible).
+     * 
+     * @see #getEndValue(Comparable, Comparable)
+     */
+    public Number getEndValue(int series, int category) {
+        if ((series < 0) || (series >= getSeriesCount())) {
+            throw new IllegalArgumentException(
+                "DefaultIntervalCategoryDataset.getValue(): "
+                + "series index out of range.");
+        }
+
+        if ((category < 0) || (category >= getCategoryCount())) {
+            throw new IllegalArgumentException(
+                "DefaultIntervalCategoryDataset.getValue(): "
+                + "category index out of range.");
+        }
+
+        return this.endData[series][category];
+    }
+
+    /**
+     * Sets the start data value for one category in a series.
+     * 
+     * @param series  the series (zero-based index).
+     * @param category  the category.
+     * 
+     * @param value The value.
+     * 
+     * @see #setEndValue(int, Comparable, Number)
+     */
+    public void setStartValue(int series, Comparable category, Number value) {
+
+        // does the series exist?
+        if ((series < 0) || (series > getSeriesCount() - 1)) {
+            throw new IllegalArgumentException(
+                "DefaultIntervalCategoryDataset.setValue: "
+                + "series outside valid range.");
+        }
+
+        // is the category valid?
+        int categoryIndex = getCategoryIndex(category);
+        if (categoryIndex < 0) {
+            throw new IllegalArgumentException(
+                "DefaultIntervalCategoryDataset.setValue: "
+                + "unrecognised category.");
+        }
+
+        // update the data...
+        this.startData[series][categoryIndex] = value;
+        fireDatasetChanged();
+
+    }
+
+    /**
+     * Sets the end data value for one category in a series.
+     *
+     * @param series  the series (zero-based index).
+     * @param category  the category.
+     *
+     * @param value the value.
+     * 
+     * @see #setStartValue(int, Comparable, Number)
+     */
+    public void setEndValue(int series, Comparable category, Number value) {
+
+        // does the series exist?
+        if ((series < 0) || (series > getSeriesCount() - 1)) {
+            throw new IllegalArgumentException(
+                "DefaultIntervalCategoryDataset.setValue: "
+                + "series outside valid range.");
+        }
+
+        // is the category valid?
+        int categoryIndex = getCategoryIndex(category);
+        if (categoryIndex < 0) {
+            throw new IllegalArgumentException(
+                "DefaultIntervalCategoryDataset.setValue: "
+                + "unrecognised category.");
+        }
+
+        // update the data...
+        this.endData[series][categoryIndex] = value;
+        fireDatasetChanged();
+
+    }
+
+    /**
+     * Returns the index for the given category.
+     *
+     * @param category  the category (<code>null</code> not permitted).
+     *
+     * @return The index.
+     * 
+     * @see #getColumnIndex(Comparable)
+     */
+    public int getCategoryIndex(Comparable category) {
+        int result = -1;
+        for (int i = 0; i < this.categoryKeys.length; i++) {
+            if (category.equals(this.categoryKeys[i])) {
+                result = i;
+                break;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Generates an array of keys, by appending a space plus an integer
+     * (starting with 1) to the supplied prefix string.
+     *
+     * @param count  the number of keys required.
+     * @param prefix  the name prefix.
+     *
+     * @return An array of <i>prefixN</i> with N = { 1 .. count}.
+     */
+    private Comparable[] generateKeys(int count, String prefix) {
+        Comparable[] result = new Comparable[count];
+        String name;
+        for (int i = 0; i < count; i++) {
+            name = prefix + (i + 1);
+            result[i] = name;
+        }
+        return result;
+    }
+
+    /**
+     * Returns a column key.
+     *
+     * @param column  the column index.
+     *
+     * @return The column key.
+     * 
+     * @see #getRowKey(int)
+     */
+    public Comparable getColumnKey(int column) {
+        return this.categoryKeys[column];
+    }
+
+    /**
+     * Returns a column index.
+     *
+     * @param columnKey  the column key (<code>null</code> not permitted).
+     *
+     * @return The column index.
+     * 
+     * @see #getCategoryIndex(Comparable)
+     */
+    public int getColumnIndex(Comparable columnKey) {
+        if (columnKey == null) {
+            throw new IllegalArgumentException("Null 'columnKey' argument.");
+        }
+        return getCategoryIndex(columnKey);
+    }
+
+    /**
+     * Returns a row index.
+     *
+     * @param rowKey  the row key.
+     *
+     * @return The row index.
+     * 
+     * @see #getSeriesIndex(Comparable)
+     */
+    public int getRowIndex(Comparable rowKey) {
+        return getSeriesIndex(rowKey);
+    }
+
+    /**
+     * Returns a list of the series in the dataset.  This method supports the 
+     * {@link CategoryDataset} interface.
+     *
+     * @return A list of the series in the dataset.
+     * 
+     * @see #getColumnKeys()
+     */
+    public List getRowKeys() {
+        // the CategoryDataset interface expects a list of series, but
+        // we've stored them in an array...
+        if (this.seriesKeys == null) {
+            return new java.util.ArrayList();
+        }
+        else {
+            return Collections.unmodifiableList(Arrays.asList(this.seriesKeys));
+        }
+    }
+
+    /**
+     * Returns the name of the specified series.
+     *
+     * @param row  the index of the required row/series (zero-based).
+     *
+     * @return The name of the specified series.
+     * 
+     * @see #getColumnKey(int)
+     */
+    public Comparable getRowKey(int row) {
+        if ((row >= getRowCount()) || (row < 0)) {
+            throw new IllegalArgumentException(
+                    "The 'row' argument is out of bounds.");
+        }
+        return this.seriesKeys[row];
+    }
+
+    /**
+     * Returns the number of categories in the dataset.  This method is part of 
+     * the {@link CategoryDataset} interface.
+     *
+     * @return The number of categories in the dataset.
+     * 
+     * @see #getCategoryCount()
+     * @see #getRowCount()
+     */
+    public int getColumnCount() {
+        return this.categoryKeys.length;
+    }
+
+    /**
+     * Returns the number of series in the dataset (possibly zero).
+     *
+     * @return The number of series in the dataset.
+     * 
+     * @see #getSeriesCount()
+     * @see #getColumnCount()
+     */
+    public int getRowCount() {
+        return this.seriesKeys.length;
+    }
+    
+    /**
+     * Tests this dataset for equality with an arbitrary object.
+     * 
+     * @param obj  the object (<code>null</code> permitted).
+     * 
+     * @return A boolean.
+     */
+    public boolean equals(Object obj) {
+        if (obj == this) {
+            return true;
+        }
+        if (!(obj instanceof DefaultIntervalCategoryDataset)) {
+            return false;
+        }
+        DefaultIntervalCategoryDataset that 
+                = (DefaultIntervalCategoryDataset) obj;
+        if (!Arrays.equals(this.seriesKeys, that.seriesKeys)) {
+            return false;
+        }
+        if (!Arrays.equals(this.categoryKeys, that.categoryKeys)) {
+            return false;
+        }
+        if (!equal(this.startData, that.startData)) {
+            return false;
+        }
+        if (!equal(this.endData, that.endData)) {
+            return false;
+        }
+        // seem to be the same...
+        return true;
+    }
+
+    /**
+     * Returns a clone of this dataset.
+     * 
+     * @return A clone.
+     * 
+     * @throws CloneNotSupportedException if there is a problem cloning the
+     *         dataset.
+     */
+    public Object clone() throws CloneNotSupportedException {
+        DefaultIntervalCategoryDataset clone 
+                = (DefaultIntervalCategoryDataset) super.clone();
+        clone.categoryKeys = (Comparable[]) this.categoryKeys.clone();
+        clone.seriesKeys = (Comparable[]) this.seriesKeys.clone();
+        clone.startData = clone(this.startData);
+        clone.endData = clone(this.endData);
+        return clone;
+    }
+    
+    /**
+     * Tests two double[][] arrays for equality.
+     * 
+     * @param array1  the first array (<code>null</code> permitted).
+     * @param array2  the second arrray (<code>null</code> permitted).
+     * 
+     * @return A boolean.
+     */
+    private static boolean equal(Number[][] array1, Number[][] array2) {
+        if (array1 == null) {
+            return (array2 == null);
+        }
+        if (array2 == null) {
+            return false;
+        }
+        if (array1.length != array2.length) {
+            return false;
+        }
+        for (int i = 0; i < array1.length; i++) {
+            if (!Arrays.equals(array1[i], array2[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    /**
+     * Clones a two dimensional array of <code>Number</code> objects.
+     * 
+     * @param array  the array (<code>null</code> not permitted).
+     * 
+     * @return A clone of the array.
+     */
+    private static Number[][] clone(Number[][] array) {
+        if (array == null) {
+            throw new IllegalArgumentException("Null 'array' argument.");
+        }
+        Number[][] result = new Number[array.length][];
+        for (int i = 0; i < array.length; i++) {
+            Number[] child = array[i];
+            Number[] copychild = new Number[child.length];
+            System.arraycopy(child, 0, copychild, 0, child.length);
+            result[i] = copychild;
+        }
+        return result;
+    }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ DefaultIntervalCategoryDatasetClaudeTest ใน package org.jfree.data.category เพื่อทดสอบคลาส DefaultIntervalCategoryDataset ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.jfree.data.category;` เท่านั้น
+</instructions>

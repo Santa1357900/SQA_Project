@@ -1,0 +1,267 @@
+package com.google.javascript.rhino.jstype;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.Node;
+
+public class ArrowTypeClaudeTest {
+
+  private JSTypeRegistry registry;
+  private JSType numberType;
+  private JSType stringType;
+  private JSType unknownType;
+
+  @Before
+  public void setUp() throws Throwable {
+    registry = new JSTypeRegistry(null);
+    numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    stringType = registry.getNativeType(JSTypeNative.STRING_TYPE);
+    unknownType = registry.getNativeType(JSTypeNative.UNKNOWN_TYPE);
+  }
+
+  // Constructor: null parameters -> auto var-args unknown param list; null returnType -> unknown; returnTypeInferred defaults false
+  @Test
+  public void testConstructor_nullParametersAndReturnType_usesDefaults() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, null);
+    assertNotNull(arrow.parameters);
+    assertTrue(arrow.returnType.isUnknownType());
+    assertFalse(arrow.returnTypeInferred);
+  }
+
+  // Constructor: explicit non-null parameters/returnType are stored by reference, 3-arg ctor defaults returnTypeInferred false
+  @Test
+  public void testConstructor_explicitParametersAndReturnType_storesReferences() throws Throwable {
+    Node params = registry.createParametersWithVarArgs(numberType);
+    ArrowType arrow = new ArrowType(registry, params, numberType);
+    assertSame(params, arrow.parameters);
+    assertSame(numberType, arrow.returnType);
+    assertFalse(arrow.returnTypeInferred);
+  }
+
+  // Constructor: 4-arg ctor with returnTypeInferred = true sets the field accordingly
+  @Test
+  public void testConstructor_fourArgReturnTypeInferredTrue_setsFlag() throws Throwable {
+    Node params = registry.createParametersWithVarArgs(numberType);
+    ArrowType arrow = new ArrowType(registry, params, numberType, true);
+    assertTrue(arrow.returnTypeInferred);
+    assertSame(numberType, arrow.returnType);
+  }
+
+  // Constructor: 4-arg ctor with returnTypeInferred = false and null parameters still applies defaults correctly
+  @Test
+  public void testConstructor_fourArgReturnTypeInferredFalse_defaultsParameters() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, numberType, false);
+    assertFalse(arrow.returnTypeInferred);
+    assertNotNull(arrow.parameters);
+    assertSame(numberType, arrow.returnType);
+  }
+
+  // isSubtype: other is not an ArrowType instance -> instanceof check fails -> false
+  @Test
+  public void testIsSubtype_otherNotArrowType_returnsFalse() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, numberType);
+    assertFalse(arrow.isSubtype(numberType));
+  }
+
+  // isSubtype: an ArrowType is always a subtype of itself (reflexive)
+  @Test
+  public void testIsSubtype_sameInstance_returnsTrue() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    assertTrue(arrow.isSubtype(arrow));
+  }
+
+  // isSubtype: two structurally identical (but distinct) ArrowTypes are subtypes of each other
+  @Test
+  public void testIsSubtype_structurallyIdenticalSeparateInstances_returnsTrue() throws Throwable {
+    ArrowType a1 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    ArrowType a2 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    assertTrue(a1.isSubtype(a2));
+  }
+
+  // isSubtype: return type not a subtype (string vs number) makes the whole relation false, regardless of params
+  @Test
+  public void testIsSubtype_returnTypeNotSubtype_returnsFalse() throws Throwable {
+    ArrowType a1 = new ArrowType(registry, registry.createParametersWithVarArgs(unknownType), stringType);
+    ArrowType a2 = new ArrowType(registry, registry.createParametersWithVarArgs(unknownType), numberType);
+    assertFalse(a1.isSubtype(a2));
+  }
+
+  // isSubtype: contravariant param check fails when that's param type is not a subtype of this's param type
+  @Test
+  public void testIsSubtype_contravariantParamMismatch_returnsFalse() throws Throwable {
+    ArrowType a1 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), unknownType);
+    ArrowType a2 = new ArrowType(registry, registry.createParametersWithVarArgs(stringType), unknownType);
+    assertFalse(a1.isSubtype(a2));
+  }
+
+  // isSubtype: contravariant param check succeeds when that's param type is a subtype of this's (unknown) param type
+  @Test
+  public void testIsSubtype_contravariantParamCompatible_returnsTrue() throws Throwable {
+    ArrowType a1 = new ArrowType(registry, registry.createParametersWithVarArgs(unknownType), unknownType);
+    ArrowType a2 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), unknownType);
+    assertTrue(a1.isSubtype(a2));
+  }
+
+  // hasEqualParameters: identical single param types across both arrow types -> true
+  @Test
+  public void testHasEqualParameters_sameParamTypes_returnsTrue() throws Throwable {
+    ArrowType a1 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    ArrowType a2 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    assertTrue(a1.hasEqualParameters(a2, false));
+  }
+
+  // hasEqualParameters: differing param types between the two arrow types -> false
+  @Test
+  public void testHasEqualParameters_differentParamTypes_returnsFalse() throws Throwable {
+    ArrowType a1 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    ArrowType a2 = new ArrowType(registry, registry.createParametersWithVarArgs(stringType), numberType);
+    assertFalse(a1.hasEqualParameters(a2, false));
+  }
+
+  // checkArrowEquivalenceHelper: same returnType and same params -> true
+  @Test
+  public void testCheckArrowEquivalenceHelper_sameReturnAndParams_returnsTrue() throws Throwable {
+    ArrowType a1 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    ArrowType a2 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    assertTrue(a1.checkArrowEquivalenceHelper(a2, false));
+  }
+
+  // checkArrowEquivalenceHelper: different returnType short-circuits to false before even checking params
+  @Test
+  public void testCheckArrowEquivalenceHelper_differentReturnType_returnsFalse() throws Throwable {
+    ArrowType a1 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    ArrowType a2 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), stringType);
+    assertFalse(a1.checkArrowEquivalenceHelper(a2, false));
+  }
+
+  // hashCode: must be a deterministic/consistent function across repeated calls on the same instance
+  @Test
+  public void testHashCode_consistentAcrossCalls() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    int h1 = arrow.hashCode();
+    int h2 = arrow.hashCode();
+    assertEquals(h1, h2);
+  }
+
+  // checkArrowEquivalenceHelper's Javadoc says it must stay "in sync" with hashCode(): two ArrowTypes judged
+  // equivalent by it (same returnType/params, differing only in returnTypeInferred) must have equal hashCodes.
+  @Test
+  public void testHashCode_equivalentArrowTypesPerHelper_haveEqualHashCode() throws Throwable {
+    ArrowType a1 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType, false);
+    ArrowType a2 = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType, true);
+    assertTrue(a1.checkArrowEquivalenceHelper(a2, false));
+    assertEquals(a1.hashCode(), a2.hashCode());
+  }
+
+  // getLeastSupertype: always unsupported for ArrowType
+  @Test
+  public void testGetLeastSupertype_alwaysThrowsUnsupportedOperationException() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, null);
+    try {
+      arrow.getLeastSupertype(null);
+      fail("expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException expected) {
+    }
+  }
+
+  // getGreatestSubtype: always unsupported for ArrowType
+  @Test
+  public void testGetGreatestSubtype_alwaysThrowsUnsupportedOperationException() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, null);
+    try {
+      arrow.getGreatestSubtype(null);
+      fail("expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException expected) {
+    }
+  }
+
+  // testForEquality: always unsupported for ArrowType
+  @Test
+  public void testTestForEquality_alwaysThrowsUnsupportedOperationException() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, null);
+    try {
+      arrow.testForEquality(null);
+      fail("expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException expected) {
+    }
+  }
+
+  // visit: always unsupported for ArrowType, regardless of the visitor argument
+  @Test
+  public void testVisit_alwaysThrowsUnsupportedOperationException() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, null);
+    try {
+      arrow.visit(null);
+      fail("expected UnsupportedOperationException");
+    } catch (UnsupportedOperationException expected) {
+    }
+  }
+
+  // getPossibleToBooleanOutcomes: ArrowType always reports TRUE as its only possible boolean outcome
+  @Test
+  public void testGetPossibleToBooleanOutcomes_returnsTrueLiteralSet() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, null);
+    assertEquals(BooleanLiteralSet.TRUE, arrow.getPossibleToBooleanOutcomes());
+  }
+
+  // resolveInternal: per its contract it resolves fields in place and returns "this"
+  @Test
+  public void testResolveInternal_returnsThisInstance() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    JSType result = arrow.resolveInternal(null, null);
+    assertSame(arrow, result);
+  }
+
+  // resolveInternal: after resolving, the return type and the single parameter's type remain non-null
+  @Test
+  public void testResolveInternal_keepsReturnAndParamTypesNonNull() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    arrow.resolveInternal(null, null);
+    assertNotNull(arrow.returnType);
+    assertNotNull(arrow.parameters.getFirstChild().getJSType());
+  }
+
+  // hasUnknownParamsOrReturn: default (null) parameters produce an unknown-typed var-args param -> true
+  @Test
+  public void testHasUnknownParamsOrReturn_unknownParam_returnsTrue() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, numberType);
+    assertTrue(arrow.hasUnknownParamsOrReturn());
+  }
+
+  // hasUnknownParamsOrReturn: known (non-unknown) param type and known return type -> false
+  @Test
+  public void testHasUnknownParamsOrReturn_knownParamAndReturnType_returnsFalse() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    assertFalse(arrow.hasUnknownParamsOrReturn());
+  }
+
+  // hasUnknownParamsOrReturn: known param type but null returnType (becomes unknown) -> true
+  @Test
+  public void testHasUnknownParamsOrReturn_unknownReturnTypeOnly_returnsTrue() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), null);
+    assertTrue(arrow.hasUnknownParamsOrReturn());
+  }
+
+  // toStringHelper: always returns the fixed literal "[ArrowType]" when forAnnotations is true
+  @Test
+  public void testToStringHelper_forAnnotationsTrue_returnsArrowTypeLiteral() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, null);
+    assertEquals("[ArrowType]", arrow.toStringHelper(true));
+  }
+
+  // toStringHelper: always returns the fixed literal "[ArrowType]" when forAnnotations is false
+  @Test
+  public void testToStringHelper_forAnnotationsFalse_returnsArrowTypeLiteral() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, null, null);
+    assertEquals("[ArrowType]", arrow.toStringHelper(false));
+  }
+
+  // hasAnyTemplateInternal: plain number return type and plain number param carry no templates -> false
+  @Test
+  public void testHasAnyTemplateInternal_noTemplates_returnsFalse() throws Throwable {
+    ArrowType arrow = new ArrowType(registry, registry.createParametersWithVarArgs(numberType), numberType);
+    assertFalse(arrow.hasAnyTemplateInternal());
+  }
+}

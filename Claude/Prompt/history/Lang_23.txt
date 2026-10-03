@@ -1,0 +1,596 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Lang (Defects4J bug Lang-23)
+package: org.apache.commons.lang3.text
+class_under_test: ExtendedMessageFormat
+test_class_to_write: ExtendedMessageFormatClaudeTest
+</target>
+
+<project_notes>
+Commons Lang: เมธอดส่วนใหญ่เป็น static utility เรียกตรงได้ ระวัง overload ที่รับ Object... กับ String
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.lang3.text;
+
+import java.text.Format;
+import java.text.MessageFormat;
+import java.text.ParsePosition;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.Map;
+
+import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.Validate;
+
+/**
+ * Extends <code>java.text.MessageFormat</code> to allow pluggable/additional formatting
+ * options for embedded format elements.  Client code should specify a registry
+ * of <code>FormatFactory</code> instances associated with <code>String</code>
+ * format names.  This registry will be consulted when the format elements are 
+ * parsed from the message pattern.  In this way custom patterns can be specified,
+ * and the formats supported by <code>java.text.MessageFormat</code> can be overridden
+ * at the format and/or format style level (see MessageFormat).  A "format element"
+ * embedded in the message pattern is specified (<b>()?</b> signifies optionality):<br />
+ * <code>{</code><i>argument-number</i><b>(</b><code>,</code><i>format-name</i><b>(</b><code>,</code><i>format-style</i><b>)?)?</b><code>}</code>
+ *
+ * <p>
+ * <i>format-name</i> and <i>format-style</i> values are trimmed of surrounding whitespace
+ * in the manner of <code>java.text.MessageFormat</code>.  If <i>format-name</i> denotes
+ * <code>FormatFactory formatFactoryInstance</code> in <code>registry</code>, a <code>Format</code>
+ * matching <i>format-name</i> and <i>format-style</i> is requested from
+ * <code>formatFactoryInstance</code>.  If this is successful, the <code>Format</code>
+ * found is used for this format element.
+ * </p>
+ *
+ * <p><b>NOTICE:</b> The various subformat mutator methods are considered unnecessary; they exist on the parent
+ * class to allow the type of customization which it is the job of this class to provide in
+ * a configurable fashion.  These methods have thus been disabled and will throw
+ * <code>UnsupportedOperationException</code> if called.
+ * </p>
+ * 
+ * <p>Limitations inherited from <code>java.text.MessageFormat</code>:
+ * <ul>
+ * <li>When using "choice" subformats, support for nested formatting instructions is limited
+ *     to that provided by the base class.</li>
+ * <li>Thread-safety of <code>Format</code>s, including <code>MessageFormat</code> and thus
+ *     <code>ExtendedMessageFormat</code>, is not guaranteed.</li>
+ * </ul>
+ * </p>
+ * 
+ * @author Apache Software Foundation
+ * @author Matt Benson
+ * @since 2.4
+ * @version $Id$
+ */
+public class ExtendedMessageFormat extends MessageFormat {
+    private static final long serialVersionUID = -2362048321261811743L;
+
+    private static final String DUMMY_PATTERN = "";
+    private static final String ESCAPED_QUOTE = "''";
+    private static final char START_FMT = ',';
+    private static final char END_FE = '}';
+    private static final char START_FE = '{';
+    private static final char QUOTE = '\'';
+
+    private String toPattern;
+    private final Map<String, ? extends FormatFactory> registry;
+
+    /**
+     * Create a new ExtendedMessageFormat for the default locale.
+     * 
+     * @param pattern  the pattern to use, not null
+     * @throws IllegalArgumentException in case of a bad pattern.
+     */
+    public ExtendedMessageFormat(String pattern) {
+        this(pattern, Locale.getDefault());
+    }
+
+    /**
+     * Create a new ExtendedMessageFormat.
+     * 
+     * @param pattern  the pattern to use, not null
+     * @param locale  the locale to use, not null
+     * @throws IllegalArgumentException in case of a bad pattern.
+     */
+    public ExtendedMessageFormat(String pattern, Locale locale) {
+        this(pattern, locale, null);
+    }
+
+    /**
+     * Create a new ExtendedMessageFormat for the default locale.
+     * 
+     * @param pattern  the pattern to use, not null
+     * @param registry  the registry of format factories, may be null
+     * @throws IllegalArgumentException in case of a bad pattern.
+     */
+    public ExtendedMessageFormat(String pattern, Map<String, ? extends FormatFactory> registry) {
+        this(pattern, Locale.getDefault(), registry);
+    }
+
+    /**
+     * Create a new ExtendedMessageFormat.
+     * 
+     * @param pattern  the pattern to use, not null
+     * @param locale  the locale to use, not null
+     * @param registry  the registry of format factories, may be null
+     * @throws IllegalArgumentException in case of a bad pattern.
+     */
+    public ExtendedMessageFormat(String pattern, Locale locale, Map<String, ? extends FormatFactory> registry) {
+        super(DUMMY_PATTERN);
+        setLocale(locale);
+        this.registry = registry;
+        applyPattern(pattern);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String toPattern() {
+        return toPattern;
+    }
+
+    /**
+     * Apply the specified pattern.
+     * 
+     * @param pattern String
+     */
+    @Override
+    public final void applyPattern(String pattern) {
+        if (registry == null) {
+            super.applyPattern(pattern);
+            toPattern = super.toPattern();
+            return;
+        }
+        ArrayList<Format> foundFormats = new ArrayList<Format>();
+        ArrayList<String> foundDescriptions = new ArrayList<String>();
+        StringBuilder stripCustom = new StringBuilder(pattern.length());
+
+        ParsePosition pos = new ParsePosition(0);
+        char[] c = pattern.toCharArray();
+        int fmtCount = 0;
+        while (pos.getIndex() < pattern.length()) {
+            switch (c[pos.getIndex()]) {
+            case QUOTE:
+                appendQuotedString(pattern, pos, stripCustom, true);
+                break;
+            case START_FE:
+                fmtCount++;
+                seekNonWs(pattern, pos);
+                int start = pos.getIndex();
+                int index = readArgumentIndex(pattern, next(pos));
+                stripCustom.append(START_FE).append(index);
+                seekNonWs(pattern, pos);
+                Format format = null;
+                String formatDescription = null;
+                if (c[pos.getIndex()] == START_FMT) {
+                    formatDescription = parseFormatDescription(pattern,
+                            next(pos));
+                    format = getFormat(formatDescription);
+                    if (format == null) {
+                        stripCustom.append(START_FMT).append(formatDescription);
+                    }
+                }
+                foundFormats.add(format);
+                foundDescriptions.add(format == null ? null : formatDescription);
+                Validate.isTrue(foundFormats.size() == fmtCount);
+                Validate.isTrue(foundDescriptions.size() == fmtCount);
+                if (c[pos.getIndex()] != END_FE) {
+                    throw new IllegalArgumentException(
+                            "Unreadable format element at position " + start);
+                }
+                //$FALL-THROUGH$
+            default:
+                stripCustom.append(c[pos.getIndex()]);
+                next(pos);
+            }
+        }
+        super.applyPattern(stripCustom.toString());
+        toPattern = insertFormats(super.toPattern(), foundDescriptions);
+        if (containsElements(foundFormats)) {
+            Format[] origFormats = getFormats();
+            // only loop over what we know we have, as MessageFormat on Java 1.3 
+            // seems to provide an extra format element:
+            int i = 0;
+            for (Iterator<Format> it = foundFormats.iterator(); it.hasNext(); i++) {
+                Format f = it.next();
+                if (f != null) {
+                    origFormats[i] = f;
+                }
+            }
+            super.setFormats(origFormats);
+        }
+    }
+
+    /**
+     * Throws UnsupportedOperationException - see class Javadoc for details.
+     * 
+     * @param formatElementIndex format element index
+     * @param newFormat the new format
+     * @throws UnsupportedOperationException
+     */
+    @Override
+    public void setFormat(int formatElementIndex, Format newFormat) {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Throws UnsupportedOperationException - see class Javadoc for details.
+     * 
+     * @param argumentIndex argument index
+     * @param newFormat the new format
+     * @throws UnsupportedOperationException
+     */
+    @Override
+    public void setFormatByArgumentIndex(int argumentIndex, Format newFormat) {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Throws UnsupportedOperationException - see class Javadoc for details.
+     * 
+     * @param newFormats new formats
+     * @throws UnsupportedOperationException
+     */
+    @Override
+    public void setFormats(Format[] newFormats) {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Throws UnsupportedOperationException - see class Javadoc for details.
+     * 
+     * @param newFormats new formats
+     * @throws UnsupportedOperationException
+     */
+    @Override
+    public void setFormatsByArgumentIndex(Format[] newFormats) {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Check if this extended message format is equal to another object.
+     *
+     * @param obj the object to compare to
+     * @return true if this object equals the other, otherwise false
+     */
+
+    /**
+     * Return the hashcode.
+     *
+     * @return the hashcode
+     */
+
+    /**
+     * Get a custom format from a format description.
+     * 
+     * @param desc String
+     * @return Format
+     */
+    private Format getFormat(String desc) {
+        if (registry != null) {
+            String name = desc;
+            String args = null;
+            int i = desc.indexOf(START_FMT);
+            if (i > 0) {
+                name = desc.substring(0, i).trim();
+                args = desc.substring(i + 1).trim();
+            }
+            FormatFactory factory = registry.get(name);
+            if (factory != null) {
+                return factory.getFormat(name, args, getLocale());
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Read the argument index from the current format element
+     * 
+     * @param pattern pattern to parse
+     * @param pos current parse position
+     * @return argument index
+     */
+    private int readArgumentIndex(String pattern, ParsePosition pos) {
+        int start = pos.getIndex();
+        seekNonWs(pattern, pos);
+        StringBuffer result = new StringBuffer();
+        boolean error = false;
+        for (; !error && pos.getIndex() < pattern.length(); next(pos)) {
+            char c = pattern.charAt(pos.getIndex());
+            if (Character.isWhitespace(c)) {
+                seekNonWs(pattern, pos);
+                c = pattern.charAt(pos.getIndex());
+                if (c != START_FMT && c != END_FE) {
+                    error = true;
+                    continue;
+                }
+            }
+            if ((c == START_FMT || c == END_FE) && result.length() > 0) {
+                try {
+                    return Integer.parseInt(result.toString());
+                } catch (NumberFormatException e) {
+                    // we've already ensured only digits, so unless something
+                    // outlandishly large was specified we should be okay.
+                }
+            }
+            error = !Character.isDigit(c);
+            result.append(c);
+        }
+        if (error) {
+            throw new IllegalArgumentException(
+                    "Invalid format argument index at position " + start + ": "
+                            + pattern.substring(start, pos.getIndex()));
+        }
+        throw new IllegalArgumentException(
+                "Unterminated format element at position " + start);
+    }
+
+    /**
+     * Parse the format component of a format element.
+     * 
+     * @param pattern string to parse
+     * @param pos current parse position
+     * @return Format description String
+     */
+    private String parseFormatDescription(String pattern, ParsePosition pos) {
+        int start = pos.getIndex();
+        seekNonWs(pattern, pos);
+        int text = pos.getIndex();
+        int depth = 1;
+        for (; pos.getIndex() < pattern.length(); next(pos)) {
+            switch (pattern.charAt(pos.getIndex())) {
+            case START_FE:
+                depth++;
+                break;
+            case END_FE:
+                depth--;
+                if (depth == 0) {
+                    return pattern.substring(text, pos.getIndex());
+                }
+                break;
+            case QUOTE:
+                getQuotedString(pattern, pos, false);
+                break;
+            }
+        }
+        throw new IllegalArgumentException(
+                "Unterminated format element at position " + start);
+    }
+
+    /**
+     * Insert formats back into the pattern for toPattern() support.
+     *
+     * @param pattern source
+     * @param customPatterns The custom patterns to re-insert, if any
+     * @return full pattern
+     */
+    private String insertFormats(String pattern, ArrayList<String> customPatterns) {
+        if (!containsElements(customPatterns)) {
+            return pattern;
+        }
+        StringBuilder sb = new StringBuilder(pattern.length() * 2);
+        ParsePosition pos = new ParsePosition(0);
+        int fe = -1;
+        int depth = 0;
+        while (pos.getIndex() < pattern.length()) {
+            char c = pattern.charAt(pos.getIndex());
+            switch (c) {
+            case QUOTE:
+                appendQuotedString(pattern, pos, sb, false);
+                break;
+            case START_FE:
+                depth++;
+                if (depth == 1) {
+                    fe++;
+                    sb.append(START_FE).append(
+                            readArgumentIndex(pattern, next(pos)));
+                    String customPattern = customPatterns.get(fe);
+                    if (customPattern != null) {
+                        sb.append(START_FMT).append(customPattern);
+                    }
+                }
+                break;
+            case END_FE:
+                depth--;
+                //$FALL-THROUGH$
+            default:
+                sb.append(c);
+                next(pos);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Consume whitespace from the current parse position.
+     * 
+     * @param pattern String to read
+     * @param pos current position
+     */
+    private void seekNonWs(String pattern, ParsePosition pos) {
+        int len = 0;
+        char[] buffer = pattern.toCharArray();
+        do {
+            len = StrMatcher.splitMatcher().isMatch(buffer, pos.getIndex());
+            pos.setIndex(pos.getIndex() + len);
+        } while (len > 0 && pos.getIndex() < pattern.length());
+    }
+
+    /**
+     * Convenience method to advance parse position by 1
+     * 
+     * @param pos ParsePosition
+     * @return <code>pos</code>
+     */
+    private ParsePosition next(ParsePosition pos) {
+        pos.setIndex(pos.getIndex() + 1);
+        return pos;
+    }
+
+    /**
+     * Consume a quoted string, adding it to <code>appendTo</code> if
+     * specified.
+     * 
+     * @param pattern pattern to parse
+     * @param pos current parse position
+     * @param appendTo optional StringBuffer to append
+     * @param escapingOn whether to process escaped quotes
+     * @return <code>appendTo</code>
+     */
+    private StringBuilder appendQuotedString(String pattern, ParsePosition pos,
+            StringBuilder appendTo, boolean escapingOn) {
+        int start = pos.getIndex();
+        char[] c = pattern.toCharArray();
+        if (escapingOn && c[start] == QUOTE) {
+            next(pos);
+            return appendTo == null ? null : appendTo.append(QUOTE);
+        }
+        int lastHold = start;
+        for (int i = pos.getIndex(); i < pattern.length(); i++) {
+            if (escapingOn && pattern.substring(i).startsWith(ESCAPED_QUOTE)) {
+                appendTo.append(c, lastHold, pos.getIndex() - lastHold).append(
+                        QUOTE);
+                pos.setIndex(i + ESCAPED_QUOTE.length());
+                lastHold = pos.getIndex();
+                continue;
+            }
+            switch (c[pos.getIndex()]) {
+            case QUOTE:
+                next(pos);
+                return appendTo == null ? null : appendTo.append(c, lastHold,
+                        pos.getIndex() - lastHold);
+            default:
+                next(pos);
+            }
+        }
+        throw new IllegalArgumentException(
+                "Unterminated quoted string at position " + start);
+    }
+
+    /**
+     * Consume quoted string only
+     * 
+     * @param pattern pattern to parse
+     * @param pos current parse position
+     * @param escapingOn whether to process escaped quotes
+     */
+    private void getQuotedString(String pattern, ParsePosition pos,
+            boolean escapingOn) {
+        appendQuotedString(pattern, pos, null, escapingOn);
+    }
+
+    /**
+     * Learn whether the specified Collection contains non-null elements.
+     * @param coll to check
+     * @return <code>true</code> if some Object was found, <code>false</code> otherwise.
+     */
+    private boolean containsElements(Collection<?> coll) {
+        if (coll == null || coll.size() == 0) {
+            return false;
+        }
+        for (Iterator<?> iter = coll.iterator(); iter.hasNext();) {
+            if (iter.next() != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ ExtendedMessageFormatClaudeTest ใน package org.apache.commons.lang3.text เพื่อทดสอบคลาส ExtendedMessageFormat ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.lang3.text;` เท่านั้น
+</instructions>

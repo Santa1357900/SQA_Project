@@ -1,0 +1,468 @@
+package org.joda.time;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.joda.time.format.ISOPeriodFormat;
+import org.joda.time.format.PeriodFormatter;
+
+public class PeriodClaudeTest {
+
+    // parse(String) uses ISOPeriodFormat.standard(), all designators present
+    @Test
+    public void testParse_standardFormat_parsesAllFields() throws Throwable {
+        Period p = Period.parse("P1Y2M3DT4H5M6S");
+        assertEquals(1, p.getYears());
+        assertEquals(2, p.getMonths());
+        assertEquals(0, p.getWeeks());
+        assertEquals(3, p.getDays());
+        assertEquals(4, p.getHours());
+        assertEquals(5, p.getMinutes());
+        assertEquals(6, p.getSeconds());
+    }
+
+    // parse(String, PeriodFormatter) delegates to formatter.parsePeriod
+    @Test
+    public void testParse_withExplicitFormatter_parsesAllFields() throws Throwable {
+        PeriodFormatter fmt = ISOPeriodFormat.standard();
+        Period p = Period.parse("P1Y2M3DT4H5M6S", fmt);
+        assertEquals(1, p.getYears());
+        assertEquals(4, p.getHours());
+        assertEquals(6, p.getSeconds());
+    }
+
+    // years()/months() factories set only the respective field
+    @Test
+    public void testYearsAndMonthsFactories_setOnlyRespectiveField() throws Throwable {
+        Period y = Period.years(4);
+        assertEquals(4, y.getYears());
+        assertEquals(0, y.getMonths());
+        Period m = Period.months(7);
+        assertEquals(7, m.getMonths());
+        assertEquals(0, m.getYears());
+    }
+
+    // weeks()/days() factories set only the respective field
+    @Test
+    public void testWeeksAndDaysFactories_setOnlyRespectiveField() throws Throwable {
+        Period w = Period.weeks(3);
+        assertEquals(3, w.getWeeks());
+        assertEquals(0, w.getDays());
+        Period d = Period.days(9);
+        assertEquals(9, d.getDays());
+        assertEquals(0, d.getWeeks());
+    }
+
+    // hours()/minutes() factories set only the respective field
+    @Test
+    public void testHoursAndMinutesFactories_setOnlyRespectiveField() throws Throwable {
+        Period h = Period.hours(5);
+        assertEquals(5, h.getHours());
+        assertEquals(0, h.getMinutes());
+        Period min = Period.minutes(45);
+        assertEquals(45, min.getMinutes());
+        assertEquals(0, min.getHours());
+    }
+
+    // seconds()/millis() factories set only the respective field
+    @Test
+    public void testSecondsAndMillisFactories_setOnlyRespectiveField() throws Throwable {
+        Period s = Period.seconds(30);
+        assertEquals(30, s.getSeconds());
+        assertEquals(0, s.getMillis());
+        Period ms = Period.millis(250);
+        assertEquals(250, ms.getMillis());
+        assertEquals(0, ms.getSeconds());
+    }
+
+    // fieldDifference: null start throws IllegalArgumentException
+    @Test
+    public void testFieldDifference_nullStart_throwsIllegalArgumentException() throws Throwable {
+        try {
+            Period.fieldDifference(null, new LocalDate(2000, 1, 1));
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("null"));
+        }
+    }
+
+    // fieldDifference: null end throws IllegalArgumentException
+    @Test
+    public void testFieldDifference_nullEnd_throwsIllegalArgumentException() throws Throwable {
+        try {
+            Period.fieldDifference(new LocalDate(2000, 1, 1), null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("null"));
+        }
+    }
+
+    // fieldDifference: different field-set sizes throws IllegalArgumentException
+    @Test
+    public void testFieldDifference_differentFieldCount_throwsIllegalArgumentException() throws Throwable {
+        try {
+            Period.fieldDifference(new LocalDate(2000, 1, 1), new LocalTime(0, 0, 0, 0));
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("same set of fields"));
+        }
+    }
+
+    // fieldDifference: computes per-field subtraction without carry/borrow
+    @Test
+    public void testFieldDifference_localDates_computesPerFieldDifference() throws Throwable {
+        Period diff = Period.fieldDifference(new LocalDate(2012, 6, 15), new LocalDate(2015, 9, 20));
+        assertEquals(3, diff.getYears());
+        assertEquals(3, diff.getMonths());
+        assertEquals(5, diff.getDays());
+    }
+
+    // default constructor: all eight fields are zero
+    @Test
+    public void testDefaultConstructor_allFieldsZero() throws Throwable {
+        Period p = new Period();
+        assertEquals(0, p.getYears());
+        assertEquals(0, p.getMonths());
+        assertEquals(0, p.getWeeks());
+        assertEquals(0, p.getDays());
+        assertEquals(0, p.getHours());
+        assertEquals(0, p.getMinutes());
+        assertEquals(0, p.getSeconds());
+        assertEquals(0, p.getMillis());
+    }
+
+    // 4-int constructor sets hours,minutes,seconds,millis only
+    @Test
+    public void testFourIntConstructor_setsTimeFieldsOnly() throws Throwable {
+        Period p = new Period(1, 2, 3, 4);
+        assertEquals(0, p.getYears());
+        assertEquals(1, p.getHours());
+        assertEquals(2, p.getMinutes());
+        assertEquals(3, p.getSeconds());
+        assertEquals(4, p.getMillis());
+    }
+
+    // 8-int constructor sets all eight fields in declared order
+    @Test
+    public void testEightIntConstructor_setsAllFields() throws Throwable {
+        Period p = new Period(1, 2, 3, 4, 5, 6, 7, 8);
+        assertEquals(1, p.getYears());
+        assertEquals(2, p.getMonths());
+        assertEquals(3, p.getWeeks());
+        assertEquals(4, p.getDays());
+        assertEquals(5, p.getHours());
+        assertEquals(6, p.getMinutes());
+        assertEquals(7, p.getSeconds());
+        assertEquals(8, p.getMillis());
+    }
+
+    // 9-arg constructor: non-zero value for a field unsupported by type throws
+    @Test
+    public void testNineArgConstructor_unsupportedNonZeroField_throwsIllegalArgumentException() throws Throwable {
+        PeriodType monthOnly = PeriodType.forFields(new DurationFieldType[] { DurationFieldType.MONTHS_TYPE });
+        try {
+            new Period(1, 0, 0, 0, 0, 0, 0, 0, monthOnly);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // long duration constructor: only precise time fields are populated
+    @Test
+    public void testLongDurationConstructor_splitsIntoPreciseTimeFields() throws Throwable {
+        Period p = new Period(3661000L);
+        assertEquals(0, p.getYears());
+        assertEquals(0, p.getDays());
+        assertEquals(1, p.getHours());
+        assertEquals(1, p.getMinutes());
+        assertEquals(1, p.getSeconds());
+        assertEquals(0, p.getMillis());
+    }
+
+    // toPeriod returns this exact instance
+    @Test
+    public void testToPeriod_returnsSameInstance() throws Throwable {
+        Period p = Period.weeks(2);
+        assertSame(p, p.toPeriod());
+    }
+
+    // withPeriodType with an equal type returns the same instance
+    @Test
+    public void testWithPeriodType_sameType_returnsSameInstance() throws Throwable {
+        Period p = Period.years(5);
+        Period same = p.withPeriodType(PeriodType.standard());
+        assertSame(p, same);
+    }
+
+    // withPeriodType with a different type creates a converted instance
+    @Test
+    public void testWithPeriodType_differentType_createsConvertedInstance() throws Throwable {
+        Period p = Period.years(5);
+        PeriodType yearOnly = PeriodType.forFields(new DurationFieldType[] { DurationFieldType.YEARS_TYPE });
+        Period converted = p.withPeriodType(yearOnly);
+        assertNotSame(p, converted);
+        assertEquals(5, converted.getYears());
+    }
+
+    // withFields(null) returns the same instance
+    @Test
+    public void testWithFields_nullPeriod_returnsSameInstance() throws Throwable {
+        Period p = Period.days(3);
+        assertSame(p, p.withFields(null));
+    }
+
+    // withFields copies only the fields present in the source period's type
+    @Test
+    public void testWithFields_mergesOnlySourceTypeFields() throws Throwable {
+        PeriodType yearOnly = PeriodType.forFields(new DurationFieldType[] { DurationFieldType.YEARS_TYPE });
+        Period toMerge = new Period(9, 0, 0, 0, 0, 0, 0, 0, yearOnly);
+        Period base = new Period(1, 1, 1, 1, 1, 1, 1, 1);
+        Period merged = base.withFields(toMerge);
+        assertEquals(9, merged.getYears());
+        assertEquals(1, merged.getMonths());
+    }
+
+    // withField(null, x) throws IllegalArgumentException
+    @Test
+    public void testWithField_nullFieldType_throwsIllegalArgumentException() throws Throwable {
+        Period p = Period.hours(1);
+        try {
+            p.withField(null, 5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // withField sets the specified field while leaving others untouched
+    @Test
+    public void testWithField_setsSpecifiedFieldValue() throws Throwable {
+        Period p = Period.hours(1);
+        Period p2 = p.withField(DurationFieldType.MINUTES_TYPE, 30);
+        assertEquals(30, p2.getMinutes());
+        assertEquals(1, p2.getHours());
+    }
+
+    // withFieldAdded(null, x) throws IllegalArgumentException
+    @Test
+    public void testWithFieldAdded_nullFieldType_throwsIllegalArgumentException() throws Throwable {
+        Period p = Period.hours(1);
+        try {
+            p.withFieldAdded(null, 5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // withFieldAdded(type, 0) returns the same instance
+    @Test
+    public void testWithFieldAdded_zeroValue_returnsSameInstance() throws Throwable {
+        Period p = Period.hours(2);
+        assertSame(p, p.withFieldAdded(DurationFieldType.HOURS_TYPE, 0));
+    }
+
+    // withFieldAdded adds the value to the existing field
+    @Test
+    public void testWithFieldAdded_addsToExistingValue() throws Throwable {
+        Period p = Period.hours(2);
+        Period p2 = p.withFieldAdded(DurationFieldType.HOURS_TYPE, 3);
+        assertEquals(5, p2.getHours());
+    }
+
+    // withYears/withMonths/withWeeks/withDays each set independently
+    @Test
+    public void testWithYearsMonthsWeeksDays_eachIndependent() throws Throwable {
+        Period base = new Period(1, 2, 3, 4, 5, 6, 7, 8);
+        Period p = base.withYears(10).withMonths(20).withWeeks(30).withDays(40);
+        assertEquals(10, p.getYears());
+        assertEquals(20, p.getMonths());
+        assertEquals(30, p.getWeeks());
+        assertEquals(40, p.getDays());
+        assertEquals(5, p.getHours());
+    }
+
+    // withHours/withMinutes/withSeconds/withMillis each set independently
+    @Test
+    public void testWithHoursMinutesSecondsMillis_eachIndependent() throws Throwable {
+        Period base = new Period(1, 2, 3, 4, 5, 6, 7, 8);
+        Period p = base.withHours(50).withMinutes(51).withSeconds(52).withMillis(53);
+        assertEquals(50, p.getHours());
+        assertEquals(51, p.getMinutes());
+        assertEquals(52, p.getSeconds());
+        assertEquals(53, p.getMillis());
+        assertEquals(1, p.getYears());
+    }
+
+    // plus(null) returns the same instance
+    @Test
+    public void testPlus_nullPeriod_returnsSameInstance() throws Throwable {
+        Period p = Period.days(5);
+        assertSame(p, p.plus(null));
+    }
+
+    // plus adds each field separately without carrying
+    @Test
+    public void testPlus_addsEachFieldSeparately() throws Throwable {
+        Period a = new Period(1, 1, 1, 1, 1, 1, 1, 1);
+        Period b = new Period(1, 1, 1, 1, 1, 1, 1, 1);
+        Period sum = a.plus(b);
+        assertEquals(2, sum.getYears());
+        assertEquals(2, sum.getMonths());
+        assertEquals(2, sum.getWeeks());
+        assertEquals(2, sum.getDays());
+        assertEquals(2, sum.getHours());
+        assertEquals(2, sum.getMinutes());
+        assertEquals(2, sum.getSeconds());
+        assertEquals(2, sum.getMillis());
+    }
+
+    // plusYears(0) returns the same instance
+    @Test
+    public void testPlusYears_zero_returnsSameInstance() throws Throwable {
+        Period p = Period.months(5);
+        assertSame(p, p.plusYears(0));
+    }
+
+    // minus subtracts each field separately without borrowing
+    @Test
+    public void testMinus_subtractsEachFieldSeparately() throws Throwable {
+        Period a = new Period(5, 5, 5, 5, 5, 5, 5, 5);
+        Period b = new Period(1, 2, 3, 4, 1, 2, 3, 4);
+        Period diff = a.minus(b);
+        assertEquals(4, diff.getYears());
+        assertEquals(3, diff.getMonths());
+        assertEquals(2, diff.getWeeks());
+        assertEquals(1, diff.getDays());
+        assertEquals(4, diff.getHours());
+        assertEquals(3, diff.getMinutes());
+        assertEquals(2, diff.getSeconds());
+        assertEquals(1, diff.getMillis());
+    }
+
+    // multipliedBy: ZERO instance and scalar==1 both return same instance
+    @Test
+    public void testMultipliedBy_identityBranches_returnSameInstance() throws Throwable {
+        assertSame(Period.ZERO, Period.ZERO.multipliedBy(5));
+        Period p = Period.years(7);
+        assertSame(p, p.multipliedBy(1));
+    }
+
+    // multipliedBy multiplies every field by the scalar
+    @Test
+    public void testMultipliedBy_scalarMultipliesEachField() throws Throwable {
+        Period p = new Period(1, 2, 3, 4, 5, 6, 7, 8);
+        Period r = p.multipliedBy(3);
+        assertEquals(3, r.getYears());
+        assertEquals(6, r.getMonths());
+        assertEquals(9, r.getWeeks());
+        assertEquals(12, r.getDays());
+        assertEquals(15, r.getHours());
+        assertEquals(24, r.getMillis());
+    }
+
+    // negated negates every field
+    @Test
+    public void testNegated_negatesEachField() throws Throwable {
+        Period p = new Period(1, -2, 3, -4, 5, -6, 7, -8);
+        Period n = p.negated();
+        assertEquals(-1, n.getYears());
+        assertEquals(2, n.getMonths());
+        assertEquals(-3, n.getWeeks());
+        assertEquals(4, n.getDays());
+        assertEquals(-5, n.getHours());
+        assertEquals(6, n.getMinutes());
+        assertEquals(-7, n.getSeconds());
+        assertEquals(8, n.getMillis());
+    }
+
+    // toStandardWeeks: non-zero years throws UnsupportedOperationException
+    @Test
+    public void testToStandardWeeks_yearsPresent_throwsUnsupportedOperationException() throws Throwable {
+        Period p = Period.years(1);
+        try {
+            p.toStandardWeeks();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // toStandardDuration: non-zero months throws UnsupportedOperationException
+    @Test
+    public void testToStandardDuration_monthsPresent_throwsUnsupportedOperationException() throws Throwable {
+        Period p = Period.months(1);
+        try {
+            p.toStandardDuration();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // toStandardDays sums weeks/days/hours/minutes/seconds/millis into days
+    @Test
+    public void testToStandardDays_computesTotalDays() throws Throwable {
+        Period p = new Period(0, 0, 1, 2, 3, 4, 5, 6);
+        Days d = p.toStandardDays();
+        assertEquals(9, d.getDays());
+    }
+
+    // toStandardHours sums weeks/days/hours/minutes/seconds/millis into hours
+    @Test
+    public void testToStandardHours_computesTotalHours() throws Throwable {
+        Period p = new Period(0, 0, 1, 2, 3, 4, 5, 6);
+        Hours h = p.toStandardHours();
+        assertEquals(219, h.getHours());
+    }
+
+    // toStandardMinutes sums weeks/days/hours/minutes/seconds/millis into minutes
+    @Test
+    public void testToStandardMinutes_computesTotalMinutes() throws Throwable {
+        Period p = new Period(0, 0, 1, 2, 3, 4, 5, 6);
+        Minutes m = p.toStandardMinutes();
+        assertEquals(13144, m.getMinutes());
+    }
+
+    // toStandardSeconds sums weeks/days/hours/minutes/seconds/millis into seconds
+    @Test
+    public void testToStandardSeconds_computesTotalSeconds() throws Throwable {
+        Period p = new Period(0, 0, 1, 2, 3, 4, 5, 6);
+        Seconds s = p.toStandardSeconds();
+        assertEquals(788645, s.getSeconds());
+    }
+
+    // toStandardDuration sums weeks/days/hours/minutes/seconds/millis into millis
+    @Test
+    public void testToStandardDuration_computesTotalMillis() throws Throwable {
+        Period p = new Period(0, 0, 1, 2, 3, 4, 5, 6);
+        Duration dur = p.toStandardDuration();
+        assertEquals(788645006L, dur.getMillis());
+    }
+
+    // normalizedStandard redistributes overflowing time fields into weeks/days/hours/minutes
+    @Test
+    public void testNormalizedStandard_overflowingTimeFields_redistributesAcrossStandardFields() throws Throwable {
+        Period p = new Period(0, 0, 0, 0, 25, 70, 0, 0);
+        Period norm = p.normalizedStandard();
+        assertEquals(0, norm.getWeeks());
+        assertEquals(1, norm.getDays());
+        assertEquals(2, norm.getHours());
+        assertEquals(10, norm.getMinutes());
+    }
+
+    // normalizedStandard carries positive month overflow into years correctly
+    @Test
+    public void testNormalizedStandard_positiveYearsAndMonthsOverflow_carriesIntoYears() throws Throwable {
+        Period p = new Period(1, 13, 0, 0, 0, 0, 0, 0);
+        Period norm = p.normalizedStandard();
+        assertEquals(2, norm.getYears());
+        assertEquals(1, norm.getMonths());
+    }
+
+    // Javadoc contract: "months will be normalized to be between 0 and 11";
+    // with years=1,months=-1 (total 11 months) this must yield years=0,months=11
+    @Test
+    public void testNormalizedStandard_negativeMonthsWithPositiveYears_normalizesMonthsToZeroToEleven() throws Throwable {
+        Period p = new Period(1, -1, 0, 0, 0, 0, 0, 0);
+        Period norm = p.normalizedStandard();
+        assertEquals(0, norm.getYears());
+        assertEquals(11, norm.getMonths());
+    }
+}

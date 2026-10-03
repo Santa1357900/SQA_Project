@@ -1,0 +1,274 @@
+package org.apache.commons.jxpath.ri;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.model.NodePointer;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class NamespaceResolverClaudeTest {
+
+    private NodePointer pointer;
+    private NodePointer pointer2;
+
+    @Before
+    public void setUp() throws Throwable {
+        pointer = createPointer("name", "value1");
+        pointer2 = createPointer("other", "value2");
+    }
+
+    private NodePointer createPointer(String key, Object value) {
+        Map map = new HashMap();
+        map.put(key, value);
+        JXPathContext context = JXPathContext.newContext(map);
+        Pointer p = context.getPointer(key);
+        return (NodePointer) p;
+    }
+
+    // Default constructor: parent field must be null
+    @Test
+    public void testConstructorDefault_parentIsNull() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        assertNull(resolver.parent);
+    }
+
+    // Constructor with parent: parent field must reference the given parent
+    @Test
+    public void testConstructorWithParent_setsParentField() throws Throwable {
+        NamespaceResolver parent = new NamespaceResolver();
+        NamespaceResolver child = new NamespaceResolver(parent);
+        assertSame(parent, child.parent);
+    }
+
+    // registerNamespace: entry stored in namespaceMap
+    @Test
+    public void testRegisterNamespace_addsEntryToNamespaceMap() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.registerNamespace("a", "urn:a");
+        assertEquals("urn:a", resolver.namespaceMap.get("a"));
+    }
+
+    // registerNamespace: null URI value is stored as-is
+    @Test
+    public void testRegisterNamespace_nullURI_storesNullValue() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.registerNamespace("a", null);
+        assertTrue(resolver.namespaceMap.containsKey("a"));
+        assertNull(resolver.namespaceMap.get("a"));
+    }
+
+    // registerNamespace on a sealed resolver throws IllegalStateException
+    @Test
+    public void testRegisterNamespace_sealed_throwsIllegalStateException() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.seal();
+        try {
+            resolver.registerNamespace("a", "urn:a");
+            fail("expected IllegalStateException");
+        }
+        catch (IllegalStateException expected) {
+        }
+    }
+
+    // registerNamespace resets reverseMap to null so it is rebuilt on next getPrefix call
+    @Test
+    public void testRegisterNamespace_resetsReverseMapToNull() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.setNamespaceContextPointer(pointer);
+        resolver.registerNamespace("a", "urn:a");
+        resolver.getPrefix("urn:a");
+        assertNotNull(resolver.reverseMap);
+        resolver.registerNamespace("b", "urn:b");
+        assertNull(resolver.reverseMap);
+    }
+
+    // setNamespaceContextPointer stores the pointer field
+    @Test
+    public void testSetNamespaceContextPointer_setsPointerField() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.setNamespaceContextPointer(pointer);
+        assertSame(pointer, resolver.pointer);
+    }
+
+    // getNamespaceContextPointer returns own pointer when set
+    @Test
+    public void testGetNamespaceContextPointer_ownPointerSet_returnsSamePointer() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.setNamespaceContextPointer(pointer);
+        assertSame(pointer, resolver.getNamespaceContextPointer());
+    }
+
+    // getNamespaceContextPointer: no pointer, no parent -> null
+    @Test
+    public void testGetNamespaceContextPointer_noPointerNoParent_returnsNull() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        assertNull(resolver.getNamespaceContextPointer());
+    }
+
+    // getNamespaceContextPointer: no own pointer -> delegates to parent
+    @Test
+    public void testGetNamespaceContextPointer_noPointerDelegatesToParent() throws Throwable {
+        NamespaceResolver parent = new NamespaceResolver();
+        parent.setNamespaceContextPointer(pointer);
+        NamespaceResolver child = new NamespaceResolver(parent);
+        assertSame(pointer, child.getNamespaceContextPointer());
+    }
+
+    // getNamespaceContextPointer: own pointer takes precedence over parent's
+    @Test
+    public void testGetNamespaceContextPointer_ownPointerOverridesParent() throws Throwable {
+        NamespaceResolver parent = new NamespaceResolver();
+        parent.setNamespaceContextPointer(pointer);
+        NamespaceResolver child = new NamespaceResolver(parent);
+        child.setNamespaceContextPointer(pointer2);
+        assertSame(pointer2, child.getNamespaceContextPointer());
+    }
+
+    // getNamespaceURI: prefix found directly in namespaceMap
+    @Test
+    public void testGetNamespaceURI_prefixInMap_returnsURI() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.registerNamespace("a", "urn:a");
+        assertEquals("urn:a", resolver.getNamespaceURI("a"));
+    }
+
+    // getNamespaceURI: not in map, no pointer, no parent -> null
+    @Test
+    public void testGetNamespaceURI_prefixNotFound_noPointerNoParent_returnsNull() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        assertNull(resolver.getNamespaceURI("x"));
+    }
+
+    // getNamespaceURI: not in map, pointer set but has no matching namespace -> null
+    @Test
+    public void testGetNamespaceURI_prefixNotInMap_pointerSet_returnsNull() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.setNamespaceContextPointer(pointer);
+        assertNull(resolver.getNamespaceURI("undefinedPrefix"));
+    }
+
+    // getNamespaceURI: not found locally, no pointer -> delegates to parent
+    @Test
+    public void testGetNamespaceURI_prefixNotInMap_delegatesToParent_returnsParentURI() throws Throwable {
+        NamespaceResolver parent = new NamespaceResolver();
+        parent.registerNamespace("p", "urn:p");
+        NamespaceResolver child = new NamespaceResolver(parent);
+        assertEquals("urn:p", child.getNamespaceURI("p"));
+    }
+
+    // getNamespaceURI: not found anywhere in chain -> null
+    @Test
+    public void testGetNamespaceURI_prefixNotFoundAnywhere_returnsNull() throws Throwable {
+        NamespaceResolver parent = new NamespaceResolver();
+        NamespaceResolver child = new NamespaceResolver(parent);
+        assertNull(child.getNamespaceURI("nope"));
+    }
+
+    // getNamespaceURI: empty string prefix, unregistered -> null
+    @Test
+    public void testGetNamespaceURI_emptyStringPrefix_unregistered_returnsNull() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        assertNull(resolver.getNamespaceURI(""));
+    }
+
+    // Bug check: getPrefix() must not throw when pointer is null (per its contract it just
+    // returns a prefix or null), yet the buggy code unconditionally calls pointer.namespaceIterator().
+    @Test
+    public void testGetPrefix_pointerNull_noExceptionThrown_returnsNull() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        String prefix = resolver.getPrefix("urn:unregistered");
+        assertNull(prefix);
+    }
+
+    // Bug check: getPrefix() with a registered namespace but no pointer must still resolve
+    // the prefix from namespaceMap instead of throwing NullPointerException.
+    @Test
+    public void testGetPrefix_pointerNull_withRegisteredNamespace_returnsPrefix() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.registerNamespace("x", "urn:x");
+        String prefix = resolver.getPrefix("urn:x");
+        assertEquals("x", prefix);
+    }
+
+    // getPrefix: registered in namespaceMap, pointer set -> prefix resolved from namespaceMap
+    @Test
+    public void testGetPrefix_registeredInMap_pointerSet_returnsPrefix() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.setNamespaceContextPointer(pointer);
+        resolver.registerNamespace("a", "urn:a");
+        assertEquals("a", resolver.getPrefix("urn:a"));
+    }
+
+    // getPrefix: not found locally -> delegates to parent's getPrefix
+    @Test
+    public void testGetPrefix_notFoundLocally_delegatesToParent() throws Throwable {
+        NamespaceResolver parent = new NamespaceResolver();
+        parent.setNamespaceContextPointer(pointer);
+        parent.registerNamespace("q", "urn:q");
+        NamespaceResolver child = new NamespaceResolver(parent);
+        child.setNamespaceContextPointer(pointer2);
+        assertEquals("q", child.getPrefix("urn:q"));
+    }
+
+    // getPrefix: not found anywhere in chain -> null
+    @Test
+    public void testGetPrefix_notFoundAnywhere_returnsNull() throws Throwable {
+        NamespaceResolver parent = new NamespaceResolver();
+        parent.setNamespaceContextPointer(pointer);
+        NamespaceResolver child = new NamespaceResolver(parent);
+        child.setNamespaceContextPointer(pointer2);
+        assertNull(child.getPrefix("urn:missing"));
+    }
+
+    // isSealed: default state is false
+    @Test
+    public void testIsSealed_defaultFalse() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        assertFalse(resolver.isSealed());
+    }
+
+    // seal: sets sealed on this resolver and propagates to parent
+    @Test
+    public void testSeal_setsSealedTrueAndPropagatesToParent() throws Throwable {
+        NamespaceResolver parent = new NamespaceResolver();
+        NamespaceResolver child = new NamespaceResolver(parent);
+        child.seal();
+        assertTrue(child.isSealed());
+        assertTrue(parent.isSealed());
+    }
+
+    // clone: returns a distinct instance that carries over the namespaceMap contents
+    @Test
+    public void testClone_returnsDistinctInstanceWithSameNamespaceMap() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.registerNamespace("a", "urn:a");
+        NamespaceResolver clone = (NamespaceResolver) resolver.clone();
+        assertNotSame(resolver, clone);
+        assertEquals(resolver.namespaceMap, clone.namespaceMap);
+    }
+
+    // clone: a sealed resolver's clone is unsealed, while the original stays sealed
+    @Test
+    public void testClone_sealedClonedResolver_isUnsealed() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.seal();
+        NamespaceResolver clone = (NamespaceResolver) resolver.clone();
+        assertFalse(clone.isSealed());
+        assertTrue(resolver.isSealed());
+    }
+
+    // clone: unsealed clone allows registering a new namespace without exception
+    @Test
+    public void testClone_unsealedCloneAllowsRegisterNamespace() throws Throwable {
+        NamespaceResolver resolver = new NamespaceResolver();
+        resolver.seal();
+        NamespaceResolver clone = (NamespaceResolver) resolver.clone();
+        clone.registerNamespace("a", "urn:a");
+        assertEquals("urn:a", clone.namespaceMap.get("a"));
+    }
+}

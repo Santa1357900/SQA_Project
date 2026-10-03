@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Time-17-syt7d6cw/Time-17f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.joda.time.DateTimeZoneClaudeTest::testForOffsetHoursMinutes_hoursTooLarge_throwsIllegalArgumentException
+  - org.joda.time.DateTimeZoneClaudeTest::testEqualsHashCodeToString_UTC_consistent
+  - org.joda.time.DateTimeZoneClaudeTest::testForOffsetHoursMinutes_hoursTooSmall_throwsIllegalArgumentException
+[exit 0]

@@ -1,0 +1,297 @@
+package com.google.javascript.jscomp.type;
+
+import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.javascript.jscomp.ClosureCodingConvention;
+import com.google.javascript.jscomp.Compiler;
+import com.google.javascript.jscomp.LinkedFlowScope;
+import com.google.javascript.jscomp.Scope;
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Token;
+import com.google.javascript.rhino.jstype.JSType;
+import com.google.javascript.rhino.jstype.JSTypeNative;
+import com.google.javascript.rhino.jstype.JSTypeRegistry;
+
+public class ClosureReverseAbstractInterpreterClaudeTest {
+
+  private Compiler compiler;
+  private JSTypeRegistry registry;
+  private ClosureReverseAbstractInterpreter interpreter;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    registry = compiler.getTypeRegistry();
+    interpreter = new ClosureReverseAbstractInterpreter(
+        new ClosureCodingConvention(), registry);
+  }
+
+  private FlowScope newScope() {
+    Scope scope = new Scope(new Node(Token.BLOCK), compiler);
+    return LinkedFlowScope.createEntryLattice(scope);
+  }
+
+  private Node nameParam(String name) {
+    return Node.newString(Token.NAME, name);
+  }
+
+  private Node googCall(String methodName, Node param) {
+    Node googName = Node.newString(Token.NAME, "goog");
+    Node prop = Node.newString(Token.STRING, methodName);
+    Node getProp = new Node(Token.GETPROP, googName, prop);
+    return new Node(Token.CALL, getProp, param);
+  }
+
+  // Constructor: สร้าง instance ได้ และ method หลักทำงานได้โดยไม่ throw (default fallback path)
+  @Test
+  public void testConstructor_withValidArguments_returnsWorkingInterpreter() throws Throwable {
+    assertNotNull(interpreter);
+    FlowScope blind = newScope();
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(
+        nameParam("x"), blind, true);
+    assertSame(blind, result);
+  }
+
+  // สาขา: condition.isCall() == false -> default fallback คืน blindScope เดิม
+  @Test
+  public void testGetPreciserScope_conditionNotCall_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node condition = nameParam("cond");
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(condition, blind, false);
+    assertSame(blind, result);
+  }
+
+  // สาขา: childCount != 2 (ไม่มี argument เลย) -> default fallback
+  @Test
+  public void testGetPreciserScope_callWithNoArguments_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node googName = Node.newString(Token.NAME, "goog");
+    Node prop = Node.newString(Token.STRING, "isArray");
+    Node getProp = new Node(Token.GETPROP, googName, prop);
+    Node call = new Node(Token.CALL, getProp);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(blind, result);
+  }
+
+  // สาขา: childCount != 2 (มีสอง argument) -> default fallback
+  @Test
+  public void testGetPreciserScope_callWithTwoArguments_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node googName = Node.newString(Token.NAME, "goog");
+    Node prop = Node.newString(Token.STRING, "isArray");
+    Node getProp = new Node(Token.GETPROP, googName, prop);
+    Node call = new Node(Token.CALL, getProp, nameParam("a"), nameParam("b"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(blind, result);
+  }
+
+  // สาขา: callee.isGetProp() == false (เรียกฟังก์ชันตรงๆ ไม่ผ่าน property) -> default fallback
+  @Test
+  public void testGetPreciserScope_calleeNotGetProp_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node callee = Node.newString(Token.NAME, "foo");
+    Node call = new Node(Token.CALL, callee, nameParam("a"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(blind, result);
+  }
+
+  // สาขา: param.isQualifiedName() == false (ส่ง string literal เป็น argument) -> default fallback
+  @Test
+  public void testGetPreciserScope_paramNotQualifiedName_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node param = Node.newString(Token.STRING, "x");
+    Node call = googCall("isArray", param);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(blind, result);
+  }
+
+  // สาขา: left.isName() == false (callee เป็น nested property เช่น foo.bar.isArray) -> default fallback
+  @Test
+  public void testGetPreciserScope_receiverNotSimpleName_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node ns = new Node(Token.GETPROP,
+        Node.newString(Token.NAME, "foo"), Node.newString(Token.STRING, "bar"));
+    Node getProp = new Node(Token.GETPROP, ns, Node.newString(Token.STRING, "isArray"));
+    Node call = new Node(Token.CALL, getProp, nameParam("x"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(blind, result);
+  }
+
+  // สาขา: left.isName() == true แต่ไม่ใช่ "goog" -> default fallback
+  @Test
+  public void testGetPreciserScope_receiverNameNotGoog_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node getProp = new Node(Token.GETPROP,
+        Node.newString(Token.NAME, "foo"), Node.newString(Token.STRING, "isArray"));
+    Node call = new Node(Token.CALL, getProp, nameParam("x"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(blind, result);
+  }
+
+  // สาขา: right.isString() == false (property ไม่ใช่ string node) -> default fallback
+  @Test
+  public void testGetPreciserScope_propertyNotStringNode_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node getProp = new Node(Token.GETPROP,
+        Node.newString(Token.NAME, "goog"), Node.newString(Token.NAME, "isArray"));
+    Node call = new Node(Token.CALL, getProp, nameParam("x"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(blind, result);
+  }
+
+  // สาขา: restricters.get(...) == null (ชื่อฟังก์ชัน goog.* ไม่รู้จัก) -> default fallback
+  @Test
+  public void testGetPreciserScope_unknownGoogFunction_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node call = googCall("isWeirdThing", nameParam("x"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(blind, result);
+  }
+
+  // สาขา: param.isQualifiedName() == true ผ่าน GETPROP (obj.prop) + isDef outcome=false -> type null -> blindScope เดิม
+  @Test
+  public void testGetPreciserScope_qualifiedNameParameter_isDefFalse_returnsBlindScopeUnchanged()
+      throws Throwable {
+    FlowScope blind = newScope();
+    Node param = new Node(Token.GETPROP,
+        Node.newString(Token.NAME, "obj"), Node.newString(Token.STRING, "prop"));
+    Node call = googCall("isDef", param);
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, false);
+    assertSame(blind, result);
+  }
+
+  // isDef: outcome=false, p.type==null -> restricter คืน null ตรงๆ ตามโค้ด -> blindScope เดิม
+  @Test
+  public void testGetPreciserScope_isDefFalseOnUnknownType_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node call = googCall("isDef", nameParam("a"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, false);
+    assertSame(blind, result);
+  }
+
+  // isDef: outcome=true บน NUMBER_TYPE (ไม่มี undefined อยู่แล้ว) -> ต้องได้ type ที่ไม่ null กลับมา
+  @Test
+  public void testGetPreciserScope_isDefTrueOnNumberType_returnsNonNullType() throws Throwable {
+    FlowScope blind = newScope();
+    JSType numberType = registry.getNativeType(JSTypeNative.NUMBER_TYPE);
+    blind = blind.inferSlotType("a", numberType);
+    Node call = googCall("isDef", nameParam("a"));
+    FlowScope informed = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertNotNull(informed.getSlot("a").getType());
+  }
+
+  // isNull: outcome=true, p.type==null -> restricter คืน null ตรงๆ ตามโค้ด -> blindScope เดิม
+  @Test
+  public void testGetPreciserScope_isNullTrueOnUnknownType_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node call = googCall("isNull", nameParam("a"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(blind, result);
+  }
+
+  // isDefAndNotNull: outcome=false, p.type==null -> restricter คืน null ตรงๆ ตามโค้ด -> blindScope เดิม
+  @Test
+  public void testGetPreciserScope_isDefAndNotNullFalseOnUnknownType_returnsBlindScopeUnchanged()
+      throws Throwable {
+    FlowScope blind = newScope();
+    Node call = googCall("isDefAndNotNull", nameParam("a"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, false);
+    assertSame(blind, result);
+  }
+
+  // isArray: p.type==null, outcome=false -> ตามโค้ดคืน null ตรงๆ -> blindScope เดิม
+  @Test
+  public void testGetPreciserScope_isArrayFalseOnUnknownType_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node call = googCall("isArray", nameParam("a"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, false);
+    assertSame(blind, result);
+  }
+
+  // isArray: p.type==null, outcome=true -> ตามโค้ดคืน ARRAY_TYPE (ไม่ null) -> ต้องสร้าง child scope ใหม่
+  @Test
+  public void testGetPreciserScope_isArrayTrueOnUnknownType_createsChildScope() throws Throwable {
+    FlowScope blind = newScope();
+    Node call = googCall("isArray", nameParam("a"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertNotSame(blind, result);
+  }
+
+  // isArray: p.type=ALL_TYPE (top type), outcome=true -> caseTopType คืน topType เดิมไม่เปลี่ยนแปลง
+  @Test
+  public void testGetPreciserScope_isArrayTrueOnAllType_keepsTopType() throws Throwable {
+    FlowScope blind = newScope();
+    JSType allType = registry.getNativeType(JSTypeNative.ALL_TYPE);
+    blind = blind.inferSlotType("a", allType);
+    Node call = googCall("isArray", nameParam("a"));
+    FlowScope informed = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(allType, informed.getSlot("a").getType());
+  }
+
+  // isArray: p.type=ARRAY_TYPE, outcome=true -> caseObjectType: arrayType.isSubtype(type) จริง -> คืน arrayType
+  @Test
+  public void testGetPreciserScope_isArrayTrueOnArrayType_keepsArrayType() throws Throwable {
+    FlowScope blind = newScope();
+    JSType arrayType = registry.getNativeType(JSTypeNative.ARRAY_TYPE);
+    blind = blind.inferSlotType("a", arrayType);
+    Node call = googCall("isArray", nameParam("a"));
+    FlowScope informed = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(arrayType, informed.getSlot("a").getType());
+  }
+
+  // isArray: p.type=ARRAY_TYPE, outcome=false -> caseObjectType: type.isSubtype(ARRAY_TYPE) จริง -> คืน null
+  @Test
+  public void testGetPreciserScope_isArrayFalseOnArrayType_eliminatesType() throws Throwable {
+    FlowScope blind = newScope();
+    JSType arrayType = registry.getNativeType(JSTypeNative.ARRAY_TYPE);
+    blind = blind.inferSlotType("a", arrayType);
+    Node call = googCall("isArray", nameParam("a"));
+    FlowScope informed = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, false);
+    assertSame(blind, informed);
+  }
+
+  // isObject: p.type==null, outcome=false -> ตามโค้ดคืน null ตรงๆ -> blindScope เดิม
+  @Test
+  public void testGetPreciserScope_isObjectFalseOnUnknownType_returnsBlindScopeUnchanged() throws Throwable {
+    FlowScope blind = newScope();
+    Node call = googCall("isObject", nameParam("a"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, false);
+    assertSame(blind, result);
+  }
+
+  // isObject: p.type==null, outcome=true -> ตามโค้ดคืน OBJECT_TYPE (ไม่ null) -> ต้องสร้าง child scope ใหม่
+  @Test
+  public void testGetPreciserScope_isObjectTrueOnUnknownType_createsChildScope() throws Throwable {
+    FlowScope blind = newScope();
+    Node call = googCall("isObject", nameParam("a"));
+    FlowScope result = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertNotSame(blind, result);
+  }
+
+  // บั๊ก Closure-111: p.type=ALL_TYPE (top type), isObject outcome=true
+  // ตาม Javadoc "goog.isObject returns true" ค่าที่ refine แล้วต้องเป็น OBJECT_TYPE ไม่ใช่ NO_OBJECT_TYPE (bottom)
+  @Test
+  public void testGetPreciserScope_isObjectTrueOnAllType_restrictsToObjectType() throws Throwable {
+    FlowScope blind = newScope();
+    JSType allType = registry.getNativeType(JSTypeNative.ALL_TYPE);
+    blind = blind.inferSlotType("a", allType);
+    Node call = googCall("isObject", nameParam("a"));
+    FlowScope informed = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    JSType expected = registry.getNativeType(JSTypeNative.OBJECT_TYPE);
+    assertSame(expected, informed.getSlot("a").getType());
+  }
+
+  // isObject: p.type=ARRAY_TYPE, outcome=true -> caseObjectType คืน type เดิม (array คือ object ชนิดหนึ่ง)
+  @Test
+  public void testGetPreciserScope_isObjectTrueOnArrayType_keepsArrayType() throws Throwable {
+    FlowScope blind = newScope();
+    JSType arrayType = registry.getNativeType(JSTypeNative.ARRAY_TYPE);
+    blind = blind.inferSlotType("a", arrayType);
+    Node call = googCall("isObject", nameParam("a"));
+    FlowScope informed = interpreter.getPreciserScopeKnowingConditionOutcome(call, blind, true);
+    assertSame(arrayType, informed.getSlot("a").getType());
+  }
+}

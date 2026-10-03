@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Collections-17-mqo64ke5/Collections-17f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.collections.functors.EqualPredicateClaudeTest::testEvaluate_nullStoredValue_nonNullInput_returnsFalse
+  - org.apache.commons.collections.functors.EqualPredicateClaudeTest::testEvaluate_nullStoredValue_nullInput_returnsTrue
+[exit 0]

@@ -1,0 +1,282 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.common.base.Supplier;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+
+public class InlineFunctionsClaudeTest {
+
+  private Compiler compiler;
+  private Supplier<String> supplier;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    supplier = new Supplier<String>() {
+      public String get() {
+        return "0";
+      }
+    };
+  }
+
+  // Covers Preconditions.checkArgument(compiler != null) throwing branch.
+  @Test
+  public void testConstructor_nullCompiler_throwsIllegalArgumentException() throws Throwable {
+    try {
+      new InlineFunctions(null, supplier, true, true, true);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // Covers Preconditions.checkArgument(safeNameIdSupplier != null) throwing branch.
+  @Test
+  public void testConstructor_nullSupplier_throwsIllegalArgumentException() throws Throwable {
+    try {
+      new InlineFunctions(compiler, null, true, true, true);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // Covers the first checkArgument short-circuiting when both args are null.
+  @Test
+  public void testConstructor_compilerAndSupplierNull_throwsIllegalArgumentException() throws Throwable {
+    try {
+      new InlineFunctions(null, null, true, true, true);
+      fail("expected IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+  }
+
+  // Covers successful construction with all flags true.
+  @Test
+  public void testConstructor_allFlagsTrue_createsInstanceImplementingPass() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    assertNotNull(inliner);
+    assertTrue(inliner instanceof SpecializationAwareCompilerPass);
+  }
+
+  // Covers successful construction with all flags false.
+  @Test
+  public void testConstructor_allFlagsFalse_createsInstance() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, false, false, false);
+    assertNotNull(inliner);
+  }
+
+  // Covers constructor with only inlineGlobalFunctions true.
+  @Test
+  public void testConstructor_onlyInlineGlobalTrue_createsInstance() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, false, false);
+    assertNotNull(inliner);
+  }
+
+  // Covers constructor with only inlineLocalFunctions true.
+  @Test
+  public void testConstructor_onlyInlineLocalTrue_createsInstance() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, false, true, false);
+    assertNotNull(inliner);
+  }
+
+  // Covers constructor with only blockFunctionInliningEnabled true.
+  @Test
+  public void testConstructor_onlyBlockInliningTrue_createsInstance() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, false, false, true);
+    assertNotNull(inliner);
+  }
+
+  // Covers the "get" branch of getOrCreateFunctionState: same name returns same instance.
+  @Test
+  public void testGetOrCreateFunctionState_sameName_returnsSameInstance() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    Object fs1 = inliner.getOrCreateFunctionState("foo");
+    Object fs2 = inliner.getOrCreateFunctionState("foo");
+    assertSame(fs1, fs2);
+  }
+
+  // Covers the "create" branch of getOrCreateFunctionState: different names yield different instances.
+  @Test
+  public void testGetOrCreateFunctionState_differentNames_returnsDifferentInstances() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    Object fs1 = inliner.getOrCreateFunctionState("foo");
+    Object fs2 = inliner.getOrCreateFunctionState("bar");
+    assertNotSame(fs1, fs2);
+  }
+
+  // Covers null as a valid map key: repeated null lookups return the same instance.
+  @Test
+  public void testGetOrCreateFunctionState_nullNameTwice_returnsSameInstance() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    Object fs1 = inliner.getOrCreateFunctionState(null);
+    Object fs2 = inliner.getOrCreateFunctionState(null);
+    assertSame(fs1, fs2);
+  }
+
+  // Covers that empty string and null are distinct keys.
+  @Test
+  public void testGetOrCreateFunctionState_emptyStringVsNull_returnsDifferentInstances() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    Object fs1 = inliner.getOrCreateFunctionState("");
+    Object fs2 = inliner.getOrCreateFunctionState(null);
+    assertNotSame(fs1, fs2);
+  }
+
+  // Covers basic non-null creation for a fresh name.
+  @Test
+  public void testGetOrCreateFunctionState_newName_returnsNonNull() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    Object fs = inliner.getOrCreateFunctionState("uniqueName");
+    assertNotNull(fs);
+  }
+
+  // Covers Preconditions.checkState(compiler.getLifeCycleStage().isNormalized()) failing
+  // for a freshly created (not-yet-normalized) compiler, with null externs/root.
+  @Test
+  public void testProcess_lifeCycleNotNormalized_nullArgs_throwsIllegalStateException() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    try {
+      inliner.process(null, null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Same precondition branch, but with concrete block nodes for externs/root.
+  @Test
+  public void testProcess_lifeCycleNotNormalized_blockNodes_throwsIllegalStateException() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    Node externs = IR.block();
+    Node root = IR.block();
+    try {
+      inliner.process(externs, root);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Same precondition branch with a different flag combination and mixed args.
+  @Test
+  public void testProcess_lifeCycleNotNormalized_mixedArgs_throwsIllegalStateException() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, false, false, false);
+    try {
+      inliner.process(IR.block(), null);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Covers Preconditions.checkState(name.getType() == Token.NAME) failing for a STRING node.
+  @Test
+  public void testIsCandidateUsage_stringTypeNode_throwsIllegalStateException() throws Throwable {
+    Node notAName = IR.string("foo");
+    try {
+      InlineFunctions.isCandidateUsage(notAName);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Same precondition branch, exercised with a NUMBER node instead.
+  @Test
+  public void testIsCandidateUsage_numberTypeNode_throwsIllegalStateException() throws Throwable {
+    Node notAName = IR.number(42.0);
+    try {
+      InlineFunctions.isCandidateUsage(notAName);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Same precondition branch, exercised with a BLOCK node instead.
+  @Test
+  public void testIsCandidateUsage_blockTypeNode_throwsIllegalStateException() throws Throwable {
+    Node notAName = IR.block();
+    try {
+      InlineFunctions.isCandidateUsage(notAName);
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // A NAME node passes the type check but has no parent attached; dereferencing
+  // parent.getType() must fail with a NullPointerException.
+  @Test
+  public void testIsCandidateUsage_nameWithoutParent_throwsNullPointerException() throws Throwable {
+    Node orphanName = IR.name("foo");
+    try {
+      InlineFunctions.isCandidateUsage(orphanName);
+      fail("expected NullPointerException");
+    } catch (NullPointerException expected) {
+    }
+  }
+
+  // Covers trimCanidatesUsingOnCost: a default FunctionState (no references, removable)
+  // must NOT be removed, since hasReferences() is false and canRemove() is true.
+  @Test
+  public void testTrimCanidatesUsingOnCost_defaultFunctionState_isRetained() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    Object fsBefore = inliner.getOrCreateFunctionState("foo");
+    inliner.trimCanidatesUsingOnCost();
+    Object fsAfter = inliner.getOrCreateFunctionState("foo");
+    assertSame(fsBefore, fsAfter);
+  }
+
+  // Covers the loop iterating over multiple default entries, all retained.
+  @Test
+  public void testTrimCanidatesUsingOnCost_multipleEntries_allRetained() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    Object a1 = inliner.getOrCreateFunctionState("a");
+    Object b1 = inliner.getOrCreateFunctionState("b");
+    inliner.trimCanidatesUsingOnCost();
+    assertSame(a1, inliner.getOrCreateFunctionState("a"));
+    assertSame(b1, inliner.getOrCreateFunctionState("b"));
+  }
+
+  // Covers the zero-iteration path of the loop when no candidates exist yet.
+  @Test
+  public void testTrimCanidatesUsingOnCost_emptyMap_stillUsableAfterwards() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    inliner.trimCanidatesUsingOnCost();
+    Object fs = inliner.getOrCreateFunctionState("x");
+    assertNotNull(fs);
+  }
+
+  // Covers removeInlinedFunctions with no candidates (zero-iteration loop).
+  @Test
+  public void testRemoveInlinedFunctions_emptyMap_stillUsableAfterwards() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    inliner.removeInlinedFunctions();
+    Object fs = inliner.getOrCreateFunctionState("y");
+    assertNotNull(fs);
+  }
+
+  // A default FunctionState is canRemove()==true and canInline()==true but has fn==null,
+  // so Preconditions.checkState(fn != null) must throw IllegalStateException.
+  @Test
+  public void testRemoveInlinedFunctions_functionStateWithoutFn_throwsIllegalStateException() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    inliner.getOrCreateFunctionState("foo");
+    try {
+      inliner.removeInlinedFunctions();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  // Same branch exercised with multiple default entries present in the map.
+  @Test
+  public void testRemoveInlinedFunctions_multipleEntriesWithoutFn_throwsIllegalStateException() throws Throwable {
+    InlineFunctions inliner = new InlineFunctions(compiler, supplier, true, true, true);
+    inliner.getOrCreateFunctionState("foo");
+    inliner.getOrCreateFunctionState("bar");
+    try {
+      inliner.removeInlinedFunctions();
+      fail("expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+    }
+  }
+}

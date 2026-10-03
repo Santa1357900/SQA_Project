@@ -1,0 +1,732 @@
+package org.jfree.chart.plot;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.geom.Rectangle2D;
+import java.util.Collection;
+import java.util.List;
+
+import org.jfree.chart.LegendItemCollection;
+import org.jfree.chart.axis.AxisLocation;
+import org.jfree.chart.util.Layer;
+import org.jfree.chart.util.RectangleInsets;
+import org.jfree.data.category.CategoryDataset;
+import org.jfree.data.category.DefaultCategoryDataset;
+
+public class CategoryPlotClaudeTest {
+
+    private DefaultCategoryDataset createDataset() {
+        DefaultCategoryDataset ds = new DefaultCategoryDataset();
+        ds.addValue(1.0, "R1", "C1");
+        ds.addValue(2.0, "R1", "C2");
+        return ds;
+    }
+
+    // Default constructor: null dataset/domain/range axis, default orientation
+    @Test
+    public void testDefaultConstructor_basicDefaults() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertNull(plot.getDataset());
+        assertNull(plot.getDomainAxis());
+        assertNull(plot.getRangeAxis());
+        assertEquals(PlotOrientation.VERTICAL, plot.getOrientation());
+        assertNotNull(plot.getAxisOffset());
+    }
+
+    // Default constructor: default flags/orders/anchor values
+    @Test
+    public void testDefaultConstructor_flagsAndOrders() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertFalse(plot.isDomainGridlinesVisible());
+        assertTrue(plot.isRangeGridlinesVisible());
+        assertEquals(DatasetRenderingOrder.REVERSE, plot.getDatasetRenderingOrder());
+        assertEquals(SortOrder.ASCENDING, plot.getColumnRenderingOrder());
+        assertEquals(SortOrder.ASCENDING, plot.getRowRenderingOrder());
+        assertEquals(0.0, plot.getAnchorValue(), 1e-9);
+        assertFalse(plot.isRangeCrosshairVisible());
+        assertTrue(plot.isRangeCrosshairLockedOnData());
+        assertNotNull(plot.getAnnotations());
+        assertTrue(plot.getAnnotations().isEmpty());
+    }
+
+    // Constructor with dataset stores exact reference
+    @Test
+    public void testConstructorWithDataset_getDatasetReturnsSameInstance() throws Throwable {
+        CategoryDataset ds = createDataset();
+        CategoryPlot plot = new CategoryPlot(ds, null, null, null);
+        assertSame(ds, plot.getDataset());
+    }
+
+    // getPlotType returns non-null non-empty localized string
+    @Test
+    public void testGetPlotType_returnsNonEmptyString() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        String type = plot.getPlotType();
+        assertNotNull(type);
+        assertTrue(type.length() > 0);
+    }
+
+    // setOrientation(null) throws IllegalArgumentException
+    @Test
+    public void testSetOrientation_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setOrientation(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setOrientation(HORIZONTAL) updates orientation
+    @Test
+    public void testSetOrientation_horizontal_updatesOrientation() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setOrientation(PlotOrientation.HORIZONTAL);
+        assertEquals(PlotOrientation.HORIZONTAL, plot.getOrientation());
+    }
+
+    // setAxisOffset(null) throws IllegalArgumentException
+    @Test
+    public void testSetAxisOffset_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setAxisOffset(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setAxisOffset(valid) updates the offset reference
+    @Test
+    public void testSetAxisOffset_valid_updatesOffset() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        RectangleInsets insets = new RectangleInsets(1.0, 1.0, 1.0, 1.0);
+        plot.setAxisOffset(insets);
+        assertSame(insets, plot.getAxisOffset());
+    }
+
+    // getDomainAxis(index) out of bounds and no parent -> null
+    @Test
+    public void testGetDomainAxis_indexOutOfBounds_returnsNull() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertNull(plot.getDomainAxis(5));
+    }
+
+    // setDomainAxes(array) grows the domain axis count to array length
+    @Test
+    public void testSetDomainAxes_arrayOfNulls_updatesCount() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        CategoryAxis[] axes = new CategoryAxis[] {null, null, null};
+        plot.setDomainAxes(axes);
+        assertEquals(3, plot.getDomainAxisCount());
+    }
+
+    // getDomainAxisIndex: default null axis stored at index 0
+    @Test
+    public void testGetDomainAxisIndex_defaultNullAxis_returnsZero() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertEquals(0, plot.getDomainAxisIndex(null));
+    }
+
+    // getDomainAxisLocation(1) falls back to opposite of index0 per contract
+    @Test
+    public void testGetDomainAxisLocation_index1_fallsBackToOpposite() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        AxisLocation expected = AxisLocation.getOpposite(plot.getDomainAxisLocation(0));
+        assertEquals(expected, plot.getDomainAxisLocation(1));
+    }
+
+    // setDomainAxisLocation(0, null) throws IllegalArgumentException
+    @Test
+    public void testSetDomainAxisLocation_nullAtIndex0_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setDomainAxisLocation(0, null, true);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // getDomainAxisCount defaults to 1
+    @Test
+    public void testGetDomainAxisCount_defaultIsOne() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertEquals(1, plot.getDomainAxisCount());
+    }
+
+    // clearDomainAxes resets the count to zero
+    @Test
+    public void testClearDomainAxes_resetsCountToZero() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.clearDomainAxes();
+        assertEquals(0, plot.getDomainAxisCount());
+    }
+
+    // configureDomainAxes with null axis does not change axis count
+    @Test
+    public void testConfigureDomainAxes_noExceptionKeepsCount() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.configureDomainAxes();
+        assertEquals(1, plot.getDomainAxisCount());
+    }
+
+    // getRangeAxisIndex: default null axis stored at index 0
+    @Test
+    public void testGetRangeAxisIndex_defaultNullAxis_returnsZero() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertEquals(0, plot.getRangeAxisIndex(null));
+    }
+
+    // getRangeAxisLocation(1) falls back to opposite of index0 per contract
+    @Test
+    public void testGetRangeAxisLocation_index1_fallsBackToOpposite() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        AxisLocation expected = AxisLocation.getOpposite(plot.getRangeAxisLocation(0));
+        assertEquals(expected, plot.getRangeAxisLocation(1));
+    }
+
+    // setRangeAxisLocation(0, null) throws IllegalArgumentException
+    @Test
+    public void testSetRangeAxisLocation_nullAtIndex0_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setRangeAxisLocation(0, null, true);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setRangeAxes(array) grows the range axis count to array length
+    @Test
+    public void testSetRangeAxes_arrayOfNulls_updatesCount() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        ValueAxis[] axes = new ValueAxis[] {null, null};
+        plot.setRangeAxes(axes);
+        assertEquals(2, plot.getRangeAxisCount());
+    }
+
+    // clearRangeAxes resets the count to zero
+    @Test
+    public void testClearRangeAxes_resetsCountToZero() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.clearRangeAxes();
+        assertEquals(0, plot.getRangeAxisCount());
+    }
+
+    // setDataset(index, dataset) replaces dataset and dataset count stays 1
+    @Test
+    public void testSetDataset_replacesDataset() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        CategoryDataset ds = createDataset();
+        plot.setDataset(0, ds);
+        assertSame(ds, plot.getDataset(0));
+        assertEquals(1, plot.getDatasetCount());
+    }
+
+    // mapDatasetToDomainAxis: mapped branch and unmapped-fallback branch
+    @Test
+    public void testMapDatasetToDomainAxis_mappedAndUnmapped() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.mapDatasetToDomainAxis(0, 0);
+        assertEquals(plot.getDomainAxis(0), plot.getDomainAxisForDataset(0));
+        assertEquals(plot.getDomainAxis(), plot.getDomainAxisForDataset(9));
+    }
+
+    // mapDatasetToRangeAxis: mapped branch and unmapped-fallback branch
+    @Test
+    public void testMapDatasetToRangeAxis_mappedAndUnmapped() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.mapDatasetToRangeAxis(0, 0);
+        assertEquals(plot.getRangeAxis(0), plot.getRangeAxisForDataset(0));
+        assertEquals(plot.getRangeAxis(), plot.getRangeAxisForDataset(9));
+    }
+
+    // getRenderer(index) out of bounds returns null
+    @Test
+    public void testGetRenderer_indexOutOfBounds_returnsNull() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertNull(plot.getRenderer(5));
+    }
+
+    // setRenderer(null) keeps primary renderer null
+    @Test
+    public void testSetRenderer_null_rendererStaysNull() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setRenderer(null);
+        assertNull(plot.getRenderer());
+    }
+
+    // getRendererForDataset returns null when dataset not part of the plot
+    @Test
+    public void testGetRendererForDataset_datasetNotInPlot_returnsNull() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        CategoryDataset other = createDataset();
+        assertNull(plot.getRendererForDataset(other));
+    }
+
+    // getIndexOf: default null renderer is stored at index 0
+    @Test
+    public void testGetIndexOf_defaultNullRenderer_returnsZero() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertEquals(0, plot.getIndexOf(null));
+    }
+
+    // setDatasetRenderingOrder(null) throws IllegalArgumentException
+    @Test
+    public void testSetDatasetRenderingOrder_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setDatasetRenderingOrder(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setDatasetRenderingOrder(FORWARD) updates the order
+    @Test
+    public void testSetDatasetRenderingOrder_forward_updatesOrder() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setDatasetRenderingOrder(DatasetRenderingOrder.FORWARD);
+        assertEquals(DatasetRenderingOrder.FORWARD, plot.getDatasetRenderingOrder());
+    }
+
+    // setColumnRenderingOrder(null) throws IllegalArgumentException
+    @Test
+    public void testSetColumnRenderingOrder_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setColumnRenderingOrder(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setRowRenderingOrder(null) throws IllegalArgumentException
+    @Test
+    public void testSetRowRenderingOrder_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setRowRenderingOrder(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setDomainGridlinesVisible toggles the flag
+    @Test
+    public void testSetDomainGridlinesVisible_toggle_updatesFlag() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setDomainGridlinesVisible(true);
+        assertTrue(plot.isDomainGridlinesVisible());
+    }
+
+    // setDomainGridlinePosition(null) throws IllegalArgumentException
+    @Test
+    public void testSetDomainGridlinePosition_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setDomainGridlinePosition(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setDomainGridlineStroke(null) throws; valid value updates stroke
+    @Test
+    public void testSetDomainGridlineStroke_nullThrows_validUpdates() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setDomainGridlineStroke(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+        BasicStroke stroke = new BasicStroke(2.0f);
+        plot.setDomainGridlineStroke(stroke);
+        assertSame(stroke, plot.getDomainGridlineStroke());
+    }
+
+    // setDomainGridlinePaint(null) throws; valid value updates paint
+    @Test
+    public void testSetDomainGridlinePaint_nullThrows_validUpdates() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setDomainGridlinePaint(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+        plot.setDomainGridlinePaint(Color.RED);
+        assertSame(Color.RED, plot.getDomainGridlinePaint());
+    }
+
+    // setRangeGridlinesVisible toggles the flag
+    @Test
+    public void testSetRangeGridlinesVisible_toggle_updatesFlag() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setRangeGridlinesVisible(false);
+        assertFalse(plot.isRangeGridlinesVisible());
+    }
+
+    // setRangeGridlineStroke(null) throws IllegalArgumentException
+    @Test
+    public void testSetRangeGridlineStroke_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setRangeGridlineStroke(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // setRangeGridlinePaint(null) throws IllegalArgumentException
+    @Test
+    public void testSetRangeGridlinePaint_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setRangeGridlinePaint(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // fixed legend items override the computed legend items
+    @Test
+    public void testFixedLegendItems_setterOverridesGetLegendItems() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        LegendItemCollection items = new LegendItemCollection();
+        plot.setFixedLegendItems(items);
+        assertSame(items, plot.getFixedLegendItems());
+        assertSame(items, plot.getLegendItems());
+    }
+
+    // getLegendItems with no fixed items creates a fresh collection each call
+    @Test
+    public void testGetLegendItems_noFixedItems_returnsNewCollectionEachTime() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        LegendItemCollection first = plot.getLegendItems();
+        LegendItemCollection second = plot.getLegendItems();
+        assertNotNull(first);
+        assertNotSame(first, second);
+    }
+
+    // handleClick outside the data area leaves anchor value unchanged
+    @Test
+    public void testHandleClick_outsideDataArea_anchorValueUnchanged() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setAnchorValue(5.0);
+        PlotRenderingInfo info = new PlotRenderingInfo(null);
+        info.setDataArea(new Rectangle2D.Double(0.0, 0.0, 100.0, 100.0));
+        plot.handleClick(500, 500, info);
+        assertEquals(5.0, plot.getAnchorValue(), 1e-9);
+    }
+
+    // addDomainMarker(null marker) throws IllegalArgumentException
+    @Test
+    public void testAddDomainMarker_nullMarker_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.addDomainMarker(null, Layer.FOREGROUND);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // addDomainMarker(marker, null layer) throws IllegalArgumentException
+    @Test
+    public void testAddDomainMarker_nullLayer_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        CategoryMarker marker = new CategoryMarker("Category 1");
+        try {
+            plot.addDomainMarker(marker, null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // addDomainMarker(FOREGROUND) adds marker to the foreground collection
+    @Test
+    public void testAddDomainMarker_foreground_addsMarkerToCollection() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        CategoryMarker marker = new CategoryMarker("Category 1");
+        plot.addDomainMarker(marker, Layer.FOREGROUND);
+        Collection markers = plot.getDomainMarkers(Layer.FOREGROUND);
+        assertEquals(1, markers.size());
+        assertTrue(markers.contains(marker));
+    }
+
+    // clearDomainMarkers removes all markers and map entries
+    @Test
+    public void testClearDomainMarkers_removesAllMarkers() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        CategoryMarker marker = new CategoryMarker("Category 1");
+        plot.addDomainMarker(marker, Layer.FOREGROUND);
+        plot.clearDomainMarkers();
+        assertNull(plot.getDomainMarkers(Layer.FOREGROUND));
+    }
+
+    // default constructor already adds one baseline background range marker
+    @Test
+    public void testDefaultConstructor_hasOneBaselineBackgroundRangeMarker() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        Collection markers = plot.getRangeMarkers(Layer.BACKGROUND);
+        assertEquals(1, markers.size());
+    }
+
+    // addRangeMarker(FOREGROUND) adds a new marker to the foreground collection
+    @Test
+    public void testAddRangeMarker_foreground_addsMarkerToCollection() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        Marker m = new ValueMarker(1.0, Color.RED, new BasicStroke(1.0f),
+                Color.BLUE, new BasicStroke(1.0f), 1.0f);
+        plot.addRangeMarker(m, Layer.FOREGROUND);
+        Collection markers = plot.getRangeMarkers(Layer.FOREGROUND);
+        assertEquals(1, markers.size());
+        assertTrue(markers.contains(m));
+    }
+
+    // clearRangeMarkers removes all range marker map entries (including baseline)
+    @Test
+    public void testClearRangeMarkers_removesAllMarkers() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.clearRangeMarkers();
+        assertNull(plot.getRangeMarkers(Layer.BACKGROUND));
+    }
+
+    // setRangeCrosshairVisible toggles the flag
+    @Test
+    public void testSetRangeCrosshairVisible_toggle_updatesFlag() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setRangeCrosshairVisible(true);
+        assertTrue(plot.isRangeCrosshairVisible());
+    }
+
+    // setRangeCrosshairLockedOnData toggles the flag
+    @Test
+    public void testSetRangeCrosshairLockedOnData_toggle_updatesFlag() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setRangeCrosshairLockedOnData(false);
+        assertFalse(plot.isRangeCrosshairLockedOnData());
+    }
+
+    // setRangeCrosshairValue updates the stored value
+    @Test
+    public void testSetRangeCrosshairValue_updatesValue() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setRangeCrosshairValue(3.5);
+        assertEquals(3.5, plot.getRangeCrosshairValue(), 1e-9);
+    }
+
+    // setRangeCrosshairStroke(null) throws; valid value updates stroke
+    @Test
+    public void testSetRangeCrosshairStroke_nullThrows_validUpdates() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setRangeCrosshairStroke(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+        BasicStroke stroke = new BasicStroke(3.0f);
+        plot.setRangeCrosshairStroke(stroke);
+        assertSame(stroke, plot.getRangeCrosshairStroke());
+    }
+
+    // setRangeCrosshairPaint(null) throws IllegalArgumentException
+    @Test
+    public void testSetRangeCrosshairPaint_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.setRangeCrosshairPaint(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // addAnnotation(null) throws IllegalArgumentException
+    @Test
+    public void testAddAnnotation_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.addAnnotation(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // removeAnnotation(null) throws IllegalArgumentException
+    @Test
+    public void testRemoveAnnotation_null_throwsException() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        try {
+            plot.removeAnnotation(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // clearAnnotations leaves the annotations list empty
+    @Test
+    public void testClearAnnotations_listIsEmpty() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.clearAnnotations();
+        List annotations = plot.getAnnotations();
+        assertNotNull(annotations);
+        assertTrue(annotations.isEmpty());
+    }
+
+    // getDataRange(null): no range axis, no dataset -> null result
+    @Test
+    public void testGetDataRange_nullAxisNoDataset_returnsNull() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertNull(plot.getDataRange(null));
+    }
+
+    // getDataRange: dataset present but renderer null -> null result
+    @Test
+    public void testGetDataRange_datasetWithoutRenderer_returnsNull() throws Throwable {
+        CategoryDataset ds = createDataset();
+        CategoryPlot plot = new CategoryPlot(ds, null, null, null);
+        plot.setRenderer(null);
+        assertNull(plot.getDataRange(null));
+    }
+
+    // getCategories: null dataset returns null
+    @Test
+    public void testGetCategories_nullDataset_returnsNull() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertNull(plot.getCategories());
+    }
+
+    // getCategories: with dataset returns the column keys in order
+    @Test
+    public void testGetCategories_withDataset_returnsColumnKeys() throws Throwable {
+        CategoryDataset ds = createDataset();
+        CategoryPlot plot = new CategoryPlot(ds, null, null, null);
+        List cats = plot.getCategories();
+        assertEquals(2, cats.size());
+        assertEquals("C1", cats.get(0));
+        assertEquals("C2", cats.get(1));
+    }
+
+    // getWeight/setWeight round trip
+    @Test
+    public void testGetWeight_setWeight_updatesValue() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setWeight(7);
+        assertEquals(7, plot.getWeight());
+    }
+
+    // fixed domain axis space getter/setter round trip
+    @Test
+    public void testFixedDomainAxisSpace_setterGetter() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        AxisSpace space = new AxisSpace();
+        plot.setFixedDomainAxisSpace(space);
+        assertSame(space, plot.getFixedDomainAxisSpace());
+    }
+
+    // fixed range axis space getter/setter round trip
+    @Test
+    public void testFixedRangeAxisSpace_setterGetter() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        AxisSpace space = new AxisSpace();
+        plot.setFixedRangeAxisSpace(space);
+        assertSame(space, plot.getFixedRangeAxisSpace());
+    }
+
+    // drawSharedDomainAxis getter/setter round trip
+    @Test
+    public void testGetDrawSharedDomainAxis_setterGetter() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertFalse(plot.getDrawSharedDomainAxis());
+        plot.setDrawSharedDomainAxis(true);
+        assertTrue(plot.getDrawSharedDomainAxis());
+    }
+
+    // isDomainZoomable always returns false
+    @Test
+    public void testIsDomainZoomable_returnsFalse() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertFalse(plot.isDomainZoomable());
+    }
+
+    // isRangeZoomable always returns true
+    @Test
+    public void testIsRangeZoomable_returnsTrue() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertTrue(plot.isRangeZoomable());
+    }
+
+    // zoomDomainAxes is a no-op and does not change domain axis count
+    @Test
+    public void testZoomDomainAxes_isNoOp() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.zoomDomainAxes(2.0, null, null);
+        assertEquals(1, plot.getDomainAxisCount());
+    }
+
+    // getAnchorValue/setAnchorValue round trip
+    @Test
+    public void testGetAnchorValue_setAnchorValue_updatesValue() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        plot.setAnchorValue(9.9);
+        assertEquals(9.9, plot.getAnchorValue(), 1e-9);
+    }
+
+    // equals: same instance is always equal to itself
+    @Test
+    public void testEquals_sameInstance_returnsTrue() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertTrue(plot.equals(plot));
+    }
+
+    // equals: a non-CategoryPlot object is never equal
+    @Test
+    public void testEquals_differentClass_returnsFalse() throws Throwable {
+        CategoryPlot plot = new CategoryPlot();
+        assertFalse(plot.equals("not a plot"));
+    }
+
+    // equals: two plots differing only by a domain marker must NOT be equal
+    // (this exercises the bug where domain markers were omitted from equals())
+    @Test
+    public void testEquals_differentDomainMarkers_notEqual() throws Throwable {
+        CategoryDataset ds = createDataset();
+        CategoryPlot p1 = new CategoryPlot(ds, null, null, null);
+        CategoryPlot p2 = new CategoryPlot(ds, null, null, null);
+        assertTrue(p1.equals(p2));
+        CategoryMarker marker = new CategoryMarker("Category 1");
+        p1.addDomainMarker(marker, Layer.FOREGROUND);
+        assertFalse(p1.equals(p2));
+    }
+
+    // clone produces an independent but equal plot, sharing the dataset reference
+    @Test
+    public void testClone_producesIndependentEqualPlot() throws Throwable {
+        CategoryDataset ds = createDataset();
+        CategoryPlot original = new CategoryPlot(ds, null, null, null);
+        CategoryPlot clone = (CategoryPlot) original.clone();
+        assertNotSame(original, clone);
+        assertTrue(original.equals(clone));
+        assertSame(original.getDataset(), clone.getDataset());
+    }
+}

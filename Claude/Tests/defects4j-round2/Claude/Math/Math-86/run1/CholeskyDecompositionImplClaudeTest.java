@@ -1,0 +1,331 @@
+package org.apache.commons.math.linear;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CholeskyDecompositionImplClaudeTest {
+
+    private static final double EPS = 1.0e-9;
+
+    private RealMatrix m(double[][] data) {
+        return new RealMatrixImpl(data, false);
+    }
+
+    // Constructor: matrix.isSquare() == false -> NonSquareMatrixException
+    @Test
+    public void testConstructor_nonSquareMatrix_throwsNonSquareMatrixException() throws Throwable {
+        double[][] data = {{1.0, 2.0, 3.0}, {2.0, 5.0, 6.0}};
+        try {
+            new CholeskyDecompositionImpl(m(data));
+            fail("expected NonSquareMatrixException");
+        } catch (NonSquareMatrixException expected) {
+        }
+    }
+
+    // Constructor: diagonal entry below DEFAULT_ABSOLUTE_POSITIVITY_THRESHOLD -> NotPositiveDefiniteMatrixException
+    @Test
+    public void testConstructor_diagonalBelowDefaultThreshold_throwsNotPositiveDefiniteMatrixException() throws Throwable {
+        double[][] data = {{1.0e-11}};
+        try {
+            new CholeskyDecompositionImpl(m(data));
+            fail("expected NotPositiveDefiniteMatrixException");
+        } catch (NotPositiveDefiniteMatrixException expected) {
+        }
+    }
+
+    // Constructor: diagonal exactly equal to threshold -> condition is strict '<', must NOT throw
+    @Test
+    public void testConstructor_diagonalEqualsThreshold_doesNotThrow() throws Throwable {
+        double[][] data = {{CholeskyDecompositionImpl.DEFAULT_ABSOLUTE_POSITIVITY_THRESHOLD}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        double expectedL00 = Math.sqrt(CholeskyDecompositionImpl.DEFAULT_ABSOLUTE_POSITIVITY_THRESHOLD);
+        assertEquals(expectedL00, c.getL().getData()[0][0], EPS);
+    }
+
+    // Constructor: off-diagonal asymmetry exceeds default relative threshold -> NotSymmetricMatrixException
+    @Test
+    public void testConstructor_offDiagonalExceedsDefaultSymmetryThreshold_throwsNotSymmetricMatrixException() throws Throwable {
+        double[][] data = {{4.0, 1.0}, {3.0, 4.0}};
+        try {
+            new CholeskyDecompositionImpl(m(data));
+            fail("expected NotSymmetricMatrixException");
+        } catch (NotSymmetricMatrixException expected) {
+        }
+    }
+
+    // Constructor: valid symmetric positive definite matrix decomposes without throwing; determinant matches A
+    @Test
+    public void testConstructor_symmetricPositiveDefiniteMatrix_determinantMatchesExpected() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        assertEquals(8.0, c.getDeterminant(), EPS);
+    }
+
+    // Constructor: custom absolutePositivityThreshold stricter than default -> NotPositiveDefiniteMatrixException
+    @Test
+    public void testConstructor_customAbsolutePositivityThreshold_throwsNotPositiveDefiniteMatrixException() throws Throwable {
+        double[][] data = {{0.05}};
+        try {
+            new CholeskyDecompositionImpl(m(data),
+                    CholeskyDecompositionImpl.DEFAULT_RELATIVE_SYMMETRY_THRESHOLD, 0.1);
+            fail("expected NotPositiveDefiniteMatrixException");
+        } catch (NotPositiveDefiniteMatrixException expected) {
+        }
+    }
+
+    // Constructor: custom relativeSymmetryThreshold allows slight off-diagonal asymmetry to pass
+    @Test
+    public void testConstructor_customRelativeSymmetryThreshold_allowsSlightAsymmetry() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0001, 4.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data), 0.1,
+                CholeskyDecompositionImpl.DEFAULT_ABSOLUTE_POSITIVITY_THRESHOLD);
+        double[][] l = c.getL().getData();
+        assertEquals(2.0, l[0][0], EPS);
+        assertEquals(1.0, l[1][0], EPS);
+    }
+
+    // Bug hunt: symmetric matrix with positive diagonal but not actually positive definite must throw
+    @Test
+    public void testConstructor_nonPositiveDefiniteSymmetricMatrix_throwsNotPositiveDefiniteMatrixException() throws Throwable {
+        double[][] data = {{1.0, 2.0}, {2.0, 1.0}};
+        try {
+            new CholeskyDecompositionImpl(m(data));
+            fail("expected NotPositiveDefiniteMatrixException for non positive definite matrix");
+        } catch (NotPositiveDefiniteMatrixException expected) {
+        }
+    }
+
+    // Constructor: 1x1 matrix, zero off-diagonal iterations, decomposes to sqrt of diagonal
+    @Test
+    public void testConstructor_singleElementMatrix_decomposesCorrectly() throws Throwable {
+        double[][] data = {{9.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        assertEquals(3.0, c.getL().getData()[0][0], EPS);
+        assertEquals(9.0, c.getDeterminant(), EPS);
+    }
+
+    // Constructor: 3x3 identity matrix exercises multiple transform loop iterations, result stays identity
+    @Test
+    public void testConstructor_identityMatrixThreeDimensions_decomposesToIdentity() throws Throwable {
+        double[][] data = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        double[][] l = c.getL().getData();
+        assertEquals(1.0, l[0][0], EPS);
+        assertEquals(1.0, l[1][1], EPS);
+        assertEquals(1.0, l[2][2], EPS);
+        assertEquals(0.0, l[0][1], EPS);
+    }
+
+    // getL(): values match standard Cholesky lower triangular factor for a known matrix
+    @Test
+    public void testGetL_returnsCorrectLowerTriangularValues() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        double[][] l = c.getL().getData();
+        assertEquals(2.0, l[0][0], EPS);
+        assertEquals(1.0, l[1][0], EPS);
+        assertEquals(Math.sqrt(2.0), l[1][1], EPS);
+    }
+
+    // getL(): upper triangle part must be zero
+    @Test
+    public void testGetL_upperTriangleIsZero() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        double[][] l = c.getL().getData();
+        assertEquals(0.0, l[0][1], EPS);
+    }
+
+    // getL(): cached value returned on second call (same reference)
+    @Test
+    public void testGetL_cachedOnSecondCall_returnsSameInstance() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        RealMatrix first = c.getL();
+        RealMatrix second = c.getL();
+        assertSame(first, second);
+    }
+
+    // getLT(): values match standard Cholesky upper triangular transpose factor
+    @Test
+    public void testGetLT_returnsCorrectValues() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        double[][] lt = c.getLT().getData();
+        assertEquals(2.0, lt[0][0], EPS);
+        assertEquals(1.0, lt[0][1], EPS);
+        assertEquals(0.0, lt[1][0], EPS);
+    }
+
+    // getLT(): cached value returned on second call (same reference)
+    @Test
+    public void testGetLT_cachedOnSecondCall_returnsSameInstance() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        RealMatrix first = c.getLT();
+        RealMatrix second = c.getLT();
+        assertSame(first, second);
+    }
+
+    // getLT(): must be the transpose of getL()
+    @Test
+    public void testGetLT_isTransposeOfL() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        double[][] l = c.getL().getData();
+        double[][] lt = c.getLT().getData();
+        assertEquals(l[1][0], lt[0][1], EPS);
+        assertEquals(l[0][1], lt[1][0], EPS);
+    }
+
+    // getDeterminant(): identity matrix has determinant 1
+    @Test
+    public void testGetDeterminant_identityMatrix_returnsOne() throws Throwable {
+        double[][] data = {{1.0, 0.0}, {0.0, 1.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        assertEquals(1.0, c.getDeterminant(), EPS);
+    }
+
+    // getDeterminant(): matches determinant computed by the standard 2x2 formula ad-bc
+    @Test
+    public void testGetDeterminant_knownMatrix_matchesExpected() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        assertEquals(4.0 * 3.0 - 2.0 * 2.0, c.getDeterminant(), EPS);
+    }
+
+    // getDeterminant(): single element matrix determinant equals the element itself
+    @Test
+    public void testGetDeterminant_singleElementMatrix() throws Throwable {
+        double[][] data = {{5.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        assertEquals(5.0, c.getDeterminant(), EPS);
+    }
+
+    // Solver.isNonSingular(): always true once decomposition succeeded
+    @Test
+    public void testSolverIsNonSingular_returnsTrue() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        assertTrue(c.getSolver().isNonSingular());
+    }
+
+    // Solver.solve(double[]): A = identity -> solution equals right-hand side
+    @Test
+    public void testSolverSolveDoubleArray_identityMatrix_returnsSameVector() throws Throwable {
+        double[][] data = {{1.0, 0.0}, {0.0, 1.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        double[] x = c.getSolver().solve(new double[]{3.0, -5.0});
+        assertEquals(3.0, x[0], EPS);
+        assertEquals(-5.0, x[1], EPS);
+    }
+
+    // Solver.solve(double[]): known non identity matrix, solution verified against A*x=b by hand
+    @Test
+    public void testSolverSolveDoubleArray_knownNonIdentityMatrix_correctSolution() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        double[] x = c.getSolver().solve(new double[]{6.0, 5.0});
+        assertEquals(1.0, x[0], EPS);
+        assertEquals(1.0, x[1], EPS);
+    }
+
+    // Solver.solve(double[]): wrong length right-hand side -> IllegalArgumentException
+    @Test
+    public void testSolverSolveDoubleArray_dimensionMismatch_throwsIllegalArgumentException() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        try {
+            c.getSolver().solve(new double[]{1.0, 2.0, 3.0});
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Solver.solve(RealVector) with a RealVectorImpl: correct solution extracted via getData()
+    @Test
+    public void testSolverSolveRealVectorImpl_correctSolution() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        RealVector b = new RealVectorImpl(new double[]{6.0, 5.0}, false);
+        RealVector x = c.getSolver().solve(b);
+        assertEquals(1.0, x.getData()[0], EPS);
+        assertEquals(1.0, x.getData()[1], EPS);
+    }
+
+    // Solver.solve(RealVector): dimension mismatch for RealVectorImpl -> IllegalArgumentException
+    @Test
+    public void testSolverSolveRealVector_dimensionMismatch_throwsIllegalArgumentException() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        RealVector b = new RealVectorImpl(new double[]{1.0, 2.0, 3.0}, false);
+        try {
+            c.getSolver().solve(b);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Solver.solve(RealMatrix): A = identity -> solution equals right-hand side matrix
+    @Test
+    public void testSolverSolveRealMatrix_identityMatrix_returnsSameMatrix() throws Throwable {
+        double[][] data = {{1.0, 0.0}, {0.0, 1.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        RealMatrix b = m(new double[][]{{1.0, 2.0}, {3.0, 4.0}});
+        double[][] x = c.getSolver().solve(b).getData();
+        assertEquals(1.0, x[0][0], EPS);
+        assertEquals(2.0, x[0][1], EPS);
+        assertEquals(3.0, x[1][0], EPS);
+        assertEquals(4.0, x[1][1], EPS);
+    }
+
+    // Solver.solve(RealMatrix): multiple right-hand side columns solved independently, checked by hand
+    @Test
+    public void testSolverSolveRealMatrix_multipleColumns_correctSolution() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        RealMatrix b = m(new double[][]{{6.0, 10.0}, {5.0, 8.0}});
+        double[][] x = c.getSolver().solve(b).getData();
+        assertEquals(1.0, x[0][0], EPS);
+        assertEquals(1.0, x[1][0], EPS);
+        assertEquals(1.75, x[0][1], EPS);
+        assertEquals(1.5, x[1][1], EPS);
+    }
+
+    // Solver.solve(RealMatrix): row dimension mismatch -> IllegalArgumentException
+    @Test
+    public void testSolverSolveRealMatrix_dimensionMismatch_throwsIllegalArgumentException() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        RealMatrix b = m(new double[][]{{1.0}, {2.0}, {3.0}});
+        try {
+            c.getSolver().solve(b);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // getInverse(): inverse of identity matrix is identity
+    @Test
+    public void testGetInverse_identityMatrix_returnsIdentity() throws Throwable {
+        double[][] data = {{1.0, 0.0}, {0.0, 1.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        double[][] inv = c.getSolver().getInverse().getData();
+        assertEquals(1.0, inv[0][0], EPS);
+        assertEquals(0.0, inv[0][1], EPS);
+        assertEquals(0.0, inv[1][0], EPS);
+        assertEquals(1.0, inv[1][1], EPS);
+    }
+
+    // getInverse(): matches analytically computed inverse via adjugate/determinant formula
+    @Test
+    public void testGetInverse_knownMatrix_matchesExpectedInverse() throws Throwable {
+        double[][] data = {{4.0, 2.0}, {2.0, 3.0}};
+        CholeskyDecompositionImpl c = new CholeskyDecompositionImpl(m(data));
+        double[][] inv = c.getSolver().getInverse().getData();
+        assertEquals(0.375, inv[0][0], EPS);
+        assertEquals(-0.25, inv[0][1], EPS);
+        assertEquals(-0.25, inv[1][0], EPS);
+        assertEquals(0.5, inv[1][1], EPS);
+    }
+}

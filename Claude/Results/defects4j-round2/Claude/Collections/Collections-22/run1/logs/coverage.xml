@@ -1,0 +1,968 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.7333333333333333" branch-rate="0.6538461538461539" lines-covered="143" lines-valid="195" branches-covered="34" branches-valid="52" complexity="1.5694444444444444" version="2.0.3" timestamp="1790846479731">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="org.apache.commons.collections4.map" line-rate="0.7333333333333333" branch-rate="0.6538461538461539" complexity="1.5694444444444444">
+			<classes>
+				<class name="org.apache.commons.collections4.map.ListOrderedMap" filename="org/apache/commons/collections4/map/ListOrderedMap.java" line-rate="0.9157894736842105" branch-rate="0.8823529411764706" complexity="1.5694444444444444">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="112" hits="46" branch="false"/>
+								<line number="113" hits="46" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Ljava/util/Map;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="86" hits="48" branch="false"/>
+								<line number="122" hits="49" branch="false"/>
+								<line number="123" hits="48" branch="false"/>
+								<line number="124" hits="48" branch="false"/>
+							</lines>
+						</method>
+						<method name="access$000" signature="(Lorg/apache/commons/collections4/map/ListOrderedMap;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="78" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="asList" signature="()Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="489" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="clear" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="271" hits="1" branch="false"/>
+								<line number="272" hits="1" branch="false"/>
+								<line number="273" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="entrySet" signature="()Ljava/util/Set;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="342" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="firstKey" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="167" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="168" hits="1" branch="false"/>
+								<line number="170" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="get" signature="(I)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="384" hits="26" branch="false"/>
+							</lines>
+						</method>
+						<method name="getValue" signature="(I)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="395" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="indexOf" signature="(Ljava/lang/Object;)I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="405" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="keyList" signature="()Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="300" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="keySet" signature="()Ljava/util/Set;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="286" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="lastKey" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="180" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="181" hits="1" branch="false"/>
+								<line number="183" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="listOrderedMap" signature="(Ljava/util/Map;)Lorg/apache/commons/collections4/map/ListOrderedMap;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="101" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="mapIterator" signature="()Lorg/apache/commons/collections4/MapIterator;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="mapIterator" signature="()Lorg/apache/commons/collections4/OrderedMapIterator;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="157" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="nextKey" signature="(Ljava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="194" hits="3" branch="false"/>
+								<line number="195" hits="3" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="196" hits="1" branch="false"/>
+								<line number="198" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="previousKey" signature="(Ljava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="209" hits="3" branch="false"/>
+								<line number="210" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="211" hits="1" branch="false"/>
+								<line number="213" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="put" signature="(ILjava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="442" hits="7" branch="false"/>
+								<line number="443" hits="7" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="444" hits="3" branch="false"/>
+								<line number="445" hits="3" branch="false"/>
+								<line number="446" hits="3" branch="false"/>
+								<line number="447" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="448" hits="2" branch="false"/>
+								<line number="450" hits="3" branch="false"/>
+								<line number="451" hits="3" branch="false"/>
+								<line number="452" hits="3" branch="false"/>
+								<line number="454" hits="4" branch="false"/>
+								<line number="455" hits="4" branch="false"/>
+								<line number="456" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="put" signature="(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="219" hits="78" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="221" hits="3" branch="false"/>
+								<line number="224" hits="75" branch="false"/>
+								<line number="225" hits="75" branch="false"/>
+								<line number="226" hits="75" branch="false"/>
+							</lines>
+						</method>
+						<method name="putAll" signature="(ILjava/util/Map;)V" line-rate="0.8571428571428571" branch-rate="0.75">
+							<lines>
+								<line number="245" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="246" hits="4" branch="false"/>
+								<line number="247" hits="4" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="251" hits="4" branch="false"/>
+								<line number="254" hits="0" branch="false"/>
+								<line number="256" hits="4" branch="false"/>
+								<line number="257" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="putAll" signature="(Ljava/util/Map;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="232" hits="1" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="233" hits="2" branch="false"/>
+								<line number="234" hits="2" branch="false"/>
+								<line number="235" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="readObject" signature="(Ljava/io/ObjectInputStream;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="149" hits="0" branch="false"/>
+								<line number="150" hits="0" branch="false"/>
+								<line number="151" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="remove" signature="(I)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="468" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="remove" signature="(Ljava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="261" hits="4" branch="false"/>
+								<line number="262" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="263" hits="3" branch="false"/>
+								<line number="264" hits="3" branch="false"/>
+								<line number="266" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="setValue" signature="(ILjava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="418" hits="2" branch="false"/>
+								<line number="419" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="0.9411764705882353" branch-rate="0.7">
+							<lines>
+								<line number="353" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="354" hits="1" branch="false"/>
+								<line number="356" hits="1" branch="false"/>
+								<line number="357" hits="1" branch="false"/>
+								<line number="358" hits="1" branch="false"/>
+								<line number="359" hits="1" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="360" hits="1" branch="false"/>
+								<line number="361" hits="1" branch="false"/>
+								<line number="362" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="363" hits="1" branch="false"/>
+								<line number="365" hits="0" branch="false"/>
+								<line number="367" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="368" hits="1" branch="false"/>
+								<line number="369" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="370" hits="1" branch="false"/>
+								<line number="371" hits="1" branch="false"/>
+								<line number="372" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="valueList" signature="()Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="330" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="values" signature="()Ljava/util/Collection;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="316" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeObject" signature="(Ljava/io/ObjectOutputStream;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="135" hits="0" branch="false"/>
+								<line number="136" hits="0" branch="false"/>
+								<line number="137" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="78" hits="4" branch="false"/>
+						<line number="86" hits="48" branch="false"/>
+						<line number="101" hits="2" branch="false"/>
+						<line number="112" hits="46" branch="false"/>
+						<line number="113" hits="46" branch="false"/>
+						<line number="122" hits="49" branch="false"/>
+						<line number="123" hits="48" branch="false"/>
+						<line number="124" hits="48" branch="false"/>
+						<line number="135" hits="0" branch="false"/>
+						<line number="136" hits="0" branch="false"/>
+						<line number="137" hits="0" branch="false"/>
+						<line number="149" hits="0" branch="false"/>
+						<line number="150" hits="0" branch="false"/>
+						<line number="151" hits="0" branch="false"/>
+						<line number="157" hits="4" branch="false"/>
+						<line number="167" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="168" hits="1" branch="false"/>
+						<line number="170" hits="2" branch="false"/>
+						<line number="180" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="181" hits="1" branch="false"/>
+						<line number="183" hits="1" branch="false"/>
+						<line number="194" hits="3" branch="false"/>
+						<line number="195" hits="3" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="196" hits="1" branch="false"/>
+						<line number="198" hits="2" branch="false"/>
+						<line number="209" hits="3" branch="false"/>
+						<line number="210" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="211" hits="1" branch="false"/>
+						<line number="213" hits="2" branch="false"/>
+						<line number="219" hits="78" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="221" hits="3" branch="false"/>
+						<line number="224" hits="75" branch="false"/>
+						<line number="225" hits="75" branch="false"/>
+						<line number="226" hits="75" branch="false"/>
+						<line number="232" hits="1" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="233" hits="2" branch="false"/>
+						<line number="234" hits="2" branch="false"/>
+						<line number="235" hits="1" branch="false"/>
+						<line number="245" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="246" hits="4" branch="false"/>
+						<line number="247" hits="4" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="251" hits="4" branch="false"/>
+						<line number="254" hits="0" branch="false"/>
+						<line number="256" hits="4" branch="false"/>
+						<line number="257" hits="2" branch="false"/>
+						<line number="261" hits="4" branch="false"/>
+						<line number="262" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="263" hits="3" branch="false"/>
+						<line number="264" hits="3" branch="false"/>
+						<line number="266" hits="4" branch="false"/>
+						<line number="271" hits="1" branch="false"/>
+						<line number="272" hits="1" branch="false"/>
+						<line number="273" hits="1" branch="false"/>
+						<line number="286" hits="1" branch="false"/>
+						<line number="300" hits="3" branch="false"/>
+						<line number="316" hits="1" branch="false"/>
+						<line number="330" hits="2" branch="false"/>
+						<line number="342" hits="4" branch="false"/>
+						<line number="353" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="354" hits="1" branch="false"/>
+						<line number="356" hits="1" branch="false"/>
+						<line number="357" hits="1" branch="false"/>
+						<line number="358" hits="1" branch="false"/>
+						<line number="359" hits="1" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="360" hits="1" branch="false"/>
+						<line number="361" hits="1" branch="false"/>
+						<line number="362" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="363" hits="1" branch="false"/>
+						<line number="365" hits="0" branch="false"/>
+						<line number="367" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="368" hits="1" branch="false"/>
+						<line number="369" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="370" hits="1" branch="false"/>
+						<line number="371" hits="1" branch="false"/>
+						<line number="372" hits="1" branch="false"/>
+						<line number="384" hits="26" branch="false"/>
+						<line number="395" hits="2" branch="false"/>
+						<line number="405" hits="3" branch="false"/>
+						<line number="418" hits="2" branch="false"/>
+						<line number="419" hits="2" branch="false"/>
+						<line number="442" hits="7" branch="false"/>
+						<line number="443" hits="7" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="444" hits="3" branch="false"/>
+						<line number="445" hits="3" branch="false"/>
+						<line number="446" hits="3" branch="false"/>
+						<line number="447" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="448" hits="2" branch="false"/>
+						<line number="450" hits="3" branch="false"/>
+						<line number="451" hits="3" branch="false"/>
+						<line number="452" hits="3" branch="false"/>
+						<line number="454" hits="4" branch="false"/>
+						<line number="455" hits="4" branch="false"/>
+						<line number="456" hits="4" branch="false"/>
+						<line number="468" hits="2" branch="false"/>
+						<line number="489" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.collections4.map.ListOrderedMap$EntrySetView" filename="org/apache/commons/collections4/map/ListOrderedMap.java" line-rate="0.19230769230769232" branch-rate="0.0" complexity="1.5694444444444444">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/collections4/map/ListOrderedMap;Ljava/util/List;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="584" hits="4" branch="false"/>
+								<line number="585" hits="4" branch="false"/>
+								<line number="586" hits="4" branch="false"/>
+								<line number="587" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="clear" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="631" hits="0" branch="false"/>
+								<line number="632" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="contains" signature="(Ljava/lang/Object;)Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="607" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="containsAll" signature="(Ljava/util/Collection;)Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="612" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="equals" signature="(Ljava/lang/Object;)Z" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="636" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="637" hits="0" branch="false"/>
+								<line number="639" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getEntrySet" signature="()Ljava/util/Set;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="590" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="591" hits="0" branch="false"/>
+								<line number="593" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="hashCode" signature="()I" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="644" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="isEmpty" signature="()Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="602" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="iterator" signature="()Ljava/util/Iterator;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="654" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="remove" signature="(Ljava/lang/Object;)Z" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="618" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="619" hits="0" branch="false"/>
+								<line number="621" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="622" hits="0" branch="false"/>
+								<line number="623" hits="0" branch="false"/>
+								<line number="624" hits="0" branch="false"/>
+								<line number="626" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="size" signature="()I" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="598" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="649" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="584" hits="4" branch="false"/>
+						<line number="585" hits="4" branch="false"/>
+						<line number="586" hits="4" branch="false"/>
+						<line number="587" hits="4" branch="false"/>
+						<line number="590" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="591" hits="0" branch="false"/>
+						<line number="593" hits="0" branch="false"/>
+						<line number="598" hits="0" branch="false"/>
+						<line number="602" hits="0" branch="false"/>
+						<line number="607" hits="0" branch="false"/>
+						<line number="612" hits="0" branch="false"/>
+						<line number="618" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="619" hits="0" branch="false"/>
+						<line number="621" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="622" hits="0" branch="false"/>
+						<line number="623" hits="0" branch="false"/>
+						<line number="624" hits="0" branch="false"/>
+						<line number="626" hits="0" branch="false"/>
+						<line number="631" hits="0" branch="false"/>
+						<line number="632" hits="0" branch="false"/>
+						<line number="636" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="637" hits="0" branch="false"/>
+						<line number="639" hits="0" branch="false"/>
+						<line number="644" hits="0" branch="false"/>
+						<line number="649" hits="0" branch="false"/>
+						<line number="654" hits="4" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.collections4.map.ListOrderedMap$KeySetView" filename="org/apache/commons/collections4/map/ListOrderedMap.java" line-rate="0.625" branch-rate="1.0" complexity="1.5694444444444444">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/collections4/map/ListOrderedMap;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="548" hits="1" branch="false"/>
+								<line number="549" hits="1" branch="false"/>
+								<line number="550" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="clear" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="564" hits="0" branch="false"/>
+								<line number="565" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="contains" signature="(Ljava/lang/Object;)Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="559" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="iterator" signature="()Ljava/util/Iterator;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="569" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="size" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="554" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="548" hits="1" branch="false"/>
+						<line number="549" hits="1" branch="false"/>
+						<line number="550" hits="1" branch="false"/>
+						<line number="554" hits="1" branch="false"/>
+						<line number="559" hits="0" branch="false"/>
+						<line number="564" hits="0" branch="false"/>
+						<line number="565" hits="0" branch="false"/>
+						<line number="569" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.collections4.map.ListOrderedMap$KeySetView$1" filename="org/apache/commons/collections4/map/ListOrderedMap.java" line-rate="1.0" branch-rate="1.0" complexity="1.5694444444444444">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/collections4/map/ListOrderedMap$KeySetView;Ljava/util/Iterator;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="569" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="next" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="571" hits="2" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="569" hits="1" branch="false"/>
+						<line number="571" hits="2" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.collections4.map.ListOrderedMap$ListOrderedIterator" filename="org/apache/commons/collections4/map/ListOrderedMap.java" line-rate="0.7" branch-rate="1.0" complexity="1.5694444444444444">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/collections4/map/ListOrderedMap;Ljava/util/List;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="661" hits="4" branch="false"/>
+								<line number="664" hits="4" branch="false"/>
+								<line number="665" hits="4" branch="false"/>
+								<line number="666" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="next" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="659" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="next" signature="()Ljava/util/Map$Entry;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="669" hits="7" branch="false"/>
+								<line number="670" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="remove" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="675" hits="0" branch="false"/>
+								<line number="676" hits="0" branch="false"/>
+								<line number="677" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="659" hits="7" branch="false"/>
+						<line number="661" hits="4" branch="false"/>
+						<line number="664" hits="4" branch="false"/>
+						<line number="665" hits="4" branch="false"/>
+						<line number="666" hits="4" branch="false"/>
+						<line number="669" hits="7" branch="false"/>
+						<line number="670" hits="7" branch="false"/>
+						<line number="675" hits="0" branch="false"/>
+						<line number="676" hits="0" branch="false"/>
+						<line number="677" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.collections4.map.ListOrderedMap$ListOrderedMapEntry" filename="org/apache/commons/collections4/map/ListOrderedMap.java" line-rate="0.8" branch-rate="1.0" complexity="1.5694444444444444">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/collections4/map/ListOrderedMap;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="685" hits="7" branch="false"/>
+								<line number="686" hits="7" branch="false"/>
+								<line number="687" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="getValue" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="691" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="setValue" signature="(Ljava/lang/Object;)Ljava/lang/Object;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="696" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="685" hits="7" branch="false"/>
+						<line number="686" hits="7" branch="false"/>
+						<line number="687" hits="7" branch="false"/>
+						<line number="691" hits="4" branch="false"/>
+						<line number="696" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.collections4.map.ListOrderedMap$ListOrderedMapIterator" filename="org/apache/commons/collections4/map/ListOrderedMap.java" line-rate="0.6944444444444444" branch-rate="0.4" complexity="1.5694444444444444">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/collections4/map/ListOrderedMap;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="704" hits="4" branch="false"/>
+								<line number="705" hits="4" branch="false"/>
+								<line number="708" hits="4" branch="false"/>
+								<line number="709" hits="4" branch="false"/>
+								<line number="710" hits="4" branch="false"/>
+								<line number="711" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="getKey" signature="()Ljava/lang/Object;" line-rate="0.6666666666666666" branch-rate="0.5">
+							<lines>
+								<line number="743" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="744" hits="1" branch="false"/>
+								<line number="746" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getValue" signature="()Ljava/lang/Object;" line-rate="0.6666666666666666" branch-rate="0.5">
+							<lines>
+								<line number="750" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="751" hits="0" branch="false"/>
+								<line number="753" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="hasNext" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="714" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="hasPrevious" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="724" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="next" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="718" hits="4" branch="false"/>
+								<line number="719" hits="4" branch="false"/>
+								<line number="720" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="previous" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="728" hits="1" branch="false"/>
+								<line number="729" hits="1" branch="false"/>
+								<line number="730" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="remove" signature="()V" line-rate="0.8333333333333334" branch-rate="0.5">
+							<lines>
+								<line number="734" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="735" hits="0" branch="false"/>
+								<line number="737" hits="1" branch="false"/>
+								<line number="738" hits="1" branch="false"/>
+								<line number="739" hits="1" branch="false"/>
+								<line number="740" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="reset" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="764" hits="0" branch="false"/>
+								<line number="765" hits="0" branch="false"/>
+								<line number="766" hits="0" branch="false"/>
+								<line number="767" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="setValue" signature="(Ljava/lang/Object;)Ljava/lang/Object;" line-rate="0.6666666666666666" branch-rate="0.5">
+							<lines>
+								<line number="757" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="758" hits="0" branch="false"/>
+								<line number="760" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="771" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="772" hits="0" branch="false"/>
+								<line number="774" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="704" hits="4" branch="false"/>
+						<line number="705" hits="4" branch="false"/>
+						<line number="708" hits="4" branch="false"/>
+						<line number="709" hits="4" branch="false"/>
+						<line number="710" hits="4" branch="false"/>
+						<line number="711" hits="4" branch="false"/>
+						<line number="714" hits="1" branch="false"/>
+						<line number="718" hits="4" branch="false"/>
+						<line number="719" hits="4" branch="false"/>
+						<line number="720" hits="4" branch="false"/>
+						<line number="724" hits="1" branch="false"/>
+						<line number="728" hits="1" branch="false"/>
+						<line number="729" hits="1" branch="false"/>
+						<line number="730" hits="1" branch="false"/>
+						<line number="734" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="735" hits="0" branch="false"/>
+						<line number="737" hits="1" branch="false"/>
+						<line number="738" hits="1" branch="false"/>
+						<line number="739" hits="1" branch="false"/>
+						<line number="740" hits="1" branch="false"/>
+						<line number="743" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="744" hits="1" branch="false"/>
+						<line number="746" hits="0" branch="false"/>
+						<line number="750" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="751" hits="0" branch="false"/>
+						<line number="753" hits="1" branch="false"/>
+						<line number="757" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="758" hits="0" branch="false"/>
+						<line number="760" hits="1" branch="false"/>
+						<line number="764" hits="0" branch="false"/>
+						<line number="765" hits="0" branch="false"/>
+						<line number="766" hits="0" branch="false"/>
+						<line number="767" hits="0" branch="false"/>
+						<line number="771" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="772" hits="0" branch="false"/>
+						<line number="774" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.collections4.map.ListOrderedMap$ValuesView" filename="org/apache/commons/collections4/map/ListOrderedMap.java" line-rate="0.5454545454545454" branch-rate="1.0" complexity="1.5694444444444444">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/collections4/map/ListOrderedMap;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="498" hits="3" branch="false"/>
+								<line number="499" hits="3" branch="false"/>
+								<line number="500" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="clear" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="514" hits="0" branch="false"/>
+								<line number="515" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="contains" signature="(Ljava/lang/Object;)Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="509" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="get" signature="(I)Ljava/lang/Object;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="528" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="iterator" signature="()Ljava/util/Iterator;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="519" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="remove" signature="(I)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="538" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="set" signature="(ILjava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="533" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="size" signature="()I" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="504" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="498" hits="3" branch="false"/>
+						<line number="499" hits="3" branch="false"/>
+						<line number="500" hits="3" branch="false"/>
+						<line number="504" hits="0" branch="false"/>
+						<line number="509" hits="0" branch="false"/>
+						<line number="514" hits="0" branch="false"/>
+						<line number="515" hits="0" branch="false"/>
+						<line number="519" hits="1" branch="false"/>
+						<line number="528" hits="0" branch="false"/>
+						<line number="533" hits="1" branch="false"/>
+						<line number="538" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.collections4.map.ListOrderedMap$ValuesView$1" filename="org/apache/commons/collections4/map/ListOrderedMap.java" line-rate="1.0" branch-rate="1.0" complexity="1.5694444444444444">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/collections4/map/ListOrderedMap$ValuesView;Ljava/util/Iterator;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="519" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="next" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="521" hits="2" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="519" hits="1" branch="false"/>
+						<line number="521" hits="2" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

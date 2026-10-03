@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Cli-8-g99ucck0/Cli-8b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 192
+     Lines covered: 179
+  Conditions total: 104
+Conditions covered: 85
+     Line coverage: 93.2%
+Condition coverage: 81.7%
+[exit 0]

@@ -1,0 +1,401 @@
+package org.apache.commons.cli2.commandline;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.cli2.Option;
+import org.apache.commons.cli2.option.PropertyOption;
+
+public class WriteableCommandLineImplClaudeTest {
+
+    private Option rootOption;
+    private List arguments;
+    private WriteableCommandLineImpl cl;
+
+    @Before
+    public void setUp() throws Throwable {
+        rootOption = new PropertyOption();
+        arguments = new ArrayList();
+        cl = new WriteableCommandLineImpl(rootOption, arguments);
+    }
+
+    // Constructor: normalised list stores exactly the arguments passed in, in order
+    @Test
+    public void testConstructor_storesNormalisedArguments() throws Throwable {
+        List args = new ArrayList();
+        args.add("foo");
+        args.add("bar baz");
+        WriteableCommandLineImpl c = new WriteableCommandLineImpl(rootOption, args);
+        List normalised = c.getNormalised();
+        assertEquals(2, normalised.size());
+        assertEquals("foo", normalised.get(0));
+        assertEquals("bar baz", normalised.get(1));
+    }
+
+    // getNormalised: returned list is unmodifiable
+    @Test
+    public void testGetNormalised_returnsUnmodifiableList() throws Throwable {
+        List normalised = cl.getNormalised();
+        try {
+            normalised.add("x");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // looksLikeOption: true branch when trigger starts with a real prefix of root option
+    @Test
+    public void testLooksLikeOption_withKnownPrefix_returnsTrue() throws Throwable {
+        Set prefixes = rootOption.getPrefixes();
+        Iterator it = prefixes.iterator();
+        assertTrue(it.hasNext());
+        String prefix = (String) it.next();
+        assertTrue(cl.looksLikeOption(prefix + "X"));
+    }
+
+    // looksLikeOption: false branch when trigger matches none of the prefixes
+    @Test
+    public void testLooksLikeOption_unrelatedTrigger_returnsFalse() throws Throwable {
+        assertFalse(cl.looksLikeOption("plainArgumentNoPrefix"));
+    }
+
+    // addOption: option becomes visible via getOptions()
+    @Test
+    public void testAddOption_addsToOptionsList() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addOption(opt);
+        List opts = cl.getOptions();
+        assertEquals(1, opts.size());
+        assertSame(opt, opts.get(0));
+    }
+
+    // addOption: preferred name is mapped back to the option
+    @Test
+    public void testAddOption_getOptionByPreferredName() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addOption(opt);
+        assertSame(opt, cl.getOption(opt.getPreferredName()));
+    }
+
+    // addOption: every trigger of the option is mapped back to it
+    @Test
+    public void testAddOption_getOptionByTrigger() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addOption(opt);
+        Set triggers = opt.getTriggers();
+        assertTrue(triggers.size() > 0);
+        Iterator it = triggers.iterator();
+        while (it.hasNext()) {
+            Object trigger = it.next();
+            assertSame(opt, cl.getOption((String) trigger));
+        }
+    }
+
+    // getOption: unknown trigger on an empty command line returns null
+    @Test
+    public void testGetOption_unknownTrigger_returnsNull() throws Throwable {
+        assertNull(cl.getOption("no-such-trigger"));
+    }
+
+    // getOptions: returned list is unmodifiable
+    @Test
+    public void testGetOptions_isUnmodifiable() throws Throwable {
+        List opts = cl.getOptions();
+        try {
+            opts.add(new PropertyOption());
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // getOptionTriggers: contains the preferred name after addOption
+    @Test
+    public void testGetOptionTriggers_containsPreferredName() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addOption(opt);
+        Set triggers = cl.getOptionTriggers();
+        assertTrue(triggers.contains(opt.getPreferredName()));
+    }
+
+    // getOptionTriggers: returned set is unmodifiable
+    @Test
+    public void testGetOptionTriggers_isUnmodifiable() throws Throwable {
+        Set triggers = cl.getOptionTriggers();
+        try {
+            triggers.add("x");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // addValue: value is stored and retrievable
+    @Test
+    public void testAddValue_storesValue() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addValue(opt, "value1");
+        List values = cl.getValues(opt, null);
+        assertEquals(1, values.size());
+        assertEquals("value1", values.get(0));
+    }
+
+    // addValue: multiple calls on same option append values, preserving order
+    @Test
+    public void testAddValue_multipleCalls_appendsValues() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addValue(opt, "v1");
+        cl.addValue(opt, "v2");
+        List values = cl.getUndefaultedValues(opt);
+        assertEquals(2, values.size());
+        assertEquals("v1", values.get(0));
+        assertEquals("v2", values.get(1));
+    }
+
+    // hasOption: false when option was never added
+    @Test
+    public void testHasOption_notAdded_returnsFalse() throws Throwable {
+        Option opt = new PropertyOption();
+        assertFalse(cl.hasOption(opt));
+    }
+
+    // hasOption: true after addOption
+    @Test
+    public void testHasOption_added_returnsTrue() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addOption(opt);
+        assertTrue(cl.hasOption(opt));
+    }
+
+    // getValues: no stored values, no supplied defaults, no option defaults -> empty list
+    @Test
+    public void testGetValues_noneAvailable_returnsEmptyList() throws Throwable {
+        Option opt = new PropertyOption();
+        List result = cl.getValues(opt, null);
+        assertTrue(result.isEmpty());
+    }
+
+    // getValues: no stored values -> falls back to the supplied default list
+    @Test
+    public void testGetValues_usesSuppliedDefaults() throws Throwable {
+        Option opt = new PropertyOption();
+        List defaults = new ArrayList();
+        defaults.add("d1");
+        List result = cl.getValues(opt, defaults);
+        assertEquals(1, result.size());
+        assertEquals("d1", result.get(0));
+    }
+
+    // getValues: stored command line values take priority over supplied defaults
+    @Test
+    public void testGetValues_storedValuesTakePriority() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addValue(opt, "real");
+        List defaults = new ArrayList();
+        defaults.add("d1");
+        List result = cl.getValues(opt, defaults);
+        assertEquals(1, result.size());
+        assertEquals("real", result.get(0));
+    }
+
+    // getValues: empty supplied defaults falls back to the option's stored default values
+    @Test
+    public void testGetValues_emptySuppliedDefaults_fallsBackToOptionDefaults() throws Throwable {
+        Option opt = new PropertyOption();
+        List optDefaults = new ArrayList();
+        optDefaults.add("optDefault");
+        cl.setDefaultValues(opt, optDefaults);
+        List result = cl.getValues(opt, new ArrayList());
+        assertEquals(1, result.size());
+        assertEquals("optDefault", result.get(0));
+    }
+
+    // getValues: null supplied defaults falls back to the option's stored default values
+    @Test
+    public void testGetValues_nullSuppliedDefaults_fallsBackToOptionDefaults() throws Throwable {
+        Option opt = new PropertyOption();
+        List optDefaults = new ArrayList();
+        optDefaults.add("optDefault");
+        cl.setDefaultValues(opt, optDefaults);
+        List result = cl.getValues(opt, null);
+        assertEquals(1, result.size());
+        assertEquals("optDefault", result.get(0));
+    }
+
+    // setDefaultValues: passing null removes the stored default entry
+    @Test
+    public void testSetDefaultValues_null_removesDefault() throws Throwable {
+        Option opt = new PropertyOption();
+        List optDefaults = new ArrayList();
+        optDefaults.add("optDefault");
+        cl.setDefaultValues(opt, optDefaults);
+        cl.setDefaultValues(opt, null);
+        List result = cl.getValues(opt, null);
+        assertTrue(result.isEmpty());
+    }
+
+    // getUndefaultedValues: returns empty list when option has no stored values
+    @Test
+    public void testGetUndefaultedValues_none_returnsEmptyList() throws Throwable {
+        Option opt = new PropertyOption();
+        List result = cl.getUndefaultedValues(opt);
+        assertTrue(result.isEmpty());
+    }
+
+    // getUndefaultedValues: ignores option default values, only real values counted
+    @Test
+    public void testGetUndefaultedValues_ignoresDefaults() throws Throwable {
+        Option opt = new PropertyOption();
+        List optDefaults = new ArrayList();
+        optDefaults.add("optDefault");
+        cl.setDefaultValues(opt, optDefaults);
+        List result = cl.getUndefaultedValues(opt);
+        assertTrue(result.isEmpty());
+    }
+
+    // addSwitch: true value is stored and option becomes present
+    @Test
+    public void testAddSwitch_setsValueAndAddsOption() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addSwitch(opt, true);
+        assertTrue(cl.hasOption(opt));
+        assertEquals(Boolean.TRUE, cl.getSwitch(opt, null));
+    }
+
+    // addSwitch: false value is stored correctly
+    @Test
+    public void testAddSwitch_falseValue() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addSwitch(opt, false);
+        assertEquals(Boolean.FALSE, cl.getSwitch(opt, null));
+    }
+
+    // addSwitch: calling twice on same option throws IllegalStateException
+    @Test
+    public void testAddSwitch_calledTwice_throwsIllegalStateException() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addSwitch(opt, true);
+        try {
+            cl.addSwitch(opt, false);
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+
+
+    // getSwitch: no switch, no supplied default, no option default -> null
+    @Test
+    public void testGetSwitch_none_returnsNull() throws Throwable {
+        Option opt = new PropertyOption();
+        assertNull(cl.getSwitch(opt, null));
+    }
+
+    // getSwitch: no switch set -> falls back to supplied default
+    @Test
+    public void testGetSwitch_usesSuppliedDefault() throws Throwable {
+        Option opt = new PropertyOption();
+        assertEquals(Boolean.TRUE, cl.getSwitch(opt, Boolean.TRUE));
+    }
+
+    // getSwitch: no switch, supplied default null -> falls back to option's default switch
+    @Test
+    public void testGetSwitch_fallsBackToOptionDefaultSwitch() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.setDefaultSwitch(opt, Boolean.FALSE);
+        assertEquals(Boolean.FALSE, cl.getSwitch(opt, null));
+    }
+
+    // setDefaultSwitch: passing null removes the stored default switch
+    @Test
+    public void testSetDefaultSwitch_null_removesDefault() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.setDefaultSwitch(opt, Boolean.TRUE);
+        cl.setDefaultSwitch(opt, null);
+        assertNull(cl.getSwitch(opt, null));
+    }
+
+    // addProperty/getProperty(Option): stored property value is retrievable
+    @Test
+    public void testAddProperty_getPropertyByOption_returnsStoredValue() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addProperty(opt, "key1", "val1");
+        assertEquals("val1", cl.getProperty(opt, "key1", "default"));
+    }
+
+    // getProperty(Option): unknown property key on a known option returns supplied default
+    @Test
+    public void testGetProperty_unknownPropertyOnKnownOption_returnsDefault() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addProperty(opt, "key1", "val1");
+        assertEquals("fallback", cl.getProperty(opt, "unknownKey", "fallback"));
+    }
+
+    // getProperty(Option): option never used with addProperty returns supplied default
+    @Test
+    public void testGetProperty_unknownOption_returnsDefault() throws Throwable {
+        Option opt = new PropertyOption();
+        assertEquals("fallback", cl.getProperty(opt, "key1", "fallback"));
+    }
+
+    // getProperties(Option): returns key set of stored properties
+    @Test
+    public void testGetProperties_withOption_returnsKeySet() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addProperty(opt, "key1", "val1");
+        Set props = cl.getProperties(opt);
+        assertTrue(props.contains("key1"));
+        assertEquals(1, props.size());
+    }
+
+    // getProperties(Option): unknown option returns empty set
+    @Test
+    public void testGetProperties_unknownOption_returnsEmptySet() throws Throwable {
+        Option opt = new PropertyOption();
+        Set props = cl.getProperties(opt);
+        assertTrue(props.isEmpty());
+    }
+
+    // getProperties(Option): returned set is unmodifiable
+    @Test
+    public void testGetProperties_isUnmodifiable() throws Throwable {
+        Option opt = new PropertyOption();
+        cl.addProperty(opt, "key1", "val1");
+        Set props = cl.getProperties(opt);
+        try {
+            props.add("newKey");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // toString: single-word arguments are joined with a single space, unquoted
+    @Test
+    public void testToString_singleWordArgs_joinedWithSpaces() throws Throwable {
+        List args = new ArrayList();
+        args.add("foo");
+        args.add("bar");
+        WriteableCommandLineImpl c = new WriteableCommandLineImpl(rootOption, args);
+        assertEquals("foo bar", c.toString());
+    }
+
+    // toString: an argument containing a space is wrapped in double quotes
+    @Test
+    public void testToString_argWithSpace_isQuoted() throws Throwable {
+        List args = new ArrayList();
+        args.add("hello world");
+        WriteableCommandLineImpl c = new WriteableCommandLineImpl(rootOption, args);
+        assertEquals("\"hello world\"", c.toString());
+    }
+
+    // toString: empty argument list yields an empty string
+    @Test
+    public void testToString_emptyArguments_returnsEmptyString() throws Throwable {
+        WriteableCommandLineImpl c = new WriteableCommandLineImpl(rootOption, new ArrayList());
+        assertEquals("", c.toString());
+    }
+}

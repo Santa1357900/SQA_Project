@@ -1,0 +1,15 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-153-smybkxq8/Closure-153f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 9
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testProcess_AssertOnChangeTrueAlreadyNormalized_DoesNotThrow
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testProcess_DuplicateVarWithValue_ReplacedWithAssignment
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testParseAndNormalizeSyntheticCode_MultipleVarDeclaration_SplitsIntoSeparateVarStatements
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testProcess_DuplicateVarWithoutValue_RemovedEntirely
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testParseAndNormalizeSyntheticCode_WhileLoop_ConvertedToFor
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testProcess_AllCapsVarName_MarkedConstantViaFullPipeline
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testProcess_VarSplitting_SplitsIntoSeparateStatements
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testParseAndNormalizeTestCode_UnhoistedFunctionInForBody_RewrittenToVarAssignment
+  - com.google.javascript.jscomp.NormalizeClaudeTest::testProcess_AssertOnChangeTrueRequiringChange_ThrowsIllegalStateException
+[exit 0]

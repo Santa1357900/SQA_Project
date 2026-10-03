@@ -1,0 +1,301 @@
+package org.apache.commons.math.optimization.direct;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.FunctionEvaluationException;
+import org.apache.commons.math.optimization.GoalType;
+import org.apache.commons.math.optimization.MultivariateRealFunction;
+import org.apache.commons.math.optimization.OptimizationException;
+import org.apache.commons.math.optimization.RealPointValuePair;
+
+public class MultiDirectionalClaudeTest {
+
+    private MultivariateRealFunction sphere2D;
+    private MultivariateRealFunction sphere1D;
+    private MultivariateRealFunction sphere3D;
+    private MultivariateRealFunction rosenbrock;
+    private MultivariateRealFunction negQuadraticMax;
+    private MultivariateRealFunction offsetScale;
+
+    @Before
+    public void setUp() throws Throwable {
+        sphere2D = new MultivariateRealFunction() {
+            public double value(double[] point) throws FunctionEvaluationException {
+                return point[0] * point[0] + point[1] * point[1];
+            }
+        };
+        sphere1D = new MultivariateRealFunction() {
+            public double value(double[] point) throws FunctionEvaluationException {
+                return (point[0] - 3.0) * (point[0] - 3.0);
+            }
+        };
+        sphere3D = new MultivariateRealFunction() {
+            public double value(double[] point) throws FunctionEvaluationException {
+                return point[0] * point[0] + point[1] * point[1] + point[2] * point[2];
+            }
+        };
+        rosenbrock = new MultivariateRealFunction() {
+            public double value(double[] point) throws FunctionEvaluationException {
+                double a = point[1] - point[0] * point[0];
+                double b = 1.0 - point[0];
+                return 100.0 * a * a + b * b;
+            }
+        };
+        negQuadraticMax = new MultivariateRealFunction() {
+            public double value(double[] point) throws FunctionEvaluationException {
+                double dx = point[0] - 1.0;
+                double dy = point[1] - 2.0;
+                return 5.0 - dx * dx - dy * dy;
+            }
+        };
+        offsetScale = new MultivariateRealFunction() {
+            public double value(double[] point) throws FunctionEvaluationException {
+                double d = point[0] - 4.0;
+                return 2.0 * d * d + 3.0;
+            }
+        };
+    }
+
+    // Default constructor (khi=2.0, gamma=0.5): exercises reflection/expansion branch on a convex function
+    @Test
+    public void testConstructorDefault_minimizeSphere2D_convergesToOrigin() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        RealPointValuePair result = optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {5.0, 5.0});
+        assertEquals(0.0, result.getValue(), 1e-3);
+        assertEquals(0.0, result.getPoint()[0], 1e-2);
+        assertEquals(0.0, result.getPoint()[1], 1e-2);
+    }
+
+    // Default constructor on a shifted 1-D parabola: n=1 simplex (two vertices)
+    @Test
+    public void testConstructorDefault_minimizeShiftedSphere1D_convergesToShiftedMinimum() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        RealPointValuePair result = optimizer.optimize(sphere1D, GoalType.MINIMIZE, new double[] {10.0});
+        assertEquals(0.0, result.getValue(), 1e-3);
+        assertEquals(3.0, result.getPoint()[0], 1e-2);
+    }
+
+    // Explicit coefficients matching defaults: constructor sets khi/gamma, same correct result expected
+    @Test
+    public void testConstructorCustomCoefficients_minimizeSphere2D_convergesToOrigin() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional(2.0, 0.5);
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        RealPointValuePair result = optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {5.0, -5.0});
+        assertEquals(0.0, result.getValue(), 1e-3);
+    }
+
+    // khi = 1.0: expansion step equals reflection step, algorithm must still converge
+    @Test
+    public void testConstructorCustomCoefficients_khiEqualsOne_stillConverges() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional(1.0, 0.5);
+        optimizer.setMaxIterations(20000);
+        optimizer.setMaxEvaluations(50000);
+        RealPointValuePair result = optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {5.0, 5.0});
+        assertEquals(0.0, result.getValue(), 1e-2);
+    }
+
+    // gamma close to 1: weak contraction, more shrink-retry cycles needed, still must converge
+    @Test
+    public void testConstructorCustomCoefficients_gammaCloseToOne_stillConverges() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional(2.0, 0.9);
+        optimizer.setMaxIterations(20000);
+        optimizer.setMaxEvaluations(50000);
+        RealPointValuePair result = optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {5.0, 5.0});
+        assertEquals(0.0, result.getValue(), 1e-2);
+    }
+
+    // GoalType.MAXIMIZE branch: comparator ordering must be reversed for maximization
+    @Test
+    public void testOptimize_maximizeGoal_convergesToMaximum() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        RealPointValuePair result = optimizer.optimize(negQuadraticMax, GoalType.MAXIMIZE, new double[] {0.0, 0.0});
+        assertEquals(5.0, result.getValue(), 1e-2);
+        assertEquals(1.0, result.getPoint()[0], 0.1);
+        assertEquals(2.0, result.getPoint()[1], 0.1);
+    }
+
+    // Classic stress test exposing shrink/reflect/expand interaction bugs in iterateSimplex
+    @Test
+    public void testOptimize_rosenbrockFunction_convergesNearGlobalMinimum() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(20000);
+        optimizer.setMaxEvaluations(50000);
+        RealPointValuePair result = optimizer.optimize(rosenbrock, GoalType.MINIMIZE, new double[] {-1.2, 1.0});
+        assertTrue(result.getValue() < 1.0);
+        assertEquals(1.0, result.getPoint()[0], 0.3);
+        assertEquals(1.0, result.getPoint()[1], 0.3);
+    }
+
+    // Starting close to (but not exactly at) the optimum: should refine further, not diverge
+    @Test
+    public void testOptimize_startNearMinimum_convergesAccurately() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        RealPointValuePair result = optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {0.1, -0.1});
+        assertEquals(0.0, result.getValue(), 1e-3);
+    }
+
+    // incrementIterationsCounter path: tiny iteration budget must raise OptimizationException
+    @Test
+    public void testOptimize_maxIterationsExceeded_throwsOptimizationException() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(1);
+        optimizer.setMaxEvaluations(100000);
+        try {
+            optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {50.0, 50.0});
+            fail("expected OptimizationException");
+        } catch (OptimizationException expected) {
+            // iteration budget exhausted before convergence
+        }
+    }
+
+    // evaluate() path inside evaluateSimplex/evaluateNewSimplex: tiny evaluation budget must raise exception
+    @Test
+    public void testOptimize_maxEvaluationsExceeded_throwsOptimizationException() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(100000);
+        optimizer.setMaxEvaluations(1);
+        try {
+            optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {50.0, 50.0});
+            fail("expected OptimizationException");
+        } catch (OptimizationException expected) {
+            // evaluation budget exhausted before convergence
+        }
+    }
+
+    // n=1 dimension: inner transformation loop in evaluateNewSimplex runs exactly once
+    @Test
+    public void testOptimize_oneDimensionalFunction_convergesToMinimum() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        RealPointValuePair result = optimizer.optimize(sphere1D, GoalType.MINIMIZE, new double[] {-7.0});
+        assertEquals(3.0, result.getPoint()[0], 1e-2);
+    }
+
+    // n=3 dimension: inner transformation loop runs several times per vertex
+    @Test
+    public void testOptimize_threeDimensionalFunction_convergesToMinimum() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(10000);
+        optimizer.setMaxEvaluations(40000);
+        RealPointValuePair result = optimizer.optimize(sphere3D, GoalType.MINIMIZE, new double[] {4.0, -4.0, 4.0});
+        assertEquals(0.0, result.getValue(), 1e-2);
+    }
+
+    // Negative-valued start point: reflection/expansion arithmetic must work with negative coordinates
+    @Test
+    public void testOptimize_negativeStartPoint_convergesToOrigin() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        RealPointValuePair result = optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {-5.0, -5.0});
+        assertEquals(0.0, result.getValue(), 1e-3);
+    }
+
+    // Domain sanity: a sum-of-squares function can never return a negative optimized value
+    @Test
+    public void testOptimize_sphereResultValueNonNegative() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        RealPointValuePair result = optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {3.0, 4.0});
+        assertTrue(result.getValue() >= 0.0);
+    }
+
+    // Each call to evaluate() increments the evaluation counter, so it must be positive after optimize
+    @Test
+    public void testOptimize_evaluationsCountPositiveAfterOptimize() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {2.0, 2.0});
+        assertTrue(optimizer.getEvaluations() > 0);
+    }
+
+    // incrementIterationsCounter() is called at least once at the start of iterateSimplex
+    @Test
+    public void testOptimize_iterationsCountPositiveAfterOptimize() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {2.0, 2.0});
+        assertTrue(optimizer.getIterations() > 0);
+    }
+
+    // Start point very far from the optimum: algorithm must still locate the minimum given enough budget
+    @Test
+    public void testOptimize_farAwayStart_stillConverges() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(20000);
+        optimizer.setMaxEvaluations(60000);
+        RealPointValuePair result = optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {1000.0, 1000.0});
+        assertEquals(0.0, result.getValue(), 0.5);
+    }
+
+    // Larger khi (more aggressive expansion): expansion-acceptance comparison must still pick the better point
+    @Test
+    public void testOptimize_khiLarge_convergesToMinimum() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional(5.0, 0.5);
+        optimizer.setMaxIterations(20000);
+        optimizer.setMaxEvaluations(50000);
+        RealPointValuePair result = optimizer.optimize(sphere2D, GoalType.MINIMIZE, new double[] {5.0, 5.0});
+        assertEquals(0.0, result.getValue(), 1e-2);
+    }
+
+    // Offset/scaled quadratic: verifies both the minimizing point and the minimized value are correct
+    @Test
+    public void testOptimize_quadraticWithOffsetAndScale_convergesToCorrectMinimumAndValue() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(5000);
+        optimizer.setMaxEvaluations(20000);
+        RealPointValuePair result = optimizer.optimize(offsetScale, GoalType.MINIMIZE, new double[] {0.0});
+        assertEquals(4.0, result.getPoint()[0], 1e-2);
+        assertEquals(3.0, result.getValue(), 1e-2);
+    }
+
+    // Two distinct start points on the same convex function must both reach the same global minimum
+    @Test
+    public void testOptimize_twoDifferentStartPoints_sameGlobalMinimumReached() throws Throwable {
+        MultiDirectional optimizer1 = new MultiDirectional();
+        optimizer1.setMaxIterations(5000);
+        optimizer1.setMaxEvaluations(20000);
+        MultiDirectional optimizer2 = new MultiDirectional();
+        optimizer2.setMaxIterations(5000);
+        optimizer2.setMaxEvaluations(20000);
+        RealPointValuePair r1 = optimizer1.optimize(sphere2D, GoalType.MINIMIZE, new double[] {6.0, 1.0});
+        RealPointValuePair r2 = optimizer2.optimize(sphere2D, GoalType.MINIMIZE, new double[] {-1.0, 6.0});
+        assertEquals(0.0, r1.getValue(), 1e-2);
+        assertEquals(0.0, r2.getValue(), 1e-2);
+    }
+
+    // Maximizing a shifted negative quadratic from a point beyond the peak in both coordinates
+    @Test
+    public void testOptimize_maximizeNegativeQuadratic_convergesToMaximumValue() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(10000);
+        optimizer.setMaxEvaluations(30000);
+        RealPointValuePair result = optimizer.optimize(negQuadraticMax, GoalType.MAXIMIZE, new double[] {5.0, -3.0});
+        assertEquals(5.0, result.getValue(), 1e-2);
+    }
+
+    // The returned point array must have the same dimensionality as the start point (n=3)
+    @Test
+    public void testOptimize_resultPointArrayLengthMatchesDimension() throws Throwable {
+        MultiDirectional optimizer = new MultiDirectional();
+        optimizer.setMaxIterations(10000);
+        optimizer.setMaxEvaluations(40000);
+        RealPointValuePair result = optimizer.optimize(sphere3D, GoalType.MINIMIZE, new double[] {1.0, 2.0, -3.0});
+        assertEquals(3, result.getPoint().length);
+    }
+}

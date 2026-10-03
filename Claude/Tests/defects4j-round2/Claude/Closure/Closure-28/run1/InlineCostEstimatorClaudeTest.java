@@ -1,0 +1,198 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Token;
+
+public class InlineCostEstimatorClaudeTest {
+
+  // getCost(Node): NAME node uses addIdentifier override -> fixed cost ESTIMATED_IDENTIFIER_COST
+  @Test
+  public void testGetCost_singleNameNode_returnsEstimatedIdentifierCost() throws Throwable {
+    Node root = IR.name("x");
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(InlineCostEstimator.ESTIMATED_IDENTIFIER_COST, cost);
+  }
+
+  // NAME node with a very long identifier must still cost the fixed constant, not the real length
+  @Test
+  public void testGetCost_longIdentifierName_returnsEstimatedIdentifierCost() throws Throwable {
+    Node root = IR.name("thisIsAVeryLongIdentifierNameUsedForTestingPurposesOnly");
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(InlineCostEstimator.ESTIMATED_IDENTIFIER_COST, cost);
+  }
+
+  // Node.newString(Token.NAME, ...) produces the same NAME node behavior as IR.name(...)
+  @Test
+  public void testGetCost_nodeNewStringNameToken_returnsEstimatedIdentifierCost() throws Throwable {
+    Node root = Node.newString(Token.NAME, "y");
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(InlineCostEstimator.ESTIMATED_IDENTIFIER_COST, cost);
+  }
+
+  // NUMBER node: single digit zero prints as "0", cost 1
+  @Test
+  public void testGetCost_numberZero_returnsCostOne() throws Throwable {
+    Node root = IR.number(0);
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(1, cost);
+  }
+
+  // NUMBER node: single digit prints as itself, cost 1
+  @Test
+  public void testGetCost_numberSingleDigit_returnsCostOne() throws Throwable {
+    Node root = IR.number(7);
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(1, cost);
+  }
+
+  // NUMBER node: multi-digit integer prints without decoration, cost equals digit count
+  @Test
+  public void testGetCost_numberMultiDigit_returnsCostEqualToDigitCount() throws Throwable {
+    Node root = IR.number(123);
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(3, cost);
+  }
+
+  // NUMBER node: larger integer, cost equals digit count
+  @Test
+  public void testGetCost_numberLargeValue_costMatchesDigitLength() throws Throwable {
+    Node root = IR.number(987654);
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(6, cost);
+  }
+
+  // NUMBER node: negative value includes the minus sign in cost
+  @Test
+  public void testGetCost_numberNegativeValue_costIncludesMinusSign() throws Throwable {
+    Node root = IR.number(-5);
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(2, cost);
+  }
+
+  // NUMBER node: non-integer value includes the decimal point in cost
+  @Test
+  public void testGetCost_numberDecimalValue_costIncludesDecimalPoint() throws Throwable {
+    Node root = IR.number(1.5);
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(3, cost);
+  }
+
+  // STRING node: empty string still needs the two surrounding quote characters
+  @Test
+  public void testGetCost_emptyStringLiteral_returnsCostTwo() throws Throwable {
+    Node root = IR.string("");
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(2, cost);
+  }
+
+  // STRING node: cost equals content length plus two quote characters
+  @Test
+  public void testGetCost_stringLiteral_returnsCostEqualToLengthPlusQuotes() throws Throwable {
+    Node root = IR.string("abc");
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(5, cost);
+  }
+
+  // STRING node: internal spaces are counted as part of the content length
+  @Test
+  public void testGetCost_stringWithSpaces_costIncludesSpaces() throws Throwable {
+    Node root = IR.string("a b");
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(5, cost);
+  }
+
+  // STRING node: single character content plus quotes
+  @Test
+  public void testGetCost_stringSingleChar_costThree() throws Throwable {
+    Node root = IR.string("x");
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(3, cost);
+  }
+
+  // BLOCK node: empty block prints as "{}" with whitespace stripped, cost 2
+  @Test
+  public void testGetCost_emptyBlock_returnsCostTwo() throws Throwable {
+    Node root = IR.block();
+    int cost = InlineCostEstimator.getCost(root);
+    assertEquals(2, cost);
+  }
+
+  // getCost(Node) must delegate to getCost(Node, Integer.MAX_VALUE)
+  @Test
+  public void testGetCost_defaultThreshold_equalsExplicitMaxValueThreshold() throws Throwable {
+    Node root = IR.name("z");
+    int costDefault = InlineCostEstimator.getCost(root);
+    int costExplicit = InlineCostEstimator.getCost(root, Integer.MAX_VALUE);
+    assertEquals(costExplicit, costDefault);
+  }
+
+  // threshold greater than actual cost never triggers early stop, returns full cost
+  @Test
+  public void testGetCost_thresholdGreaterThanActualCost_returnsFullCost() throws Throwable {
+    Node root = IR.name("id");
+    int cost = InlineCostEstimator.getCost(root, 100);
+    assertEquals(InlineCostEstimator.ESTIMATED_IDENTIFIER_COST, cost);
+  }
+
+  // boundary: threshold exactly equal to actual cost (maxCost <= cost branch true at equality)
+  @Test
+  public void testGetCost_thresholdEqualToActualCost_returnsFullCost() throws Throwable {
+    Node root = IR.name("id");
+    int threshold = InlineCostEstimator.ESTIMATED_IDENTIFIER_COST;
+    int cost = InlineCostEstimator.getCost(root, threshold);
+    assertEquals(InlineCostEstimator.ESTIMATED_IDENTIFIER_COST, cost);
+  }
+
+  // threshold below actual cost: the crossing append already committed, so full atomic cost is returned
+  @Test
+  public void testGetCost_thresholdLessThanActualCost_stillReturnsFullAtomicCost() throws Throwable {
+    Node root = IR.name("id");
+    int cost = InlineCostEstimator.getCost(root, 1);
+    assertEquals(InlineCostEstimator.ESTIMATED_IDENTIFIER_COST, cost);
+  }
+
+  // threshold zero: the very first append already exceeds it, returns full atomic cost
+  @Test
+  public void testGetCost_thresholdZero_returnsFullAtomicCost() throws Throwable {
+    Node root = IR.name("id");
+    int cost = InlineCostEstimator.getCost(root, 0);
+    assertEquals(InlineCostEstimator.ESTIMATED_IDENTIFIER_COST, cost);
+  }
+
+  // negative threshold: first append already exceeds it, returns full atomic cost
+  @Test
+  public void testGetCost_negativeThreshold_returnsFullAtomicCost() throws Throwable {
+    Node root = IR.name("id");
+    int cost = InlineCostEstimator.getCost(root, -5);
+    assertEquals(InlineCostEstimator.ESTIMATED_IDENTIFIER_COST, cost);
+  }
+
+  // calling getCost twice on the same node yields the same result (no hidden state mutation)
+  @Test
+  public void testGetCost_multipleCallsIndependent_sameNodeReused() throws Throwable {
+    Node root = IR.name("reuse");
+    int cost1 = InlineCostEstimator.getCost(root);
+    int cost2 = InlineCostEstimator.getCost(root);
+    assertEquals(cost1, cost2);
+  }
+
+  // constant contract: ESTIMATED_IDENTIFIER_COST must equal the length of the 2-char placeholder
+  @Test
+  public void testEstimatedIdentifierCostConstant_equalsTwo() throws Throwable {
+    assertEquals(2, InlineCostEstimator.ESTIMATED_IDENTIFIER_COST);
+  }
+
+  // null root should fail fast rather than silently returning a bogus cost
+  @Test
+  public void testGetCost_nullRoot_throwsNullPointerException() throws Throwable {
+    try {
+      InlineCostEstimator.getCost(null);
+      fail("expected NullPointerException for null root");
+    } catch (NullPointerException expected) {
+    }
+  }
+}

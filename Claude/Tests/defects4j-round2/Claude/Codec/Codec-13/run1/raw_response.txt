@@ -1,0 +1,235 @@
+package org.apache.commons.codec.binary;
+
+import static org.junit.Assert.*;
+
+import java.nio.charset.Charset;
+
+import org.junit.Test;
+
+public class CharSequenceUtilsClaudeTest {
+
+    // getBytesIso8859_1: null input -> must return null per Javadoc
+    @Test
+    public void testGetBytesIso8859_1_nullInput_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesIso8859_1(null));
+    }
+
+    // getBytesIso8859_1: normal string encoded correctly
+    @Test
+    public void testGetBytesIso8859_1_normalString_matchesJdkEncoding() throws Throwable {
+        byte[] expected = "abc".getBytes(Charset.forName("ISO-8859-1"));
+        assertArrayEquals(expected, StringUtils.getBytesIso8859_1("abc"));
+    }
+
+    // getBytesIso8859_1: empty string -> empty byte array
+    @Test
+    public void testGetBytesIso8859_1_emptyString_returnsEmptyArray() throws Throwable {
+        assertArrayEquals(new byte[0], StringUtils.getBytesIso8859_1(""));
+    }
+
+    // getBytesUnchecked: null input -> null
+    @Test
+    public void testGetBytesUnchecked_nullInput_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUnchecked(null, "UTF-8"));
+    }
+
+    // getBytesUnchecked: valid charset name encodes correctly
+    @Test
+    public void testGetBytesUnchecked_validCharset_matchesJdkEncoding() throws Throwable {
+        byte[] expected = "hello".getBytes(Charset.forName("UTF-8"));
+        assertArrayEquals(expected, StringUtils.getBytesUnchecked("hello", "UTF-8"));
+    }
+
+    // getBytesUnchecked: unsupported charset name -> IllegalStateException branch
+    @Test
+    public void testGetBytesUnchecked_invalidCharset_throwsIllegalStateException() throws Throwable {
+        try {
+            StringUtils.getBytesUnchecked("hello", "NOT_A_REAL_CHARSET_XYZ");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("NOT_A_REAL_CHARSET_XYZ"));
+        }
+    }
+
+    // getBytesUsAscii: null input -> null
+    @Test
+    public void testGetBytesUsAscii_nullInput_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUsAscii(null));
+    }
+
+    // getBytesUsAscii: normal string encoded correctly
+    @Test
+    public void testGetBytesUsAscii_normalString_matchesJdkEncoding() throws Throwable {
+        byte[] expected = "abc".getBytes(Charset.forName("US-ASCII"));
+        assertArrayEquals(expected, StringUtils.getBytesUsAscii("abc"));
+    }
+
+    // getBytesUtf16: null input -> null
+    @Test
+    public void testGetBytesUtf16_nullInput_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUtf16(null));
+    }
+
+    // getBytesUtf16: normal string encoded correctly
+    @Test
+    public void testGetBytesUtf16_normalString_matchesJdkEncoding() throws Throwable {
+        byte[] expected = "abc".getBytes(Charset.forName("UTF-16"));
+        assertArrayEquals(expected, StringUtils.getBytesUtf16("abc"));
+    }
+
+    // getBytesUtf16Be: null input -> null
+    @Test
+    public void testGetBytesUtf16Be_nullInput_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUtf16Be(null));
+    }
+
+    // getBytesUtf16Be: normal string encoded correctly
+    @Test
+    public void testGetBytesUtf16Be_normalString_matchesJdkEncoding() throws Throwable {
+        byte[] expected = "abc".getBytes(Charset.forName("UTF-16BE"));
+        assertArrayEquals(expected, StringUtils.getBytesUtf16Be("abc"));
+    }
+
+    // getBytesUtf16Le: null input -> null
+    @Test
+    public void testGetBytesUtf16Le_nullInput_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUtf16Le(null));
+    }
+
+    // getBytesUtf16Le: normal string encoded correctly
+    @Test
+    public void testGetBytesUtf16Le_normalString_matchesJdkEncoding() throws Throwable {
+        byte[] expected = "abc".getBytes(Charset.forName("UTF-16LE"));
+        assertArrayEquals(expected, StringUtils.getBytesUtf16Le("abc"));
+    }
+
+    // getBytesUtf8: null input -> null
+    @Test
+    public void testGetBytesUtf8_nullInput_returnsNull() throws Throwable {
+        assertNull(StringUtils.getBytesUtf8(null));
+    }
+
+    // getBytesUtf8: normal string with unicode char encoded correctly
+    @Test
+    public void testGetBytesUtf8_unicodeString_matchesJdkEncoding() throws Throwable {
+        String s = "h\u00e9llo";
+        byte[] expected = s.getBytes(Charset.forName("UTF-8"));
+        assertArrayEquals(expected, StringUtils.getBytesUtf8(s));
+    }
+
+    // newString(byte[], String): null bytes -> null
+    @Test
+    public void testNewStringCharsetName_nullBytes_returnsNull() throws Throwable {
+        assertNull(StringUtils.newString(null, "UTF-8"));
+    }
+
+    // newString(byte[], String): valid charset name decodes correctly
+    @Test
+    public void testNewStringCharsetName_validCharset_matchesJdkDecoding() throws Throwable {
+        byte[] bytes = "hello".getBytes(Charset.forName("UTF-8"));
+        String expected = new String(bytes, Charset.forName("UTF-8"));
+        assertEquals(expected, StringUtils.newString(bytes, "UTF-8"));
+    }
+
+    // newString(byte[], String): unsupported charset name -> IllegalStateException branch
+    @Test
+    public void testNewStringCharsetName_invalidCharset_throwsIllegalStateException() throws Throwable {
+        byte[] bytes = new byte[] { 65, 66, 67 };
+        try {
+            StringUtils.newString(bytes, "NOT_A_REAL_CHARSET_XYZ");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("NOT_A_REAL_CHARSET_XYZ"));
+        }
+    }
+
+    // newStringIso8859_1: Javadoc states null bytes must return null (bug reveals NPE here)
+    @Test
+    public void testNewStringIso8859_1_nullBytes_returnsNull() throws Throwable {
+        assertNull(StringUtils.newStringIso8859_1(null));
+    }
+
+    // newStringIso8859_1: normal bytes decode correctly
+    @Test
+    public void testNewStringIso8859_1_normalBytes_matchesJdkDecoding() throws Throwable {
+        byte[] bytes = "abc".getBytes(Charset.forName("ISO-8859-1"));
+        String expected = new String(bytes, Charset.forName("ISO-8859-1"));
+        assertEquals(expected, StringUtils.newStringIso8859_1(bytes));
+    }
+
+    // newStringUsAscii: Javadoc states null bytes must return null (bug reveals NPE here)
+    @Test
+    public void testNewStringUsAscii_nullBytes_returnsNull() throws Throwable {
+        assertNull(StringUtils.newStringUsAscii(null));
+    }
+
+    // newStringUsAscii: normal bytes decode correctly
+    @Test
+    public void testNewStringUsAscii_normalBytes_matchesJdkDecoding() throws Throwable {
+        byte[] bytes = "abc".getBytes(Charset.forName("US-ASCII"));
+        String expected = new String(bytes, Charset.forName("US-ASCII"));
+        assertEquals(expected, StringUtils.newStringUsAscii(bytes));
+    }
+
+    // newStringUtf16: Javadoc states null bytes must return null (bug reveals NPE here)
+    @Test
+    public void testNewStringUtf16_nullBytes_returnsNull() throws Throwable {
+        assertNull(StringUtils.newStringUtf16(null));
+    }
+
+    // newStringUtf16: normal bytes round trip decode correctly
+    @Test
+    public void testNewStringUtf16_normalBytes_matchesJdkDecoding() throws Throwable {
+        byte[] bytes = "abc".getBytes(Charset.forName("UTF-16"));
+        String expected = new String(bytes, Charset.forName("UTF-16"));
+        assertEquals(expected, StringUtils.newStringUtf16(bytes));
+    }
+
+    // newStringUtf16Be: Javadoc states null bytes must return null (bug reveals NPE here)
+    @Test
+    public void testNewStringUtf16Be_nullBytes_returnsNull() throws Throwable {
+        assertNull(StringUtils.newStringUtf16Be(null));
+    }
+
+    // newStringUtf16Be: normal bytes decode correctly
+    @Test
+    public void testNewStringUtf16Be_normalBytes_matchesJdkDecoding() throws Throwable {
+        byte[] bytes = "abc".getBytes(Charset.forName("UTF-16BE"));
+        String expected = new String(bytes, Charset.forName("UTF-16BE"));
+        assertEquals(expected, StringUtils.newStringUtf16Be(bytes));
+    }
+
+    // newStringUtf16Le: Javadoc states null bytes must return null (bug reveals NPE here)
+    @Test
+    public void testNewStringUtf16Le_nullBytes_returnsNull() throws Throwable {
+        assertNull(StringUtils.newStringUtf16Le(null));
+    }
+
+    // newStringUtf16Le: normal bytes decode correctly
+    @Test
+    public void testNewStringUtf16Le_normalBytes_matchesJdkDecoding() throws Throwable {
+        byte[] bytes = "abc".getBytes(Charset.forName("UTF-16LE"));
+        String expected = new String(bytes, Charset.forName("UTF-16LE"));
+        assertEquals(expected, StringUtils.newStringUtf16Le(bytes));
+    }
+
+    // newStringUtf8: null bytes -> null (uses null-safe private helper, must not NPE)
+    @Test
+    public void testNewStringUtf8_nullBytes_returnsNull() throws Throwable {
+        assertNull(StringUtils.newStringUtf8(null));
+    }
+
+    // newStringUtf8: normal bytes with unicode char decode correctly
+    @Test
+    public void testNewStringUtf8_unicodeBytes_matchesJdkDecoding() throws Throwable {
+        byte[] bytes = "h\u00e9llo".getBytes(Charset.forName("UTF-8"));
+        String expected = new String(bytes, Charset.forName("UTF-8"));
+        assertEquals(expected, StringUtils.newStringUtf8(bytes));
+    }
+
+    // newStringUtf8: empty byte array -> empty string
+    @Test
+    public void testNewStringUtf8_emptyBytes_returnsEmptyString() throws Throwable {
+        assertEquals("", StringUtils.newStringUtf8(new byte[0]));
+    }
+}

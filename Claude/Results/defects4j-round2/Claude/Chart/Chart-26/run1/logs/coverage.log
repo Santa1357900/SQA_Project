@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Chart-26-dszq254_/Chart-26b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 350
+     Lines covered: 235
+  Conditions total: 128
+Conditions covered: 82
+     Line coverage: 67.1%
+Condition coverage: 64.1%
+[exit 0]

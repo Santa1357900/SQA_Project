@@ -1,0 +1,519 @@
+package org.apache.commons.compress.archivers.zip;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.zip.Deflater;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ZipArchiveInputStreamClaudeTest {
+
+    private void writeShort(ByteArrayOutputStream out, int v) {
+        out.write(v & 0xFF);
+        out.write((v >> 8) & 0xFF);
+    }
+
+    private void writeInt(ByteArrayOutputStream out, int v) {
+        out.write(v & 0xFF);
+        out.write((v >> 8) & 0xFF);
+        out.write((v >> 16) & 0xFF);
+        out.write((v >> 24) & 0xFF);
+    }
+
+    private byte[] buildLocalFileHeader(int gpFlag, int method, long crc, long csize, long size, String name)
+            throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(0x50); out.write(0x4B); out.write(0x03); out.write(0x04);
+        writeShort(out, 20);
+        writeShort(out, gpFlag);
+        writeShort(out, method);
+        writeShort(out, 0);
+        writeShort(out, 0);
+        writeInt(out, (int) crc);
+        writeInt(out, (int) csize);
+        writeInt(out, (int) size);
+        byte[] nameBytes = name.getBytes("UTF-8");
+        writeShort(out, nameBytes.length);
+        writeShort(out, 0);
+        out.write(nameBytes);
+        return out.toByteArray();
+    }
+
+    private byte[] buildCentralFileHeader(int method, long csize, long size, String name) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(0x50); out.write(0x4B); out.write(0x01); out.write(0x02);
+        writeShort(out, 20);
+        writeShort(out, 20);
+        writeShort(out, 0);
+        writeShort(out, method);
+        writeShort(out, 0);
+        writeShort(out, 0);
+        writeInt(out, 0);
+        writeInt(out, (int) csize);
+        writeInt(out, (int) size);
+        byte[] nameBytes = name.getBytes("UTF-8");
+        writeShort(out, nameBytes.length);
+        writeShort(out, 0);
+        writeShort(out, 0);
+        writeShort(out, 0);
+        writeShort(out, 0);
+        writeInt(out, 0);
+        writeInt(out, 0);
+        out.write(nameBytes);
+        return out.toByteArray();
+    }
+
+    private byte[] buildEOCD() {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(0x50); out.write(0x4B); out.write(0x05); out.write(0x06);
+        writeShort(out, 0);
+        writeShort(out, 0);
+        writeShort(out, 1);
+        writeShort(out, 1);
+        writeInt(out, 0);
+        writeInt(out, 0);
+        writeShort(out, 0);
+        return out.toByteArray();
+    }
+
+    private byte[] buildStoredDDBugArchive() throws IOException {
+        byte[] lfh = buildLocalFileHeader(0x0008, 0, 0, 0, 0, "a");
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(lfh);
+        for (int i = 0; i < 12; i++) {
+            out.write(0x00);
+        }
+        out.write(0x50); out.write(0x4B); out.write(0x01); out.write(0x02);
+        for (int i = 0; i < 40; i++) {
+            out.write(0x00);
+        }
+        return out.toByteArray();
+    }
+
+    private byte[] deflateRaw(byte[] input) {
+        Deflater def = new Deflater(Deflater.DEFAULT_COMPRESSION, true);
+        def.setInput(input);
+        def.finish();
+        byte[] tmp = new byte[256];
+        int len = def.deflate(tmp);
+        def.end();
+        return Arrays.copyOf(tmp, len);
+    }
+
+    private byte[] readAll(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buf = new byte[16];
+        int n;
+        while ((n = in.read(buf, 0, buf.length)) != -1) {
+            out.write(buf, 0, n);
+        }
+        return out.toByteArray();
+    }
+
+    // single-arg constructor must default to UTF-8 encoding field
+    @Test
+    public void testConstructor_singleArg_defaultEncodingIsUTF8() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[0]));
+        try {
+            assertEquals(ZipEncodingHelper.UTF8, zis.encoding);
+        } finally {
+            zis.close();
+        }
+    }
+
+    // null encoding must be stored as-is in the encoding field
+    @Test
+    public void testConstructor_withNullEncoding_fieldStoresNull() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[0]), null);
+        try {
+            assertNull(zis.encoding);
+        } finally {
+            zis.close();
+        }
+    }
+
+    // empty stream -> EOFException is caught internally -> returns null
+    @Test
+    public void testGetNextZipEntry_emptyStream_returnsNull() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[0]));
+        try {
+            assertNull(zis.getNextZipEntry());
+        } finally {
+            zis.close();
+        }
+    }
+
+    // after close(), getNextZipEntry must short-circuit to null
+    @Test
+    public void testGetNextZipEntry_afterClose_returnsNull() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[0]));
+        zis.close();
+        assertNull(zis.getNextZipEntry());
+    }
+
+    // unrecognised signature must throw ZipException
+    @Test
+    public void testGetNextZipEntry_invalidSignature_throwsZipException() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[30]));
+        try {
+            try {
+                zis.getNextZipEntry();
+                fail("expected ZipException");
+            } catch (ZipException expected) { }
+        } finally {
+            zis.close();
+        }
+    }
+
+    // DD_SIG as very first 4 bytes signals a split archive -> UnsupportedZipFeatureException
+    @Test
+    public void testGetNextZipEntry_splitArchiveMarker_throwsUnsupportedZipFeatureException() throws Throwable {
+        byte[] data = new byte[30];
+        data[0] = 0x50; data[1] = 0x4B; data[2] = 0x07; data[3] = 0x08;
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(data));
+        try {
+            try {
+                zis.getNextZipEntry();
+                fail("expected UnsupportedZipFeatureException");
+            } catch (UnsupportedZipFeatureException expected) { }
+        } finally {
+            zis.close();
+        }
+    }
+
+    // valid STORED entry header without data descriptor must expose correct metadata
+    @Test
+    public void testGetNextZipEntry_validStoredEntry_returnsCorrectMetadata() throws Throwable {
+        byte[] lfh = buildLocalFileHeader(0, 0, 0, 3, 3, "a");
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(lfh));
+        try {
+            ZipArchiveEntry entry = zis.getNextZipEntry();
+            assertEquals("a", entry.getName());
+            assertEquals(ZipEntry.STORED, entry.getMethod());
+            assertEquals(3L, entry.getSize());
+        } finally {
+            zis.close();
+        }
+    }
+
+    // UTF-8 multi-byte filename must be decoded correctly
+    @Test
+    public void testGetNextZipEntry_unicodeName_decodesCorrectly() throws Throwable {
+        String name = "caf\u00e9";
+        byte[] lfh = buildLocalFileHeader(0, 0, 0, 0, 0, name);
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(lfh));
+        try {
+            ZipArchiveEntry entry = zis.getNextZipEntry();
+            assertEquals(name, entry.getName());
+        } finally {
+            zis.close();
+        }
+    }
+
+    // second getNextZipEntry() call must drain the unread first entry and return the second
+    @Test
+    public void testGetNextZipEntry_secondEntryAfterFirstUnread_skipsAndReturnsSecond() throws Throwable {
+        byte[] lfh1 = buildLocalFileHeader(0, 0, 0, 3, 3, "a");
+        byte[] data1 = {0x78, 0x79, 0x7A};
+        byte[] lfh2 = buildLocalFileHeader(0, 0, 0, 2, 2, "b");
+        byte[] data2 = {0x68, 0x69};
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        bos.write(lfh1); bos.write(data1); bos.write(lfh2); bos.write(data2);
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(bos.toByteArray()));
+        try {
+            assertEquals("a", zis.getNextZipEntry().getName());
+            assertEquals("b", zis.getNextZipEntry().getName());
+        } finally {
+            zis.close();
+        }
+    }
+
+    // full minimal archive (LFH+data+CFH+EOCD): second call must hit central dir and return null
+    @Test
+    public void testGetNextZipEntry_fullArchiveRoundTrip_secondCallReturnsNullAtCentralDirectory() throws Throwable {
+        byte[] lfh = buildLocalFileHeader(0, 0, 0, 2, 2, "a");
+        byte[] data = {0x68, 0x69};
+        byte[] cfh = buildCentralFileHeader(0, 2, 2, "a");
+        byte[] eocd = buildEOCD();
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        bos.write(lfh); bos.write(data); bos.write(cfh); bos.write(eocd);
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(bos.toByteArray()));
+        try {
+            assertEquals("a", zis.getNextZipEntry().getName());
+            assertNull(zis.getNextZipEntry());
+        } finally {
+            zis.close();
+        }
+    }
+
+    // getNextEntry() must delegate to getNextZipEntry() returning the same entry
+    @Test
+    public void testGetNextEntry_delegatesToGetNextZipEntry() throws Throwable {
+        byte[] lfh = buildLocalFileHeader(0, 0, 0, 0, 0, "x");
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(lfh));
+        try {
+            ArchiveEntry entry = zis.getNextEntry();
+            assertTrue(entry instanceof ZipArchiveEntry);
+            assertEquals("x", ((ZipArchiveEntry) entry).getName());
+        } finally {
+            zis.close();
+        }
+    }
+
+    // non ZipArchiveEntry (null) argument must return false, no NPE
+    @Test
+    public void testCanReadEntryData_nonZipArchiveEntry_returnsFalse() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[0]));
+        try {
+            assertFalse(zis.canReadEntryData(null));
+        } finally {
+            zis.close();
+        }
+    }
+
+    // a plain STORED entry without data descriptor must be readable
+    @Test
+    public void testCanReadEntryData_validStoredEntry_returnsTrue() throws Throwable {
+        byte[] lfh = buildLocalFileHeader(0, 0, 0, 0, 0, "x");
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(lfh));
+        try {
+            ZipArchiveEntry entry = zis.getNextZipEntry();
+            assertTrue(zis.canReadEntryData(entry));
+        } finally {
+            zis.close();
+        }
+    }
+
+    // read() before any entry has been obtained must return -1
+    @Test
+    public void testRead_beforeAnyEntry_returnsMinusOne() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[0]));
+        try {
+            assertEquals(-1, zis.read(new byte[5], 0, 5));
+        } finally {
+            zis.close();
+        }
+    }
+
+    // read() after close() must throw IOException
+    @Test
+    public void testRead_afterClose_throwsIOException() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[0]));
+        zis.close();
+        try {
+            zis.read(new byte[5], 0, 5);
+            fail("expected IOException");
+        } catch (IOException expected) { }
+    }
+
+    // negative offset must throw ArrayIndexOutOfBoundsException
+    @Test
+    public void testRead_negativeOffset_throwsArrayIndexOutOfBoundsException() throws Throwable {
+        byte[] lfh = buildLocalFileHeader(0, 0, 0, 0, 0, "x");
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(lfh));
+        try {
+            zis.getNextZipEntry();
+            try {
+                zis.read(new byte[5], -1, 1);
+                fail("expected ArrayIndexOutOfBo                fail("expected ArrayIndexOutOfBoundsException");
+            } catch (ArrayIndexOutOfBoundsException expected) { }
+        } finally {
+            zis.close();
+        }
+    }
+
+    // negative length must throw ArrayIndexOutOfBoundsException
+    @Test
+    public void testRead_negativeLength_throwsArrayIndexOutOfBoundsException() throws Throwable {
+        byte[] lfh = buildLocalFileHeader(0, 0, 0, 0, 0, "x");
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(lfh));
+        try {
+            zis.getNextZipEntry();
+            try {
+                zis.read(new byte[5], 0, -1);
+                fail("expected ArrayIndexOutOfBoundsException");
+            } catch (ArrayIndexOutOfBoundsException expected) { }
+        } finally {
+            zis.close();
+        }
+    }
+
+    // STORED entry without data descriptor: read() must return exact bytes then -1
+    @Test
+    public void testRead_storedEntryNoDataDescriptor_returnsExactContent() throws Throwable {
+        byte[] lfh = buildLocalFileHeader(0, 0, 0, 3, 3, "a");
+        byte[] data = {0x78, 0x79, 0x7A};
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        bos.write(lfh); bos.write(data);
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(bos.toByteArray()));
+        try {
+            zis.getNextZipEntry();
+            byte[] buf = new byte[3];
+            int n = zis.read(buf, 0, 3);
+            assertEquals(3, n);
+            assertArrayEquals(data, buf);
+            assertEquals(-1, zis.read(buf, 0, 3));
+        } finally {
+            zis.close();
+        }
+    }
+
+    // STORED entry with zero declared size must return -1 immediately
+    @Test
+    public void testRead_storedEntryEmptyContent_returnsMinusOne() throws Throwable {
+        byte[] lfh = buildLocalFileHeader(0, 0, 0, 0, 0, "a");
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(lfh));
+        try {
+            zis.getNextZipEntry();
+            byte[] buf = new byte[3];
+            assertEquals(-1, zis.read(buf, 0, 3));
+        } finally {
+            zis.close();
+        }
+    }
+
+    // DEFLATED entry must inflate back to the original content
+    @Test
+    public void testRead_deflatedEntry_decompressesCorrectly() throws Throwable {
+        byte[] original = "Hello World".getBytes("UTF-8");
+        byte[] compressed = deflateRaw(original);
+        byte[] lfh = buildLocalFileHeader(0, 8, 0, compressed.length, original.length, "d");
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        bos.write(lfh); bos.write(compressed);
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(bos.toByteArray()));
+        try {
+            zis.getNextZipEntry();
+            byte[] result = readAll(zis);
+            assertArrayEquals(original, result);
+        } finally {
+            zis.close();
+        }
+    }
+
+    // STORED + data descriptor, default constructor disallows it -> UnsupportedZipFeatureException
+    @Test
+    public void testRead_storedEntryWithDataDescriptor_disallowedByDefault_throwsUnsupportedZipFeatureException()
+            throws Throwable {
+        byte[] lfh = buildLocalFileHeader(0x0008, 0, 0, 0, 0, "a");
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(lfh));
+        try {
+            ZipArchiveEntry entry = zis.getNextZipEntry();
+            assertTrue(entry.getGeneralPurposeBit().usesDataDescriptor());
+            try {
+                zis.read(new byte[10], 0, 10);
+                fail("expected UnsupportedZipFeatureException");
+            } catch (UnsupportedZipFeatureException expected) { }
+        } finally {
+            zis.close();
+        }
+    }
+
+    // STORED + data descriptor, allowed: entry data must end exactly at the CFH signature
+    // (regression for the LFH/CFH signature-detection off-by-index bug)
+    @Test
+    public void testRead_storedEntryWithDataDescriptor_cfhSignatureDetection_bugTest() throws Throwable {
+        byte[] archive = buildStoredDDBugArchive();
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(archive), "UTF-8", true, true);
+        try {
+            ZipArchiveEntry entry = zis.getNextZipEntry();
+            assertTrue(entry.getGeneralPurposeBit().usesDataDescriptor());
+            byte[] buf = new byte[10];
+            int n = zis.read(buf, 0, buf.length);
+            assertEquals(10, n);
+        } finally {
+            zis.close();
+        }
+    }
+
+    // skip() with negative value must throw IllegalArgumentException
+    @Test
+    public void testSkip_negativeValue_throwsIllegalArgumentException() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[0]));
+        try {
+            try {
+                zis.skip(-1);
+                fail("expected IllegalArgumentException");
+            } catch (IllegalArgumentException expected) { }
+        } finally {
+            zis.close();
+        }
+    }
+
+    // skip(0) must return 0 without consuming anything
+    @Test
+    public void testSkip_zeroValue_returnsZero() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[0]));
+        try {
+            assertEquals(0L, zis.skip(0));
+        } finally {
+            zis.close();
+        }
+    }
+
+    // skip() inside a STORED entry must advance the read position correctly
+    @Test
+    public void testSkip_skipsRequestedBytesWithinEntry() throws Throwable {
+        byte[] lfh = buildLocalFileHeader(0, 0, 0, 5, 5, "a");
+        byte[] data = {1, 2, 3, 4, 5};
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        bos.write(lfh); bos.write(data);
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(bos.toByteArray()));
+        try {
+            zis.getNextZipEntry();
+            assertEquals(3L, zis.skip(3));
+            byte[] buf = new byte[2];
+            zis.read(buf, 0, 2);
+            assertArrayEquals(new byte[]{4, 5}, buf);
+        } finally {
+            zis.close();
+        }
+    }
+
+    // length shorter than LFH signature length must return false
+    @Test
+    public void testMatches_tooShortLength_returnsFalse() throws Throwable {
+        byte[] sig = {0x50, 0x4B};
+        assertFalse(ZipArchiveInputStream.matches(sig, 2));
+    }
+
+    // local file header signature must be recognised
+    @Test
+    public void testMatches_localFileHeaderSignature_returnsTrue() throws Throwable {
+        byte[] sig = {0x50, 0x4B, 0x03, 0x04};
+        assertTrue(ZipArchiveInputStream.matches(sig, 4));
+    }
+
+    // end of central directory signature (empty zip) must be recognised
+    @Test
+    public void testMatches_endOfCentralDirSignature_returnsTrue() throws Throwable {
+        byte[] sig = {0x50, 0x4B, 0x05, 0x06};
+        assertTrue(ZipArchiveInputStream.matches(sig, 4));
+    }
+
+    // arbitrary non zip signature must not be recognised
+    @Test
+    public void testMatches_nonMatchingSignature_returnsFalse() throws Throwable {
+        byte[] sig = {0x11, 0x22, 0x33, 0x44};
+        assertFalse(ZipArchiveInputStream.matches(sig, 4));
+    }
+
+    // close() must be idempotent and leave the stream in the closed state
+    @Test
+    public void testClose_calledTwice_doesNotThrow() throws Throwable {
+        ZipArchiveInputStream zis = new ZipArchiveInputStream(new ByteArrayInputStream(new byte[0]));
+        zis.close();
+        zis.close();
+        try {
+            zis.read(new byte[1], 0, 1);
+            fail("expected IOException after close");
+        } catch (IOException expected) { }
+    }
+}

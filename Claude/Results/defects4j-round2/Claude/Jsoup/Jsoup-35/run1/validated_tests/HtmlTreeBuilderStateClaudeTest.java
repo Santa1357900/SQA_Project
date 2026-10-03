@@ -1,0 +1,280 @@
+package org.jsoup.parser;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+public class HtmlTreeBuilderStateClaudeTest {
+
+    // Initial state: well-formed "<!DOCTYPE html>" must not force quirks mode
+    @Test
+    public void testInitial_wellFormedDoctype_doesNotForceQuirksMode() throws Throwable {
+        Document doc = Jsoup.parse("<!DOCTYPE html><html><body>x</body></html>");
+        assertEquals(Document.QuirksMode.noQuirks, doc.quirksMode());
+    }
+
+    // BeforeHtml state: comment token before <html> is preserved in the document
+    @Test
+    public void testBeforeHtml_commentBeforeHtmlTag_preservedInDocument() throws Throwable {
+        Document doc = Jsoup.parse("<!--c1--><html><body>x</body></html>");
+        assertTrue(doc.html().contains("<!--c1-->"));
+    }
+
+    // BeforeHead state: non-head start tag implies <head> and later <body> elements
+    @Test
+    public void testBeforeHead_nonHeadStartTag_impliesHeadAndBodyElements() throws Throwable {
+        Document doc = Jsoup.parse("<html><p>Hi</p></html>");
+        assertNotNull(doc.head());
+        Elements ps = doc.select("p");
+        assertEquals(1, ps.size());
+        assertEquals("Hi", ps.get(0).text());
+        assertEquals(doc.body(), ps.get(0).parent());
+    }
+
+    // InHead state: <title> content sets the document title
+    @Test
+    public void testInHead_titleTagSetsDocumentTitle() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><title>Hello</title></head><body></body></html>");
+        assertEquals("Hello", doc.title());
+    }
+
+    // InHead state: <meta> is inserted as an empty element with attribute preserved
+    @Test
+    public void testInHead_metaTagInsertedAsEmptyElement() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><meta charset=\"utf-8\"></head></html>");
+        Elements metas = doc.select("meta");
+        assertEquals(1, metas.size());
+        assertEquals("utf-8", metas.get(0).attr("charset"));
+        assertEquals(0, metas.get(0).childNodeSize());
+    }
+
+    // InHead state: <style> content is stored raw and not parsed as elements
+    @Test
+    public void testInHead_styleTagStoresRawTextWithoutParsingChildren() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><style>p{color:red}</style></head></html>");
+        Elements styles = doc.select("style");
+        assertEquals(1, styles.size());
+        assertEquals("p{color:red}", styles.get(0).data());
+    }
+
+    // InHead state: <script> content is stored raw and not parsed as elements
+    @Test
+    public void testInHead_scriptTagStoresRawTextWithoutParsingChildren() throws Throwable {
+        Document doc = Jsoup.parse("<html><head><script>var a = 1;</script></head></html>");
+        Elements scripts = doc.select("script");
+        assertEquals(1, scripts.size());
+        assertEquals("var a = 1;", scripts.get(0).data());
+    }
+
+    // InHead state: explicit </head> end tag transitions to AfterHead, body still parsed correctly
+    @Test
+    public void testInHead_headEndTag_transitionsToAfterHead() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body>content</body></html>");
+        assertEquals("content", doc.body().text());
+    }
+
+    // AfterHead state: <body> start tag inserts body with its attributes
+    @Test
+    public void testAfterHead_bodyStartTag_transitionsToInBodyAndSetsAttributes() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><body class=\"main\">Hi</body></html>");
+        assertEquals("main", doc.body().attr("class"));
+        assertEquals("Hi", doc.body().text());
+    }
+
+    // AfterHead state: <frameset> start tag transitions to InFrameset
+    @Test
+    public void testAfterHead_framesetStartTag_transitionsToInFrameset() throws Throwable {
+        Document doc = Jsoup.parse("<html><head></head><frameset><frame src=\"a.html\"></frameset></html>");
+        assertEquals(1, doc.select("frameset").size());
+    }
+
+    // InBody state: consecutive <p> tags auto-close the previous paragraph (button scope)
+    @Test
+    public void testInBody_consecutivePTags_autoClosesPreviousP() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><p>first<p>second</body></html>");
+        Elements ps = doc.select("p");
+        assertEquals(2, ps.size());
+        assertEquals("first", ps.get(0).text());
+        assertEquals("second", ps.get(1).text());
+    }
+
+    // InBody state: consecutive heading tags auto-close the previous heading
+    @Test
+    public void testInBody_consecutiveHeadingTags_autoClosesPreviousHeading() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><h1>A<h2>B</body></html>");
+        Elements headings = doc.select("h1, h2");
+        assertEquals(2, headings.size());
+        assertEquals("A", headings.get(0).text());
+        assertEquals("B", headings.get(1).text());
+    }
+
+
+
+    // InBody state: consecutive <li> items auto-close the previous list item
+    @Test
+    public void testInBody_consecutiveLiTags_autoClosesPreviousLi() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><ul><li>one<li>two</ul></body></html>");
+        Elements lis = doc.select("li");
+        assertEquals(2, lis.size());
+        assertEquals("one", lis.get(0).text());
+        assertEquals("two", lis.get(1).text());
+    }
+
+    // InBody state: <dd> after <dt> auto-closes the previous definition term
+    @Test
+    public void testInBody_ddAfterDt_autoClosesPreviousDefinitionTerm() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><dl><dt>term<dd>desc</dl></body></html>");
+        Elements items = doc.select("dt, dd");
+        assertEquals(2, items.size());
+        assertEquals(items.get(0).parent(), items.get(1).parent());
+    }
+
+    // InBody state: nested <button> closes the previously open button
+    @Test
+    public void testInBody_nestedButtonTags_closesPreviousButton() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><button>Outer<button>Inner</button></body></html>");
+        Elements buttons = doc.select("button");
+        assertEquals(2, buttons.size());
+        assertEquals("Outer", buttons.get(0).text());
+        assertEquals("Inner", buttons.get(1).text());
+        assertEquals(buttons.get(0).parent(), buttons.get(1).parent());
+    }
+
+    // InBody state: consecutive <a> tags close the previous anchor (active formatting element)
+    @Test
+    public void testInBody_consecutiveAnchorTags_closesPreviousAnchor() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><a href=\"1\">One<a href=\"2\">Two</a></body></html>");
+        Elements anchors = doc.select("a");
+        assertEquals(2, anchors.size());
+        assertEquals("One", anchors.get(0).text());
+        assertEquals("Two", anchors.get(1).text());
+    }
+
+    // InBody state: <hr> is a void element with no children
+    @Test
+    public void testInBody_hrVoidElement_hasNoChildren() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><p>text<hr></body></html>");
+        Elements hrs = doc.select("hr");
+        assertEquals(1, hrs.size());
+        assertEquals(0, hrs.get(0).childNodeSize());
+    }
+
+    // InBody state: <br> is a void element with no children
+    @Test
+    public void testInBody_brVoidElement_hasNoChildren() throws Throwable {
+        Document doc = Jsoup.parse("<html><body>line1<br>line2</body></html>");
+        Elements brs = doc.select("br");
+        assertEquals(1, brs.size());
+        assertEquals(0, brs.get(0).childNodeSize());
+    }
+
+    // InBody state: <table> after open <p> closes the paragraph and becomes its sibling
+    @Test
+    public void testInBody_tableAfterOpenP_closesPAndInsertsTableAsSibling() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><p>Hello<table><tr><td>Cell</td></tr></table></body></html>");
+        Elements ps = doc.select("p");
+        Elements tables = doc.select("table");
+        assertEquals(1, ps.size());
+        assertEquals(1, tables.size());
+        assertEquals(ps.get(0).parent(), tables.get(0).parent());
+    }
+
+
+
+
+
+    // InBody state: "rt" inside ruby scope is inserted with its text content
+    @Test
+    public void testInBody_rtTagInsideRubyScope_isInserted() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><ruby>Base<rt>Anno</rt></ruby></body></html>");
+        Elements rts = doc.select("rt");
+        assertEquals(1, rts.size());
+        assertEquals("Anno", rts.get(0).text());
+    }
+
+    // InSelect state: consecutive <option> tags inside <select> are siblings
+    @Test
+    public void testInSelect_optionTagsInsideSelect_areSiblings() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><select><option>1<option>2</select></body></html>");
+        Elements options = doc.select("option");
+        assertEquals(2, options.size());
+        assertEquals(options.get(0).parent(), options.get(1).parent());
+    }
+
+    // InTable state: <caption> is inserted and retains its text content
+    @Test
+    public void testInTable_captionInserted_andContainsText() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><table><caption>Title</caption><tr><td>X</td></tr></table></body></html>");
+        Elements captions = doc.select("caption");
+        assertEquals(1, captions.size());
+        assertEquals("Title", captions.get(0).text());
+    }
+
+    // InColumnGroup state: <col> inside <colgroup> is inserted as an empty element
+    @Test
+    public void testInTable_colgroupAndColInserted_colHasNoChildren() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><table><colgroup><col></colgroup><tr><td>x</td></tr></table></body></html>");
+        Elements cols = doc.select("col");
+        assertEquals(1, cols.size());
+        assertEquals(0, cols.get(0).childNodeSize());
+    }
+
+    // InTableBody state: <tr> without explicit <tbody> implies one
+    @Test
+    public void testInTableBody_trWithoutExplicitTbody_impliesTbody() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><table><tr><td>a</td></tr></table></body></html>");
+        Elements tbodies = doc.select("tbody");
+        assertEquals(1, tbodies.size());
+    }
+
+    // InRow state: <th> and <td> in the same row share the same parent element
+    @Test
+    public void testInRow_thAndTdShareSameParentRow() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><table><tr><th>Head</th><td>Data</td></tr></table></body></html>");
+        Elements ths = doc.select("th");
+        Elements tds = doc.select("td");
+        assertEquals(1, ths.size());
+        assertEquals(1, tds.size());
+        assertEquals(ths.get(0).parent(), tds.get(0).parent());
+    }
+
+    // InCell state: a new cell tag properly closes the previous cell, both remain siblings
+    @Test
+    public void testInCell_tdClosedProperlyWhenNewCellStarts() throws Throwable {
+        Document doc = Jsoup.parse("<html><body><table><tr><td>A<td>B</tr></table></body></html>");
+        Elements tds = doc.select("td");
+        assertEquals(2, tds.size());
+        assertEquals("A", tds.get(0).text());
+        assertEquals("B", tds.get(1).text());
+        assertEquals(tds.get(0).parent(), tds.get(1).parent());
+    }
+
+    // AfterBody state: trailing whitespace after </body> does not alter the body's text content
+    @Test
+    public void testAfterBody_trailingWhitespace_doesNotAlterBodyText() throws Throwable {
+        Document doc = Jsoup.parse("<html><body>Content</body>   \n</html>");
+        assertEquals("Content", doc.body().text());
+    }
+
+    // InFrameset state: <frame> is inserted as an empty element with its attributes preserved
+    @Test
+    public void testInFrameset_frameElementInsertedWithAttributes() throws Throwable {
+        Document doc = Jsoup.parse("<html><frameset><frame src=\"a.html\" name=\"f1\"></frameset></html>");
+        Elements frames = doc.select("frame");
+        assertEquals(1, frames.size());
+        assertEquals("a.html", frames.get(0).attr("src"));
+        assertEquals("f1", frames.get(0).attr("name"));
+        assertEquals(0, frames.get(0).childNodeSize());
+    }
+
+    // AfterAfterBody state: comment after closing </html> is preserved in the document
+    @Test
+    public void testAfterAfterBody_commentAfterHtmlTag_preservedInDocument() throws Throwable {
+        Document doc = Jsoup.parse("<html><body>Hi</body></html><!--tail-->");
+        assertTrue(doc.html().contains("<!--tail-->"));
+    }
+}

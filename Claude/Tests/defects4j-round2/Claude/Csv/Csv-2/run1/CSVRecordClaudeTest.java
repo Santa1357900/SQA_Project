@@ -1,0 +1,312 @@
+package org.apache.commons.csv;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CSVRecordClaudeTest {
+
+    // get(int): valid index returns the value stored
+    @Test
+    public void testGetByIndex_validIndex_returnsValue() throws Throwable {
+        String[] values = {"a", "b", "c"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        assertEquals("b", record.get(1));
+    }
+
+    // get(int): index out of bounds throws ArrayIndexOutOfBoundsException
+    @Test
+    public void testGetByIndex_outOfBounds_throwsException() throws Throwable {
+        String[] values = {"a", "b"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        try {
+            record.get(5);
+            fail("expected ArrayIndexOutOfBoundsException");
+        } catch (ArrayIndexOutOfBoundsException expected) {
+        }
+    }
+
+    // get(int): negative index throws ArrayIndexOutOfBoundsException
+    @Test
+    public void testGetByIndex_negativeIndex_throwsException() throws Throwable {
+        String[] values = {"a", "b"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        try {
+            record.get(-1);
+            fail("expected ArrayIndexOutOfBoundsException");
+        } catch (ArrayIndexOutOfBoundsException expected) {
+        }
+    }
+
+    // constructor: null values array is replaced by empty array (ternary branch)
+    @Test
+    public void testConstructor_nullValues_resultsInEmptySize() throws Throwable {
+        CSVRecord record = new CSVRecord(null, null, null, 1L);
+        assertEquals(0, record.size());
+    }
+
+    // get(String): null mapping throws IllegalStateException
+    @Test
+    public void testGetByName_mappingNull_throwsIllegalStateException() throws Throwable {
+        String[] values = {"a", "b"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        try {
+            record.get("name");
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+    }
+
+    // get(String): name not present in mapping returns null (ternary else branch)
+    @Test
+    public void testGetByName_nameNotInMapping_returnsNull() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", 0);
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        assertNull(record.get("missing"));
+    }
+
+    // get(String): valid mapped name returns corresponding value (ternary then branch)
+    @Test
+    public void testGetByName_validName_returnsValue() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", 0);
+        mapping.put("second", 1);
+        String[] values = {"x", "y"};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        assertEquals("y", record.get("second"));
+    }
+
+    // get(String): per Javadoc, an inconsistent record must throw IllegalArgumentException
+    @Test
+    public void testGetByName_inconsistentRecord_throwsIllegalArgumentException() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("name", 5);
+        String[] values = {"a", "b"};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        try {
+            record.get("name");
+            fail("expected IllegalArgumentException because record is inconsistent");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // isConsistent: null mapping returns true
+    @Test
+    public void testIsConsistent_mappingNull_returnsTrue() throws Throwable {
+        String[] values = {"a", "b"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        assertTrue(record.isConsistent());
+    }
+
+    // isConsistent: mapping size equals values length returns true
+    @Test
+    public void testIsConsistent_sizeEqualsValuesLength_returnsTrue() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", 0);
+        mapping.put("second", 1);
+        String[] values = {"a", "b"};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        assertTrue(record.isConsistent());
+    }
+
+    // isConsistent: mapping size differs from values length returns false
+    @Test
+    public void testIsConsistent_sizeNotEqualsValuesLength_returnsFalse() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", 0);
+        String[] values = {"a", "b"};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        assertFalse(record.isConsistent());
+    }
+
+    // isConsistent: both mapping and values empty returns true (boundary case)
+    @Test
+    public void testIsConsistent_bothEmpty_returnsTrue() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        String[] values = {};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        assertTrue(record.isConsistent());
+    }
+
+    // isMapped: null mapping returns false
+    @Test
+    public void testIsMapped_mappingNull_returnsFalse() throws Throwable {
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        assertFalse(record.isMapped("first"));
+    }
+
+    // isMapped: name present in mapping returns true
+    @Test
+    public void testIsMapped_nameInMapping_returnsTrue() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", 0);
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        assertTrue(record.isMapped("first"));
+    }
+
+    // isMapped: name absent in mapping returns false
+    @Test
+    public void testIsMapped_nameNotInMapping_returnsFalse() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", 0);
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        assertFalse(record.isMapped("second"));
+    }
+
+    // isSet: name not mapped returns false (short-circuit of &&)
+    @Test
+    public void testIsSet_nameNotMapped_returnsFalse() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        assertFalse(record.isSet("missing"));
+    }
+
+    // isSet: mapped index strictly less than values length returns true
+    @Test
+    public void testIsSet_indexWithinRange_returnsTrue() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", 1);
+        String[] values = {"a", "b"};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        assertTrue(record.isSet("first"));
+    }
+
+    // isSet: mapped index equal to values length returns false (boundary of <)
+    @Test
+    public void testIsSet_indexEqualToLength_returnsFalse() throws Throwable {
+        Map<String, Integer> mapping = new HashMap<String, Integer>();
+        mapping.put("first", 2);
+        String[] values = {"a", "b"};
+        CSVRecord record = new CSVRecord(values, mapping, null, 1L);
+        assertFalse(record.isSet("first"));
+    }
+
+    // iterator: empty values array yields an iterator with no elements
+    @Test
+    public void testIterator_emptyValues_hasNoNext() throws Throwable {
+        String[] values = {};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        Iterator<String> it = record.iterator();
+        assertFalse(it.hasNext());
+    }
+
+    // iterator: multiple values iterated in original order
+    @Test
+    public void testIterator_multipleValues_iteratesInOrder() throws Throwable {
+        String[] values = {"a", "b", "c"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        Iterator<String> it = record.iterator();
+        assertEquals("a", it.next());
+        assertEquals("b", it.next());
+        assertEquals("c", it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // values(): package-private accessor returns array whose content matches constructor input
+    @Test
+    public void testValues_returnsGivenValuesContent() throws Throwable {
+        String[] values = {"x", "y"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        String[] result = record.values();
+        assertEquals(2, result.length);
+        assertEquals("x", result[0]);
+        assertEquals("y", result[1]);
+    }
+
+    // values(): null constructor input results in empty array, not null
+    @Test
+    public void testValues_nullInput_returnsEmptyArray() throws Throwable {
+        CSVRecord record = new CSVRecord(null, null, null, 1L);
+        assertNotNull(record.values());
+        assertEquals(0, record.values().length);
+    }
+
+    // getComment: non-null comment is returned unchanged
+    @Test
+    public void testGetComment_withComment_returnsSameComment() throws Throwable {
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, null, "hello comment", 1L);
+        assertEquals("hello comment", record.getComment());
+    }
+
+    // getComment: null comment returns null
+    @Test
+    public void testGetComment_nullComment_returnsNull() throws Throwable {
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        assertNull(record.getComment());
+    }
+
+    // getComment: empty string comment is preserved as empty string, not null
+    @Test
+    public void testGetComment_emptyStringComment_returnsEmptyString() throws Throwable {
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, null, "", 1L);
+        assertEquals("", record.getComment());
+    }
+
+    // getRecordNumber: positive number is returned unchanged
+    @Test
+    public void testGetRecordNumber_positiveValue_returnsSameValue() throws Throwable {
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, null, null, 42L);
+        assertEquals(42L, record.getRecordNumber());
+    }
+
+    // getRecordNumber: zero is returned unchanged (boundary)
+    @Test
+    public void testGetRecordNumber_zero_returnsZero() throws Throwable {
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, null, null, 0L);
+        assertEquals(0L, record.getRecordNumber());
+    }
+
+    // getRecordNumber: large long value is preserved without overflow
+    @Test
+    public void testGetRecordNumber_maxValue_returnsSameValue() throws Throwable {
+        String[] values = {"a"};
+        CSVRecord record = new CSVRecord(values, null, null, Long.MAX_VALUE);
+        assertEquals(Long.MAX_VALUE, record.getRecordNumber());
+    }
+
+    // size(): empty values array returns zero
+    @Test
+    public void testSize_emptyValues_returnsZero() throws Throwable {
+        String[] values = {};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        assertEquals(0, record.size());
+    }
+
+    // size(): multiple values array returns its length
+    @Test
+    public void testSize_multipleValues_returnsLength() throws Throwable {
+        String[] values = {"a", "b", "c", "d"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        assertEquals(4, record.size());
+    }
+
+    // toString(): returns the same format as Arrays.toString on the values array
+    @Test
+    public void testToString_multipleValues_matchesArraysToString() throws Throwable {
+        String[] values = {"a", "b"};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        assertEquals("[a, b]", record.toString());
+    }
+
+    // toString(): empty values array yields empty brackets
+    @Test
+    public void testToString_emptyValues_returnsEmptyBrackets() throws Throwable {
+        String[] values = {};
+        CSVRecord record = new CSVRecord(values, null, null, 1L);
+        assertEquals("[]", record.toString());
+    }
+}

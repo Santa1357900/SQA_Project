@@ -1,0 +1,462 @@
+package org.apache.commons.lang;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class BooleanUtilsClaudeTest {
+
+    // Constructor is public, should be instantiable without error
+    @Test
+    public void testConstructor_instantiable() throws Throwable {
+        BooleanUtils bu = new BooleanUtils();
+        assertNotNull(bu);
+    }
+
+    // negate: TRUE->FALSE, FALSE->TRUE, null->null
+    @Test
+    public void testNegate_allBranches() throws Throwable {
+        assertEquals(Boolean.FALSE, BooleanUtils.negate(Boolean.TRUE));
+        assertEquals(Boolean.TRUE, BooleanUtils.negate(Boolean.FALSE));
+        assertNull(BooleanUtils.negate(null));
+    }
+
+    // isTrue: TRUE->true, FALSE->false, null->false
+    @Test
+    public void testIsTrue_allBranches() throws Throwable {
+        assertTrue(BooleanUtils.isTrue(Boolean.TRUE));
+        assertFalse(BooleanUtils.isTrue(Boolean.FALSE));
+        assertFalse(BooleanUtils.isTrue(null));
+    }
+
+    // isNotTrue: inverse of isTrue
+    @Test
+    public void testIsNotTrue_allBranches() throws Throwable {
+        assertFalse(BooleanUtils.isNotTrue(Boolean.TRUE));
+        assertTrue(BooleanUtils.isNotTrue(Boolean.FALSE));
+        assertTrue(BooleanUtils.isNotTrue(null));
+    }
+
+    // isFalse: TRUE->false, FALSE->true, null->false
+    @Test
+    public void testIsFalse_allBranches() throws Throwable {
+        assertFalse(BooleanUtils.isFalse(Boolean.TRUE));
+        assertTrue(BooleanUtils.isFalse(Boolean.FALSE));
+        assertFalse(BooleanUtils.isFalse(null));
+    }
+
+    // isNotFalse: inverse of isFalse
+    @Test
+    public void testIsNotFalse_allBranches() throws Throwable {
+        assertTrue(BooleanUtils.isNotFalse(Boolean.TRUE));
+        assertFalse(BooleanUtils.isNotFalse(Boolean.FALSE));
+        assertTrue(BooleanUtils.isNotFalse(null));
+    }
+
+    // toBooleanObject(boolean): factory ternary both branches
+    @Test
+    public void testToBooleanObject_boolean_bothBranches() throws Throwable {
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject(true));
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject(false));
+    }
+
+    // toBoolean(Boolean): TRUE, FALSE, null handling
+    @Test
+    public void testToBoolean_Boolean_allBranches() throws Throwable {
+        assertTrue(BooleanUtils.toBoolean(Boolean.TRUE));
+        assertFalse(BooleanUtils.toBoolean(Boolean.FALSE));
+        assertFalse(BooleanUtils.toBoolean((Boolean) null));
+    }
+
+    // toBooleanDefaultIfNull: null uses default (both default values), non-null uses value
+    @Test
+    public void testToBooleanDefaultIfNull_allBranches() throws Throwable {
+        assertTrue(BooleanUtils.toBooleanDefaultIfNull(null, true));
+        assertFalse(BooleanUtils.toBooleanDefaultIfNull(null, false));
+        assertTrue(BooleanUtils.toBooleanDefaultIfNull(Boolean.TRUE, false));
+    }
+
+    // toBoolean(int): zero is false, nonzero (1 and 2) is true
+    @Test
+    public void testToBoolean_int_zeroAndNonZero() throws Throwable {
+        assertFalse(BooleanUtils.toBoolean(0));
+        assertTrue(BooleanUtils.toBoolean(1));
+        assertTrue(BooleanUtils.toBoolean(2));
+    }
+
+    // toBooleanObject(int): zero->FALSE, nonzero->TRUE
+    @Test
+    public void testToBooleanObject_int_zeroAndNonZero() throws Throwable {
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject(0));
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject(1));
+    }
+
+    // toBooleanObject(Integer): null->null, zero->FALSE, nonzero->TRUE
+    @Test
+    public void testToBooleanObject_Integer_allBranches() throws Throwable {
+        assertNull(BooleanUtils.toBooleanObject((Integer) null));
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject(new Integer(0)));
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject(new Integer(5)));
+    }
+
+    // toBoolean(int,int,int): match trueValue, match falseValue
+    @Test
+    public void testToBoolean_intIntInt_matches() throws Throwable {
+        assertTrue(BooleanUtils.toBoolean(1, 1, 0));
+        assertFalse(BooleanUtils.toBoolean(0, 1, 0));
+    }
+
+    // toBoolean(int,int,int): no match throws IllegalArgumentException
+    @Test
+    public void testToBoolean_intIntInt_noMatch_throws() throws Throwable {
+        try {
+            BooleanUtils.toBoolean(3, 1, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // toBoolean(Integer,Integer,Integer): value null with trueValue null -> true; value null with falseValue null -> false
+    @Test
+    public void testToBoolean_IntegerIntegerInteger_nullValueBranches() throws Throwable {
+        assertTrue(BooleanUtils.toBoolean((Integer) null, null, new Integer(0)));
+        assertFalse(BooleanUtils.toBoolean((Integer) null, new Integer(1), null));
+    }
+
+    // toBoolean(Integer,Integer,Integer): value null but neither trueValue nor falseValue null -> no match throws
+    @Test
+    public void testToBoolean_IntegerIntegerInteger_nullValueNoMatch_throws() throws Throwable {
+        try {
+            BooleanUtils.toBoolean((Integer) null, new Integer(1), new Integer(0));
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // toBoolean(Integer,Integer,Integer): non-null value equals trueValue / falseValue
+    @Test
+    public void testToBoolean_IntegerIntegerInteger_nonNullMatches() throws Throwable {
+        assertTrue(BooleanUtils.toBoolean(new Integer(1), new Integer(1), new Integer(0)));
+        assertFalse(BooleanUtils.toBoolean(new Integer(0), new Integer(1), new Integer(0)));
+    }
+
+    // toBooleanObject(int,int,int,int): match true/false/null branches
+    @Test
+    public void testToBooleanObject_4int_matches() throws Throwable {
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject(0, 0, 2, 3));
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject(2, 1, 2, 3));
+        assertNull(BooleanUtils.toBooleanObject(3, 1, 2, 3));
+    }
+
+    // toBooleanObject(int,int,int,int): no match throws
+    @Test
+    public void testToBooleanObject_4int_noMatch_throws() throws Throwable {
+        try {
+            BooleanUtils.toBooleanObject(9, 1, 2, 3);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // toBooleanObject(Integer x4): null value branches for true/false/null results
+    @Test
+    public void testToBooleanObject_4Integer_nullValueBranches() throws Throwable {
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject(null, null, new Integer(2), new Integer(3)));
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject(null, new Integer(1), null, new Integer(3)));
+        assertNull(BooleanUtils.toBooleanObject(null, new Integer(1), new Integer(2), null));
+    }
+
+    // toBooleanObject(Integer x4): null value with no null match in args -> falls through to throw
+    @Test
+    public void testToBooleanObject_4Integer_nullValueNoMatch_throws() throws Throwable {
+        try {
+            BooleanUtils.toBooleanObject(null, new Integer(1), new Integer(2), new Integer(3));
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // toBooleanObject(Integer x4): non-null value matches true/false/null values
+    @Test
+    public void testToBooleanObject_4Integer_nonNullMatches() throws Throwable {
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject(new Integer(0), new Integer(0), new Integer(2), new Integer(3)));
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject(new Integer(2), new Integer(1), new Integer(2), new Integer(3)));
+        assertNull(BooleanUtils.toBooleanObject(new Integer(3), new Integer(1), new Integer(2), new Integer(3)));
+    }
+
+    // toInteger(boolean): true->1, false->0
+    @Test
+    public void testToInteger_boolean_bothBranches() throws Throwable {
+        assertEquals(1, BooleanUtils.toInteger(true));
+        assertEquals(0, BooleanUtils.toInteger(false));
+    }
+
+    // toIntegerObject(boolean): true->1, false->0
+    @Test
+    public void testToIntegerObject_boolean_bothBranches() throws Throwable {
+        assertEquals(new Integer(1), BooleanUtils.toIntegerObject(true));
+        assertEquals(new Integer(0), BooleanUtils.toIntegerObject(false));
+    }
+
+    // toIntegerObject(Boolean): null->null, TRUE->1, FALSE->0
+    @Test
+    public void testToIntegerObject_Boolean_allBranches() throws Throwable {
+        assertNull(BooleanUtils.toIntegerObject((Boolean) null));
+        assertEquals(new Integer(1), BooleanUtils.toIntegerObject(Boolean.TRUE));
+        assertEquals(new Integer(0), BooleanUtils.toIntegerObject(Boolean.FALSE));
+    }
+
+    // toInteger(boolean,int,int): true and false branches
+    @Test
+    public void testToInteger_booleanIntInt_bothBranches() throws Throwable {
+        assertEquals(1, BooleanUtils.toInteger(true, 1, 0));
+        assertEquals(0, BooleanUtils.toInteger(false, 1, 0));
+    }
+
+    // toInteger(Boolean,int,int,int): TRUE, FALSE, null branches
+    @Test
+    public void testToInteger_BooleanIntIntInt_allBranches() throws Throwable {
+        assertEquals(1, BooleanUtils.toInteger(Boolean.TRUE, 1, 0, 2));
+        assertEquals(0, BooleanUtils.toInteger(Boolean.FALSE, 1, 0, 2));
+        assertEquals(2, BooleanUtils.toInteger((Boolean) null, 1, 0, 2));
+    }
+
+    // toIntegerObject(boolean,Integer,Integer): true and false branches
+    @Test
+    public void testToIntegerObject_booleanIntegerInteger_bothBranches() throws Throwable {
+        assertEquals(new Integer(1), BooleanUtils.toIntegerObject(true, new Integer(1), new Integer(0)));
+        assertEquals(new Integer(0), BooleanUtils.toIntegerObject(false, new Integer(1), new Integer(0)));
+    }
+
+    // toIntegerObject(Boolean,Integer,Integer,Integer): TRUE, FALSE, null branches
+    @Test
+    public void testToIntegerObject_BooleanIntegerIntegerInteger_allBranches() throws Throwable {
+        assertEquals(new Integer(1), BooleanUtils.toIntegerObject(Boolean.TRUE, new Integer(1), new Integer(0), new Integer(2)));
+        assertEquals(new Integer(0), BooleanUtils.toIntegerObject(Boolean.FALSE, new Integer(1), new Integer(0), new Integer(2)));
+        assertEquals(new Integer(2), BooleanUtils.toIntegerObject((Boolean) null, new Integer(1), new Integer(0), new Integer(2)));
+    }
+
+    // toBooleanObject(String): all recognized keywords case-insensitive plus no-match and null
+    @Test
+    public void testToBooleanObject_String_recognizedKeywords() throws Throwable {
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject("true"));
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject("false"));
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject("ON"));
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject("oFf"));
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject("yes"));
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject("no"));
+    }
+
+    // toBooleanObject(String): no match returns null, null input returns null
+    @Test
+    public void testToBooleanObject_String_noMatchAndNull() throws Throwable {
+        assertNull(BooleanUtils.toBooleanObject("blue"));
+        assertNull(BooleanUtils.toBooleanObject((String) null));
+    }
+
+    // toBooleanObject(String,3 strings): str null branches matching trueString/falseString/nullString
+    @Test
+    public void testToBooleanObject_4String_nullStrBranches() throws Throwable {
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject(null, null, "false", "null"));
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject(null, "true", null, "null"));
+        assertNull(BooleanUtils.toBooleanObject(null, "true", "false", null));
+    }
+
+    // toBooleanObject(String,3 strings): str null but no arg is null -> falls through to throw
+    @Test
+    public void testToBooleanObject_4String_nullStrNoMatch_throws() throws Throwable {
+        try {
+            BooleanUtils.toBooleanObject(null, "true", "false", "null");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // toBooleanObject(String,3 strings): non-null str matches true/false/null strings, else throws
+    @Test
+    public void testToBooleanObject_4String_nonNullMatches() throws Throwable {
+        assertEquals(Boolean.TRUE, BooleanUtils.toBooleanObject("true", "true", "false", "null"));
+        assertEquals(Boolean.FALSE, BooleanUtils.toBooleanObject("false", "true", "false", "null"));
+        assertNull(BooleanUtils.toBooleanObject("null", "true", "false", "null"));
+    }
+
+    // toBooleanObject(String,3 strings): non-null str no match throws
+    @Test
+    public void testToBooleanObject_4String_nonNullNoMatch_throws() throws Throwable {
+        try {
+            BooleanUtils.toBooleanObject("xyz", "true", "false", "null");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // toBoolean(String): interned "true" fast path, null, and generic true keywords (on/yes), case variants
+    @Test
+    public void testToBoolean_String_trueKeywords() throws Throwable {
+        assertTrue(BooleanUtils.toBoolean("true"));
+        assertFalse(BooleanUtils.toBoolean((String) null));
+        assertTrue(BooleanUtils.toBoolean("on"));
+        assertTrue(BooleanUtils.toBoolean("yes"));
+        assertTrue(BooleanUtils.toBoolean("TRUE"));
+    }
+
+    // toBoolean(String): false keyword and non-matching strings of various lengths
+    @Test
+    public void testToBoolean_String_falseAndNoMatch() throws Throwable {
+        assertFalse(BooleanUtils.toBoolean("false"));
+        assertFalse(BooleanUtils.toBoolean("x gti"));
+        assertFalse(BooleanUtils.toBoolean(""));
+        assertFalse(BooleanUtils.toBoolean("y"));
+    }
+
+    // Bug hunt: per Javadoc, a non-matching 3-char string must return false (not throw).
+    // Buggy switch has no break after case 3, falling into case 4's charAt(3) access.
+    @Test
+    public void testToBoolean_String_threeCharNoMatch_mustReturnFalseNotThrow() throws Throwable {
+        boolean result = BooleanUtils.toBoolean("tru");
+        assertFalse(result);
+    }
+
+    // toBoolean(String,String,String): str null branches for trueString/falseString null
+    @Test
+    public void testToBoolean_3String_nullStrBranches() throws Throwable {
+        assertTrue(BooleanUtils.toBoolean(null, null, "false"));
+        assertFalse(BooleanUtils.toBoolean(null, "true", null));
+    }
+
+    // toBoolean(String,String,String): str null but neither string is null -> falls through to throw
+    @Test
+    public void testToBoolean_3String_nullStrNoMatch_throws() throws Throwable {
+        try {
+            BooleanUtils.toBoolean(null, "true", "false");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // toBoolean(String,String,String): non-null str matches true/false, else throws
+    @Test
+    public void testToBoolean_3String_nonNullMatchesAndThrows() throws Throwable {
+        assertTrue(BooleanUtils.toBoolean("true", "true", "false"));
+        assertFalse(BooleanUtils.toBoolean("false", "true", "false"));
+        try {
+            BooleanUtils.toBoolean("xyz", "true", "false");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // toStringTrueFalse(Boolean): TRUE, FALSE, null
+    @Test
+    public void testToStringTrueFalse_Boolean_allBranches() throws Throwable {
+        assertEquals("true", BooleanUtils.toStringTrueFalse(Boolean.TRUE));
+        assertEquals("false", BooleanUtils.toStringTrueFalse(Boolean.FALSE));
+        assertNull(BooleanUtils.toStringTrueFalse((Boolean) null));
+    }
+
+    // toStringOnOff(Boolean): TRUE, FALSE, null
+    @Test
+    public void testToStringOnOff_Boolean_allBranches() throws Throwable {
+        assertEquals("on", BooleanUtils.toStringOnOff(Boolean.TRUE));
+        assertEquals("off", BooleanUtils.toStringOnOff(Boolean.FALSE));
+        assertNull(BooleanUtils.toStringOnOff((Boolean) null));
+    }
+
+    // toStringYesNo(Boolean): TRUE, FALSE, null
+    @Test
+    public void testToStringYesNo_Boolean_allBranches() throws Throwable {
+        assertEquals("yes", BooleanUtils.toStringYesNo(Boolean.TRUE));
+        assertEquals("no", BooleanUtils.toStringYesNo(Boolean.FALSE));
+        assertNull(BooleanUtils.toStringYesNo((Boolean) null));
+    }
+
+    // toString(Boolean,String,String,String): TRUE, FALSE, null branches
+    @Test
+    public void testToString_BooleanStrings_allBranches() throws Throwable {
+        assertEquals("T", BooleanUtils.toString(Boolean.TRUE, "T", "F", "N"));
+        assertEquals("F", BooleanUtils.toString(Boolean.FALSE, "T", "F", "N"));
+        assertEquals("N", BooleanUtils.toString((Boolean) null, "T", "F", "N"));
+    }
+
+    // toStringTrueFalse(boolean): both branches
+    @Test
+    public void testToStringTrueFalse_boolean_bothBranches() throws Throwable {
+        assertEquals("true", BooleanUtils.toStringTrueFalse(true));
+        assertEquals("false", BooleanUtils.toStringTrueFalse(false));
+    }
+
+    // toStringOnOff(boolean) and toStringYesNo(boolean): both branches
+    @Test
+    public void testToStringOnOffAndYesNo_boolean_bothBranches() throws Throwable {
+        assertEquals("on", BooleanUtils.toStringOnOff(true));
+        assertEquals("off", BooleanUtils.toStringOnOff(false));
+        assertEquals("yes", BooleanUtils.toStringYesNo(true));
+        assertEquals("no", BooleanUtils.toStringYesNo(false));
+    }
+
+    // toString(boolean,String,String): ternary both branches
+    @Test
+    public void testToString_booleanStrings_bothBranches() throws Throwable {
+        assertEquals("T", BooleanUtils.toString(true, "T", "F"));
+        assertEquals("F", BooleanUtils.toString(false, "T", "F"));
+    }
+
+    // xor(boolean[]): null array throws IllegalArgumentException
+    @Test
+    public void testXor_booleanArray_null_throws() throws Throwable {
+        try {
+            BooleanUtils.xor((boolean[]) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // xor(boolean[]): empty array throws IllegalArgumentException
+    @Test
+    public void testXor_booleanArray_empty_throws() throws Throwable {
+        try {
+            BooleanUtils.xor(new boolean[0]);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // xor(boolean[]): two trues -> false (second true causes early false return), two falses -> false, one true -> true
+    @Test
+    public void testXor_booleanArray_countBranches() throws Throwable {
+        assertFalse(BooleanUtils.xor(new boolean[] { true, true }));
+        assertFalse(BooleanUtils.xor(new boolean[] { false, false }));
+        assertTrue(BooleanUtils.xor(new boolean[] { true, false }));
+    }
+
+    // xor(Boolean[]): null array and empty array throw IllegalArgumentException
+    @Test
+    public void testXor_BooleanArray_nullAndEmpty_throws() throws Throwable {
+        try {
+            BooleanUtils.xor((Boolean[]) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+        try {
+            BooleanUtils.xor(new Boolean[0]);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // xor(Boolean[]): array containing a null element throws IllegalArgumentException
+    @Test
+    public void testXor_BooleanArray_containsNull_throws() throws Throwable {
+        try {
+            BooleanUtils.xor(new Boolean[] { Boolean.TRUE, null });
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // xor(Boolean[]): valid arrays produce TRUE/FALSE as per boolean[] xor semantics
+    @Test
+    public void testXor_BooleanArray_validValues() throws Throwable {
+        assertEquals(Boolean.TRUE, BooleanUtils.xor(new Boolean[] { Boolean.TRUE, Boolean.FALSE }));
+        assertEquals(Boolean.FALSE, BooleanUtils.xor(new Boolean[] { Boolean.TRUE, Boolean.TRUE }));
+    }
+}

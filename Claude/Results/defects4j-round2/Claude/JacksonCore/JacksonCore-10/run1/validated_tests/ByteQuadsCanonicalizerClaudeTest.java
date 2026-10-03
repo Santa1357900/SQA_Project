@@ -1,0 +1,311 @@
+package com.fasterxml.jackson.core.sym;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ByteQuadsCanonicalizerClaudeTest
+{
+    // covers: createRoot(int seed) stores seed, hashSeed() returns it
+    @Test
+    public void testCreateRoot_seed_hashSeedMatches() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(9999);
+        assertEquals(9999, root.hashSeed());
+    }
+
+    // covers: makeChild copies initial state (count=0) from parent's TableInfo
+    @Test
+    public void testMakeChild_initialSizeMatchesParent() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        assertEquals(0, child.size());
+    }
+
+    // covers: bucketCount() on child reflects DEFAULT_T_SIZE (64) from parent state
+    @Test
+    public void testBucketCount_childDefaultIs64() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        assertEquals(64, child.bucketCount());
+    }
+
+    // covers: maybeDirty() false right after child creation, true after modification
+    @Test
+    public void testMaybeDirty_childInitiallyFalse_thenTrueAfterAdd() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        assertFalse(child.maybeDirty());
+        child.addName("x", 1);
+        assertTrue(child.maybeDirty());
+    }
+
+    // covers: size() on root table, branch where _tableInfo != null
+    @Test
+    public void testSize_rootInitiallyZero() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        assertEquals(0, root.size());
+    }
+
+    // covers: addName(String,int) stores value, increments count, returns name
+    @Test
+    public void testAddName_singleQuad_increasesSizeAndReturnsName() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(42);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        assertEquals(0, child.size());
+        String result = child.addName("foo", 100);
+        assertEquals("foo", result);
+        assertEquals(1, child.size());
+    }
+
+    // covers: findName(int) empty slot branch (len == 0) -> null
+    @Test
+    public void testFindName_singleQuad_notFound_returnsNull() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        assertNull(child.findName(999));
+    }
+
+    // covers: findName(int) primary match branch (len == 1)
+    @Test
+    public void testFindName_singleQuad_found_returnsName() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        child.addName("bar", 555);
+        assertEquals("bar", child.findName(555));
+    }
+
+    // covers: addName/findName(int,int) with q2 != 0, branch using calcHash(q1,q2)
+    @Test
+    public void testFindName_twoQuads_q2NonZero_found() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        child.addName("baz", 111, 222);
+        assertEquals("baz", child.findName(111, 222));
+    }
+
+
+
+    // covers: addName/findName(int,int,int) primary match branch
+    @Test
+    public void testFindName_threeQuads_found() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        child.addName("abc", 1, 2, 3);
+        assertEquals("abc", child.findName(1, 2, 3));
+    }
+
+    // covers: findName(int,int,int) empty slot branch -> null
+    @Test
+    public void testFindName_threeQuads_notFound_returnsNull() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        assertNull(child.findName(9, 9, 9));
+    }
+
+    // covers: addName(String,int[],qlen) case qlen==1 delegates to single-quad storage
+    @Test
+    public void testAddNameArray_qlen1_delegatesToSingleQuad() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        int[] q = new int[] { 77 };
+        child.addName("one", q, 1);
+        assertEquals("one", child.findName(77));
+        assertEquals("one", child.findName(q, 1));
+    }
+
+    // covers: addName(String,int[],qlen) case qlen==2
+    @Test
+    public void testAddNameArray_qlen2_delegatesToTwoQuad() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        int[] q = new int[] { 1, 2 };
+        child.addName("two", q, 2);
+        assertEquals("two", child.findName(q, 2));
+    }
+
+    // covers: addName(String,int[],qlen) case qlen==3
+    @Test
+    public void testAddNameArray_qlen3_delegatesToThreeQuad() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        int[] q = new int[] { 1, 2, 3 };
+        child.addName("three", q, 3);
+        assertEquals("three", child.findName(q, 3));
+    }
+
+    // covers: addName(String,int[],qlen) default branch boundary qlen==4 (long name path)
+    @Test
+    public void testAddNameArray_qlen4_boundary_storesAndFinds() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        int[] q = new int[] { 10, 20, 30, 40 };
+        child.addName("four", q, 4);
+        assertEquals("four", child.findName(q, 4));
+    }
+
+    // covers: addName(String,int[],qlen) default branch qlen>4, findName(int[],qlen) long-name match
+    @Test
+    public void testAddNameArray_qlenLong_storesAndFinds() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        int[] q = new int[] { 1, 2, 3, 4, 5 };
+        child.addName("longname", q, 5);
+        assertEquals("longname", child.findName(q, 5));
+    }
+
+    // covers: findName(int[],qlen) long-name branch, empty slot -> null
+    @Test
+    public void testFindNameArray_qlenLong_notFound_returnsNull() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(7);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        int[] q = new int[] { 100, 200, 300, 400, 500 };
+        assertNull(child.findName(q, 5));
+    }
+
+    // covers: calcHash(int) determinism for same seed/input
+    @Test
+    public void testCalcHash_singleQuad_isDeterministic() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(123);
+        int h1 = root.calcHash(999);
+        int h2 = root.calcHash(999);
+        assertEquals(h1, h2);
+    }
+
+    // covers: calcHash(int,int) determinism
+    @Test
+    public void testCalcHash_twoQuads_isDeterministic() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(123);
+        int h1 = root.calcHash(1, 2);
+        int h2 = root.calcHash(1, 2);
+        assertEquals(h1, h2);
+    }
+
+    // covers: calcHash(int,int,int) determinism
+    @Test
+    public void testCalcHash_threeQuads_isDeterministic() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(123);
+        int h1 = root.calcHash(1, 2, 3);
+        int h2 = root.calcHash(1, 2, 3);
+        assertEquals(h1, h2);
+    }
+
+    // covers: calcHash(int[],qlen) throws IllegalArgumentException when qlen < 4
+    @Test
+    public void testCalcHash_arrayQlenLessThan4_throwsIllegalArgumentException() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(123);
+        try {
+            root.calcHash(new int[] { 1, 2, 3 }, 3);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers: calcHash(int[],qlen) normal path qlen==4, determinism
+    @Test
+    public void testCalcHash_arrayQlen4_isDeterministic() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(123);
+        int[] q = new int[] { 1, 2, 3, 4 };
+        int h1 = root.calcHash(q, 4);
+        int h2 = root.calcHash(q, 4);
+        assertEquals(h1, h2);
+    }
+
+    // covers: totalCount() sums non-empty slots across fixed hash area
+    @Test
+    public void testTotalCount_afterAddingTwoNames_equalsTwo() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        child.addName("a", 11);
+        child.addName("b", 22);
+        assertEquals(2, child.totalCount());
+    }
+
+    // covers: spilloverCount() on freshly created child, no entries -> zero
+    @Test
+    public void testSpilloverCount_initiallyZero() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        assertEquals(0, child.spilloverCount());
+    }
+
+    // covers: toString() formats a descriptive string including class name
+    @Test
+    public void testToString_containsClassName() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        child.addName("x", 1);
+        String s = child.toString();
+        assertTrue(s.contains("ByteQuadsCanonicalizer"));
+    }
+
+    // covers: release() merges dirty child state into parent (mergeChild count differs)
+    @Test
+    public void testRelease_mergesChildEntriesIntoParent() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        child.addName("merged", 12345);
+        child.release();
+        assertEquals(1, root.size());
+    }
+
+    // covers: release() no-op branch when child is not dirty (maybeDirty() false)
+    @Test
+    public void testRelease_noChanges_sizeRemainsZero() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        child.release();
+        assertEquals(0, root.size());
+    }
+
+    // covers: child modifications are isolated from parent until release() is called
+    @Test
+    public void testChildModification_doesNotAffectRootSizeUntilRelease() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        child.addName("temp", 42);
+        assertEquals(0, root.size());
+        assertEquals(1, child.size());
+    }
+
+    // covers: rehash() triggered once count exceeds threshold, bucketCount doubles
+    @Test
+    public void testAddName_manyEntries_triggersRehash_bucketCountDoubles() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        for (int i = 0; i < 60; i++) {
+            child.addName("name" + i, i * 7919 + 1);
+        }
+        assertTrue(child.bucketCount() > 64);
+    }
+
+    // covers: primaryCount/secondaryCount/tertiaryCount/spilloverCount sum matches totalCount
+    @Test
+    public void testCountBreakdown_sumsMatchTotalCount() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        child.addName("a", 1);
+        child.addName("b", 2);
+        child.addName("c", 3);
+        int sum = child.primaryCount() + child.secondaryCount() + child.tertiaryCount() + child.spilloverCount();
+        assertEquals(child.totalCount(), sum);
+    }
+
+    // covers: addName(String,int,int) with q2 != 0 increases size and returns name
+    @Test
+    public void testAddName_twoQuads_increasesSizeAndReturnsName() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        String result = child.addName("pair", 5, 6);
+        assertEquals("pair", result);
+        assertEquals(1, child.size());
+    }
+
+    // covers: addName(String,int,int,int) increases size and returns name
+    @Test
+    public void testAddName_threeQuads_increasesSizeAndReturnsName() throws Throwable {
+        ByteQuadsCanonicalizer root = ByteQuadsCanonicalizer.createRoot(1);
+        ByteQuadsCanonicalizer child = root.makeChild(0);
+        String result = child.addName("trio", 7, 8, 9);
+        assertEquals("trio", result);
+        assertEquals(1, child.size());
+    }
+}

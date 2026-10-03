@@ -1,0 +1,308 @@
+package org.apache.commons.cli;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.util.Iterator;
+import java.util.List;
+
+public class CommandLineClaudeTest
+{
+    // hasOption(String): option present via short opt -> true
+    @Test
+    public void testHasOptionString_setShort_true() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-a"});
+        assertTrue(cmd.hasOption("a"));
+    }
+
+    // hasOption(String): option not present -> false
+    @Test
+    public void testHasOptionString_notSet_false() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {});
+        assertFalse(cmd.hasOption("a"));
+    }
+
+    // hasOption(char): delegates to String version, present -> true
+    @Test
+    public void testHasOptionChar_setShort_true() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-a"});
+        assertTrue(cmd.hasOption('a'));
+    }
+
+    // hasOption(char): not present -> false
+    @Test
+    public void testHasOptionChar_notSet_false() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {});
+        assertFalse(cmd.hasOption('a'));
+    }
+
+    // getOptionObject(String): short option with arg set -> non-null result
+    @Test
+    public void testGetOptionObjectString_shortOptionWithArg_notNull() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("n", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-n", "5"});
+        assertNotNull(cmd.getOptionObject("n"));
+    }
+
+    // getOptionObject(String): option set but no arg -> res is null -> returns null
+    @Test
+    public void testGetOptionObjectString_optionSetNoArg_returnsNull() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-a"});
+        assertNull(cmd.getOptionObject("a"));
+    }
+
+    // getOptionObject(String): option not present at all -> returns null
+    @Test
+    public void testGetOptionObjectString_notSet_returnsNull() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("n", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {});
+        assertNull(cmd.getOptionObject("n"));
+    }
+
+    // getOptionObject(String) contract: long option name must resolve same as short name
+    // (getOptionValue("beta") succeeds, so object must not be null)
+    @Test
+    public void testGetOptionObjectString_longOptionName_returnsNonNull() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("b", "beta", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-b", "val"});
+        assertEquals("val", cmd.getOptionValue("beta"));
+        assertNotNull(cmd.getOptionObject("beta"));
+    }
+
+    // getOptionObject(char): delegates to String version, present -> non-null
+    @Test
+    public void testGetOptionObjectChar_setShort_notNull() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("n", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-n", "7"});
+        assertNotNull(cmd.getOptionObject('n'));
+    }
+
+    // getOptionObject(char): not set -> null
+    @Test
+    public void testGetOptionObjectChar_notSet_returnsNull() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("n", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {});
+        assertNull(cmd.getOptionObject('n'));
+    }
+
+    // getOptionValue(String): returns the first (only) value
+    @Test
+    public void testGetOptionValueString_returnsFirstValue() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-f", "hello"});
+        assertEquals("hello", cmd.getOptionValue("f"));
+    }
+
+    // getOptionValue(String): option not set -> null
+    @Test
+    public void testGetOptionValueString_notSet_returnsNull() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {});
+        assertNull(cmd.getOptionValue("f"));
+    }
+
+    // getOptionValue(String): option set but no arg configured -> null
+    @Test
+    public void testGetOptionValueString_optionSetNoArg_returnsNull() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-a"});
+        assertNull(cmd.getOptionValue("a"));
+    }
+
+    // getOptionValue(char): returns value
+    @Test
+    public void testGetOptionValueChar_returnsValue() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-f", "world"});
+        assertEquals("world", cmd.getOptionValue('f'));
+    }
+
+    // getOptionValue(char): not set -> null
+    @Test
+    public void testGetOptionValueChar_notSet_returnsNull() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {});
+        assertNull(cmd.getOptionValue('f'));
+    }
+
+    // getOptionValues(String): single value option -> array of length 1
+    @Test
+    public void testGetOptionValuesString_singleValue() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-f", "hello"});
+        String[] values = cmd.getOptionValues("f");
+        assertEquals(1, values.length);
+        assertEquals("hello", values[0]);
+    }
+
+    // getOptionValues(String): option not set -> null
+    @Test
+    public void testGetOptionValuesString_notSet_returnsNull() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {});
+        assertNull(cmd.getOptionValues("f"));
+    }
+
+    // getOptionValues(String): leading single hyphen is stripped before lookup
+    @Test
+    public void testGetOptionValuesString_leadingSingleHyphenStripped() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-f", "hello"});
+        String[] values = cmd.getOptionValues("-f");
+        assertNotNull(values);
+        assertEquals("hello", values[0]);
+    }
+
+    // getOptionValues(String): leading double hyphen is stripped before lookup
+    @Test
+    public void testGetOptionValuesString_leadingDoubleHyphenStripped() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("b", "beta", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"--beta", "val2"});
+        String[] values = cmd.getOptionValues("--beta");
+        assertNotNull(values);
+        assertEquals("val2", values[0]);
+    }
+
+    // getOptionValues(String): long option name resolves via names map to same option
+    @Test
+    public void testGetOptionValuesString_longOptionResolves() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("b", "beta", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-b", "val"});
+        String[] values = cmd.getOptionValues("beta");
+        assertNotNull(values);
+        assertEquals("val", values[0]);
+    }
+
+    // getOptionValues(char): delegates to String version
+    @Test
+    public void testGetOptionValuesChar_delegates() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-f", "hi"});
+        String[] values = cmd.getOptionValues('f');
+        assertEquals(1, values.length);
+        assertEquals("hi", values[0]);
+    }
+
+    // getOptionValue(String, default): option set -> returns actual value
+    @Test
+    public void testGetOptionValueStringDefault_setReturnsValue() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-f", "actual"});
+        assertEquals("actual", cmd.getOptionValue("f", "fallback"));
+    }
+
+    // getOptionValue(String, default): option not set -> returns default
+    @Test
+    public void testGetOptionValueStringDefault_notSetReturnsDefault() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {});
+        assertEquals("fallback", cmd.getOptionValue("f", "fallback"));
+    }
+
+    // getOptionValue(char, default): option set -> returns actual value
+    @Test
+    public void testGetOptionValueCharDefault_setReturnsValue() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-f", "actual"});
+        assertEquals("actual", cmd.getOptionValue('f', "fallback"));
+    }
+
+    // getOptionValue(char, default): option not set -> returns default
+    @Test
+    public void testGetOptionValueCharDefault_notSetReturnsDefault() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("f", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {});
+        assertEquals("fallback", cmd.getOptionValue('f', "fallback"));
+    }
+
+    // getArgs(): no leftover non-option arguments -> empty array
+    @Test
+    public void testGetArgs_noLeftover_emptyArray() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-a"});
+        String[] argsArr = cmd.getArgs();
+        assertEquals(0, argsArr.length);
+    }
+
+    // getArgs(): leftover non-option arguments are returned in order
+    @Test
+    public void testGetArgs_withLeftoverArgs_returnsThem() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-a", "leftover1", "leftover2"});
+        String[] argsArr = cmd.getArgs();
+        assertEquals(2, argsArr.length);
+        assertEquals("leftover1", argsArr[0]);
+        assertEquals("leftover2", argsArr[1]);
+    }
+
+    // getArgList(): returns List with the same leftover contents
+    @Test
+    public void testGetArgList_returnsListWithSameContents() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-a", "leftover1", "leftover2"});
+        List argList = cmd.getArgList();
+        assertEquals(2, argList.size());
+        assertEquals("leftover1", argList.get(0));
+        assertEquals("leftover2", argList.get(1));
+    }
+
+    // iterator(): iterates over exactly the processed options
+    @Test
+    public void testIterator_returnsProcessedOptionsCount() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        opts.addOption("b", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-a", "-b", "val"});
+        Iterator it = cmd.iterator();
+        int count = 0;
+        while (it.hasNext())
+        {
+            it.next();
+            count++;
+        }
+        assertEquals(2, count);
+    }
+
+    // getOptions(): returns array containing all processed options
+    @Test
+    public void testGetOptions_returnsArrayOfProcessedOptions() throws Throwable {
+        Options opts = new Options();
+        opts.addOption("a", false, "desc");
+        opts.addOption("b", true, "desc");
+        CommandLine cmd = new PosixParser().parse(opts, new String[] {"-a", "-b", "val"});
+        Option[] optionsArray = cmd.getOptions();
+        assertEquals(2, optionsArray.length);
+    }
+}

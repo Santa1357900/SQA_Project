@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-JacksonXml-6-8wds4nee/JacksonXml-6b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 485
+     Lines covered: 247
+  Conditions total: 222
+Conditions covered: 97
+     Line coverage: 50.9%
+Condition coverage: 43.7%
+[exit 0]

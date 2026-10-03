@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-59-78dmipw4/JacksonDatabind-59f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - com.fasterxml.jackson.databind.JavaTypeClaudeTest::testWithContentType_containerTypeChangesOrKeepsContent
+  - com.fasterxml.jackson.databind.JavaTypeClaudeTest::testFindSuperType_objectFoundAndUnrelatedNull
+  - com.fasterxml.jackson.databind.JavaTypeClaudeTest::testGetInterfaces_emptyAndNonEmpty
+  - com.fasterxml.jackson.databind.JavaTypeClaudeTest::testGetSuperClass_nonNullAndObjectHasNoSuperClass
+[exit 0]

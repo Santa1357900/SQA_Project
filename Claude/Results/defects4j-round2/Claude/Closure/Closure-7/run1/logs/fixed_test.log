@@ -1,0 +1,48 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-7-7x5szg9g/Closure-7f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 42
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testDeclareNameInScope_numberNode_throwsIllegalArgumentException
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutUndefined_booleanType_returnsBooleanType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_objectType_typeofFunction_resultNotEquals_returnsNonNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutNull_unionWithNull_removesNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_numberType_matching_resultNotEquals_returnsNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_functionType_typeofFunction_resultEquals_returnsSameType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_unionType_matchingNumber_returnsNumberType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetTypeIfRefinable_numberNode_returnsNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_noObjectType_typeofObject_returnsNoObjectType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_numberType_matching_resultEquals_returnsType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetTypeIfRefinable_blockNode_returnsNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutUndefined_noType_returnsNoType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutNull_nullTypeConstant_returnsNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutUndefined_stringType_returnsStringType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutUndefined_nullTypeConstant_returnsNullType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testFirstPreciserScope_delegatesToFirstLink
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testNextPreciserScope_withNextLink_delegatesToNextLink
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetTypeIfRefinable_stringNode_returnsNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutNull_allType_returnsUnionWithoutNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutNull_voidType_returnsVoidType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_numberType_nonMatching_resultNotEquals_returnsType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testAppend_returnsLastLinkAndPropagatesFirstLink
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testAppend_lastLinkAlreadyHasNext_throwsIllegalArgumentException
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_objectType_typeofFunction_resultEquals_returnsNonNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutUndefined_nullInput_returnsNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutUndefined_voidType_returnsNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_nullType_knownValue_returnsNativeType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testNextPreciserScope_noNextLink_returnsBlindScope
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testConstructor_validArgs_getFirstReturnsSelf
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testDeclareNameInScope_stringNode_throwsIllegalArgumentException
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_voidType_typeofUndefined_returnsVoidType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_nullTypeConstant_typeofObject_returnsNullType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutUndefined_numberType_returnsNumberType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutNull_numberType_returnsNumberType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutUndefined_unionWithVoid_removesVoid
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutNull_nullInput_returnsNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutUndefined_unknownType_returnsUnknownType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testConstructor_nullConvention_throwsNullPointerException
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_nullType_unknownValue_returnsCheckedUnknown
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedByTypeOfResult_nullType_resultNotEqualsValue_returnsNull
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetNativeType_returnsRegistryNativeType
+  - com.google.javascript.jscomp.type.ChainableReverseAbstractInterpreterClaudeTest::testGetRestrictedWithoutUndefined_allType_returnsUnionWithoutVoid
+[exit 0]

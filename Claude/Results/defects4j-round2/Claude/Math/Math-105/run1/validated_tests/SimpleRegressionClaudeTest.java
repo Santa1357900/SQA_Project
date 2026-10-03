@@ -1,0 +1,360 @@
+package org.apache.commons.math.stat.regression;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class SimpleRegressionClaudeTest {
+
+    private static final double DELTA = 1e-9;
+
+    // Constructor: fresh instance has no observations
+    @Test
+    public void testConstructor_initialState_nReturnsZero() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        assertEquals(0L, reg.getN());
+    }
+
+    // addData(double,double): first call takes the n==0 branch
+    @Test
+    public void testAddData_singleObservation_nIncrementsToOne() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        assertEquals(1L, reg.getN());
+    }
+
+    // addData(double,double): subsequent calls take the else (updating formula) branch
+    @Test
+    public void testAddData_multipleObservations_nIncrementsCorrectly() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(3L, reg.getN());
+    }
+
+    // addData(double[][]): loop executes zero times
+    @Test
+    public void testAddDataArray_emptyArray_nRemainsZero() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        double[][] data = new double[0][0];
+        reg.addData(data);
+        assertEquals(0L, reg.getN());
+    }
+
+    // addData(double[][]): loop executes multiple times, matches sequential addData
+    @Test
+    public void testAddDataArray_multipleRows_matchesSequentialAddData() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        double[][] data = { {1d, 1d}, {2d, 2d}, {3d, 3d} };
+        reg.addData(data);
+        assertEquals(3L, reg.getN());
+        assertEquals(1d, reg.getSlope(), DELTA);
+    }
+
+    // clear(): n is reset to zero after data was added
+    @Test
+    public void testClear_afterAddingData_resetsN() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.clear();
+        assertEquals(0L, reg.getN());
+    }
+
+    // clear() then addData: statistics are computed fresh, not combined with old data
+    @Test
+    public void testClear_thenAddData_computesFreshStatistics() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(5d, 5d);
+        reg.addData(5d, 10d);
+        reg.clear();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(1d, reg.getSlope(), DELTA);
+        assertEquals(0d, reg.getIntercept(), DELTA);
+    }
+
+    // getN(): reflects the exact count of added observations
+    @Test
+    public void testGetN_afterObservations_returnsCorrectCount() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 2d);
+        reg.addData(2d, 4d);
+        reg.addData(3d, 6d);
+        reg.addData(4d, 8d);
+        assertEquals(4L, reg.getN());
+    }
+
+    // predict(x): fewer than two observations -> NaN precondition
+    @Test
+    public void testPredict_insufficientData_returnsNaN() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        assertTrue(Double.isNaN(reg.predict(5d)));
+    }
+
+    // predict(x): perfect linear data y = x -> predict(4) == 4
+    @Test
+    public void testPredict_perfectLinearData_returnsCorrectValue() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(4d, reg.predict(4d), DELTA);
+    }
+
+    // getIntercept(): fewer than two observations -> NaN
+    @Test
+    public void testGetIntercept_insufficientData_returnsNaN() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        assertTrue(Double.isNaN(reg.getIntercept()));
+    }
+
+    // getIntercept(): perfect line through origin, y = x -> intercept 0
+    @Test
+    public void testGetIntercept_perfectLinearData_returnsZero() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(0d, reg.getIntercept(), DELTA);
+    }
+
+    // getSlope(): fewer than two observations -> NaN
+    @Test
+    public void testGetSlope_insufficientData_returnsNaN() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        assertTrue(Double.isNaN(reg.getSlope()));
+    }
+
+    // getSlope(): no variation in x (all same x) -> NaN
+    @Test
+    public void testGetSlope_noVariationInX_returnsNaN() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(5d, 1d);
+        reg.addData(5d, 2d);
+        assertTrue(Double.isNaN(reg.getSlope()));
+    }
+
+    // getSlope(): perfect positive linear data y = x -> slope 1
+    @Test
+    public void testGetSlope_perfectLinearData_returnsOne() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(1d, reg.getSlope(), DELTA);
+    }
+
+    // getSlope(): perfect negative linear data y = -x + 4 -> slope -1
+    @Test
+    public void testGetSlope_negativeSlopeData_returnsNegativeOne() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 3d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 1d);
+        assertEquals(-1d, reg.getSlope(), DELTA);
+    }
+
+    // getSumSquaredErrors(): perfect fit -> SSE should be 0
+    @Test
+    public void testGetSumSquaredErrors_perfectFit_returnsZero() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(0d, reg.getSumSquaredErrors(), DELTA);
+    }
+
+    // getSumSquaredErrors(): Javadoc guarantees non-negative result even with rounding error
+    @Test
+    public void testGetSumSquaredErrors_roundingError_nonNegative() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        double[] x = {1.107178495E9, 1.107265987E9, 1.107354478E9};
+        double[] y = {8915.102, 8919.302, 8923.502};
+        for (int i = 0; i < x.length; i++) {
+            reg.addData(x[i], y[i]);
+        }
+        assertTrue(reg.getSumSquaredErrors() >= 0.0d);
+    }
+
+    // getTotalSumSquares(): fewer than two observations -> NaN
+    @Test
+    public void testGetTotalSumSquares_insufficientData_returnsNaN() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        assertTrue(Double.isNaN(reg.getTotalSumSquares()));
+    }
+
+    // getTotalSumSquares(): valid data -> sum of squared deviations of y
+    @Test
+    public void testGetTotalSumSquares_validData_returnsSumYY() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(2d, reg.getTotalSumSquares(), DELTA);
+    }
+
+    // getRegressionSumSquares(): slope^2 * sumXX for perfect fit data
+    @Test
+    public void testGetRegressionSumSquares_validData_returnsCorrectValue() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(2d, reg.getRegressionSumSquares(), DELTA);
+    }
+
+    // getMeanSquareError(): fewer than three observations -> NaN
+    @Test
+    public void testGetMeanSquareError_fewerThanThreeObservations_returnsNaN() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        assertTrue(Double.isNaN(reg.getMeanSquareError()));
+    }
+
+    // getMeanSquareError(): exactly three observations, perfect fit -> 0
+    @Test
+    public void testGetMeanSquareError_threeObservations_returnsZeroForPerfectFit() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(0d, reg.getMeanSquareError(), DELTA);
+    }
+
+    // getR(): positive slope -> positive Pearson's r (1 for perfect positive fit)
+    @Test
+    public void testGetR_positiveSlope_returnsOne() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(1d, reg.getR(), DELTA);
+    }
+
+    // getR(): negative slope -> negative Pearson's r (-1 for perfect negative fit)
+    @Test
+    public void testGetR_negativeSlope_returnsNegativeOne() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 3d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 1d);
+        assertEquals(-1d, reg.getR(), DELTA);
+    }
+
+    // getRSquare(): perfect fit -> coefficient of determination equals 1
+    @Test
+    public void testGetRSquare_perfectFit_returnsOne() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(1d, reg.getRSquare(), DELTA);
+    }
+
+    // getInterceptStdErr(): perfect fit -> MSE is zero so stderr is zero
+    @Test
+    public void testGetInterceptStdErr_perfectFit_returnsZero() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(0d, reg.getInterceptStdErr(), DELTA);
+    }
+
+    // getSlopeStdErr(): perfect fit -> MSE is zero so stderr is zero
+    @Test
+    public void testGetSlopeStdErr_perfectFit_returnsZero() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        assertEquals(0d, reg.getSlopeStdErr(), DELTA);
+    }
+
+    // getSlopeConfidenceInterval(): perfect fit -> zero stderr gives zero half-width
+    @Test
+    public void testGetSlopeConfidenceInterval_defaultAlpha_perfectFitReturnsZero() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        double ci = reg.getSlopeConfidenceInterval();
+        assertEquals(0d, ci, DELTA);
+    }
+
+    // getSlopeConfidenceInterval(alpha): alpha == 0 -> IllegalArgumentException
+    @Test
+    public void testGetSlopeConfidenceInterval_alphaZero_throwsIllegalArgumentException() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        try {
+            reg.getSlopeConfidenceInterval(0d);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // getSlopeConfidenceInterval(alpha): alpha == 1 -> IllegalArgumentException
+    @Test
+    public void testGetSlopeConfidenceInterval_alphaOne_throwsIllegalArgumentException() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        try {
+            reg.getSlopeConfidenceInterval(1d);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // getSlopeConfidenceInterval(alpha): alpha < 0 -> IllegalArgumentException
+    @Test
+    public void testGetSlopeConfidenceInterval_alphaNegative_throwsIllegalArgumentException() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        try {
+            reg.getSlopeConfidenceInterval(-0.1d);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // getSlopeConfidenceInterval(alpha): alpha > 1 -> IllegalArgumentException
+    @Test
+    public void testGetSlopeConfidenceInterval_alphaGreaterThanOne_throwsIllegalArgumentException() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 1d);
+        reg.addData(2d, 2d);
+        reg.addData(3d, 3d);
+        try {
+            reg.getSlopeConfidenceInterval(1.1d);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // getSignificance(): non-perfect fit with nonzero slope stderr -> result is a valid probability-like value in [0,2]
+    @Test
+    public void testGetSignificance_validData_returnsValueInRange() throws Throwable {
+        SimpleRegression reg = new SimpleRegression();
+        reg.addData(1d, 2.1d);
+        reg.addData(2d, 3.9d);
+        reg.addData(3d, 6.2d);
+        reg.addData(4d, 7.8d);
+        double significance = reg.getSignificance();
+        assertFalse(Double.isNaN(significance));
+        assertTrue(significance >= 0d && significance <= 2d);
+    }
+}

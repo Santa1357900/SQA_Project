@@ -1,0 +1,773 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Compress (Defects4J bug Compress-21)
+package: org.apache.commons.compress.archivers.sevenz
+class_under_test: SevenZOutputFile
+test_class_to_write: SevenZOutputFileClaudeTest
+</target>
+
+<project_notes>
+Commons Compress: ใช้ ByteArrayInputStream/ByteArrayOutputStream แทนไฟล์จริง ปิด stream ด้วย try/finally
+</project_notes>
+
+<source_code>
+/*
+ *  Licensed to the Apache Software Foundation (ASF) under one or more
+ *  contributor license agreements.  See the NOTICE file distributed with
+ *  this work for additional information regarding copyright ownership.
+ *  The ASF licenses this file to You under the Apache License, Version 2.0
+ *  (the "License"); you may not use this file except in compliance with
+ *  the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ */
+package org.apache.commons.compress.archivers.sevenz;
+
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.RandomAccessFile;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Date;
+import java.util.List;
+import java.util.zip.CRC32;
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.utils.CountingOutputStream;
+
+/**
+ * Writes a 7z file.
+ * @since 1.6
+ */
+public class SevenZOutputFile {
+    private final RandomAccessFile file;
+    private final List<SevenZArchiveEntry> files = new ArrayList<SevenZArchiveEntry>();
+    private int numNonEmptyStreams = 0;
+    private CRC32 crc32 = new CRC32();
+    private CRC32 compressedCrc32 = new CRC32();
+    private long fileBytesWritten = 0;
+    private boolean finished = false;
+    private CountingOutputStream currentOutputStream;
+    private SevenZMethod contentCompression = SevenZMethod.LZMA2;
+    
+    /**
+     * Opens file to write a 7z archive to.
+     *
+     * @param filename name of the file to write to
+     * @throws IOException if opening the file fails
+     */
+    public SevenZOutputFile(final File filename) throws IOException {
+        file = new RandomAccessFile(filename, "rw");
+        file.seek(SevenZFile.SIGNATURE_HEADER_SIZE);
+    }
+    
+    /**
+     * Sets the compression method to use for entry contents - the
+     * default is LZMA2.
+     *
+     * <p>Currently only {@link SevenZMethod#COPY}, {@link
+     * SevenZMethod#LZMA2}, {@link SevenZMethod#BZIP2} and {@link
+     * SevenZMethod#DEFLATE} are supported.</p>
+     */
+    public void setContentCompression(SevenZMethod method) {
+        this.contentCompression = method;
+    }
+
+    /**
+     * Closes the archive, calling {@link #finish} if necessary.
+     * 
+     * @throws IOException
+     */
+    public void close() throws IOException {
+        if (!finished) {
+            finish();
+        }
+        file.close();
+    }
+    
+    /**
+     * Create an archive entry using the inputFile and entryName provided.
+     * 
+     * @param inputFile
+     * @param entryName 
+     * @return the ArchiveEntry set up with details from the file
+     * 
+     * @throws IOException
+     */
+    public SevenZArchiveEntry createArchiveEntry(final File inputFile,
+            final String entryName) throws IOException {
+        final SevenZArchiveEntry entry = new SevenZArchiveEntry();
+        entry.setDirectory(inputFile.isDirectory());
+        entry.setName(entryName);
+        entry.setLastModifiedDate(new Date(inputFile.lastModified()));
+        return entry;
+    }
+
+    /**
+     * Records an archive entry to add.
+     *
+     * The caller must then write the content to the archive and call
+     * {@link #closeArchiveEntry()} to complete the process.
+     * 
+     * @param archiveEntry describes the entry
+     * @throws IOException
+     */
+    public void putArchiveEntry(final ArchiveEntry archiveEntry) throws IOException {
+        final SevenZArchiveEntry entry = (SevenZArchiveEntry) archiveEntry;
+        files.add(entry);
+    }
+    
+    /**
+     * Closes the archive entry.
+     * @throws IOException
+     */
+    public void closeArchiveEntry() throws IOException {
+        if (currentOutputStream != null) {
+            currentOutputStream.flush();
+            currentOutputStream.close();
+        }
+
+        final SevenZArchiveEntry entry = files.get(files.size() - 1);
+        if (fileBytesWritten > 0) {
+            entry.setHasStream(true);
+            ++numNonEmptyStreams;
+            entry.setSize(currentOutputStream.getBytesWritten());
+            entry.setCompressedSize(fileBytesWritten);
+            entry.setCrcValue(crc32.getValue());
+            entry.setCompressedCrcValue(compressedCrc32.getValue());
+            entry.setHasCrc(true);
+        } else {
+            entry.setHasStream(false);
+            entry.setSize(0);
+            entry.setCompressedSize(0);
+            entry.setHasCrc(false);
+        }
+        currentOutputStream = null;
+        crc32.reset();
+        compressedCrc32.reset();
+        fileBytesWritten = 0;
+    }
+    
+    /**
+     * Writes a byte to the current archive entry.
+     * @param b The byte to be written.
+     * @throws IOException on error
+     */
+    public void write(final int b) throws IOException {
+        getCurrentOutputStream().write(b);
+    }
+    
+    /**
+     * Writes a byte array to the current archive entry.
+     * @param b The byte array to be written.
+     * @throws IOException on error
+     */
+    public void write(final byte[] b) throws IOException {
+        write(b, 0, b.length);
+    }
+    
+    /**
+     * Writes part of a byte array to the current archive entry.
+     * @param b The byte array to be written.
+     * @param off offset into the array to start writing from
+     * @param len number of bytes to write
+     * @throws IOException on error
+     */
+    public void write(final byte[] b, final int off, final int len) throws IOException {
+        if (len > 0) {
+            getCurrentOutputStream().write(b, off, len);
+        }
+    }
+    
+    /**
+     * Finishes the addition of entries to this archive, without closing it.
+     * 
+     * @throws IOException if archive is already closed.
+     */
+    public void finish() throws IOException {
+        if (finished) {
+            throw new IOException("This archive has already been finished");
+        }
+        finished = true;
+        
+        final long headerPosition = file.getFilePointer();
+        
+        final ByteArrayOutputStream headerBaos = new ByteArrayOutputStream();
+        final DataOutputStream header = new DataOutputStream(headerBaos);
+        
+        writeHeader(header);
+        header.flush();
+        final byte[] headerBytes = headerBaos.toByteArray();
+        file.write(headerBytes);
+        
+        final CRC32 crc32 = new CRC32();
+        
+        // signature header
+        file.seek(0);
+        file.write(SevenZFile.sevenZSignature);
+        // version
+        file.write(0);
+        file.write(2);
+        
+        // start header
+        final ByteArrayOutputStream startHeaderBaos = new ByteArrayOutputStream();
+        final DataOutputStream startHeaderStream = new DataOutputStream(startHeaderBaos);
+        startHeaderStream.writeLong(Long.reverseBytes(headerPosition - SevenZFile.SIGNATURE_HEADER_SIZE));
+        startHeaderStream.writeLong(Long.reverseBytes(0xffffFFFFL & headerBytes.length));
+        crc32.reset();
+        crc32.update(headerBytes);
+        startHeaderStream.writeInt(Integer.reverseBytes((int)crc32.getValue()));
+        startHeaderStream.flush();
+        final byte[] startHeaderBytes = startHeaderBaos.toByteArray();
+        crc32.reset();
+        crc32.update(startHeaderBytes);
+        file.writeInt(Integer.reverseBytes((int) crc32.getValue()));
+        file.write(startHeaderBytes);
+    }
+    
+    /*
+     * Creation of output stream is deferred until data is actually
+     * written as some codecs might write header information even for
+     * empty streams and directories otherwise.
+     */
+    private OutputStream getCurrentOutputStream() throws IOException {
+        if (currentOutputStream == null) {
+            currentOutputStream = setupFileOutputStream();
+        }
+        return currentOutputStream;
+    }
+
+    private CountingOutputStream setupFileOutputStream() throws IOException {
+        OutputStream out = new OutputStreamWrapper();
+        return new CountingOutputStream(Coders
+                                        .addEncoder(out,
+                                                    contentCompression,
+                                                    null)) {
+            @Override
+            public void write(final int b) throws IOException {
+                super.write(b);
+                crc32.update(b);
+            }
+    
+            @Override
+            public void write(final byte[] b) throws IOException {
+                super.write(b);
+                crc32.update(b);
+            }
+    
+            @Override
+            public void write(final byte[] b, final int off, final int len)
+                throws IOException {
+                super.write(b, off, len);
+                crc32.update(b, off, len);
+            }
+        };
+    }
+
+    private void writeHeader(final DataOutput header) throws IOException {
+        header.write(NID.kHeader);
+        
+        header.write(NID.kMainStreamsInfo);
+        writeStreamsInfo(header);
+        writeFilesInfo(header);
+        header.write(NID.kEnd);
+    }
+    
+    private void writeStreamsInfo(final DataOutput header) throws IOException {
+        if (numNonEmptyStreams > 0) {
+            writePackInfo(header);
+            writeUnpackInfo(header);
+        }
+        
+        writeSubStreamsInfo(header);
+        
+        header.write(NID.kEnd);
+    }
+    
+    private void writePackInfo(final DataOutput header) throws IOException {
+        header.write(NID.kPackInfo);
+        
+        writeUint64(header, 0);
+        writeUint64(header, 0xffffFFFFL & numNonEmptyStreams);
+        
+        header.write(NID.kSize);
+        for (final SevenZArchiveEntry entry : files) {
+            if (entry.hasStream()) {
+                writeUint64(header, entry.getCompressedSize());
+            }
+        }
+        
+        header.write(NID.kCRC);
+        header.write(1);
+        for (final SevenZArchiveEntry entry : files) {
+            if (entry.hasStream()) {
+                header.writeInt(Integer.reverseBytes((int) entry.getCompressedCrcValue()));
+            }
+        }
+        
+        header.write(NID.kEnd);
+    }
+    
+    private void writeUnpackInfo(final DataOutput header) throws IOException {
+        header.write(NID.kUnpackInfo);
+        
+        header.write(NID.kFolder);
+        writeUint64(header, numNonEmptyStreams);
+        header.write(0);
+        for (int i = 0; i < numNonEmptyStreams; i++) {
+            writeFolder(header);
+        }
+        
+        header.write(NID.kCodersUnpackSize);
+        for (final SevenZArchiveEntry entry : files) {
+            if (entry.hasStream()) {
+                writeUint64(header, entry.getSize());
+            }
+        }
+        
+        header.write(NID.kCRC);
+        header.write(1);
+        for (final SevenZArchiveEntry entry : files) {
+            if (entry.hasStream()) {
+                header.writeInt(Integer.reverseBytes((int) entry.getCrcValue()));
+            }
+        }
+        
+        header.write(NID.kEnd);
+    }
+    
+    private void writeFolder(final DataOutput header) throws IOException {
+        // one coder
+        writeUint64(header, 1);
+        byte[] id = contentCompression.getId();
+        byte[] properties = contentCompression.getProperties();
+
+        int codecFlags = id.length;
+        if (properties.length > 0) {
+            codecFlags |= 0x20;
+        }
+        header.write(codecFlags);
+        header.write(id);
+
+        if (properties.length > 0) {
+            header.write(properties.length);
+            header.write(properties);
+        }
+    }
+    
+    private void writeSubStreamsInfo(final DataOutput header) throws IOException {
+        header.write(NID.kSubStreamsInfo);
+//        
+//        header.write(NID.kCRC);
+//        header.write(1);
+//        for (final SevenZArchiveEntry entry : files) {
+//            if (entry.getHasCrc()) {
+//                header.writeInt(Integer.reverseBytes(entry.getCrc()));
+//            }
+//        }
+//        
+        header.write(NID.kEnd);
+    }
+    
+    private void writeFilesInfo(final DataOutput header) throws IOException {
+        header.write(NID.kFilesInfo);
+        
+        writeUint64(header, files.size());
+
+        writeFileEmptyStreams(header);
+        writeFileEmptyFiles(header);
+        writeFileAntiItems(header);
+        writeFileNames(header);
+        writeFileCTimes(header);
+        writeFileATimes(header);
+        writeFileMTimes(header);
+        writeFileWindowsAttributes(header);
+        header.write(0);
+    }
+    
+    private void writeFileEmptyStreams(final DataOutput header) throws IOException {
+        boolean hasEmptyStreams = false;
+        for (final SevenZArchiveEntry entry : files) {
+            if (!entry.hasStream()) {
+                hasEmptyStreams = true;
+                break;
+            }
+        }
+        if (hasEmptyStreams) {
+            header.write(NID.kEmptyStream);
+            final BitSet emptyStreams = new BitSet(files.size());
+            for (int i = 0; i < files.size(); i++) {
+                emptyStreams.set(i, !files.get(i).hasStream());
+            }
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            final DataOutputStream out = new DataOutputStream(baos);
+            writeBits(out, emptyStreams, files.size());
+            out.flush();
+            final byte[] contents = baos.toByteArray();
+            writeUint64(header, contents.length);
+            header.write(contents);
+        }
+    }
+    
+    private void writeFileEmptyFiles(final DataOutput header) throws IOException {
+        boolean hasEmptyFiles = false;
+        int emptyStreamCounter = 0;
+        final BitSet emptyFiles = new BitSet(0);
+        for (int i = 0; i < files.size(); i++) {
+            if (!files.get(i).hasStream()) {
+                boolean isDir = files.get(i).isDirectory();
+                emptyFiles.set(emptyStreamCounter++, !isDir);
+                hasEmptyFiles |= !isDir;
+            }
+        }
+        if (hasEmptyFiles) {
+            header.write(NID.kEmptyFile);
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            final DataOutputStream out = new DataOutputStream(baos);
+            writeBits(out, emptyFiles, emptyStreamCounter);
+            out.flush();
+            final byte[] contents = baos.toByteArray();
+            writeUint64(header, contents.length);
+            header.write(contents);
+        }
+    }
+    
+    private void writeFileAntiItems(final DataOutput header) throws IOException {
+        boolean hasAntiItems = false;
+        final BitSet antiItems = new BitSet(0);
+        int antiItemCounter = 0;
+        for (int i = 0; i < files.size(); i++) {
+            if (!files.get(i).hasStream()) {
+                boolean isAnti = files.get(i).isAntiItem();
+                antiItems.set(antiItemCounter++, isAnti);
+                hasAntiItems |= isAnti;
+            }
+        }
+        if (hasAntiItems) {
+            header.write(NID.kAnti);
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            final DataOutputStream out = new DataOutputStream(baos);
+            writeBits(out, antiItems, antiItemCounter);
+            out.flush();
+            final byte[] contents = baos.toByteArray();
+            writeUint64(header, contents.length);
+            header.write(contents);
+        }
+    }
+    
+    private void writeFileNames(final DataOutput header) throws IOException {
+        header.write(NID.kName);
+        
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        final DataOutputStream out = new DataOutputStream(baos);
+        out.write(0);
+        for (final SevenZArchiveEntry entry : files) {
+            out.write(entry.getName().getBytes("UTF-16LE"));
+            out.writeShort(0);
+        }
+        out.flush();
+        final byte[] contents = baos.toByteArray();
+        writeUint64(header, contents.length);
+        header.write(contents);
+    }
+
+    private void writeFileCTimes(final DataOutput header) throws IOException {
+        int numCreationDates = 0;
+        for (final SevenZArchiveEntry entry : files) {
+            if (entry.getHasCreationDate()) {
+                ++numCreationDates;
+            }
+        }
+        if (numCreationDates > 0) {
+            header.write(NID.kCTime);
+
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            final DataOutputStream out = new DataOutputStream(baos);
+            if (numCreationDates != files.size()) {
+                out.write(0);
+                final BitSet cTimes = new BitSet(files.size());
+                for (int i = 0; i < files.size(); i++) {
+                    cTimes.set(i, files.get(i).getHasCreationDate());
+                }
+                writeBits(out, cTimes, files.size());
+            } else {
+                out.write(1);
+            }
+            out.write(0);
+            for (final SevenZArchiveEntry entry : files) {
+                if (entry.getHasCreationDate()) {
+                    out.writeLong(Long.reverseBytes(
+                            SevenZArchiveEntry.javaTimeToNtfsTime(entry.getCreationDate())));
+                }
+            }
+            out.flush();
+            final byte[] contents = baos.toByteArray();
+            writeUint64(header, contents.length);
+            header.write(contents);
+        }
+    }
+
+    private void writeFileATimes(final DataOutput header) throws IOException {
+        int numAccessDates = 0;
+        for (final SevenZArchiveEntry entry : files) {
+            if (entry.getHasAccessDate()) {
+                ++numAccessDates;
+            }
+        }
+        if (numAccessDates > 0) {
+            header.write(NID.kATime);
+
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            final DataOutputStream out = new DataOutputStream(baos);
+            if (numAccessDates != files.size()) {
+                out.write(0);
+                final BitSet aTimes = new BitSet(files.size());
+                for (int i = 0; i < files.size(); i++) {
+                    aTimes.set(i, files.get(i).getHasAccessDate());
+                }
+                writeBits(out, aTimes, files.size());
+            } else {
+                out.write(1);
+            }
+            out.write(0);
+            for (final SevenZArchiveEntry entry : files) {
+                if (entry.getHasAccessDate()) {
+                    out.writeLong(Long.reverseBytes(
+                            SevenZArchiveEntry.javaTimeToNtfsTime(entry.getAccessDate())));
+                }
+            }
+            out.flush();
+            final byte[] contents = baos.toByteArray();
+            writeUint64(header, contents.length);
+            header.write(contents);
+        }
+    }
+
+    private void writeFileMTimes(final DataOutput header) throws IOException {
+        int numLastModifiedDates = 0;
+        for (final SevenZArchiveEntry entry : files) {
+            if (entry.getHasLastModifiedDate()) {
+                ++numLastModifiedDates;
+            }
+        }
+        if (numLastModifiedDates > 0) {
+            header.write(NID.kMTime);
+
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            final DataOutputStream out = new DataOutputStream(baos);
+            if (numLastModifiedDates != files.size()) {
+                out.write(0);
+                final BitSet mTimes = new BitSet(files.size());
+                for (int i = 0; i < files.size(); i++) {
+                    mTimes.set(i, files.get(i).getHasLastModifiedDate());
+                }
+                writeBits(out, mTimes, files.size());
+            } else {
+                out.write(1);
+            }
+            out.write(0);
+            for (final SevenZArchiveEntry entry : files) {
+                if (entry.getHasLastModifiedDate()) {
+                    out.writeLong(Long.reverseBytes(
+                            SevenZArchiveEntry.javaTimeToNtfsTime(entry.getLastModifiedDate())));
+                }
+            }
+            out.flush();
+            final byte[] contents = baos.toByteArray();
+            writeUint64(header, contents.length);
+            header.write(contents);
+        }
+    }
+
+    private void writeFileWindowsAttributes(final DataOutput header) throws IOException {
+        int numWindowsAttributes = 0;
+        for (final SevenZArchiveEntry entry : files) {
+            if (entry.getHasWindowsAttributes()) {
+                ++numWindowsAttributes;
+            }
+        }
+        if (numWindowsAttributes > 0) {
+            header.write(NID.kWinAttributes);
+
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            final DataOutputStream out = new DataOutputStream(baos);
+            if (numWindowsAttributes != files.size()) {
+                out.write(0);
+                final BitSet attributes = new BitSet(files.size());
+                for (int i = 0; i < files.size(); i++) {
+                    attributes.set(i, files.get(i).getHasWindowsAttributes());
+                }
+                writeBits(out, attributes, files.size());
+            } else {
+                out.write(1);
+            }
+            out.write(0);
+            for (final SevenZArchiveEntry entry : files) {
+                if (entry.getHasWindowsAttributes()) {
+                    out.writeInt(Integer.reverseBytes(entry.getWindowsAttributes()));
+                }
+            }
+            out.flush();
+            final byte[] contents = baos.toByteArray();
+            writeUint64(header, contents.length);
+            header.write(contents);
+        }
+    }
+
+    private void writeUint64(final DataOutput header, long value) throws IOException {
+        int firstByte = 0;
+        int mask = 0x80;
+        int i;
+        for (i = 0; i < 8; i++) {
+            if (value < ((1L << ( 7  * (i + 1))))) {
+                firstByte |= (value >>> (8 * i));
+                break;
+            }
+            firstByte |= mask;
+            mask >>>= 1;
+        }
+        header.write(firstByte);
+        for (; i > 0; i--) {
+            header.write((int) (0xff & value));
+            value >>>= 8;
+        }
+    }
+
+    private void writeBits(final DataOutput header, final BitSet bits, final int length) throws IOException {
+        int cache = 0;
+        int shift = 7;
+        for (int i = 0; i < length; i++) {
+            cache |= ((bits.get(i) ? 1 : 0) << shift);
+            --shift;
+            if (shift == 0) {
+                header.write(cache);
+                shift = 7;
+                cache = 0;
+            }
+        }
+        if (length > 0 && shift > 0) {
+            header.write(cache);
+        }
+    }
+
+    private class OutputStreamWrapper extends OutputStream {
+        @Override
+        public void write(final int b) throws IOException {
+            file.write(b);
+            compressedCrc32.update(b);
+            fileBytesWritten++;
+        }
+    
+        @Override
+        public void write(final byte[] b) throws IOException {
+            OutputStreamWrapper.this.write(b, 0, b.length);
+        }
+    
+        @Override
+        public void write(final byte[] b, final int off, final int len)
+            throws IOException {
+            file.write(b, off, len);
+            compressedCrc32.update(b, off, len);
+            fileBytesWritten += len;
+        }
+
+        @Override
+        public void flush() throws IOException {
+            // no reason to flush a RandomAccessFile
+        }
+
+        @Override
+        public void close() throws IOException {
+            // the file will be closed by the containing class's close method
+        }
+    }
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ SevenZOutputFileClaudeTest ใน package org.apache.commons.compress.archivers.sevenz เพื่อทดสอบคลาส SevenZOutputFile ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.compress.archivers.sevenz;` เท่านั้น
+</instructions>

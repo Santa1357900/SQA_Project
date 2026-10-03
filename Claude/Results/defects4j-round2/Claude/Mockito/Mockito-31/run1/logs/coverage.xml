@@ -1,0 +1,118 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.9473684210526315" branch-rate="1.0" lines-covered="18" lines-valid="19" branches-covered="6" branches-valid="6" complexity="2.5" version="2.0.3" timestamp="1790853472579">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="org.mockito.internal.stubbing.defaultanswers" line-rate="0.9473684210526315" branch-rate="1.0" complexity="2.5">
+			<classes>
+				<class name="org.mockito.internal.stubbing.defaultanswers.ReturnsSmartNulls" filename="org/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls.java" line-rate="1.0" branch-rate="1.0" complexity="2.5">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="38" hits="22" branch="false"/>
+								<line number="64" hits="22" branch="false"/>
+							</lines>
+						</method>
+						<method name="answer" signature="(Lorg/mockito/invocation/InvocationOnMock;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="67" hits="22" branch="false"/>
+								<line number="68" hits="22" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="69" hits="8" branch="false"/>
+								<line number="71" hits="14" branch="false"/>
+								<line number="72" hits="14" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="73" hits="13" branch="false"/>
+								<line number="75" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="38" hits="22" branch="false"/>
+						<line number="64" hits="22" branch="false"/>
+						<line number="67" hits="22" branch="false"/>
+						<line number="68" hits="22" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="69" hits="8" branch="false"/>
+						<line number="71" hits="14" branch="false"/>
+						<line number="72" hits="14" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="73" hits="13" branch="false"/>
+						<line number="75" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.stubbing.defaultanswers.ReturnsSmartNulls$1" filename="org/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls.java" line-rate="1.0" branch-rate="1.0" complexity="2.5">
+					<methods>
+					</methods>
+					<lines>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.stubbing.defaultanswers.ReturnsSmartNulls$ThrowingInterceptor" filename="org/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls.java" line-rate="0.9" branch-rate="1.0" complexity="2.5">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls;Lorg/mockito/invocation/InvocationOnMock;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="44" hits="13" branch="false"/>
+								<line number="46" hits="13" branch="false"/>
+								<line number="47" hits="13" branch="false"/>
+								<line number="48" hits="13" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Lorg/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls;Lorg/mockito/invocation/InvocationOnMock;Lorg/mockito/internal/stubbing/defaultanswers/ReturnsSmartNulls$1;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="42" hits="13" branch="false"/>
+							</lines>
+						</method>
+						<method name="formatMethodCall" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="60" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="intercept" signature="(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;Lorg/mockito/cglib/proxy/MethodProxy;)Ljava/lang/Object;" line-rate="0.75" branch-rate="1.0">
+							<lines>
+								<line number="51" hits="11" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="52" hits="7" branch="false"/>
+								<line number="55" hits="4" branch="false"/>
+								<line number="56" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="42" hits="13" branch="false"/>
+						<line number="44" hits="13" branch="false"/>
+						<line number="46" hits="13" branch="false"/>
+						<line number="47" hits="13" branch="false"/>
+						<line number="48" hits="13" branch="false"/>
+						<line number="51" hits="11" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="52" hits="7" branch="false"/>
+						<line number="55" hits="4" branch="false"/>
+						<line number="56" hits="0" branch="false"/>
+						<line number="60" hits="7" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

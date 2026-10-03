@@ -1,0 +1,468 @@
+package org.apache.commons.collections;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Properties;
+import java.util.Vector;
+
+public class ExtendedPropertiesClaudeTest {
+
+    // default constructor: isInitialized should be false before any load/addProperty
+    @Test
+    public void testDefaultConstructor_isInitializedFalse() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        assertFalse(ext.isInitialized());
+    }
+
+    // getInclude(): includePropertyName null -> returns static default "include"
+    @Test
+    public void testGetInclude_default_returnsInclude() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        assertEquals("include", ext.getInclude());
+    }
+
+    // setInclude(null) converts to "" internally -> getInclude returns null (hack branch)
+    @Test
+    public void testSetInclude_null_getIncludeReturnsNull() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setInclude(null);
+        assertNull(ext.getInclude());
+    }
+
+    // setInclude(custom) -> getInclude returns the custom value
+    @Test
+    public void testSetInclude_customValue_getIncludeReturnsCustom() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setInclude("myinclude");
+        assertEquals("myinclude", ext.getInclude());
+    }
+
+    // load(): simple key=value line is parsed and retrievable
+    @Test
+    public void testLoad_simpleKeyValue_getStringReturnsValue() throws Throwable {
+        String content = "key=val\n";
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.load(new ByteArrayInputStream(content.getBytes("ISO-8859-1")));
+        assertEquals("val", ext.getString("key"));
+    }
+
+    // load(): comment lines (#) and blank lines are skipped, only real property remains
+    @Test
+    public void testLoad_commentAndBlankLinesSkipped() throws Throwable {
+        String content = "# a comment\n\nkey=val\n";
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.load(new ByteArrayInputStream(content.getBytes("ISO-8859-1")));
+        assertEquals("val", ext.getString("key"));
+        Iterator it = ext.getKeys();
+        int count = 0;
+        while (it.hasNext()) {
+            it.next();
+            count++;
+        }
+        assertEquals(1, count);
+    }
+
+    // load(): trailing backslash continuation joins two lines into one value
+    @Test
+    public void testLoad_multilineContinuation_concatenatesValue() throws Throwable {
+        String content = "key = aaa\\\nbbb\n";
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.load(new ByteArrayInputStream(content.getBytes("ISO-8859-1")));
+        assertEquals("aaabbb", ext.getString("key"));
+    }
+
+    // load(): same key appearing twice accumulates values into a list (not overwritten)
+    @Test
+    public void testLoad_duplicateKey_valuesAppendedAsList() throws Throwable {
+        String content = "key = value1\nkey = value2\n";
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.load(new ByteArrayInputStream(content.getBytes("ISO-8859-1")));
+        String[] arr = ext.getStringArray("key");
+        assertEquals(2, arr.length);
+        assertEquals("value1", arr[0]);
+        assertEquals("value2", arr[1]);
+    }
+
+    // load(): comma separated single-line value splits into multiple tokens
+    @Test
+    public void testLoad_commaSeparatedTokens_getStringArrayLength2() throws Throwable {
+        String content = "tokens = first token, second token\n";
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.load(new ByteArrayInputStream(content.getBytes("ISO-8859-1")));
+        String[] arr = ext.getStringArray("tokens");
+        assertEquals(2, arr.length);
+        assertEquals("first token", arr[0]);
+        assertEquals("second token", arr[1]);
+    }
+
+    // load(): backslash-escaped comma is not treated as a token separator
+    @Test
+    public void testLoad_escapedComma_tokenNotSplit() throws Throwable {
+        String content = "commas.escaped = Hi\\, what up\n";
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.load(new ByteArrayInputStream(content.getBytes("ISO-8859-1")));
+        assertEquals("Hi, what up", ext.getString("commas.escaped"));
+    }
+
+    // getProperty(): missing key with no defaults returns null
+    @Test
+    public void testGetProperty_missingKey_returnsNull() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        assertNull(ext.getProperty("missing"));
+    }
+
+    // addProperty(): adding same key twice converts single value into a 2-element list
+    @Test
+    public void testAddProperty_sameKeyTwice_becomesListOfTwo() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.addProperty("k", "v1");
+        ext.addProperty("k", "v2");
+        String[] arr = ext.getStringArray("k");
+        assertEquals(2, arr.length);
+        assertEquals("v1", arr[0]);
+        assertEquals("v2", arr[1]);
+    }
+
+    // setProperty(): replaces previous value entirely (implicit clearProperty + addProperty)
+    @Test
+    public void testSetProperty_overwritesPrevious() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("k", "v1");
+        ext.setProperty("k", "v2");
+        assertEquals("v2", ext.getString("k"));
+    }
+
+    // save(): writes key=value lines to the output stream
+    @Test
+    public void testSave_writesKeyValueLines() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("key1", "value1");
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ext.save(baos, null);
+        String output = baos.toString("ISO-8859-1");
+        assertTrue(output.indexOf("key1=value1") >= 0);
+    }
+
+    // save(): null output stream returns immediately without affecting state
+    @Test
+    public void testSave_nullOutput_doesNothing() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("key1", "value1");
+        ext.save(null, "header");
+        assertEquals("value1", ext.getString("key1"));
+    }
+
+    // combine(): combined key must be registered so it shows up via getKeys() (repository contract)
+    @Test
+    public void testCombine_addsKeyToKeysAsListedAndValue() throws Throwable {
+        ExtendedProperties target = new ExtendedProperties();
+        ExtendedProperties source = new ExtendedProperties();
+        source.setProperty("newkey", "newvalue");
+        target.combine(source);
+        assertEquals("newvalue", target.getString("newkey"));
+        Iterator it = target.getKeys();
+        boolean found = false;
+        while (it.hasNext()) {
+            if ("newkey".equals(it.next())) {
+                found = true;
+            }
+        }
+        assertTrue("combine() must register new keys for getKeys() iteration", found);
+    }
+
+    // clearProperty(): removes key from both the map and the ordered key list
+    @Test
+    public void testClearProperty_removesKeyFromKeysAndMap() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("k", "v");
+        ext.clearProperty("k");
+        assertNull(ext.getProperty("k"));
+        assertFalse(ext.getKeys().hasNext());
+    }
+
+    // clearProperty(): clearing a non-existent key is a no-op
+    @Test
+    public void testClearProperty_nonexistentKey_noChange() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("k", "v");
+        ext.clearProperty("doesNotExist");
+        assertEquals("v", ext.getString("k"));
+        Iterator it = ext.getKeys();
+        int count = 0;
+        while (it.hasNext()) {
+            it.next();
+            count++;
+        }
+        assertEquals(1, count);
+    }
+
+    // getKeys(): iterates in insertion order
+    @Test
+    public void testGetKeys_returnsInsertionOrder() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("first", "1");
+        ext.setProperty("second", "2");
+        Iterator it = ext.getKeys();
+        assertEquals("first", it.next());
+        assertEquals("second", it.next());
+        assertFalse(it.hasNext());
+    }
+
+    // getKeys(prefix): only keys starting with the prefix are returned
+    @Test
+    public void testGetKeysWithPrefix_filtersCorrectly() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("db.url", "x");
+        ext.setProperty("db.user", "y");
+        ext.setProperty("other", "z");
+        Iterator it = ext.getKeys("db.");
+        List found = new ArrayList();
+        while (it.hasNext()) {
+            found.add(it.next());
+        }
+        assertEquals(2, found.size());
+        assertTrue(found.contains("db.url"));
+        assertTrue(found.contains("db.user"));
+    }
+
+    // subset(): no matching keys returns null
+    @Test
+    public void testSubset_noMatch_returnsNull() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("a", "1");
+        assertNull(ext.subset("zzz"));
+    }
+
+    // subset(): matching keys have prefix (and dot) stripped in new instance
+    @Test
+    public void testSubset_withMatch_returnsStrippedKeys() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("db.url", "jdbc:test");
+        ext.setProperty("db.user", "admin");
+        ExtendedProperties sub = ext.subset("db");
+        assertEquals("jdbc:test", sub.getString("url"));
+        assertEquals("admin", sub.getString("user"));
+    }
+
+    // subset(): key exactly equal to prefix length maps to newKey == prefix
+    @Test
+    public void testSubset_exactPrefixMatch_newKeyEqualsPrefix() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("db", "value1");
+        ExtendedProperties sub = ext.subset("db");
+        assertEquals("value1", sub.getString("db"));
+    }
+
+    // getString(key): missing key, no default, no defaults object -> null
+    @Test
+    public void testGetString_missingKeyNoDefault_returnsNull() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        assertNull(ext.getString("missing"));
+    }
+
+    // getString(key, default): missing key returns supplied default value
+    @Test
+    public void testGetString_withDefault_missingKeyReturnsDefault() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        assertEquals("def", ext.getString("missing", "def"));
+    }
+
+    // getString(): ${var} interpolation resolves to another property's value
+    @Test
+    public void testGetString_interpolation_resolvesVariable() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("name", "world");
+        ext.setProperty("greeting", "Hello ${name}");
+        assertEquals("Hello world", ext.getString("greeting"));
+    }
+
+    // getString(): value that is neither String nor List throws ClassCastException
+    @Test
+    public void testGetString_valueNotStringOrList_throwsClassCastException() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.addProperty("num", new Integer(5));
+        try {
+            ext.getString("num");
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+        }
+    }
+
+    // getProperties(): tokens of form key=value are parsed into a Properties object
+    @Test
+    public void testGetProperties_parsesKeyValuePairs() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.addProperty("props", "a=1,b=2");
+        Properties props = ext.getProperties("props");
+        assertEquals("1", props.getProperty("a"));
+        assertEquals("2", props.getProperty("b"));
+    }
+
+    // getProperties(): a token without an equals sign throws IllegalArgumentException
+    @Test
+    public void testGetProperties_malformedToken_throwsIllegalArgumentException() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.addProperty("bad", "noEqualsSign");
+        try {
+            ext.getProperties("bad");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // getStringArray(): missing key with no defaults returns an empty array
+    @Test
+    public void testGetStringArray_missingKeyNoDefaults_returnsEmptyArray() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        String[] arr = ext.getStringArray("missing");
+        assertNotNull(arr);
+        assertEquals(0, arr.length);
+    }
+
+    // getVector(key): missing key, no default value, no defaults -> empty Vector
+    @Test
+    public void testGetVector_missingKeyNoDefaultValue_returnsEmptyVector() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        Vector result = ext.getVector("missing");
+        assertNotNull(result);
+        assertEquals(0, result.size());
+    }
+
+    // getVector(key, default): missing key returns the supplied default vector
+    @Test
+    public void testGetVector_missingKeyWithDefaultValue_returnsDefault() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        Vector def = new Vector();
+        def.add("x");
+        Vector result = ext.getVector("missing", def);
+        assertEquals(1, result.size());
+        assertEquals("x", result.get(0));
+    }
+
+    // getList(): when source value is a List, returned list is an independent copy
+    @Test
+    public void testGetList_fromListValue_returnsCopy() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.addProperty("list", "a,b");
+        List result = ext.getList("list");
+        assertEquals(2, result.size());
+        result.add("c");
+        List result2 = ext.getList("list");
+        assertEquals(2, result2.size());
+    }
+
+    // getBoolean(key): true/false textual variants recognized case-insensitively
+    @Test
+    public void testGetBoolean_trueAndFalseVariants() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.addProperty("b1", "True");
+        assertTrue(ext.getBoolean("b1"));
+        ext.addProperty("b2", "no");
+        assertFalse(ext.getBoolean("b2"));
+    }
+
+    // getBoolean(key): missing key with no defaults throws NoSuchElementException
+    @Test
+    public void testGetBoolean_missingKey_throwsNoSuchElementException() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        try {
+            ext.getBoolean("missing");
+            fail("expected NoSuchElementException");
+        } catch (NoSuchElementException expected) {
+        }
+    }
+
+    // testBoolean(): true/false textual aliases and unrecognized value returning null
+    @Test
+    public void testTestBoolean_variousInputs() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        assertEquals("true", ext.testBoolean("YES"));
+        assertEquals("false", ext.testBoolean("No"));
+        assertNull(ext.testBoolean("maybe"));
+    }
+
+    // getInteger(key): non-numeric string value throws NumberFormatException
+    @Test
+    public void testGetInteger_invalidFormat_throwsNumberFormatException() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.addProperty("bad", "notanumber");
+        try {
+            ext.getInteger("bad");
+            fail("expected NumberFormatException");
+        } catch (NumberFormatException expected) {
+        }
+    }
+
+    // getLong(key): valid numeric string parsed correctly
+    @Test
+    public void testGetLong_validString() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.addProperty("l", "123456789012");
+        assertEquals(123456789012L, ext.getLong("l"));
+    }
+
+    // getDouble(key): valid numeric string parsed correctly
+    @Test
+    public void testGetDouble_validString() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.addProperty("d", "3.5");
+        assertEquals(3.5, ext.getDouble("d"), 0.0001);
+    }
+
+    // convertProperties(): all entries from a java.util.Properties are copied
+    @Test
+    public void testConvertProperties_copiesAllEntries() throws Throwable {
+        Properties p = new Properties();
+        p.setProperty("a", "1");
+        p.setProperty("b", "2");
+        ExtendedProperties ext = ExtendedProperties.convertProperties(p);
+        assertEquals("1", ext.getString("a"));
+        assertEquals("2", ext.getString("b"));
+    }
+
+    // put(): returns previous value (null first time), appends on second call for same key
+    @Test
+    public void testPut_returnsOldValueAndAppendsOnSecondCall() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        Object old1 = ext.put("k", "v1");
+        assertNull(old1);
+        Object old2 = ext.put("k", "v2");
+        assertEquals("v1", old2);
+        String[] arr = ext.getStringArray("k");
+        assertEquals(2, arr.length);
+        assertEquals("v1", arr[0]);
+        assertEquals("v2", arr[1]);
+    }
+
+    // putAll(): when source is ExtendedProperties, keys are added and order preserved
+    @Test
+    public void testPutAll_fromExtendedProperties_maintainsOrder() throws Throwable {
+        ExtendedProperties src = new ExtendedProperties();
+        src.setProperty("x", "1");
+        src.setProperty("y", "2");
+        ExtendedProperties dst = new ExtendedProperties();
+        dst.putAll(src);
+        assertEquals("1", dst.getString("x"));
+        assertEquals("2", dst.getString("y"));
+        Iterator it = dst.getKeys();
+        assertEquals("x", it.next());
+        assertEquals("y", it.next());
+    }
+
+    // remove(): returns old value and removes the key from the configuration
+    @Test
+    public void testRemove_returnsOldValueAndRemovesKey() throws Throwable {
+        ExtendedProperties ext = new ExtendedProperties();
+        ext.setProperty("k", "v");
+        Object removed = ext.remove("k");
+        assertEquals("v", removed);
+        assertNull(ext.getProperty("k"));
+    }
+}

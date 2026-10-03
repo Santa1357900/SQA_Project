@@ -1,0 +1,370 @@
+package org.apache.commons.collections4.list;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Set;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class SetUniqueListClaudeTest {
+
+    // setUniqueList: list == null -> IllegalArgumentException
+    @Test
+    public void testSetUniqueList_nullList_throwsIllegalArgumentException() throws Throwable {
+        try {
+            SetUniqueList.setUniqueList(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // setUniqueList: empty list branch decorates the original list reference directly
+    @Test
+    public void testSetUniqueList_emptyList_wrapsOriginalListReference() throws Throwable {
+        List<String> src = new ArrayList<String>();
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(src);
+        sul.add("z");
+        assertEquals(1, src.size());
+        assertEquals("z", src.get(0));
+    }
+
+    // setUniqueList: non-empty list with duplicates -> first occurrence kept, order preserved
+    @Test
+    public void testSetUniqueList_listWithDuplicates_keepsFirstOccurrenceOrder() throws Throwable {
+        List<String> src = new ArrayList<String>(Arrays.asList("a", "b", "a", "c", "b"));
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(src);
+        assertEquals(3, sul.size());
+        assertEquals("a", sul.get(0));
+        assertEquals("b", sul.get(1));
+        assertEquals("c", sul.get(2));
+    }
+
+    // protected constructor: set == null -> IllegalArgumentException
+    @Test
+    public void testConstructor_nullSet_throwsIllegalArgumentException() throws Throwable {
+        List<String> backing = new ArrayList<String>();
+        try {
+            new SetUniqueList<String>(backing, null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // asSet(): reflects current elements of the list
+    @Test
+    public void testAsSet_returnsCurrentElements() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        Set<String> s = sul.asSet();
+        assertEquals(2, s.size());
+        assertTrue(s.contains("a"));
+        assertTrue(s.contains("b"));
+    }
+
+    // asSet(): returned set must be unmodifiable
+    @Test
+    public void testAsSet_isUnmodifiable_throwsUnsupportedOperationException() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a")));
+        Set<String> s = sul.asSet();
+        try {
+            s.add("z");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // add(E): new element added, returns true, size increases
+    @Test
+    public void testAdd_newElement_returnsTrueAndIncreasesSize() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>());
+        assertTrue(sul.add("a"));
+        assertEquals(1, sul.size());
+    }
+
+    // add(E): duplicate element rejected, returns false, size unchanged
+    @Test
+    public void testAdd_duplicateElement_returnsFalseAndSizeUnchanged() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a")));
+        assertFalse(sul.add("a"));
+        assertEquals(1, sul.size());
+    }
+
+    // add(int,E): new element inserted at specified index, shifting others
+    @Test
+    public void testAddIndex_newElement_insertsAtIndex() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "c")));
+        sul.add(1, "b");
+        assertEquals(3, sul.size());
+        assertEquals("b", sul.get(1));
+        assertEquals("c", sul.get(2));
+    }
+
+    // add(int,E): duplicate element at index is silently ignored (no insertion)
+    @Test
+    public void testAddIndex_duplicateElement_noChange() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        sul.add(0, "b");
+        assertEquals(3, sul.size());
+        assertEquals("a", sul.get(0));
+    }
+
+    // addAll(Collection): mix of new and duplicate elements, only new ones appended, returns true
+    @Test
+    public void testAddAllCollection_mixedNewAndDuplicate_onlyNewAdded() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a")));
+        boolean changed = sul.addAll(Arrays.asList("a", "b", "b", "c"));
+        assertTrue(changed);
+        assertEquals(Arrays.asList("a", "b", "c"), sul);
+    }
+
+    // addAll(Collection): all duplicates, nothing added, returns false
+    @Test
+    public void testAddAllCollection_allDuplicates_returnsFalse() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        boolean changed = sul.addAll(Arrays.asList("a", "b"));
+        assertFalse(changed);
+        assertEquals(2, sul.size());
+    }
+
+    // addAll(int,Collection): inserts new elements at index, skipping duplicates
+    @Test
+    public void testAddAllIndexCollection_insertsAtIndexSkippingDuplicates() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "d")));
+        boolean changed = sul.addAll(1, Arrays.asList("b", "a", "c"));
+        assertTrue(changed);
+        assertEquals(Arrays.asList("a", "b", "c", "d"), sul);
+    }
+
+    // set(index,E): object not present elsewhere (pos == -1), simple replace
+    @Test
+    public void testSet_posMinusOne_replacesAndUpdatesSet() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        String removed = sul.set(1, "x");
+        assertEquals("b", removed);
+        assertEquals(Arrays.asList("a", "x", "c"), sul);
+        assertFalse(sul.contains("b"));
+        assertTrue(sul.contains("x"));
+    }
+
+    // set(index,E): object already present exactly at that index -> no structural change
+    @Test
+    public void testSet_posEqualsIndex_noChange() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        String removed = sul.set(1, "b");
+        assertEquals("b", removed);
+        assertEquals(Arrays.asList("a", "b", "c"), sul);
+    }
+
+    // set(index,E): object already present at a different index -> duplicate removed, list shrinks
+    @Test
+    public void testSet_posDifferentFromIndex_removesDuplicateShrinksList() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        String removed = sul.set(0, "c");
+        assertEquals("a", removed);
+        assertEquals(2, sul.size());
+        assertEquals(Arrays.asList("c", "b"), sul);
+        assertFalse(sul.contains("a"));
+    }
+
+    // remove(Object): present element removed, returns true
+    @Test
+    public void testRemoveObject_present_returnsTrueAndRemoves() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        assertTrue(sul.remove("b"));
+        assertEquals(2, sul.size());
+        assertFalse(sul.contains("b"));
+    }
+
+    // remove(Object): absent element, returns false, list unchanged
+    @Test
+    public void testRemoveObject_absent_returnsFalse() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        assertFalse(sul.remove("z"));
+        assertEquals(2, sul.size());
+    }
+
+    // remove(int): removes element by index, returns removed element, not contained anymore
+    @Test
+    public void testRemoveIndex_removesAndReturnsElement() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        String removed = sul.remove(1);
+        assertEquals("b", removed);
+        assertFalse(sul.contains("b"));
+        assertEquals(2, sul.size());
+    }
+
+    // removeAll(Collection): matches removed, returns true
+    @Test
+    public void testRemoveAll_withMatches_returnsTrueAndRemoves() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        boolean changed = sul.removeAll(Arrays.asList("b", "x"));
+        assertTrue(changed);
+        assertEquals(Arrays.asList("a", "c"), sul);
+    }
+
+    // removeAll(Collection): no matches, returns false, list unchanged
+    @Test
+    public void testRemoveAll_noMatches_returnsFalse() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        boolean changed = sul.removeAll(Arrays.asList("x", "y"));
+        assertFalse(changed);
+        assertEquals(2, sul.size());
+    }
+
+    // retainAll(Collection): coll contains all current elements -> no change, returns false
+    @Test
+    public void testRetainAll_fullRetain_returnsFalseNoChange() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        boolean changed = sul.retainAll(Arrays.asList("a", "b", "c"));
+        assertFalse(changed);
+        assertEquals(Arrays.asList("a", "b"), sul);
+    }
+
+    // retainAll(Collection): empty intersection -> list cleared, returns true
+    @Test
+    public void testRetainAll_emptyIntersection_clearsList() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        boolean changed = sul.retainAll(Arrays.asList("x", "y"));
+        assertTrue(changed);
+        assertEquals(0, sul.size());
+    }
+
+    // retainAll(Collection): partial intersection -> keeps only common elements, returns true
+    @Test
+    public void testRetainAll_partialIntersection_keepsOnlyCommon() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        boolean changed = sul.retainAll(Arrays.asList("b", "x"));
+        assertTrue(changed);
+        assertEquals(Arrays.asList("b"), sul);
+    }
+
+    // clear(): empties both list and internal set
+    @Test
+    public void testClear_emptiesListAndSet() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        sul.clear();
+        assertEquals(0, sul.size());
+        assertFalse(sul.contains("a"));
+    }
+
+    // contains(Object): true for present element, false for absent
+    @Test
+    public void testContains_trueAndFalse() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        assertTrue(sul.contains("a"));
+        assertFalse(sul.contains("z"));
+    }
+
+    // containsAll(Collection): true when all present, false when one missing
+    @Test
+    public void testContainsAll_trueAndFalse() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        assertTrue(sul.containsAll(Arrays.asList("a", "c")));
+        assertFalse(sul.containsAll(Arrays.asList("a", "x")));
+    }
+
+    // iterator().remove(): removes current element from both list and internal set
+    @Test
+    public void testIterator_remove_removesFromListAndSet() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        Iterator<String> it = sul.iterator();
+        assertEquals("a", it.next());
+        it.remove();
+        assertEquals(2, sul.size());
+        assertFalse(sul.contains("a"));
+    }
+
+    // listIterator(): forward traversal then remove() deletes the last returned element
+    @Test
+    public void testListIterator_forwardTraversalAndRemove() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        ListIterator<String> it = sul.listIterator();
+        assertEquals("a", it.next());
+        assertEquals("b", it.next());
+        it.remove();
+        assertEquals(Arrays.asList("a", "c"), sul);
+        assertFalse(sul.contains("b"));
+    }
+
+    // listIterator().add(E): new element inserted at cursor and registered in internal set
+    @Test
+    public void testListIterator_addNewElement_insertsAndUpdatesSet() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        ListIterator<String> it = sul.listIterator();
+        it.next();
+        it.add("x");
+        assertEquals(3, sul.size());
+        assertEquals("x", sul.get(1));
+        assertTrue(sul.contains("x"));
+    }
+
+    // listIterator().add(E): duplicate element is ignored, no structural change
+    @Test
+    public void testListIterator_addDuplicateElement_ignored() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        ListIterator<String> it = sul.listIterator();
+        it.next();
+        it.add("a");
+        assertEquals(2, sul.size());
+    }
+
+    // listIterator(index): starts cursor at the given position
+    @Test
+    public void testListIteratorIndex_startsAtGivenPosition() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        ListIterator<String> it = sul.listIterator(1);
+        assertEquals(1, it.nextIndex());
+        assertEquals("b", it.next());
+    }
+
+    // listIterator(): backward traversal returns elements in reverse order
+    @Test
+    public void testListIterator_previousTraversal() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c")));
+        ListIterator<String> it = sul.listIterator(sul.size());
+        assertEquals("c", it.previous());
+        assertEquals("b", it.previous());
+        assertEquals("a", it.previous());
+        assertFalse(it.hasPrevious());
+    }
+
+    // listIterator().set(Object): always throws UnsupportedOperationException per contract
+    @Test
+    public void testListIterator_set_throwsUnsupportedOperationException() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b")));
+        ListIterator<String> it = sul.listIterator();
+        it.next();
+        try {
+            it.set("z");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // subList(from,to): returns a view containing the correct range of elements
+    @Test
+    public void testSubList_returnsCorrectSubListContent() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c", "d")));
+        List<String> sub = sul.subList(1, 3);
+        assertEquals(2, sub.size());
+        assertEquals("b", sub.get(0));
+        assertEquals("c", sub.get(1));
+    }
+
+    // subList(from,to): Javadoc states an unmodifiable list is returned from 4.0 -> mutation must throw
+    @Test
+    public void testSubList_modification_throwsUnsupportedOperationException() throws Throwable {
+        SetUniqueList<String> sul = SetUniqueList.setUniqueList(new ArrayList<String>(Arrays.asList("a", "b", "c", "d")));
+        List<String> sub = sul.subList(1, 3);
+        try {
+            sub.add("z");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+}

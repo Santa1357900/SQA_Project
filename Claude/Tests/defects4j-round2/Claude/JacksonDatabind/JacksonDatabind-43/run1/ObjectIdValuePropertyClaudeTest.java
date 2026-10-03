@@ -1,0 +1,309 @@
+package com.fasterxml.jackson.databind.deser.impl;
+
+import java.io.IOException;
+import java.util.UUID;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyMetadata;
+import com.fasterxml.jackson.databind.PropertyName;
+import com.fasterxml.jackson.databind.deser.SettableBeanProperty;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+
+public class ObjectIdValuePropertyClaudeTest {
+
+    private ObjectMapper mapper;
+    private JavaType idType;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+        idType = mapper.constructType(Integer.class);
+    }
+
+    // helper deserializer that always returns a fixed value, ignoring parser/context
+    public static class FixedValueDeserializer extends JsonDeserializer<Object> {
+        private final Object value;
+        public FixedValueDeserializer(Object value) { this.value = value; }
+        @Override
+        public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            return value;
+        }
+    }
+
+    // helper deserializer that counts invocations and always returns null
+    public static class CountingNullDeserializer extends JsonDeserializer<Object> {
+        public int callCount = 0;
+        @Override
+        public Object deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            callCount++;
+            return null;
+        }
+    }
+
+    private ObjectIdReader buildReader(JsonDeserializer<?> deser, SettableBeanProperty idProp) {
+        return ObjectIdReader.construct(idType, new PropertyName("id"),
+                new ObjectIdGenerators.IntSequenceGenerator(), deser, idProp,
+                new SimpleObjectIdResolver());
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+    public static class Node {
+        public Integer id;
+        public String name;
+        public Node next;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class)
+    public static class Item {
+        public String label;
+        public Item ref;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "code")
+    public static class Tagged {
+        public String code;
+        public Tagged link;
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "uid")
+    public static class UPojo {
+        public UUID uid;
+        public UPojo link;
+    }
+
+    // Covers: idProp != null branch in deserializeSetAndReturn; underlying "id" field gets set
+    @Test
+    public void testDeserializeAndSet_propertyGeneratorBasicId_setsIdField() throws Throwable {
+        Node n = mapper.readValue("{\"id\":10,\"name\":\"A\"}", Node.class);
+        assertEquals(Integer.valueOf(10), n.id);
+        assertEquals("A", n.name);
+    }
+
+    // Covers: roid.bindItem(instance) correctly registers instance for later self-reference resolution
+    @Test
+    public void testDeserializeAndSet_selfReferenceViaPropertyGenerator_resolvesToSameInstance() throws Throwable {
+        Node n = mapper.readValue("{\"id\":7,\"name\":\"B\",\"next\":7}", Node.class);
+        assertSame(n, n.next);
+    }
+
+    // Covers: id == null branch; verifies no idProp.setAndReturn call happens, field stays null
+    @Test
+    public void testDeserializeAndSet_nullIdWithPropertyGenerator_leavesIdFieldNull() throws Throwable {
+        Node n = mapper.readValue("{\"id\":null,\"name\":\"C\"}", Node.class);
+        assertNull(n.id);
+        assertEquals("C", n.name);
+    }
+
+    // Covers: repeated invocation across siblings does not cross-contaminate state
+    @Test
+    public void testDeserializeAndSet_multipleDistinctNodes_eachGetsOwnId() throws Throwable {
+        Node[] arr = mapper.readValue("[{\"id\":1,\"name\":\"X\"},{\"id\":2,\"name\":\"Y\"}]", Node[].class);
+        assertEquals(Integer.valueOf(1), arr[0].id);
+        assertEquals(Integer.valueOf(2), arr[1].id);
+        assertNotSame(arr[0], arr[1]);
+    }
+
+    // Covers: id binding must occur before recursing into nested object, enabling cyclic forward reference
+    @Test
+    public void testDeserializeAndSet_forwardReferenceAcrossNestedNodes_resolvesCycle() throws Throwable {
+        String json = "{\"id\":1,\"name\":\"Parent\",\"next\":{\"id\":2,\"name\":\"Child\",\"next\":1}}";
+        Node parent = mapper.readValue(json, Node.class);
+        assertSame(parent, parent.next.next);
+    }
+
+    // Covers: idProp == null branch (virtual id not backed by a real bean property); returns instance directly
+    @Test
+    public void testDeserializeAndSet_virtualIdSelfReference_resolvesToSameInstanceWhenIdPropertyNull() throws Throwable {
+        Item it = mapper.readValue("{\"@id\":1,\"label\":\"x\",\"ref\":1}", Item.class);
+        assertSame(it, it.ref);
+        assertEquals("x", it.label);
+    }
+
+    // Covers: id == null branch through full deserialization when id has no backing property
+    @Test
+    public void testDeserializeAndSet_virtualIdNull_noBindingOccurs() throws Throwable {
+        Item it = mapper.readValue("{\"@id\":null,\"label\":\"y\"}", Item.class);
+        assertEquals("y", it.label);
+        assertNull(it.ref);
+    }
+
+    // Covers: identity mechanism is type-agnostic (String id) via idProp != null path
+    @Test
+    public void testDeserializeAndSet_stringIdPropertyGenerator_selfReference() throws Throwable {
+        Tagged t = mapper.readValue("{\"code\":\"abc\",\"link\":\"abc\"}", Tagged.class);
+        assertSame(t, t.link);
+        assertEquals("abc", t.code);
+    }
+
+    // Covers: identity mechanism is type-agnostic (UUID id) via idProp != null path
+    @Test
+    public void testDeserializeAndSet_uuidIdPropertyGenerator_selfReference() throws Throwable {
+        UUID id = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+        String json = "{\"uid\":\"" + id.toString() + "\",\"link\":\"" + id.toString() + "\"}";
+        UPojo p = mapper.readValue(json, UPojo.class);
+        assertSame(p, p.link);
+        assertEquals(id, p.uid);
+    }
+
+    // Covers: property entirely absent in JSON; virtual property never invoked, default retained
+    @Test
+    public void testDeserializeAndSet_missingIdField_defaultsToNull() throws Throwable {
+        Node n = mapper.readValue("{\"name\":\"NoId\"}", Node.class);
+        assertNull(n.id);
+        assertEquals("NoId", n.name);
+    }
+
+    // Covers: nested virtual-id forward reference forms a correctly resolved cycle
+    @Test
+    public void testDeserializeAndSet_nestedVirtualIdForwardReference_resolvesCycle() throws Throwable {
+        String json = "{\"@id\":1,\"label\":\"P\",\"ref\":{\"@id\":2,\"label\":\"C\",\"ref\":1}}";
+        Item parent = mapper.readValue(json, Item.class);
+        assertSame(parent, parent.ref.ref);
+    }
+
+    // Covers: deserializeSetAndReturn id==null branch; safe since ctxt is never touched on this path
+    @Test
+    public void testDeserializeSetAndReturn_idNull_returnsNull() throws Throwable {
+        ObjectIdReader reader = buildReader(new FixedValueDeserializer(null), null);
+        ObjectIdValueProperty prop = new ObjectIdValueProperty(reader, PropertyMetadata.STD_REQUIRED);
+        Object result = prop.deserializeSetAndReturn(null, null, new Object());
+        assertNull(result);
+    }
+
+    // Covers: deserializeAndSet id==null branch has no side effect on the target instance
+    @Test
+    public void testDeserializeAndSet_idNullDirect_noSideEffectOnInstance() throws Throwable {
+        ObjectIdReader reader = buildReader(new FixedValueDeserializer(null), null);
+        ObjectIdValueProperty prop = new ObjectIdValueProperty(reader, PropertyMetadata.STD_REQUIRED);
+        int[] marker = new int[] { 42 };
+        prop.deserializeAndSet(null, null, marker);
+        assertEquals(42, marker[0]);
+    }
+
+    // Covers: setAndReturn throws when _objectIdReader.idProperty == null
+    @Test
+    public void testSetAndReturn_nullIdProperty_throwsUnsupportedOperationException() throws Throwable {
+        ObjectIdReader reader = buildReader(new FixedValueDeserializer(null), null);
+        ObjectIdValueProperty prop = new ObjectIdValueProperty(reader, PropertyMetadata.STD_REQUIRED);
+        try {
+            prop.setAndReturn(new Object(), Integer.valueOf(1));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+            assertTrue(expected.getMessage().contains("ObjectIdProperty"));
+        }
+    }
+
+    // Covers: set(instance,value) delegates to setAndReturn and surfaces same exception
+    @Test
+    public void testSet_nullIdProperty_throwsUnsupportedOperationException() throws Throwable {
+        ObjectIdReader reader = buildReader(new FixedValueDeserializer(null), null);
+        ObjectIdValueProperty prop = new ObjectIdValueProperty(reader, PropertyMetadata.STD_REQUIRED);
+        try {
+            prop.set(new Object(), Integer.valueOf(1));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+            assertTrue(expected.getMessage().contains("ObjectIdProperty"));
+        }
+    }
+
+    // Covers: setAndReturn idProp != null branch delegates the call to the inner property
+    @Test
+    public void testSetAndReturn_nonNullIdPropertyDelegates_propagatesUnderlyingException() throws Throwable {
+        ObjectIdReader innerReader = buildReader(new FixedValueDeserializer(null), null);
+        ObjectIdValueProperty innerProp = new ObjectIdValueProperty(innerReader, PropertyMetadata.STD_REQUIRED);
+        ObjectIdReader outerReader = buildReader(new FixedValueDeserializer(null), innerProp);
+        ObjectIdValueProperty outerProp = new ObjectIdValueProperty(outerReader, PropertyMetadata.STD_REQUIRED);
+        try {
+            outerProp.setAndReturn(new Object(), Integer.valueOf(5));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // Covers: withName produces a distinct instance that still preserves _objectIdReader behavior
+    @Test
+    public void testWithName_returnsDistinctInstancePreservingReaderBehavior() throws Throwable {
+        ObjectIdReader reader = buildReader(new FixedValueDeserializer(null), null);
+        ObjectIdValueProperty original = new ObjectIdValueProperty(reader, PropertyMetadata.STD_REQUIRED);
+        ObjectIdValueProperty renamed = original.withName(new PropertyName("otherName"));
+        assertNotSame(original, renamed);
+        try {
+            renamed.setAndReturn(new Object(), Integer.valueOf(1));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // Covers: withName can be chained, each call producing a new distinct instance
+    @Test
+    public void testWithName_calledTwiceSequentially_eachReturnsDistinctInstance() throws Throwable {
+        ObjectIdReader reader = buildReader(new FixedValueDeserializer(null), null);
+        ObjectIdValueProperty p0 = new ObjectIdValueProperty(reader, PropertyMetadata.STD_REQUIRED);
+        ObjectIdValueProperty p1 = p0.withName(new PropertyName("n1"));
+        ObjectIdValueProperty p2 = p1.withName(new PropertyName("n2"));
+        assertNotSame(p0, p1);
+        assertNotSame(p1, p2);
+        assertNotSame(p0, p2);
+    }
+
+    // Covers: withValueDeserializer returns distinct instance whose runtime deserializer actually changes
+    @Test
+    public void testWithValueDeserializer_returnsDistinctInstanceAndUsesNewDeserializer() throws Throwable {
+        CountingNullDeserializer deser1 = new CountingNullDeserializer();
+        CountingNullDeserializer deser2 = new CountingNullDeserializer();
+        ObjectIdReader reader = buildReader(deser1, null);
+        ObjectIdValueProperty original = new ObjectIdValueProperty(reader, PropertyMetadata.STD_REQUIRED);
+        ObjectIdValueProperty updated = original.withValueDeserializer(deser2);
+        assertNotSame(original, updated);
+        updated.deserializeSetAndReturn(null, null, new Object());
+        assertEquals(1, deser2.callCount);
+        assertEquals(0, deser1.callCount);
+    }
+
+    // Covers: withValueDeserializer can be chained, each call producing a new distinct instance
+    @Test
+    public void testWithValueDeserializer_calledTwiceSequentially_eachReturnsDistinctInstance() throws Throwable {
+        ObjectIdReader reader = buildReader(new FixedValueDeserializer(null), null);
+        ObjectIdValueProperty p0 = new ObjectIdValueProperty(reader, PropertyMetadata.STD_REQUIRED);
+        ObjectIdValueProperty p1 = p0.withValueDeserializer(new FixedValueDeserializer(null));
+        ObjectIdValueProperty p2 = p1.withValueDeserializer(new FixedValueDeserializer(null));
+        assertNotSame(p0, p1);
+        assertNotSame(p1, p2);
+        assertNotSame(p0, p2);
+    }
+
+    // Covers: getAnnotation always returns null regardless of requested annotation class
+    @Test
+    public void testGetAnnotation_anyClass_alwaysReturnsNull() throws Throwable {
+        ObjectIdReader reader = buildReader(new FixedValueDeserializer(null), null);
+        ObjectIdValueProperty prop = new ObjectIdValueProperty(reader, PropertyMetadata.STD_REQUIRED);
+        assertNull(prop.getAnnotation(Override.class));
+    }
+
+    // Covers: getMember always returns null
+    @Test
+    public void testGetMember_always_returnsNull() throws Throwable {
+        ObjectIdReader reader = buildReader(new FixedValueDeserializer(null), null);
+        ObjectIdValueProperty prop = new ObjectIdValueProperty(reader, PropertyMetadata.STD_REQUIRED);
+        assertNull(prop.getMember());
+    }
+
+    // Covers: constructor dereferences objectIdReader immediately; null argument must fail fast
+    @Test
+    public void testConstructor_nullObjectIdReader_throwsNullPointerException() throws Throwable {
+        try {
+            new ObjectIdValueProperty(null, PropertyMetadata.STD_REQUIRED);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+}

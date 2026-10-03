@@ -1,0 +1,508 @@
+package org.apache.commons.math.fraction;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.exception.NullArgumentException;
+import org.apache.commons.math.exception.ZeroException;
+import org.apache.commons.math.exception.MathIllegalArgumentException;
+
+public class BigFractionClaudeTest {
+
+    // Covers: num null branch, den null branch (checkNotNull throws)
+    @Test
+    public void testConstructorBigInteger_nullArguments_throwNullArgumentException() throws Throwable {
+        try {
+            new BigFraction((BigInteger) null, BigInteger.ONE);
+            fail("expected NullArgumentException for null numerator");
+        } catch (NullArgumentException expected) {
+        }
+        try {
+            new BigFraction(BigInteger.ONE, (BigInteger) null);
+            fail("expected NullArgumentException for null denominator");
+        } catch (NullArgumentException expected) {
+        }
+    }
+
+    // Covers: zero denominator branch
+    @Test
+    public void testConstructorBigInteger_zeroDenominator_throwsZeroException() throws Throwable {
+        try {
+            new BigFraction(BigInteger.ONE, BigInteger.ZERO);
+            fail("expected ZeroException");
+        } catch (ZeroException expected) {
+        }
+    }
+
+    // Covers: zero numerator special-case branch
+    @Test
+    public void testConstructorBigInteger_zeroNumerator_returnsZeroFraction() throws Throwable {
+        BigFraction f = new BigFraction(BigInteger.ZERO, BigInteger.TEN);
+        assertEquals(BigInteger.ZERO, f.getNumerator());
+        assertEquals(BigInteger.ONE, f.getDenominator());
+    }
+
+    // Covers: gcd reduction branch + negative-denominator sign move branch
+    @Test
+    public void testConstructorBigInteger_negativeDenominator_movesSignToNumerator() throws Throwable {
+        BigFraction f = new BigFraction(BigInteger.valueOf(4), BigInteger.valueOf(-8));
+        assertEquals(-1, f.getNumeratorAsInt());
+        assertEquals(2, f.getDenominatorAsInt());
+    }
+
+    // Covers: NaN branch, infinite branch of double constructor
+    @Test
+    public void testConstructorDouble_nanAndInfinite_throwMathIllegalArgumentException() throws Throwable {
+        try {
+            new BigFraction(Double.NaN);
+            fail("expected MathIllegalArgumentException for NaN");
+        } catch (MathIllegalArgumentException expected) {
+        }
+        try {
+            new BigFraction(Double.POSITIVE_INFINITY);
+            fail("expected MathIllegalArgumentException for infinity");
+        } catch (MathIllegalArgumentException expected) {
+        }
+    }
+
+    // Covers: exact bit decomposition path, k<0 branch
+    @Test
+    public void testConstructorDouble_exactHalf_returnsOneHalf() throws Throwable {
+        BigFraction f = new BigFraction(0.5);
+        assertEquals(1, f.getNumeratorAsInt());
+        assertEquals(2, f.getDenominatorAsInt());
+    }
+
+    // Covers: epsilon-based convergence (continued fraction) stop-on-convergence branch
+    @Test
+    public void testConstructorDoubleEpsilon_oneThird_convergesExactly() throws Throwable {
+        BigFraction f = new BigFraction(1.0 / 3.0, 1.0e-12, 100);
+        assertEquals(1, f.getNumeratorAsInt());
+        assertEquals(3, f.getDenominatorAsInt());
+    }
+
+    // Covers: n >= maxIterations throw branch
+    @Test
+    public void testConstructorDoubleEpsilon_tooFewIterations_throwsFractionConversionException() throws Throwable {
+        try {
+            new BigFraction(Math.PI, 1.0e-20, 1);
+            fail("expected FractionConversionException");
+        } catch (FractionConversionException expected) {
+        }
+    }
+
+    // Covers: maxDenominator-based convergence path
+    @Test
+    public void testConstructorDoubleMaxDenominator_twoThirds_convergesExactly() throws Throwable {
+        BigFraction f = new BigFraction(2.0 / 3.0, 100);
+        assertEquals(2, f.getNumeratorAsInt());
+        assertEquals(3, f.getDenominatorAsInt());
+    }
+
+    // Covers: a0 > overflow immediate throw branch
+    @Test
+    public void testConstructorDoubleMaxDenominator_hugeValue_throwsFractionConversionException() throws Throwable {
+        try {
+            new BigFraction(1.0e20, 10);
+            fail("expected FractionConversionException");
+        } catch (FractionConversionException expected) {
+        }
+    }
+
+    // Covers: int and long single-arg constructors
+    @Test
+    public void testConstructorIntAndLong_createsIntegerFraction() throws Throwable {
+        BigFraction f1 = new BigFraction(5);
+        assertEquals(5, f1.getNumeratorAsInt());
+        assertEquals(1, f1.getDenominatorAsInt());
+        BigFraction f2 = new BigFraction(5L);
+        assertEquals(5, f2.getNumeratorAsInt());
+        assertEquals(1, f2.getDenominatorAsInt());
+    }
+
+    // Covers: int,int and long,long two-arg constructors, reduction
+    @Test
+    public void testConstructorIntIntAndLongLong_reducesToLowestTerms() throws Throwable {
+        BigFraction f1 = new BigFraction(6, 8);
+        assertEquals(3, f1.getNumeratorAsInt());
+        assertEquals(4, f1.getDenominatorAsInt());
+        BigFraction f2 = new BigFraction(6L, 8L);
+        assertEquals(3, f2.getNumeratorAsInt());
+        assertEquals(4, f2.getDenominatorAsInt());
+    }
+
+    // Covers: numerator==0 normalization branch and normal reduction branch
+    @Test
+    public void testGetReducedFraction_zeroAndNormal() throws Throwable {
+        assertSame(BigFraction.ZERO, BigFraction.getReducedFraction(0, 5));
+        BigFraction f = BigFraction.getReducedFraction(6, 8);
+        assertEquals(3, f.getNumeratorAsInt());
+        assertEquals(4, f.getDenominatorAsInt());
+    }
+
+    // Covers: abs() both ternary branches
+    @Test
+    public void testAbs_positiveAndNegative() throws Throwable {
+        BigFraction pos = new BigFraction(3, 4);
+        assertSame(pos, pos.abs());
+        BigFraction neg = new BigFraction(-3, 4);
+        BigFraction a = neg.abs();
+        assertEquals(3, a.getNumeratorAsInt());
+        assertEquals(4, a.getDenominatorAsInt());
+    }
+
+    // Covers: add(BigInteger) null-check and normal computation branches
+    @Test
+    public void testAddBigInteger_nullAndNormal() throws Throwable {
+        BigFraction f = new BigFraction(1, 2);
+        try {
+            f.add((BigInteger) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+        BigFraction sum = f.add(BigInteger.valueOf(1));
+        assertEquals(3, sum.getNumeratorAsInt());
+        assertEquals(2, sum.getDenominatorAsInt());
+    }
+
+    // Covers: add(int) and add(long) delegating overloads
+    @Test
+    public void testAddIntAndLong_returnsSum() throws Throwable {
+        BigFraction f = new BigFraction(1, 2);
+        BigFraction s1 = f.add(1);
+        assertEquals(3, s1.getNumeratorAsInt());
+        assertEquals(2, s1.getDenominatorAsInt());
+        BigFraction s2 = f.add(1L);
+        assertEquals(3, s2.getNumeratorAsInt());
+        assertEquals(2, s2.getDenominatorAsInt());
+    }
+
+    // Covers: add(BigFraction) null check, zero short-circuit, same/different denominator branches
+    @Test
+    public void testAddBigFraction_allBranches() throws Throwable {
+        BigFraction f = new BigFraction(2, 3);
+        try {
+            f.add((BigFraction) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+        assertSame(f, f.add(BigFraction.ZERO));
+        BigFraction sameDen = new BigFraction(1, 4).add(new BigFraction(2, 4));
+        assertEquals(3, sameDen.getNumeratorAsInt());
+        assertEquals(4, sameDen.getDenominatorAsInt());
+        BigFraction diffDen = new BigFraction(1, 2).add(new BigFraction(1, 3));
+        assertEquals(5, diffDen.getNumeratorAsInt());
+        assertEquals(6, diffDen.getDenominatorAsInt());
+    }
+
+    // Covers: bigDecimalValue() basic terminating division
+    @Test
+    public void testBigDecimalValue_basic() throws Throwable {
+        BigDecimal bd = new BigFraction(1, 4).bigDecimalValue();
+        assertEquals(0, bd.compareTo(new BigDecimal("0.25")));
+    }
+
+    // Covers: bigDecimalValue(roundingMode) and bigDecimalValue(scale, roundingMode)
+    @Test
+    public void testBigDecimalValue_roundingModeAndScale() throws Throwable {
+        BigDecimal bd1 = new BigFraction(7, 2).bigDecimalValue(BigDecimal.ROUND_HALF_UP);
+        assertEquals(0, bd1.compareTo(new BigDecimal("4")));
+        BigDecimal bd2 = new BigFraction(1, 3).bigDecimalValue(2, BigDecimal.ROUND_HALF_UP);
+        assertEquals(0, bd2.compareTo(new BigDecimal("0.33")));
+    }
+
+    // Covers: compareTo less-than, greater-than and equal branches
+    @Test
+    public void testCompareTo_lessEqualGreater() throws Throwable {
+        BigFraction half = new BigFraction(1, 2);
+        assertTrue(half.compareTo(BigFraction.ONE) < 0);
+        assertTrue(BigFraction.ONE.compareTo(half) > 0);
+        assertEquals(0, half.compareTo(new BigFraction(2, 4)));
+    }
+
+    // Covers: divide(BigInteger) zero-check and normal computation branches
+    @Test
+    public void testDivideBigInteger_zeroAndNormal() throws Throwable {
+        BigFraction f = new BigFraction(1, 2);
+        try {
+            f.divide(BigInteger.ZERO);
+            fail("expected ZeroException");
+        } catch (ZeroException expected) {
+        }
+        BigFraction q = f.divide(BigInteger.valueOf(2));
+        assertEquals(1, q.getNumeratorAsInt());
+        assertEquals(4, q.getDenominatorAsInt());
+    }
+
+    // Covers: divide(int) and divide(long) delegating overloads
+    @Test
+    public void testDivideIntAndLong_returnsQuotient() throws Throwable {
+        BigFraction f = new BigFraction(1, 2);
+        BigFraction q1 = f.divide(2);
+        assertEquals(1, q1.getNumeratorAsInt());
+        assertEquals(4, q1.getDenominatorAsInt());
+        BigFraction q2 = f.divide(2L);
+        assertEquals(1, q2.getNumeratorAsInt());
+        assertEquals(4, q2.getDenominatorAsInt());
+    }
+
+    // Covers: divide(BigFraction) null check, zero-numerator check and normal branches
+    @Test
+    public void testDivideBigFraction_allBranches() throws Throwable {
+        BigFraction f = new BigFraction(1, 2);
+        try {
+            f.divide((BigFraction) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+        try {
+            f.divide(BigFraction.ZERO);
+            fail("expected ZeroException");
+        } catch (ZeroException expected) {
+        }
+        BigFraction q = f.divide(new BigFraction(1, 3));
+        assertEquals(3, q.getNumeratorAsInt());
+        assertEquals(2, q.getDenominatorAsInt());
+    }
+
+    // Covers: doubleValue() for a normal small fraction
+    @Test
+    public void testDoubleValue_normalFraction_returnsRatio() throws Throwable {
+        assertEquals(0.25, new BigFraction(1, 4).doubleValue(), 1e-12);
+    }
+
+    // Bug-catching test: numerator/denominator individually overflow double range,
+    // but mathematical ratio is close to 1.0. Contract (Javadoc) requires an
+    // accurate double ratio, not NaN from Infinity/Infinity.
+    @Test
+    public void testDoubleValue_overflowingNumeratorAndDenominator_returnsAccurateRatio() throws Throwable {
+        BigInteger den = BigInteger.ONE.shiftLeft(1100);
+        BigInteger num = den.add(BigInteger.ONE);
+        BigFraction f = new BigFraction(num, den);
+        double value = f.doubleValue();
+        assertFalse(Double.isNaN(value));
+        assertEquals(1.0, value, 1e-9);
+    }
+
+    // Covers: equals() reflexive, null, wrong-type, equal-value and not-equal branches
+    @Test
+    public void testEquals_variousCases() throws Throwable {
+        BigFraction a = new BigFraction(1, 2);
+        assertTrue(a.equals(a));
+        assertFalse(a.equals(null));
+        assertFalse(a.equals("1/2"));
+        assertTrue(a.equals(new BigFraction(2, 4)));
+        assertFalse(a.equals(new BigFraction(1, 3)));
+    }
+
+    // Covers: floatValue() normal conversion
+    @Test
+    public void testFloatValue_normalFraction_returnsRatio() throws Throwable {
+        assertEquals(0.25f, new BigFraction(1, 4).floatValue(), 1e-6f);
+    }
+
+    // Covers: getNumerator/getDenominator accessors (BigInteger, int, long forms)
+    @Test
+    public void testGetNumeratorAndDenominatorAccessors() throws Throwable {
+        BigFraction f = new BigFraction(3, 4);
+        assertEquals(BigInteger.valueOf(3), f.getNumerator());
+        assertEquals(BigInteger.valueOf(4), f.getDenominator());
+        assertEquals(3, f.getNumeratorAsInt());
+        assertEquals(4, f.getDenominatorAsInt());
+        assertEquals(3L, f.getNumeratorAsLong());
+        assertEquals(4L, f.getDenominatorAsLong());
+    }
+
+    // Covers: hashCode consistency contract with equals
+    @Test
+    public void testHashCode_equalObjectsHaveSameHashCode() throws Throwable {
+        BigFraction a = new BigFraction(1, 2);
+        BigFraction b = new BigFraction(2, 4);
+        assertEquals(a.hashCode(), b.hashCode());
+    }
+
+    // Covers: intValue()/longValue() BigInteger division truncation toward zero
+    @Test
+    public void testIntValueAndLongValue_truncateTowardZero() throws Throwable {
+        assertEquals(3, new BigFraction(7, 2).intValue());
+        assertEquals(-3, new BigFraction(-7, 2).intValue());
+        assertEquals(3L, new BigFraction(7, 2).longValue());
+        assertEquals(-3L, new BigFraction(-7, 2).longValue());
+    }
+
+    // Covers: multiply(BigInteger) null-check and normal computation branches
+    @Test
+    public void testMultiplyBigInteger_nullAndNormal() throws Throwable {
+        BigFraction f = new BigFraction(1, 2);
+        try {
+            f.multiply((BigInteger) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+        BigFraction p = f.multiply(BigInteger.valueOf(3));
+        assertEquals(3, p.getNumeratorAsInt());
+        assertEquals(2, p.getDenominatorAsInt());
+    }
+
+    // Covers: multiply(int) and multiply(long) delegating overloads
+    @Test
+    public void testMultiplyIntAndLong_returnsProduct() throws Throwable {
+        BigFraction f = new BigFraction(1, 2);
+        BigFraction p1 = f.multiply(3);
+        assertEquals(3, p1.getNumeratorAsInt());
+        assertEquals(2, p1.getDenominatorAsInt());
+        BigFraction p2 = f.multiply(3L);
+        assertEquals(3, p2.getNumeratorAsInt());
+        assertEquals(2, p2.getDenominatorAsInt());
+    }
+
+    // Covers: multiply(BigFraction) null-check, zero-operand short-circuit and normal branches
+    @Test
+    public void testMultiplyBigFraction_allBranches() throws Throwable {
+        BigFraction f = new BigFraction(1, 2);
+        try {
+            f.multiply((BigFraction) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+        assertSame(BigFraction.ZERO, f.multiply(BigFraction.ZERO));
+        BigFraction p = f.multiply(new BigFraction(2, 3));
+        assertEquals(1, p.getNumeratorAsInt());
+        assertEquals(3, p.getDenominatorAsInt());
+    }
+
+    // Covers: negate() computation
+    @Test
+    public void testNegate_returnsAdditiveInverse() throws Throwable {
+        BigFraction f = new BigFraction(3, 4);
+        BigFraction n = f.negate();
+        assertEquals(-3, n.getNumeratorAsInt());
+        assertEquals(4, n.getDenominatorAsInt());
+    }
+
+    // Covers: percentageValue() computation
+    @Test
+    public void testPercentageValue_returnsScaledPercentage() throws Throwable {
+        assertEquals(25.0, new BigFraction(1, 4).percentageValue(), 1e-9);
+    }
+
+    // Covers: pow(int) positive, zero and negative-exponent branches
+    @Test
+    public void testPowInt_positiveZeroAndNegativeExponent() throws Throwable {
+        BigFraction f = new BigFraction(2, 3);
+        BigFraction p = f.pow(3);
+        assertEquals(8, p.getNumeratorAsInt());
+        assertEquals(27, p.getDenominatorAsInt());
+        BigFraction zeroPow = f.pow(0);
+        assertEquals(1, zeroPow.getNumeratorAsInt());
+        assertEquals(1, zeroPow.getDenominatorAsInt());
+        BigFraction negPow = f.pow(-2);
+        assertEquals(9, negPow.getNumeratorAsInt());
+        assertEquals(4, negPow.getDenominatorAsInt());
+    }
+
+    // Covers: pow(long) positive and negative-exponent branches
+    @Test
+    public void testPowLong_positiveAndNegativeExponent() throws Throwable {
+        BigFraction f = new BigFraction(2, 3);
+        BigFraction p = f.pow(2L);
+        assertEquals(4, p.getNumeratorAsInt());
+        assertEquals(9, p.getDenominatorAsInt());
+        BigFraction negPow = f.pow(-1L);
+        assertEquals(3, negPow.getNumeratorAsInt());
+        assertEquals(2, negPow.getDenominatorAsInt());
+    }
+
+    // Covers: pow(BigInteger) positive and negative-exponent branches
+    @Test
+    public void testPowBigInteger_positiveAndNegativeExponent() throws Throwable {
+        BigFraction f = new BigFraction(2, 3);
+        BigFraction p = f.pow(BigInteger.valueOf(2));
+        assertEquals(4, p.getNumeratorAsInt());
+        assertEquals(9, p.getDenominatorAsInt());
+        BigFraction negPow = f.pow(BigInteger.valueOf(-1));
+        assertEquals(3, negPow.getNumeratorAsInt());
+        assertEquals(2, negPow.getDenominatorAsInt());
+    }
+
+    // Covers: pow(double) computation
+    @Test
+    public void testPowDouble_returnsRootOrPower() throws Throwable {
+        BigFraction f = new BigFraction(4, 1);
+        assertEquals(2.0, f.pow(0.5), 1e-9);
+    }
+
+    // Covers: reciprocal() computation
+    @Test
+    public void testReciprocal_swapsNumeratorAndDenominator() throws Throwable {
+        BigFraction f = new BigFraction(3, 4);
+        BigFraction r = f.reciprocal();
+        assertEquals(4, r.getNumeratorAsInt());
+        assertEquals(3, r.getDenominatorAsInt());
+    }
+
+    // Covers: reduce() computation
+    @Test
+    public void testReduce_returnsLowestTerms() throws Throwable {
+        BigFraction f = new BigFraction(6, 9);
+        BigFraction r = f.reduce();
+        assertEquals(2, r.getNumeratorAsInt());
+        assertEquals(3, r.getDenominatorAsInt());
+    }
+
+    // Covers: subtract(BigInteger) null-check and normal computation branches
+    @Test
+    public void testSubtractBigInteger_nullAndNormal() throws Throwable {
+        BigFraction f = new BigFraction(3, 2);
+        try {
+            f.subtract((BigInteger) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+        BigFraction d = f.subtract(BigInteger.valueOf(1));
+        assertEquals(1, d.getNumeratorAsInt());
+        assertEquals(2, d.getDenominatorAsInt());
+    }
+
+    // Covers: subtract(int) and subtract(long) delegating overloads
+    @Test
+    public void testSubtractIntAndLong_returnsDifference() throws Throwable {
+        BigFraction f = new BigFraction(3, 2);
+        BigFraction d1 = f.subtract(1);
+        assertEquals(1, d1.getNumeratorAsInt());
+        assertEquals(2, d1.getDenominatorAsInt());
+        BigFraction d2 = f.subtract(1L);
+        assertEquals(1, d2.getNumeratorAsInt());
+        assertEquals(2, d2.getDenominatorAsInt());
+    }
+
+    // Covers: subtract(BigFraction) null-check, zero short-circuit, same/different denominator branches
+    @Test
+    public void testSubtractBigFraction_allBranches() throws Throwable {
+        BigFraction f = new BigFraction(2, 3);
+        try {
+            f.subtract((BigFraction) null);
+            fail("expected NullArgumentException");
+        } catch (NullArgumentException expected) {
+        }
+        assertSame(f, f.subtract(BigFraction.ZERO));
+        BigFraction sameDen = new BigFraction(3, 4).subtract(new BigFraction(1, 4));
+        assertEquals(1, sameDen.getNumeratorAsInt());
+        assertEquals(2, sameDen.getDenominatorAsInt());
+        BigFraction diffDen = new BigFraction(1, 2).subtract(new BigFraction(1, 3));
+        assertEquals(1, diffDen.getNumeratorAsInt());
+        assertEquals(6, diffDen.getDenominatorAsInt());
+    }
+
+    // Covers: toString() denominator-one, numerator-zero and general-case branches, and getField()
+    @Test
+    public void testToStringAndGetField() throws Throwable {
+        assertEquals("5", new BigFraction(5).toString());
+        assertEquals("0", BigFraction.ZERO.toString());
+        assertEquals("3 / 4", new BigFraction(3, 4).toString());
+        assertSame(BigFractionField.getInstance(), new BigFraction(1, 2).getField());
+    }
+}

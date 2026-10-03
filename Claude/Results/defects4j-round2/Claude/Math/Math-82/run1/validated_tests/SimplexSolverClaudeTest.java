@@ -1,0 +1,285 @@
+package org.apache.commons.math.optimization.linear;
+
+import java.util.ArrayList;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.optimization.GoalType;
+import org.apache.commons.math.optimization.OptimizationException;
+import org.apache.commons.math.optimization.RealPointValuePair;
+
+public class SimplexSolverClaudeTest {
+
+    // Default constructor must set epsilon to the documented default (1.0e-6).
+    @Test
+    public void testConstructorDefault_epsilonField_matchesDefaultEpsilon() throws Throwable {
+        SimplexSolver solver = new SimplexSolver();
+        assertEquals(1.0e-6, solver.epsilon, 1e-15);
+    }
+
+    // Custom-epsilon constructor must store exactly the given value.
+    @Test
+    public void testConstructorWithEpsilon_epsilonField_matchesGivenEpsilon() throws Throwable {
+        SimplexSolver solver = new SimplexSolver(0.001);
+        assertEquals(0.001, solver.epsilon, 1e-12);
+    }
+
+    // Phase2-only maximize with two <= constraints: known vertex optimum (3,1) -> 9.
+    @Test
+    public void testOptimize_maximizeTwoVarLeq_knownVertexOptimum() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {2, 3}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 4));
+        cons.add(new LinearConstraint(new double[] {1, 3}, Relationship.LEQ, 6));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MAXIMIZE, true);
+        assertEquals(3.0, r.getPoint()[0], 1e-6);
+        assertEquals(1.0, r.getPoint()[1], 1e-6);
+        assertEquals(9.0, r.getValue(), 1e-6);
+    }
+
+    // Minimize with two >= constraints requiring Phase1 (artificial variables).
+    @Test
+    public void testOptimize_minimizeTwoVarGeqPhase1_knownVertexOptimum() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 2}, Relationship.GEQ, 4));
+        cons.add(new LinearConstraint(new double[] {3, 1}, Relationship.GEQ, 6));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MINIMIZE, true);
+        assertEquals(1.6, r.getPoint()[0], 1e-6);
+        assertEquals(1.2, r.getPoint()[1], 1e-6);
+        assertEquals(2.8, r.getValue(), 1e-6);
+    }
+
+    // Contradictory <= and >= on the same sum: no feasible point -> NoFeasibleSolutionException.
+    @Test
+    public void testOptimize_infeasibleInequalities_throwsNoFeasibleSolutionException() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 1));
+        cons.add(new LinearConstraint(new double[] {1, 1}, Relationship.GEQ, 3));
+        try {
+            new SimplexSolver().optimize(f, cons, GoalType.MINIMIZE, true);
+            fail("expected NoFeasibleSolutionException");
+        } catch (NoFeasibleSolutionException expected) {
+        }
+    }
+
+    // Objective grows without bound inside the feasible region -> UnboundedSolutionException.
+    @Test
+    public void testOptimize_unboundedWithConstraint_throwsUnboundedSolutionException() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, -1}, Relationship.LEQ, 1));
+        try {
+            new SimplexSolver().optimize(f, cons, GoalType.MAXIMIZE, true);
+            fail("expected UnboundedSolutionException");
+        } catch (UnboundedSolutionException expected) {
+        }
+    }
+
+    // No constraints at all with a positive objective coefficient -> unbounded.
+    @Test
+    public void testOptimize_unboundedNoConstraints_throwsUnboundedSolutionException() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        try {
+            new SimplexSolver().optimize(f, cons, GoalType.MAXIMIZE, true);
+            fail("expected UnboundedSolutionException");
+        } catch (UnboundedSolutionException expected) {
+        }
+    }
+
+    // Single equality constraint fixes x+y=4; the optimal value must equal that fixed sum.
+    @Test
+    public void testOptimize_equalityConstraintOnly_valueEqualsConstraintSum() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 1}, Relationship.EQ, 4));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MINIMIZE, true);
+        assertEquals(4.0, r.getValue(), 1e-6);
+        assertEquals(4.0, r.getPoint()[0] + r.getPoint()[1], 1e-6);
+        assertTrue(r.getPoint()[0] >= -1e-6);
+        assertTrue(r.getPoint()[1] >= -1e-6);
+    }
+
+
+
+    // Single <= constraint bounds a maximized single variable from above.
+    @Test
+    public void testOptimize_singleVarUpperBound_returnsBoundaryOptimum() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1}, Relationship.LEQ, 7));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MAXIMIZE, true);
+        assertEquals(7.0, r.getPoint()[0], 1e-6);
+        assertEquals(7.0, r.getValue(), 1e-6);
+    }
+
+    // Mixed EQ/GEQ/LEQ constraints with a unique forced minimum (Phase1 then Phase2).
+    @Test
+    public void testOptimize_mixedEqGeqLeq_uniqueKnownOptimum() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {2, 3, 1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 1, 1}, Relationship.EQ, 10));
+        cons.add(new LinearConstraint(new double[] {1, 0, 0}, Relationship.GEQ, 2));
+        cons.add(new LinearConstraint(new double[] {0, 1, 0}, Relationship.LEQ, 5));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MINIMIZE, true);
+        assertEquals(2.0, r.getPoint()[0], 1e-6);
+        assertEquals(0.0, r.getPoint()[1], 1e-6);
+        assertEquals(8.0, r.getPoint()[2], 1e-6);
+        assertEquals(12.0, r.getValue(), 1e-6);
+    }
+
+    // Maximizing a non-positive objective with only <= constraints: optimum stays at origin.
+    @Test
+    public void testOptimize_maximizeNonPositiveObjective_optimumAtOrigin() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {-1, -1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 0}, Relationship.LEQ, 5));
+        cons.add(new LinearConstraint(new double[] {0, 1}, Relationship.LEQ, 5));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MAXIMIZE, true);
+        assertEquals(0.0, r.getPoint()[0], 1e-9);
+        assertEquals(0.0, r.getPoint()[1], 1e-9);
+        assertEquals(0.0, r.getValue(), 1e-9);
+    }
+
+    // Two constraints give a tie in the minimum ratio test; the optimal value stays deterministic.
+    @Test
+    public void testOptimize_degenerateTieInRatioTest_correctOptimumValue() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {0, 1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 1}, Relationship.LEQ, 4));
+        cons.add(new LinearConstraint(new double[] {2, 2}, Relationship.LEQ, 8));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MAXIMIZE, true);
+        assertEquals(4.0, r.getPoint()[1], 1e-6);
+        assertEquals(4.0, r.getValue(), 1e-6);
+    }
+
+    // Minimizing a positive objective with only <= constraints: optimum is already at origin.
+    @Test
+    public void testOptimize_minimizeAlreadyOptimalNoIterationNeeded_zeroAtOrigin() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 0}, Relationship.LEQ, 5));
+        cons.add(new LinearConstraint(new double[] {0, 1}, Relationship.LEQ, 5));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MINIMIZE, true);
+        assertEquals(0.0, r.getPoint()[0], 1e-9);
+        assertEquals(0.0, r.getPoint()[1], 1e-9);
+        assertEquals(0.0, r.getValue(), 1e-9);
+    }
+
+    // The returned value must equal the dot product of coefficients and point (objective contract).
+    @Test
+    public void testOptimize_valueConsistentWithObjectiveDefinition_mixedLP() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {2, 3, 1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 1, 1}, Relationship.EQ, 10));
+        cons.add(new LinearConstraint(new double[] {1, 0, 0}, Relationship.GEQ, 2));
+        cons.add(new LinearConstraint(new double[] {0, 1, 0}, Relationship.LEQ, 5));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MINIMIZE, true);
+        double[] p = r.getPoint();
+        double expected = 2 * p[0] + 3 * p[1] + 1 * p[2];
+        assertEquals(expected, r.getValue(), 1e-6);
+    }
+
+    // restrictToNonNegative=false with an equality: minimum x is driven negative by y's upper bound.
+    @Test
+    public void testOptimize_restrictNonNegativeFalseWithEquality_negativeOptimum() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 0}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 1}, Relationship.EQ, 5));
+        cons.add(new LinearConstraint(new double[] {0, 1}, Relationship.LEQ, 100));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MINIMIZE, false);
+        assertEquals(-95.0, r.getPoint()[0], 1e-6);
+        assertEquals(100.0, r.getPoint()[1], 1e-6);
+        assertEquals(-95.0, r.getValue(), 1e-6);
+    }
+
+    // Empty constraint collection with restrictToNonNegative=true: minimum is trivially at origin.
+    @Test
+    public void testOptimize_emptyConstraintsMinimize_zeroAtOrigin() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MINIMIZE, true);
+        assertEquals(0.0, r.getPoint()[0], 1e-9);
+        assertEquals(0.0, r.getPoint()[1], 1e-9);
+        assertEquals(0.0, r.getValue(), 1e-9);
+    }
+
+    // Classic textbook LP (multi-iteration Phase2 only): known optimum (3, 1.5) -> 21.
+    @Test
+    public void testOptimize_classicTextbookLP_knownOptimum() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {5, 4}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {6, 4}, Relationship.LEQ, 24));
+        cons.add(new LinearConstraint(new double[] {1, 2}, Relationship.LEQ, 6));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MAXIMIZE, true);
+        assertEquals(3.0, r.getPoint()[0], 1e-6);
+        assertEquals(1.5, r.getPoint()[1], 1e-6);
+        assertEquals(21.0, r.getValue(), 1e-6);
+    }
+
+    // Two equality constraints with the same LHS but different RHS are contradictory -> infeasible.
+    @Test
+    public void testOptimize_conflictingEqualities_throwsNoFeasibleSolutionException() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, 1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 1}, Relationship.EQ, 5));
+        cons.add(new LinearConstraint(new double[] {1, 1}, Relationship.EQ, 10));
+        try {
+            new SimplexSolver().optimize(f, cons, GoalType.MINIMIZE, true);
+            fail("expected NoFeasibleSolutionException");
+        } catch (NoFeasibleSolutionException expected) {
+        }
+    }
+
+    // The returned point must respect every original inequality constraint (feasibility contract).
+    @Test
+    public void testOptimize_solutionSatisfiesAllConstraints_classicLP() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {5, 4}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {6, 4}, Relationship.LEQ, 24));
+        cons.add(new LinearConstraint(new double[] {1, 2}, Relationship.LEQ, 6));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MAXIMIZE, true);
+        double[] p = r.getPoint();
+        assertTrue(6 * p[0] + 4 * p[1] <= 24 + 1e-6);
+        assertTrue(p[0] + 2 * p[1] <= 6 + 1e-6);
+        assertTrue(p[0] >= -1e-6 && p[1] >= -1e-6);
+    }
+
+    // restrictToNonNegative=false with no constraints: a free variable to maximize is unbounded.
+    @Test
+    public void testOptimize_unboundedFreeVariableNoConstraints_throwsUnboundedSolutionException() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        try {
+            new SimplexSolver().optimize(f, cons, GoalType.MAXIMIZE, false);
+            fail("expected UnboundedSolutionException");
+        } catch (UnboundedSolutionException expected) {
+        }
+    }
+
+    // Minimizing with a single >= constraint (single-row Phase1): optimum sits at the lower bound.
+    @Test
+    public void testOptimize_singleVarLowerBoundOnlyRestrictTrue_minimumAtLowerBound() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1}, Relationship.GEQ, 3));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MINIMIZE, true);
+        assertEquals(3.0, r.getPoint()[0], 1e-6);
+        assertEquals(3.0, r.getValue(), 1e-6);
+    }
+
+    // Maximize with a single equality constraint linking two variables: unique known optimum.
+    @Test
+    public void testOptimize_maximizeSingleEqualityConstraint_knownOptimum() throws Throwable {
+        LinearObjectiveFunction f = new LinearObjectiveFunction(new double[] {1, -1}, 0.0);
+        ArrayList<LinearConstraint> cons = new ArrayList<LinearConstraint>();
+        cons.add(new LinearConstraint(new double[] {1, 1}, Relationship.EQ, 6));
+        RealPointValuePair r = new SimplexSolver().optimize(f, cons, GoalType.MAXIMIZE, true);
+        assertEquals(6.0, r.getPoint()[0], 1e-6);
+        assertEquals(0.0, r.getPoint()[1], 1e-6);
+        assertEquals(6.0, r.getValue(), 1e-6);
+    }
+}

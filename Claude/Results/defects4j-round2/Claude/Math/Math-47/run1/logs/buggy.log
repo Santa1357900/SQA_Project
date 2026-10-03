@@ -1,0 +1,20 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Math -v 47b -w /tmp/claude-Math-47-_g6soxtu/buggy
+Checking out 32b0f733 to /tmp/claude-Math-47-_g6soxtu/buggy................ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 32b0f733:6a895ec2..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Math-47b........................................ OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Math-47-_g6soxtu/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

@@ -1,0 +1,436 @@
+package org.apache.commons.math.linear;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ArrayRealVectorClaudeTest {
+
+    // covers no-arg constructor: dimension must be 0
+    @Test
+    public void testDefaultConstructor_zeroLength() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector();
+        assertEquals(0, v.getDimension());
+    }
+
+    // covers (int size) constructor: all entries default to 0.0
+    @Test
+    public void testSizeConstructor_fillsZeros() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(3);
+        assertEquals(3, v.getDimension());
+        assertEquals(0.0, v.getEntry(0), 1e-9);
+        assertEquals(0.0, v.getEntry(2), 1e-9);
+    }
+
+    // covers (int size, double preset) constructor: Arrays.fill branch
+    @Test
+    public void testSizePresetConstructor_fillsPresetValue() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(4, 7.5);
+        for (int i = 0; i < 4; i++) {
+            assertEquals(7.5, v.getEntry(i), 1e-9);
+        }
+    }
+
+    // covers (double[] d) constructor: must clone, not reference, input array
+    @Test
+    public void testDoubleArrayConstructor_copiesInput() throws Throwable {
+        double[] src = {1.0, 2.0, 3.0};
+        ArrayRealVector v = new ArrayRealVector(src);
+        src[0] = 99.0;
+        assertEquals(1.0, v.getEntry(0), 1e-9);
+    }
+
+    // covers (double[], boolean) constructor with copyArray=true
+    @Test
+    public void testCopyArrayConstructor_trueMakesIndependentCopy() throws Throwable {
+        double[] src = {1.0, 2.0};
+        ArrayRealVector v = new ArrayRealVector(src, true);
+        src[0] = 42.0;
+        assertEquals(1.0, v.getEntry(0), 1e-9);
+    }
+
+    // covers (double[], boolean) constructor with copyArray=false: no copy
+    @Test
+    public void testCopyArrayConstructor_falseSharesReference() throws Throwable {
+        double[] src = {1.0, 2.0};
+        ArrayRealVector v = new ArrayRealVector(src, false);
+        src[0] = 42.0;
+        assertEquals(42.0, v.getEntry(0), 1e-9);
+    }
+
+    // covers null-check branch of (double[], boolean) constructor
+    @Test
+    public void testCopyArrayConstructor_nullThrowsNullPointerException() throws Throwable {
+        try {
+            new ArrayRealVector((double[]) null, true);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // covers empty-array branch of (double[], boolean) constructor
+    @Test
+    public void testCopyArrayConstructor_emptyThrowsIllegalArgumentException() throws Throwable {
+        try {
+            new ArrayRealVector(new double[0], true);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers d.length < pos+size branch of (double[], int pos, int size) constructor
+    @Test
+    public void testArrayPosSizeConstructor_outOfRangeThrowsIllegalArgumentException() throws Throwable {
+        try {
+            new ArrayRealVector(new double[]{1.0, 2.0}, 1, 5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers (Double[] d) constructor: boxing conversion loop
+    @Test
+    public void testDoubleObjectArrayConstructor_convertsValues() throws Throwable {
+        Double[] src = {new Double(1.5), new Double(2.5)};
+        ArrayRealVector v = new ArrayRealVector(src);
+        assertEquals(2, v.getDimension());
+        assertEquals(1.5, v.getEntry(0), 1e-9);
+        assertEquals(2.5, v.getEntry(1), 1e-9);
+    }
+
+    // covers d.length < pos+size branch of (Double[], int pos, int size) constructor
+    @Test
+    public void testDoubleObjectArrayPosSizeConstructor_outOfRangeThrows() throws Throwable {
+        Double[] src = {new Double(1.0)};
+        try {
+            new ArrayRealVector(src, 0, 5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers (RealVector v) constructor: deep copy via getEntry loop
+    @Test
+    public void testRealVectorConstructor_deepCopiesEntries() throws Throwable {
+        ArrayRealVector src = new ArrayRealVector(new double[]{1.0, 2.0});
+        ArrayRealVector v = new ArrayRealVector((RealVector) src);
+        src.setEntry(0, 99.0);
+        assertEquals(1.0, v.getEntry(0), 1e-9);
+    }
+
+    // covers ArrayRealVector(v) deep-default and ArrayRealVector(v,false) shallow branch
+    @Test
+    public void testArrayRealVectorConstructors_deepTrueAndFalse() throws Throwable {
+        ArrayRealVector src = new ArrayRealVector(new double[]{5.0});
+        ArrayRealVector deepCopy = new ArrayRealVector(src);
+        ArrayRealVector shallowCopy = new ArrayRealVector(src, false);
+        src.setEntry(0, 1.0);
+        assertEquals(5.0, deepCopy.getEntry(0), 1e-9);
+        assertEquals(1.0, shallowCopy.getEntry(0), 1e-9);
+    }
+
+    // covers ArrayRealVector(v1, v2) append constructor concatenation order
+    @Test
+    public void testAppendTwoVectorsConstructor_concatenatesInOrder() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{1.0, 2.0});
+        ArrayRealVector v2 = new ArrayRealVector(new double[]{3.0});
+        ArrayRealVector v = new ArrayRealVector(v1, v2);
+        assertEquals(3, v.getDimension());
+        assertEquals(3.0, v.getEntry(2), 1e-9);
+    }
+
+    // covers copy(): must be an independent deep copy
+    @Test
+    public void testCopy_returnsIndependentEqualCopy() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{1.0, 2.0});
+        AbstractRealVector c = v.copy();
+        v.setEntry(0, 9.0);
+        assertEquals(1.0, c.getEntry(0), 1e-9);
+    }
+
+    // covers add(ArrayRealVector) delegating through add(double[])
+    @Test
+    public void testAdd_ArrayRealVector_elementWiseSum() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{1.0, 2.0});
+        ArrayRealVector v2 = new ArrayRealVector(new double[]{3.0, 4.0});
+        ArrayRealVector sum = v1.add(v2);
+        assertEquals(4.0, sum.getEntry(0), 1e-9);
+        assertEquals(6.0, sum.getEntry(1), 1e-9);
+    }
+
+    // covers checkVectorDimensions failure path reached through add(double[])
+    @Test
+    public void testAdd_dimensionMismatchThrowsIllegalArgumentException() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{1.0, 2.0});
+        try {
+            v1.add(new double[]{1.0});
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // covers subtract(ArrayRealVector) element-wise difference
+    @Test
+    public void testSubtract_ArrayRealVector_elementWiseDifference() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{5.0, 7.0});
+        ArrayRealVector v2 = new ArrayRealVector(new double[]{2.0, 3.0});
+        ArrayRealVector diff = v1.subtract(v2);
+        assertEquals(3.0, diff.getEntry(0), 1e-9);
+        assertEquals(4.0, diff.getEntry(1), 1e-9);
+    }
+
+    // covers mapAddToSelf and mapMultiplyToSelf in-place mutation loops
+    @Test
+    public void testMapAddAndMultiplyToSelf_mutateInPlace() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{1.0, 2.0});
+        v.mapAddToSelf(10.0);
+        assertEquals(11.0, v.getEntry(0), 1e-9);
+        v.mapMultiplyToSelf(2.0);
+        assertEquals(22.0, v.getEntry(0), 1e-9);
+    }
+
+    // covers ebeMultiply(ArrayRealVector): element-by-element product
+    @Test
+    public void testEbeMultiply_elementWiseProduct() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{2.0, 3.0});
+        ArrayRealVector v2 = new ArrayRealVector(new double[]{4.0, 5.0});
+        ArrayRealVector prod = v1.ebeMultiply(v2);
+        assertEquals(8.0, prod.getEntry(0), 1e-9);
+        assertEquals(15.0, prod.getEntry(1), 1e-9);
+    }
+
+    // covers ebeDivide(ArrayRealVector): element-by-element quotient
+    @Test
+    public void testEbeDivide_elementWiseQuotient() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{8.0, 9.0});
+        ArrayRealVector v2 = new ArrayRealVector(new double[]{2.0, 3.0});
+        ArrayRealVector quot = v1.ebeDivide(v2);
+        assertEquals(4.0, quot.getEntry(0), 1e-9);
+        assertEquals(3.0, quot.getEntry(1), 1e-9);
+    }
+
+    // covers getData(): must return an independent copy of the underlying array
+    @Test
+    public void testGetData_returnsIndependentCopy() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{1.0, 2.0});
+        double[] data = v.getData();
+        data[0] = 99.0;
+        assertEquals(1.0, v.getEntry(0), 1e-9);
+    }
+
+    // covers getDataRef(): must return the live underlying array reference
+    @Test
+    public void testGetDataRef_returnsLiveReference() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{1.0, 2.0});
+        double[] ref = v.getDataRef();
+        ref[0] = 99.0;
+        assertEquals(99.0, v.getEntry(0), 1e-9);
+    }
+
+    // covers dotProduct(ArrayRealVector): sum of pairwise products
+    @Test
+    public void testDotProduct_sumOfProducts() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{1.0, 2.0, 3.0});
+        ArrayRealVector v2 = new ArrayRealVector(new double[]{4.0, 5.0, 6.0});
+        assertEquals(32.0, v1.dotProduct(v2), 1e-9);
+    }
+
+    // covers getNorm() euclidean length and getL1Norm() sum-of-absolute-values
+    @Test
+    public void testGetNormAndL1Norm_correctFormulas() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{3.0, 4.0});
+        assertEquals(5.0, v.getNorm(), 1e-9);
+        assertEquals(7.0, v.getL1Norm(), 1e-9);
+    }
+
+    // covers getLInfNorm(): contract is max(|a_i|), not a cumulative running sum
+    @Test
+    public void testGetLInfNorm_maxAbsoluteValue_bugCheck() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{1.0, 2.0, 3.0});
+        assertEquals(3.0, v.getLInfNorm(), 1e-9);
+    }
+
+    // covers getLInfNorm() with negative entries, contract still max of absolute values
+    @Test
+    public void testGetLInfNorm_withNegativeValues_bugCheck() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{-1.0, -2.0, -3.0});
+        assertEquals(3.0, v.getLInfNorm(), 1e-9);
+    }
+
+    // covers getDistance(ArrayRealVector): euclidean distance formula
+    @Test
+    public void testGetDistance_euclideanDistance() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{0.0, 0.0});
+        ArrayRealVector v2 = new ArrayRealVector(new double[]{3.0, 4.0});
+        assertEquals(5.0, v1.getDistance(v2), 1e-9);
+    }
+
+    // covers getL1Distance and getLInfDistance, correctly using max= rather than +=
+    @Test
+    public void testGetL1AndLInfDistance_correctFormulas() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{1.0, 2.0});
+        ArrayRealVector v2 = new ArrayRealVector(new double[]{4.0, 3.0});
+        assertEquals(4.0, v1.getL1Distance(v2), 1e-9);
+        assertEquals(3.0, v1.getLInfDistance(v2), 1e-9);
+    }
+
+    // covers unitVector() non-zero-norm branch and zero-norm exception branch
+    @Test
+    public void testUnitVector_normalizesOrThrowsOnZeroNorm() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{3.0, 4.0});
+        assertEquals(1.0, v.unitVector().getNorm(), 1e-9);
+        ArrayRealVector zero = new ArrayRealVector(new double[]{0.0, 0.0});
+        try {
+            zero.unitVector();
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // covers unitize() zero-norm exception branch
+    @Test
+    public void testUnitize_zeroNormThrowsArithmeticException() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{0.0});
+        try {
+            v.unitize();
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // covers projection(ArrayRealVector) onto an axis vector
+    @Test
+    public void testProjection_onOrthogonalAxis() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{3.0, 4.0});
+        ArrayRealVector axis = new ArrayRealVector(new double[]{1.0, 0.0});
+        ArrayRealVector p = v.projection(axis);
+        assertEquals(3.0, p.getEntry(0), 1e-9);
+        assertEquals(0.0, p.getEntry(1), 1e-9);
+    }
+
+    // covers getEntry(int): direct array access
+    @Test
+    public void testGetEntry_returnsStoredValue() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{7.0, 8.0});
+        assertEquals(8.0, v.getEntry(1), 1e-9);
+    }
+
+    // covers getDimension(): matches underlying array length
+    @Test
+    public void testGetDimension_matchesDataLength() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(5);
+        assertEquals(5, v.getDimension());
+    }
+
+    // covers append(double) and append(double[]) overloads
+    @Test
+    public void testAppend_doubleAndDoubleArrayOverloads() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{1.0});
+        RealVector r1 = v.append(2.0);
+        assertEquals(2, r1.getDimension());
+        RealVector r2 = v.append(new double[]{3.0, 4.0});
+        assertEquals(3, r2.getDimension());
+        assertEquals(4.0, r2.getEntry(2), 1e-9);
+    }
+
+    // covers getSubVector valid path and its out-of-range exception path
+    @Test
+    public void testGetSubVector_validAndOutOfRangeBranches() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{1.0, 2.0, 3.0, 4.0});
+        RealVector sub = v.getSubVector(1, 2);
+        assertEquals(2.0, sub.getEntry(0), 1e-9);
+        try {
+            v.getSubVector(1, 10);
+            fail("expected MatrixIndexException");
+        } catch (MatrixIndexException expected) {
+        }
+    }
+
+    // covers setEntry valid path and its out-of-range exception path
+    @Test
+    public void testSetEntry_validAndOutOfRangeBranches() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{1.0, 2.0});
+        v.setEntry(1, 99.0);
+        assertEquals(99.0, v.getEntry(1), 1e-9);
+        try {
+            v.setEntry(5, 1.0);
+            fail("expected MatrixIndexException");
+        } catch (MatrixIndexException expected) {
+        }
+    }
+
+    // covers setSubVector(double[]) and setSubVector(RealVector) ArrayRealVector branch
+    @Test
+    public void testSetSubVector_bothOverloadsOverwriteRange() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{1.0, 2.0, 3.0, 4.0});
+        v.setSubVector(1, new double[]{9.0, 8.0});
+        assertEquals(9.0, v.getEntry(1), 1e-9);
+        assertEquals(8.0, v.getEntry(2), 1e-9);
+        ArrayRealVector repl = new ArrayRealVector(new double[]{5.0, 6.0});
+        v.setSubVector(0, (RealVector) repl);
+        assertEquals(5.0, v.getEntry(0), 1e-9);
+        assertEquals(6.0, v.getEntry(1), 1e-9);
+    }
+
+    // covers set(double value): fills all entries
+    @Test
+    public void testSet_fillsAllEntriesWithValue() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(3);
+        v.set(4.0);
+        assertEquals(4.0, v.getEntry(0), 1e-9);
+        assertEquals(4.0, v.getEntry(2), 1e-9);
+    }
+
+    // covers toArray(): must return an independent copy
+    @Test
+    public void testToArray_returnsIndependentCopy() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{1.0, 2.0});
+        double[] arr = v.toArray();
+        arr[0] = 55.0;
+        assertEquals(1.0, v.getEntry(0), 1e-9);
+    }
+
+    // covers isNaN() true branch and false (loop completes) branch
+    @Test
+    public void testIsNaN_trueAndFalseBranches() throws Throwable {
+        ArrayRealVector withNaN = new ArrayRealVector(new double[]{1.0, Double.NaN});
+        ArrayRealVector withoutNaN = new ArrayRealVector(new double[]{1.0, 2.0});
+        assertTrue(withNaN.isNaN());
+        assertFalse(withoutNaN.isNaN());
+    }
+
+    // covers isInfinite() true branch and NaN-suppresses-infinite branch per Javadoc
+    @Test
+    public void testIsInfinite_trueBranchAndNaNSuppressesInfiniteBranch() throws Throwable {
+        ArrayRealVector infOnly = new ArrayRealVector(new double[]{1.0, Double.POSITIVE_INFINITY});
+        ArrayRealVector infWithNaN = new ArrayRealVector(new double[]{Double.NaN, Double.POSITIVE_INFINITY});
+        assertTrue(infOnly.isInfinite());
+        assertFalse(infWithNaN.isInfinite());
+    }
+
+    // covers equals(): equal-values, dimension-mismatch, null and non-RealVector branches
+    @Test
+    public void testEquals_variousBranches() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{1.0, 2.0});
+        ArrayRealVector v2 = new ArrayRealVector(new double[]{1.0, 2.0});
+        ArrayRealVector v3 = new ArrayRealVector(new double[]{1.0});
+        assertTrue(v1.equals(v2));
+        assertFalse(v1.equals(v3));
+        assertFalse(v1.equals(null));
+        assertFalse(v1.equals("not a vector"));
+    }
+
+    // covers equals(): rhs.isNaN() branch treats any-NaN vectors as equal
+    @Test
+    public void testEquals_nanTreatedEqualToAnyNaNVector() throws Throwable {
+        ArrayRealVector v1 = new ArrayRealVector(new double[]{Double.NaN, 1.0});
+        ArrayRealVector v2 = new ArrayRealVector(new double[]{5.0, Double.NaN});
+        assertTrue(v1.equals(v2));
+    }
+
+    // covers hashCode(): isNaN() branch returns constant 9
+    @Test
+    public void testHashCode_nanVectorsShareSameHash() throws Throwable {
+        ArrayRealVector v = new ArrayRealVector(new double[]{Double.NaN});
+        assertEquals(9, v.hashCode());
+    }
+}

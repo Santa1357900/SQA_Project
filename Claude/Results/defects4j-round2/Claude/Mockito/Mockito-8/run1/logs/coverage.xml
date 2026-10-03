@@ -1,0 +1,912 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.930635838150289" branch-rate="0.8875" lines-covered="161" lines-valid="173" branches-covered="71" branches-valid="80" complexity="2.34" version="2.0.3" timestamp="1790853590197">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="org.mockito.internal.util.reflection" line-rate="0.930635838150289" branch-rate="0.8875" complexity="2.34">
+			<classes>
+				<class name="org.mockito.internal.util.reflection.GenericMetadataSupport" filename="org/mockito/internal/util/reflection/GenericMetadataSupport.java" line-rate="0.9636363636363636" branch-rate="0.9666666666666667" complexity="2.34">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="56" hits="31" branch="false"/>
+								<line number="63" hits="31" branch="false"/>
+							</lines>
+						</method>
+						<method name="actualTypeArguments" signature="()Ljava/util/Map;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="167" hits="3" branch="false"/>
+								<line number="168" hits="3" branch="false"/>
+								<line number="170" hits="5" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="172" hits="2" branch="false"/>
+								<line number="174" hits="2" branch="false"/>
+								<line number="178" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="boundsOf" signature="(Ljava/lang/reflect/TypeVariable;)Lorg/mockito/internal/util/reflection/GenericMetadataSupport$BoundedType;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="105" hits="18" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="106" hits="2" branch="false"/>
+								<line number="108" hits="16" branch="false"/>
+							</lines>
+						</method>
+						<method name="boundsOf" signature="(Ljava/lang/reflect/WildcardType;)Lorg/mockito/internal/util/reflection/GenericMetadataSupport$BoundedType;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="123" hits="2" branch="false"/>
+								<line number="124" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="125" hits="1" branch="false"/>
+								<line number="128" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="extraInterfaces" signature="()Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="144" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="getActualTypeArgumentFor" signature="(Ljava/lang/reflect/TypeVariable;)Ljava/lang/reflect/Type;" line-rate="0.6" branch-rate="0.5">
+							<lines>
+								<line number="182" hits="9" branch="false"/>
+								<line number="183" hits="9" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="184" hits="0" branch="false"/>
+								<line number="185" hits="0" branch="false"/>
+								<line number="188" hits="9" branch="false"/>
+							</lines>
+						</method>
+						<method name="hasRawExtraInterfaces" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="158" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="inferFrom" signature="(Ljava/lang/reflect/Type;)Lorg/mockito/internal/util/reflection/GenericMetadataSupport;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="229" hits="20" branch="false"/>
+								<line number="230" hits="20" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="231" hits="16" branch="false"/>
+								<line number="233" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="234" hits="3" branch="false"/>
+								<line number="237" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="rawExtraInterfaces" signature="()[Ljava/lang/Class;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="151" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="registerTypeParametersOn" signature="([Ljava/lang/reflect/TypeVariable;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="87" hits="48" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="88" hits="18" branch="false"/>
+								<line number="90" hits="30" branch="false"/>
+							</lines>
+						</method>
+						<method name="registerTypeVariableIfNotPresent" signature="(Ljava/lang/reflect/TypeVariable;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="93" hits="18" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="94" hits="15" branch="false"/>
+								<line number="97" hits="18" branch="false"/>
+							</lines>
+						</method>
+						<method name="registerTypeVariablesOn" signature="(Ljava/lang/reflect/Type;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="67" hits="45" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="68" hits="30" branch="false"/>
+								<line number="70" hits="15" branch="false"/>
+								<line number="71" hits="15" branch="false"/>
+								<line number="72" hits="15" branch="false"/>
+								<line number="73" hits="30" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="74" hits="15" branch="false"/>
+								<line number="75" hits="15" branch="false"/>
+								<line number="77" hits="15" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="78" hits="2" branch="false"/>
+								<line number="80" hits="13" branch="false"/>
+								<line number="84" hits="15" branch="false"/>
+							</lines>
+						</method>
+						<method name="resolveGenericReturnType" signature="(Ljava/lang/reflect/Method;)Lorg/mockito/internal/util/reflection/GenericMetadataSupport;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="200" hits="13" branch="false"/>
+								<line number="203" hits="13" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="204" hits="1" branch="false"/>
+								<line number="206" hits="12" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="207" hits="4" branch="false"/>
+								<line number="209" hits="8" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="210" hits="7" branch="false"/>
+								<line number="213" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="56" hits="31" branch="false"/>
+						<line number="63" hits="31" branch="false"/>
+						<line number="67" hits="45" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="68" hits="30" branch="false"/>
+						<line number="70" hits="15" branch="false"/>
+						<line number="71" hits="15" branch="false"/>
+						<line number="72" hits="15" branch="false"/>
+						<line number="73" hits="30" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="74" hits="15" branch="false"/>
+						<line number="75" hits="15" branch="false"/>
+						<line number="77" hits="15" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="78" hits="2" branch="false"/>
+						<line number="80" hits="13" branch="false"/>
+						<line number="84" hits="15" branch="false"/>
+						<line number="87" hits="48" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="88" hits="18" branch="false"/>
+						<line number="90" hits="30" branch="false"/>
+						<line number="93" hits="18" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="94" hits="15" branch="false"/>
+						<line number="97" hits="18" branch="false"/>
+						<line number="105" hits="18" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="106" hits="2" branch="false"/>
+						<line number="108" hits="16" branch="false"/>
+						<line number="123" hits="2" branch="false"/>
+						<line number="124" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="125" hits="1" branch="false"/>
+						<line number="128" hits="1" branch="false"/>
+						<line number="144" hits="2" branch="false"/>
+						<line number="151" hits="3" branch="false"/>
+						<line number="158" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="167" hits="3" branch="false"/>
+						<line number="168" hits="3" branch="false"/>
+						<line number="170" hits="5" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="172" hits="2" branch="false"/>
+						<line number="174" hits="2" branch="false"/>
+						<line number="178" hits="3" branch="false"/>
+						<line number="182" hits="9" branch="false"/>
+						<line number="183" hits="9" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="184" hits="0" branch="false"/>
+						<line number="185" hits="0" branch="false"/>
+						<line number="188" hits="9" branch="false"/>
+						<line number="200" hits="13" branch="false"/>
+						<line number="203" hits="13" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="204" hits="1" branch="false"/>
+						<line number="206" hits="12" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="207" hits="4" branch="false"/>
+						<line number="209" hits="8" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="210" hits="7" branch="false"/>
+						<line number="213" hits="1" branch="false"/>
+						<line number="229" hits="20" branch="false"/>
+						<line number="230" hits="20" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="231" hits="16" branch="false"/>
+						<line number="233" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="234" hits="3" branch="false"/>
+						<line number="237" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.util.reflection.GenericMetadataSupport$BoundedType" filename="org/mockito/internal/util/reflection/GenericMetadataSupport.java" line-rate="1.0" branch-rate="1.0" complexity="2.34">
+					<methods>
+					</methods>
+					<lines>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.util.reflection.GenericMetadataSupport$FromClassGenericMetadataSupport" filename="org/mockito/internal/util/reflection/GenericMetadataSupport.java" line-rate="0.9444444444444444" branch-rate="0.875" complexity="2.34">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/Class;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="254" hits="16" branch="false"/>
+								<line number="255" hits="16" branch="false"/>
+								<line number="257" hits="16" branch="false"/>
+								<line number="258" hits="35" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="259" hits="19" branch="false"/>
+								<line number="261" hits="19" branch="false"/>
+								<line number="263" hits="16" branch="false"/>
+							</lines>
+						</method>
+						<method name="rawType" signature="()Ljava/lang/Class;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="284" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="readActualTypeParametersOnDeclaringClass" signature="(Ljava/lang/Class;)V" line-rate="0.8" branch-rate="0.5">
+							<lines>
+								<line number="275" hits="19" branch="false"/>
+								<line number="276" hits="19" branch="false"/>
+								<line number="277" hits="19" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="278" hits="0" branch="false"/>
+								<line number="280" hits="19" branch="false"/>
+							</lines>
+						</method>
+						<method name="superClassOf" signature="(Ljava/lang/Class;)Ljava/lang/Class;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="266" hits="19" branch="false"/>
+								<line number="267" hits="19" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="268" hits="3" branch="false"/>
+								<line number="269" hits="3" branch="false"/>
+								<line number="271" hits="16" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="254" hits="16" branch="false"/>
+						<line number="255" hits="16" branch="false"/>
+						<line number="257" hits="16" branch="false"/>
+						<line number="258" hits="35" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="259" hits="19" branch="false"/>
+						<line number="261" hits="19" branch="false"/>
+						<line number="263" hits="16" branch="false"/>
+						<line number="266" hits="19" branch="false"/>
+						<line number="267" hits="19" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="268" hits="3" branch="false"/>
+						<line number="269" hits="3" branch="false"/>
+						<line number="271" hits="16" branch="false"/>
+						<line number="275" hits="19" branch="false"/>
+						<line number="276" hits="19" branch="false"/>
+						<line number="277" hits="19" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="278" hits="0" branch="false"/>
+						<line number="280" hits="19" branch="false"/>
+						<line number="284" hits="2" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.util.reflection.GenericMetadataSupport$FromParameterizedTypeGenericMetadataSupport" filename="org/mockito/internal/util/reflection/GenericMetadataSupport.java" line-rate="1.0" branch-rate="1.0" complexity="2.34">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/reflect/ParameterizedType;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="303" hits="3" branch="false"/>
+								<line number="304" hits="3" branch="false"/>
+								<line number="305" hits="3" branch="false"/>
+								<line number="306" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="rawType" signature="()Ljava/lang/Class;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="315" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="readActualTypeParameters" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="309" hits="3" branch="false"/>
+								<line number="310" hits="3" branch="false"/>
+								<line number="311" hits="3" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="303" hits="3" branch="false"/>
+						<line number="304" hits="3" branch="false"/>
+						<line number="305" hits="3" branch="false"/>
+						<line number="306" hits="3" branch="false"/>
+						<line number="309" hits="3" branch="false"/>
+						<line number="310" hits="3" branch="false"/>
+						<line number="311" hits="3" branch="false"/>
+						<line number="315" hits="2" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.util.reflection.GenericMetadataSupport$NotGenericReturnTypeSupport" filename="org/mockito/internal/util/reflection/GenericMetadataSupport.java" line-rate="1.0" branch-rate="1.0" complexity="2.34">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/reflect/Type;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="469" hits="1" branch="false"/>
+								<line number="470" hits="1" branch="false"/>
+								<line number="471" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="rawType" signature="()Ljava/lang/Class;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="475" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="469" hits="1" branch="false"/>
+						<line number="470" hits="1" branch="false"/>
+						<line number="471" hits="1" branch="false"/>
+						<line number="475" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.util.reflection.GenericMetadataSupport$ParameterizedReturnType" filename="org/mockito/internal/util/reflection/GenericMetadataSupport.java" line-rate="1.0" branch-rate="1.0" complexity="2.34">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/mockito/internal/util/reflection/GenericMetadataSupport;[Ljava/lang/reflect/TypeVariable;Ljava/lang/reflect/ParameterizedType;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="327" hits="4" branch="false"/>
+								<line number="328" hits="4" branch="false"/>
+								<line number="329" hits="4" branch="false"/>
+								<line number="330" hits="4" branch="false"/>
+								<line number="332" hits="4" branch="false"/>
+								<line number="333" hits="4" branch="false"/>
+								<line number="334" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="rawType" signature="()Ljava/lang/Class;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="346" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="readTypeParameters" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="337" hits="4" branch="false"/>
+								<line number="338" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="readTypeVariables" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="341" hits="4" branch="false"/>
+								<line number="342" hits="4" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="327" hits="4" branch="false"/>
+						<line number="328" hits="4" branch="false"/>
+						<line number="329" hits="4" branch="false"/>
+						<line number="330" hits="4" branch="false"/>
+						<line number="332" hits="4" branch="false"/>
+						<line number="333" hits="4" branch="false"/>
+						<line number="334" hits="4" branch="false"/>
+						<line number="337" hits="4" branch="false"/>
+						<line number="338" hits="4" branch="false"/>
+						<line number="341" hits="4" branch="false"/>
+						<line number="342" hits="4" branch="false"/>
+						<line number="346" hits="4" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.util.reflection.GenericMetadataSupport$TypeVarBoundedType" filename="org/mockito/internal/util/reflection/GenericMetadataSupport.java" line-rate="0.8571428571428571" branch-rate="1.0" complexity="2.34">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/reflect/TypeVariable;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="519" hits="27" branch="false"/>
+								<line number="520" hits="27" branch="false"/>
+								<line number="521" hits="27" branch="false"/>
+							</lines>
+						</method>
+						<method name="access$000" signature="(Lorg/mockito/internal/util/reflection/GenericMetadataSupport$TypeVarBoundedType;)Ljava/lang/reflect/TypeVariable;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="515" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="equals" signature="(Ljava/lang/Object;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="545" hits="5" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="546" hits="4" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="548" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="firstBound" signature="()Ljava/lang/reflect/Type;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="527" hits="10" branch="false"/>
+							</lines>
+						</method>
+						<method name="hashCode" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="554" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="interfaceBounds" signature="()[Ljava/lang/reflect/Type;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="538" hits="5" branch="false"/>
+								<line number="539" hits="5" branch="false"/>
+								<line number="540" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="559" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="typeVariable" signature="()Ljava/lang/reflect/TypeVariable;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="563" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="515" hits="0" branch="false"/>
+						<line number="519" hits="27" branch="false"/>
+						<line number="520" hits="27" branch="false"/>
+						<line number="521" hits="27" branch="false"/>
+						<line number="527" hits="10" branch="false"/>
+						<line number="538" hits="5" branch="false"/>
+						<line number="539" hits="5" branch="false"/>
+						<line number="540" hits="5" branch="false"/>
+						<line number="545" hits="5" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="546" hits="4" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="548" hits="2" branch="false"/>
+						<line number="554" hits="2" branch="false"/>
+						<line number="559" hits="0" branch="false"/>
+						<line number="563" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.util.reflection.GenericMetadataSupport$TypeVariableReturnType" filename="org/mockito/internal/util/reflection/GenericMetadataSupport.java" line-rate="0.8979591836734694" branch-rate="0.8214285714285714" complexity="2.34">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/mockito/internal/util/reflection/GenericMetadataSupport;[Ljava/lang/reflect/TypeVariable;Ljava/lang/reflect/TypeVariable;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="362" hits="7" branch="false"/>
+								<line number="363" hits="7" branch="false"/>
+								<line number="364" hits="7" branch="false"/>
+								<line number="365" hits="7" branch="false"/>
+								<line number="367" hits="7" branch="false"/>
+								<line number="368" hits="7" branch="false"/>
+								<line number="369" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="extraInterfaces" signature="()Ljava/util/List;" line-rate="0.625" branch-rate="0.5">
+							<lines>
+								<line number="412" hits="8" branch="false"/>
+								<line number="413" hits="8" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="414" hits="4" branch="false"/>
+								<line number="416" hits="4" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="417" hits="4" branch="false"/>
+								<line number="419" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="420" hits="0" branch="false"/>
+								<line number="422" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="extractActualBoundedTypeOf" signature="(Ljava/lang/reflect/Type;)Ljava/lang/reflect/Type;" line-rate="0.875" branch-rate="0.8333333333333334">
+							<lines>
+								<line number="443" hits="20" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="448" hits="8" branch="false"/>
+								<line number="450" hits="12" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="451" hits="4" branch="false"/>
+								<line number="452" hits="4" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="453" hits="4" branch="false"/>
+								<line number="455" hits="0" branch="false"/>
+								<line number="457" hits="8" branch="false"/>
+							</lines>
+						</method>
+						<method name="extractRawTypeOf" signature="(Ljava/lang/reflect/Type;)Ljava/lang/Class;" line-rate="0.8888888888888888" branch-rate="0.875">
+							<lines>
+								<line number="391" hits="23" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="392" hits="4" branch="false"/>
+								<line number="394" hits="19" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="395" hits="8" branch="false"/>
+								<line number="397" hits="11" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="398" hits="4" branch="false"/>
+								<line number="400" hits="7" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="405" hits="7" branch="false"/>
+								<line number="407" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="rawExtraInterfaces" signature="()[Ljava/lang/Class;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="430" hits="5" branch="false"/>
+								<line number="431" hits="5" branch="false"/>
+								<line number="432" hits="5" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="433" hits="5" branch="false"/>
+								<line number="435" hits="5" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="436" hits="3" branch="false"/>
+								<line number="438" hits="5" branch="false"/>
+								<line number="439" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="rawType" signature="()Ljava/lang/Class;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="384" hits="10" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="385" hits="7" branch="false"/>
+								<line number="387" hits="10" branch="false"/>
+							</lines>
+						</method>
+						<method name="readTypeParameters" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="372" hits="7" branch="false"/>
+								<line number="373" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="readTypeVariables" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="376" hits="16" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="377" hits="9" branch="false"/>
+								<line number="379" hits="7" branch="false"/>
+								<line number="380" hits="7" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="362" hits="7" branch="false"/>
+						<line number="363" hits="7" branch="false"/>
+						<line number="364" hits="7" branch="false"/>
+						<line number="365" hits="7" branch="false"/>
+						<line number="367" hits="7" branch="false"/>
+						<line number="368" hits="7" branch="false"/>
+						<line number="369" hits="7" branch="false"/>
+						<line number="372" hits="7" branch="false"/>
+						<line number="373" hits="7" branch="false"/>
+						<line number="376" hits="16" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="377" hits="9" branch="false"/>
+						<line number="379" hits="7" branch="false"/>
+						<line number="380" hits="7" branch="false"/>
+						<line number="384" hits="10" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="385" hits="7" branch="false"/>
+						<line number="387" hits="10" branch="false"/>
+						<line number="391" hits="23" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="392" hits="4" branch="false"/>
+						<line number="394" hits="19" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="395" hits="8" branch="false"/>
+						<line number="397" hits="11" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="398" hits="4" branch="false"/>
+						<line number="400" hits="7" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="405" hits="7" branch="false"/>
+						<line number="407" hits="0" branch="false"/>
+						<line number="412" hits="8" branch="false"/>
+						<line number="413" hits="8" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="414" hits="4" branch="false"/>
+						<line number="416" hits="4" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="417" hits="4" branch="false"/>
+						<line number="419" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="420" hits="0" branch="false"/>
+						<line number="422" hits="0" branch="false"/>
+						<line number="430" hits="5" branch="false"/>
+						<line number="431" hits="5" branch="false"/>
+						<line number="432" hits="5" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="433" hits="5" branch="false"/>
+						<line number="435" hits="5" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="436" hits="3" branch="false"/>
+						<line number="438" hits="5" branch="false"/>
+						<line number="439" hits="5" branch="false"/>
+						<line number="443" hits="20" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="448" hits="8" branch="false"/>
+						<line number="450" hits="12" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="451" hits="4" branch="false"/>
+						<line number="452" hits="4" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="453" hits="4" branch="false"/>
+						<line number="455" hits="0" branch="false"/>
+						<line number="457" hits="8" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.mockito.internal.util.reflection.GenericMetadataSupport$WildCardBoundedType" filename="org/mockito/internal/util/reflection/GenericMetadataSupport.java" line-rate="0.8461538461538461" branch-rate="0.75" complexity="2.34">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/reflect/WildcardType;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="579" hits="9" branch="false"/>
+								<line number="580" hits="9" branch="false"/>
+								<line number="581" hits="9" branch="false"/>
+							</lines>
+						</method>
+						<method name="equals" signature="(Ljava/lang/Object;)Z" line-rate="0.6666666666666666" branch-rate="0.6666666666666666">
+							<lines>
+								<line number="602" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="603" hits="1" branch="true" condition-coverage="50% (2/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="605" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="firstBound" signature="()Ljava/lang/reflect/Type;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="587" hits="6" branch="false"/>
+								<line number="588" hits="6" branch="false"/>
+								<line number="590" hits="6" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="hashCode" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="611" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="interfaceBounds" signature="()[Ljava/lang/reflect/Type;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="597" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="616" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="wildCard" signature="()Ljava/lang/reflect/WildcardType;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="620" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="579" hits="9" branch="false"/>
+						<line number="580" hits="9" branch="false"/>
+						<line number="581" hits="9" branch="false"/>
+						<line number="587" hits="6" branch="false"/>
+						<line number="588" hits="6" branch="false"/>
+						<line number="590" hits="6" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="597" hits="1" branch="false"/>
+						<line number="602" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="603" hits="1" branch="true" condition-coverage="50% (2/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="605" hits="0" branch="false"/>
+						<line number="611" hits="1" branch="false"/>
+						<line number="616" hits="0" branch="false"/>
+						<line number="620" hits="1" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

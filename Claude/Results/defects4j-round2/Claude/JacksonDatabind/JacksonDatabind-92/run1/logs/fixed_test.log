@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-92-fqvrqjfm/JacksonDatabind-92f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - com.fasterxml.jackson.databind.deser.BeanDeserializerFactoryClaudeTest::testIsPotentialBeanType_proxyClass_throwsIllegalArgumentException
+  - com.fasterxml.jackson.databind.deser.BeanDeserializerFactoryClaudeTest::testDeserialize_objectIdentity_propertyGenerator_invalidProperty_throwsIllegalArgumentException
+  - com.fasterxml.jackson.databind.deser.BeanDeserializerFactoryClaudeTest::testIsIgnorableType_resultCachedInProvidedMap
+[exit 0]

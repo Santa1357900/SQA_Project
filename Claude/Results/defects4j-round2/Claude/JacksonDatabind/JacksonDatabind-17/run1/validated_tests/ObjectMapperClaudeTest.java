@@ -1,0 +1,456 @@
+package com.fasterxml.jackson.databind;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+
+import com.fasterxml.jackson.databind.type.TypeFactory;
+
+import com.fasterxml.jackson.databind.ser.BeanSerializerFactory;
+import com.fasterxml.jackson.databind.ser.DefaultSerializerProvider;
+
+import com.fasterxml.jackson.databind.introspect.JacksonAnnotationIntrospector;
+
+import com.fasterxml.jackson.databind.jsontype.impl.StdSubtypeResolver;
+
+public class ObjectMapperClaudeTest {
+
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    public static class SimpleBean {
+        private int id;
+        private String name;
+        public int getId() { return id; }
+        public void setId(int id) { this.id = id; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class MixInSource {
+    }
+
+    public abstract static class AbstractBean {
+    }
+
+    // DefaultTyping.JAVA_LANG_OBJECT: only Object.class itself should match
+    @Test
+    public void testDefaultTypeResolverBuilder_javaLangObject_trueOnlyForObjectClass() throws Throwable {
+        ObjectMapper.DefaultTypeResolverBuilder builder =
+                new ObjectMapper.DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.JAVA_LANG_OBJECT);
+        assertTrue(builder.useForType(mapper.constructType(Object.class)));
+        assertFalse(builder.useForType(mapper.constructType(SimpleBean.class)));
+    }
+
+    // OBJECT_AND_NON_CONCRETE: abstract (non-concrete) type must be included
+    @Test
+    public void testDefaultTypeResolverBuilder_objectAndNonConcrete_trueForAbstractType() throws Throwable {
+        JavaType type = mapper.constructType(AbstractBean.class);
+        ObjectMapper.DefaultTypeResolverBuilder builder =
+                new ObjectMapper.DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.OBJECT_AND_NON_CONCRETE);
+        assertTrue(builder.useForType(type));
+    }
+
+    // OBJECT_AND_NON_CONCRETE: concrete, non-TreeNode type must be excluded
+    @Test
+    public void testDefaultTypeResolverBuilder_objectAndNonConcrete_falseForConcreteNonTreeNode() throws Throwable {
+        JavaType type = mapper.constructType(SimpleBean.class);
+        ObjectMapper.DefaultTypeResolverBuilder builder =
+                new ObjectMapper.DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.OBJECT_AND_NON_CONCRETE);
+        assertFalse(builder.useForType(type));
+    }
+
+    // Per Javadoc [databind#88]: TreeNode subtypes must NEVER use default typing
+    @Test
+    public void testDefaultTypeResolverBuilder_objectAndNonConcrete_excludesTreeNode() throws Throwable {
+        JavaType type = mapper.constructType(ObjectNode.class);
+        ObjectMapper.DefaultTypeResolverBuilder builder =
+                new ObjectMapper.DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.OBJECT_AND_NON_CONCRETE);
+        assertFalse(builder.useForType(type));
+    }
+
+    // NON_CONCRETE_AND_ARRAYS: array must be unwrapped, then matched as Object.class
+    @Test
+    public void testDefaultTypeResolverBuilder_nonConcreteAndArrays_unwrapsToObjectClass() throws Throwable {
+        JavaType type = mapper.constructType(Object[].class);
+        ObjectMapper.DefaultTypeResolverBuilder builder =
+                new ObjectMapper.DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.NON_CONCRETE_AND_ARRAYS);
+        assertTrue(builder.useForType(type));
+    }
+
+    // NON_FINAL: final classes (e.g. String) must never use default typing
+    @Test
+    public void testDefaultTypeResolverBuilder_nonFinal_falseForFinalClass() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        ObjectMapper.DefaultTypeResolverBuilder builder =
+                new ObjectMapper.DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.NON_FINAL);
+        assertFalse(builder.useForType(type));
+    }
+
+    // NON_FINAL: non-final, non-TreeNode concrete classes must use default typing
+    @Test
+    public void testDefaultTypeResolverBuilder_nonFinal_trueForNonFinalConcreteClass() throws Throwable {
+        JavaType type = mapper.constructType(SimpleBean.class);
+        ObjectMapper.DefaultTypeResolverBuilder builder =
+                new ObjectMapper.DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.NON_FINAL);
+        assertTrue(builder.useForType(type));
+    }
+
+    // readValue(String, Class): normal JSON to bean path
+    @Test
+    public void testReadValue_validJson_deserializesBean() throws Throwable {
+        String json = "{\"id\":5,\"name\":\"Alice\"}";
+        SimpleBean bean = mapper.readValue(json, SimpleBean.class);
+        assertEquals(5, bean.getId());
+        assertEquals("Alice", bean.getName());
+    }
+
+    // _initForReading: no tokens available must throw JsonMappingException
+    @Test
+    public void testReadValue_emptyString_throwsJsonMappingException() throws Throwable {
+        try {
+            mapper.readValue("", SimpleBean.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            // expected: no content to map
+        }
+    }
+
+    // readValue(String, TypeReference): generic Map deserialization path
+    @Test
+    public void testReadValue_withTypeReference_deserializesGenericMap() throws Throwable {
+        String json = "{\"id\":5}";
+        Map<String, Object> map = mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+        assertEquals(Integer.valueOf(5), map.get("id"));
+    }
+
+    // writeValueAsString: field values must be present as JSON
+    @Test
+    public void testWriteValueAsString_bean_containsFieldsAsJson() throws Throwable {
+        SimpleBean bean = new SimpleBean();
+        bean.setId(7);
+        bean.setName("Bob");
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"id\":7"));
+        assertTrue(json.contains("\"name\":\"Bob\""));
+    }
+
+    // writeValueAsBytes + readValue(byte[]): round trip must preserve data
+    @Test
+    public void testWriteValueAsBytes_bean_roundTrips() throws Throwable {
+        SimpleBean bean = new SimpleBean();
+        bean.setId(9);
+        bean.setName("Carol");
+        byte[] bytes = mapper.writeValueAsBytes(bean);
+        SimpleBean back = mapper.readValue(bytes, SimpleBean.class);
+        assertEquals(9, back.getId());
+        assertEquals("Carol", back.getName());
+    }
+
+    // readTree(String): valid JSON produces an object node with matching fields
+    @Test
+    public void testReadTree_validJsonString_returnsObjectNodeWithFields() throws Throwable {
+        JsonNode node = mapper.readTree("{\"id\":3,\"name\":\"Dan\"}");
+        assertTrue(node.isObject());
+        assertEquals(3, node.get("id").asInt());
+        assertEquals("Dan", node.get("name").asText());
+    }
+
+    // readTree(String): empty content must throw JsonMappingException
+    @Test
+    public void testReadTree_emptyString_throwsJsonMappingException() throws Throwable {
+        try {
+            mapper.readTree("");
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            // expected: no content to map
+        }
+    }
+
+    // canSerialize: mapper must be able to find a serializer for String
+    @Test
+    public void testCanSerialize_stringType_true() throws Throwable {
+        assertTrue(mapper.canSerialize(String.class));
+    }
+
+    // canDeserialize: mapper must be able to find a deserializer for a simple bean
+    @Test
+    public void testCanDeserialize_beanType_true() throws Throwable {
+        JavaType type = mapper.constructType(SimpleBean.class);
+        assertTrue(mapper.canDeserialize(type));
+    }
+
+    // valueToTree: null input must yield null per Javadoc
+    @Test
+    public void testValueToTree_null_returnsNull() throws Throwable {
+        JsonNode node = mapper.valueToTree(null);
+        assertNull(node);
+    }
+
+    // valueToTree: bean must be converted to a matching object node
+    @Test
+    public void testValueToTree_bean_returnsMatchingObjectNode() throws Throwable {
+        SimpleBean bean = new SimpleBean();
+        bean.setId(11);
+        bean.setName("Eve");
+        JsonNode node = mapper.valueToTree(bean);
+        assertEquals(11, node.get("id").asInt());
+        assertEquals("Eve", node.get("name").asText());
+    }
+
+    // treeToValue: object node must be converted back into a bean
+    @Test
+    public void testTreeToValue_objectNode_convertsToBean() throws Throwable {
+        ObjectNode node = mapper.createObjectNode();
+        node.put("id", 20);
+        node.put("name", "Frank");
+        SimpleBean bean = mapper.treeToValue(node, SimpleBean.class);
+        assertEquals(20, bean.getId());
+        assertEquals("Frank", bean.getName());
+    }
+
+    // convertValue: bean converted to Map must contain matching entries
+    @Test
+    public void testConvertValue_beanToMap_containsFields() throws Throwable {
+        SimpleBean bean = new SimpleBean();
+        bean.setId(30);
+        bean.setName("Grace");
+        Map<?, ?> map = mapper.convertValue(bean, Map.class);
+        assertEquals(Integer.valueOf(30), map.get("id"));
+        assertEquals("Grace", map.get("name"));
+    }
+
+    // convertValue: assignable same type shortcut must return the same instance
+    @Test
+    public void testConvertValue_sameAssignableType_returnsSameInstance() throws Throwable {
+        SimpleBean bean = new SimpleBean();
+        Object result = mapper.convertValue(bean, SimpleBean.class);
+        assertSame(bean, result);
+    }
+
+    // convertValue: null input must yield null
+    @Test
+    public void testConvertValue_null_returnsNull() throws Throwable {
+        SimpleBean result = mapper.convertValue(null, SimpleBean.class);
+        assertNull(result);
+    }
+
+    // mixInCount default state and findMixInClassFor with nothing registered
+    @Test
+    public void testMixIn_defaultEmptyAndFindReturnsNull() throws Throwable {
+        assertEquals(0, mapper.mixInCount());
+        assertNull(mapper.findMixInClassFor(SimpleBean.class));
+    }
+
+    // addMixInAnnotations must register and be retrievable via findMixInClassFor
+    @Test
+    public void testAddMixInAnnotations_findMixInClassFor_returnsRegisteredClass() throws Throwable {
+        mapper.addMixInAnnotations(SimpleBean.class, MixInSource.class);
+        assertEquals(MixInSource.class, mapper.findMixInClassFor(SimpleBean.class));
+        assertEquals(1, mapper.mixInCount());
+    }
+
+    // addMixIn must return this for chaining
+    @Test
+    public void testAddMixIn_chaining_returnsThis() throws Throwable {
+        ObjectMapper result = mapper.addMixIn(SimpleBean.class, MixInSource.class);
+        assertSame(mapper, result);
+    }
+
+    // setMixInAnnotations(Map) must register all provided entries
+    @Test
+    public void testSetMixInAnnotations_mapProvided_registersEntries() throws Throwable {
+        Map<Class<?>, Class<?>> mixins = new HashMap<Class<?>, Class<?>>();
+        mixins.put(SimpleBean.class, MixInSource.class);
+        mapper.setMixInAnnotations(mixins);
+        assertEquals(1, mapper.mixInCount());
+        assertEquals(MixInSource.class, mapper.findMixInClassFor(SimpleBean.class));
+    }
+
+    // setMixInAnnotations(null) must clear any previously registered entries
+    @Test
+    public void testSetMixInAnnotations_null_clearsExisting() throws Throwable {
+        mapper.addMixInAnnotations(SimpleBean.class, MixInSource.class);
+        mapper.setMixInAnnotations(null);
+        assertEquals(0, mapper.mixInCount());
+    }
+
+    // getVisibilityChecker must be non-null; setVisibility must return this
+    @Test
+    public void testVisibilityChecker_getNotNullAndSetReturnsThis() throws Throwable {
+        assertNotNull(mapper.getVisibilityChecker());
+        ObjectMapper result = mapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+        assertSame(mapper, result);
+    }
+
+    // subtype resolver get/set must reflect the same instance; registerSubtypes must not replace it
+    @Test
+    public void testSubtypeResolver_getSetAndRegisterSubtypes() throws Throwable {
+        assertNotNull(mapper.getSubtypeResolver());
+        StdSubtypeResolver resolver = new StdSubtypeResolver();
+        ObjectMapper result = mapper.setSubtypeResolver(resolver);
+        assertSame(mapper, result);
+        assertSame(resolver, mapper.getSubtypeResolver());
+        mapper.registerSubtypes(SimpleBean.class);
+        assertSame(resolver, mapper.getSubtypeResolver());
+    }
+
+    // setAnnotationIntrospector must return this for chaining
+    @Test
+    public void testSetAnnotationIntrospector_returnsThis() throws Throwable {
+        ObjectMapper result = mapper.setAnnotationIntrospector(new JacksonAnnotationIntrospector());
+        assertSame(mapper, result);
+    }
+
+    // enableDefaultTyping / disableDefaultTyping must both return this for chaining
+    @Test
+    public void testEnableDisableDefaultTyping_returnsThis() throws Throwable {
+        ObjectMapper enabled = mapper.enableDefaultTyping();
+        assertSame(mapper, enabled);
+        ObjectMapper disabled = mapper.disableDefaultTyping();
+        assertSame(mapper, disabled);
+    }
+
+    // constructType must produce a JavaType with the matching raw class
+    @Test
+    public void testConstructType_returnsMatchingRawClass() throws Throwable {
+        JavaType type = mapper.constructType(String.class);
+        assertEquals(String.class, type.getRawClass());
+    }
+
+    // setTypeFactory must update getTypeFactory accordingly
+    @Test
+    public void testSetTypeFactory_updatesGetTypeFactory() throws Throwable {
+        TypeFactory tf = TypeFactory.defaultInstance();
+        ObjectMapper result = mapper.setTypeFactory(tf);
+        assertSame(mapper, result);
+        assertSame(tf, mapper.getTypeFactory());
+    }
+
+    // setNodeFactory must update getNodeFactory accordingly
+    @Test
+    public void testSetNodeFactory_updatesGetNodeFactory() throws Throwable {
+        ObjectMapper result = mapper.setNodeFactory(JsonNodeFactory.instance);
+        assertSame(mapper, result);
+        assertSame(JsonNodeFactory.instance, mapper.getNodeFactory());
+    }
+
+    // createObjectNode / createArrayNode must produce empty nodes of the right kind
+    @Test
+    public void testCreateObjectNodeAndArrayNode_returnsEmptyNodes() throws Throwable {
+        ObjectNode obj = mapper.createObjectNode();
+        ArrayNode arr = mapper.createArrayNode();
+        assertTrue(obj.isObject());
+        assertEquals(0, obj.size());
+        assertTrue(arr.isArray());
+        assertEquals(0, arr.size());
+    }
+
+    // configure(MapperFeature,...) must toggle isEnabled state both ways
+    @Test
+    public void testConfigureMapperFeature_togglesState() throws Throwable {
+        mapper.configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true);
+        assertTrue(mapper.isEnabled(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY));
+        mapper.configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, false);
+        assertFalse(mapper.isEnabled(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY));
+    }
+
+    // configure(SerializationFeature,...) INDENT_OUTPUT must actually affect output formatting
+    @Test
+    public void testConfigureSerializationFeature_indentOutput_affectsWriteValue() throws Throwable {
+        mapper.configure(SerializationFeature.INDENT_OUTPUT, true);
+        SimpleBean bean = new SimpleBean();
+        bean.setId(1);
+        bean.setName("X");
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\n"));
+    }
+
+    // enable(SerializationFeature)/disable(SerializationFeature) single-arg must toggle state
+    @Test
+    public void testEnableDisableSerializationFeature_singleArg() throws Throwable {
+        ObjectMapper result = mapper.enable(SerializationFeature.WRAP_ROOT_VALUE);
+        assertSame(mapper, result);
+        assertTrue(mapper.isEnabled(SerializationFeature.WRAP_ROOT_VALUE));
+        mapper.disable(SerializationFeature.WRAP_ROOT_VALUE);
+        assertFalse(mapper.isEnabled(SerializationFeature.WRAP_ROOT_VALUE));
+    }
+
+    // writer()/reader() factory methods must return non-null instances
+    @Test
+    public void testWriterAndReader_returnNonNull() throws Throwable {
+        assertNotNull(mapper.writer());
+        assertNotNull(mapper.reader());
+    }
+
+    // readerForUpdating must return a non-null ObjectReader
+    @Test
+    public void testReaderForUpdating_returnsNonNull() throws Throwable {
+        SimpleBean bean = new SimpleBean();
+        assertNotNull(mapper.readerForUpdating(bean));
+    }
+
+    // acceptJsonFormatVisitor(JavaType,...): null type must throw IllegalArgumentException
+    @Test
+    public void testAcceptJsonFormatVisitor_nullType_throwsIllegalArgumentException() throws Throwable {
+        try {
+            mapper.acceptJsonFormatVisitor((JavaType) null, null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+    }
+
+    // copy(): resulting mapper must share initial config but be independently mutable
+    @Test
+    public void testCopy_createsIndependentInstance() throws Throwable {
+        mapper.configure(SerializationFeature.INDENT_OUTPUT, true);
+        ObjectMapper copy = mapper.copy();
+        assertNotSame(mapper, copy);
+        assertTrue(copy.isEnabled(SerializationFeature.INDENT_OUTPUT));
+        mapper.configure(SerializationFeature.INDENT_OUTPUT, false);
+        assertTrue(copy.isEnabled(SerializationFeature.INDENT_OUTPUT));
+    }
+
+    // version() and main config accessors must never return null
+    @Test
+    public void testVersionAndConfigsAccessors_notNull() throws Throwable {
+        assertNotNull(mapper.version());
+        assertNotNull(mapper.getSerializationConfig());
+        assertNotNull(mapper.getDeserializationConfig());
+        assertNotNull(mapper.getDeserializationContext());
+    }
+
+    // setSerializerFactory must update getSerializerFactory accordingly
+    @Test
+    public void testSetSerializerFactory_updatesGetSerializerFactory() throws Throwable {
+        ObjectMapper result = mapper.setSerializerFactory(BeanSerializerFactory.instance);
+        assertSame(mapper, result);
+        assertSame(BeanSerializerFactory.instance, mapper.getSerializerFactory());
+    }
+
+    // setSerializerProvider must update getSerializerProvider accordingly
+    @Test
+    public void testSetSerializerProvider_updatesGetSerializerProvider() throws Throwable {
+        DefaultSerializerProvider.Impl provider = new DefaultSerializerProvider.Impl();
+        ObjectMapper result = mapper.setSerializerProvider(provider);
+        assertSame(mapper, result);
+        assertSame(provider, mapper.getSerializerProvider());
+    }
+}

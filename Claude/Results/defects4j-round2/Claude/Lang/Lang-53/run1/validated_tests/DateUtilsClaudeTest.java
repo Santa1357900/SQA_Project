@@ -1,0 +1,420 @@
+package org.apache.commons.lang.time;
+
+import static org.junit.Assert.*;
+
+import java.text.ParseException;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
+import org.junit.Test;
+
+public class DateUtilsClaudeTest {
+
+    private Calendar newCal(int year, int month, int day, int hour, int minute, int second, int millis) {
+        Calendar cal = Calendar.getInstance();
+        cal.clear();
+        cal.set(year, month, day, hour, minute, second);
+        cal.set(Calendar.MILLISECOND, millis);
+        return cal;
+    }
+
+    private Date newDate(int year, int month, int day, int hour, int minute, int second, int millis) {
+        return newCal(year, month, day, hour, minute, second, millis).getTime();
+    }
+
+    // Constructor is public for bean tools
+    @Test
+    public void testConstructor_createsInstance() throws Throwable {
+        DateUtils du = new DateUtils();
+        assertNotNull(du);
+    }
+
+    // isSameDay(Date,Date): null date1 -> IllegalArgumentException
+    @Test
+    public void testIsSameDayDate_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.isSameDay(null, new Date());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // isSameDay(Date,Date): same day different time -> true
+    @Test
+    public void testIsSameDayDate_sameDayDifferentTime_returnsTrue() throws Throwable {
+        Date d1 = newDate(2002, 2, 28, 13, 45, 0, 0);
+        Date d2 = newDate(2002, 2, 28, 6, 1, 0, 0);
+        assertTrue(DateUtils.isSameDay(d1, d2));
+    }
+
+    // isSameDay(Date,Date): different day -> false
+    @Test
+    public void testIsSameDayDate_differentDay_returnsFalse() throws Throwable {
+        Date d1 = newDate(2002, 2, 28, 13, 45, 0, 0);
+        Date d2 = newDate(2002, 2, 12, 13, 45, 0, 0);
+        assertFalse(DateUtils.isSameDay(d1, d2));
+    }
+
+    // isSameDay(Calendar,Calendar): null -> IllegalArgumentException
+    @Test
+    public void testIsSameDayCalendar_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.isSameDay((Calendar) null, Calendar.getInstance());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // isSameDay(Calendar,Calendar): same day -> true
+    @Test
+    public void testIsSameDayCalendar_sameDay_returnsTrue() throws Throwable {
+        Calendar c1 = newCal(2002, 2, 28, 0, 0, 0, 0);
+        Calendar c2 = newCal(2002, 2, 28, 23, 0, 0, 0);
+        assertTrue(DateUtils.isSameDay(c1, c2));
+    }
+
+    // isSameInstant(Date,Date): null -> IllegalArgumentException
+    @Test
+    public void testIsSameInstantDate_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.isSameInstant(new Date(), null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // isSameInstant(Date,Date): same millis -> true
+    @Test
+    public void testIsSameInstantDate_sameMillis_returnsTrue() throws Throwable {
+        Date d1 = new Date(123456789L);
+        Date d2 = new Date(123456789L);
+        assertTrue(DateUtils.isSameInstant(d1, d2));
+    }
+
+    // isSameInstant(Date,Date): different millis -> false
+    @Test
+    public void testIsSameInstantDate_differentMillis_returnsFalse() throws Throwable {
+        Date d1 = new Date(123456789L);
+        Date d2 = new Date(123456790L);
+        assertFalse(DateUtils.isSameInstant(d1, d2));
+    }
+
+    // isSameInstant(Calendar,Calendar): null -> IllegalArgumentException
+    @Test
+    public void testIsSameInstantCalendar_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.isSameInstant((Calendar) null, (Calendar) null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // isSameLocalTime(Calendar,Calendar): null -> IllegalArgumentException
+    @Test
+    public void testIsSameLocalTime_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.isSameLocalTime(Calendar.getInstance(), null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // isSameLocalTime(Calendar,Calendar): same fields and class -> true
+    @Test
+    public void testIsSameLocalTime_sameFields_returnsTrue() throws Throwable {
+        Calendar c1 = newCal(2002, 2, 28, 9, 15, 30, 10);
+        Calendar c2 = newCal(2002, 2, 28, 9, 15, 30, 10);
+        assertTrue(DateUtils.isSameLocalTime(c1, c2));
+    }
+
+    // isSameLocalTime(Calendar,Calendar): different hour -> false
+    @Test
+    public void testIsSameLocalTime_differentHour_returnsFalse() throws Throwable {
+        Calendar c1 = newCal(2002, 2, 28, 9, 15, 30, 10);
+        Calendar c2 = newCal(2002, 2, 28, 10, 15, 30, 10);
+        assertFalse(DateUtils.isSameLocalTime(c1, c2));
+    }
+
+    // parseDate: null string -> IllegalArgumentException
+    @Test
+    public void testParseDate_nullString_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.parseDate(null, new String[] {"yyyy-MM-dd"});
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // parseDate: null patterns -> IllegalArgumentException
+    @Test
+    public void testParseDate_nullPatterns_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.parseDate("2002-03-28", null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // parseDate: matching pattern -> parses correctly
+    @Test
+    public void testParseDate_validPattern_returnsParsedDate() throws Throwable {
+        Date result = DateUtils.parseDate("2002-03-28", new String[] {"yyyy-MM-dd"});
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(result);
+        assertEquals(2002, cal.get(Calendar.YEAR));
+        assertEquals(Calendar.MARCH, cal.get(Calendar.MONTH));
+        assertEquals(28, cal.get(Calendar.DAY_OF_MONTH));
+    }
+
+    // parseDate: no pattern fully matches -> ParseException
+    @Test
+    public void testParseDate_noPatternMatches_throwsParseException() throws Throwable {
+        try {
+            DateUtils.parseDate("2002-03-28", new String[] {"MM/dd/yyyy"});
+            fail("expected ParseException");
+        } catch (ParseException expected) { }
+    }
+
+    // addYears: positive amount increments year field
+    @Test
+    public void testAddYears_positiveAmount_addsYears() throws Throwable {
+        Date date = newDate(2000, 0, 1, 0, 0, 0, 0);
+        Date result = DateUtils.addYears(date, 5);
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(result);
+        assertEquals(2005, cal.get(Calendar.YEAR));
+    }
+
+    // addMonths: negative amount decrements month field
+    @Test
+    public void testAddMonths_negativeAmount_subtractsMonths() throws Throwable {
+        Date date = newDate(2002, 5, 15, 0, 0, 0, 0);
+        Date result = DateUtils.addMonths(date, -2);
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(result);
+        assertEquals(Calendar.APRIL, cal.get(Calendar.MONTH));
+    }
+
+    // add: null date -> IllegalArgumentException
+    @Test
+    public void testAdd_nullDate_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.add(null, Calendar.DATE, 1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // round(Date,field): null -> IllegalArgumentException
+    @Test
+    public void testRoundDate_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.round((Date) null, Calendar.MINUTE);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // round(Date,MINUTE): minutes<30 but seconds>=30 must still round up the MINUTE itself (bug target)
+    @Test
+    public void testRoundDate_toMinuteWithSecondsRoundUp_roundsMinuteCorrectly() throws Throwable {
+        Date date = newDate(2002, 2, 28, 10, 15, 45, 0);
+        Date result = DateUtils.round(date, Calendar.MINUTE);
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(result);
+        assertEquals(10, cal.get(Calendar.HOUR_OF_DAY));
+        assertEquals(16, cal.get(Calendar.MINUTE));
+        assertEquals(0, cal.get(Calendar.SECOND));
+    }
+
+    // round(Date,HOUR_OF_DAY): minute<30 rounds down to the hour
+    @Test
+    public void testRoundDate_toHourRoundDown_truncatesToHour() throws Throwable {
+        Date date = newDate(2002, 2, 28, 10, 20, 0, 0);
+        Date result = DateUtils.round(date, Calendar.HOUR_OF_DAY);
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(result);
+        assertEquals(10, cal.get(Calendar.HOUR_OF_DAY));
+        assertEquals(0, cal.get(Calendar.MINUTE));
+    }
+
+    // round(Date,HOUR_OF_DAY): minute>=30 rounds up to next hour
+    @Test
+    public void testRoundDate_toHourRoundUp_incrementsHour() throws Throwable {
+        Date date = newDate(2002, 2, 28, 10, 40, 0, 0);
+        Date result = DateUtils.round(date, Calendar.HOUR_OF_DAY);
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(result);
+        assertEquals(11, cal.get(Calendar.HOUR_OF_DAY));
+        assertEquals(0, cal.get(Calendar.MINUTE));
+    }
+
+    // round(Calendar,field): year too large -> ArithmeticException
+    @Test
+    public void testRoundCalendar_yearTooLarge_throwsArithmeticException() throws Throwable {
+        Calendar cal = Calendar.getInstance();
+        cal.clear();
+        cal.set(Calendar.YEAR, 280000001);
+        try {
+            DateUtils.round(cal, Calendar.MONTH);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) { }
+    }
+
+    // round(Object,field): Date branch matches round(Date,field)
+    @Test
+    public void testRoundObject_dateInstance_matchesRoundDate() throws Throwable {
+        Date date = newDate(2002, 2, 28, 10, 40, 0, 0);
+        Date viaObject = DateUtils.round((Object) date, Calendar.HOUR_OF_DAY);
+        Date viaDate = DateUtils.round(date, Calendar.HOUR_OF_DAY);
+        assertEquals(viaDate.getTime(), viaObject.getTime());
+    }
+
+    // round(Object,field): null -> IllegalArgumentException
+    @Test
+    public void testRoundObject_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.round((Object) null, Calendar.YEAR);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // round(Object,field): unsupported type -> ClassCastException
+    @Test
+    public void testRoundObject_invalidType_throwsClassCastException() throws Throwable {
+        try {
+            DateUtils.round((Object) "notADate", Calendar.YEAR);
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) { }
+    }
+
+    // round: field not present in fields table -> IllegalArgumentException
+    @Test
+    public void testRound_unsupportedField_throwsIllegalArgumentException() throws Throwable {
+        Date date = newDate(2002, 2, 28, 10, 0, 0, 0);
+        try {
+            DateUtils.round(date, -9999);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // truncate(Date,field): null -> IllegalArgumentException
+    @Test
+    public void testTruncateDate_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.truncate((Date) null, Calendar.DATE);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // truncate(Date,DATE): time fields reset to zero
+    @Test
+    public void testTruncateDate_toDate_truncatesTimeFields() throws Throwable {
+        Date date = newDate(2002, 2, 28, 13, 45, 1, 231);
+        Date result = DateUtils.truncate(date, Calendar.DATE);
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(result);
+        assertEquals(0, cal.get(Calendar.HOUR_OF_DAY));
+        assertEquals(0, cal.get(Calendar.MINUTE));
+        assertEquals(0, cal.get(Calendar.SECOND));
+        assertEquals(0, cal.get(Calendar.MILLISECOND));
+    }
+
+    // truncate(Calendar,SEMI_MONTH): day in top half -> truncated to day 1
+    @Test
+    public void testTruncateCalendar_semiMonth_firstHalf() throws Throwable {
+        Calendar cal = newCal(2002, 2, 10, 13, 45, 1, 231);
+        Calendar result = DateUtils.truncate(cal, DateUtils.SEMI_MONTH);
+        assertEquals(1, result.get(Calendar.DATE));
+    }
+
+    // truncate(Calendar,SEMI_MONTH): day in bottom half -> truncated to day 16
+    @Test
+    public void testTruncateCalendar_semiMonth_secondHalf() throws Throwable {
+        Calendar cal = newCal(2002, 2, 20, 13, 45, 1, 231);
+        Calendar result = DateUtils.truncate(cal, DateUtils.SEMI_MONTH);
+        assertEquals(16, result.get(Calendar.DATE));
+    }
+
+    // truncate(Object,field): unsupported type -> ClassCastException
+    @Test
+    public void testTruncateObject_invalidType_throwsClassCastException() throws Throwable {
+        try {
+            DateUtils.truncate((Object) "notADate", Calendar.YEAR);
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) { }
+    }
+
+    // truncate(Object,field): null -> IllegalArgumentException
+    @Test
+    public void testTruncateObject_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.truncate((Object) null, Calendar.YEAR);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // iterator(Date,rangeStyle): null -> IllegalArgumentException
+    @Test
+    public void testIteratorDate_null_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateUtils.iterator((Date) null, DateUtils.RANGE_WEEK_SUNDAY);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // iterator(Date,rangeStyle): invalid style -> IllegalArgumentException
+    @Test
+    public void testIteratorDate_invalidRangeStyle_throwsIllegalArgumentException() throws Throwable {
+        Date date = newDate(2002, 6, 4, 0, 0, 0, 0);
+        try {
+            DateUtils.iterator(date, 9999);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // iterator(Calendar,RANGE_WEEK_SUNDAY): always produces exactly 7 days starting Sunday
+    @Test
+    public void testIteratorCalendar_rangeWeekSunday_iteratesSevenDays() throws Throwable {
+        Calendar focus = newCal(2002, 6, 4, 10, 0, 0, 0);
+        Iterator it = DateUtils.iterator(focus, DateUtils.RANGE_WEEK_SUNDAY);
+        int count = 0;
+        Calendar first = null;
+        while (it.hasNext()) {
+            Calendar day = (Calendar) it.next();
+            if (first == null) {
+                first = day;
+            }
+            count++;
+        }
+        assertEquals(7, count);
+        assertEquals(Calendar.SUNDAY, first.get(Calendar.DAY_OF_WEEK));
+    }
+
+    // iterator(Object,rangeStyle): unsupported type -> ClassCastException
+    @Test
+    public void testIteratorObject_invalidType_throwsClassCastException() throws Throwable {
+        try {
+            DateUtils.iterator((Object) "notADate", DateUtils.RANGE_WEEK_SUNDAY);
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) { }
+    }
+
+    // DateIterator: calling next() after exhausting range -> NoSuchElementException
+    @Test
+    public void testDateIterator_nextAfterEnd_throwsNoSuchElementException() throws Throwable {
+        Date date = newDate(2002, 6, 4, 0, 0, 0, 0);
+        Iterator it = DateUtils.iterator(date, DateUtils.RANGE_WEEK_SUNDAY);
+        while (it.hasNext()) {
+            it.next();
+        }
+        try {
+            it.next();
+            fail("expected NoSuchElementException");
+        } catch (NoSuchElementException expected) { }
+    }
+
+    // DateIterator: remove() always throws UnsupportedOperationException
+    @Test
+    public void testDateIterator_remove_throwsUnsupportedOperationException() throws Throwable {
+        Date date = newDate(2002, 6, 4, 0, 0, 0, 0);
+        Iterator it = DateUtils.iterator(date, DateUtils.RANGE_WEEK_SUNDAY);
+        try {
+            it.remove();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) { }
+    }
+}

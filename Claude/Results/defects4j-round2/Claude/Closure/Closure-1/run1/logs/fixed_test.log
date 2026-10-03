@@ -1,0 +1,12 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-1-0af4u112/Closure-1f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 6
+  - com.google.javascript.jscomp.RemoveUnusedVarsClaudeTest::testProcess_unusedFunctionArgNotAtEnd_notRemoved
+  - com.google.javascript.jscomp.RemoveUnusedVarsClaudeTest::testConstructor_implementsExpectedInterfaces
+  - com.google.javascript.jscomp.RemoveUnusedVarsClaudeTest::testProcess_allParamsReferenced_noneRemoved
+  - com.google.javascript.jscomp.RemoveUnusedVarsClaudeTest::testProcess_trailingUnusedFunctionArgs_removedFromEnd
+  - com.google.javascript.jscomp.RemoveUnusedVarsClaudeTest::testProcess_localUnusedVarInFunction_removesVar
+  - com.google.javascript.jscomp.RemoveUnusedVarsClaudeTest::testProcess_argumentsReferenced_marksAllParamsReferenced
+[exit 0]

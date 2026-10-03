@@ -1,0 +1,244 @@
+package org.jsoup.parser;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Comment;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.DocumentType;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.nodes.CDataNode;
+import org.jsoup.nodes.XmlDeclaration;
+
+import java.util.List;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class XmlTreeBuilderClaudeTest {
+
+    private static final String BASE_URI = "http://example.com/";
+    private XmlTreeBuilder builder;
+
+    @Before
+    public void setUp() throws Throwable {
+        builder = new XmlTreeBuilder();
+    }
+
+    // defaultSettings() must return the preserveCase constant used for XML parsing
+    @Test
+    public void testDefaultSettings_returnsPreserveCaseSettings() throws Throwable {
+        assertSame(ParseSettings.preserveCase, builder.defaultSettings());
+    }
+
+    // parse(String,String) must set the given baseUri on the resulting document
+    @Test
+    public void testParseStringBaseUri_setsDocumentBaseUri() throws Throwable {
+        Document doc = builder.parse("<root></root>", BASE_URI);
+        assertEquals(BASE_URI, doc.baseUri());
+    }
+
+    // initialiseParse sets XML output syntax: a tag parsed as self-closing renders with a closing slash
+    @Test
+    public void testParseStringBaseUri_xmlSyntaxRendersSelfClosedElement() throws Throwable {
+        Document doc = builder.parse("<foo/>", BASE_URI);
+        assertTrue(doc.outerHtml().contains("/>"));
+    }
+
+    // preserveCase settings must not lowercase element tag names
+    @Test
+    public void testParseStringBaseUri_preservesElementTagCase() throws Throwable {
+        Document doc = builder.parse("<Foo></Foo>", BASE_URI);
+        assertEquals("Foo", doc.child(0).tagName());
+    }
+
+    // preserveCase settings keep attribute names as written, retrievable with same case
+    @Test
+    public void testParseStringBaseUri_attributeAccessibleWithOriginalCase() throws Throwable {
+        Document doc = builder.parse("<Foo Bar=\"1\"/>", BASE_URI);
+        assertEquals("1", doc.child(0).attr("Bar"));
+    }
+
+    // parse(Reader,String) overload must parse equivalently to the String overload
+    @Test
+    public void testParseReaderBaseUri_parsesSimpleElement() throws Throwable {
+        Document doc = builder.parse(new java.io.StringReader("<a></a>"), BASE_URI);
+        assertEquals("a", doc.child(0).tagName());
+    }
+
+    // self-closing unknown tag: StartTag branch must not push element onto stack -> no children
+    @Test
+    public void testInsertStartTag_selfClosingUnknownTag_hasNoChildren() throws Throwable {
+        Document doc = builder.parse("<qwertyxyz/>", BASE_URI);
+        Element el = doc.child(0);
+        assertEquals("qwertyxyz", el.tagName());
+        assertEquals(0, el.childNodeSize());
+    }
+
+    // self-closing known tag: regardless of isKnownTag(), element must still not be pushed onto stack
+    @Test
+    public void testInsertStartTag_selfClosingKnownTag_hasNoChildren() throws Throwable {
+        Document doc = builder.parse("<div/>", BASE_URI);
+        Element el = doc.child(0);
+        assertEquals("div", el.tagName());
+        assertEquals(0, el.childNodeSize());
+    }
+
+    // key contract test: a self-closed element must NOT adopt the following sibling markup as its child
+    @Test
+    public void testInsertStartTag_selfClosingTag_siblingNotAdoptedAsChild() throws Throwable {
+        Document doc = builder.parse("<foo/><bar>baz</bar>", BASE_URI);
+        assertEquals(2, doc.children().size());
+        assertEquals(0, doc.child(0).children().size());
+        assertEquals("bar", doc.child(1).tagName());
+        assertEquals("baz", doc.child(1).text());
+    }
+
+    // non-self-closing StartTag is pushed onto the stack so following content nests inside it
+    @Test
+    public void testInsertStartTag_nonSelfClosing_nestsChildElement() throws Throwable {
+        Document doc = builder.parse("<a><b></b></a>", BASE_URI);
+        assertEquals(1, doc.child(0).children().size());
+        assertEquals("b", doc.child(0).child(0).tagName());
+    }
+
+    // a self-closing child followed by a normal child inside an open parent: only the normal one nests content
+    @Test
+    public void testInsertStartTag_nestedSelfClosingInsideOpenParent() throws Throwable {
+        Document doc = builder.parse("<a><b/><c>txt</c></a>", BASE_URI);
+        Element a = doc.child(0);
+        assertEquals(2, a.children().size());
+        assertEquals(0, a.child(0).childNodeSize());
+        assertEquals("txt", a.child(1).text());
+    }
+
+    // popStackToClose: matching end tag closes the corresponding element
+    @Test
+    public void testPopStackToClose_matchingEndTag_closesElement() throws Throwable {
+        Document doc = builder.parse("<a>hi</a>", BASE_URI);
+        assertEquals("a", doc.child(0).tagName());
+        assertEquals("hi", doc.child(0).text());
+    }
+
+    // popStackToClose: an end tag closes the nearest matching ancestor, implicitly closing unclosed descendants
+    @Test
+    public void testPopStackToClose_mismatchedEndTag_closesAncestorAndChild() throws Throwable {
+        Document doc = builder.parse("<a><b>txt</a>", BASE_URI);
+        Element a = doc.child(0);
+        assertEquals(1, a.children().size());
+        assertEquals("b", a.child(0).tagName());
+        assertEquals("txt", a.child(0).text());
+    }
+
+    // popStackToClose: if no matching element exists on the stack, the end tag is skipped without error
+    @Test
+    public void testPopStackToClose_noMatchInStack_skipsWithoutError() throws Throwable {
+        Document doc = builder.parse("<a></a></b>", BASE_URI);
+        assertEquals(1, doc.childNodeSize());
+        assertEquals("a", doc.child(0).tagName());
+    }
+
+    // insert(Comment): a plain (non-bogus) comment becomes a Comment node carrying the exact data
+    @Test
+    public void testInsertComment_nonBogus_createsCommentWithExactData() throws Throwable {
+        Document doc = builder.parse("<!--hi-->", BASE_URI);
+        Node node = doc.childNode(0);
+        assertTrue(node instanceof Comment);
+        assertEquals("hi", ((Comment) node).getData());
+    }
+
+    // insert(Comment): a bogus comment looking like an XML declaration becomes an XmlDeclaration node
+    @Test
+    public void testInsertComment_bogusXmlDeclaration_createsXmlDeclarationNode() throws Throwable {
+        Document doc = builder.parse("<?xml version=\"1.0\"?>", BASE_URI);
+        Node node = doc.childNode(0);
+        assertTrue(node instanceof XmlDeclaration);
+    }
+
+    // insert(Character): plain text token becomes a TextNode carrying the content
+    @Test
+    public void testInsertCharacter_plainText_createsTextNodeWithContent() throws Throwable {
+        Document doc = builder.parse("<a>hello</a>", BASE_URI);
+        Node node = doc.child(0).childNode(0);
+        assertTrue(node instanceof TextNode);
+        assertEquals("hello", ((TextNode) node).text());
+    }
+
+    // insert(Character): a CDATA token becomes a CDataNode
+    @Test
+    public void testInsertCharacter_cdataSection_createsCDataNode() throws Throwable {
+        Document doc = builder.parse("<a><![CDATA[hello]]></a>", BASE_URI);
+        Node node = doc.child(0).childNode(0);
+        assertTrue(node instanceof CDataNode);
+        assertEquals("hello", ((CDataNode) node).text());
+    }
+
+    // insert(Doctype): a doctype token becomes a DocumentType node
+    @Test
+    public void testInsertDoctype_createsDocumentTypeNode() throws Throwable {
+        Document doc = builder.parse("<!DOCTYPE root>", BASE_URI);
+        Node node = doc.childNode(0);
+        assertTrue(node instanceof DocumentType);
+    }
+
+    // process(EOF) on empty input must not throw and must produce no nodes
+    @Test
+    public void testProcess_eofOnEmptyInput_producesNoNodes() throws Throwable {
+        Document doc = builder.parse("", BASE_URI);
+        assertEquals(0, doc.childNodeSize());
+    }
+
+    // parseFragment: multiple self-closing top-level tags must remain siblings, not nested
+    @Test
+    public void testParseFragment_multipleTopLevelSelfClosingElements_returnsSiblingNodes() throws Throwable {
+        List<Node> nodes = builder.parseFragment("<a/><b/>", BASE_URI, ParseErrorList.noTracking(), ParseSettings.preserveCase);
+        assertEquals(2, nodes.size());
+        assertEquals("a", ((Element) nodes.get(0)).tagName());
+        assertEquals("b", ((Element) nodes.get(1)).tagName());
+    }
+
+    // parseFragment: empty input yields an empty node list, no exception
+    @Test
+    public void testParseFragment_emptyInput_returnsEmptyList() throws Throwable {
+        List<Node> nodes = builder.parseFragment("", BASE_URI, ParseErrorList.noTracking(), ParseSettings.preserveCase);
+        assertEquals(0, nodes.size());
+    }
+
+    // parseFragment: plain text input yields a single TextNode
+    @Test
+    public void testParseFragment_textOnly_returnsSingleTextNode() throws Throwable {
+        List<Node> nodes = builder.parseFragment("hello", BASE_URI, ParseErrorList.noTracking(), ParseSettings.preserveCase);
+        assertEquals(1, nodes.size());
+        assertTrue(nodes.get(0) instanceof TextNode);
+        assertEquals("hello", ((TextNode) nodes.get(0)).text());
+    }
+
+    // multiple attributes on a start tag must all be retrievable via attr()
+    @Test
+    public void testParseStringBaseUri_multipleAttributesAccessible() throws Throwable {
+        Document doc = builder.parse("<foo a=\"1\" b=\"2\"/>", BASE_URI);
+        Element el = doc.child(0);
+        assertEquals("1", el.attr("a"));
+        assertEquals("2", el.attr("b"));
+    }
+
+    // deeply nested elements retain their text content at the correct depth
+    @Test
+    public void testParseStringBaseUri_deeplyNestedElementsRetainText() throws Throwable {
+        Document doc = builder.parse("<a><b><c>deep</c></b></a>", BASE_URI);
+        Element c = doc.child(0).child(0).child(0);
+        assertEquals("c", c.tagName());
+        assertEquals("deep", c.text());
+    }
+
+    // parseFragment: comment, self-closing element and trailing text all appear as separate sibling nodes
+    @Test
+    public void testParseFragment_commentElementAndTextAsSiblings() throws Throwable {
+        List<Node> nodes = builder.parseFragment("<!--c--><a/>text", BASE_URI, ParseErrorList.noTracking(), ParseSettings.preserveCase);
+        assertEquals(3, nodes.size());
+        assertTrue(nodes.get(0) instanceof Comment);
+        assertEquals("a", ((Element) nodes.get(1)).tagName());
+        assertTrue(nodes.get(2) instanceof TextNode);
+    }
+}

@@ -1,0 +1,58 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-14-3g7d9q0d/Cli-14f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ FAIL
+Executed command:  cd /tmp/claude-Cli-14-3g7d9q0d/fixed && ant -f /home/pheerapat/defects4j/framework/projects/defects4j.build.xml -Dd4j.home=/home/pheerapat/defects4j -Dd4j.dir.projects=/home/pheerapat/defects4j/framework/projects -Dbasedir=/tmp/claude-Cli-14-3g7d9q0d/fixed -Dd4j.test.dir=/tmp/claude-Cli-14-3g7d9q0d/fixed/.test_suite compile.gen.tests 2>&1
+Buildfile: /home/pheerapat/defects4j/framework/projects/defects4j.build.xml
+
+init:
+
+setProxy:
+
+noProxy:
+     [echo] Proxy not used.
+
+get-custom-dep-commons-lang.jar:
+
+get-dep-commons-lang.jar:
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/Cli/lib/commons-lang/commons-lang/2.1/commons-lang-2.1.jar
+      [get] To: /tmp/claude-Cli-14-3g7d9q0d/fixed/target/lib/commons-lang/jars/commons-lang-2.1.jar
+
+get-custom-dep-junit.jar:
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/lib/junit-4.12.jar
+      [get] To: /tmp/claude-Cli-14-3g7d9q0d/fixed/target/lib/junit/jars/junit-3.8.1.jar
+      [get] Error getting file:/home/pheerapat/defects4j/framework/projects/lib/junit-4.12.jar to /tmp/claude-Cli-14-3g7d9q0d/fixed/target/lib/junit/jars/junit-3.8.1.jar
+
+get-dep-junit.jar:
+
+get-custom-dep-jdepend.jar:
+
+get-dep-jdepend.jar:
+      [get] Getting: file:/home/pheerapat/defects4j/framework/projects/Cli/lib/jdepend/jdepend/2.5/jdepend-2.5.jar
+      [get] To: /tmp/claude-Cli-14-3g7d9q0d/fixed/target/lib/jdepend/jars/jdepend-2.5.jar
+
+get-deps:
+
+compile:
+    [javac] /tmp/claude-Cli-14-3g7d9q0d/fixed/build.xml:74: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+
+compile.gen.tests:
+     [echo] classes.dir: /tmp/claude-Cli-14-3g7d9q0d/fixed/target/classes
+     [echo] build.home: /tmp/claude-Cli-14-3g7d9q0d/fixed/target/classes/..
+    [mkdir] Created dir: /tmp/claude-Cli-14-3g7d9q0d/fixed/.classes_testgen
+    [javac] /home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: warning: 'includeantruntime' was not set, defaulting to build.sysclasspath=last; set to false for repeatable builds
+    [javac] Compiling 1 source file to /tmp/claude-Cli-14-3g7d9q0d/fixed/.classes_testgen
+    [javac] /tmp/claude-Cli-14-3g7d9q0d/fixed/.test_suite/org/apache/commons/cli2/option/GroupImplClaudeTest.java:37: error: reference to canProcess is ambiguous
+    [javac]         assertFalse(group.canProcess(null, null));
+    [javac]                          ^
+    [javac]   both method canProcess(WriteableCommandLine,ListIterator) in OptionImpl and method canProcess(WriteableCommandLine,String) in GroupImpl match
+    [javac] Note: /tmp/claude-Cli-14-3g7d9q0d/fixed/.test_suite/org/apache/commons/cli2/option/GroupImplClaudeTest.java uses unchecked or unsafe operations.
+    [javac] Note: Recompile with -Xlint:unchecked for details.
+    [javac] 1 error
+
+BUILD FAILED
+/home/pheerapat/defects4j/framework/projects/defects4j.build.xml:268: Compile failed; see the compiler error output for details.
+
+Total time: 1 second
+Cannot compile extracted test suite! at /home/pheerapat/defects4j/framework/bin/d4j/d4j-test line 126.
+Compilation failed in require at /home/pheerapat/defects4j/framework/bin/defects4j line 195.
+[exit 1]

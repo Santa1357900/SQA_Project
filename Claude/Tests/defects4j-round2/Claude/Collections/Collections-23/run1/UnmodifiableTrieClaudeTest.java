@@ -1,0 +1,427 @@
+package org.apache.commons.collections4.trie;
+
+import java.util.AbstractMap;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+
+import org.apache.commons.collections4.OrderedMapIterator;
+import org.apache.commons.collections4.Unmodifiable;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class UnmodifiableTrieClaudeTest {
+
+    private PatriciaTrie<Integer> backing;
+    private UnmodifiableTrie<String, Integer> trie;
+
+    @Before
+    public void setUp() throws Throwable {
+        backing = new PatriciaTrie<Integer>();
+        backing.put("alpha", Integer.valueOf(1));
+        backing.put("beta", Integer.valueOf(2));
+        backing.put("gamma", Integer.valueOf(3));
+        trie = new UnmodifiableTrie<String, Integer>(backing);
+    }
+
+    // constructor: trie == null -> IllegalArgumentException
+    @Test
+    public void testConstructor_nullTrie_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new UnmodifiableTrie<String, Integer>(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Trie"));
+        }
+    }
+
+    // static factory wraps given trie and exposes Unmodifiable marker
+    @Test
+    public void testUnmodifiableTrie_factoryMethod_wrapsGivenTrie() throws Throwable {
+        UnmodifiableTrie<String, Integer> wrapped = UnmodifiableTrie.unmodifiableTrie(backing);
+        assertEquals(backing.size(), wrapped.size());
+        assertTrue(wrapped instanceof Unmodifiable);
+    }
+
+    // entrySet(): structural add() must throw
+    @Test
+    public void testEntrySet_isUnmodifiable_addThrowsUnsupportedOperationException() throws Throwable {
+        Set<Map.Entry<String, Integer>> entries = trie.entrySet();
+        try {
+            entries.add(new AbstractMap.SimpleEntry<String, Integer>("new", Integer.valueOf(1)));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // entrySet(): contents forwarded from delegate
+    @Test
+    public void testEntrySet_contentsMatchDelegate() throws Throwable {
+        Set<Map.Entry<String, Integer>> expected = backing.entrySet();
+        Set<Map.Entry<String, Integer>> actual = trie.entrySet();
+        assertEquals(expected.size(), actual.size());
+        assertTrue(actual.containsAll(expected));
+    }
+
+    // BUG HUNT: an unmodifiable Trie must not allow mutation through entrySet entries' setValue()
+    @Test
+    public void testEntrySet_entrySetValue_shouldThrowUnsupportedOperationException() throws Throwable {
+        Set<Map.Entry<String, Integer>> entries = trie.entrySet();
+        Iterator<Map.Entry<String, Integer>> iterator = entries.iterator();
+        Map.Entry<String, Integer> entry = iterator.next();
+        try {
+            entry.setValue(Integer.valueOf(999));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // keySet(): structural remove() must throw
+    @Test
+    public void testKeySet_isUnmodifiable_removeThrowsUnsupportedOperationException() throws Throwable {
+        Set<String> keys = trie.keySet();
+        try {
+            keys.remove("alpha");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // keySet(): contents forwarded from delegate
+    @Test
+    public void testKeySet_contentsMatchDelegate() throws Throwable {
+        Set<String> expected = backing.keySet();
+        Set<String> actual = trie.keySet();
+        assertEquals(expected.size(), actual.size());
+        assertTrue(actual.containsAll(expected));
+    }
+
+    // values(): structural add() must throw
+    @Test
+    public void testValues_isUnmodifiable_addThrowsUnsupportedOperationException() throws Throwable {
+        Collection<Integer> values = trie.values();
+        try {
+            values.add(Integer.valueOf(999));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // values(): contents forwarded from delegate
+    @Test
+    public void testValues_contentsMatchDelegate() throws Throwable {
+        Collection<Integer> expected = backing.values();
+        Collection<Integer> actual = trie.values();
+        assertEquals(expected.size(), actual.size());
+        assertTrue(actual.containsAll(expected));
+    }
+
+    // clear(): always throws
+    @Test
+    public void testClear_alwaysThrowsUnsupportedOperationException() throws Throwable {
+        try {
+            trie.clear();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // containsKey(): key present -> true
+    @Test
+    public void testContainsKey_existingKey_returnsTrue() throws Throwable {
+        assertTrue(trie.containsKey("alpha"));
+    }
+
+    // containsKey(): key absent -> false
+    @Test
+    public void testContainsKey_nonExistingKey_returnsFalse() throws Throwable {
+        assertFalse(trie.containsKey("nonexistent"));
+    }
+
+    // containsValue(): value present -> true
+    @Test
+    public void testContainsValue_existingValue_returnsTrue() throws Throwable {
+        assertTrue(trie.containsValue(Integer.valueOf(2)));
+    }
+
+    // containsValue(): value absent -> false
+    @Test
+    public void testContainsValue_nonExistingValue_returnsFalse() throws Throwable {
+        assertFalse(trie.containsValue(Integer.valueOf(999)));
+    }
+
+    // get(): key present returns delegate value
+    @Test
+    public void testGet_existingKey_returnsDelegateValue() throws Throwable {
+        assertEquals(Integer.valueOf(1), trie.get("alpha"));
+    }
+
+    // get(): key absent returns null
+    @Test
+    public void testGet_nonExistingKey_returnsNull() throws Throwable {
+        assertNull(trie.get("nonexistent"));
+    }
+
+    // isEmpty(): non-empty delegate -> false
+    @Test
+    public void testIsEmpty_nonEmptyTrie_returnsFalse() throws Throwable {
+        assertFalse(trie.isEmpty());
+    }
+
+    // isEmpty(): empty delegate -> true
+    @Test
+    public void testIsEmpty_emptyTrie_returnsTrue() throws Throwable {
+        PatriciaTrie<Integer> emptyBacking = new PatriciaTrie<Integer>();
+        UnmodifiableTrie<String, Integer> emptyTrie = new UnmodifiableTrie<String, Integer>(emptyBacking);
+        assertTrue(emptyTrie.isEmpty());
+    }
+
+    // put(): always throws
+    @Test
+    public void testPut_alwaysThrowsUnsupportedOperationException() throws Throwable {
+        try {
+            trie.put("delta", Integer.valueOf(4));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // putAll(): always throws
+    @Test
+    public void testPutAll_alwaysThrowsUnsupportedOperationException() throws Throwable {
+        Map<String, Integer> source = new HashMap<String, Integer>();
+        source.put("delta", Integer.valueOf(4));
+        try {
+            trie.putAll(source);
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // remove(): always throws
+    @Test
+    public void testRemove_alwaysThrowsUnsupportedOperationException() throws Throwable {
+        try {
+            trie.remove("alpha");
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // size(): forwarded from delegate
+    @Test
+    public void testSize_matchesDelegateSize() throws Throwable {
+        assertEquals(backing.size(), trie.size());
+    }
+
+    // firstKey(): forwarded from delegate
+    @Test
+    public void testFirstKey_matchesDelegateFirstKey() throws Throwable {
+        assertEquals(backing.firstKey(), trie.firstKey());
+    }
+
+    // lastKey(): forwarded from delegate
+    @Test
+    public void testLastKey_matchesDelegateLastKey() throws Throwable {
+        assertEquals(backing.lastKey(), trie.lastKey());
+    }
+
+    // headMap(): contents forwarded from delegate
+    @Test
+    public void testHeadMap_contentsMatchDelegate() throws Throwable {
+        String last = backing.lastKey();
+        SortedMap<String, Integer> expected = backing.headMap(last);
+        SortedMap<String, Integer> actual = trie.headMap(last);
+        assertEquals(expected, actual);
+    }
+
+    // headMap(): result is unmodifiable
+    @Test
+    public void testHeadMap_isUnmodifiable_putThrowsUnsupportedOperationException() throws Throwable {
+        String last = backing.lastKey();
+        SortedMap<String, Integer> head = trie.headMap(last);
+        try {
+            head.put("x", Integer.valueOf(100));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // tailMap(): contents forwarded from delegate
+    @Test
+    public void testTailMap_contentsMatchDelegate() throws Throwable {
+        String first = backing.firstKey();
+        SortedMap<String, Integer> expected = backing.tailMap(first);
+        SortedMap<String, Integer> actual = trie.tailMap(first);
+        assertEquals(expected, actual);
+    }
+
+    // tailMap(): result is unmodifiable
+    @Test
+    public void testTailMap_isUnmodifiable_putThrowsUnsupportedOperationException() throws Throwable {
+        String first = backing.firstKey();
+        SortedMap<String, Integer> tail = trie.tailMap(first);
+        try {
+            tail.put("x", Integer.valueOf(100));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // subMap(): contents forwarded from delegate
+    @Test
+    public void testSubMap_contentsMatchDelegate() throws Throwable {
+        String first = backing.firstKey();
+        String last = backing.lastKey();
+        SortedMap<String, Integer> expected = backing.subMap(first, last);
+        SortedMap<String, Integer> actual = trie.subMap(first, last);
+        assertEquals(expected, actual);
+    }
+
+    // subMap(): result is unmodifiable
+    @Test
+    public void testSubMap_isUnmodifiable_putThrowsUnsupportedOperationException() throws Throwable {
+        String first = backing.firstKey();
+        String last = backing.lastKey();
+        SortedMap<String, Integer> sub = trie.subMap(first, last);
+        try {
+            sub.put("x", Integer.valueOf(100));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // prefixMap(): contents forwarded from delegate
+    @Test
+    public void testPrefixMap_contentsMatchDelegate() throws Throwable {
+        String first = backing.firstKey();
+        SortedMap<String, Integer> expected = backing.prefixMap(first);
+        SortedMap<String, Integer> actual = trie.prefixMap(first);
+        assertEquals(expected, actual);
+    }
+
+    // prefixMap(): result is unmodifiable
+    @Test
+    public void testPrefixMap_isUnmodifiable_putThrowsUnsupportedOperationException() throws Throwable {
+        String first = backing.firstKey();
+        SortedMap<String, Integer> prefix = trie.prefixMap(first);
+        try {
+            prefix.put("x", Integer.valueOf(100));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // comparator(): forwarded from delegate (null or same instance)
+    @Test
+    public void testComparator_matchesDelegateComparator() throws Throwable {
+        Comparator<? super String> expected = backing.comparator();
+        Comparator<? super String> actual = trie.comparator();
+        if (expected == null) {
+            assertNull(actual);
+        } else {
+            assertSame(expected, actual);
+        }
+    }
+
+    // mapIterator(): iterates over all delegate entries, 0/1/many-loop coverage via full traversal
+    @Test
+    public void testMapIterator_iteratesAllEntries() throws Throwable {
+        OrderedMapIterator<String, Integer> it = trie.mapIterator();
+        int count = 0;
+        while (it.hasNext()) {
+            it.next();
+            count++;
+        }
+        assertEquals(backing.size(), count);
+    }
+
+    // mapIterator(): setValue() must throw on the unmodifiable iterator
+    @Test
+    public void testMapIterator_setValue_throwsUnsupportedOperationException() throws Throwable {
+        OrderedMapIterator<String, Integer> it = trie.mapIterator();
+        assertTrue(it.hasNext());
+        it.next();
+        try {
+            it.setValue(Integer.valueOf(123));
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // mapIterator(): remove() must throw on the unmodifiable iterator
+    @Test
+    public void testMapIterator_remove_throwsUnsupportedOperationException() throws Throwable {
+        OrderedMapIterator<String, Integer> it = trie.mapIterator();
+        assertTrue(it.hasNext());
+        it.next();
+        try {
+            it.remove();
+            fail("expected UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+        }
+    }
+
+    // nextKey(): at lastKey() there is no next -> null
+    @Test
+    public void testNextKey_lastKey_returnsNull() throws Throwable {
+        String last = backing.lastKey();
+        assertNull(trie.nextKey(last));
+    }
+
+    // previousKey(): at firstKey() there is no previous -> null
+    @Test
+    public void testPreviousKey_firstKey_returnsNull() throws Throwable {
+        String first = backing.firstKey();
+        assertNull(trie.previousKey(first));
+    }
+
+    // nextKey(): from firstKey() forwards to delegate's next key
+    @Test
+    public void testNextKey_firstKey_matchesDelegate() throws Throwable {
+        String first = backing.firstKey();
+        String expected = backing.nextKey(first);
+        String actual = trie.nextKey(first);
+        assertNotNull(actual);
+        assertEquals(expected, actual);
+    }
+
+    // previousKey(): from lastKey() forwards to delegate's previous key
+    @Test
+    public void testPreviousKey_lastKey_matchesDelegate() throws Throwable {
+        String last = backing.lastKey();
+        String expected = backing.previousKey(last);
+        String actual = trie.previousKey(last);
+        assertNotNull(actual);
+        assertEquals(expected, actual);
+    }
+
+    // hashCode(): forwarded from delegate
+    @Test
+    public void testHashCode_matchesDelegateHashCode() throws Throwable {
+        assertEquals(backing.hashCode(), trie.hashCode());
+    }
+
+    // equals(): forwarded, same delegate instance is equal
+    @Test
+    public void testEquals_withDelegate_returnsTrue() throws Throwable {
+        assertTrue(trie.equals(backing));
+    }
+
+    // equals(): forwarded, unrelated object type is not equal
+    @Test
+    public void testEquals_withUnrelatedObject_returnsFalse() throws Throwable {
+        assertFalse(trie.equals("not a trie"));
+    }
+
+    // toString(): forwarded from delegate
+    @Test
+    public void testToString_matchesDelegateToString() throws Throwable {
+        assertEquals(backing.toString(), trie.toString());
+    }
+}

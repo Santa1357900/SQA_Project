@@ -1,0 +1,599 @@
+package com.fasterxml.jackson.databind.introspect;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.lang.annotation.Annotation;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.fasterxml.jackson.annotation.JacksonAnnotationsInside;
+import com.fasterxml.jackson.annotation.JacksonInject;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonEnumDefaultValue;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonGetter;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIgnoreType;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import com.fasterxml.jackson.annotation.JsonRootName;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+
+import com.fasterxml.jackson.databind.InjectableValues;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
+import com.fasterxml.jackson.databind.PropertyNamingStrategy;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
+
+import com.fasterxml.jackson.core.Version;
+
+public class JacksonAnnotationIntrospectorClaudeTest {
+
+    private ObjectMapper mapper;
+    private JacksonAnnotationIntrospector introspector;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+        introspector = new JacksonAnnotationIntrospector();
+    }
+
+    // version(): must never return null (Versioned contract)
+    @Test
+    public void testVersion_returnsNonNullVersion() throws Throwable {
+        Version v = introspector.version();
+        assertNotNull(v);
+    }
+
+    // setConstructorPropertiesImpliesCreator(boolean): fluent, returns same instance
+    @Test
+    public void testSetConstructorPropertiesImpliesCreator_returnsSameInstanceForChaining() throws Throwable {
+        JacksonAnnotationIntrospector result = introspector.setConstructorPropertiesImpliesCreator(false);
+        assertSame(introspector, result);
+    }
+
+    // isAnnotationBundle: annotation meta-annotated with @JacksonAnnotationsInside -> true
+    @Test
+    public void testIsAnnotationBundle_withJacksonAnnotationsInsideMeta_returnsTrue() throws Throwable {
+        Field f = BundleHolder.class.getField("field");
+        Annotation ann = f.getAnnotation(BundleAnno.class);
+        assertTrue(introspector.isAnnotationBundle(ann));
+    }
+
+    // isAnnotationBundle: plain annotation without meta -> false
+    @Test
+    public void testIsAnnotationBundle_withoutMetaAnnotation_returnsFalse() throws Throwable {
+        Field f = PlainHolder.class.getField("field");
+        Annotation ann = f.getAnnotation(JsonProperty.class);
+        assertFalse(introspector.isAnnotationBundle(ann));
+    }
+
+    // findEnumValue: no @JsonProperty -> falls back to enum name
+    @Test
+    public void testFindEnumValue_withoutAnnotation_returnsEnumName() throws Throwable {
+        String result = introspector.findEnumValue(ColorSimple.RED);
+        assertEquals("RED", result);
+    }
+
+    // findEnumValue: @JsonProperty present -> uses annotated value
+    @Test
+    public void testFindEnumValue_withJsonPropertyAnnotation_returnsAnnotatedValue() throws Throwable {
+        String result = introspector.findEnumValue(ColorSimple.BLUE);
+        assertEquals("blue_color", result);
+    }
+
+    // findEnumValues: constant with @JsonProperty overrides default name entry
+    @Test
+    public void testFindEnumValues_withJsonPropertyOnConstant_overridesDefaultName() throws Throwable {
+        Class<ColorSimple> cls = ColorSimple.class;
+        Enum<?>[] values = (Enum<?>[]) cls.getEnumConstants();
+        String[] names = new String[] { "RED", "BLUE" };
+        String[] result = introspector.findEnumValues(cls, values, names);
+        assertEquals("RED", result[0]);
+        assertEquals("blue_color", result[1]);
+    }
+
+    // findEnumValues: no annotations present -> names array untouched
+    @Test
+    public void testFindEnumValues_withoutAnnotation_keepsProvidedDefaultNames() throws Throwable {
+        Class<PlainPair> cls = PlainPair.class;
+        Enum<?>[] values = (Enum<?>[]) cls.getEnumConstants();
+        String[] names = new String[] { "X", "Y" };
+        String[] result = introspector.findEnumValues(cls, values, names);
+        assertEquals("X", result[0]);
+        assertEquals("Y", result[1]);
+    }
+
+    // findDefaultEnumValue: @JsonEnumDefaultValue present -> returns that constant
+    @Test
+    public void testFindDefaultEnumValue_withJsonEnumDefaultValue_returnsAnnotatedConstant() throws Throwable {
+        Class<?> raw = StatusEnum.class;
+        @SuppressWarnings("unchecked")
+        Class<Enum<?>> cls = (Class<Enum<?>>) raw;
+        Enum<?> result = introspector.findDefaultEnumValue(cls);
+        assertEquals(StatusEnum.UNKNOWN, result);
+    }
+
+    // findDefaultEnumValue: no annotation present -> null
+    @Test
+    public void testFindDefaultEnumValue_withoutAnnotation_returnsNull() throws Throwable {
+        Class<?> raw = PlainEnum.class;
+        @SuppressWarnings("unchecked")
+        Class<Enum<?>> cls = (Class<Enum<?>>) raw;
+        Enum<?> result = introspector.findDefaultEnumValue(cls);
+        assertNull(result);
+    }
+
+    // findRootName: @JsonRootName + WRAP_ROOT_VALUE wraps output with given name
+    @Test
+    public void testFindRootName_withJsonRootNameAndWrapRootValue_wrapsWithGivenName() throws Throwable {
+        mapper.enable(SerializationFeature.WRAP_ROOT_VALUE);
+        String json = mapper.writeValueAsString(new RootBean());
+        assertTrue(json.contains("\"myRoot\""));
+    }
+
+    // findPropertyIgnorals: @JsonIgnoreProperties excludes the named property
+    @Test
+    public void testFindPropertyIgnorals_withJsonIgnoreProperties_excludesNamedProperty() throws Throwable {
+        String json = mapper.writeValueAsString(new IgnorePropsBean());
+        assertFalse(json.contains("secret"));
+        assertTrue(json.contains("visible"));
+    }
+
+    // isIgnorableType: @JsonIgnoreType excludes the whole property of that type
+    @Test
+    public void testIsIgnorableType_withJsonIgnoreType_excludesEntirePropertyOfThatType() throws Throwable {
+        String json = mapper.writeValueAsString(new HostIgnore());
+        assertFalse(json.contains("nested"));
+        assertTrue(json.contains("host"));
+    }
+
+    // findNamingStrategy: @JsonNaming(SnakeCase) converts camelCase field name
+    @Test
+    public void testFindNamingStrategy_withJsonNamingSnakeCase_convertsFieldName() throws Throwable {
+        String json = mapper.writeValueAsString(new NamingBean());
+        assertTrue(json.contains("first_name"));
+    }
+
+    // findAutoDetectVisibility: fieldVisibility=ANY detects otherwise-hidden private field
+    @Test
+    public void testFindAutoDetectVisibility_withFieldVisibilityAny_detectsPrivateField() throws Throwable {
+        String json = mapper.writeValueAsString(new AutoDetectBean());
+        assertTrue(json.contains("secretField"));
+    }
+
+    // findPropertyAliases: @JsonAlias allows deserialization using alternate name
+    @Test
+    public void testFindPropertyAliases_withJsonAlias_deserializesUsingAlternateName() throws Throwable {
+        AliasBean bean = mapper.readValue("{\"fullName\":\"Bob\"}", AliasBean.class);
+        assertEquals("Bob", bean.getName());
+    }
+
+    // hasIgnoreMarker: @JsonIgnore excludes field from serialization
+    @Test
+    public void testHasIgnoreMarker_withJsonIgnore_excludesFieldFromSerialization() throws Throwable {
+        String json = mapper.writeValueAsString(new IgnoreFieldBean());
+        assertFalse(json.contains("secret"));
+        assertTrue(json.contains("visible"));
+    }
+
+
+
+    // findFormat: @JsonFormat(pattern) formats a Date field accordingly
+    @Test
+    public void testFindFormat_withJsonFormatPattern_formatsDateUsingPattern() throws Throwable {
+        FormatBean bean = new FormatBean();
+        bean.when = new Date(0L);
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("1970"));
+    }
+
+    // findReferenceType: managed/back reference pair excludes back-ref property, avoids recursion
+    @Test
+    public void testFindReferenceType_withManagedAndBackReference_excludesBackReferenceFromOutput() throws Throwable {
+        ParentRef p = new ParentRef();
+        ChildRef c = new ChildRef();
+        c.parent = p;
+        p.children.add(c);
+        String json = mapper.writeValueAsString(p);
+        assertFalse(json.contains("\"parent\""));
+        assertTrue(json.contains("\"children\""));
+    }
+
+    // findUnwrappingNameTransformer: @JsonUnwrapped(prefix) flattens nested property names
+    @Test
+    public void testFindUnwrappingNameTransformer_withJsonUnwrappedPrefix_flattensNestedProperties() throws Throwable {
+        String json = mapper.writeValueAsString(new UnwrapPerson());
+        assertTrue(json.contains("addr_city"));
+        assertFalse(json.contains("\"address\""));
+    }
+
+    // findInjectableValue: @JacksonInject on field infers id from declared field type
+    @Test
+    public void testFindInjectableValue_withJacksonInjectOnField_injectsValueByTypeName() throws Throwable {
+        InjectableValues.Std iv = new InjectableValues.Std().addValue(String.class, "injectedValue");
+        ObjectReader reader = mapper.reader(iv).forType(InjectBean.class);
+        InjectBean bean = reader.readValue("{\"normal\":\"n\"}");
+        assertEquals("injectedValue", bean.injected);
+    }
+
+    // findViews: @JsonView limits serialized properties to the active view
+    @Test
+    public void testFindViews_withJsonView_includesOnlyPropertiesInView() throws Throwable {
+        String json = mapper.writerWithView(ViewA.class).writeValueAsString(new ViewBean());
+        assertTrue(json.contains("\"a\""));
+        assertFalse(json.contains("\"b\""));
+    }
+
+    // findObjectIdInfo: @JsonIdentityInfo adds configured id property to output
+    @Test
+    public void testFindObjectIdInfo_withJsonIdentityInfo_includesIdProperty() throws Throwable {
+        String json = mapper.writeValueAsString(new IdBean(42));
+        assertTrue(json.contains("@id"));
+    }
+
+    // findPropertyInclusion: @JsonInclude(NON_NULL) omits a null-valued property
+    @Test
+    public void testFindPropertyInclusion_withJsonIncludeNonNull_omitsNullProperty() throws Throwable {
+        InclusionBean bean = new InclusionBean();
+        bean.maybeNull = null;
+        String json = mapper.writeValueAsString(bean);
+        assertFalse(json.contains("maybeNull"));
+        assertTrue(json.contains("always"));
+    }
+
+    // findSerializationPropertyOrder: explicit @JsonPropertyOrder respected over declaration order
+    @Test
+    public void testFindSerializationPropertyOrder_withExplicitOrder_respectsDeclaredOrder() throws Throwable {
+        String json = mapper.writeValueAsString(new OrderBean());
+        int idxB = json.indexOf("\"b\"");
+        int idxA = json.indexOf("\"a\"");
+        assertTrue(idxB >= 0 && idxA >= 0 && idxB < idxA);
+    }
+
+    // findSerializationSortAlphabetically: alphabetic=true sorts properties alphabetically
+    @Test
+    public void testFindSerializationSortAlphabetically_withAlphabeticOrderTrue_sortsPropertiesAlphabetically() throws Throwable {
+        String json = mapper.writeValueAsString(new AlphaBean());
+        int idxApple = json.indexOf("\"apple\"");
+        int idxZebra = json.indexOf("\"zebra\"");
+        assertTrue(idxApple >= 0 && idxZebra >= 0 && idxApple < idxZebra);
+    }
+
+    // findNameForSerialization: @JsonGetter renames output property
+    @Test
+    public void testFindNameForSerialization_withJsonGetter_usesAnnotatedNameOnOutput() throws Throwable {
+        RenameBean bean = new RenameBean();
+        bean.setValue("x");
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"val\""));
+    }
+
+    // hasAsValue: @JsonValue serializes bean as the raw annotated value
+    @Test
+    public void testHasAsValue_withJsonValue_serializesUsingAnnotatedMethod() throws Throwable {
+        String json = mapper.writeValueAsString(new ValueBean("hello"));
+        assertEquals("\"hello\"", json);
+    }
+
+    // hasAnyGetter: @JsonAnyGetter injects dynamic map entries into output
+    @Test
+    public void testHasAnyGetter_withJsonAnyGetter_includesDynamicProperties() throws Throwable {
+        String json = mapper.writeValueAsString(new AnyGetterBean());
+        assertTrue(json.contains("\"x\":\"y\""));
+        assertFalse(json.contains("\"extra\""));
+    }
+
+    // refineDeserializationType: @JsonDeserialize(contentAs) narrows container element type
+    @Test
+    public void testRefineDeserializationType_withContentAs_narrowsListElementType() throws Throwable {
+        ContentAsBean bean = mapper.readValue("{\"numbers\":[1,2,3]}", ContentAsBean.class);
+        assertTrue(bean.numbers.get(0) instanceof Double);
+    }
+
+    // findPOJOBuilder/findPOJOBuilderConfig: @JsonDeserialize(builder) + @JsonPOJOBuilder build object
+    @Test
+    public void testFindPOJOBuilderConfig_withJsonPOJOBuilder_deserializesUsingBuilder() throws Throwable {
+        BuilderBean bean = mapper.readValue("{\"name\":\"Bob\"}", BuilderBean.class);
+        assertEquals("Bob", bean.getName());
+    }
+
+    // findNameForDeserialization: @JsonSetter binds input using the annotated name
+    @Test
+    public void testFindNameForDeserialization_withJsonSetter_bindsUsingAnnotatedName() throws Throwable {
+        RenameBean bean = mapper.readValue("{\"val\":\"z\"}", RenameBean.class);
+        assertEquals("z", bean.getValue());
+    }
+
+    // hasAnySetter: @JsonAnySetter captures unknown properties into a map
+    @Test
+    public void testHasAnySetter_withJsonAnySetter_capturesUnknownProperties() throws Throwable {
+        AnySetterBean bean = mapper.readValue("{\"foo\":\"bar\"}", AnySetterBean.class);
+        assertEquals("bar", bean.getExtra().get("foo"));
+    }
+
+    // findCreatorAnnotation: @JsonCreator constructor used for deserialization
+    @Test
+    public void testFindCreatorAnnotation_withJsonCreator_usesAnnotatedConstructor() throws Throwable {
+        CreatorBean bean = mapper.readValue("{\"value\":\"hi\"}", CreatorBean.class);
+        assertEquals("hi", bean.getValue());
+    }
+
+    /* ---------------- helper annotations / POJOs ---------------- */
+
+    @Retention(RetentionPolicy.RUNTIME)
+    @JacksonAnnotationsInside
+    public static @interface BundleAnno {
+    }
+
+    public static class BundleHolder {
+        @BundleAnno
+        public String field;
+    }
+
+    public static class PlainHolder {
+        @JsonProperty("x")
+        public String field;
+    }
+
+    public enum ColorSimple {
+        RED,
+        @JsonProperty("blue_color")
+        BLUE
+    }
+
+    public enum PlainPair { X, Y }
+
+    public enum StatusEnum {
+        @JsonEnumDefaultValue
+        UNKNOWN,
+        ACTIVE
+    }
+
+    public enum PlainEnum { A, B }
+
+    @JsonRootName("myRoot")
+    public static class RootBean {
+        public String value = "v";
+    }
+
+    @JsonIgnoreProperties({ "secret" })
+    public static class IgnorePropsBean {
+        public String secret = "hidden";
+        public String visible = "shown";
+    }
+
+    @JsonIgnoreType
+    public static class IgnorableType {
+        public String value = "ignoredValue";
+    }
+
+    public static class HostIgnore {
+        public String host = "host";
+        public IgnorableType nested = new IgnorableType();
+    }
+
+    @JsonNaming(PropertyNamingStrategy.SnakeCaseStrategy.class)
+    public static class NamingBean {
+        public String firstName = "Joe";
+    }
+
+    @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
+    public static class AutoDetectBean {
+        private String secretField = "abc";
+    }
+
+    public static class AliasBean {
+        private String name;
+
+        @JsonAlias({ "nm", "fullName" })
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
+        }
+    }
+
+    public static class IgnoreFieldBean {
+        @JsonIgnore
+        public String secret = "hidden";
+        public String visible = "shown";
+    }
+
+    public static class IndexBean {
+        @JsonProperty(index = 1)
+        public String second = "B";
+        @JsonProperty(index = 0)
+        public String first = "A";
+    }
+
+    public static class FormatBean {
+        @JsonFormat(pattern = "yyyy", timezone = "UTC")
+        public Date when;
+    }
+
+    public static class ParentRef {
+        public String name = "P";
+        @JsonManagedReference
+        public List<ChildRef> children = new ArrayList<ChildRef>();
+    }
+
+    public static class ChildRef {
+        public String name = "C";
+        @JsonBackReference
+        public ParentRef parent;
+    }
+
+    public static class UnwrapAddress {
+        public String city = "NYC";
+    }
+
+    public static class UnwrapPerson {
+        public String name = "Joe";
+        @JsonUnwrapped(prefix = "addr_")
+        public UnwrapAddress address = new UnwrapAddress();
+    }
+
+    public static class InjectBean {
+        @JacksonInject
+        public String injected;
+        public String normal;
+    }
+
+    public static class ViewA { }
+    public static class ViewB { }
+
+    public static class ViewBean {
+        @JsonView(ViewA.class)
+        public String a = "A";
+        @JsonView(ViewB.class)
+        public String b = "B";
+    }
+
+    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "@id")
+    public static class IdBean {
+        public int value;
+
+        public IdBean(int value) {
+            this.value = value;
+        }
+    }
+
+    public static class InclusionBean {
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public String maybeNull;
+        public String always = "x";
+    }
+
+    @JsonPropertyOrder({ "b", "a" })
+    public static class OrderBean {
+        public String a = "A";
+        public String b = "B";
+    }
+
+    @JsonPropertyOrder(alphabetic = true)
+    public static class AlphaBean {
+        public String zebra = "z";
+        public String apple = "a";
+    }
+
+    public static class RenameBean {
+        private String value;
+
+        @JsonGetter("val")
+        public String getValue() {
+            return value;
+        }
+
+        @JsonSetter("val")
+        public void setValue(String value) {
+            this.value = value;
+        }
+    }
+
+    public static class ValueBean {
+        private final String raw;
+
+        public ValueBean(String raw) {
+            this.raw = raw;
+        }
+
+        @JsonValue
+        public String getRaw() {
+            return raw;
+        }
+    }
+
+    public static class AnyGetterBean {
+        @JsonAnyGetter
+        public Map<String, String> getExtra() {
+            Map<String, String> m = new LinkedHashMap<String, String>();
+            m.put("x", "y");
+            return m;
+        }
+    }
+
+    public static class ContentAsBean {
+        @JsonDeserialize(contentAs = Double.class)
+        public List<Number> numbers;
+    }
+
+    @JsonDeserialize(builder = BuilderBeanBuilder.class)
+    public static class BuilderBean {
+        private final String name;
+
+        public BuilderBean(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
+        }
+    }
+
+    @JsonPOJOBuilder
+    public static class BuilderBeanBuilder {
+        private String name;
+
+        public BuilderBeanBuilder withName(String name) {
+            this.name = name;
+            return this;
+        }
+
+        public BuilderBean build() {
+            return new BuilderBean(name);
+        }
+    }
+
+    public static class AnySetterBean {
+        private Map<String, String> extra = new LinkedHashMap<String, String>();
+
+        @JsonAnySetter
+        public void setExtra(String key, String value) {
+            extra.put(key, value);
+        }
+
+        public Map<String, String> getExtra() {
+            return extra;
+        }
+    }
+
+    public static class CreatorBean {
+        private final String value;
+
+        @JsonCreator
+        public CreatorBean(@JsonProperty("value") String value) {
+            this.value = value;
+        }
+
+        public String getValue() {
+            return value;
+        }
+    }
+}

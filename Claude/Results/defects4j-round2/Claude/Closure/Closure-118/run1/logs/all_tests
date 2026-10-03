@@ -1,0 +1,2 @@
+testForJSTypeSystem_nullCompiler_throwsNullPointerException(com.google.javascript.jscomp.DisambiguatePropertiesClaudeTest)
+testForJSTypeSystem_nullPropertiesToErrorFor_throwsNullPointerException(com.google.javascript.jscomp.DisambiguatePropertiesClaudeTest)

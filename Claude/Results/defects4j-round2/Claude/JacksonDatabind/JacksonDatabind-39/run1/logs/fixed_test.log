@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-39-zus7exue/JacksonDatabind-39f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - com.fasterxml.jackson.databind.deser.std.NullifyingDeserializerClaudeTest::testDeserialize_startingAtFieldName_mustConsumeFieldNameAndPointAtValueToken
+  - com.fasterxml.jackson.databind.deser.std.NullifyingDeserializerClaudeTest::testDeserialize_secondFieldName_consumesNameAndValue
+[exit 0]

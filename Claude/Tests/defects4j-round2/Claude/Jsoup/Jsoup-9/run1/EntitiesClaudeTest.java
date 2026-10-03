@@ -1,0 +1,209 @@
+package org.jsoup.nodes;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+import java.util.Map;
+
+public class EntitiesClaudeTest {
+
+    // Covers: escape() loop with map hit for each xhtml-restricted char (< > & ' ") and encodable non-mapped char branch
+    @Test
+    public void testEscape_XhtmlMode_RestrictedEntitiesMapped() throws Throwable {
+        CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("<a>&'\"", encoder, Entities.EscapeMode.xhtml);
+        assertEquals("&lt;a&gt;&amp;&apos;&quot;", result);
+    }
+
+    // Covers: escape() encodable-but-not-mapped branch ('a' appended directly)
+    @Test
+    public void testEscape_XhtmlMode_UnmappedCharacterAppendedDirectly() throws Throwable {
+        CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("z", encoder, Entities.EscapeMode.xhtml);
+        assertEquals("z", result);
+    }
+
+    // Covers: escape() base mode map hit for accented char (eacute)
+    @Test
+    public void testEscape_BaseMode_CommonEntityMapped() throws Throwable {
+        CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("caf\u00E9", encoder, Entities.EscapeMode.base);
+        assertEquals("caf&eacute;", result);
+    }
+
+    // Covers: escape() base mode map hit for ampersand
+    @Test
+    public void testEscape_BaseMode_AmpMapped() throws Throwable {
+        CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("&", encoder, Entities.EscapeMode.base);
+        assertEquals("&amp;", result);
+    }
+
+    // Covers: escape() extended mode map hit for entity not present in base map
+    @Test
+    public void testEscape_ExtendedMode_ExtendedEntityMapped() throws Throwable {
+        CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("\u2020", encoder, Entities.EscapeMode.extended);
+        assertEquals("&dagger;", result);
+    }
+
+    // Covers: escape() loop executing zero times (empty string)
+    @Test
+    public void testEscape_EmptyString_ReturnsEmptyString() throws Throwable {
+        CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("", encoder, Entities.EscapeMode.base);
+        assertEquals("", result);
+    }
+
+    // Covers: escape() else branch - character not encodable, numeric character reference produced
+    @Test
+    public void testEscape_NonEncodableCharacter_UsesNumericCharacterReference() throws Throwable {
+        CharsetEncoder encoder = Charset.forName("US-ASCII").newEncoder();
+        String result = Entities.escape("\u3042", encoder, Entities.EscapeMode.base);
+        assertEquals("&#12354;", result);
+    }
+
+    // Covers: escape() encoder.canEncode() true branch with ASCII encoder for unmapped ascii char
+    @Test
+    public void testEscape_EncodableNonMappedCharacter_AppendedAsIs() throws Throwable {
+        CharsetEncoder encoder = Charset.forName("US-ASCII").newEncoder();
+        String result = Entities.escape("Z", encoder, Entities.EscapeMode.base);
+        assertEquals("Z", result);
+    }
+
+    // Covers: escape() loop with multiple iterations mixing mapped, unmapped chars
+    @Test
+    public void testEscape_MultipleCharactersMixed() throws Throwable {
+        CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("A&\u00E9Z", encoder, Entities.EscapeMode.base);
+        assertEquals("A&amp;&eacute;Z", result);
+    }
+
+    // Covers: EscapeMode.xhtml.getMap() returns expected mapping
+    @Test
+    public void testEscapeMode_XhtmlGetMap_ContainsAmp() throws Throwable {
+        Map<Character, String> map = Entities.EscapeMode.xhtml.getMap();
+        assertEquals("amp", map.get(Character.valueOf('&')));
+    }
+
+    // Covers: EscapeMode.base.getMap() returns expected mapping
+    @Test
+    public void testEscapeMode_BaseGetMap_ContainsNbsp() throws Throwable {
+        Map<Character, String> map = Entities.EscapeMode.base.getMap();
+        assertEquals("nbsp", map.get(Character.valueOf('\u00A0')));
+    }
+
+    // Covers: EscapeMode.extended.getMap() returns expected mapping
+    @Test
+    public void testEscapeMode_ExtendedGetMap_ContainsDagger() throws Throwable {
+        Map<Character, String> map = Entities.EscapeMode.extended.getMap();
+        assertEquals("dagger", map.get(Character.valueOf('\u2020')));
+    }
+
+    // Covers: EscapeMode.valueOf standard enum lookup
+    @Test
+    public void testEscapeMode_ValueOf_ReturnsCorrectEnum() throws Throwable {
+        Entities.EscapeMode mode = Entities.EscapeMode.valueOf("base");
+        assertEquals(Entities.EscapeMode.base, mode);
+    }
+
+    // Covers: unescape() early-return branch when string has no ampersand
+    @Test
+    public void testUnescape_NoAmpersand_ReturnsSameString() throws Throwable {
+        String result = Entities.unescape("hello world");
+        assertEquals("hello world", result);
+    }
+
+    // Covers: unescape() early-return branch for empty string (no '&')
+    @Test
+    public void testUnescape_EmptyString_ReturnsEmptyString() throws Throwable {
+        String result = Entities.unescape("");
+        assertEquals("", result);
+    }
+
+    // Covers: unescape() named-entity branch with trailing semicolon
+    @Test
+    public void testUnescape_NamedEntityWithSemicolon_ReturnsChar() throws Throwable {
+        String result = Entities.unescape("&amp;");
+        assertEquals("&", result);
+    }
+
+    // Covers: unescape() named-entity branch without trailing semicolon (optional ';')
+    @Test
+    public void testUnescape_NamedEntityWithoutSemicolon_ReturnsChar() throws Throwable {
+        String result = Entities.unescape("&amp is fun");
+        assertEquals("& is fun", result);
+    }
+
+    // Covers: unescape() unknown named entity -> full.containsKey false -> keep original text
+    @Test
+    public void testUnescape_UnknownNamedEntity_ReturnsOriginal() throws Throwable {
+        String result = Entities.unescape("&foobar;");
+        assertEquals("&foobar;", result);
+    }
+
+    // Covers: unescape() decimal numeric character reference branch
+    @Test
+    public void testUnescape_DecimalNumericReference_ReturnsChar() throws Throwable {
+        String result = Entities.unescape("&#65;");
+        assertEquals("A", result);
+    }
+
+    // Covers: unescape() hex numeric character reference branch, lowercase x
+    @Test
+    public void testUnescape_HexNumericReferenceLowercaseX_ReturnsChar() throws Throwable {
+        String result = Entities.unescape("&#x41;");
+        assertEquals("A", result);
+    }
+
+    // Covers: unescape() hex numeric character reference branch, uppercase X
+    @Test
+    public void testUnescape_HexNumericReferenceUppercaseX_ReturnsChar() throws Throwable {
+        String result = Entities.unescape("&#X41;");
+        assertEquals("A", result);
+    }
+
+    // Covers: unescape() decimal numeric reference with leading zeros
+    @Test
+    public void testUnescape_LeadingZerosNumeric_ReturnsChar() throws Throwable {
+        String result = Entities.unescape("&#0065;");
+        assertEquals("A", result);
+    }
+
+    // Covers: unescape() out-of-range numeric reference must stay unescaped per "out of range" contract (BUG TEST)
+    @Test
+    public void testUnescape_OutOfRangeNumericReference_KeepsOriginal() throws Throwable {
+        String result = Entities.unescape("&#100000;");
+        assertEquals("&#100000;", result);
+    }
+
+    // Covers: unescape() boundary case charval == 0xFFFF (max valid single char)
+    @Test
+    public void testUnescape_BoundaryMaxValidNumericReference_ReturnsChar() throws Throwable {
+        String result = Entities.unescape("&#65535;");
+        String expected = String.valueOf((char) 0xFFFF);
+        assertEquals(expected, result);
+    }
+
+    // Covers: unescape() NumberFormatException catch branch on integer overflow, charval stays -1
+    @Test
+    public void testUnescape_NumericOverflow_CatchesException_ReturnsOriginal() throws Throwable {
+        String result = Entities.unescape("&#99999999999;");
+        assertEquals("&#99999999999;", result);
+    }
+
+    // Covers: unescape() loop with multiple named-entity matches replaced via appendReplacement/appendTail
+    @Test
+    public void testUnescape_MultipleNamedEntities_ReturnsDecodedString() throws Throwable {
+        String result = Entities.unescape("&lt;p&gt;Hello &amp; World&lt;/p&gt;");
+        assertEquals("<p>Hello & World</p>", result);
+    }
+
+    // Covers: unescape() mixed numeric and named entities in same string
+    @Test
+    public void testUnescape_MixedNumericAndNamedEntities_ReturnsDecodedString() throws Throwable {
+        String result = Entities.unescape("&#65;&amp;&#66;");
+        assertEquals("A&B", result);
+    }
+}

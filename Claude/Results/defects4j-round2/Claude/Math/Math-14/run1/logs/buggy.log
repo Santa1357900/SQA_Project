@@ -1,0 +1,20 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Math -v 14b -w /tmp/claude-Math-14-mhf3f5yx/buggy
+Checking out b07ecae3 to /tmp/claude-Math-14-mhf3f5yx/buggy................ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff b07ecae3:ace42058..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Math-14b........................................ OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Math-14-mhf3f5yx/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

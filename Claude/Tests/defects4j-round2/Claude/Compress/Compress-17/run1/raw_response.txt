@@ -1,0 +1,370 @@
+package org.apache.commons.compress.archivers.tar;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class TarUtilsClaudeTest {
+
+    // parseOctal: normal digits followed by trailing NUL
+    @Test
+    public void testParseOctal_basicValue_trailingNul() throws Throwable {
+        byte[] buffer = {'7', '5', '5', 0};
+        long result = TarUtils.parseOctal(buffer, 0, 4);
+        assertEquals(493L, result);
+    }
+
+    // parseOctal: trailing space instead of NUL
+    @Test
+    public void testParseOctal_trailingSpace_parsesCorrectly() throws Throwable {
+        byte[] buffer = {'1', '0', ' '};
+        long result = TarUtils.parseOctal(buffer, 0, 3);
+        assertEquals(8L, result);
+    }
+
+    // parseOctal: leading spaces are skipped
+    @Test
+    public void testParseOctal_leadingSpacesSkipped_parsesCorrectly() throws Throwable {
+        byte[] buffer = {' ', ' ', '7', 0};
+        long result = TarUtils.parseOctal(buffer, 0, 4);
+        assertEquals(7L, result);
+    }
+
+    // parseOctal: leading NUL byte returns 0 regardless of remaining content
+    @Test
+    public void testParseOctal_leadingNul_returnsZero() throws Throwable {
+        byte[] buffer = {0, '1', '2', 0};
+        long result = TarUtils.parseOctal(buffer, 0, 4);
+        assertEquals(0L, result);
+    }
+
+    // parseOctal: length < 2 must throw IllegalArgumentException
+    @Test
+    public void testParseOctal_lengthLessThanTwo_throwsIllegalArgumentException() throws Throwable {
+        byte[] buffer = {'0', 0};
+        try {
+            TarUtils.parseOctal(buffer, 0, 1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // parseOctal: missing trailing space/NUL must throw IllegalArgumentException
+    @Test
+    public void testParseOctal_missingTrailer_throwsIllegalArgumentException() throws Throwable {
+        byte[] buffer = {'1', '2'};
+        try {
+            TarUtils.parseOctal(buffer, 0, 2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // parseOctal: invalid octal digit must throw IllegalArgumentException
+    @Test
+    public void testParseOctal_invalidDigit_throwsIllegalArgumentException() throws Throwable {
+        byte[] buffer = {'8', 0};
+        try {
+            TarUtils.parseOctal(buffer, 0, 2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // parseOctal: additional (second) trailing NUL/space is allowed
+    @Test
+    public void testParseOctal_doubleTrailer_parsesCorrectly() throws Throwable {
+        byte[] buffer = {'5', 0, 0};
+        long result = TarUtils.parseOctal(buffer, 0, 3);
+        assertEquals(5L, result);
+    }
+
+    // parseOctalOrBinary: high bit clear delegates to octal parsing
+    @Test
+    public void testParseOctalOrBinary_octalPath_delegatesToParseOctal() throws Throwable {
+        byte[] buffer = {'7', '5', '5', 0};
+        long result = TarUtils.parseOctalOrBinary(buffer, 0, 4);
+        assertEquals(493L, result);
+    }
+
+    // parseOctalOrBinary: length < 9 binary path, negative value round trip
+    @Test
+    public void testParseOctalOrBinary_shortBinaryNegative_roundTrips() throws Throwable {
+        byte[] buf = new byte[8];
+        TarUtils.formatLongOctalOrBinaryBytes(-5L, buf, 0, 8);
+        long result = TarUtils.parseOctalOrBinary(buf, 0, 8);
+        assertEquals(-5L, result);
+    }
+
+    // parseOctalOrBinary: length < 9 binary path, large positive value round trip (0x80 marker)
+    @Test
+    public void testParseOctalOrBinary_shortBinaryPositive_roundTripsWith80Marker() throws Throwable {
+        byte[] buf = new byte[8];
+        long value = 72057594037927935L; // 2^56 - 1
+        TarUtils.formatLongOctalOrBinaryBytes(value, buf, 0, 8);
+        assertEquals((byte) 0x80, buf[0]);
+        long result = TarUtils.parseOctalOrBinary(buf, 0, 8);
+        assertEquals(value, result);
+    }
+
+    // parseOctalOrBinary: length >= 9 BigInteger path, normal negative value round trip
+    @Test
+    public void testParseOctalOrBinary_bigIntegerPath_roundTripsNormalValue() throws Throwable {
+        byte[] buf = new byte[12];
+        long value = 123456789012345L;
+        TarUtils.formatLongOctalOrBinaryBytes(value, buf, 0, 12);
+        long result = TarUtils.parseOctalOrBinary(buf, 0, 12);
+        assertEquals(value, result);
+    }
+
+    // parseOctalOrBinary: length >= 9 BigInteger path must correctly round trip Long.MIN_VALUE
+    @Test
+    public void testParseOctalOrBinary_bigIntegerPath_roundTripsLongMinValue() throws Throwable {
+        byte[] buf = new byte[12];
+        TarUtils.formatLongOctalOrBinaryBytes(Long.MIN_VALUE, buf, 0, 12);
+        long result = TarUtils.parseOctalOrBinary(buf, 0, 12);
+        assertEquals(Long.MIN_VALUE, result);
+    }
+
+    // parseBoolean: byte value 1 means true
+    @Test
+    public void testParseBoolean_byteOne_returnsTrue() throws Throwable {
+        byte[] buffer = {1};
+        assertTrue(TarUtils.parseBoolean(buffer, 0));
+    }
+
+    // parseBoolean: byte value 0 means false
+    @Test
+    public void testParseBoolean_byteZero_returnsFalse() throws Throwable {
+        byte[] buffer = {0};
+        assertFalse(TarUtils.parseBoolean(buffer, 0));
+    }
+
+    // parseBoolean: any byte other than 1 means false
+    @Test
+    public void testParseBoolean_otherByte_returnsFalse() throws Throwable {
+        byte[] buffer = {5};
+        assertFalse(TarUtils.parseBoolean(buffer, 0));
+    }
+
+    // parseName: trailing NULs trimmed, name decoded correctly
+    @Test
+    public void testParseName_trailingNuls_stopsAtFirstTrailingNul() throws Throwable {
+        byte[] buf = new byte[10];
+        buf[0] = 't';
+        buf[1] = 'e';
+        buf[2] = 's';
+        buf[3] = 't';
+        String result = TarUtils.parseName(buf, 0, 10);
+        assertEquals("test", result);
+    }
+
+    // parseName: all NUL buffer returns empty string
+    @Test
+    public void testParseName_allNul_returnsEmptyString() throws Throwable {
+        byte[] buf = new byte[5];
+        String result = TarUtils.parseName(buf, 0, 5);
+        assertEquals("", result);
+    }
+
+    // parseName: no trailing NUL, full length used as name
+    @Test
+    public void testParseName_noTrailingNul_usesFullLength() throws Throwable {
+        byte[] buf = {'a', 'b', 'c'};
+        String result = TarUtils.parseName(buf, 0, 3);
+        assertEquals("abc", result);
+    }
+
+    // parseName: explicit FALLBACK_ENCODING decodes correctly and stops at NUL
+    @Test
+    public void testParseName_withFallbackEncoding_decodesCorrectly() throws Throwable {
+        byte[] buf = {'x', 'y', 0, 0};
+        String result = TarUtils.parseName(buf, 0, 4, TarUtils.FALLBACK_ENCODING);
+        assertEquals("xy", result);
+    }
+
+    // formatNameBytes: name shorter than buffer is padded with trailing NULs
+    @Test
+    public void testFormatNameBytes_shorterThanBuffer_padsWithNul() throws Throwable {
+        byte[] buf = new byte[6];
+        int ret = TarUtils.formatNameBytes("abc", buf, 0, 6);
+        assertEquals(6, ret);
+        assertEquals('a', buf[0]);
+        assertEquals('b', buf[1]);
+        assertEquals('c', buf[2]);
+        assertEquals(0, buf[3]);
+        assertEquals(0, buf[4]);
+        assertEquals(0, buf[5]);
+    }
+
+    // formatNameBytes: name longer than buffer is truncated
+    @Test
+    public void testFormatNameBytes_longerThanBuffer_truncates() throws Throwable {
+        byte[] buf = new byte[3];
+        int ret = TarUtils.formatNameBytes("abcdef", buf, 0, 3);
+        assertEquals(3, ret);
+        assertEquals('a', buf[0]);
+        assertEquals('b', buf[1]);
+        assertEquals('c', buf[2]);
+    }
+
+    // formatNameBytes: name exactly matches buffer length, no padding needed
+    @Test
+    public void testFormatNameBytes_exactLength_noPadding() throws Throwable {
+        byte[] buf = new byte[3];
+        int ret = TarUtils.formatNameBytes("abc", buf, 0, 3);
+        assertEquals(3, ret);
+        assertEquals('a', buf[0]);
+        assertEquals('b', buf[1]);
+        assertEquals('c', buf[2]);
+    }
+
+    // formatUnsignedOctalString: value 0 fills buffer with leading zero digits
+    @Test
+    public void testFormatUnsignedOctalString_zeroValue_allZeros() throws Throwable {
+        byte[] buf = new byte[4];
+        TarUtils.formatUnsignedOctalString(0L, buf, 0, 4);
+        assertEquals("0000", new String(buf));
+    }
+
+    // formatUnsignedOctalString: normal value produces correct padded octal digits
+    @Test
+    public void testFormatUnsignedOctalString_normalValue_correctOctal() throws Throwable {
+        byte[] buf = new byte[4];
+        TarUtils.formatUnsignedOctalString(8L, buf, 0, 4);
+        assertEquals("0010", new String(buf));
+    }
+
+    // formatUnsignedOctalString: value that doesn't fit must throw IllegalArgumentException
+    @Test
+    public void testFormatUnsignedOctalString_valueTooLarge_throwsIllegalArgumentException() throws Throwable {
+        byte[] buf = new byte[1];
+        try {
+            TarUtils.formatUnsignedOctalString(8L, buf, 0, 1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // formatOctalBytes: octal digits followed by trailing space then NUL
+    @Test
+    public void testFormatOctalBytes_basicValue_trailingSpaceAndNul() throws Throwable {
+        byte[] buf = new byte[6];
+        int ret = TarUtils.formatOctalBytes(8L, buf, 0, 6);
+        assertEquals(6, ret);
+        byte[] expected = {'0', '0', '1', '0', ' ', 0};
+        assertArrayEquals(expected, buf);
+    }
+
+    // formatLongOctalBytes: octal digits followed by a single trailing space
+    @Test
+    public void testFormatLongOctalBytes_basicValue_trailingSpace() throws Throwable {
+        byte[] buf = new byte[5];
+        int ret = TarUtils.formatLongOctalBytes(8L, buf, 0, 5);
+        assertEquals(5, ret);
+        byte[] expected = {'0', '0', '1', '0', ' '};
+        assertArrayEquals(expected, buf);
+    }
+
+    // formatLongOctalOrBinaryBytes: small value within octal capacity uses octal encoding
+    @Test
+    public void testFormatLongOctalOrBinaryBytes_smallValue_usesOctalEncoding() throws Throwable {
+        byte[] buf = new byte[12];
+        int ret = TarUtils.formatLongOctalOrBinaryBytes(8L, buf, 0, 12);
+        assertEquals(12, ret);
+        assertEquals((byte) '0', buf[0]);
+        assertEquals(8L, TarUtils.parseOctalOrBinary(buf, 0, 12));
+    }
+
+    // formatLongOctalOrBinaryBytes: negative value uses binary encoding with 0xFF marker
+    @Test
+    public void testFormatLongOctalOrBinaryBytes_negativeValue_usesBinaryWithFFMarker() throws Throwable {
+        byte[] buf = new byte[8];
+        TarUtils.formatLongOctalOrBinaryBytes(-1L, buf, 0, 8);
+        assertEquals((byte) 0xFF, buf[0]);
+        assertEquals(-1L, TarUtils.parseOctalOrBinary(buf, 0, 8));
+    }
+
+    // formatLongOctalOrBinaryBytes: large positive value exceeding octal capacity uses 0x80 marker
+    @Test
+    public void testFormatLongOctalOrBinaryBytes_largePositiveValue_usesBinaryWith80Marker() throws Throwable {
+        byte[] buf = new byte[8];
+        long value = 72057594037927935L; // 2^56 - 1
+        TarUtils.formatLongOctalOrBinaryBytes(value, buf, 0, 8);
+        assertEquals((byte) 0x80, buf[0]);
+        assertEquals(value, TarUtils.parseOctalOrBinary(buf, 0, 8));
+    }
+
+    // formatCheckSumOctalBytes: octal digits followed by NUL then trailing space
+    @Test
+    public void testFormatCheckSumOctalBytes_basicValue_nulThenSpace() throws Throwable {
+        byte[] buf = new byte[6];
+        int ret = TarUtils.formatCheckSumOctalBytes(8L, buf, 0, 6);
+        assertEquals(6, ret);
+        byte[] expected = {'0', '0', '1', '0', 0, ' '};
+        assertArrayEquals(expected, buf);
+    }
+
+    // computeCheckSum: bytes are summed as unsigned values (BYTE_MASK applied)
+    @Test
+    public void testComputeCheckSum_mixedBytesIncludingNegative_sumsUnsignedValues() throws Throwable {
+        byte[] buf = {(byte) 0xFF, (byte) 1, (byte) 2};
+        long sum = TarUtils.computeCheckSum(buf);
+        assertEquals(258L, sum);
+    }
+
+    // computeCheckSum: empty array sums to zero (0 loop iterations)
+    @Test
+    public void testComputeCheckSum_emptyArray_returnsZero() throws Throwable {
+        byte[] buf = new byte[0];
+        long sum = TarUtils.computeCheckSum(buf);
+        assertEquals(0L, sum);
+    }
+
+    // verifyCheckSum: correctly computed checksum written into header must verify true
+    @Test
+    public void testVerifyCheckSum_correctChecksum_returnsTrue() throws Throwable {
+        int len = TarConstants.CHKSUM_OFFSET + TarConstants.CHKSUMLEN + 10;
+        byte[] header = new byte[len];
+        for (int i = 0; i < len; i++) {
+            header[i] = (byte) 'A';
+        }
+        for (int i = TarConstants.CHKSUM_OFFSET; i < TarConstants.CHKSUM_OFFSET + TarConstants.CHKSUMLEN; i++) {
+            header[i] = ' ';
+        }
+        long sum = TarUtils.computeCheckSum(header);
+        TarUtils.formatCheckSumOctalBytes(sum, header, TarConstants.CHKSUM_OFFSET, TarConstants.CHKSUMLEN);
+        assertTrue(TarUtils.verifyCheckSum(header));
+    }
+
+    // verifyCheckSum: wrong stored checksum (smaller than actual sum) must verify false
+    @Test
+    public void testVerifyCheckSum_incorrectChecksum_returnsFalse() throws Throwable {
+        int len = TarConstants.CHKSUM_OFFSET + TarConstants.CHKSUMLEN + 10;
+        byte[] header = new byte[len];
+        for (int i = 0; i < len; i++) {
+            header[i] = (byte) 'A';
+        }
+        for (int i = TarConstants.CHKSUM_OFFSET; i < TarConstants.CHKSUM_OFFSET + TarConstants.CHKSUMLEN; i++) {
+            header[i] = ' ';
+        }
+        TarUtils.formatCheckSumOctalBytes(1L, header, TarConstants.CHKSUM_OFFSET, TarConstants.CHKSUMLEN);
+        assertFalse(TarUtils.verifyCheckSum(header));
+    }
+
+    // verifyCheckSum: stored checksum greater than computed unsigned sum (COMPRESS-177) returns true
+    @Test
+    public void testVerifyCheckSum_storedSumGreaterThanUnsigned_returnsTrue() throws Throwable {
+        int len = TarConstants.CHKSUM_OFFSET + TarConstants.CHKSUMLEN + 10;
+        byte[] header = new byte[len];
+        int off = TarConstants.CHKSUM_OFFSET;
+        header[off] = '7';
+        header[off + 1] = '7';
+        header[off + 2] = '7';
+        header[off + 3] = '7';
+        header[off + 4] = '7';
+        header[off + 5] = '7';
+        header[off + 6] = 0;
+        header[off + 7] = ' ';
+        assertTrue(TarUtils.verifyCheckSum(header));
+    }
+}

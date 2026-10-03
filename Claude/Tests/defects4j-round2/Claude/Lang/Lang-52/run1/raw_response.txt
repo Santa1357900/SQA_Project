@@ -1,0 +1,354 @@
+package org.apache.commons.lang;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.io.StringWriter;
+import java.io.Writer;
+import org.apache.commons.lang.exception.NestableRuntimeException;
+
+public class StringEscapeUtilsClaudeTest {
+
+    // public constructor usable by tools
+    @Test
+    public void testConstructor_createsInstance() throws Throwable {
+        StringEscapeUtils instance = new StringEscapeUtils();
+        assertNotNull(instance);
+    }
+
+    // escapeJava: null input -> null
+    @Test
+    public void testEscapeJava_nullInput_returnsNull() throws Throwable {
+        assertNull(StringEscapeUtils.escapeJava(null));
+    }
+
+    // escapeJava: empty input -> empty
+    @Test
+    public void testEscapeJava_emptyInput_returnsEmpty() throws Throwable {
+        assertEquals("", StringEscapeUtils.escapeJava(""));
+    }
+
+    // escapeJava: plain ascii letters unchanged (default branch of main switch)
+    @Test
+    public void testEscapeJava_plainAscii_unchanged() throws Throwable {
+        assertEquals("Hello", StringEscapeUtils.escapeJava("Hello"));
+    }
+
+    // escapeJava: quotes escaped, apostrophe left alone (javadoc example)
+    @Test
+    public void testEscapeJava_quotesAndApostrophe_javadocExample() throws Throwable {
+        String input = "He didn't say, \"Stop!\"";
+        String expected = "He didn't say, \\\"Stop!\\\"";
+        assertEquals(expected, StringEscapeUtils.escapeJava(input));
+    }
+
+    // escapeJava: named control escapes \b \n \t \f \r
+    @Test
+    public void testEscapeJava_controlCharsWithNamedEscape() throws Throwable {
+        String input = "" + (char) 8 + (char) 10 + (char) 9 + (char) 12 + (char) 13;
+        assertEquals("\\b\\n\\t\\f\\r", StringEscapeUtils.escapeJava(input));
+    }
+
+    // escapeJava: NUL char (ch<32, ch<=0xf branch) -> \u0000
+    @Test
+    public void testEscapeJava_nulChar_unicodeEscaped() throws Throwable {
+        String input = String.valueOf((char) 0);
+        String expected = "\\" + "u0000";
+        assertEquals(expected, StringEscapeUtils.escapeJava(input));
+    }
+
+    // escapeJava: control char value 5 (ch<=0xf branch) -> \u0005
+    @Test
+    public void testEscapeJava_controlCharBelow16_unicodeEscaped() throws Throwable {
+        String input = String.valueOf((char) 5);
+        String expected = "\\" + "u0005";
+        assertEquals(expected, StringEscapeUtils.escapeJava(input));
+    }
+
+    // escapeJava: control char value 27 (ch>0xf branch) -> \u001B
+    @Test
+    public void testEscapeJava_controlCharAbove15_unicodeEscaped() throws Throwable {
+        String input = String.valueOf((char) 27);
+        String expected = "\\" + "u001B";
+        assertEquals(expected, StringEscapeUtils.escapeJava(input));
+    }
+
+    // escapeJava: latin1 char 0xE9 (ch>0x7f branch) -> \u00E9
+    @Test
+    public void testEscapeJava_latin1Char_unicodeEscaped() throws Throwable {
+        String input = String.valueOf((char) 0xE9);
+        String expected = "\\" + "u00E9";
+        assertEquals(expected, StringEscapeUtils.escapeJava(input));
+    }
+
+    // escapeJava: char above 0xff (ch>0xff branch) -> \u0100
+    @Test
+    public void testEscapeJava_charAbove0xff_unicodeEscaped() throws Throwable {
+        String input = String.valueOf((char) 0x100);
+        String expected = "\\" + "u0100";
+        assertEquals(expected, StringEscapeUtils.escapeJava(input));
+    }
+
+    // escapeJava: char above 0xfff (ch>0xfff branch) -> \u1234
+    @Test
+    public void testEscapeJava_charAbove0xfff_unicodeEscaped() throws Throwable {
+        String input = String.valueOf((char) 0x1234);
+        String expected = "\\" + "u1234";
+        assertEquals(expected, StringEscapeUtils.escapeJava(input));
+    }
+
+    // escapeJava: backslash escaped to double backslash
+    @Test
+    public void testEscapeJava_backslash_escaped() throws Throwable {
+        assertEquals("\\\\", StringEscapeUtils.escapeJava("\\"));
+    }
+
+    // escapeJavaScript: single quote IS escaped (difference from escapeJava)
+    @Test
+    public void testEscapeJavaScript_singleQuote_escaped() throws Throwable {
+        assertEquals("\\'", StringEscapeUtils.escapeJavaScript("'"));
+    }
+
+    // escapeJavaScript: null input -> null
+    @Test
+    public void testEscapeJavaScript_null_returnsNull() throws Throwable {
+        assertNull(StringEscapeUtils.escapeJavaScript(null));
+    }
+
+    // escapeJava(Writer,String): null writer throws IllegalArgumentException
+    @Test
+    public void testEscapeJava_Writer_nullWriter_throwsIAE() throws Throwable {
+        try {
+            StringEscapeUtils.escapeJava((Writer) null, "abc");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // escapeJava(Writer,String): null string has no effect on writer
+    @Test
+    public void testEscapeJava_Writer_nullString_noEffect() throws Throwable {
+        StringWriter sw = new StringWriter();
+        StringEscapeUtils.escapeJava(sw, null);
+        assertEquals("", sw.toString());
+    }
+
+    // escapeJava(Writer,String): matches escapeJava(String) result
+    @Test
+    public void testEscapeJava_Writer_matchesStringVersion() throws Throwable {
+        StringWriter sw = new StringWriter();
+        String input = "He said \"hi\"\tagain";
+        StringEscapeUtils.escapeJava(sw, input);
+        assertEquals(StringEscapeUtils.escapeJava(input), sw.toString());
+    }
+
+    // escapeJavaScript(Writer,String): null writer throws IllegalArgumentException
+    @Test
+    public void testEscapeJavaScript_Writer_nullWriter_throwsIAE() throws Throwable {
+        try {
+            StringEscapeUtils.escapeJavaScript((Writer) null, "abc");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // unescapeJava: null input -> null
+    @Test
+    public void testUnescapeJava_null_returnsNull() throws Throwable {
+        assertNull(StringEscapeUtils.unescapeJava(null));
+    }
+
+    // unescapeJava: named escapes \n \t \r \f \b \\ \' \" turned into actual chars
+    @Test
+    public void testUnescapeJava_namedEscapes() throws Throwable {
+        String input = "\\n" + "\\t" + "\\r" + "\\f" + "\\b" + "\\\\" + "\\'" + "\\\"";
+        String expected = "" + (char) 10 + (char) 9 + (char) 13 + (char) 12 + (char) 8 + '\\' + '\'' + '"';
+        assertEquals(expected, StringEscapeUtils.unescapeJava(input));
+    }
+
+    // unescapeJava: \u0041 unicode escape becomes 'A'
+    @Test
+    public void testUnescapeJava_unicodeEscape() throws Throwable {
+        String input = "\\" + "u0041";
+        assertEquals("A", StringEscapeUtils.unescapeJava(input));
+    }
+
+    // unescapeJava: malformed unicode value throws NestableRuntimeException
+    @Test
+    public void testUnescapeJava_malformedUnicode_throwsNestableRuntimeException() throws Throwable {
+        String input = "\\" + "u123g";
+        try {
+            StringEscapeUtils.unescapeJava(input);
+            fail("expected NestableRuntimeException");
+        } catch (NestableRuntimeException expected) {
+            // ok
+        }
+    }
+
+    // unescapeJava: trailing lone backslash is preserved as-is
+    @Test
+    public void testUnescapeJava_trailingBackslash_preserved() throws Throwable {
+        String input = "abc\\";
+        assertEquals("abc\\", StringEscapeUtils.unescapeJava(input));
+    }
+
+    // unescapeJava: unknown escape char drops the backslash
+    @Test
+    public void testUnescapeJava_unknownEscape_dropsBackslash() throws Throwable {
+        String input = "\\q";
+        assertEquals("q", StringEscapeUtils.unescapeJava(input));
+    }
+
+    // unescapeJava(Writer,String): null writer throws IllegalArgumentException
+    @Test
+    public void testUnescapeJava_Writer_nullWriter_throwsIAE() throws Throwable {
+        try {
+            StringEscapeUtils.unescapeJava((Writer) null, "abc");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // unescapeJavaScript: delegates to unescapeJava
+    @Test
+    public void testUnescapeJavaScript_delegatesToUnescapeJava() throws Throwable {
+        String input = "\\n";
+        assertEquals(String.valueOf((char) 10), StringEscapeUtils.unescapeJavaScript(input));
+    }
+
+    // unescapeJavaScript(Writer,String): delegates to unescapeJava(Writer,String)
+    @Test
+    public void testUnescapeJavaScript_Writer_delegates() throws Throwable {
+        StringWriter sw = new StringWriter();
+        StringEscapeUtils.unescapeJavaScript(sw, "\\n");
+        assertEquals(String.valueOf((char) 10), sw.toString());
+    }
+
+    // escapeHtml: basic HTML entities < > & "
+    @Test
+    public void testEscapeHtml_basicEntities() throws Throwable {
+        assertEquals("&lt;&gt;&amp;&quot;", StringEscapeUtils.escapeHtml("<>&\""));
+    }
+
+    // escapeHtml: apostrophe is NOT a legal HTML entity, left unchanged (per javadoc)
+    @Test
+    public void testEscapeHtml_apostropheNotEscaped() throws Throwable {
+        assertEquals("'", StringEscapeUtils.escapeHtml("'"));
+    }
+
+    // escapeHtml: null input -> null
+    @Test
+    public void testEscapeHtml_null_returnsNull() throws Throwable {
+        assertNull(StringEscapeUtils.escapeHtml(null));
+    }
+
+    // escapeHtml(Writer,String): null writer throws IllegalArgumentException
+    @Test
+    public void testEscapeHtml_Writer_nullWriter_throwsIAE() throws Throwable {
+        try {
+            StringEscapeUtils.escapeHtml((Writer) null, "x");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // unescapeHtml: javadoc example with accented entity
+    @Test
+    public void testUnescapeHtml_javadocExampleAccents() throws Throwable {
+        String input = "&lt;Fran&ccedil;ais&gt;";
+        String expected = "<Fran" + (char) 0xE7 + "ais>";
+        assertEquals(expected, StringEscapeUtils.unescapeHtml(input));
+    }
+
+    // unescapeHtml: unrecognized entity left verbatim (javadoc example)
+    @Test
+    public void testUnescapeHtml_unrecognizedEntity_leftVerbatim_javadocExample() throws Throwable {
+        String input = "&gt;&zzzz;x";
+        assertEquals(">&zzzz;x", StringEscapeUtils.unescapeHtml(input));
+    }
+
+    // unescapeHtml: null input -> null
+    @Test
+    public void testUnescapeHtml_null_returnsNull() throws Throwable {
+        assertNull(StringEscapeUtils.unescapeHtml(null));
+    }
+
+    // unescapeHtml(Writer,String): null writer throws IllegalArgumentException
+    @Test
+    public void testUnescapeHtml_Writer_nullWriter_throwsIAE() throws Throwable {
+        try {
+            StringEscapeUtils.unescapeHtml((Writer) null, "x");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // escapeXml: basic entities including apostrophe (XML supports all five)
+    @Test
+    public void testEscapeXml_basicEntitiesIncludingApostrophe() throws Throwable {
+        assertEquals("&lt;&gt;&amp;&quot;&apos;", StringEscapeUtils.escapeXml("<>&\"'"));
+    }
+
+    // escapeXml: null input -> null
+    @Test
+    public void testEscapeXml_null_returnsNull() throws Throwable {
+        assertNull(StringEscapeUtils.escapeXml(null));
+    }
+
+    // escapeXml(Writer,String): null writer throws IllegalArgumentException
+    @Test
+    public void testEscapeXml_Writer_nullWriter_throwsIAE() throws Throwable {
+        try {
+            StringEscapeUtils.escapeXml((Writer) null, "x");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // unescapeXml: basic entities including apostrophe
+    @Test
+    public void testUnescapeXml_basicEntities() throws Throwable {
+        String input = "&lt;&gt;&amp;&quot;&apos;";
+        assertEquals("<>&\"'", StringEscapeUtils.unescapeXml(input));
+    }
+
+    // unescapeXml: null input -> null
+    @Test
+    public void testUnescapeXml_null_returnsNull() throws Throwable {
+        assertNull(StringEscapeUtils.unescapeXml(null));
+    }
+
+    // unescapeXml(Writer,String): null writer throws IllegalArgumentException
+    @Test
+    public void testUnescapeXml_Writer_nullWriter_throwsIAE() throws Throwable {
+        try {
+            StringEscapeUtils.unescapeXml((Writer) null, "x");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            // ok
+        }
+    }
+
+    // escapeSql: single quote doubled
+    @Test
+    public void testEscapeSql_singleQuote_doubled() throws Throwable {
+        assertEquals("McHale''s Navy", StringEscapeUtils.escapeSql("McHale's Navy"));
+    }
+
+    // escapeSql: null input -> null
+    @Test
+    public void testEscapeSql_null_returnsNull() throws Throwable {
+        assertNull(StringEscapeUtils.escapeSql(null));
+    }
+
+    // escapeSql: string without quotes unchanged
+    @Test
+    public void testEscapeSql_noQuotes_unchanged() throws Throwable {
+        assertEquals("hello world", StringEscapeUtils.escapeSql("hello world"));
+    }
+}

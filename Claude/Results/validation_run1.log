@@ -1,0 +1,941 @@
+﻿Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 295 detected 65 | FDR 0.2203 | line 0.6227 | branch 0.5417 | method 0.6792
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+wsl : usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+At line:1 char:302
++ ... tch {} } }; wsl -d Ubuntu bash /mnt/e/SaiStudyKKU/SQA/project/workspe ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (usage: validate...[PROJECTS ...]]:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=0) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=0) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=91) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=94) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=94) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=94) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=94) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=98) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=101) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=102) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=103) ...
+usage: validate_claude.py [-h] [--projects PROJECTS [PROJECTS ...]]
+                          [--bugs BUGS [BUGS ...]] [--runs RUNS [RUNS ...]]
+                          [--all] [--limit LIMIT] [--workers WORKERS]
+                          [--defects4j-bin DEFECTS4J_BIN]
+                          [--test-timeout TEST_TIMEOUT] [--overwrite]
+                          [--dry-run] [--summarize-only]
+validate_claude.py: error: unrecognized arguments: Claude/Results/generation_run1_max5.log
+validate_loop: waiting for new suites (pending=106) ...
+Targets 854 | pending 107 | workers 12
+[Closure-40 run1] no_valid_tests (test_compile_failed) valid=0/26 fault=None line=None
+[Closure-42 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[Closure-39 run1] no_valid_tests (test_compile_failed) valid=0/46 fault=None line=None
+[Closure-12 run1] no_valid_tests (test_compile_failed) valid=0/22 fault=None line=None
+[Closure-14 run1] no_valid_tests (test_compile_failed) valid=0/44 fault=None line=None
+[Closure-41 run1] no_valid_tests (test_compile_failed) valid=0/25 fault=None line=None
+[Closure-43 run1] no_valid_tests (test_compile_failed) valid=0/27 fault=None line=None
+[Closure-45 run1] no_valid_tests (test_compile_failed) valid=0/25 fault=None line=None
+[Closure-48 run1] no_valid_tests (test_compile_failed) valid=0/30 fault=None line=None
+[Closure-50 run1] no_valid_tests (test_compile_failed) valid=0/34 fault=None line=None
+[Closure-51 run1] no_valid_tests (test_compile_failed) valid=0/39 fault=None line=None
+[Closure-38 run1] complete (complete) valid=40/40 fault=False line=1.0
+[Closure-44 run1] complete (complete) valid=44/44 fault=False line=0.9266
+[Closure-16 run1] complete (complete) valid=22/25 fault=False line=0.7871
+[Closure-10 run1] complete (complete) valid=69/69 fault=False line=0.4138
+[Closure-37 run1] complete (complete) valid=31/39 fault=False line=0.1214
+[Closure-52 run1] no_valid_tests (test_compile_failed) valid=0/39 fault=None line=None
+[Closure-53 run1] no_valid_tests (test_compile_failed) valid=0/29 fault=None line=None
+[Closure-54 run1] no_valid_tests (test_compile_failed) valid=0/29 fault=None line=None
+[Closure-55 run1] no_valid_tests (test_compile_failed) valid=0/23 fault=None line=None
+[Closure-57 run1] no_valid_tests (test_compile_failed) valid=0/33 fault=None line=None
+[Closure-46 run1] complete (complete) valid=24/26 fault=False line=0.7798
+[Closure-47 run1] complete (complete) valid=19/24 fault=False line=0.6676
+[Closure-49 run1] complete (complete) valid=37/37 fault=False line=0.3575
+[Closure-59 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[Closure-62 run1] no_valid_tests (test_compile_failed) valid=0/24 fault=None line=None
+[Closure-67 run1] no_valid_tests (test_compile_failed) valid=0/29 fault=None line=None
+[Closure-66 run1] no_valid_tests (test_compile_failed) valid=0/37 fault=None line=None
+[Closure-69 run1] no_valid_tests (test_compile_failed) valid=0/36 fault=None line=None
+[Closure-70 run1] no_valid_tests (test_compile_failed) valid=0/27 fault=None line=None
+[Closure-71 run1] no_valid_tests (test_compile_failed) valid=0/28 fault=None line=None
+[Closure-65 run1] complete (complete) valid=34/36 fault=False line=0.1176
+[Closure-56 run1] complete (complete) valid=38/38 fault=True line=0.8592
+[Closure-64 run1] complete (complete) valid=38/40 fault=False line=0.4199
+[Closure-72 run1] no_valid_tests (test_compile_failed) valid=0/21 fault=None line=None
+[Closure-73 run1] no_valid_tests (test_compile_failed) valid=0/32 fault=None line=None
+[Closure-74 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[Closure-75 run1] no_valid_tests (test_compile_failed) valid=0/43 fault=None line=None
+[Closure-58 run1] complete (complete) valid=28/28 fault=False line=0.9135
+[Closure-60 run1] complete (complete) valid=71/72 fault=False line=0.5459
+[Closure-61 run1] complete (complete) valid=49/51 fault=False line=0.3004
+[Closure-76 run1] no_valid_tests (test_compile_failed) valid=0/26 fault=None line=None
+[Closure-68 run1] complete (complete) valid=37/38 fault=False line=0.2826
+[Closure-78 run1] no_valid_tests (test_compile_failed) valid=0/38 fault=None line=None
+[Closure-81 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[Closure-80 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[Closure-77 run1] no_valid_tests (test_compile_failed) valid=0/40 fault=None line=None
+[Closure-84 run1] no_valid_tests (test_compile_failed) valid=0/43 fault=None line=None
+[Closure-85 run1] no_valid_tests (test_compile_failed) valid=0/24 fault=None line=None
+[Closure-87 run1] no_valid_tests (test_compile_failed) valid=0/31 fault=None line=None
+[Closure-88 run1] no_valid_tests (test_compile_failed) valid=0/24 fault=None line=None
+[Closure-90 run1] no_valid_tests (test_compile_failed) valid=0/30 fault=None line=None
+[Closure-91 run1] no_valid_tests (test_compile_failed) valid=0/25 fault=None line=None
+[Closure-89 run1] no_valid_tests (test_compile_failed) valid=0/24 fault=None line=None
+[Closure-92 run1] no_valid_tests (test_compile_failed) valid=0/37 fault=None line=None
+[Closure-94 run1] no_valid_tests (test_compile_failed) valid=0/43 fault=None line=None
+[Closure-95 run1] no_valid_tests (test_compile_failed) valid=0/33 fault=None line=None
+[Closure-96 run1] no_valid_tests (test_compile_failed) valid=0/39 fault=None line=None
+[Closure-97 run1] no_valid_tests (test_compile_failed) valid=0/44 fault=None line=None
+[Closure-98 run1] no_valid_tests (test_compile_failed) valid=0/36 fault=None line=None
+[Closure-102 run1] no_valid_tests (test_compile_failed) valid=0/23 fault=None line=None
+[Closure-103 run1] no_valid_tests (test_compile_failed) valid=0/37 fault=None line=None
+[Closure-79 run1] complete (complete) valid=18/25 fault=False line=0.3708
+[Closure-83 run1] complete (complete) valid=29/32 fault=False line=0.8
+[Closure-86 run1] complete (complete) valid=44/45 fault=False line=0.3757
+[Closure-104 run1] no_valid_tests (test_compile_failed) valid=0/44 fault=None line=None
+[Closure-82 run1] complete (complete) valid=53/56 fault=False line=0.482
+[Closure-106 run1] no_valid_tests (test_compile_failed) valid=0/43 fault=None line=None
+[Closure-99 run1] complete (complete) valid=23/24 fault=False line=0.9149
+[Closure-100 run1] complete (complete) valid=24/24 fault=True line=1.0
+[Closure-101 run1] complete (complete) valid=28/28 fault=True line=0.8606
+[Closure-105 run1] complete (complete) valid=44/45 fault=False line=0.3122
+[Closure-111 run1] no_valid_tests (test_compile_failed) valid=0/24 fault=None line=None
+[Closure-117 run1] no_valid_tests (all_tests_fail_on_fixed) valid=0/34 fault=None line=None
+[Closure-107 run1] complete (complete) valid=21/27 fault=False line=0.7829
+[Closure-109 run1] complete (complete) valid=44/45 fault=True line=0.2661
+[Closure-108 run1] complete (complete) valid=21/22 fault=True line=0.9628
+[Closure-113 run1] complete (complete) valid=36/37 fault=False line=0.8251
+[Closure-112 run1] complete (complete) valid=32/32 fault=False line=0.6381
+[Closure-110 run1] complete (complete) valid=22/24 fault=False line=0.4844
+[Closure-114 run1] complete (complete) valid=27/27 fault=False line=0.7137
+[Closure-115 run1] complete (complete) valid=29/30 fault=False line=0.537
+[Closure-116 run1] complete (complete) valid=29/29 fault=False line=0.4488
+[Closure-118 run1] complete (complete) valid=2/30 fault=False line=0.0108
+[Closure-119 run1] complete (complete) valid=41/42 fault=False line=0.7097
+[Closure-126 run1] no_valid_tests (test_compile_failed) valid=0/23 fault=None line=None
+[Closure-135 run1] no_valid_tests (test_compile_failed) valid=0/24 fault=None line=None
+[Closure-139 run1] no_valid_tests (test_compile_failed) valid=0/29 fault=None line=None
+[Closure-121 run1] complete (complete) valid=25/26 fault=False line=0.6027
+[Closure-140 run1] complete (complete) valid=39/40 fault=False line=0.3486
+[Closure-144 run1] no_valid_tests (test_compile_failed) valid=0/34 fault=None line=None
+[Closure-128 run1] complete (complete) valid=26/26 fault=True line=0.0502
+[Closure-122 run1] complete (complete) valid=39/43 fault=False line=0.6194
+[Closure-127 run1] complete (complete) valid=23/26 fault=False line=0.8659
+[Closure-123 run1] complete (complete) valid=41/43 fault=False line=0.5554
+[Closure-125 run1] complete (complete) valid=36/38 fault=False line=0.4758
+[Closure-129 run1] complete (complete) valid=20/24 fault=True line=0.8194
+[Closure-143 run1] complete (complete) valid=40/40 fault=False line=0.3725
+[Closure-146 run1] no_valid_tests (test_compile_failed) valid=0/53 fault=None line=None
+[Closure-141 run1] complete (complete) valid=44/45 fault=False line=0.1935
+[Closure-147 run1] no_valid_tests (test_compile_failed) valid=0/27 fault=None line=None
+[Closure-148 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[Closure-156 run1] no_valid_tests (test_compile_failed) valid=0/25 fault=None line=None
+[Closure-130 run1] complete (complete) valid=18/24 fault=False line=0.7871
+[Closure-131 run1] complete (complete) valid=42/42 fault=False line=0.9646
+[Closure-149 run1] complete (complete) valid=45/45 fault=False line=0.2071
+[Closure-153 run1] complete (complete) valid=21/30 fault=False line=0.3617
+Summary: 854 runs | bugs 854 evaluated 343 detected 72 | FDR 0.2099 | line 0.6149 | branch 0.5315 | method 0.6729
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=59) ...
+Targets 854 | pending 65 | workers 12
+[Closure-138 run1] no_valid_tests (test_compile_failed) valid=0/31 fault=None line=None
+[Closure-136 run1] no_valid_tests (test_compile_failed) valid=0/25 fault=None line=None
+[Closure-134 run1] no_valid_tests (test_compile_failed) valid=0/23 fault=None line=None
+[Closure-150 run1] no_valid_tests (test_compile_failed) valid=0/28 fault=None line=None
+[Closure-142 run1] no_valid_tests (test_compile_failed) valid=0/22 fault=None line=None
+[Closure-152 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[Closure-154 run1] no_valid_tests (test_compile_failed) valid=0/41 fault=None line=None
+[Closure-155 run1] no_valid_tests (test_compile_failed) valid=0/26 fault=None line=None
+[Closure-159 run1] no_valid_tests (test_compile_failed) valid=0/26 fault=None line=None
+[Closure-160 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[Closure-145 run1] complete (complete) valid=27/29 fault=False line=0.1462
+[Closure-137 run1] complete (complete) valid=28/28 fault=False line=0.0669
+[Closure-151 run1] complete (complete) valid=37/38 fault=False line=0.8261
+[Closure-161 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[Closure-163 run1] no_valid_tests (test_compile_failed) valid=0/30 fault=None line=None
+[Closure-162 run1] no_valid_tests (test_compile_failed) valid=0/42 fault=None line=None
+[Closure-164 run1] no_valid_tests (test_compile_failed) valid=0/31 fault=None line=None
+[Closure-165 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[Closure-157 run1] complete (complete) valid=32/33 fault=False line=0.0551
+[Closure-167 run1] no_valid_tests (test_compile_failed) valid=0/29 fault=None line=None
+[Closure-133 run1] complete (complete) valid=34/34 fault=False line=0.2929
+[Closure-158 run1] complete (complete) valid=45/45 fault=False line=0.4152
+[Closure-132 run1] complete (complete) valid=27/28 fault=False line=0.4822
+[Closure-120 run1] complete (complete) valid=40/40 fault=False line=0.9479
+[Closure-169 run1] no_valid_tests (test_compile_failed) valid=0/29 fault=None line=None
+[Codec-1 run1] complete (complete) valid=31/33 fault=False line=0.2695
+[Codec-2 run1] complete (complete) valid=42/43 fault=False line=0.9346
+[Closure-166 run1] complete (complete) valid=43/43 fault=False line=0.7091
+[Codec-3 run1] complete (complete) valid=44/44 fault=False line=0.6313
+[Codec-4 run1] complete (complete) valid=44/45 fault=True line=0.9654
+[Codec-5 run1] complete (complete) valid=45/45 fault=False line=0.9697
+[Closure-170 run1] complete (complete) valid=24/24 fault=False line=0.9162
+[Codec-6 run1] complete (complete) valid=25/25 fault=False line=0.9714
+[Closure-168 run1] complete (complete) valid=29/30 fault=False line=0.6939
+[Codec-7 run1] complete (complete) valid=44/46 fault=False line=0.97
+[Closure-171 run1] complete (complete) valid=31/32 fault=False line=0.5775
+[Closure-173 run1] complete (complete) valid=25/26 fault=False line=0.0371
+[Closure-174 run1] complete (complete) valid=19/23 fault=False line=0.0404
+[Closure-172 run1] complete (complete) valid=27/27 fault=False line=0.6404
+[Codec-8 run1] complete (complete) valid=41/42 fault=False line=0.7395
+[Closure-175 run1] complete (complete) valid=31/32 fault=False line=0.4488
+[Codec-9 run1] complete (complete) valid=40/41 fault=False line=0.9545
+[Closure-176 run1] complete (complete) valid=26/27 fault=False line=0.5285
+[Codec-16 run1] no_valid_tests (test_compile_failed) valid=0/38 fault=None line=None
+[Codec-10 run1] complete (complete) valid=29/29 fault=True line=1.0
+[Codec-12 run1] complete (complete) valid=26/28 fault=True line=0.9677
+[Codec-13 run1] complete (complete) valid=27/32 fault=False line=0.0561
+[Codec-14 run1] complete (complete) valid=23/26 fault=False line=0.0541
+[Codec-15 run1] complete (complete) valid=31/31 fault=False line=1.0
+[Codec-17 run1] complete (complete) valid=41/42 fault=True line=0.9744
+[Codec-18 run1] complete (complete) valid=42/42 fault=True line=0.9744
+[Collections-1 run1] complete (complete) valid=43/44 fault=True line=0.5764
+[Collections-4 run1] complete (complete) valid=39/39 fault=True line=0.973
+[Collections-2 run1] complete (complete) valid=45/45 fault=True line=0.7527
+[Collections-5 run1] complete (complete) valid=31/32 fault=True line=0.9512
+[Collections-3 run1] complete (complete) valid=45/45 fault=True line=0.6809
+[Collections-6 run1] complete (complete) valid=45/45 fault=True line=0.6303
+[Collections-8 run1] complete (complete) valid=27/28 fault=False line=0.8409
+[Collections-10 run1] complete (complete) valid=40/40 fault=False line=0.9412
+[Collections-11 run1] complete (complete) valid=32/32 fault=True line=1.0
+[Collections-14 run1] complete (complete) valid=29/29 fault=True line=1.0
+[Collections-15 run1] complete (complete) valid=35/36 fault=True line=1.0
+[Collections-16 run1] complete (complete) valid=31/32 fault=False line=1.0
+[Collections-18 run1] complete (complete) valid=38/39 fault=False line=0.957
+[Collections-19 run1] complete (complete) valid=32/32 fault=True line=0.945
+Summary: 854 runs | bugs 854 evaluated 390 detected 87 | FDR 0.2231 | line 0.6241 | branch 0.5414 | method 0.6833
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=32) ...
+Targets 854 | pending 35 | workers 12
+[Collections-23 run1] no_valid_tests (test_compile_failed) valid=0/44 fault=None line=None
+[Collections-27 run1] no_valid_tests (test_compile_failed) valid=0/41 fault=None line=None
+[Collections-7 run1] complete (complete) valid=43/45 fault=False line=0.6729
+[Collections-13 run1] complete (complete) valid=44/45 fault=False line=0.6735
+[Collections-9 run1] complete (complete) valid=44/45 fault=False line=0.7597
+[Collections-12 run1] complete (complete) valid=43/43 fault=True line=0.6339
+[Collections-24 run1] complete (complete) valid=32/32 fault=False line=0.9231
+[Collections-22 run1] complete (complete) valid=45/45 fault=True line=0.7333
+[Collections-17 run1] complete (complete) valid=28/30 fault=True line=1.0
+[Collections-26 run1] complete (complete) valid=34/34 fault=False line=1.0
+[Collections-20 run1] complete (complete) valid=39/39 fault=False line=0.8532
+[Collections-25 run1] complete (complete) valid=58/58 fault=True line=0.6667
+[Collections-21 run1] complete (complete) valid=36/36 fault=True line=0.945
+[Compress-1 run1] no_valid_tests (test_compile_failed) valid=0/32 fault=None line=None
+[Compress-4 run1] no_valid_tests (test_compile_failed) valid=0/36 fault=None line=None
+[Compress-3 run1] complete (complete) valid=21/26 fault=False line=0.8222
+[Compress-2 run1] complete (complete) valid=31/31 fault=True line=1.0
+[Collections-28 run1] complete (complete) valid=42/42 fault=False line=0.4496
+[Compress-7 run1] complete (complete) valid=32/32 fault=False line=0.9683
+[Compress-5 run1] complete (complete) valid=26/27 fault=False line=0.9565
+[Compress-6 run1] complete (complete) valid=37/38 fault=True line=0.6397
+[Compress-8 run1] complete (complete) valid=30/30 fault=True line=0.9714
+[Compress-9 run1] complete (complete) valid=23/27 fault=False line=0.8545
+[Compress-11 run1] complete (complete) valid=27/27 fault=True line=0.8551
+[Compress-10 run1] complete (complete) valid=28/28 fault=False line=0.7993
+[Compress-12 run1] complete (complete) valid=28/28 fault=False line=0.5692
+[Compress-13 run1] complete (complete) valid=43/45 fault=False line=0.72
+[Compress-14 run1] complete (complete) valid=35/35 fault=True line=0.9802
+[Compress-16 run1] complete (complete) valid=28/29 fault=False line=0.8429
+[Compress-15 run1] complete (complete) valid=45/45 fault=False line=0.7143
+[Compress-18 run1] complete (complete) valid=36/38 fault=False line=0.8564
+[Compress-19 run1] complete (complete) valid=34/38 fault=False line=1.0
+[Compress-22 run1] complete (complete) valid=27/28 fault=False line=0.2032
+[Compress-21 run1] complete (complete) valid=25/25 fault=True line=0.7256
+[Compress-26 run1] complete (complete) valid=28/28 fault=True line=0.9444
+Summary: 854 runs | bugs 854 evaluated 421 detected 99 | FDR 0.2352 | line 0.6369 | branch 0.5564 | method 0.6973
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=12) ...
+Targets 854 | pending 14 | workers 12
+[Codec-11 run1] complete (complete) valid=29/43 fault=False line=0.9506
+[Compress-17 run1] complete (complete) valid=36/37 fault=False line=0.8827
+[Compress-30 run1] complete (complete) valid=26/26 fault=True line=0.2
+[Compress-34 run1] complete (complete) valid=37/37 fault=True line=1.0
+[Compress-42 run1] complete (complete) valid=28/28 fault=False line=0.0
+[Compress-31 run1] complete (complete) valid=33/36 fault=False line=0.9091
+[Compress-39 run1] complete (complete) valid=36/36 fault=True line=0.6935
+[Compress-23 run1] complete (complete) valid=22/22 fault=False line=0.5825
+[Compress-28 run1] complete (complete) valid=28/29 fault=False line=0.6338
+[Compress-33 run1] complete (complete) valid=31/31 fault=False line=0.75
+[Compress-29 run1] complete (complete) valid=38/38 fault=False line=0.1299
+[Compress-44 run1] complete (complete) valid=22/26 fault=False line=0.9412
+[Csv-1 run1] complete (complete) valid=26/27 fault=False line=1.0
+[Csv-2 run1] complete (complete) valid=32/32 fault=True line=1.0
+Summary: 854 runs | bugs 854 evaluated 435 detected 103 | FDR 0.2368 | line 0.6387 | branch 0.5597 | method 0.6998
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=9) ...
+Targets 854 | pending 11 | workers 12
+[Csv-3 run1] no_valid_tests (test_compile_failed) valid=0/38 fault=None line=None
+[Csv-4 run1] no_valid_tests (test_compile_failed) valid=0/38 fault=None line=None
+[Compress-35 run1] no_valid_tests (test_compile_failed) valid=0/35 fault=None line=None
+[Compress-37 run1] no_valid_tests (test_compile_failed) valid=0/37 fault=None line=None
+[Csv-6 run1] complete (complete) valid=35/36 fault=False line=1.0
+[Compress-40 run1] complete (complete) valid=22/22 fault=True line=1.0
+[Compress-38 run1] complete (complete) valid=45/45 fault=False line=0.7401
+[Compress-36 run1] complete (complete) valid=24/28 fault=False line=0.3265
+[Compress-45 run1] complete (complete) valid=34/35 fault=True line=0.883
+[Compress-43 run1] complete (complete) valid=32/34 fault=False line=0.4315
+[Compress-46 run1] complete (complete) valid=38/38 fault=True line=0.958
+Summary: 854 runs | bugs 854 evaluated 442 detected 106 | FDR 0.2398 | line 0.6406 | branch 0.5615 | method 0.702
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=1) ...
+Targets 854 | pending 8 | workers 12
+[Compress-47 run1] no_valid_tests (test_compile_failed) valid=0/30 fault=None line=None
+[Csv-8 run1] complete (complete) valid=44/45 fault=False line=0.8212
+[Csv-5 run1] complete (complete) valid=33/34 fault=False line=0.7595
+[Jsoup-79 run1] complete (complete) valid=30/32 fault=False line=0.9394
+[Jsoup-77 run1] complete (complete) valid=26/26 fault=False line=0.9855
+[Jsoup-81 run1] complete (complete) valid=26/27 fault=False line=0.8718
+[Compress-24 run1] complete (complete) valid=40/41 fault=False line=0.9167
+[Compress-32 run1] complete (complete) valid=36/37 fault=False line=0.6136
+Summary: 854 runs | bugs 854 evaluated 449 detected 106 | FDR 0.2361 | line 0.6438 | branch 0.5638 | method 0.7053
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=2) ...
+Targets 854 | pending 9 | workers 12
+[Csv-7 run1] no_valid_tests (test_compile_failed) valid=0/32 fault=None line=None
+[Jsoup-91 run1] no_valid_tests (test_compile_failed) valid=0/25 fault=None line=None
+[Jsoup-88 run1] complete (complete) valid=42/44 fault=False line=0.7727
+[Jsoup-89 run1] complete (complete) valid=38/38 fault=True line=0.7879
+[Jsoup-85 run1] complete (complete) valid=36/39 fault=True line=0.7385
+[Jsoup-80 run1] complete (complete) valid=26/27 fault=False line=0.9855
+[Jsoup-84 run1] complete (complete) valid=24/24 fault=True line=0.9342
+[Jsoup-78 run1] complete (complete) valid=29/29 fault=False line=0.8716
+[Compress-25 run1] complete (complete) valid=29/30 fault=True line=0.6733
+Summary: 854 runs | bugs 854 evaluated 456 detected 110 | FDR 0.2412 | line 0.6466 | branch 0.5657 | method 0.7081
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=2) ...
+Targets 854 | pending 6 | workers 12
+[Jsoup-83 run1] complete (complete) valid=39/39 fault=False line=0.1579
+[Jsoup-93 run1] complete (complete) valid=24/25 fault=False line=1.0
+[Jsoup-76 run1] complete (complete) valid=36/38 fault=False line=0.533
+[Jsoup-82 run1] complete (complete) valid=28/29 fault=False line=0.9469
+[Jsoup-45 run1] complete (complete) valid=42/44 fault=True line=0.734
+[Jsoup-63 run1] complete (complete) valid=42/45 fault=False line=0.6096
+Summary: 854 runs | bugs 854 evaluated 462 detected 111 | FDR 0.2403 | line 0.6468 | branch 0.5658 | method 0.7086
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=3) ...
+Targets 854 | pending 8 | workers 12
+[JxPath-2 run1] complete (complete) valid=22/22 fault=False line=0.9211
+[JxPath-6 run1] complete (complete) valid=31/31 fault=False line=0.8571
+[JxPath-8 run1] complete (complete) valid=22/34 fault=True line=0.4359
+[JxPath-7 run1] complete (complete) valid=26/30 fault=False line=0.25
+[Jsoup-86 run1] complete (complete) valid=22/27 fault=False line=1.0
+[Jsoup-90 run1] complete (complete) valid=43/45 fault=False line=0.4346
+[Jsoup-92 run1] complete (complete) valid=41/42 fault=False line=0.2165
+[Jsoup-87 run1] complete (complete) valid=42/44 fault=False line=0.3569
+Summary: 854 runs | bugs 854 evaluated 470 detected 112 | FDR 0.2383 | line 0.6453 | branch 0.5635 | method 0.7075
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=6) ...
+Targets 854 | pending 12 | workers 12
+[JxPath-11 run1] no_valid_tests (all_tests_fail_on_fixed) valid=0/24 fault=None line=None
+[JxPath-4 run1] no_valid_tests (all_tests_fail_on_fixed) valid=0/40 fault=None line=None
+[JxPath-17 run1] no_valid_tests (all_tests_fail_on_fixed) valid=0/24 fault=None line=None
+[JxPath-10 run1] complete (complete) valid=30/35 fault=True line=0.4884
+[JxPath-5 run1] complete (complete) valid=38/40 fault=False line=0.6034
+[JxPath-15 run1] complete (complete) valid=21/22 fault=True line=1.0
+[JxPath-3 run1] complete (complete) valid=26/28 fault=False line=0.6623
+[JxPath-9 run1] complete (complete) valid=34/34 fault=True line=0.8254
+[JxPath-1 run1] complete (complete) valid=45/45 fault=False line=0.3286
+[Jsoup-67 run1] complete (complete) valid=43/45 fault=False line=0.7953
+[Compress-27 run1] complete (complete) valid=35/36 fault=False line=0.9045
+[JxPath-13 run1] timeout (fixed_test_timeout) valid=0/27 fault=None line=None
+Summary: 854 runs | bugs 854 evaluated 478 detected 115 | FDR 0.2406 | line 0.6462 | branch 0.5644 | method 0.7083
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=47) ...
+Targets 854 | pending 53 | workers 12
+[JxPath-22 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+[JxPath-21 run1] no_valid_tests (test_compile_failed) valid=0/37 fault=None line=None
+[JxPath-12 run1] no_valid_tests (all_tests_fail_on_fixed) valid=0/42 fault=None line=None
+[JxPath-16 run1] no_valid_tests (all_tests_fail_on_fixed) valid=0/41 fault=None line=None
+[JxPath-19 run1] no_valid_tests (all_tests_fail_on_fixed) valid=0/45 fault=None line=None
+[JxPath-20 run1] complete (complete) valid=37/37 fault=True line=0.8605
+[JxPath-18 run1] complete (complete) valid=23/24 fault=False line=0.931
+[JxPath-14 run1] complete (complete) valid=41/43 fault=True line=0.6423
+[Compress-20 run1] complete (complete) valid=24/35 fault=False line=0.6682
+[Compress-41 run1] complete (complete) valid=27/29 fault=False line=0.6408
+[Lang-4 run1] complete (complete) valid=24/24 fault=True line=1.0
+[Lang-5 run1] complete (complete) valid=34/34 fault=False line=1.0
+[Lang-6 run1] complete (complete) valid=26/26 fault=False line=1.0
+[Lang-7 run1] complete (complete) valid=43/45 fault=False line=0.5342
+[Lang-8 run1] complete (complete) valid=40/41 fault=False line=0.9288
+[Lang-11 run1] complete (complete) valid=35/35 fault=False line=0.875
+[Lang-10 run1] complete (complete) valid=34/35 fault=False line=0.8315
+[Lang-12 run1] complete (complete) valid=30/30 fault=True line=0.9615
+[Lang-13 run1] complete (complete) valid=24/24 fault=True line=0.875
+[Lang-14 run1] complete (complete) valid=42/43 fault=False line=0.1633
+[Lang-15 run1] complete (complete) valid=45/45 fault=True line=0.6388
+[Lang-19 run1] complete (complete) valid=19/21 fault=False line=1.0
+[Lang-16 run1] complete (complete) valid=45/45 fault=True line=0.4933
+[Lang-17 run1] complete (complete) valid=26/26 fault=True line=0.9394
+[Lang-20 run1] complete (complete) valid=42/45 fault=False line=0.423
+[Lang-21 run1] complete (complete) valid=43/44 fault=True line=0.7743
+[Lang-22 run1] complete (complete) valid=42/42 fault=False line=0.9424
+[Lang-23 run1] complete (complete) valid=28/29 fault=False line=0.8503
+[Lang-24 run1] complete (complete) valid=40/42 fault=False line=0.6064
+[Lang-26 run1] complete (complete) valid=45/45 fault=False line=0.772
+[Lang-28 run1] complete (complete) valid=22/22 fault=True line=1.0
+[Lang-27 run1] complete (complete) valid=44/45 fault=False line=0.7834
+[Lang-29 run1] complete (complete) valid=33/34 fault=False line=0.9433
+[Lang-33 run1] complete (complete) valid=44/44 fault=True line=0.7413
+[Lang-32 run1] complete (complete) valid=45/45 fault=False line=0.9247
+[Lang-30 run1] complete (complete) valid=55/56 fault=False line=0.7645
+[Lang-46 run1] no_valid_tests (test_compile_failed) valid=0/44 fault=None line=None
+[Lang-36 run1] complete (complete) valid=44/45 fault=False line=0.4919
+[Lang-35 run1] complete (complete) valid=59/59 fault=True line=0.2697
+[Lang-34 run1] complete (complete) valid=43/45 fault=False line=0.6913
+[Lang-37 run1] complete (complete) valid=47/47 fault=True line=0.2029
+[Lang-38 run1] complete (complete) valid=36/39 fault=True line=0.7026
+[Lang-50 run1] no_valid_tests (test_compile_failed) valid=0/44 fault=None line=None
+[Lang-39 run1] complete (complete) valid=45/45 fault=False line=0.54
+[Lang-41 run1] complete (complete) valid=45/45 fault=True line=0.707
+[Lang-40 run1] complete (complete) valid=57/58 fault=False line=0.7682
+[Lang-44 run1] complete (complete) valid=44/44 fault=True line=0.8895
+[Lang-42 run1] complete (complete) valid=37/38 fault=False line=0.971
+[Lang-47 run1] complete (complete) valid=44/45 fault=False line=0.4756
+[Lang-49 run1] complete (complete) valid=43/43 fault=True line=0.9275
+[Lang-51 run1] complete (complete) valid=54/54 fault=True line=0.9825
+[Lang-55 run1] complete (complete) valid=32/33 fault=False line=0.9825
+[Lang-53 run1] complete (complete) valid=41/41 fault=True line=0.7696
+Summary: 854 runs | bugs 854 evaluated 524 detected 134 | FDR 0.2557 | line 0.6561 | branch 0.5739 | method 0.7185
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=18) ...
+Targets 854 | pending 21 | workers 12
+[Lang-54 run1] no_valid_tests (test_compile_failed) valid=0/37 fault=None line=None
+[Lang-64 run1] complete (complete) valid=27/27 fault=True line=1.0
+[Lang-65 run1] complete (complete) valid=45/45 fault=False line=0.8103
+[Lang-52 run1] complete (complete) valid=45/45 fault=False line=0.8629
+[Lang-58 run1] complete (complete) valid=44/45 fault=False line=0.4966
+[Lang-62 run1] complete (complete) valid=41/42 fault=False line=0.971
+[Lang-61 run1] complete (complete) valid=44/45 fault=False line=0.596
+[Lang-60 run1] complete (complete) valid=87/88 fault=False line=0.7149
+[Lang-59 run1] complete (complete) valid=45/45 fault=True line=0.5869
+[Lang-43 run1] complete (complete) valid=26/26 fault=True line=0.8554
+[Math-2 run1] complete (complete) valid=31/32 fault=False line=1.0
+[Math-1 run1] complete (complete) valid=64/65 fault=False line=0.4753
+[Math-8 run1] no_valid_tests (test_compile_failed) valid=0/26 fault=None line=None
+[Math-3 run1] complete (complete) valid=47/47 fault=True line=0.772
+[Math-4 run1] complete (complete) valid=23/23 fault=True line=0.2976
+[Math-6 run1] complete (complete) valid=25/28 fault=False line=0.0249
+[Math-11 run1] complete (complete) valid=22/22 fault=True line=1.0
+[Math-9 run1] complete (complete) valid=32/32 fault=False line=0.9783
+[Math-7 run1] complete (complete) valid=26/27 fault=False line=0.5154
+[Math-10 run1] complete (complete) valid=44/45 fault=False line=0.8553
+[Math-5 run1] complete (complete) valid=42/42 fault=True line=0.6416
+Summary: 854 runs | bugs 854 evaluated 543 detected 141 | FDR 0.2597 | line 0.6579 | branch 0.5757 | method 0.7203
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=7) ...
+Targets 854 | pending 15 | workers 12
+[Math-13 run1] no_valid_tests (test_compile_failed) valid=0/23 fault=None line=None
+[Math-22 run1] complete (complete) valid=29/33 fault=False line=0.6047
+[Math-17 run1] complete (complete) valid=41/45 fault=False line=0.6521
+[Math-21 run1] complete (complete) valid=24/24 fault=True line=1.0
+[Math-12 run1] complete (complete) valid=26/26 fault=False line=1.0
+[Math-20 run1] complete (complete) valid=27/28 fault=False line=0.938
+[Math-16 run1] complete (complete) valid=50/50 fault=False line=0.6193
+[Math-23 run1] complete (complete) valid=25/25 fault=True line=0.9669
+[Math-19 run1] complete (complete) valid=24/24 fault=False line=0.9421
+[Math-14 run1] complete (complete) valid=22/23 fault=False line=0.8627
+[Math-15 run1] complete (complete) valid=45/45 fault=False line=0.5471
+[Closure-124 run1] complete (complete) valid=27/27 fault=False line=0.9875
+[Math-24 run1] complete (complete) valid=24/24 fault=True line=0.925
+[Math-25 run1] complete (complete) valid=12/20 fault=False line=0.8617
+[Math-34 run1] complete (complete) valid=34/34 fault=True line=1.0
+Summary: 854 runs | bugs 854 evaluated 557 detected 145 | FDR 0.2603 | line 0.6627 | branch 0.5803 | method 0.724
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=8) ...
+Targets 854 | pending 12 | workers 12
+[Math-35 run1] complete (complete) valid=28/28 fault=True line=1.0
+[Math-32 run1] complete (complete) valid=28/28 fault=False line=0.7396
+[Math-30 run1] complete (complete) valid=24/25 fault=False line=1.0
+[Math-31 run1] complete (complete) valid=20/22 fault=False line=0.8644
+[Math-40 run1] complete (complete) valid=30/30 fault=False line=0.9762
+[Math-41 run1] complete (complete) valid=41/41 fault=True line=0.9732
+[Math-26 run1] complete (complete) valid=44/45 fault=False line=0.929
+[Math-27 run1] complete (complete) valid=41/42 fault=False line=0.9454
+[Math-36 run1] complete (complete) valid=45/45 fault=True line=0.9348
+[Math-28 run1] complete (complete) valid=21/22 fault=False line=0.9494
+[Math-38 run1] complete (complete) valid=23/26 fault=True line=0.9192
+[Math-18 run1] complete (complete) valid=22/23 fault=False line=0.949
+Summary: 854 runs | bugs 854 evaluated 569 detected 149 | FDR 0.2619 | line 0.6684 | branch 0.5858 | method 0.7287
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=5) ...
+Targets 854 | pending 11 | workers 12
+[Math-55 run1] complete (complete) valid=48/48 fault=True line=1.0
+[Math-50 run1] complete (complete) valid=26/26 fault=False line=0.8267
+[Math-48 run1] complete (complete) valid=26/26 fault=False line=0.9041
+[Math-44 run1] complete (complete) valid=29/29 fault=False line=0.4615
+[Math-45 run1] complete (complete) valid=34/34 fault=False line=1.0
+[Math-46 run1] complete (complete) valid=43/45 fault=False line=0.5941
+[Math-47 run1] complete (complete) valid=44/45 fault=True line=0.7264
+[Math-43 run1] complete (complete) valid=40/40 fault=False line=0.8854
+[Math-37 run1] complete (complete) valid=45/45 fault=True line=0.7227
+[Math-42 run1] complete (complete) valid=34/34 fault=False line=0.9781
+[Math-39 run1] complete (complete) valid=21/21 fault=False line=0.9439
+Summary: 854 runs | bugs 854 evaluated 580 detected 152 | FDR 0.2621 | line 0.6713 | branch 0.5878 | method 0.7319
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=1) ...
+Targets 854 | pending 10 | workers 12
+[Math-59 run1] complete (complete) valid=60/61 fault=False line=0.519
+[Math-60 run1] complete (complete) valid=34/34 fault=False line=0.8723
+[Math-61 run1] complete (complete) valid=30/30 fault=False line=1.0
+[Math-56 run1] complete (complete) valid=32/32 fault=True line=0.9867
+[Math-58 run1] complete (complete) valid=16/19 fault=False line=0.8438
+[Math-57 run1] complete (complete) valid=20/20 fault=True line=0.975
+[Math-52 run1] complete (complete) valid=41/42 fault=False line=0.8883
+[Math-53 run1] complete (complete) valid=45/45 fault=False line=0.8941
+[Math-51 run1] complete (complete) valid=30/30 fault=False line=0.9718
+[Math-33 run1] complete (complete) valid=34/34 fault=False line=0.9459
+Summary: 854 runs | bugs 854 evaluated 590 detected 154 | FDR 0.261 | line 0.675 | branch 0.5911 | method 0.7361
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=4) ...
+Targets 854 | pending 9 | workers 12
+[Math-62 run1] complete (complete) valid=21/21 fault=True line=0.9362
+[Math-63 run1] complete (complete) valid=53/54 fault=True line=0.4826
+[Math-70 run1] complete (complete) valid=22/22 fault=True line=1.0
+[Math-66 run1] complete (complete) valid=27/29 fault=False line=0.9706
+[Math-69 run1] complete (complete) valid=31/31 fault=False line=0.9067
+[Math-75 run1] complete (complete) valid=48/48 fault=True line=0.9478
+[Math-65 run1] complete (complete) valid=24/24 fault=True line=1.0
+[Math-54 run1] complete (complete) valid=43/45 fault=False line=0.751
+[Math-49 run1] complete (complete) valid=44/45 fault=False line=0.7063
+Summary: 854 runs | bugs 854 evaluated 599 detected 159 | FDR 0.2654 | line 0.6777 | branch 0.5945 | method 0.7385
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=3) ...
+Targets 854 | pending 6 | workers 12
+[Math-71 run1] complete (complete) valid=24/24 fault=False line=0.5736
+[Math-79 run1] complete (complete) valid=58/61 fault=False line=0.4905
+[Math-77 run1] complete (complete) valid=45/45 fault=True line=0.2466
+[Math-68 run1] complete (complete) valid=17/24 fault=False line=0.8825
+[Math-67 run1] complete (complete) valid=26/28 fault=False line=0.871
+[Math-64 run1] complete (complete) valid=23/23 fault=False line=0.8918
+Summary: 854 runs | bugs 854 evaluated 605 detected 160 | FDR 0.2645 | line 0.6775 | branch 0.5944 | method 0.739
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=4) ...
+Targets 854 | pending 8 | workers 12
+[Math-78 run1] complete (complete) valid=24/24 fault=False line=0.3556
+[Math-76 run1] complete (complete) valid=30/33 fault=False line=0.9851
+[Math-82 run1] complete (complete) valid=22/23 fault=False line=0.9667
+[Math-81 run1] complete (complete) valid=30/34 fault=False line=0.6522
+[Math-86 run1] complete (complete) valid=30/30 fault=True line=0.8448
+[Math-80 run1] complete (complete) valid=24/33 fault=False line=0.6643
+[Math-74 run1] complete (complete) valid=26/26 fault=False line=0.8689
+[Math-29 run1] complete (complete) valid=46/47 fault=False line=0.9377
+Summary: 854 runs | bugs 854 evaluated 613 detected 161 | FDR 0.2626 | line 0.6789 | branch 0.5954 | method 0.7418
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=5) ...
+Targets 854 | pending 10 | workers 12
+[Math-84 run1] no_valid_tests (test_compile_failed) valid=0/22 fault=None line=None
+[Math-95 run1] complete (complete) valid=28/28 fault=True line=1.0
+[Math-94 run1] complete (complete) valid=45/45 fault=True line=0.5911
+[Math-93 run1] complete (complete) valid=40/41 fault=False line=0.7168
+[Math-91 run1] complete (complete) valid=40/41 fault=False line=0.9632
+[Math-90 run1] complete (complete) valid=40/40 fault=False line=0.9434
+[Math-89 run1] complete (complete) valid=44/44 fault=True line=0.9815
+[Math-73 run1] complete (complete) valid=19/23 fault=False line=0.8654
+[Math-87 run1] complete (complete) valid=33/33 fault=False line=0.0724
+[Math-83 run1] complete (complete) valid=30/32 fault=False line=0.071
+Summary: 854 runs | bugs 854 evaluated 622 detected 164 | FDR 0.2637 | line 0.6791 | branch 0.5959 | method 0.7418
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=7) ...
+Targets 854 | pending 11 | workers 12
+[Math-105 run1] complete (complete) valid=34/34 fault=False line=1.0
+[Math-96 run1] complete (complete) valid=42/44 fault=False line=0.8239
+[Math-92 run1] complete (complete) valid=44/45 fault=True line=0.9048
+[Math-99 run1] complete (complete) valid=44/45 fault=False line=0.6617
+[Math-104 run1] complete (complete) valid=39/39 fault=False line=0.9574
+[Math-103 run1] complete (complete) valid=30/30 fault=True line=1.0
+[Math-101 run1] complete (complete) valid=39/42 fault=False line=0.972
+[Math-100 run1] complete (complete) valid=20/23 fault=False line=0.8356
+[Math-88 run1] complete (complete) valid=38/39 fault=False line=0.0724
+[Math-102 run1] complete (complete) valid=35/36 fault=True line=0.991
+[Mockito-2 run1] complete (complete) valid=17/20 fault=False line=1.0
+Summary: 854 runs | bugs 854 evaluated 633 detected 167 | FDR 0.2638 | line 0.6819 | branch 0.5988 | method 0.7442
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=10) ...
+Targets 854 | pending 17 | workers 12
+[Math-106 run1] complete (complete) valid=22/26 fault=True line=0.8947
+[Math-98 run1] complete (complete) valid=41/45 fault=False line=0.4292
+[Math-85 run1] complete (complete) valid=24/24 fault=True line=0.9474
+[Math-72 run1] complete (complete) valid=25/28 fault=True line=0.9252
+[Mockito-12 run1] complete (complete) valid=20/21 fault=True line=1.0
+[Mockito-13 run1] complete (complete) valid=27/27 fault=False line=0.425
+[Mockito-14 run1] complete (complete) valid=26/26 fault=False line=0.1604
+[Mockito-15 run1] complete (complete) valid=22/22 fault=True line=1.0
+[Mockito-22 run1] complete (complete) valid=32/32 fault=False line=0.9231
+[Mockito-1 run1] complete (complete) valid=25/25 fault=True line=0.8033
+[Mockito-3 run1] complete (complete) valid=26/27 fault=False line=0.8033
+[Mockito-9 run1] complete (complete) valid=3/23 fault=False line=0.5
+[Mockito-6 run1] complete (complete) valid=30/30 fault=False line=0.9818
+[Mockito-11 run1] complete (complete) valid=20/22 fault=True line=0.9286
+[Mockito-7 run1] complete (complete) valid=33/34 fault=False line=0.9253
+[Mockito-5 run1] complete (complete) valid=24/24 fault=False line=0.8889
+[Mockito-18 run1] complete (complete) valid=35/35 fault=False line=0.7727
+Summary: 854 runs | bugs 854 evaluated 650 detected 174 | FDR 0.2677 | line 0.6845 | branch 0.6006 | method 0.7465
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=23) ...
+Targets 854 | pending 28 | workers 12
+[Mockito-16 run1] no_valid_tests (test_compile_failed) valid=0/29 fault=None line=None
+[Math-97 run1] complete (complete) valid=18/22 fault=False line=0.9326
+[Mockito-17 run1] complete (complete) valid=26/29 fault=True line=0.3934
+[Mockito-19 run1] no_valid_tests (test_compile_failed) valid=0/24 fault=None line=None
+[Mockito-25 run1] complete (complete) valid=28/30 fault=True line=0.9565
+[Mockito-27 run1] complete (complete) valid=30/30 fault=False line=0.9286
+[Mockito-28 run1] complete (complete) valid=19/19 fault=True line=0.9667
+[Mockito-30 run1] no_valid_tests (test_compile_failed) valid=0/38 fault=None line=None
+[Mockito-26 run1] complete (complete) valid=40/40 fault=True line=0.9722
+[Mockito-24 run1] complete (complete) valid=30/31 fault=False line=0.8636
+[Mockito-23 run1] complete (complete) valid=20/24 fault=False line=0.9394
+[Mockito-34 run1] no_valid_tests (test_compile_failed) valid=0/31 fault=None line=None
+[Mockito-33 run1] no_valid_tests (test_compile_failed) valid=0/29 fault=None line=None
+[Mockito-36 run1] no_valid_tests (test_compile_failed) valid=0/43 fault=None line=None
+[Mockito-29 run1] complete (complete) valid=24/24 fault=True line=1.0
+[Mockito-38 run1] no_valid_tests (test_compile_failed) valid=0/22 fault=None line=None
+[Mockito-37 run1] no_valid_tests (test_compile_failed) valid=0/23 fault=None line=None
+[Mockito-31 run1] complete (complete) valid=20/20 fault=False line=0.9474
+[Mockito-32 run1] complete (complete) valid=19/21 fault=False line=0.913
+[Mockito-35 run1] complete (complete) valid=41/41 fault=False line=0.9804
+[Time-1 run1] complete (complete) valid=30/30 fault=True line=0.1395
+[Time-2 run1] complete (complete) valid=31/32 fault=False line=0.1347
+[Time-8 run1] complete (complete) valid=43/44 fault=True line=0.6338
+[Mockito-4 run1] complete (complete) valid=45/45 fault=False line=0.4204
+[Mockito-21 run1] complete (complete) valid=17/18 fault=True line=1.0
+[Mockito-20 run1] complete (complete) valid=23/23 fault=False line=0.35
+[Mockito-8 run1] complete (complete) valid=35/36 fault=False line=0.9306
+[Mockito-10 run1] complete (complete) valid=21/22 fault=False line=0.9524
+Summary: 854 runs | bugs 854 evaluated 670 detected 182 | FDR 0.2716 | line 0.687 | branch 0.6031 | method 0.7495
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=10) ...
+Targets 854 | pending 14 | workers 12
+[Time-4 run1] complete (complete) valid=43/45 fault=False line=0.9012
+[Time-5 run1] complete (complete) valid=44/44 fault=True line=0.689
+[Time-6 run1] complete (complete) valid=38/39 fault=False line=0.5568
+[Time-3 run1] complete (complete) valid=45/45 fault=False line=0.584
+[Time-10 run1] complete (complete) valid=45/45 fault=False line=0.9577
+[Time-11 run1] complete (complete) valid=42/43 fault=False line=0.7226
+[Time-17 run1] complete (complete) valid=40/43 fault=False line=0.7114
+[Time-15 run1] complete (complete) valid=44/45 fault=False line=0.9733
+[Time-16 run1] complete (complete) valid=52/53 fault=False line=0.8551
+[Time-19 run1] complete (complete) valid=43/44 fault=False line=0.6472
+[Time-14 run1] complete (complete) valid=34/34 fault=False line=0.7632
+[Time-18 run1] complete (complete) valid=36/37 fault=False line=0.5465
+[Time-20 run1] complete (complete) valid=43/45 fault=False line=0.3001
+[Time-22 run1] complete (complete) valid=49/51 fault=False line=0.8772
+Summary: 854 runs | bugs 854 evaluated 684 detected 183 | FDR 0.2675 | line 0.6877 | branch 0.6031 | method 0.7494
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=6) ...
+Targets 854 | pending 9 | workers 12
+[Time-7 run1] complete (complete) valid=44/45 fault=False line=0.7981
+[Time-9 run1] complete (complete) valid=45/47 fault=False line=0.7436
+[Time-12 run1] complete (complete) valid=45/45 fault=False line=0.2711
+[Time-23 run1] complete (complete) valid=42/43 fault=False line=0.8158
+[Time-26 run1] complete (complete) valid=42/42 fault=False line=0.5767
+[Time-24 run1] complete (complete) valid=29/29 fault=False line=0.9722
+[Time-25 run1] complete (complete) valid=45/45 fault=False line=0.686
+[Time-13 run1] complete (complete) valid=39/39 fault=False line=0.6533
+[Time-27 run1] complete (complete) valid=43/43 fault=False line=0.6269
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 0 | workers 12
+Summary: 854 runs | bugs 854 evaluated 693 detected 183 | FDR 0.2641 | line 0.6876 | branch 0.6026 | method 0.7488
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 3 | workers 12
+[Lang-57 run1] no_valid_tests (test_compile_failed) valid=0/33 fault=None line=None
+[Lang-45 run1] complete (complete) valid=42/42 fault=True line=0.9928
+[Lang-31 run1] complete (complete) valid=58/59 fault=True line=0.7683
+Summary: 854 runs | bugs 854 evaluated 695 detected 185 | FDR 0.2662 | line 0.6882 | branch 0.6032 | method 0.7493
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=1) ...
+Targets 854 | pending 2 | workers 12
+[Lang-56 run1] complete (complete) valid=42/44 fault=False line=0.7651
+[Lang-9 run1] complete (complete) valid=33/38 fault=False line=0.7582
+Summary: 854 runs | bugs 854 evaluated 697 detected 185 | FDR 0.2654 | line 0.6884 | branch 0.6032 | method 0.7496
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: waiting for new suites (pending=0) ...
+Targets 854 | pending 1 | workers 12
+[Lang-63 run1] no_valid_tests (test_compile_failed) valid=0/45 fault=None line=None
+Summary: 854 runs | bugs 854 evaluated 697 detected 185 | FDR 0.2654 | line 0.6884 | branch 0.6032 | method 0.7496
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_by_project.csv
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/summary_overall.json
+  -> /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Results/defects4j-round2/results_claude.csv
+validate_loop: generation finished and nothing pending - exiting

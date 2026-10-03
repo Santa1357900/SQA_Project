@@ -1,0 +1,292 @@
+package org.jsoup.helper;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.parser.Parser;
+import org.jsoup.select.Elements;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
+public class DataUtilClaudeTest {
+
+    private Element firstOf(Elements els) {
+        for (Element e : els) return e;
+        return null;
+    }
+
+    private byte[] buildBytesWithRawByte(String prefix, int middleByte, String suffix) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        bos.write(prefix.getBytes("US-ASCII"));
+        bos.write(middleByte);
+        bos.write(suffix.getBytes("US-ASCII"));
+        return bos.toByteArray();
+    }
+
+    // load(File,...): FileInputStream must surface FileNotFoundException for a missing file
+    @Test
+    public void testLoadFile_nonExistentFile_throwsFileNotFoundException() throws Throwable {
+        File missing = new File("this_file_should_not_exist_12345.html");
+        try {
+            DataUtil.load(missing, "UTF-8", "http://example.com/");
+            fail("expected FileNotFoundException");
+        } catch (FileNotFoundException expected) { }
+    }
+
+    // load(InputStream, charsetName, baseUri): basic delegation to parseInputStream with htmlParser
+    @Test
+    public void testLoadInputStream_basicHtml_parsesWithGivenCharset() throws Throwable {
+        byte[] data = "<html><body><div id=\"x\" data-x=\"ok\"></div></body></html>".getBytes("UTF-8");
+        Document doc = DataUtil.load(new ByteArrayInputStream(data), "UTF-8", "http://example.com/");
+        Element div = firstOf(doc.select("div[id=x]"));
+        assertNotNull(div);
+        assertEquals("ok", div.attr("data-x"));
+    }
+
+    // load(InputStream, charsetName, baseUri, parser): alternate parser must be honored
+    @Test
+    public void testLoadInputStreamWithParser_xmlParser_parsesAttribute() throws Throwable {
+        byte[] data = "<root attr=\"v2\"></root>".getBytes("UTF-8");
+        Document doc = DataUtil.load(new ByteArrayInputStream(data), "UTF-8", "http://example.com/", Parser.xmlParser());
+        Element root = firstOf(doc.select("root"));
+        assertNotNull(root);
+        assertEquals("v2", root.attr("attr"));
+    }
+
+    // crossStreams: loop runs many rounds (>bufferSize) and must copy every byte faithfully
+    @Test
+    public void testCrossStreams_copiesAllBytes() throws Throwable {
+        byte[] original = new byte[70000];
+        for (int i = 0; i < original.length; i++) original[i] = (byte) (i % 256);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        DataUtil.crossStreams(new ByteArrayInputStream(original), out);
+        assertArrayEquals(original, out.toByteArray());
+    }
+
+    // crossStreams: zero bytes available means the while loop body never executes
+    @Test
+    public void testCrossStreams_emptyStream_producesEmptyOutput() throws Throwable {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        DataUtil.crossStreams(new ByteArrayInputStream(new byte[0]), out);
+        assertEquals(0, out.toByteArray().length);
+    }
+
+    // parseInputStream: null input -> javadoc/comment: "empty body" returns a Document with no children
+    @Test
+    public void testParseInputStream_nullInput_returnsEmptyDocument() throws Throwable {
+        Document doc = DataUtil.parseInputStream(null, "UTF-8", "http://example.com/", Parser.htmlParser());
+        assertNotNull(doc);
+        assertEquals(0, doc.childNodeSize());
+    }
+
+    // parseInputStream: empty (non-null) charsetName must trigger Validate.notEmpty in the "specified" branch
+    @Test
+    public void testParseInputStream_emptyCharsetName_throwsIllegalArgumentException() throws Throwable {
+        byte[] data = "<html></html>".getBytes("UTF-8");
+        try {
+            DataUtil.parseInputStream(new ByteArrayInputStream(data), "", "http://example.com/", Parser.htmlParser());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // parseInputStream: explicit charsetName bypasses auto-detection and decodes with that charset directly
+    @Test
+    public void testParseInputStream_specifiedCharset_decodesCorrectly() throws Throwable {
+        byte[] data = buildBytesWithRawByte("<html><body><div id=\"x\" data-x=\"", 0xE9, "\"></div></body></html>");
+        Document doc = DataUtil.parseInputStream(new ByteArrayInputStream(data), "ISO-8859-1", "http://example.com/", Parser.htmlParser());
+        Element div = firstOf(doc.select("div[id=x]"));
+        assertNotNull(div);
+        assertEquals("\u00e9", div.attr("data-x"));
+    }
+
+    // parseInputStream: UTF-8 BOM must be detected and used to decode the content correctly
+    @Test
+    public void testParseInputStream_bomUtf8_detectedAndDecoded() throws Throwable {
+        byte[] bom = new byte[] { (byte) 0xEF, (byte) 0xBB, (byte) 0xBF };
+        byte[] body = "<html><body><div id=\"x\" data-x=\"caf\u00e9\"></div></body></html>".getBytes("UTF-8");
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        bos.write(bom);
+        bos.write(body);
+        Document doc = DataUtil.parseInputStream(new ByteArrayInputStream(bos.toByteArray()), null, "http://example.com/", Parser.htmlParser());
+        Element div = firstOf(doc.select("div[id=x]"));
+        assertNotNull(div);
+        assertEquals("caf\u00e9", div.attr("data-x"));
+    }
+
+    // parseInputStream: UTF-16 BOM (Java's "UTF-16" encoder writes a BE BOM) must be detected and decoded
+    @Test
+    public void testParseInputStream_bomUtf16_detectedAndDecoded() throws Throwable {
+        byte[] data = "<html><body><div id=\"x\" data-x=\"caf\u00e9\"></div></body></html>".getBytes("UTF-16");
+        Document doc = DataUtil.parseInputStream(new ByteArrayInputStream(data), null, "http://example.com/", Parser.htmlParser());
+        Element div = firstOf(doc.select("div[id=x]"));
+        assertNotNull(div);
+        assertEquals("caf\u00e9", div.attr("data-x"));
+    }
+
+
+
+    // parseInputStream: meta http-equiv Content-Type charset must force a redecode with that charset
+    @Test
+    public void testParseInputStream_metaHttpEquivCharset_redecodesCorrectly() throws Throwable {
+        byte[] data = buildBytesWithRawByte(
+            "<html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=ISO-8859-1\"></head><body><div id=\"x\" data-x=\"",
+            0xE9, "\"></div></body></html>");
+        Document doc = DataUtil.parseInputStream(new ByteArrayInputStream(data), null, "http://example.com/", Parser.htmlParser());
+        Element div = firstOf(doc.select("div[id=x]"));
+        assertNotNull(div);
+        assertEquals("\u00e9", div.attr("data-x"));
+    }
+
+    // parseInputStream: HTML5 <meta charset="..."> attribute must also force a redecode
+    @Test
+    public void testParseInputStream_metaCharsetAttribute_redecodesCorrectly() throws Throwable {
+        byte[] data = buildBytesWithRawByte(
+            "<html><head><meta charset=\"ISO-8859-1\"></head><body><div id=\"x\" data-x=\"",
+            0xE9, "\"></div></body></html>");
+        Document doc = DataUtil.parseInputStream(new ByteArrayInputStream(data), null, "http://example.com/", Parser.htmlParser());
+        Element div = firstOf(doc.select("div[id=x]"));
+        assertNotNull(div);
+        assertEquals("\u00e9", div.attr("data-x"));
+    }
+
+    // parseInputStream: meta charset equal to the default (UTF-8) needs no redecode, still parses correctly
+    @Test
+    public void testParseInputStream_metaCharsetEqualsDefault_parsesFine() throws Throwable {
+        byte[] data = "<html><head><meta charset=\"utf-8\"></head><body><div id=\"x\" data-x=\"ok\"></div></body></html>".getBytes("UTF-8");
+        Document doc = DataUtil.parseInputStream(new ByteArrayInputStream(data), null, "http://example.com/", Parser.htmlParser());
+        Element div = firstOf(doc.select("div[id=x]"));
+        assertNotNull(div);
+        assertEquals("ok", div.attr("data-x"));
+    }
+
+    // parseInputStream: leading <?xml ... encoding="..."?> (parsed as a bogus comment) drives charset detection
+    @Test
+    public void testParseInputStream_xmlDeclarationEncoding_redecodesCorrectly() throws Throwable {
+        byte[] data = buildBytesWithRawByte(
+            "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><html><body><div id=\"x\" data-x=\"",
+            0xE9, "\"></div></body></html>");
+        Document doc = DataUtil.parseInputStream(new ByteArrayInputStream(data), null, "http://example.com/", Parser.htmlParser());
+        Element div = firstOf(doc.select("div[id=x]"));
+        assertNotNull(div);
+        assertEquals("\u00e9", div.attr("data-x"));
+    }
+
+    // parseInputStream: a plain leading comment (not an xml declaration) must be ignored, defaulting to UTF-8
+    @Test
+    public void testParseInputStream_nonXmlComment_ignoredUsesDefaultCharset() throws Throwable {
+        byte[] data = "<!-- just a comment --><html><body><div id=\"x\" data-x=\"ok\"></div></body></html>".getBytes("UTF-8");
+        Document doc = DataUtil.parseInputStream(new ByteArrayInputStream(data), null, "http://example.com/", Parser.htmlParser());
+        Element div = firstOf(doc.select("div[id=x]"));
+        assertNotNull(div);
+        assertEquals("ok", div.attr("data-x"));
+    }
+
+    // parseInputStream: content longer than the first-read buffer must trigger a full re-parse (fullyRead == false)
+    @Test
+    public void testParseInputStream_incompleteFirstRead_forcesFullReparse() throws Throwable {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<html><body><p>");
+        for (int i = 0; i < 6000; i++) sb.append('x');
+        sb.append("</p><div id=\"marker\" data-x=\"finalvalue\"></div></body></html>");
+        byte[] data = sb.toString().getBytes("UTF-8");
+        Document doc = DataUtil.parseInputStream(new ByteArrayInputStream(data), null, "http://example.com/", Parser.htmlParser());
+        Element marker = firstOf(doc.select("div[id=marker]"));
+        assertNotNull(marker);
+        assertEquals("finalvalue", marker.attr("data-x"));
+    }
+
+    // parseInputStream: custom parser (xmlParser) must be used for both the detection pass and final parse
+    @Test
+    public void testParseInputStream_customParser_xmlParser() throws Throwable {
+        byte[] data = "<root attr=\"v\"></root>".getBytes("UTF-8");
+        Document doc = DataUtil.parseInputStream(new ByteArrayInputStream(data), "UTF-8", "http://example.com/", Parser.xmlParser());
+        Element root = firstOf(doc.select("root"));
+        assertNotNull(root);
+        assertEquals("v", root.attr("attr"));
+    }
+
+    // readToByteBuffer: negative maxSize violates "0 (unlimited) or larger" contract
+    @Test
+    public void testReadToByteBuffer_negativeMaxSize_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DataUtil.readToByteBuffer(new ByteArrayInputStream(new byte[] {1, 2, 3}), -1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // readToByteBuffer: maxSize=0 means unlimited, whole stream must be returned
+    @Test
+    public void testReadToByteBuffer_zeroMaxSize_readsAll() throws Throwable {
+        byte[] data = new byte[] {10, 20, 30, 40, 50};
+        ByteBuffer buf = DataUtil.readToByteBuffer(new ByteArrayInputStream(data), 0);
+        assertEquals(5, buf.remaining());
+    }
+
+    // readToByteBuffer: maxSize smaller than stream length must cap the returned buffer size
+    @Test
+    public void testReadToByteBuffer_limitedMaxSize_truncatesToMax() throws Throwable {
+        byte[] data = new byte[20];
+        for (int i = 0; i < data.length; i++) data[i] = (byte) i;
+        ByteBuffer buf = DataUtil.readToByteBuffer(new ByteArrayInputStream(data), 5);
+        assertEquals(5, buf.remaining());
+    }
+
+    // emptyByteBuffer: must have zero capacity and zero remaining
+    @Test
+    public void testEmptyByteBuffer_zeroCapacity() throws Throwable {
+        ByteBuffer buf = DataUtil.emptyByteBuffer();
+        assertEquals(0, buf.capacity());
+        assertEquals(0, buf.remaining());
+    }
+
+    // getCharsetFromContentType: null contentType short-circuits to null
+    @Test
+    public void testGetCharsetFromContentType_nullInput_returnsNull() throws Throwable {
+        assertNull(DataUtil.getCharsetFromContentType(null));
+    }
+
+    // getCharsetFromContentType: no "charset=" token present means the regex never matches
+    @Test
+    public void testGetCharsetFromContentType_noCharsetParam_returnsNull() throws Throwable {
+        assertNull(DataUtil.getCharsetFromContentType("text/html"));
+    }
+
+    // getCharsetFromContentType: a plain supported charset token is returned as-is
+    @Test
+    public void testGetCharsetFromContentType_simpleCharset_returnsCharset() throws Throwable {
+        assertEquals("utf-8", DataUtil.getCharsetFromContentType("text/html; charset=utf-8"));
+    }
+
+    // getCharsetFromContentType: quotes around the charset value must be stripped
+    @Test
+    public void testGetCharsetFromContentType_quotedCharset_returnsCharset() throws Throwable {
+        assertEquals("UTF-8", DataUtil.getCharsetFromContentType("text/html; charset=\"UTF-8\""));
+    }
+
+    // getCharsetFromContentType: a well-formed but unknown/unsupported charset name returns null
+    @Test
+    public void testGetCharsetFromContentType_unsupportedCharset_returnsNull() throws Throwable {
+        assertNull(DataUtil.getCharsetFromContentType("text/html; charset=bogus-charset-xyz"));
+    }
+
+    // getCharsetFromContentType: an illegal charset name throws IllegalCharsetNameException internally, caught -> null
+    @Test
+    public void testGetCharsetFromContentType_illegalCharsetName_returnsNull() throws Throwable {
+        assertNull(DataUtil.getCharsetFromContentType("text/html; charset=utf@8"));
+    }
+
+    // mimeBoundary: must produce exactly boundaryLength chars from the mime-safe alphabet
+    @Test
+    public void testMimeBoundary_lengthAndAllowedChars() throws Throwable {
+        String boundary = DataUtil.mimeBoundary();
+        assertEquals(DataUtil.boundaryLength, boundary.length());
+        assertTrue(boundary.matches("[-_a-zA-Z0-9]+"));
+    }
+}

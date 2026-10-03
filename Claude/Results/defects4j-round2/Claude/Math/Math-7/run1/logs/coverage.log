@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Math-7-cqt_jxgq/Math-7b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 130
+     Lines covered: 67
+  Conditions total: 50
+Conditions covered: 13
+     Line coverage: 51.5%
+Condition coverage: 26.0%
+[exit 0]

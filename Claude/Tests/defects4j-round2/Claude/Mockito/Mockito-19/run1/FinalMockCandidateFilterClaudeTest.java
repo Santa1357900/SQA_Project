@@ -1,0 +1,337 @@
+package org.mockito.internal.configuration.injection.filter;
+
+import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedList;
+import java.util.List;
+
+public class FinalMockCandidateFilterClaudeTest {
+
+    private FinalMockCandidateFilter filter;
+
+    @Before
+    public void setUp() throws Throwable {
+        filter = new FinalMockCandidateFilter();
+    }
+
+    // Fixtures ---------------------------------------------------------
+
+    private static class PropertyBean {
+        private String value;
+        public String getValue() { return value; }
+        public void setValue(String value) { this.value = value; }
+    }
+
+    private static class PlainField {
+        public String value;
+    }
+
+    private static class IntField {
+        public int number;
+    }
+
+    private static class BooleanField {
+        public boolean flag;
+    }
+
+    private static class IntegerWrapperField {
+        public Integer count;
+    }
+
+    // Branch: mocks.size() == 0 -> "no match" injecter ------------------
+
+    // covers mocks.size()==1 false branch (size 0), injecter must not be null
+    @Test
+    public void testFilterCandidate_zeroMocks_returnsNonNullInjecter() throws Throwable {
+        Collection<Object> mocks = new ArrayList<Object>();
+        Field field = PlainField.class.getDeclaredField("value");
+        OngoingInjecter injecter = filter.filterCandidate(mocks, field, new PlainField());
+        assertNotNull(injecter);
+    }
+
+    // covers thenInject() of the "no match" injecter returning null
+    @Test
+    public void testFilterCandidate_zeroMocks_thenInjectReturnsNull() throws Throwable {
+        Collection<Object> mocks = new ArrayList<Object>();
+        Field field = PlainField.class.getDeclaredField("value");
+        OngoingInjecter injecter = filter.filterCandidate(mocks, field, new PlainField());
+        assertNull(injecter.thenInject());
+    }
+
+    // ensures no side effect happens on the field when there is no candidate
+    @Test
+    public void testFilterCandidate_zeroMocks_fieldNotModified() throws Throwable {
+        Collection<Object> mocks = new ArrayList<Object>();
+        Field field = PlainField.class.getDeclaredField("value");
+        PlainField instance = new PlainField();
+        filter.filterCandidate(mocks, field, instance).thenInject();
+        assertNull(instance.value);
+    }
+
+    // Branch: mocks.size() == 2 (ambiguous, size != 1) -------------------
+
+    // covers mocks.size()==1 false branch with multiple candidates (size 2)
+    @Test
+    public void testFilterCandidate_twoMocks_thenInjectReturnsNull() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("a");
+        mocks.add("b");
+        Field field = PlainField.class.getDeclaredField("value");
+        OngoingInjecter injecter = filter.filterCandidate(mocks, field, new PlainField());
+        assertNull(injecter.thenInject());
+    }
+
+    // ensures ambiguous candidates do not modify the field
+    @Test
+    public void testFilterCandidate_twoMocks_fieldNotModified() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("a");
+        mocks.add("b");
+        Field field = PlainField.class.getDeclaredField("value");
+        PlainField instance = new PlainField();
+        filter.filterCandidate(mocks, field, instance).thenInject();
+        assertNull(instance.value);
+    }
+
+    // covers size != 1 with more than two candidates
+    @Test
+    public void testFilterCandidate_fiveMocks_thenInjectReturnsNull() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        for (int i = 0; i < 5; i++) {
+            mocks.add("item" + i);
+        }
+        Field field = PlainField.class.getDeclaredField("value");
+        OngoingInjecter injecter = filter.filterCandidate(mocks, field, new PlainField());
+        assertNull(injecter.thenInject());
+    }
+
+    // Branch: mocks.size() == 1 -> injecting injecter --------------------
+
+    // covers mocks.size()==1 true branch, injecter must not be null
+    @Test
+    public void testFilterCandidate_oneMock_returnsNonNullInjecter() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("x");
+        Field field = PlainField.class.getDeclaredField("value");
+        OngoingInjecter injecter = filter.filterCandidate(mocks, field, new PlainField());
+        assertNotNull(injecter);
+    }
+
+    // covers BeanPropertySetter success path: thenInject returns matching mock
+    @Test
+    public void testFilterCandidate_oneMockWithSetter_injectsViaPropertySetter_returnsMock() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("newVal");
+        Field field = PropertyBean.class.getDeclaredField("value");
+        PropertyBean instance = new PropertyBean();
+        Object result = filter.filterCandidate(mocks, field, instance).thenInject();
+        assertEquals("newVal", result);
+    }
+
+    // covers that the bean setter was actually invoked to change state
+    @Test
+    public void testFilterCandidate_oneMockWithSetter_fieldValueUpdatedThroughSetter() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("newVal");
+        Field field = PropertyBean.class.getDeclaredField("value");
+        PropertyBean instance = new PropertyBean();
+        instance.setValue("old");
+        filter.filterCandidate(mocks, field, instance).thenInject();
+        assertEquals("newVal", instance.getValue());
+    }
+
+    // covers fallback to FieldSetter when no bean setter exists, returns mock
+    @Test
+    public void testFilterCandidate_oneMockWithoutSetter_injectsViaFieldAccess_returnsMock() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("hello");
+        Field field = PlainField.class.getDeclaredField("value");
+        PlainField instance = new PlainField();
+        Object result = filter.filterCandidate(mocks, field, instance).thenInject();
+        assertEquals("hello", result);
+    }
+
+    // covers that FieldSetter fallback actually updates the raw field
+    @Test
+    public void testFilterCandidate_oneMockWithoutSetter_fieldValueUpdatedDirectly() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("hello");
+        Field field = PlainField.class.getDeclaredField("value");
+        PlainField instance = new PlainField();
+        filter.filterCandidate(mocks, field, instance).thenInject();
+        assertEquals("hello", instance.value);
+    }
+
+    // covers the edge case where the single mock candidate itself is null
+    @Test
+    public void testFilterCandidate_oneMockNullElement_setsFieldToNull() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add(null);
+        Field field = PropertyBean.class.getDeclaredField("value");
+        PropertyBean instance = new PropertyBean();
+        instance.setValue("initial");
+        filter.filterCandidate(mocks, field, instance).thenInject();
+        assertNull(instance.getValue());
+    }
+
+    // covers that the returned object is the exact same reference as the mock
+    @Test
+    public void testFilterCandidate_oneMock_returnedValueIsSameReferenceAsMock() throws Throwable {
+        Object mock = new Object();
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add(mock);
+        Field field = PlainField.class.getDeclaredField("value");
+        PlainField instance = new PlainField();
+        Object result = filter.filterCandidate(mocks, field, instance).thenInject();
+        assertSame(mock, result);
+    }
+
+    // Exception path: both BeanPropertySetter and FieldSetter fail ------
+
+    // covers catch(RuntimeException) + Reporter.cannotInjectDependency path on type mismatch
+    @Test
+    public void testFilterCandidate_incompatiblePrimitiveType_throwsRuntimeException() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("not-a-number");
+        Field field = IntField.class.getDeclaredField("number");
+        IntField instance = new IntField();
+        OngoingInjecter injecter = filter.filterCandidate(mocks, field, instance);
+        try {
+            injecter.thenInject();
+            fail("expected RuntimeException due to incompatible field type");
+        } catch (RuntimeException expected) {
+        }
+    }
+
+    // covers catch(RuntimeException) path triggered by a null field instance
+    @Test
+    public void testFilterCandidate_nullFieldInstance_oneMock_throwsRuntimeException() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("x");
+        Field field = PlainField.class.getDeclaredField("value");
+        OngoingInjecter injecter = filter.filterCandidate(mocks, field, null);
+        try {
+            injecter.thenInject();
+            fail("expected RuntimeException due to null field instance");
+        } catch (RuntimeException expected) {
+        }
+    }
+
+    // Idempotency / independence ------------------------------------------
+
+    // covers calling thenInject() twice on the same injecter yields consistent result
+    @Test
+    public void testFilterCandidate_calledTwice_returnsSameMockBothTimes() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("val");
+        Field field = PlainField.class.getDeclaredField("value");
+        PlainField instance = new PlainField();
+        OngoingInjecter injecter = filter.filterCandidate(mocks, field, instance);
+        Object first = injecter.thenInject();
+        Object second = injecter.thenInject();
+        assertEquals("val", first);
+        assertEquals("val", second);
+    }
+
+    // covers that the method works with any Collection implementation (LinkedList), size 1
+    @Test
+    public void testFilterCandidate_oneMockLinkedListCollection_injectsSuccessfully() throws Throwable {
+        Collection<Object> mocks = new LinkedList<Object>();
+        mocks.add("linkedVal");
+        Field field = PlainField.class.getDeclaredField("value");
+        PlainField instance = new PlainField();
+        Object result = filter.filterCandidate(mocks, field, instance).thenInject();
+        assertEquals("linkedVal", result);
+    }
+
+    // covers that the method works with any Collection implementation (LinkedList), size 0
+    @Test
+    public void testFilterCandidate_zeroMocksLinkedListCollection_returnsNull() throws Throwable {
+        Collection<Object> mocks = new LinkedList<Object>();
+        Field field = PlainField.class.getDeclaredField("value");
+        OngoingInjecter injecter = filter.filterCandidate(mocks, field, new PlainField());
+        assertNull(injecter.thenInject());
+    }
+
+    // covers that repeated calls to filterCandidate produce independent results
+    @Test
+    public void testFilterCandidate_multipleFilterCandidateCalls_independentInjecters() throws Throwable {
+        Field field = PlainField.class.getDeclaredField("value");
+        List<Object> mocksA = new ArrayList<Object>();
+        mocksA.add("A");
+        List<Object> mocksB = new ArrayList<Object>();
+        mocksB.add("B");
+        Object resultA = filter.filterCandidate(mocksA, field, new PlainField()).thenInject();
+        Object resultB = filter.filterCandidate(mocksB, field, new PlainField()).thenInject();
+        assertEquals("A", resultA);
+        assertEquals("B", resultB);
+    }
+
+    // covers that two calls with the same inputs return distinct injecter instances
+    @Test
+    public void testFilterCandidate_sameMocksCalledTwice_returnsDistinctInjecterInstances() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("same");
+        Field field = PlainField.class.getDeclaredField("value");
+        PlainField instance = new PlainField();
+        OngoingInjecter first = filter.filterCandidate(mocks, field, instance);
+        OngoingInjecter second = filter.filterCandidate(mocks, field, instance);
+        assertNotSame(first, second);
+    }
+
+    // Other field types without setter -----------------------------------
+
+    // covers FieldSetter fallback with a primitive boolean field
+    @Test
+    public void testFilterCandidate_oneMockBooleanFieldWithoutSetter_fieldValueUpdated() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add(Boolean.TRUE);
+        Field field = BooleanField.class.getDeclaredField("flag");
+        BooleanField instance = new BooleanField();
+        filter.filterCandidate(mocks, field, instance).thenInject();
+        assertTrue(instance.flag);
+    }
+
+    // covers FieldSetter fallback with an Integer wrapper field
+    @Test
+    public void testFilterCandidate_oneMockIntegerWrapperFieldWithoutSetter_fieldValueUpdated() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add(Integer.valueOf(42));
+        Field field = IntegerWrapperField.class.getDeclaredField("count");
+        IntegerWrapperField instance = new IntegerWrapperField();
+        filter.filterCandidate(mocks, field, instance).thenInject();
+        assertEquals(Integer.valueOf(42), instance.count);
+    }
+
+    // covers overwrite of a non-null initial value via FieldSetter fallback
+    @Test
+    public void testFilterCandidate_oneMockStringField_fieldInitiallyNonNull_overwritten() throws Throwable {
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("second");
+        Field field = PlainField.class.getDeclaredField("value");
+        PlainField instance = new PlainField();
+        instance.value = "first";
+        filter.filterCandidate(mocks, field, instance).thenInject();
+        assertEquals("second", instance.value);
+    }
+
+    // covers that injecting into one instance does not affect another instance's state
+    @Test
+    public void testFilterCandidate_oneMockWithSetterAndDifferentFieldInstance_doesNotAffectOtherInstance() throws Throwable {
+        Field field = PropertyBean.class.getDeclaredField("value");
+        PropertyBean instanceA = new PropertyBean();
+        PropertyBean instanceB = new PropertyBean();
+        instanceB.setValue("untouched");
+        List<Object> mocks = new ArrayList<Object>();
+        mocks.add("injected");
+        filter.filterCandidate(mocks, field, instanceA).thenInject();
+        assertEquals("injected", instanceA.getValue());
+        assertEquals("untouched", instanceB.getValue());
+    }
+}

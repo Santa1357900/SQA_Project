@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Lang-38-7peb6syg/Lang-38f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.lang3.time.FastDateFormatClaudeTest::testGetDateInstance_matchesSimpleDateFormatOutput
+  - org.apache.commons.lang3.time.FastDateFormatClaudeTest::testPattern_threeY_formatsFullYearNotTwoDigit
+  - org.apache.commons.lang3.time.FastDateFormatClaudeTest::testPattern_singleY_formatsFullYearNotTwoDigit
+[exit 0]

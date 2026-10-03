@@ -1,0 +1,369 @@
+package org.apache.commons.jxpath.ri.model.beans;
+
+import org.junit.Test;
+import org.junit.Before;
+import static org.junit.Assert.*;
+
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.HashMap;
+
+import org.apache.commons.jxpath.JXPathContext;
+import org.apache.commons.jxpath.AbstractFactory;
+import org.apache.commons.jxpath.JXPathAbstractFactoryException;
+import org.apache.commons.jxpath.Pointer;
+import org.apache.commons.jxpath.ri.QName;
+
+public class PropertyPointerClaudeTest {
+
+    private static class TestBean {
+        private String name = "Alice";
+        private int count = 5;
+        private String[] tags = new String[] {"x", "y", "z"};
+        private List items = new ArrayList();
+        private TestBean child;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public int getCount() { return count; }
+        public void setCount(int count) { this.count = count; }
+        public String[] getTags() { return tags; }
+        public void setTags(String[] tags) { this.tags = tags; }
+        public List getItems() { return items; }
+        public void setItems(List items) { this.items = items; }
+        public TestBean getChild() { return child; }
+        public void setChild(TestBean child) { this.child = child; }
+    }
+
+    private static class SucceedingFactory implements AbstractFactory {
+        public boolean createObject(JXPathContext context, Pointer pointer, Object parent, String name, int index) {
+            if (parent instanceof TestBean && "child".equals(name)) {
+                ((TestBean) parent).setChild(new TestBean());
+                return true;
+            }
+            return false;
+        }
+        public boolean declareVariable(JXPathContext context, String name) {
+            return false;
+        }
+    }
+
+    private static class FailingFactory implements AbstractFactory {
+        public boolean createObject(JXPathContext context, Pointer pointer, Object parent, String name, int index) {
+            return false;
+        }
+        public boolean declareVariable(JXPathContext context, String name) {
+            return false;
+        }
+    }
+
+    private TestBean bean;
+    private JXPathContext context;
+
+    @Before
+    public void setUp() throws Throwable {
+        bean = new TestBean();
+        context = JXPathContext.newContext(bean);
+    }
+
+    // covers UNSPECIFIED_PROPERTY constant contract (Integer.MIN_VALUE)
+    @Test
+    public void testUnspecifiedPropertyConstant_equalsIntegerMinValue() throws Throwable {
+        assertEquals(Integer.MIN_VALUE, PropertyPointer.UNSPECIFIED_PROPERTY);
+    }
+
+    // covers setPropertyIndex(): propertyIndex != index branch updates the value
+    @Test
+    public void testSetPropertyIndex_differentValue_updatesIndex() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        pp.setPropertyIndex(3);
+        assertEquals(3, pp.getPropertyIndex());
+    }
+
+    // covers setPropertyIndex(): propertyIndex == index branch is a no-op
+    @Test
+    public void testSetPropertyIndex_sameValueTwice_remainsUnchanged() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        pp.setPropertyIndex(7);
+        pp.setPropertyIndex(7);
+        assertEquals(7, pp.getPropertyIndex());
+    }
+
+    // covers getBean(): resolves owning bean for a simple top-level property
+    @Test
+    public void testGetBean_forTopLevelProperty_returnsRootBean() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        assertSame(bean, pp.getBean());
+    }
+
+    // covers getBean(): owner resolution even when the property value itself is null
+    @Test
+    public void testGetBean_forNullNestedProperty_returnsRootBeanAsOwner() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("child");
+        assertSame(bean, pp.getBean());
+    }
+
+    // covers getName(): wraps getPropertyName() into a QName with no prefix
+    @Test
+    public void testGetName_returnsQNameWithPropertyName() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        QName qname = pp.getName();
+        assertEquals("name", qname.getName());
+    }
+
+    // covers getPropertyName(): returns the name used to obtain the pointer
+    @Test
+    public void testGetPropertyName_matchesRequestedProperty() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("count");
+        assertEquals("count", pp.getPropertyName());
+    }
+
+    // covers isActual(): isActualProperty() true branch for an existing bean property
+    @Test
+    public void testIsActual_forExistingBeanProperty_true() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        assertTrue(pp.isActual());
+    }
+
+    // covers isActual(): isActualProperty() false branch for a non-existent dynamic (map) property
+    @Test
+    public void testIsActual_forMissingMapKey_false() throws Throwable {
+        Map map = new HashMap();
+        map.put("existing", "value");
+        JXPathContext mapContext = JXPathContext.newContext(map);
+        PropertyPointer pp = (PropertyPointer) mapContext.getPointer("missing");
+        assertFalse(pp.isActual());
+    }
+
+    // covers isCollection(): non-null array value is recognized as a collection
+    @Test
+    public void testIsCollection_forArrayProperty_true() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("tags");
+        assertTrue(pp.isCollection());
+    }
+
+    // covers isCollection(): non-collection scalar value branch
+    @Test
+    public void testIsCollection_forScalarProperty_false() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        assertFalse(pp.isCollection());
+    }
+
+    // covers isCollection(): value == null short-circuit branch
+    @Test
+    public void testIsCollection_forNullProperty_false() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("child");
+        assertFalse(pp.isCollection());
+    }
+
+    // covers isLeaf(): atomic bean-info branch for a String value
+    @Test
+    public void testIsLeaf_forStringProperty_true() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        assertTrue(pp.isLeaf());
+    }
+
+    // covers isLeaf(): value == null branch
+    @Test
+    public void testIsLeaf_forNullProperty_true() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("child");
+        assertTrue(pp.isLeaf());
+    }
+
+    // covers isLeaf(): non-atomic bean-info branch for a nested bean value
+    @Test
+    public void testIsLeaf_forNestedBeanProperty_false() throws Throwable {
+        bean.setChild(new TestBean());
+        PropertyPointer pp = (PropertyPointer) context.getPointer("child");
+        assertFalse(pp.isLeaf());
+    }
+
+    // covers getLength(): length of an array-valued property
+    @Test
+    public void testGetLength_forArrayProperty_returnsArrayLength() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("tags");
+        assertEquals(3, pp.getLength());
+    }
+
+    // covers getLength(): non-collection scalar is treated as length 1
+    @Test
+    public void testGetLength_forScalarProperty_returnsOne() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        assertEquals(1, pp.getLength());
+    }
+
+    // covers getLength(): empty collection length is zero
+    @Test
+    public void testGetLength_forEmptyListProperty_returnsZero() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("items");
+        assertEquals(0, pp.getLength());
+    }
+
+    // covers getImmediateNode(): ternary true branch (index == WHOLE_COLLECTION) for a scalar
+    @Test
+    public void testGetImmediateNode_forWholeScalarProperty_returnsValue() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        assertEquals("Alice", pp.getImmediateNode());
+    }
+
+    // covers getImmediateNode(): ternary false branch (specific index) on a freshly obtained pointer
+    @Test
+    public void testGetImmediateNode_forFreshIndexedProperty_returnsElementAtIndex() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("tags[2]");
+        assertEquals("y", pp.getImmediateNode());
+    }
+
+    // covers getImmediateNode(): whole-collection branch returning null for an unset property
+    @Test
+    public void testGetImmediateNode_forNullProperty_returnsNull() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("child");
+        assertNull(pp.getImmediateNode());
+    }
+
+    // covers getImmediateValuePointer(): returned pointer exposes the same immediate value
+    @Test
+    public void testGetImmediateValuePointer_returnsPointerExposingSameValue() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        Pointer vp = (Pointer) pp.getImmediateValuePointer();
+        assertEquals("Alice", vp.getValue());
+    }
+
+    // covers createPath(context): getImmediateNode() != null branch, no factory needed
+    @Test
+    public void testCreatePath_whenValueAlreadyExists_returnsSamePointerUnchanged() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        Object result = pp.createPath(context);
+        assertSame(pp, result);
+        assertEquals("Alice", pp.getImmediateNode());
+    }
+
+    // covers createPath(context): getImmediateNode() == null branch, factory.createObject succeeds
+    @Test
+    public void testCreatePath_whenValueNullAndFactorySucceeds_createsObjectAndReturnsSamePointer() throws Throwable {
+        context.setFactory(new SucceedingFactory());
+        PropertyPointer childPp = (PropertyPointer) context.getPointer("child");
+        Object result = childPp.createPath(context);
+        assertSame(childPp, result);
+        assertNotNull(bean.getChild());
+    }
+
+    // covers createPath(context): factory.createObject returns false -> throws JXPathAbstractFactoryException
+    @Test
+    public void testCreatePath_whenValueNullAndFactoryFails_throwsJXPathAbstractFactoryException() throws Throwable {
+        context.setFactory(new FailingFactory());
+        PropertyPointer childPp = (PropertyPointer) context.getPointer("child");
+        try {
+            childPp.createPath(context);
+            fail("expected JXPathAbstractFactoryException");
+        } catch (JXPathAbstractFactoryException expected) {
+            assertTrue(expected.getMessage().contains("Factory"));
+        }
+    }
+
+    // covers createPath(context, value): index == WHOLE_COLLECTION skip-expand branch, then setValue
+    @Test
+    public void testCreatePathWithValue_scalarProperty_setsValueOnBean() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        pp.createPath(context, "Bob");
+        assertEquals("Bob", bean.getName());
+    }
+
+    // covers createChild(context, name, index, value): name != null branch sets new property and value
+    @Test
+    public void testCreateChild_withNewPropertyNameAndValue_setsValueOnNewProperty() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        pp.createChild(context, new QName(null, "count"), 0, new Integer(42));
+        assertEquals(42, bean.getCount());
+    }
+
+    // bug hunt: getImmediateNode() caches a value that is never invalidated when createChild()
+    // clones the pointer and selects a different index; the clone must reflect its OWN index.
+    @Test
+    public void testCreateChild_afterPriorGetImmediateNode_returnsValueForNewIndexNotStaleOne() throws Throwable {
+        PropertyPointer p0 = (PropertyPointer) context.getPointer("tags[1]");
+        assertEquals("x", p0.getImmediateNode());
+        Object result = p0.createChild(context, null, 2);
+        PropertyPointer p2 = (PropertyPointer) result;
+        assertEquals("z", p2.getImmediateNode());
+    }
+
+    // covers hashCode(): equal pointers must share the same hashCode
+    @Test
+    public void testHashCode_consistentForEqualPointers() throws Throwable {
+        PropertyPointer p1 = (PropertyPointer) context.getPointer("name");
+        PropertyPointer p2 = (PropertyPointer) context.getPointer("name");
+        assertTrue(p1.equals(p2));
+        assertEquals(p1.hashCode(), p2.hashCode());
+    }
+
+    // covers equals(): object == this branch
+    @Test
+    public void testEquals_sameInstance_true() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        assertTrue(pp.equals(pp));
+    }
+
+    // covers equals(): !(object instanceof PropertyPointer) branch
+    @Test
+    public void testEquals_notAPropertyPointer_false() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        assertFalse(pp.equals("not a pointer"));
+    }
+
+    // covers equals(): propertyName mismatch branch
+    @Test
+    public void testEquals_differentPropertyName_false() throws Throwable {
+        PropertyPointer p1 = (PropertyPointer) context.getPointer("name");
+        PropertyPointer p2 = (PropertyPointer) context.getPointer("count");
+        assertFalse(p1.equals(p2));
+    }
+
+    // covers equals(): parent mismatch branch
+    @Test
+    public void testEquals_differentParentBean_false() throws Throwable {
+        TestBean otherBean = new TestBean();
+        JXPathContext otherContext = JXPathContext.newContext(otherBean);
+        PropertyPointer p1 = (PropertyPointer) context.getPointer("name");
+        PropertyPointer p2 = (PropertyPointer) otherContext.getPointer("name");
+        assertFalse(p1.equals(p2));
+    }
+
+    // covers equals(): index normalization comparison, differing indices -> false
+    @Test
+    public void testEquals_sameNamedPropertyDifferentIndex_false() throws Throwable {
+        PropertyPointer p1 = (PropertyPointer) context.getPointer("tags[1]");
+        PropertyPointer p2 = (PropertyPointer) context.getPointer("tags[2]");
+        assertFalse(p1.equals(p2));
+    }
+
+    // covers equals(): index normalization comparison, matching indices -> true
+    @Test
+    public void testEquals_sameNamedPropertySameIndex_true() throws Throwable {
+        PropertyPointer p1 = (PropertyPointer) context.getPointer("tags[1]");
+        PropertyPointer p2 = (PropertyPointer) context.getPointer("tags[1]");
+        assertTrue(p1.equals(p2));
+    }
+
+    // covers getPropertyNames(): returned array should include the currently selected property name
+    @Test
+    public void testGetPropertyNames_includesRequestedPropertyName() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        String[] names = pp.getPropertyNames();
+        assertNotNull(names);
+        boolean found = false;
+        for (int i = 0; i < names.length; i++) {
+            if ("name".equals(names[i])) {
+                found = true;
+            }
+        }
+        assertTrue(found);
+    }
+
+    // covers getPropertyCount(): must count at least the currently selected property
+    @Test
+    public void testGetPropertyCount_isAtLeastOne() throws Throwable {
+        PropertyPointer pp = (PropertyPointer) context.getPointer("name");
+        assertTrue(pp.getPropertyCount() >= 1);
+    }
+}

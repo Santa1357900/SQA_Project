@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-85-x0388p9c/Math-85b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.math.analysis.solvers.UnivariateRealSolverUtilsClaudeTest::bracketFourArg_exactZeroProductAtBoundary_succeedsPerJavadoc
+[exit 0]

@@ -1,0 +1,283 @@
+package org.jsoup.helper;
+
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class StringUtilClaudeTest {
+
+    // join(Collection, sep): empty collection -> ""
+    @Test
+    public void testJoinCollection_emptyCollection_returnsEmptyString() throws Throwable {
+        List<String> list = new ArrayList<String>();
+        assertEquals("", StringUtil.join(list, ","));
+    }
+
+    // join(Collection, sep): single element -> no separator, just the element
+    @Test
+    public void testJoinCollection_singleElement_returnsElementWithoutSeparator() throws Throwable {
+        List<String> list = new ArrayList<String>();
+        list.add("a");
+        assertEquals("a", StringUtil.join(list, ","));
+    }
+
+    // join(Collection, sep): multiple elements -> joined with separator
+    @Test
+    public void testJoinCollection_multipleElements_joinsWithSeparator() throws Throwable {
+        List<String> list = new ArrayList<String>();
+        list.add("a");
+        list.add("b");
+        list.add("c");
+        assertEquals("a-b-c", StringUtil.join(list, "-"));
+    }
+
+    // join(Iterator, sep): direct iterator path with multiple elements
+    @Test
+    public void testJoinIterator_multipleElements_joinsWithSeparator() throws Throwable {
+        List<String> list = new ArrayList<String>();
+        list.add("x");
+        list.add("y");
+        Iterator<String> it = list.iterator();
+        assertEquals("x;y", StringUtil.join(it, ";"));
+    }
+
+    // join(String[], sep): empty array -> ""
+    @Test
+    public void testJoinArray_emptyArray_returnsEmptyString() throws Throwable {
+        String[] arr = new String[0];
+        assertEquals("", StringUtil.join(arr, ","));
+    }
+
+    // join(String[], sep): multiple elements -> joined with separator
+    @Test
+    public void testJoinArray_multipleElements_joinsWithSeparator() throws Throwable {
+        String[] arr = new String[] {"x", "y"};
+        assertEquals("x;y", StringUtil.join(arr, ";"));
+    }
+
+    // padding(0): zero width -> empty string (boundary of width<0 check)
+    @Test
+    public void testPadding_zeroWidth_returnsEmptyString() throws Throwable {
+        assertEquals("", StringUtil.padding(0));
+    }
+
+    // padding(width) within memoised array range
+    @Test
+    public void testPadding_withinArrayRange_returnsCorrectSpaces() throws Throwable {
+        assertEquals("     ", StringUtil.padding(5));
+        assertEquals(" ", StringUtil.padding(1));
+    }
+
+    // padding(21): boundary where width equals padding.length, uses char-array loop path
+    @Test
+    public void testPadding_boundaryWidth21_returnsCorrectSpacesViaLoop() throws Throwable {
+        StringBuilder expected = new StringBuilder();
+        for (int i = 0; i < 21; i++)
+            expected.append(' ');
+        String result = StringUtil.padding(21);
+        assertEquals(expected.toString(), result);
+        assertEquals(21, result.length());
+    }
+
+    // padding(negative): must throw IllegalArgumentException
+    @Test
+    public void testPadding_negativeWidth_throwsIllegalArgumentException() throws Throwable {
+        try {
+            StringUtil.padding(-1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // isBlank(null) -> true per javadoc
+    @Test
+    public void testIsBlank_null_returnsTrue() throws Throwable {
+        assertTrue(StringUtil.isBlank(null));
+    }
+
+    // isBlank(""): empty string -> true
+    @Test
+    public void testIsBlank_emptyString_returnsTrue() throws Throwable {
+        assertTrue(StringUtil.isBlank(""));
+    }
+
+    // isBlank: only HTML whitespace chars -> true
+    @Test
+    public void testIsBlank_whitespaceOnly_returnsTrue() throws Throwable {
+        assertTrue(StringUtil.isBlank(" \t\n\r\f"));
+    }
+
+    // isBlank: contains non-whitespace -> false
+    @Test
+    public void testIsBlank_nonWhitespaceContent_returnsFalse() throws Throwable {
+        assertFalse(StringUtil.isBlank("a"));
+        assertFalse(StringUtil.isBlank(" a "));
+    }
+
+    // isNumeric(null) -> false per javadoc
+    @Test
+    public void testIsNumeric_null_returnsFalse() throws Throwable {
+        assertFalse(StringUtil.isNumeric(null));
+    }
+
+    // isNumeric(""): empty -> false
+    @Test
+    public void testIsNumeric_emptyString_returnsFalse() throws Throwable {
+        assertFalse(StringUtil.isNumeric(""));
+    }
+
+    // isNumeric: only digit chars -> true
+    @Test
+    public void testIsNumeric_digitsOnly_returnsTrue() throws Throwable {
+        assertTrue(StringUtil.isNumeric("12345"));
+    }
+
+    // isNumeric: contains a non-digit char -> false
+    @Test
+    public void testIsNumeric_withNonDigitChar_returnsFalse() throws Throwable {
+        assertFalse(StringUtil.isNumeric("123a45"));
+        assertFalse(StringUtil.isNumeric("123.45"));
+    }
+
+    // isWhitespace: HTML spec whitespace chars -> all true
+    @Test
+    public void testIsWhitespace_htmlWhitespaceChars_returnsTrue() throws Throwable {
+        assertTrue(StringUtil.isWhitespace(' '));
+        assertTrue(StringUtil.isWhitespace('\t'));
+        assertTrue(StringUtil.isWhitespace('\n'));
+        assertTrue(StringUtil.isWhitespace('\f'));
+        assertTrue(StringUtil.isWhitespace('\r'));
+    }
+
+    // isWhitespace: non-breaking space (160) is NOT in HTML spec whitespace -> false
+    @Test
+    public void testIsWhitespace_nonBreakingSpace_returnsFalse() throws Throwable {
+        assertFalse(StringUtil.isWhitespace(160));
+    }
+
+    // isActuallyWhitespace: non-breaking space (160) included -> true
+    @Test
+    public void testIsActuallyWhitespace_nonBreakingSpace_returnsTrue() throws Throwable {
+        assertTrue(StringUtil.isActuallyWhitespace(160));
+    }
+
+    // isActuallyWhitespace: other unicode space chars not covered -> false
+    @Test
+    public void testIsActuallyWhitespace_otherUnicodeSpace_returnsFalse() throws Throwable {
+        assertFalse(StringUtil.isActuallyWhitespace(0x2003));
+        assertFalse(StringUtil.isActuallyWhitespace('a'));
+    }
+
+    // normaliseWhitespace: multiple spaces and newline/tab collapse to single space
+    @Test
+    public void testNormaliseWhitespace_collapsesMultipleSpacesAndNewlines() throws Throwable {
+        assertEquals("a b c", StringUtil.normaliseWhitespace("a\nb\tc"));
+        assertEquals("a b", StringUtil.normaliseWhitespace("a   b"));
+    }
+
+    // normaliseWhitespace: string entirely whitespace collapses to single space (stripLeading=false)
+    @Test
+    public void testNormaliseWhitespace_allWhitespace_returnsSingleSpace() throws Throwable {
+        assertEquals(" ", StringUtil.normaliseWhitespace("   \r \n \r\n"));
+    }
+
+    // appendNormalisedWhitespace with stripLeading=true removes leading whitespace and collapses internal
+    @Test
+    public void testAppendNormalisedWhitespace_stripLeadingTrue_removesLeadingWhitespace() throws Throwable {
+        StringBuilder sb = new StringBuilder();
+        StringUtil.appendNormalisedWhitespace(sb, "   hello  world", true);
+        assertEquals("hello world", sb.toString());
+    }
+
+    // appendNormalisedWhitespace with stripLeading=false keeps leading whitespace as single space
+    @Test
+    public void testAppendNormalisedWhitespace_stripLeadingFalse_keepsLeadingAsSingleSpace() throws Throwable {
+        StringBuilder sb = new StringBuilder();
+        StringUtil.appendNormalisedWhitespace(sb, " hello", false);
+        assertEquals(" hello", sb.toString());
+    }
+
+    // in(needle, haystack...): needle present -> true
+    @Test
+    public void testIn_needleFound_returnsTrue() throws Throwable {
+        assertTrue(StringUtil.in("b", "a", "b", "c"));
+    }
+
+    // in(needle, haystack...): needle absent, including empty haystack -> false
+    @Test
+    public void testIn_needleNotFound_returnsFalse() throws Throwable {
+        assertFalse(StringUtil.in("z", "a", "b", "c"));
+        assertFalse(StringUtil.in("x"));
+    }
+
+    // inSorted: needle present in sorted array -> true
+    @Test
+    public void testInSorted_needleFound_returnsTrue() throws Throwable {
+        String[] sorted = new String[] {"apple", "banana", "cherry"};
+        assertTrue(StringUtil.inSorted("banana", sorted));
+    }
+
+    // inSorted: needle absent in sorted array -> false
+    @Test
+    public void testInSorted_needleNotFound_returnsFalse() throws Throwable {
+        String[] sorted = new String[] {"apple", "banana", "cherry"};
+        assertFalse(StringUtil.inSorted("durian", sorted));
+    }
+
+    // resolve(URL, String): relUrl starts with '?' should keep base path, replacing only query
+    @Test
+    public void testResolveUrlUrl_queryOnlyRelUrl_keepsBasePath() throws Throwable {
+        URL base = new URL("http://example.com/path/file");
+        URL result = StringUtil.resolve(base, "?foo");
+        assertEquals("http://example.com/path/file?foo", result.toExternalForm());
+    }
+
+    // resolve(URL, String): dot-relative path against a base URL with no path resolves without literal "./"
+    @Test
+    public void testResolveUrlUrl_dotRelativeAgainstNoPathBase_resolvesCorrectly() throws Throwable {
+        URL base = new URL("http://example.com");
+        URL result = StringUtil.resolve(base, "./one/two?three");
+        assertEquals("http://example.com/one/two?three", result.toExternalForm());
+    }
+
+    // resolve(URL, String): ".." relative path against base that already has a path resolves one level up
+    @Test
+    public void testResolveUrlUrl_dotDotRelativeWithExistingPath_resolvesCorrectly() throws Throwable {
+        URL base = new URL("http://example.com/two/");
+        URL result = StringUtil.resolve(base, "../one/two.html");
+        assertEquals("http://example.com/one/two.html", result.toExternalForm());
+    }
+
+    // resolve(String, String): valid base and relative url resolves to expected absolute url
+    @Test
+    public void testResolveStringString_validBaseAndRelativeUrl_returnsResolvedUrl() throws Throwable {
+        String result = StringUtil.resolve("http://example.com/two/", "../one/two.html");
+        assertEquals("http://example.com/one/two.html", result);
+    }
+
+    // resolve(String, String): invalid base but relUrl is absolute on its own -> returns relUrl absolute form
+    @Test
+    public void testResolveStringString_invalidBaseButAbsoluteRelUrl_returnsRelUrl() throws Throwable {
+        String result = StringUtil.resolve("wrong", "https://example.com/one");
+        assertEquals("https://example.com/one", result);
+    }
+
+    // resolve(String, String): both base and relUrl invalid -> returns empty string
+    @Test
+    public void testResolveStringString_bothInvalid_returnsEmptyString() throws Throwable {
+        String result = StringUtil.resolve("wrong", "also wrong");
+        assertEquals("", result);
+    }
+
+    // resolve(String, String): empty relUrl resolves to the base url itself
+    @Test
+    public void testResolveStringString_emptyRelUrl_returnsBaseUrl() throws Throwable {
+        String result = StringUtil.resolve("https://example.com/one", "");
+        assertEquals("https://example.com/one", result);
+    }
+}

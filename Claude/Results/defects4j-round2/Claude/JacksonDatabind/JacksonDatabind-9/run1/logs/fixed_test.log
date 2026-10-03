@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-JacksonDatabind-9-hjmt1x5o/JacksonDatabind-9f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - com.fasterxml.jackson.databind.ser.std.StdKeySerializerClaudeTest::testSerialize_dateKeyEpoch_writesZeroTimestampByDefault
+  - com.fasterxml.jackson.databind.ser.std.StdKeySerializerClaudeTest::testSerialize_dateKeyNegativeTimestamp_writesNegativeNumber
+  - com.fasterxml.jackson.databind.ser.std.StdKeySerializerClaudeTest::testSerialize_sqlDateSubclass_treatedAsDateInstance
+  - com.fasterxml.jackson.databind.ser.std.StdKeySerializerClaudeTest::testSerialize_dateKeyPositiveTimestamp_writesTimestampByDefault
+[exit 0]

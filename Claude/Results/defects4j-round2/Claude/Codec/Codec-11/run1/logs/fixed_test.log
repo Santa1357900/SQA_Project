@@ -1,0 +1,20 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Codec-11-jzivxn_y/Codec-11f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 14
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncode_String_unicodeChar_escapesUtf8Bytes
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncodeQuotedPrintableStatic_emptyBytes_returnsEmptyArray
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncode_Object_byteArray_delegatesCorrectly
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncode_byteArray_controlCharEscaped
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncode_byteArray_byte127Escaped
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncodeDecodeRoundTrip_allByteValues
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncode_byteArray_highBitByteEscaped
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncode_byteArray_boundaryChar60And62Literal
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncode_byteArray_boundaryChars33And126Literal
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncode_byteArray_tabAndSpaceLiteral
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncode_StringCharset_withSpecifiedCharset
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncode_byteArray_equalsSignEscaped
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncodeQuotedPrintableStatic_customBitSet_overridesDefault
+  - org.apache.commons.codec.net.QuotedPrintableCodecClaudeTest::testEncodeQuotedPrintableStatic_nullBitSet_usesDefaultPrintableChars
+[exit 0]

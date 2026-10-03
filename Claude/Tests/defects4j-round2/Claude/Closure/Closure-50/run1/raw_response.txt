@@ -1,0 +1,271 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class PeepholeReplaceKnownMethodsClaudeTest {
+
+  private static final String EXTERNS =
+      "function parseInt(string, opt_radix) {}\n" +
+      "function parseFloat(string) {}\n";
+
+  private String fold(String js) throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.foldConstants = true;
+    List<SourceFile> externs = new ArrayList<SourceFile>();
+    externs.add(SourceFile.fromCode("externs.js", EXTERNS));
+    List<SourceFile> inputs = new ArrayList<SourceFile>();
+    inputs.add(SourceFile.fromCode("test.js", js));
+    Result result = compiler.compile(externs, inputs, options);
+    assertTrue("compile should succeed for: " + js, result.success);
+    return compiler.toSource();
+  }
+
+  private boolean containsStr(String out, String value) {
+    return out.contains("\"" + value + "\"") || out.contains("'" + value + "'");
+  }
+
+  // ครอบ tryFoldStringToLowerCase: ตัวพิมพ์ใหญ่ผสมแปลงเป็นพิมพ์เล็กทั้งหมด
+  @Test
+  public void testToLowerCase_mixedCase_returnsLowercase() throws Throwable {
+    String out = fold("var x = 'ABC'.toLowerCase();");
+    assertTrue(out, containsStr(out, "abc"));
+  }
+
+  // ครอบ tryFoldStringToLowerCase: ใช้ ROOT_LOCALE ไม่ขึ้นกับ locale (Turkish I)
+  @Test
+  public void testToLowerCase_localeIndependent_capitalI() throws Throwable {
+    String out = fold("var x = 'I'.toLowerCase();");
+    assertTrue(out, containsStr(out, "i"));
+  }
+
+  // ครอบ tryFoldStringToUpperCase: ตัวพิมพ์เล็กแปลงเป็นพิมพ์ใหญ่ทั้งหมด
+  @Test
+  public void testToUpperCase_mixedCase_returnsUppercase() throws Throwable {
+    String out = fold("var x = 'abc'.toUpperCase();");
+    assertTrue(out, containsStr(out, "ABC"));
+  }
+
+  // ครอบ tryFoldParseNumber: parseInt string ปกติไม่มี radix
+  @Test
+  public void testParseInt_simpleString_returnsInt() throws Throwable {
+    String out = fold("var x = parseInt('10');");
+    assertTrue(out, out.contains("10"));
+  }
+
+  // ครอบ tryFoldParseNumber: parseInt พร้อม radix ที่ถูกต้อง
+  @Test
+  public void testParseInt_withRadix2_returnsConvertedValue() throws Throwable {
+    String out = fold("var x = parseInt('10', 2);");
+    assertTrue(out, out.contains("2"));
+  }
+
+  // ครอบ tryFoldParseNumber: ตรวจจับ prefix 0x เพื่อกำหนด radix=16
+  @Test
+  public void testParseInt_hexPrefix_detectsRadix16() throws Throwable {
+    String out = fold("var x = parseInt('0x1F');");
+    assertTrue(out, out.contains("31"));
+  }
+
+  // ครอบ tryFoldParseNumber: parseFloat string ปกติ
+  @Test
+  public void testParseFloat_simpleString_returnsFloat() throws Throwable {
+    String out = fold("var x = parseFloat('3.14');");
+    assertTrue(out, out.contains("3.14"));
+  }
+
+  // ครอบ tryFoldParseNumber: parseInt(number) ไม่มี radix หรือ radix=10 -> คืนตัวเลขเดิม
+  @Test
+  public void testParseInt_numericArgDefaultRadix_returnsNumber() throws Throwable {
+    String out = fold("var x = parseInt(10);");
+    assertTrue(out, out.contains("10"));
+  }
+
+  // ครอบ tryFoldParseNumber: parseInt(number, radix!=10) -> แปลงเป็น string แล้ว parse ด้วย radix ใหม่
+  @Test
+  public void testParseInt_numericArgDifferentRadix_convertsBase() throws Throwable {
+    String out = fold("var x = parseInt(16, 16);");
+    assertTrue(out, out.contains("22"));
+  }
+
+  // ครอบ tryFoldParseNumber: string ไม่ใช่ตัวเลขที่ถูกต้อง -> ไม่ fold
+  @Test
+  public void testParseInt_nonNumericString_doesNotFold() throws Throwable {
+    String out = fold("var x = parseInt('abc');");
+    assertTrue(out, out.contains("parseInt") && containsStr(out, "abc"));
+  }
+
+  // ครอบ tryFoldParseNumber: radix > 36 ไม่ถูกต้อง -> ไม่ fold
+  @Test
+  public void testParseInt_radixTooLarge_doesNotFold() throws Throwable {
+    String out = fold("var x = parseInt('1', 37);");
+    assertTrue(out, out.contains("parseInt") && out.contains("37"));
+  }
+
+  // ครอบ tryFoldParseNumber: radix == 1 ไม่ถูกต้อง -> ไม่ fold
+  @Test
+  public void testParseInt_radixOne_doesNotFold() throws Throwable {
+    String out = fold("var x = parseInt('1', 1);");
+    assertTrue(out, out.contains("parseInt"));
+  }
+
+  // ครอบ tryFoldParseNumber: parseFloat มี second arg -> ไม่ fold (เงื่อนไข !isParseInt)
+  @Test
+  public void testParseFloat_withSecondArg_doesNotFold() throws Throwable {
+    String out = fold("var x = parseFloat('1', 2);");
+    assertTrue(out, out.contains("parseFloat"));
+  }
+
+  // ครอบ tryFoldStringIndexOf: indexOf พบค่า
+  @Test
+  public void testIndexOf_found_returnsIndex() throws Throwable {
+    String out = fold("var x = 'abcdef'.indexOf('bc');");
+    assertTrue(out, out.contains("1"));
+  }
+
+  // ครอบ tryFoldStringIndexOf: indexOf พร้อม fromIndex ที่ทำให้หาไม่เจอ -> -1
+  @Test
+  public void testIndexOf_withFromIndex_notFound_returnsNegOne() throws Throwable {
+    String out = fold("var x = 'abcdef'.indexOf('bc', 2);");
+    assertTrue(out, out.contains("-1"));
+  }
+
+  // ครอบ tryFoldStringIndexOf: lastIndexOf ไม่มี fromIndex หาจากท้ายสุด
+  @Test
+  public void testLastIndexOf_found_returnsLastIndex() throws Throwable {
+    String out = fold("var x = 'abcabc'.lastIndexOf('a');");
+    assertTrue(out, out.contains("3"));
+  }
+
+  // ครอบ tryFoldStringIndexOf: lastIndexOf พร้อม fromIndex จำกัดขอบเขตการค้นหา
+  @Test
+  public void testLastIndexOf_withFromIndex_returnsEarlierIndex() throws Throwable {
+    String out = fold("var x = 'abcabc'.lastIndexOf('a', 2);");
+    assertTrue(out, out.contains("0"));
+  }
+
+  // ครอบ tryFoldArrayJoin: ตามตัวอย่างใน Javadoc ['a','b','c'].join('') -> 'abc'
+  @Test
+  public void testArrayJoin_javadocExample_foldsToConcatenatedString() throws Throwable {
+    String out = fold("var x = ['a', 'b', 'c'].join('');");
+    assertTrue(out, containsStr(out, "abc"));
+  }
+
+  // ครอบ tryFoldArrayJoin: array ว่าง -> string ว่าง (case 0)
+  @Test
+  public void testArrayJoin_emptyArray_foldsToEmptyString() throws Throwable {
+    String out = fold("var x = [].join(',');");
+    assertTrue(out, containsStr(out, ""));
+  }
+
+  // ครอบ tryFoldArrayJoin: ไม่มี argument -> ใช้ "," เป็นค่าดีฟอลต์
+  @Test
+  public void testArrayJoin_defaultSeparator_usesComma() throws Throwable {
+    String out = fold("var x = ['a', 'b'].join();");
+    assertTrue(out, containsStr(out, "a,b"));
+  }
+
+  // ครอบ tryFoldArrayJoin: มี element ที่ไม่ใช่ immutable value แทรกอยู่ -> ไม่สามารถ merge ได้ -> ไม่ fold
+  @Test
+  public void testArrayJoin_withNonConstantElement_doesNotFold() throws Throwable {
+    String out = fold("var x = ['a', [], 'c'].join(',');");
+    assertTrue(out, out.contains(".join("));
+  }
+
+  // ครอบ tryFoldStringSubstr: ไม่ระบุ length -> ใช้ความยาวที่เหลือจาก start
+  @Test
+  public void testSubstr_defaultLength_returnsRemainder() throws Throwable {
+    String out = fold("var x = 'abcdef'.substr(2);");
+    assertTrue(out, containsStr(out, "cdef"));
+  }
+
+  // ครอบ tryFoldStringSubstr: ระบุ start และ length ชัดเจน
+  @Test
+  public void testSubstr_explicitLength_returnsSubstring() throws Throwable {
+    String out = fold("var x = 'abcdef'.substr(1, 3);");
+    assertTrue(out, containsStr(out, "bcd"));
+  }
+
+  // ครอบ tryFoldStringSubstr: length ติดลบ -> ไม่ fold
+  @Test
+  public void testSubstr_negativeLength_doesNotFold() throws Throwable {
+    String out = fold("var x = 'abcdef'.substr(2, -1);");
+    assertTrue(out, out.contains(".substr("));
+  }
+
+  // ครอบ tryFoldStringSubstring: start < end ปกติ
+  @Test
+  public void testSubstring_basic_returnsRange() throws Throwable {
+    String out = fold("var x = 'abcdef'.substring(1, 4);");
+    assertTrue(out, containsStr(out, "bcd"));
+  }
+
+  // ครอบ tryFoldStringSubstring: ไม่ระบุ end -> ใช้ความยาวสตริง
+  @Test
+  public void testSubstring_defaultEnd_returnsToEnd() throws Throwable {
+    String out = fold("var x = 'abcdef'.substring(4);");
+    assertTrue(out, containsStr(out, "ef"));
+  }
+
+  // ล่าบั๊ก: ตาม ECMA 15.5.4.15 เมื่อ start > end ต้อง swap ค่า แต่โค้ดไม่ได้ swap
+  // 'abcdef'.substring(4,2) ต้องเท่ากับ 'abcdef'.substring(2,4) = 'cd'
+  @Test
+  public void testSubstring_startGreaterThanEnd_swapsIndices() throws Throwable {
+    String out = fold("var x = 'abcdef'.substring(4, 2);");
+    assertTrue(out, containsStr(out, "cd"));
+  }
+
+  // ครอบ tryFoldStringSubstring: start ติดลบ -> ไม่ fold
+  @Test
+  public void testSubstring_negativeStart_doesNotFold() throws Throwable {
+    String out = fold("var x = 'abcdef'.substring(-1, 3);");
+    assertTrue(out, out.contains(".substring("));
+  }
+
+  // ครอบ tryFoldStringSubstring: end เกินความยาวสตริง -> ไม่ fold
+  @Test
+  public void testSubstring_endExceedsLength_doesNotFold() throws Throwable {
+    String out = fold("var x = 'abcdef'.substring(2, 10);");
+    assertTrue(out, out.contains(".substring("));
+  }
+
+  // ครอบ tryFoldStringCharAt: index ถูกต้องในขอบเขต
+  @Test
+  public void testCharAt_validIndex_returnsChar() throws Throwable {
+    String out = fold("var x = 'abcdef'.charAt(0);");
+    assertTrue(out, containsStr(out, "a"));
+  }
+
+  // ครอบ tryFoldStringCharAt: index เกินความยาวสตริง -> ไม่ fold
+  @Test
+  public void testCharAt_outOfBounds_doesNotFold() throws Throwable {
+    String out = fold("var x = 'abcdef'.charAt(10);");
+    assertTrue(out, out.contains(".charAt("));
+  }
+
+  // ครอบ tryFoldStringCharAt: index ติดลบ -> ไม่ fold
+  @Test
+  public void testCharAt_negativeIndex_doesNotFold() throws Throwable {
+    String out = fold("var x = 'abcdef'.charAt(-1);");
+    assertTrue(out, out.contains(".charAt("));
+  }
+
+  // ครอบ tryFoldStringCharCodeAt: index ถูกต้องในขอบเขต คืนรหัสอักขระ
+  @Test
+  public void testCharCodeAt_validIndex_returnsCode() throws Throwable {
+    String out = fold("var x = 'A'.charCodeAt(0);");
+    assertTrue(out, out.contains("65"));
+  }
+
+  // ครอบ tryFoldStringCharCodeAt: index เกินความยาวสตริง -> ไม่ fold
+  @Test
+  public void testCharCodeAt_outOfBounds_doesNotFold() throws Throwable {
+    String out = fold("var x = 'abcdef'.charCodeAt(100);");
+    assertTrue(out, out.contains(".charCodeAt("));
+  }
+}

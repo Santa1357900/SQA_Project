@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Gson-15-2scqj2_f/Gson-15b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - com.google.gson.stream.JsonWriterClaudeTest::testValueDouble_lenientNaN_doesNotThrow_andWritesNaN
+  - com.google.gson.stream.JsonWriterClaudeTest::testValueDouble_lenientInfinite_doesNotThrow_andWritesInfinity
+[exit 0]

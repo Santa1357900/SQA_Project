@@ -1,0 +1,454 @@
+package org.apache.commons.math.geometry.euclidean.threed;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class RotationClaudeTest {
+
+    // Rotation(double,double,double,double,false) must keep raw quaternion values unchanged
+    @Test
+    public void testConstructorQuaternion_noNormalization_keepsRawValues() throws Throwable {
+        Rotation r = new Rotation(1.0, 0.0, 0.0, 0.0, false);
+        assertEquals(1.0, r.getQ0(), 1e-9);
+        assertEquals(0.0, r.getQ1(), 1e-9);
+        assertEquals(0.0, r.getQ2(), 1e-9);
+        assertEquals(0.0, r.getQ3(), 1e-9);
+    }
+
+    // needsNormalization=true must scale quaternion to unit norm, preserving direction
+    @Test
+    public void testConstructorQuaternion_normalization_normalizesCorrectly() throws Throwable {
+        Rotation r = new Rotation(2.0, 0.0, 0.0, 0.0, true);
+        assertEquals(1.0, r.getQ0(), 1e-9);
+        assertEquals(0.0, r.getQ1(), 1e-9);
+        assertEquals(0.0, r.getAngle(), 1e-9);
+    }
+
+    // Rotation(axis, angle): zero norm axis must throw ArithmeticException
+    @Test
+    public void testConstructorAxisAngle_zeroNormAxis_throwsArithmeticException() throws Throwable {
+        try {
+            new Rotation(new Vector3D(0, 0, 0), 1.0);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // Rotation(matrix,threshold): wrong matrix dimensions must throw NotARotationMatrixException
+    @Test
+    public void testConstructorMatrix_wrongDimensions_throwsNotARotationMatrixException() throws Throwable {
+        double[][] m = new double[2][3];
+        try {
+            new Rotation(m, 1e-10);
+            fail("expected NotARotationMatrixException");
+        } catch (NotARotationMatrixException expected) {
+        }
+    }
+
+    // Orthogonal matrix with determinant -1 must be rejected
+    @Test
+    public void testConstructorMatrix_negativeDeterminant_throwsNotARotationMatrixException() throws Throwable {
+        double[][] m = new double[][] { {1, 0, 0}, {0, 1, 0}, {0, 0, -1} };
+        try {
+            new Rotation(m, 1e-10);
+            fail("expected NotARotationMatrixException");
+        } catch (NotARotationMatrixException expected) {
+        }
+    }
+
+    // matrix constructor branch (trace large, q0 dominant) must reconstruct same rotation
+    @Test
+    public void testConstructorMatrix_branch1_roundTripMatchesOriginalRotation() throws Throwable {
+        Rotation original = new Rotation(Vector3D.PLUS_K, 0.2);
+        double[][] m = original.getMatrix();
+        Rotation rebuilt = new Rotation(m, 1e-10);
+        Vector3D u = Vector3D.PLUS_I;
+        Vector3D expected = original.applyTo(u);
+        Vector3D actual = rebuilt.applyTo(u);
+        assertEquals(expected.getX(), actual.getX(), 1e-6);
+        assertEquals(expected.getY(), actual.getY(), 1e-6);
+        assertEquals(expected.getZ(), actual.getZ(), 1e-6);
+    }
+
+    // matrix constructor branch (q1 dominant) must reconstruct same rotation
+    @Test
+    public void testConstructorMatrix_branch2_roundTripMatchesOriginalRotation() throws Throwable {
+        Rotation original = new Rotation(Vector3D.PLUS_I, 3.0);
+        double[][] m = original.getMatrix();
+        Rotation rebuilt = new Rotation(m, 1e-10);
+        Vector3D u = Vector3D.PLUS_J;
+        Vector3D expected = original.applyTo(u);
+        Vector3D actual = rebuilt.applyTo(u);
+        assertEquals(expected.getX(), actual.getX(), 1e-6);
+        assertEquals(expected.getY(), actual.getY(), 1e-6);
+        assertEquals(expected.getZ(), actual.getZ(), 1e-6);
+    }
+
+    // matrix constructor branch (q2 dominant) must reconstruct same rotation
+    @Test
+    public void testConstructorMatrix_branch3_roundTripMatchesOriginalRotation() throws Throwable {
+        Rotation original = new Rotation(Vector3D.PLUS_J, 3.0);
+        double[][] m = original.getMatrix();
+        Rotation rebuilt = new Rotation(m, 1e-10);
+        Vector3D u = Vector3D.PLUS_K;
+        Vector3D expected = original.applyTo(u);
+        Vector3D actual = rebuilt.applyTo(u);
+        assertEquals(expected.getX(), actual.getX(), 1e-6);
+        assertEquals(expected.getY(), actual.getY(), 1e-6);
+        assertEquals(expected.getZ(), actual.getZ(), 1e-6);
+    }
+
+    // matrix constructor branch (q3 dominant) must reconstruct same rotation
+    @Test
+    public void testConstructorMatrix_branch4_roundTripMatchesOriginalRotation() throws Throwable {
+        Rotation original = new Rotation(Vector3D.PLUS_K, 3.0);
+        double[][] m = original.getMatrix();
+        Rotation rebuilt = new Rotation(m, 1e-10);
+        Vector3D u = Vector3D.PLUS_I;
+        Vector3D expected = original.applyTo(u);
+        Vector3D actual = rebuilt.applyTo(u);
+        assertEquals(expected.getX(), actual.getX(), 1e-6);
+        assertEquals(expected.getY(), actual.getY(), 1e-6);
+        assertEquals(expected.getZ(), actual.getZ(), 1e-6);
+    }
+
+    // four-vector constructor: zero norm origin vector must throw IllegalArgumentException
+    @Test
+    public void testConstructorFourVectors_zeroNormVector_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Rotation(new Vector3D(0, 0, 0), Vector3D.PLUS_J, Vector3D.PLUS_I, Vector3D.PLUS_J);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // four-vector constructor contract: applying instance to (u1,u2) must produce (v1,v2)
+    @Test
+    public void testConstructorFourVectors_contractMapsPairsCorrectly() throws Throwable {
+        Vector3D u1 = Vector3D.PLUS_I;
+        Vector3D u2 = Vector3D.PLUS_J;
+        Vector3D v1 = Vector3D.PLUS_J;
+        Vector3D v2 = Vector3D.PLUS_K;
+        Rotation r = new Rotation(u1, u2, v1, v2);
+        Vector3D ru1 = r.applyTo(u1);
+        Vector3D ru2 = r.applyTo(u2);
+        assertEquals(v1.getX(), ru1.getX(), 1e-9);
+        assertEquals(v1.getY(), ru1.getY(), 1e-9);
+        assertEquals(v1.getZ(), ru1.getZ(), 1e-9);
+        assertEquals(v2.getX(), ru2.getX(), 1e-9);
+        assertEquals(v2.getZ(), ru2.getZ(), 1e-9);
+    }
+
+    // two-vector constructor: zero norm vector must throw IllegalArgumentException
+    @Test
+    public void testConstructorTwoVectors_zeroNormVector_throwsIllegalArgumentException() throws Throwable {
+        try {
+            new Rotation(new Vector3D(0, 0, 0), Vector3D.PLUS_I);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // two-vector constructor general branch: parallel same-direction vectors give identity-like mapping
+    @Test
+    public void testConstructorTwoVectors_sameDirection_identityLikeMapping() throws Throwable {
+        Vector3D u = Vector3D.PLUS_I;
+        Vector3D v = new Vector3D(5, 0, 0);
+        Rotation r = new Rotation(u, v);
+        Vector3D result = r.applyTo(u);
+        assertEquals(1.0, result.getX(), 1e-9);
+        assertEquals(0.0, result.getY(), 1e-9);
+        assertEquals(0.0, result.getZ(), 1e-9);
+    }
+
+    // two-vector constructor special branch: opposite vectors give a PI rotation mapping u to -u direction
+    @Test
+    public void testConstructorTwoVectors_oppositeDirection_piRotation() throws Throwable {
+        Vector3D u = Vector3D.PLUS_I;
+        Vector3D v = new Vector3D(-3, 0, 0);
+        Rotation r = new Rotation(u, v);
+        assertEquals(Math.PI, r.getAngle(), 1e-6);
+        Vector3D result = r.applyTo(u);
+        assertEquals(-1.0, result.getX(), 1e-6);
+        assertEquals(0.0, result.getY(), 1e-6);
+        assertEquals(0.0, result.getZ(), 1e-6);
+    }
+
+    // getAngles(XYZ) round trip must recover original Cardan angles within canonical ranges
+    @Test
+    public void testGetAngles_XYZ_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.XYZ, 0.5, 0.3, -0.6);
+        double[] a = r.getAngles(RotationOrder.XYZ);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(0.3, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(XZY) round trip must recover original Cardan angles within canonical ranges
+    @Test
+    public void testGetAngles_XZY_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.XZY, 0.5, 0.3, -0.6);
+        double[] a = r.getAngles(RotationOrder.XZY);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(0.3, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(YXZ) round trip must recover original Cardan angles within canonical ranges
+    @Test
+    public void testGetAngles_YXZ_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.YXZ, 0.5, 0.3, -0.6);
+        double[] a = r.getAngles(RotationOrder.YXZ);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(0.3, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(YZX) round trip must recover original Cardan angles within canonical ranges
+    @Test
+    public void testGetAngles_YZX_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.YZX, 0.5, 0.3, -0.6);
+        double[] a = r.getAngles(RotationOrder.YZX);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(0.3, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(ZXY) round trip must recover original Cardan angles within canonical ranges
+    @Test
+    public void testGetAngles_ZXY_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.ZXY, 0.5, 0.3, -0.6);
+        double[] a = r.getAngles(RotationOrder.ZXY);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(0.3, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(ZYX) round trip must recover original Cardan angles within canonical ranges
+    @Test
+    public void testGetAngles_ZYX_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.ZYX, 0.5, 0.3, -0.6);
+        double[] a = r.getAngles(RotationOrder.ZYX);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(0.3, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(XYX) round trip must recover original Euler angles within canonical ranges
+    @Test
+    public void testGetAngles_XYX_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.XYX, 0.5, 1.2, -0.6);
+        double[] a = r.getAngles(RotationOrder.XYX);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(1.2, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(XZX) round trip must recover original Euler angles within canonical ranges
+    @Test
+    public void testGetAngles_XZX_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.XZX, 0.5, 1.2, -0.6);
+        double[] a = r.getAngles(RotationOrder.XZX);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(1.2, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(YXY) round trip must recover original Euler angles within canonical ranges
+    @Test
+    public void testGetAngles_YXY_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.YXY, 0.5, 1.2, -0.6);
+        double[] a = r.getAngles(RotationOrder.YXY);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(1.2, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(YZY) round trip must recover original Euler angles within canonical ranges
+    @Test
+    public void testGetAngles_YZY_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.YZY, 0.5, 1.2, -0.6);
+        double[] a = r.getAngles(RotationOrder.YZY);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(1.2, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(ZXZ) round trip must recover original Euler angles within canonical ranges
+    @Test
+    public void testGetAngles_ZXZ_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.ZXZ, 0.5, 1.2, -0.6);
+        double[] a = r.getAngles(RotationOrder.ZXZ);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(1.2, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // getAngles(ZYZ) round trip must recover original Euler angles within canonical ranges
+    @Test
+    public void testGetAngles_ZYZ_roundTrip() throws Throwable {
+        Rotation r = new Rotation(RotationOrder.ZYZ, 0.5, 1.2, -0.6);
+        double[] a = r.getAngles(RotationOrder.ZYZ);
+        assertEquals(0.5, a[0], 1e-9);
+        assertEquals(1.2, a[1], 1e-9);
+        assertEquals(-0.6, a[2], 1e-9);
+    }
+
+    // XYZ Cardan gimbal-lock condition must throw CardanEulerSingularityException
+    @Test
+    public void testGetAngles_XYZ_nearGimbalLock_throwsCardanEulerSingularityException() throws Throwable {
+        Rotation r = new Rotation(Vector3D.PLUS_J, Math.PI / 2.0);
+        try {
+            r.getAngles(RotationOrder.XYZ);
+            fail("expected CardanEulerSingularityException");
+        } catch (CardanEulerSingularityException expected) {
+        }
+    }
+
+    // identity rotation is always singular for Euler angles (per Javadoc), must throw for XYX
+    @Test
+    public void testGetAngles_XYX_identityRotation_throwsCardanEulerSingularityException() throws Throwable {
+        try {
+            Rotation.IDENTITY.getAngles(RotationOrder.XYX);
+            fail("expected CardanEulerSingularityException");
+        } catch (CardanEulerSingularityException expected) {
+        }
+    }
+
+
+
+    // getMatrix() result applied by hand multiplication must match applyTo(vector)
+    @Test
+    public void testGetMatrix_consistentWithApplyTo() throws Throwable {
+        Rotation r = new Rotation(new Vector3D(1, 1, 1), 0.7);
+        double[][] m = r.getMatrix();
+        Vector3D u = new Vector3D(2, -3, 5);
+        double mx = m[0][0] * u.getX() + m[0][1] * u.getY() + m[0][2] * u.getZ();
+        double my = m[1][0] * u.getX() + m[1][1] * u.getY() + m[1][2] * u.getZ();
+        double mz = m[2][0] * u.getX() + m[2][1] * u.getY() + m[2][2] * u.getZ();
+        Vector3D expected = r.applyTo(u);
+        assertEquals(expected.getX(), mx, 1e-9);
+        assertEquals(expected.getY(), my, 1e-9);
+        assertEquals(expected.getZ(), mz, 1e-9);
+    }
+
+    // applyTo(vector) must match the exact example given in the class Javadoc
+    @Test
+    public void testApplyTo_vector_quarterTurnAroundK_matchesJavadocExample() throws Throwable {
+        Rotation r = new Rotation(Vector3D.PLUS_K, Math.PI / 2.0);
+        Vector3D result = r.applyTo(Vector3D.PLUS_I);
+        assertEquals(0.0, result.getX(), 1e-9);
+        assertEquals(1.0, result.getY(), 1e-9);
+        assertEquals(0.0, result.getZ(), 1e-9);
+    }
+
+    // applyInverseTo(vector) must undo applyTo(vector)
+    @Test
+    public void testApplyInverseTo_vector_undoesApplyTo() throws Throwable {
+        Rotation r = new Rotation(new Vector3D(1, 1, 1), 0.8);
+        Vector3D u = new Vector3D(3, -2, 1);
+        Vector3D v = r.applyTo(u);
+        Vector3D back = r.applyInverseTo(v);
+        assertEquals(u.getX(), back.getX(), 1e-9);
+        assertEquals(u.getY(), back.getY(), 1e-9);
+        assertEquals(u.getZ(), back.getZ(), 1e-9);
+    }
+
+    // applyTo(Rotation): composing two same-axis rotations must add their angles
+    @Test
+    public void testApplyTo_rotation_sameAxisComposition_addsAngles() throws Throwable {
+        Rotation r1 = new Rotation(Vector3D.PLUS_K, 0.4);
+        Rotation r2 = new Rotation(Vector3D.PLUS_K, 0.7);
+        Rotation comp = r1.applyTo(r2);
+        Rotation direct = new Rotation(Vector3D.PLUS_K, 1.1);
+        Vector3D v = new Vector3D(1, 2, 3);
+        Vector3D expected = direct.applyTo(v);
+        Vector3D actual = comp.applyTo(v);
+        assertEquals(expected.getX(), actual.getX(), 1e-9);
+        assertEquals(expected.getY(), actual.getY(), 1e-9);
+        assertEquals(expected.getZ(), actual.getZ(), 1e-9);
+    }
+
+    // applyInverseTo(Rotation): instance^-1 composed with r about same axis must subtract angles
+    @Test
+    public void testApplyInverseTo_rotation_sameAxisComposition_subtractsAngles() throws Throwable {
+        Rotation r1 = new Rotation(Vector3D.PLUS_K, 0.4);
+        Rotation r2 = new Rotation(Vector3D.PLUS_K, 1.1);
+        Rotation comp = r1.applyInverseTo(r2);
+        Rotation direct = new Rotation(Vector3D.PLUS_K, 0.7);
+        Vector3D v = new Vector3D(1, 2, 3);
+        Vector3D expected = direct.applyTo(v);
+        Vector3D actual = comp.applyTo(v);
+        assertEquals(expected.getX(), actual.getX(), 1e-9);
+        assertEquals(expected.getY(), actual.getY(), 1e-9);
+        assertEquals(expected.getZ(), actual.getZ(), 1e-9);
+    }
+
+    // revert() must build the rotation whose effect undoes the original: rev.applyTo(r.applyTo(u)) == u
+    @Test
+    public void testRevert_undoesRotation() throws Throwable {
+        Rotation r = new Rotation(Vector3D.PLUS_K, 0.9);
+        Vector3D u = new Vector3D(1, 0.5, -2);
+        Vector3D v = r.applyTo(u);
+        Rotation rev = r.revert();
+        Vector3D back = rev.applyTo(v);
+        assertEquals(u.getX(), back.getX(), 1e-9);
+        assertEquals(u.getY(), back.getY(), 1e-9);
+        assertEquals(u.getZ(), back.getZ(), 1e-9);
+    }
+
+    // distance between a rotation and itself must be zero
+    @Test
+    public void testDistance_identicalRotations_isZero() throws Throwable {
+        Rotation r = new Rotation(Vector3D.PLUS_I, 0.6);
+        assertEquals(0.0, Rotation.distance(r, r), 1e-9);
+    }
+
+    // distance between IDENTITY and r must equal r's own rotation angle
+    @Test
+    public void testDistance_identityAndRotation_equalsAngle() throws Throwable {
+        Rotation r = new Rotation(Vector3D.PLUS_J, 0.6);
+        assertEquals(0.6, Rotation.distance(Rotation.IDENTITY, r), 1e-9);
+    }
+
+    // getAxis(): zero vectorial part (identity) must return the default axis (1,0,0)
+    @Test
+    public void testGetAxis_zeroVectorPart_returnsPlusI() throws Throwable {
+        Rotation r = new Rotation(1.0, 0.0, 0.0, 0.0, false);
+        Vector3D axis = r.getAxis();
+        assertEquals(1.0, axis.getX(), 1e-9);
+        assertEquals(0.0, axis.getY(), 1e-9);
+        assertEquals(0.0, axis.getZ(), 1e-9);
+    }
+
+    // getAxis() must recover the exact axis used by the axis-angle constructor (q0>=0 branch)
+    @Test
+    public void testGetAxis_consistentWithAxisAngleConstructor() throws Throwable {
+        Rotation r = new Rotation(Vector3D.PLUS_K, 1.0);
+        Vector3D axis = r.getAxis();
+        assertEquals(0.0, axis.getX(), 1e-9);
+        assertEquals(0.0, axis.getY(), 1e-9);
+        assertEquals(1.0, axis.getZ(), 1e-9);
+    }
+
+    // getAngle() must recover the exact angle used by the axis-angle constructor
+    @Test
+    public void testGetAngle_consistentWithAxisAngleConstructor_moderateAngle() throws Throwable {
+        Rotation r = new Rotation(Vector3D.PLUS_K, 1.0);
+        assertEquals(1.0, r.getAngle(), 1e-9);
+    }
+
+    // getAngle() asin branch (|q0|>0.1) must still recover the exact input angle
+    @Test
+    public void testGetAngle_asinBranch_largeAngle() throws Throwable {
+        Rotation r = new Rotation(Vector3D.PLUS_K, 3.0);
+        assertEquals(3.0, r.getAngle(), 1e-9);
+    }
+
+    // getAngle() acos branch with negative q0 (angle input above PI) must return canonical 2*PI-angle value
+    @Test
+    public void testGetAngle_acosBranchNegativeQ0_angleAbovePi() throws Throwable {
+        Rotation r = new Rotation(Vector3D.PLUS_K, Math.PI + 0.1);
+        assertEquals(Math.PI - 0.1, r.getAngle(), 1e-9);
+    }
+}

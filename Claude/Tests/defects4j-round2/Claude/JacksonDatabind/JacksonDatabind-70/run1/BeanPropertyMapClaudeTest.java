@@ -1,0 +1,359 @@
+package com.fasterxml.jackson.databind.deser.impl;
+
+import java.util.List;
+import java.util.ArrayList;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonMappingException;
+
+public class BeanPropertyMapClaudeTest {
+
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    public static class SimpleBean {
+        public String name;
+        public int age;
+        public boolean active;
+    }
+
+    public static class MediumBean {
+        public String m0, m1, m2, m3, m4, m5, m6, m7, m8, m9;
+    }
+
+    public static class BigBean {
+        public String f0, f1, f2, f3, f4, f5, f6, f7, f8, f9,
+            f10, f11, f12, f13, f14, f15, f16, f17, f18, f19,
+            f20, f21, f22, f23, f24, f25, f26, f27, f28, f29;
+    }
+
+    public static class NameBean {
+        public String firstName;
+        public String lastName;
+    }
+
+    public static class Inner {
+        public String value;
+    }
+
+    public static class OuterBean {
+        @JsonUnwrapped(prefix = "inner_")
+        public Inner inner;
+        public String outerValue;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class IgnoreUnknownBean {
+        public String known;
+    }
+
+    @JsonIgnoreProperties({"secret"})
+    public static class IgnoreNamedBean {
+        public String visible;
+        public String secret;
+    }
+
+    public static class SpecialNameBean {
+        @JsonProperty("user-name")
+        public String userName;
+    }
+
+    public static class NumberBean {
+        public int value;
+    }
+
+    public static class NestedOuter {
+        public NameBean person;
+        public String tag;
+    }
+
+    private String buildBigBeanJson(boolean upperKeys) {
+        StringBuilder sb = new StringBuilder("{");
+        for (int i = 0; i < 30; i++) {
+            if (i > 0) sb.append(",");
+            String key = upperKeys ? ("F" + i) : ("f" + i);
+            sb.append("\"").append(key).append("\":\"v").append(i).append("\"");
+        }
+        sb.append("}");
+        return sb.toString();
+    }
+
+    // covers basic construction + find() success path for multiple fields
+    @Test
+    public void testSimpleBean_allFieldsPresent_valuesSetCorrectly() throws Throwable {
+        String json = "{\"name\":\"Bob\",\"age\":30,\"active\":true}";
+        SimpleBean bean = mapper.readValue(json, SimpleBean.class);
+        assertEquals("Bob", bean.name);
+        assertEquals(30, bean.age);
+        assertTrue(bean.active);
+    }
+
+    // covers find() returning null for a missing property (default retained)
+    @Test
+    public void testSimpleBean_missingField_defaultRetained() throws Throwable {
+        String json = "{\"name\":\"Ann\"}";
+        SimpleBean bean = mapper.readValue(json, SimpleBean.class);
+        assertEquals("Ann", bean.name);
+        assertEquals(0, bean.age);
+        assertFalse(bean.active);
+    }
+
+    // covers unknown-property path: find() returns null, default config throws
+    @Test
+    public void testUnknownProperty_defaultConfig_throwsJsonMappingException() throws Throwable {
+        String json = "{\"name\":\"Bob\",\"unknownField\":1}";
+        try {
+            mapper.readValue(json, SimpleBean.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().length() > 0);
+        }
+    }
+
+    // covers unknown-property ignored when feature disabled
+    @Test
+    public void testUnknownProperty_failOnUnknownDisabled_ignoredSuccessfully() throws Throwable {
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        String json = "{\"name\":\"Bob\",\"unknownField\":1}";
+        SimpleBean bean = mapper.readValue(json, SimpleBean.class);
+        assertEquals("Bob", bean.name);
+    }
+
+    // case-insensitive disabled: different-case key must NOT match -> unrecognized
+    @Test
+    public void testCaseInsensitive_disabled_differentCaseKey_throwsException() throws Throwable {
+        String json = "{\"NAME\":\"Bob\",\"age\":1,\"active\":false}";
+        try {
+            mapper.readValue(json, SimpleBean.class);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().length() > 0);
+        }
+    }
+
+    // case-insensitive enabled: differing case must match per contract
+    @Test
+    public void testCaseInsensitive_enabled_differentCaseKey_matchesProperty() throws Throwable {
+        mapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+        String json = "{\"NAME\":\"Bob\",\"AGE\":5,\"ACTIVE\":true}";
+        SimpleBean bean = mapper.readValue(json, SimpleBean.class);
+        assertEquals("Bob", bean.name);
+        assertEquals(5, bean.age);
+        assertTrue(bean.active);
+    }
+
+    // case-insensitive enabled: exact-case key must still match
+    @Test
+    public void testCaseInsensitive_enabled_exactCaseKey_stillMatches() throws Throwable {
+        mapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+        String json = "{\"name\":\"Carl\",\"age\":7,\"active\":false}";
+        SimpleBean bean = mapper.readValue(json, SimpleBean.class);
+        assertEquals("Carl", bean.name);
+        assertEquals(7, bean.age);
+    }
+
+    // case-insensitive enabled: all-uppercase json keys across multiple fields
+    @Test
+    public void testCaseInsensitive_enabled_allUpperCaseJsonKeys_matchesAllProperties() throws Throwable {
+        mapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+        String json = "{\"FIRSTNAME\":\"John\",\"LASTNAME\":\"Doe\"}";
+        NameBean bean = mapper.readValue(json, NameBean.class);
+        assertEquals("John", bean.firstName);
+        assertEquals("Doe", bean.lastName);
+    }
+
+    // duplicate keys differing only by case: last value wins per JSON semantics
+    @Test
+    public void testCaseInsensitive_enabled_duplicateKeysDifferentCase_lastValueWins() throws Throwable {
+        mapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+        String json = "{\"firstName\":\"A\",\"FIRSTNAME\":\"B\",\"lastName\":\"L\"}";
+        NameBean bean = mapper.readValue(json, NameBean.class);
+        assertEquals("B", bean.firstName);
+        assertEquals("L", bean.lastName);
+    }
+
+    // covers findSize() hashSize=16 branch (6..12 props) with all matched correctly
+    @Test
+    public void testMediumBean_tenProperties_allDeserializedCorrectly() throws Throwable {
+        String json = "{\"m0\":\"v0\",\"m1\":\"v1\",\"m5\":\"v5\",\"m9\":\"v9\"}";
+        MediumBean bean = mapper.readValue(json, MediumBean.class);
+        assertEquals("v0", bean.m0);
+        assertEquals("v5", bean.m5);
+        assertEquals("v9", bean.m9);
+    }
+
+    // medium bean with case-insensitive matching across 10 properties
+    @Test
+    public void testMediumBean_caseInsensitive_tenProperties_matchesAll() throws Throwable {
+        mapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+        String json = "{\"M0\":\"v0\",\"M4\":\"v4\",\"M9\":\"v9\"}";
+        MediumBean bean = mapper.readValue(json, MediumBean.class);
+        assertEquals("v0", bean.m0);
+        assertEquals("v4", bean.m4);
+        assertEquals("v9", bean.m9);
+    }
+
+    // covers findSize() growing loop branch (30 props -> hashSize grows beyond 32)
+    @Test
+    public void testBigBean_thirtyProperties_defaultCase_allDeserializedCorrectly() throws Throwable {
+        String json = buildBigBeanJson(false);
+        BigBean bean = mapper.readValue(json, BigBean.class);
+        assertEquals("v0", bean.f0);
+        assertEquals("v15", bean.f15);
+        assertEquals("v29", bean.f29);
+    }
+
+    // big bean, case-insensitive, exercises hash collisions/spillover at scale
+    @Test
+    public void testBigBean_thirtyProperties_caseInsensitive_allDeserializedCorrectly() throws Throwable {
+        mapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+        String json = buildBigBeanJson(true);
+        BigBean bean = mapper.readValue(json, BigBean.class);
+        assertEquals("v0", bean.f0);
+        assertEquals("v22", bean.f22);
+        assertEquals("v29", bean.f29);
+    }
+
+    // empty object: zero iterations of the lookup loop, no exception, defaults kept
+    @Test
+    public void testEmptyJsonObject_defaultsRetained_noException() throws Throwable {
+        SimpleBean bean = mapper.readValue("{}", SimpleBean.class);
+        assertNull(bean.name);
+        assertEquals(0, bean.age);
+    }
+
+    // edge case size=1 property map
+    @Test
+    public void testSinglePropertyBean_deserializesCorrectly() throws Throwable {
+        String json = "{\"value\":\"only\"}";
+        Inner bean = mapper.readValue(json, Inner.class);
+        assertEquals("only", bean.value);
+    }
+
+    // covers renameAll()/_rename path via @JsonUnwrapped with a prefix transformer
+    @Test
+    public void testJsonUnwrapped_prefixApplied_nestedPropertySet() throws Throwable {
+        String json = "{\"outerValue\":\"o\",\"inner_value\":\"iv\"}";
+        OuterBean bean = mapper.readValue(json, OuterBean.class);
+        assertEquals("o", bean.outerValue);
+        assertNotNull(bean.inner);
+        assertEquals("iv", bean.inner.value);
+    }
+
+    // unwrapped property together with a sibling plain property, both bound
+    @Test
+    public void testJsonUnwrapped_outerAndInnerBothPresent_bothSet() throws Throwable {
+        String json = "{\"inner_value\":\"x\",\"outerValue\":\"y\"}";
+        OuterBean bean = mapper.readValue(json, OuterBean.class);
+        assertEquals("y", bean.outerValue);
+        assertEquals("x", bean.inner.value);
+    }
+
+    // class-level @JsonIgnoreProperties(ignoreUnknown=true): extra field tolerated
+    @Test
+    public void testJsonIgnoreProperties_classLevelIgnoreUnknownTrue_extraFieldIgnored() throws Throwable {
+        String json = "{\"known\":\"k\",\"extra\":\"e\"}";
+        IgnoreUnknownBean bean = mapper.readValue(json, IgnoreUnknownBean.class);
+        assertEquals("k", bean.known);
+    }
+
+    // named-ignore property: value present in JSON but must not be bound
+    @Test
+    public void testJsonIgnoreProperties_namedIgnore_fieldNotBound() throws Throwable {
+        String json = "{\"visible\":\"v\",\"secret\":\"s\"}";
+        IgnoreNamedBean bean = mapper.readValue(json, IgnoreNamedBean.class);
+        assertEquals("v", bean.visible);
+        assertNull(bean.secret);
+    }
+
+    // @JsonProperty with a name containing a hyphen (non-identifier key)
+    @Test
+    public void testJsonPropertyAnnotation_specialCharacterName_matchesCorrectly() throws Throwable {
+        String json = "{\"user-name\":\"bob\"}";
+        SpecialNameBean bean = mapper.readValue(json, SpecialNameBean.class);
+        assertEquals("bob", bean.userName);
+    }
+
+    // round trip: serialize then deserialize, values preserved
+    @Test
+    public void testRoundTrip_serializeThenDeserialize_valuesPreserved() throws Throwable {
+        SimpleBean original = new SimpleBean();
+        original.name = "Zoe";
+        original.age = 42;
+        original.active = true;
+        String json = mapper.writeValueAsString(original);
+        SimpleBean result = mapper.readValue(json, SimpleBean.class);
+        assertEquals("Zoe", result.name);
+        assertEquals(42, result.age);
+        assertTrue(result.active);
+    }
+
+    // numeric edge value: Integer.MAX_VALUE
+    @Test
+    public void testNumericField_maxValue_deserializedCorrectly() throws Throwable {
+        String json = "{\"value\":" + Integer.MAX_VALUE + "}";
+        NumberBean bean = mapper.readValue(json, NumberBean.class);
+        assertEquals(Integer.MAX_VALUE, bean.value);
+    }
+
+    // numeric edge value: Integer.MIN_VALUE
+    @Test
+    public void testNumericField_minValue_deserializedCorrectly() throws Throwable {
+        String json = "{\"value\":" + Integer.MIN_VALUE + "}";
+        NumberBean bean = mapper.readValue(json, NumberBean.class);
+        assertEquals(Integer.MIN_VALUE, bean.value);
+    }
+
+    // explicit JSON null sets the field to null
+    @Test
+    public void testNullValue_explicitNull_fieldSetToNull() throws Throwable {
+        String json = "{\"name\":null,\"age\":1,\"active\":false}";
+        SimpleBean bean = mapper.readValue(json, SimpleBean.class);
+        assertNull(bean.name);
+        assertEquals(1, bean.age);
+    }
+
+    // nested bean, case-insensitive matching applied at both outer and inner levels
+    @Test
+    public void testNestedBeanCaseInsensitive_bothLevelsMatched() throws Throwable {
+        mapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+        String json = "{\"TAG\":\"t1\",\"PERSON\":{\"FIRSTNAME\":\"A\",\"LASTNAME\":\"B\"}}";
+        NestedOuter bean = mapper.readValue(json, NestedOuter.class);
+        assertEquals("t1", bean.tag);
+        assertEquals("A", bean.person.firstName);
+        assertEquals("B", bean.person.lastName);
+    }
+
+    // boolean field true/false both handled correctly
+    @Test
+    public void testBooleanField_trueAndFalse_deserializedCorrectly() throws Throwable {
+        SimpleBean t = mapper.readValue("{\"active\":true}", SimpleBean.class);
+        SimpleBean f = mapper.readValue("{\"active\":false}", SimpleBean.class);
+        assertTrue(t.active);
+        assertFalse(f.active);
+    }
+
+    // list of medium beans exercises repeated construction of BeanPropertyMap
+    @Test
+    public void testListOfBeans_eachElementDeserializedIndependently() throws Throwable {
+        String json = "[{\"m0\":\"a\"},{\"m0\":\"b\"}]";
+        List<MediumBean> list = mapper.readValue(json,
+                mapper.getTypeFactory().constructCollectionType(ArrayList.class, MediumBean.class));
+        assertEquals(2, list.size());
+        assertEquals("a", list.get(0).m0);
+        assertEquals("b", list.get(1).m0);
+    }
+}

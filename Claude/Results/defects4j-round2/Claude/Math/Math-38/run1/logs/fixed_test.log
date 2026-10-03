@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-38-j_eu_jur/Math-38f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.math.optimization.direct.BOBYQAOptimizerClaudeTest::testOptimize_startAtUpperBoundCorner_minimize_staysAtBound
+  - org.apache.commons.math.optimization.direct.BOBYQAOptimizerClaudeTest::testOptimize_nptMinimumBoundaryValid_minimize
+  - org.apache.commons.math.optimization.direct.BOBYQAOptimizerClaudeTest::testOptimize_startAtLowerBoundCorner_minimize_staysAtBound
+[exit 0]

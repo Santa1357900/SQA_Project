@@ -1,0 +1,481 @@
+package com.fasterxml.jackson.databind.deser;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+
+public class BuilderBasedDeserializerClaudeTest {
+
+    // สาขา: START_OBJECT -> _vanillaProcessing/deserializeFromObject, properties ปกติ 2 ฟิลด์
+    @Test
+    public void testDeserialize_simpleVanillaObject_buildsCorrectValue() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"x\":1,\"y\":2}";
+        Point p = mapper.readValue(json, Point.class);
+        assertEquals(1, p.getX());
+        assertEquals(2, p.getY());
+    }
+
+    // สาขา: ลำดับฟิลด์สลับกัน ยังต้องตั้งค่าถูกต้อง
+    @Test
+    public void testDeserialize_propertiesInReverseOrder_buildsCorrectValue() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"y\":2,\"x\":1}";
+        Point p = mapper.readValue(json, Point.class);
+        assertEquals(1, p.getX());
+        assertEquals(2, p.getY());
+    }
+
+    // สาขา: ลูป 0 รอบ (object ว่าง) ใช้ค่า default ของ primitive int
+    @Test
+    public void testDeserialize_emptyObject_usesZeroDefaults() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        Point p = mapper.readValue("{}", Point.class);
+        assertEquals(0, p.getX());
+        assertEquals(0, p.getY());
+    }
+
+    // ค่าขอบ: key ซ้ำ ค่าสุดท้ายต้องชนะ (ลูปหลายรอบเขียนทับ field เดิม)
+    @Test
+    public void testDeserialize_duplicateKeys_lastValueWins() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"x\":1,\"x\":2,\"y\":0}";
+        Point p = mapper.readValue(json, Point.class);
+        assertEquals(2, p.getX());
+        assertEquals(0, p.getY());
+    }
+
+    // สาขา: VALUE_STRING -> deserializeFromString + finishBuild ผ่าน delegating creator
+    @Test
+    public void testDeserializeFromString_delegatingCreator_buildsCorrectValue() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        TextWrapper w = mapper.readValue("\"hello\"", TextWrapper.class);
+        assertEquals("hello", w.getValue());
+    }
+
+    // สาขา: VALUE_NUMBER_INT -> deserializeFromNumber + finishBuild
+    @Test
+    public void testDeserializeFromNumberInt_delegatingCreator_buildsCorrectValue() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        NumWrapper w = mapper.readValue("42", NumWrapper.class);
+        assertEquals(42, w.getValue());
+    }
+
+    // สาขา: VALUE_NUMBER_FLOAT -> deserializeFromDouble + finishBuild
+    @Test
+    public void testDeserializeFromDouble_delegatingCreator_buildsCorrectValue() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        DoubleWrapper w = mapper.readValue("3.5", DoubleWrapper.class);
+        assertEquals(3.5, w.getValue(), 1e-9);
+    }
+
+    // สาขา: VALUE_TRUE -> deserializeFromBoolean + finishBuild
+    @Test
+    public void testDeserializeFromBoolean_delegatingCreator_true() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        BoolWrapper w = mapper.readValue("true", BoolWrapper.class);
+        assertTrue(w.isValue());
+    }
+
+    // สาขา: VALUE_FALSE -> deserializeFromBoolean + finishBuild
+    @Test
+    public void testDeserializeFromBoolean_delegatingCreator_false() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        BoolWrapper w = mapper.readValue("false", BoolWrapper.class);
+        assertFalse(w.isValue());
+    }
+
+    // สาขา: START_ARRAY -> deserializeFromArray + finishBuild ผ่าน delegating array creator
+    @Test
+    public void testDeserializeFromArray_delegatingArrayCreator_buildsCorrectValue() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        Coords c = mapper.readValue("[1,2,3]", Coords.class);
+        assertArrayEquals(new int[] { 1, 2, 3 }, c.getValues());
+    }
+
+    // สาขา: field ไม่รู้จัก + FAIL_ON_UNKNOWN_PROPERTIES ค่า default (true) -> ต้อง throw
+    @Test
+    public void testDeserialize_unknownProperty_defaultFailOnUnknown_throwsUnrecognizedPropertyException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"x\":1,\"y\":2,\"z\":3}";
+        try {
+            mapper.readValue(json, Point.class);
+            fail("expected UnrecognizedPropertyException");
+        } catch (UnrecognizedPropertyException expected) {
+        }
+    }
+
+    // สาขา: field ไม่รู้จัก + FAIL_ON_UNKNOWN_PROPERTIES=false -> handleUnknownVanilla ข้ามไปเฉยๆ
+    @Test
+    public void testDeserialize_unknownProperty_failOnUnknownDisabled_ignoresProperty() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        String json = "{\"x\":1,\"z\":99,\"y\":2}";
+        Point p = mapper.readValue(json, Point.class);
+        assertEquals(1, p.getX());
+        assertEquals(2, p.getY());
+    }
+
+
+
+
+
+    // ล่าบั๊ก: @JsonAnySetter บน builder ต้องจับ field ที่ไม่รู้จักได้ ไม่ throw
+    @Test
+    public void testDeserialize_anySetterOnBuilder_capturesUnknownProperty() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"known\":5,\"secret\":\"abc\"}";
+        AnyHolder result = mapper.readValue(json, AnyHolder.class);
+        assertEquals(5, result.getKnown());
+        assertEquals("abc", result.getExtra().get("secret"));
+    }
+
+    // ล่าบั๊ก: @JsonAnySetter ต้องจับได้หลาย field ไม่รู้จักพร้อมกัน
+    @Test
+    public void testDeserialize_anySetterOnBuilder_multipleUnknownProperties_allCaptured() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"a\":1,\"known\":7,\"b\":2}";
+        AnyHolder result = mapper.readValue(json, AnyHolder.class);
+        assertEquals(7, result.getKnown());
+        assertEquals(Integer.valueOf(1), result.getExtra().get("a"));
+        assertEquals(Integer.valueOf(2), result.getExtra().get("b"));
+    }
+
+    // สาขา: property-based creator (@JsonCreator) + with-setter เพิ่มเติมหลัง build creator
+    @Test
+    public void testDeserialize_propertyBasedCreator_withAdditionalSetter_buildsCorrectValue() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"name\":\"origin\",\"x\":3,\"y\":4}";
+        NamedPoint np = mapper.readValue(json, NamedPoint.class);
+        assertEquals("origin", np.getName());
+        assertEquals(3, np.getX());
+        assertEquals(4, np.getY());
+    }
+
+    // สาขา: regular property มาก่อน creator property -> ต้อง buffer แล้ว apply ตอน build
+    @Test
+    public void testDeserialize_propertyBasedCreator_regularPropertyBufferedBeforeCreatorProp() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"y\":4,\"name\":\"origin\",\"x\":3}";
+        NamedPoint np = mapper.readValue(json, NamedPoint.class);
+        assertEquals("origin", np.getName());
+        assertEquals(3, np.getX());
+        assertEquals(4, np.getY());
+    }
+
+
+
+    // ค่าขอบ: int MIN_VALUE และ MAX_VALUE ต้องตั้งค่าได้ถูกต้อง
+    @Test
+    public void testDeserialize_edgeIntValues_minAndMax() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"x\":" + Integer.MIN_VALUE + ",\"y\":" + Integer.MAX_VALUE + "}";
+        Point p = mapper.readValue(json, Point.class);
+        assertEquals(Integer.MIN_VALUE, p.getX());
+        assertEquals(Integer.MAX_VALUE, p.getY());
+    }
+
+    // ค่าขอบ: string ว่าง ต้องตั้งค่าเป็น "" ไม่ใช่ null
+    @Test
+    public void testDeserialize_blankStringProperty_setsEmptyString() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        NameHolder h = mapper.readValue("{\"name\":\"\"}", NameHolder.class);
+        assertEquals("", h.getName());
+    }
+
+    // ค่าขอบ: unicode escape และ quote escape ใน string property
+    @Test
+    public void testDeserialize_stringWithUnicodeAndEscape() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "{\"name\":\"caf\\u00e9\\n\\\"quote\\\"\"}";
+        NameHolder h = mapper.readValue(json, NameHolder.class);
+        assertEquals("caf\u00e9\n\"quote\"", h.getName());
+    }
+
+    // สาขา throw: build() ล้มเหลว -> finishBuild ต้องจัดการเป็น IOException
+    @Test
+    public void testDeserialize_buildMethodThrows_wrapsAsIOException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            mapper.readValue("{\"x\":1}", FailHolder.class);
+            fail("expected exception due to build() failure");
+        } catch (IOException expected) {
+        }
+    }
+
+    // สาขา throw: with-setter ล้มเหลว -> wrapAndThrow ต้องส่งเป็น IOException
+    @Test
+    public void testDeserialize_propertySetterThrows_wrapsAsIOException() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            mapper.readValue("{\"x\":-1}", ThrowingHolder.class);
+            fail("expected exception due to property setter failure");
+        } catch (IOException expected) {
+        }
+    }
+
+    // ลูป 0 รอบ: array ว่าง ไม่มี builder ใดถูกสร้าง
+    @Test
+    public void testDeserialize_arrayOfObjects_emptyArray() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        Point[] arr = mapper.readValue("[]", Point[].class);
+        assertEquals(0, arr.length);
+    }
+
+    // ลูป 1 รอบ: array มีสมาชิกเดียว
+    @Test
+    public void testDeserialize_arrayOfObjects_singleElement() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        Point[] arr = mapper.readValue("[{\"x\":1,\"y\":2}]", Point[].class);
+        assertEquals(1, arr.length);
+        assertEquals(1, arr[0].getX());
+        assertEquals(2, arr[0].getY());
+    }
+
+    // ลูปหลายรอบ: array มีสามสมาชิก ทุกตัวต้องถูกสร้างถูกต้อง
+    @Test
+    public void testDeserialize_arrayOfObjects_multipleElements() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = "[{\"x\":1,\"y\":2},{\"x\":3,\"y\":4},{\"x\":5,\"y\":6}]";
+        Point[] arr = mapper.readValue(json, Point[].class);
+        assertEquals(3, arr.length);
+        assertEquals(5, arr[2].getX());
+        assertEquals(6, arr[2].getY());
+    }
+
+    /* ============== POJO / Builder helper classes ============== */
+
+    @JsonDeserialize(builder = PointBuilder.class)
+    public static class Point {
+        private final int x;
+        private final int y;
+        protected Point(int x, int y) { this.x = x; this.y = y; }
+        public int getX() { return x; }
+        public int getY() { return y; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class PointBuilder {
+        private int x;
+        private int y;
+        public PointBuilder withX(int x) { this.x = x; return this; }
+        public PointBuilder withY(int y) { this.y = y; return this; }
+        public Point build() { return new Point(x, y); }
+    }
+
+    @JsonDeserialize(builder = TextWrapperBuilder.class)
+    public static class TextWrapper {
+        private final String value;
+        protected TextWrapper(String value) { this.value = value; }
+        public String getValue() { return value; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class TextWrapperBuilder {
+        private final String value;
+        @JsonCreator
+        public TextWrapperBuilder(String value) { this.value = value; }
+        public TextWrapper build() { return new TextWrapper(value); }
+    }
+
+    @JsonDeserialize(builder = NumWrapperBuilder.class)
+    public static class NumWrapper {
+        private final int value;
+        protected NumWrapper(int value) { this.value = value; }
+        public int getValue() { return value; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class NumWrapperBuilder {
+        private final int value;
+        @JsonCreator
+        public NumWrapperBuilder(int value) { this.value = value; }
+        public NumWrapper build() { return new NumWrapper(value); }
+    }
+
+    @JsonDeserialize(builder = DoubleWrapperBuilder.class)
+    public static class DoubleWrapper {
+        private final double value;
+        protected DoubleWrapper(double value) { this.value = value; }
+        public double getValue() { return value; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class DoubleWrapperBuilder {
+        private final double value;
+        @JsonCreator
+        public DoubleWrapperBuilder(double value) { this.value = value; }
+        public DoubleWrapper build() { return new DoubleWrapper(value); }
+    }
+
+    @JsonDeserialize(builder = BoolWrapperBuilder.class)
+    public static class BoolWrapper {
+        private final boolean value;
+        protected BoolWrapper(boolean value) { this.value = value; }
+        public boolean isValue() { return value; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class BoolWrapperBuilder {
+        private final boolean value;
+        @JsonCreator
+        public BoolWrapperBuilder(boolean value) { this.value = value; }
+        public BoolWrapper build() { return new BoolWrapper(value); }
+    }
+
+    @JsonDeserialize(builder = CoordsBuilder.class)
+    public static class Coords {
+        private final int[] values;
+        protected Coords(int[] values) { this.values = values; }
+        public int[] getValues() { return values; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class CoordsBuilder {
+        private final int[] values;
+        @JsonCreator
+        public CoordsBuilder(int[] values) { this.values = values; }
+        public Coords build() { return new Coords(values); }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonDeserialize(builder = LenientPointBuilder.class)
+    public static class LenientPoint {
+        private final int x;
+        private final int y;
+        protected LenientPoint(int x, int y) { this.x = x; this.y = y; }
+        public int getX() { return x; }
+        public int getY() { return y; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class LenientPointBuilder {
+        private int x;
+        private int y;
+        public LenientPointBuilder withX(int x) { this.x = x; return this; }
+        public LenientPointBuilder withY(int y) { this.y = y; return this; }
+        public LenientPoint build() { return new LenientPoint(x, y); }
+    }
+
+    @JsonIgnoreProperties({ "secret" })
+    @JsonDeserialize(builder = NamedIgnorePointBuilder.class)
+    public static class NamedIgnorePoint {
+        private final int x;
+        protected NamedIgnorePoint(int x) { this.x = x; }
+        public int getX() { return x; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class NamedIgnorePointBuilder {
+        private int x;
+        public NamedIgnorePointBuilder withX(int x) { this.x = x; return this; }
+        public NamedIgnorePoint build() { return new NamedIgnorePoint(x); }
+    }
+
+    @JsonDeserialize(builder = AnyBuilder.class)
+    public static class AnyHolder {
+        private final int known;
+        private final Map<String, Object> extra;
+        protected AnyHolder(int known, Map<String, Object> extra) {
+            this.known = known;
+            this.extra = extra;
+        }
+        public int getKnown() { return known; }
+        public Map<String, Object> getExtra() { return extra; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class AnyBuilder {
+        private int known;
+        private Map<String, Object> extra = new HashMap<String, Object>();
+        public AnyBuilder withKnown(int known) { this.known = known; return this; }
+        @JsonAnySetter
+        public void withAny(String name, Object value) { extra.put(name, value); }
+        public AnyHolder build() { return new AnyHolder(known, extra); }
+    }
+
+    @JsonDeserialize(builder = NamedPointBuilder.class)
+    public static class NamedPoint {
+        private final String name;
+        private final int x;
+        private final int y;
+        protected NamedPoint(String name, int x, int y) {
+            this.name = name; this.x = x; this.y = y;
+        }
+        public String getName() { return name; }
+        public int getX() { return x; }
+        public int getY() { return y; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class NamedPointBuilder {
+        private final String name;
+        private int x;
+        private int y;
+        @JsonCreator
+        public NamedPointBuilder(@JsonProperty("name") String name) { this.name = name; }
+        public NamedPointBuilder withX(int x) { this.x = x; return this; }
+        public NamedPointBuilder withY(int y) { this.y = y; return this; }
+        public NamedPoint build() { return new NamedPoint(name, x, y); }
+    }
+
+    @JsonDeserialize(builder = SelfThing.class)
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class SelfThing {
+        private int value;
+        public SelfThing withValue(int value) { this.value = value; return this; }
+        public int getValue() { return value; }
+    }
+
+    @JsonDeserialize(builder = NameHolderBuilder.class)
+    public static class NameHolder {
+        private final String name;
+        protected NameHolder(String name) { this.name = name; }
+        public String getName() { return name; }
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class NameHolderBuilder {
+        private String name;
+        public NameHolderBuilder withName(String name) { this.name = name; return this; }
+        public NameHolder build() { return new NameHolder(name); }
+    }
+
+    @JsonDeserialize(builder = FailBuilder.class)
+    public static class FailHolder {
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class FailBuilder {
+        public FailBuilder withX(int x) { return this; }
+        public FailHolder build() { throw new IllegalStateException("boom"); }
+    }
+
+    @JsonDeserialize(builder = ThrowingSetterBuilder.class)
+    public static class ThrowingHolder {
+    }
+
+    @JsonPOJOBuilder(withPrefix = "with")
+    public static class ThrowingSetterBuilder {
+        public ThrowingSetterBuilder withX(int x) {
+            if (x < 0) {
+                throw new IllegalArgumentException("negative not allowed");
+            }
+            return this;
+        }
+        public ThrowingHolder build() { return new ThrowingHolder(); }
+    }
+}

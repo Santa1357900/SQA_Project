@@ -1,0 +1,319 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.javascript.jscomp.Scope.Var;
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.jstype.JSType;
+
+public class TypedScopeCreatorClaudeTest {
+
+  private Compiler compiler;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.checkTypes = true;
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("input.js", "");
+    compiler.compile(externs, input, options);
+  }
+
+  // covers: TypedScopeCreator(AbstractCompiler) constructor builds a working scope creator
+  @Test
+  public void testConstructor_compilerOnly_createsWorkingScopeCreator() throws Throwable {
+    TypedScopeCreator sc = new TypedScopeCreator(compiler);
+    Scope s = sc.createInitialScope(IR.block());
+    assertTrue(s.isGlobal());
+  }
+
+  // covers: TypedScopeCreator(AbstractCompiler, CodingConvention) constructor with explicit convention
+  @Test
+  public void testConstructor_withCodingConvention_createsWorkingScopeCreator() throws Throwable {
+    TypedScopeCreator sc =
+        new TypedScopeCreator(compiler, compiler.getCodingConvention());
+    Scope s = sc.createInitialScope(IR.block());
+    assertTrue(s.isGlobal());
+  }
+
+  // covers defineVar: VAR with more than one child plus JSDoc reports MULTIPLE_VAR_DEF
+  @Test
+  public void testCompile_multipleVarDeclWithJsDoc_reportsWarning() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js", "/** @type {number} */ var a, b;"), o);
+    assertTrue(c.getWarningCount() >= 1);
+  }
+
+  // covers defineVar: single-child VAR with JSDoc does not report MULTIPLE_VAR_DEF
+  @Test
+  public void testCompile_singleVarDeclWithJsDoc_noError() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js", "/** @type {number} */ var a;"), o);
+    assertEquals(0, c.getErrorCount());
+  }
+
+  // covers finishConstructorDefinition: constructor var without a function initializer reports CTOR_INITIALIZER
+  @Test
+  public void testCompile_constructorWithoutInit_reportsWarning() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js", "/** @constructor */ var Foo;"), o);
+    assertTrue(c.getWarningCount() >= 1);
+  }
+
+  // covers finishConstructorDefinition: constructor declared with a function literal needs no warning
+  @Test
+  public void testCompile_constructorWithInit_noError() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js", "/** @constructor */ function Foo() {}"), o);
+    assertEquals(0, c.getErrorCount());
+  }
+
+  // covers finishConstructorDefinition: interface var without a function initializer reports IFACE_INITIALIZER
+  @Test
+  public void testCompile_interfaceWithoutInit_reportsWarning() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js", "/** @interface */ var Foo;"), o);
+    assertTrue(c.getWarningCount() >= 1);
+  }
+
+  // covers finishConstructorDefinition: interface declared with a function literal needs no warning
+  @Test
+  public void testCompile_interfaceWithInit_noError() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js", "/** @interface */ function Foo() {}"), o);
+    assertEquals(0, c.getErrorCount());
+  }
+
+  // covers defineSlot EnumType branch: enum initializer that is neither an object literal nor an enum alias
+  @Test
+  public void testCompile_enumInitializerInvalid_reportsWarning() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js", "/** @enum {number} */ var Color = 5;"), o);
+    assertTrue(c.getWarningCount() >= 1);
+  }
+
+  // covers defineSlot EnumType branch: enum initialized with an object literal is a valid enum
+  @Test
+  public void testCompile_enumInitializerObjectLit_noWarning() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js",
+            "/** @enum {number} */ var Color = {RED: 1, GREEN: 2};"), o);
+    assertEquals(0, c.getWarningCount());
+  }
+
+  // covers defineObjectLiteral @lends: lends target that was never declared reports UNKNOWN_LENDS
+  @Test
+  public void testCompile_lendsOnUndeclaredName_reportsDiagnostic() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js",
+            "/** @lends {NotDeclaredThing} */ ({foo: 1});"), o);
+    assertTrue(c.getErrorCount() + c.getWarningCount() >= 1);
+  }
+
+  // covers defineObjectLiteral @lends: lends target whose type is not an object reports LENDS_ON_NON_OBJECT
+  @Test
+  public void testCompile_lendsOnNonObjectType_reportsDiagnostic() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js",
+            "/** @type {number} */ var num = 5;"
+            + "/** @lends {num} */ ({foo: 1});"), o);
+    assertTrue(c.getErrorCount() + c.getWarningCount() >= 1);
+  }
+
+  // covers defineSlot redeclaration path: conflicting re-declared types produce a diagnostic
+  @Test
+  public void testCompile_conflictingRedeclaration_reportsDiagnostic() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js",
+            "/** @type {number} */ var x;"
+            + "/** @type {string} */ var x;"), o);
+    assertTrue(c.getErrorCount() + c.getWarningCount() >= 1);
+  }
+
+  // covers normal flow: a well-typed function declaration and call produce no diagnostics
+  @Test
+  public void testCompile_wellTypedFunctionAndCall_noDiagnostics() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js",
+            "function add(a, b) { return a + b; } var result = add(1, 2);"), o);
+    assertEquals(0, c.getErrorCount());
+  }
+
+  // covers maybeDeclareQualifiedName prototype handling: F.prototype = {...} is accepted without error
+  @Test
+  public void testCompile_prototypeAssignedObjectLiteral_noError() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js",
+            "/** @constructor */ function Foo() {} "
+            + "Foo.prototype = {bar: function() { return 1; }};"), o);
+    assertEquals(0, c.getErrorCount());
+  }
+
+  // covers defineCatch: a catch parameter is declared without causing an error
+  @Test
+  public void testCompile_catchParameterDeclaration_noError() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js",
+            "try { throw 1; } catch (e) { var y = e; }"), o);
+    assertEquals(0, c.getErrorCount());
+  }
+
+  // covers GlobalScopeBuilder#checkForTypedef: a valid typedef declaration causes no error
+  @Test
+  public void testCompile_validTypedef_noError() throws Throwable {
+    Compiler c = new Compiler();
+    CompilerOptions o = new CompilerOptions();
+    o.checkTypes = true;
+    c.compile(SourceFile.fromCode("e.js", ""),
+        SourceFile.fromCode("i.js",
+            "/** @typedef {number} */ var MyNum;"), o);
+    assertEquals(0, c.getErrorCount());
+  }
+
+  // covers createInitialScope: the returned scope is the global scope
+  @Test
+  public void testCreateInitialScope_returnsGlobalScope() throws Throwable {
+    TypedScopeCreator sc = new TypedScopeCreator(compiler);
+    Scope s = sc.createInitialScope(IR.block());
+    assertTrue(s.isGlobal());
+  }
+
+  // covers createInitialScope: core constructor-function natives are declared
+  @Test
+  public void testCreateInitialScope_declaresCoreConstructors() throws Throwable {
+    TypedScopeCreator sc = new TypedScopeCreator(compiler);
+    Scope s = sc.createInitialScope(IR.block());
+    assertTrue(s.isDeclared("Array", false));
+    assertTrue(s.isDeclared("Boolean", false));
+    assertTrue(s.isDeclared("Date", false));
+    assertTrue(s.isDeclared("Function", false));
+    assertTrue(s.isDeclared("Number", false));
+    assertTrue(s.isDeclared("Object", false));
+    assertTrue(s.isDeclared("RegExp", false));
+    assertTrue(s.isDeclared("String", false));
+  }
+
+  // covers createInitialScope: error subtype constructors are declared
+  @Test
+  public void testCreateInitialScope_declaresErrorSubtypes() throws Throwable {
+    TypedScopeCreator sc = new TypedScopeCreator(compiler);
+    Scope s = sc.createInitialScope(IR.block());
+    assertTrue(s.isDeclared("Error", false));
+    assertTrue(s.isDeclared("EvalError", false));
+    assertTrue(s.isDeclared("RangeError", false));
+    assertTrue(s.isDeclared("ReferenceError", false));
+    assertTrue(s.isDeclared("SyntaxError", false));
+    assertTrue(s.isDeclared("TypeError", false));
+    assertTrue(s.isDeclared("URIError", false));
+  }
+
+  // covers createInitialScope: prototype names are declared alongside their instance constructors
+  @Test
+  public void testCreateInitialScope_declaresPrototypes() throws Throwable {
+    TypedScopeCreator sc = new TypedScopeCreator(compiler);
+    Scope s = sc.createInitialScope(IR.block());
+    assertTrue(s.isDeclared("Array.prototype", false));
+    assertTrue(s.isDeclared("Object.prototype", false));
+  }
+
+  // covers createInitialScope: declareNativeValueType declares "undefined"
+  @Test
+  public void testCreateInitialScope_declaresUndefined() throws Throwable {
+    TypedScopeCreator sc = new TypedScopeCreator(compiler);
+    Scope s = sc.createInitialScope(IR.block());
+    assertTrue(s.isDeclared("undefined", false));
+  }
+
+  // covers createInitialScope: declareNativeValueType declares legacy "ActiveXObject"
+  @Test
+  public void testCreateInitialScope_declaresActiveXObject() throws Throwable {
+    TypedScopeCreator sc = new TypedScopeCreator(compiler);
+    Scope s = sc.createInitialScope(IR.block());
+    assertTrue(s.isDeclared("ActiveXObject", false));
+    assertNotNull(s.getVar("ActiveXObject"));
+  }
+
+  // covers createInitialScope: a name that was never declared is reported as absent
+  @Test
+  public void testCreateInitialScope_undeclaredNameIsAbsent() throws Throwable {
+    TypedScopeCreator sc = new TypedScopeCreator(compiler);
+    Scope s = sc.createInitialScope(IR.block());
+    assertFalse(s.isDeclared("ThisNameDoesNotExist123", false));
+  }
+
+  // covers createInitialScope: the Array global has a constructor function type
+  @Test
+  public void testCreateInitialScope_arrayTypeIsConstructorFunction() throws Throwable {
+    TypedScopeCreator sc = new TypedScopeCreator(compiler);
+    Scope s = sc.createInitialScope(IR.block());
+    Var arrayVar = s.getVar("Array");
+    JSType type = arrayVar.getType();
+    assertNotNull(type);
+    assertTrue(type.isFunctionType());
+    assertTrue(type.toMaybeFunctionType().isConstructor());
+  }
+
+  // covers static field DELEGATE_PROXY_SUFFIX: it is a non-empty suffix string
+  @Test
+  public void testDelegateProxySuffix_isNonEmpty() throws Throwable {
+    assertNotNull(TypedScopeCreator.DELEGATE_PROXY_SUFFIX);
+    assertTrue(TypedScopeCreator.DELEGATE_PROXY_SUFFIX.length() > 0);
+  }
+
+  // covers static DiagnosticType constants: all are initialized
+  @Test
+  public void testDiagnosticTypeConstants_areNotNull() throws Throwable {
+    assertNotNull(TypedScopeCreator.MALFORMED_TYPEDEF);
+    assertNotNull(TypedScopeCreator.ENUM_INITIALIZER);
+    assertNotNull(TypedScopeCreator.CTOR_INITIALIZER);
+    assertNotNull(TypedScopeCreator.IFACE_INITIALIZER);
+    assertNotNull(TypedScopeCreator.UNKNOWN_LENDS);
+    assertNotNull(TypedScopeCreator.LENDS_ON_NON_OBJECT);
+  }
+}

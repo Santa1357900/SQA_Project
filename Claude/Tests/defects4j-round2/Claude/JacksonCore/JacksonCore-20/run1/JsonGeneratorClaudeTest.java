@@ -1,0 +1,555 @@
+package com.fasterxml.jackson.core;
+
+import java.io.IOException;
+import java.io.StringWriter;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class JsonGeneratorClaudeTest
+{
+    private JsonFactory factory;
+
+    @Before
+    public void setUp() throws Throwable {
+        factory = new JsonFactory();
+    }
+
+    private String captureSimple(Object value) throws IOException {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen._writeSimpleObject(value);
+        gen.close();
+        return w.toString();
+    }
+
+    // Feature.getMask(): mask must equal 1<<ordinal() for every declared constant
+    @Test
+    public void testFeatureGetMask_equalsOneShiftedByOrdinalForAllValues() throws Throwable {
+        JsonGenerator.Feature[] vals = JsonGenerator.Feature.values();
+        for (int i = 0; i < vals.length; i++) {
+            assertEquals(1 << vals[i].ordinal(), vals[i].getMask());
+        }
+    }
+
+    // Feature.collectDefaults(): loop over values, only default-enabled features set their bit
+    @Test
+    public void testFeatureCollectDefaults_marksDefaultEnabledAndDisabledFeaturesCorrectly() throws Throwable {
+        int flags = JsonGenerator.Feature.collectDefaults();
+        assertTrue(JsonGenerator.Feature.AUTO_CLOSE_TARGET.enabledIn(flags));
+        assertTrue(JsonGenerator.Feature.QUOTE_FIELD_NAMES.enabledIn(flags));
+        assertFalse(JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS.enabledIn(flags));
+        assertFalse(JsonGenerator.Feature.STRICT_DUPLICATE_DETECTION.enabledIn(flags));
+        assertFalse(JsonGenerator.Feature.IGNORE_UNKNOWN.enabledIn(flags));
+    }
+
+    // Feature.enabledIn(): bit present -> true, unrelated bit absent -> false, zero mask -> false
+    @Test
+    public void testFeatureEnabledIn_detectsPresentAndAbsentBitsIndependently() throws Throwable {
+        int mask = JsonGenerator.Feature.QUOTE_FIELD_NAMES.getMask();
+        assertTrue(JsonGenerator.Feature.QUOTE_FIELD_NAMES.enabledIn(mask));
+        assertFalse(JsonGenerator.Feature.ESCAPE_NON_ASCII.enabledIn(mask));
+        assertFalse(JsonGenerator.Feature.AUTO_CLOSE_TARGET.enabledIn(0));
+    }
+
+    // configure(): true branch calls enable(), false branch calls disable()
+    @Test
+    public void testConfigure_trueEnablesAndFalseDisablesFeature() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.configure(JsonGenerator.Feature.QUOTE_FIELD_NAMES, false);
+        assertFalse(gen.isEnabled(JsonGenerator.Feature.QUOTE_FIELD_NAMES));
+        gen.configure(JsonGenerator.Feature.QUOTE_FIELD_NAMES, true);
+        assertTrue(gen.isEnabled(JsonGenerator.Feature.QUOTE_FIELD_NAMES));
+        gen.close();
+    }
+
+    // overrideStdFeatures(): only bits covered by mask change, other bits untouched
+    @Test
+    public void testOverrideStdFeatures_changesOnlyBitsCoveredByMask() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        int mask = JsonGenerator.Feature.QUOTE_FIELD_NAMES.getMask();
+        gen.overrideStdFeatures(0, mask);
+        assertFalse(gen.isEnabled(JsonGenerator.Feature.QUOTE_FIELD_NAMES));
+        assertTrue(gen.isEnabled(JsonGenerator.Feature.AUTO_CLOSE_TARGET));
+        gen.close();
+    }
+
+    // overrideFormatFeatures(): default implementation always throws IllegalArgumentException
+    @Test
+    public void testOverrideFormatFeatures_defaultImplementationThrowsIllegalArgumentException() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        try {
+            gen.overrideFormatFeatures(0, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+        gen.close();
+    }
+
+    // getSchema(): default implementation returns null when no schema configured
+    @Test
+    public void testGetSchema_defaultReturnsNullForJsonGenerator() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        assertNull(gen.getSchema());
+        gen.close();
+    }
+
+    // setPrettyPrinter(): returns same instance (chaining) and updates getPrettyPrinter()
+    @Test
+    public void testSetPrettyPrinter_returnsSameInstanceAndUpdatesGetter() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        assertNull(gen.getPrettyPrinter());
+        JsonGenerator ret = gen.setPrettyPrinter(null);
+        assertSame(gen, ret);
+        assertNull(gen.getPrettyPrinter());
+        gen.close();
+    }
+
+    // useDefaultPrettyPrinter(): sets non-null pretty printer that adds extra whitespace to output
+    @Test
+    public void testUseDefaultPrettyPrinter_addsExtraWhitespaceComparedToCompactOutput() throws Throwable {
+        StringWriter cw = new StringWriter();
+        JsonGenerator cg = factory.createGenerator(cw);
+        cg.writeStartObject(); cg.writeNumberField("a", 1); cg.writeEndObject(); cg.close();
+        StringWriter pw = new StringWriter();
+        JsonGenerator pg = factory.createGenerator(pw);
+        pg.useDefaultPrettyPrinter();
+        assertNotNull(pg.getPrettyPrinter());
+        pg.writeStartObject(); pg.writeNumberField("a", 1); pg.writeEndObject(); pg.close();
+        assertTrue(pw.toString().length() > cw.toString().length());
+    }
+
+    // getCurrentValue()/setCurrentValue(): defaults to null, then reflects set value via output context
+    @Test
+    public void testGetSetCurrentValue_defaultNullThenReflectsSetValue() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        assertNull(gen.getCurrentValue());
+        Object marker = new Object();
+        gen.setCurrentValue(marker);
+        assertSame(marker, gen.getCurrentValue());
+        gen.close();
+    }
+
+    // writeStartArray(int): default delegates to writeStartArray(), content still written normally
+    @Test
+    public void testWriteStartArrayWithSize_writesArrayContentsRegardlessOfSizeHint() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeStartArray(3);
+        gen.writeNumber(1);
+        gen.writeNumber(2);
+        gen.writeNumber(3);
+        gen.writeEndArray();
+        gen.close();
+        assertEquals("[1,2,3]", w.toString());
+    }
+
+    // writeStartObject(Object): writes start marker and assigns argument as current value
+    @Test
+    public void testWriteStartObjectForValue_setsCurrentValueAndWritesEmptyObject() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        Object marker = "marker";
+        gen.writeStartObject(marker);
+        assertSame(marker, gen.getCurrentValue());
+        gen.writeEndObject();
+        gen.close();
+        assertEquals("{}", w.toString());
+    }
+
+    // writeFieldId(long): default converts id to String and calls writeFieldName
+    @Test
+    public void testWriteFieldId_writesNumericIdAsStringFieldName() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeStartObject();
+        gen.writeFieldId(42L);
+        gen.writeString("v");
+        gen.writeEndObject();
+        gen.close();
+        assertEquals("{\"42\":\"v\"}", w.toString());
+    }
+
+    // writeArray(int[]): full range writes every element in original order
+    @Test
+    public void testWriteArrayInt_fullRange_writesAllElementsInOrder() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        int[] arr = {1, -2, 3};
+        gen.writeArray(arr, 0, 3);
+        gen.close();
+        assertEquals("[1,-2,3]", w.toString());
+    }
+
+    // writeArray(int[]): offset/length select exact subrange [offset, offset+length)
+    @Test
+    public void testWriteArrayInt_offsetAndLength_writesExpectedSubset() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        int[] arr = {10, 20, 30, 40, 50};
+        gen.writeArray(arr, 1, 3);
+        gen.close();
+        assertEquals("[20,30,40]", w.toString());
+    }
+
+    // writeArray(int[]): null array must throw IllegalArgumentException
+    @Test
+    public void testWriteArrayInt_nullArray_throwsIllegalArgumentException() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        try {
+            gen.writeArray((int[]) null, 0, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+        gen.close();
+    }
+
+    // _verifyOffsets via writeArray: negative offset and out-of-range length both throw
+    @Test
+    public void testWriteArrayInt_invalidOffsetOrLength_throwsIllegalArgumentException() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        int[] arr = {1, 2, 3};
+        try {
+            gen.writeArray(arr, -1, 2);
+            fail("expected IllegalArgumentException for negative offset");
+        } catch (IllegalArgumentException expected) {
+        }
+        try {
+            gen.writeArray(arr, 2, 5);
+            fail("expected IllegalArgumentException for length exceeding array");
+        } catch (IllegalArgumentException expected) {
+        }
+        gen.close();
+    }
+
+    // writeArray(long[]): writes long values including ones exceeding int range, in order
+    @Test
+    public void testWriteArrayLong_writesAllElementsInOrder() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        long[] arr = {2147483648L, -1L, 100L};
+        gen.writeArray(arr, 0, 3);
+        gen.close();
+        assertEquals("[2147483648,-1,100]", w.toString());
+    }
+
+    // writeArray(double[]): writes floating point values in order
+    @Test
+    public void testWriteArrayDouble_writesAllElementsInOrder() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        double[] arr = {1.0, 2.5};
+        gen.writeArray(arr, 0, 2);
+        gen.close();
+        assertEquals("[1.0,2.5]", w.toString());
+    }
+
+    // writeBinary(byte[]): full array encoded with default (MIME_NO_LINEFEEDS) base64 variant
+    @Test
+    public void testWriteBinaryBytes_fullArray_encodesUsingDefaultBase64Variant() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeBinary(new byte[] {1, 2, 3});
+        gen.close();
+        assertEquals("\"AQID\"", w.toString());
+    }
+
+    // writeBinary(byte[],offset,len): only selected subrange is base64 encoded
+    @Test
+    public void testWriteBinaryBytes_offsetAndLength_encodesOnlySelectedBytes() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeBinary(new byte[] {1, 2, 3, 4, 5}, 1, 3);
+        gen.close();
+        assertEquals("\"AgME\"", w.toString());
+    }
+
+    // writeNumber(short): default delegates to writeNumber((int) v)
+    @Test
+    public void testWriteNumberShort_delegatesToIntWrite() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeNumber((short) 1234);
+        gen.close();
+        assertEquals("1234", w.toString());
+    }
+
+    // writeEmbeddedObject(null): per core#318 comment small cases must be handled (null -> JSON null)
+    @Test
+    public void testWriteEmbeddedObject_nullValue_writesJsonNullInsteadOfThrowing() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeEmbeddedObject(null);
+        gen.close();
+        assertEquals("null", w.toString());
+    }
+
+    // writeEmbeddedObject(non-null unsupported): still throws JsonGenerationException
+    @Test
+    public void testWriteEmbeddedObject_unsupportedNonNullObject_throwsJsonGenerationException() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        try {
+            gen.writeEmbeddedObject(new Object());
+            fail("expected JsonGenerationException");
+        } catch (JsonGenerationException expected) {
+        }
+        gen.close();
+    }
+
+    // writeObjectId/writeObjectRef/writeTypeId: default implementations always throw
+    @Test
+    public void testWriteObjectIdAndObjectRefAndTypeId_throwJsonGenerationExceptionByDefault() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        try { gen.writeObjectId("id"); fail("expected exception"); } catch (JsonGenerationException expected) { }
+        try { gen.writeObjectRef("id"); fail("expected exception"); } catch (JsonGenerationException expected) { }
+        try { gen.writeTypeId("id"); fail("expected exception"); } catch (JsonGenerationException expected) { }
+        gen.close();
+    }
+
+    // writeStringField(): convenience method writes field name then string value
+    @Test
+    public void testWriteStringField_writesFieldNameThenStringValue() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeStartObject();
+        gen.writeStringField("k", "v");
+        gen.writeEndObject();
+        gen.close();
+        assertEquals("{\"k\":\"v\"}", w.toString());
+    }
+
+    // writeBooleanField()/writeNullField(): convenience methods write expected literal tokens
+    @Test
+    public void testWriteBooleanFieldAndNullField_writeExpectedTokens() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeStartObject();
+        gen.writeBooleanField("b", true);
+        gen.writeNullField("n");
+        gen.writeEndObject();
+        gen.close();
+        assertEquals("{\"b\":true,\"n\":null}", w.toString());
+    }
+
+    // writeNumberField(): int/long/double/float/BigDecimal overloads write correct literals
+    @Test
+    public void testWriteNumberFieldVariants_writeExpectedNumericLiterals() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeStartObject();
+        gen.writeNumberField("i", 5);
+        gen.writeNumberField("l", 123456789012L);
+        gen.writeNumberField("d", 1.5);
+        gen.writeNumberField("f", 2.5f);
+        gen.writeNumberField("bd", new BigDecimal("3.14"));
+        gen.writeEndObject();
+        gen.close();
+        String expected = "{\"i\":5,\"l\":123456789012,\"d\":1.5,\"f\":2.5,\"bd\":3.14}";
+        assertEquals(expected, w.toString());
+    }
+
+    // writeBinaryField(): field value is base64 encoded using default variant
+    @Test
+    public void testWriteBinaryField_encodesBase64FieldValue() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeStartObject();
+        gen.writeBinaryField("k", new byte[] {1, 2, 3});
+        gen.writeEndObject();
+        gen.close();
+        assertEquals("{\"k\":\"AQID\"}", w.toString());
+    }
+
+    // writeArrayFieldStart()/writeObjectFieldStart(): open correct nested structural markers
+    @Test
+    public void testWriteArrayFieldStartAndObjectFieldStart_openCorrectStructures() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeStartObject();
+        gen.writeArrayFieldStart("arr");
+        gen.writeNumber(1);
+        gen.writeEndArray();
+        gen.writeObjectFieldStart("obj");
+        gen.writeEndObject();
+        gen.writeEndObject();
+        gen.close();
+        assertEquals("{\"arr\":[1],\"obj\":{}}", w.toString());
+    }
+
+    // writeOmittedField(): default implementation is a no-op, writes nothing
+    @Test
+    public void testWriteOmittedField_defaultImplementationIsNoOp() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.writeStartObject();
+        gen.writeOmittedField("x");
+        gen.writeEndObject();
+        gen.close();
+        assertEquals("{}", w.toString());
+    }
+
+    // copyCurrentEvent(): round-trips object/array/string/boolean/null scalar tokens exactly
+    @Test
+    public void testCopyCurrentEvent_roundTripsMixedScalarAndStructuralTokens() throws Throwable {
+        String json = "{\"a\":1,\"b\":[true,false,null],\"c\":\"text\",\"d\":1.5}";
+        JsonParser p = factory.createParser(json);
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        JsonToken t;
+        while ((t = p.nextToken()) != null) {
+            gen.copyCurrentEvent(p);
+        }
+        gen.close();
+        assertEquals(json, w.toString());
+    }
+
+    // copyCurrentEvent(): preserves LONG, BIG_INTEGER and DOUBLE number sub-type branches
+    @Test
+    public void testCopyCurrentEvent_preservesLongAndBigIntegerAndDoubleNumberTypes() throws Throwable {
+        String json = "{\"n\":123456789012345,\"m\":123456789012345678901234567890,\"f\":3.14}";
+        JsonParser p = factory.createParser(json);
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        JsonToken t;
+        while ((t = p.nextToken()) != null) {
+            gen.copyCurrentEvent(p);
+        }
+        gen.close();
+        assertEquals(json, w.toString());
+    }
+
+    // copyCurrentEvent(): no current token (before first nextToken) triggers _reportError
+    @Test
+    public void testCopyCurrentEvent_noCurrentToken_throwsJsonGenerationException() throws Throwable {
+        JsonParser p = factory.createParser("123");
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        try {
+            gen.copyCurrentEvent(p);
+            fail("expected JsonGenerationException");
+        } catch (JsonGenerationException expected) {
+        }
+        gen.close();
+    }
+
+    // copyCurrentStructure(): START_OBJECT branch recursively copies nested array and object
+    @Test
+    public void testCopyCurrentStructure_roundTripsNestedObjectAndArray() throws Throwable {
+        String json = "{\"arr\":[1,2,{\"x\":3}]}";
+        JsonParser p = factory.createParser(json);
+        p.nextToken();
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.copyCurrentStructure(p);
+        gen.close();
+        assertEquals(json, w.toString());
+    }
+
+    // copyCurrentStructure(): default branch on scalar token delegates to copyCurrentEvent
+    @Test
+    public void testCopyCurrentStructure_scalarToken_delegatesToCopyCurrentEvent() throws Throwable {
+        JsonParser p = factory.createParser("42");
+        p.nextToken();
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen.copyCurrentStructure(p);
+        gen.close();
+        assertEquals("42", w.toString());
+    }
+
+    // _verifyOffsets(): boundary offset+length == arrayLength must be accepted (no throw)
+    @Test
+    public void testVerifyOffsets_boundaryEqualToArrayLength_allowsSubsequentWrite() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        gen._verifyOffsets(5, 2, 3);
+        gen.writeNumber(7);
+        gen.close();
+        assertEquals("7", w.toString());
+    }
+
+    // _verifyOffsets(): negative offset must throw IllegalArgumentException
+    @Test
+    public void testVerifyOffsets_negativeOffset_throwsIllegalArgumentException() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        try {
+            gen._verifyOffsets(5, -1, 2);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+        gen.close();
+    }
+
+    // _verifyOffsets(): offset+length exceeding arrayLength must throw IllegalArgumentException
+    @Test
+    public void testVerifyOffsets_offsetPlusLengthExceedsArrayLength_throwsIllegalArgumentException() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        try {
+            gen._verifyOffsets(5, 3, 4);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+        gen.close();
+    }
+
+    // _writeSimpleObject(): integer-family wrapper types dispatch to correct writeNumber overload
+    @Test
+    public void testWriteSimpleObject_integerFamilyTypes_writeNumericLiterals() throws Throwable {
+        assertEquals("7", captureSimple(Integer.valueOf(7)));
+        assertEquals("123456789012", captureSimple(Long.valueOf(123456789012L)));
+        assertEquals("9", captureSimple(Short.valueOf((short) 9)));
+        assertEquals("3", captureSimple(Byte.valueOf((byte) 3)));
+        assertEquals("42", captureSimple(BigInteger.valueOf(42)));
+        assertEquals("11", captureSimple(new AtomicInteger(11)));
+        assertEquals("22", captureSimple(new AtomicLong(22L)));
+    }
+
+    // _writeSimpleObject(): floating-point family wrapper types dispatch correctly
+    @Test
+    public void testWriteSimpleObject_floatingFamilyTypes_writeNumericLiterals() throws Throwable {
+        assertEquals("1.5", captureSimple(Double.valueOf(1.5)));
+        assertEquals("2.5", captureSimple(Float.valueOf(2.5f)));
+        assertEquals("3.5", captureSimple(new BigDecimal("3.5")));
+    }
+
+    // _writeSimpleObject(): null/String/Boolean/AtomicBoolean/byte[] each produce expected representation
+    @Test
+    public void testWriteSimpleObject_stringNullBooleanAndBinary_writeExpectedRepresentation() throws Throwable {
+        assertEquals("\"hi\"", captureSimple("hi"));
+        assertEquals("null", captureSimple(null));
+        assertEquals("true", captureSimple(Boolean.TRUE));
+        assertEquals("false", captureSimple(new AtomicBoolean(false)));
+        assertEquals("\"AQID\"", captureSimple(new byte[] {1, 2, 3}));
+    }
+
+    // _writeSimpleObject(): unsupported type falls through to final throw branch
+    @Test
+    public void testWriteSimpleObject_unsupportedType_throwsIllegalStateException() throws Throwable {
+        StringWriter w = new StringWriter();
+        JsonGenerator gen = factory.createGenerator(w);
+        try {
+            gen._writeSimpleObject(Character.valueOf('x'));
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+        }
+        gen.close();
+    }
+}

@@ -1,0 +1,3940 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.3539253539253539" branch-rate="0.20658682634730538" lines-covered="275" lines-valid="777" branches-covered="69" branches-valid="334" complexity="3.2196969696969697" version="2.0.3" timestamp="1790803197987">
+	<sources>
+		<source>gson/src/main/java</source>
+	</sources>
+	<packages>
+		<package name="com.google.gson.internal.bind" line-rate="0.3367521367521368" branch-rate="0.21544715447154472" complexity="3.28">
+			<classes>
+				<class name="com.google.gson.internal.bind.JsonTreeWriter" filename="com/google/gson/internal/bind/JsonTreeWriter.java" line-rate="1.0" branch-rate="0.9375" complexity="3.15">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="34" hits="1" branch="false"/>
+								<line number="46" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="49" hits="32" branch="false"/>
+								<line number="55" hits="32" branch="false"/>
+								<line number="58" hits="32" branch="false"/>
+								<line number="59" hits="32" branch="false"/>
+							</lines>
+						</method>
+						<method name="beginArray" signature="()Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="95" hits="18" branch="false"/>
+								<line number="96" hits="18" branch="false"/>
+								<line number="97" hits="17" branch="false"/>
+								<line number="98" hits="17" branch="false"/>
+							</lines>
+						</method>
+						<method name="beginObject" signature="()Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="114" hits="7" branch="false"/>
+								<line number="115" hits="7" branch="false"/>
+								<line number="116" hits="7" branch="false"/>
+								<line number="117" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="close" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="196" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="197" hits="1" branch="false"/>
+								<line number="199" hits="2" branch="false"/>
+								<line number="200" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="endArray" signature="()Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="102" hits="16" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="103" hits="2" branch="false"/>
+								<line number="105" hits="14" branch="false"/>
+								<line number="106" hits="14" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="107" hits="13" branch="false"/>
+								<line number="108" hits="13" branch="false"/>
+								<line number="110" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="endObject" signature="()Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="121" hits="6" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="122" hits="2" branch="false"/>
+								<line number="124" hits="4" branch="false"/>
+								<line number="125" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="126" hits="3" branch="false"/>
+								<line number="127" hits="3" branch="false"/>
+								<line number="129" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="flush" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="193" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="get" signature="()Lcom/google/gson/JsonElement;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="65" hits="18" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="66" hits="2" branch="false"/>
+								<line number="68" hits="16" branch="false"/>
+							</lines>
+						</method>
+						<method name="name" signature="(Ljava/lang/String;)Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="133" hits="8" branch="true" condition-coverage="100% (4/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="134" hits="2" branch="false"/>
+								<line number="136" hits="6" branch="false"/>
+								<line number="137" hits="6" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="138" hits="5" branch="false"/>
+								<line number="139" hits="5" branch="false"/>
+								<line number="141" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="nullValue" signature="()Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="153" hits="4" branch="false"/>
+								<line number="154" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="peek" signature="()Lcom/google/gson/JsonElement;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="72" hits="36" branch="false"/>
+							</lines>
+						</method>
+						<method name="put" signature="(Lcom/google/gson/JsonElement;)V" line-rate="1.0" branch-rate="0.9">
+							<lines>
+								<line number="76" hits="36" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="77" hits="2" branch="true" condition-coverage="75% (3/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="78" hits="2" branch="false"/>
+								<line number="79" hits="2" branch="false"/>
+								<line number="81" hits="2" branch="false"/>
+								<line number="82" hits="34" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="83" hits="24" branch="false"/>
+								<line number="85" hits="10" branch="false"/>
+								<line number="86" hits="10" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="87" hits="9" branch="false"/>
+								<line number="89" hits="1" branch="false"/>
+								<line number="92" hits="35" branch="false"/>
+							</lines>
+						</method>
+						<method name="value" signature="(D)Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="164" hits="4" branch="true" condition-coverage="100% (6/6)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="100%"/>
+										<condition number="2" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="165" hits="2" branch="false"/>
+								<line number="167" hits="2" branch="false"/>
+								<line number="168" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="value" signature="(J)Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="172" hits="1" branch="false"/>
+								<line number="173" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="value" signature="(Ljava/lang/Number;)Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="0.75">
+							<lines>
+								<line number="177" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="178" hits="1" branch="false"/>
+								<line number="181" hits="2" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="182" hits="2" branch="false"/>
+								<line number="183" hits="2" branch="true" condition-coverage="75% (3/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="184" hits="1" branch="false"/>
+								<line number="188" hits="1" branch="false"/>
+								<line number="189" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="value" signature="(Ljava/lang/String;)Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="145" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="146" hits="1" branch="false"/>
+								<line number="148" hits="2" branch="false"/>
+								<line number="149" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="value" signature="(Z)Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="158" hits="1" branch="false"/>
+								<line number="159" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="34" hits="1" branch="false"/>
+						<line number="46" hits="1" branch="false"/>
+						<line number="49" hits="32" branch="false"/>
+						<line number="55" hits="32" branch="false"/>
+						<line number="58" hits="32" branch="false"/>
+						<line number="59" hits="32" branch="false"/>
+						<line number="65" hits="18" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="66" hits="2" branch="false"/>
+						<line number="68" hits="16" branch="false"/>
+						<line number="72" hits="36" branch="false"/>
+						<line number="76" hits="36" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="77" hits="2" branch="true" condition-coverage="75% (3/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="78" hits="2" branch="false"/>
+						<line number="79" hits="2" branch="false"/>
+						<line number="81" hits="2" branch="false"/>
+						<line number="82" hits="34" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="83" hits="24" branch="false"/>
+						<line number="85" hits="10" branch="false"/>
+						<line number="86" hits="10" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="87" hits="9" branch="false"/>
+						<line number="89" hits="1" branch="false"/>
+						<line number="92" hits="35" branch="false"/>
+						<line number="95" hits="18" branch="false"/>
+						<line number="96" hits="18" branch="false"/>
+						<line number="97" hits="17" branch="false"/>
+						<line number="98" hits="17" branch="false"/>
+						<line number="102" hits="16" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="103" hits="2" branch="false"/>
+						<line number="105" hits="14" branch="false"/>
+						<line number="106" hits="14" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="107" hits="13" branch="false"/>
+						<line number="108" hits="13" branch="false"/>
+						<line number="110" hits="1" branch="false"/>
+						<line number="114" hits="7" branch="false"/>
+						<line number="115" hits="7" branch="false"/>
+						<line number="116" hits="7" branch="false"/>
+						<line number="117" hits="7" branch="false"/>
+						<line number="121" hits="6" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="122" hits="2" branch="false"/>
+						<line number="124" hits="4" branch="false"/>
+						<line number="125" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="126" hits="3" branch="false"/>
+						<line number="127" hits="3" branch="false"/>
+						<line number="129" hits="1" branch="false"/>
+						<line number="133" hits="8" branch="true" condition-coverage="100% (4/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="134" hits="2" branch="false"/>
+						<line number="136" hits="6" branch="false"/>
+						<line number="137" hits="6" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="138" hits="5" branch="false"/>
+						<line number="139" hits="5" branch="false"/>
+						<line number="141" hits="1" branch="false"/>
+						<line number="145" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="146" hits="1" branch="false"/>
+						<line number="148" hits="2" branch="false"/>
+						<line number="149" hits="2" branch="false"/>
+						<line number="153" hits="4" branch="false"/>
+						<line number="154" hits="4" branch="false"/>
+						<line number="158" hits="1" branch="false"/>
+						<line number="159" hits="1" branch="false"/>
+						<line number="164" hits="4" branch="true" condition-coverage="100% (6/6)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="100%"/>
+								<condition number="2" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="165" hits="2" branch="false"/>
+						<line number="167" hits="2" branch="false"/>
+						<line number="168" hits="2" branch="false"/>
+						<line number="172" hits="1" branch="false"/>
+						<line number="173" hits="1" branch="false"/>
+						<line number="177" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="178" hits="1" branch="false"/>
+						<line number="181" hits="2" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="182" hits="2" branch="false"/>
+						<line number="183" hits="2" branch="true" condition-coverage="75% (3/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="184" hits="1" branch="false"/>
+						<line number="188" hits="1" branch="false"/>
+						<line number="189" hits="1" branch="false"/>
+						<line number="193" hits="1" branch="false"/>
+						<line number="196" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="197" hits="1" branch="false"/>
+						<line number="199" hits="2" branch="false"/>
+						<line number="200" hits="2" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.JsonTreeWriter$1" filename="com/google/gson/internal/bind/JsonTreeWriter.java" line-rate="0.25" branch-rate="1.0" complexity="3.15">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="34" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="close" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="42" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="flush" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="39" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="([CII)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="36" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="34" hits="1" branch="false"/>
+						<line number="36" hits="0" branch="false"/>
+						<line number="39" hits="0" branch="false"/>
+						<line number="42" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.9605263157894737" branch-rate="1.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="69" hits="1" branch="false"/>
+								<line number="90" hits="1" branch="false"/>
+								<line number="92" hits="1" branch="false"/>
+								<line number="149" hits="1" branch="false"/>
+								<line number="151" hits="1" branch="false"/>
+								<line number="177" hits="1" branch="false"/>
+								<line number="191" hits="1" branch="false"/>
+								<line number="192" hits="1" branch="false"/>
+								<line number="194" hits="1" branch="false"/>
+								<line number="214" hits="1" branch="false"/>
+								<line number="215" hits="1" branch="false"/>
+								<line number="217" hits="1" branch="false"/>
+								<line number="236" hits="1" branch="false"/>
+								<line number="237" hits="1" branch="false"/>
+								<line number="239" hits="1" branch="false"/>
+								<line number="257" hits="1" branch="false"/>
+								<line number="258" hits="1" branch="false"/>
+								<line number="260" hits="1" branch="false"/>
+								<line number="271" hits="1" branch="false"/>
+								<line number="272" hits="1" branch="false"/>
+								<line number="273" hits="1" branch="false"/>
+								<line number="275" hits="1" branch="false"/>
+								<line number="282" hits="1" branch="false"/>
+								<line number="283" hits="1" branch="false"/>
+								<line number="284" hits="1" branch="false"/>
+								<line number="286" hits="1" branch="false"/>
+								<line number="313" hits="1" branch="false"/>
+								<line number="314" hits="1" branch="false"/>
+								<line number="315" hits="1" branch="false"/>
+								<line number="317" hits="1" branch="false"/>
+								<line number="336" hits="1" branch="false"/>
+								<line number="351" hits="1" branch="false"/>
+								<line number="366" hits="1" branch="false"/>
+								<line number="386" hits="1" branch="false"/>
+								<line number="388" hits="1" branch="false"/>
+								<line number="407" hits="1" branch="false"/>
+								<line number="408" hits="1" branch="false"/>
+								<line number="410" hits="1" branch="false"/>
+								<line number="430" hits="1" branch="false"/>
+								<line number="448" hits="1" branch="false"/>
+								<line number="466" hits="1" branch="false"/>
+								<line number="468" hits="1" branch="false"/>
+								<line number="483" hits="1" branch="false"/>
+								<line number="484" hits="1" branch="false"/>
+								<line number="486" hits="1" branch="false"/>
+								<line number="501" hits="1" branch="false"/>
+								<line number="502" hits="1" branch="false"/>
+								<line number="504" hits="1" branch="false"/>
+								<line number="520" hits="1" branch="false"/>
+								<line number="522" hits="1" branch="false"/>
+								<line number="542" hits="1" branch="false"/>
+								<line number="544" hits="1" branch="false"/>
+								<line number="560" hits="1" branch="false"/>
+								<line number="561" hits="1" branch="false"/>
+								<line number="563" hits="1" branch="false"/>
+								<line number="578" hits="1" branch="false"/>
+								<line number="580" hits="1" branch="false"/>
+								<line number="589" hits="1" branch="false"/>
+								<line number="590" hits="1" branch="false"/>
+								<line number="592" hits="1" branch="false"/>
+								<line number="613" hits="1" branch="false"/>
+								<line number="678" hits="1" branch="false"/>
+								<line number="679" hits="1" branch="false"/>
+								<line number="681" hits="1" branch="false"/>
+								<line number="716" hits="1" branch="false"/>
+								<line number="718" hits="1" branch="false"/>
+								<line number="790" hits="1" branch="false"/>
+								<line number="791" hits="1" branch="false"/>
+								<line number="828" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="64" hits="0" branch="false"/>
+								<line number="65" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="newFactory" signature="(Lcom/google/gson/reflect/TypeToken;Lcom/google/gson/TypeAdapter;)Lcom/google/gson/TypeAdapterFactory;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="844" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="newFactory" signature="(Ljava/lang/Class;Lcom/google/gson/TypeAdapter;)Lcom/google/gson/TypeAdapterFactory;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="854" hits="14" branch="false"/>
+							</lines>
+						</method>
+						<method name="newFactory" signature="(Ljava/lang/Class;Ljava/lang/Class;Lcom/google/gson/TypeAdapter;)Lcom/google/gson/TypeAdapterFactory;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="867" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="newFactoryForMultipleTypes" signature="(Ljava/lang/Class;Ljava/lang/Class;Lcom/google/gson/TypeAdapter;)Lcom/google/gson/TypeAdapterFactory;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="882" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="newTypeHierarchyFactory" signature="(Ljava/lang/Class;Lcom/google/gson/TypeAdapter;)Lcom/google/gson/TypeAdapterFactory;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="901" hits="2" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="64" hits="0" branch="false"/>
+						<line number="65" hits="0" branch="false"/>
+						<line number="69" hits="1" branch="false"/>
+						<line number="90" hits="1" branch="false"/>
+						<line number="92" hits="1" branch="false"/>
+						<line number="149" hits="1" branch="false"/>
+						<line number="151" hits="1" branch="false"/>
+						<line number="177" hits="1" branch="false"/>
+						<line number="191" hits="1" branch="false"/>
+						<line number="192" hits="1" branch="false"/>
+						<line number="194" hits="1" branch="false"/>
+						<line number="214" hits="1" branch="false"/>
+						<line number="215" hits="1" branch="false"/>
+						<line number="217" hits="1" branch="false"/>
+						<line number="236" hits="1" branch="false"/>
+						<line number="237" hits="1" branch="false"/>
+						<line number="239" hits="1" branch="false"/>
+						<line number="257" hits="1" branch="false"/>
+						<line number="258" hits="1" branch="false"/>
+						<line number="260" hits="1" branch="false"/>
+						<line number="271" hits="1" branch="false"/>
+						<line number="272" hits="1" branch="false"/>
+						<line number="273" hits="1" branch="false"/>
+						<line number="275" hits="1" branch="false"/>
+						<line number="282" hits="1" branch="false"/>
+						<line number="283" hits="1" branch="false"/>
+						<line number="284" hits="1" branch="false"/>
+						<line number="286" hits="1" branch="false"/>
+						<line number="313" hits="1" branch="false"/>
+						<line number="314" hits="1" branch="false"/>
+						<line number="315" hits="1" branch="false"/>
+						<line number="317" hits="1" branch="false"/>
+						<line number="336" hits="1" branch="false"/>
+						<line number="351" hits="1" branch="false"/>
+						<line number="366" hits="1" branch="false"/>
+						<line number="386" hits="1" branch="false"/>
+						<line number="388" hits="1" branch="false"/>
+						<line number="407" hits="1" branch="false"/>
+						<line number="408" hits="1" branch="false"/>
+						<line number="410" hits="1" branch="false"/>
+						<line number="430" hits="1" branch="false"/>
+						<line number="448" hits="1" branch="false"/>
+						<line number="466" hits="1" branch="false"/>
+						<line number="468" hits="1" branch="false"/>
+						<line number="483" hits="1" branch="false"/>
+						<line number="484" hits="1" branch="false"/>
+						<line number="486" hits="1" branch="false"/>
+						<line number="501" hits="1" branch="false"/>
+						<line number="502" hits="1" branch="false"/>
+						<line number="504" hits="1" branch="false"/>
+						<line number="520" hits="1" branch="false"/>
+						<line number="522" hits="1" branch="false"/>
+						<line number="542" hits="1" branch="false"/>
+						<line number="544" hits="1" branch="false"/>
+						<line number="560" hits="1" branch="false"/>
+						<line number="561" hits="1" branch="false"/>
+						<line number="563" hits="1" branch="false"/>
+						<line number="578" hits="1" branch="false"/>
+						<line number="580" hits="1" branch="false"/>
+						<line number="589" hits="1" branch="false"/>
+						<line number="590" hits="1" branch="false"/>
+						<line number="592" hits="1" branch="false"/>
+						<line number="613" hits="1" branch="false"/>
+						<line number="678" hits="1" branch="false"/>
+						<line number="679" hits="1" branch="false"/>
+						<line number="681" hits="1" branch="false"/>
+						<line number="716" hits="1" branch="false"/>
+						<line number="718" hits="1" branch="false"/>
+						<line number="790" hits="1" branch="false"/>
+						<line number="791" hits="1" branch="false"/>
+						<line number="828" hits="1" branch="false"/>
+						<line number="844" hits="0" branch="false"/>
+						<line number="854" hits="14" branch="false"/>
+						<line number="867" hits="5" branch="false"/>
+						<line number="882" hits="1" branch="false"/>
+						<line number="901" hits="2" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$1" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Class;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="81" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="82" hits="0" branch="false"/>
+								<line number="83" hits="0" branch="false"/>
+								<line number="85" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Class;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="72" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="73" hits="0" branch="false"/>
+								<line number="75" hits="0" branch="false"/>
+								<line number="76" hits="0" branch="false"/>
+								<line number="78" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="69" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="69" hits="1" branch="false"/>
+						<line number="72" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="73" hits="0" branch="false"/>
+						<line number="75" hits="0" branch="false"/>
+						<line number="76" hits="0" branch="false"/>
+						<line number="78" hits="0" branch="false"/>
+						<line number="81" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="82" hits="0" branch="false"/>
+						<line number="83" hits="0" branch="false"/>
+						<line number="85" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$10" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.05" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/util/concurrent/atomic/AtomicIntegerArray;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="288" hits="0" branch="false"/>
+								<line number="289" hits="0" branch="false"/>
+								<line number="290" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="292" hits="0" branch="false"/>
+								<line number="293" hits="0" branch="false"/>
+								<line number="294" hits="0" branch="false"/>
+								<line number="295" hits="0" branch="false"/>
+								<line number="296" hits="0" branch="false"/>
+								<line number="298" hits="0" branch="false"/>
+								<line number="299" hits="0" branch="false"/>
+								<line number="300" hits="0" branch="false"/>
+								<line number="301" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="302" hits="0" branch="false"/>
+								<line number="304" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="286" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/util/concurrent/atomic/AtomicIntegerArray;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="307" hits="0" branch="false"/>
+								<line number="308" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="309" hits="0" branch="false"/>
+								<line number="311" hits="0" branch="false"/>
+								<line number="312" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="286" hits="1" branch="false"/>
+						<line number="288" hits="0" branch="false"/>
+						<line number="289" hits="0" branch="false"/>
+						<line number="290" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="292" hits="0" branch="false"/>
+						<line number="293" hits="0" branch="false"/>
+						<line number="294" hits="0" branch="false"/>
+						<line number="295" hits="0" branch="false"/>
+						<line number="296" hits="0" branch="false"/>
+						<line number="298" hits="0" branch="false"/>
+						<line number="299" hits="0" branch="false"/>
+						<line number="300" hits="0" branch="false"/>
+						<line number="301" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="302" hits="0" branch="false"/>
+						<line number="304" hits="0" branch="false"/>
+						<line number="307" hits="0" branch="false"/>
+						<line number="308" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="309" hits="0" branch="false"/>
+						<line number="311" hits="0" branch="false"/>
+						<line number="312" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$11" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1111111111111111" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Number;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="320" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="321" hits="0" branch="false"/>
+								<line number="322" hits="0" branch="false"/>
+								<line number="325" hits="0" branch="false"/>
+								<line number="326" hits="0" branch="false"/>
+								<line number="327" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Number;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="332" hits="0" branch="false"/>
+								<line number="333" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="317" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="317" hits="1" branch="false"/>
+						<line number="320" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="321" hits="0" branch="false"/>
+						<line number="322" hits="0" branch="false"/>
+						<line number="325" hits="0" branch="false"/>
+						<line number="326" hits="0" branch="false"/>
+						<line number="327" hits="0" branch="false"/>
+						<line number="332" hits="0" branch="false"/>
+						<line number="333" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$12" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.14285714285714285" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Number;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="339" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="340" hits="0" branch="false"/>
+								<line number="341" hits="0" branch="false"/>
+								<line number="343" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Number;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="347" hits="0" branch="false"/>
+								<line number="348" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="336" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="336" hits="1" branch="false"/>
+						<line number="339" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="340" hits="0" branch="false"/>
+						<line number="341" hits="0" branch="false"/>
+						<line number="343" hits="0" branch="false"/>
+						<line number="347" hits="0" branch="false"/>
+						<line number="348" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$13" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.14285714285714285" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Number;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="354" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="355" hits="0" branch="false"/>
+								<line number="356" hits="0" branch="false"/>
+								<line number="358" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Number;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="362" hits="0" branch="false"/>
+								<line number="363" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="351" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="351" hits="1" branch="false"/>
+						<line number="354" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="355" hits="0" branch="false"/>
+						<line number="356" hits="0" branch="false"/>
+						<line number="358" hits="0" branch="false"/>
+						<line number="362" hits="0" branch="false"/>
+						<line number="363" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$14" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1111111111111111" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Number;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="369" hits="0" branch="false"/>
+								<line number="370" hits="0" branch="true" condition-coverage="0% (0/3)">
+									<conditions>
+										<condition number="0" type="switch" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="372" hits="0" branch="false"/>
+								<line number="373" hits="0" branch="false"/>
+								<line number="375" hits="0" branch="false"/>
+								<line number="377" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Number;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="382" hits="0" branch="false"/>
+								<line number="383" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="366" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="366" hits="1" branch="false"/>
+						<line number="369" hits="0" branch="false"/>
+						<line number="370" hits="0" branch="true" condition-coverage="0% (0/3)">
+							<conditions>
+								<condition number="0" type="switch" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="372" hits="0" branch="false"/>
+						<line number="373" hits="0" branch="false"/>
+						<line number="375" hits="0" branch="false"/>
+						<line number="377" hits="0" branch="false"/>
+						<line number="382" hits="0" branch="false"/>
+						<line number="383" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$15" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Character;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="391" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="392" hits="0" branch="false"/>
+								<line number="393" hits="0" branch="false"/>
+								<line number="395" hits="0" branch="false"/>
+								<line number="396" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="397" hits="0" branch="false"/>
+								<line number="399" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Character;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="403" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="404" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="388" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="388" hits="1" branch="false"/>
+						<line number="391" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="392" hits="0" branch="false"/>
+						<line number="393" hits="0" branch="false"/>
+						<line number="395" hits="0" branch="false"/>
+						<line number="396" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="397" hits="0" branch="false"/>
+						<line number="399" hits="0" branch="false"/>
+						<line number="403" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="404" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$16" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/String;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="413" hits="0" branch="false"/>
+								<line number="414" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="415" hits="0" branch="false"/>
+								<line number="416" hits="0" branch="false"/>
+								<line number="419" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="420" hits="0" branch="false"/>
+								<line number="422" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="410" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/String;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="426" hits="0" branch="false"/>
+								<line number="427" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="410" hits="1" branch="false"/>
+						<line number="413" hits="0" branch="false"/>
+						<line number="414" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="415" hits="0" branch="false"/>
+						<line number="416" hits="0" branch="false"/>
+						<line number="419" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="420" hits="0" branch="false"/>
+						<line number="422" hits="0" branch="false"/>
+						<line number="426" hits="0" branch="false"/>
+						<line number="427" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$17" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1111111111111111" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/math/BigDecimal;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="432" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="433" hits="0" branch="false"/>
+								<line number="434" hits="0" branch="false"/>
+								<line number="437" hits="0" branch="false"/>
+								<line number="438" hits="0" branch="false"/>
+								<line number="439" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="430" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/math/BigDecimal;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="444" hits="0" branch="false"/>
+								<line number="445" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="430" hits="1" branch="false"/>
+						<line number="432" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="433" hits="0" branch="false"/>
+						<line number="434" hits="0" branch="false"/>
+						<line number="437" hits="0" branch="false"/>
+						<line number="438" hits="0" branch="false"/>
+						<line number="439" hits="0" branch="false"/>
+						<line number="444" hits="0" branch="false"/>
+						<line number="445" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$18" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1111111111111111" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/math/BigInteger;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="450" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="451" hits="0" branch="false"/>
+								<line number="452" hits="0" branch="false"/>
+								<line number="455" hits="0" branch="false"/>
+								<line number="456" hits="0" branch="false"/>
+								<line number="457" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="448" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/math/BigInteger;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="462" hits="0" branch="false"/>
+								<line number="463" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="448" hits="1" branch="false"/>
+						<line number="450" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="451" hits="0" branch="false"/>
+						<line number="452" hits="0" branch="false"/>
+						<line number="455" hits="0" branch="false"/>
+						<line number="456" hits="0" branch="false"/>
+						<line number="457" hits="0" branch="false"/>
+						<line number="462" hits="0" branch="false"/>
+						<line number="463" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$19" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.14285714285714285" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/StringBuilder;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="471" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="472" hits="0" branch="false"/>
+								<line number="473" hits="0" branch="false"/>
+								<line number="475" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="468" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/StringBuilder;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="479" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="480" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="468" hits="1" branch="false"/>
+						<line number="471" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="472" hits="0" branch="false"/>
+						<line number="473" hits="0" branch="false"/>
+						<line number="475" hits="0" branch="false"/>
+						<line number="479" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="480" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$2" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.027777777777777776" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/util/BitSet;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="94" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="95" hits="0" branch="false"/>
+								<line number="96" hits="0" branch="false"/>
+								<line number="99" hits="0" branch="false"/>
+								<line number="100" hits="0" branch="false"/>
+								<line number="101" hits="0" branch="false"/>
+								<line number="102" hits="0" branch="false"/>
+								<line number="103" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="105" hits="0" branch="true" condition-coverage="0% (0/4)">
+									<conditions>
+										<condition number="0" type="switch" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="107" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="108" hits="0" branch="false"/>
+								<line number="110" hits="0" branch="false"/>
+								<line number="111" hits="0" branch="false"/>
+								<line number="113" hits="0" branch="false"/>
+								<line number="115" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="116" hits="0" branch="false"/>
+								<line number="117" hits="0" branch="false"/>
+								<line number="119" hits="0" branch="false"/>
+								<line number="122" hits="0" branch="false"/>
+								<line number="124" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="125" hits="0" branch="false"/>
+								<line number="127" hits="0" branch="false"/>
+								<line number="128" hits="0" branch="false"/>
+								<line number="129" hits="0" branch="false"/>
+								<line number="130" hits="0" branch="false"/>
+								<line number="131" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="92" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/util/BitSet;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="135" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="136" hits="0" branch="false"/>
+								<line number="137" hits="0" branch="false"/>
+								<line number="140" hits="0" branch="false"/>
+								<line number="141" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="142" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="143" hits="0" branch="false"/>
+								<line number="145" hits="0" branch="false"/>
+								<line number="146" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="92" hits="1" branch="false"/>
+						<line number="94" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="95" hits="0" branch="false"/>
+						<line number="96" hits="0" branch="false"/>
+						<line number="99" hits="0" branch="false"/>
+						<line number="100" hits="0" branch="false"/>
+						<line number="101" hits="0" branch="false"/>
+						<line number="102" hits="0" branch="false"/>
+						<line number="103" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="105" hits="0" branch="true" condition-coverage="0% (0/4)">
+							<conditions>
+								<condition number="0" type="switch" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="107" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="108" hits="0" branch="false"/>
+						<line number="110" hits="0" branch="false"/>
+						<line number="111" hits="0" branch="false"/>
+						<line number="113" hits="0" branch="false"/>
+						<line number="115" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="116" hits="0" branch="false"/>
+						<line number="117" hits="0" branch="false"/>
+						<line number="119" hits="0" branch="false"/>
+						<line number="122" hits="0" branch="false"/>
+						<line number="124" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="125" hits="0" branch="false"/>
+						<line number="127" hits="0" branch="false"/>
+						<line number="128" hits="0" branch="false"/>
+						<line number="129" hits="0" branch="false"/>
+						<line number="130" hits="0" branch="false"/>
+						<line number="131" hits="0" branch="false"/>
+						<line number="135" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="136" hits="0" branch="false"/>
+						<line number="137" hits="0" branch="false"/>
+						<line number="140" hits="0" branch="false"/>
+						<line number="141" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="142" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="143" hits="0" branch="false"/>
+						<line number="145" hits="0" branch="false"/>
+						<line number="146" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$20" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.14285714285714285" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/StringBuffer;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="489" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="490" hits="0" branch="false"/>
+								<line number="491" hits="0" branch="false"/>
+								<line number="493" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="486" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/StringBuffer;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="497" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="498" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="486" hits="1" branch="false"/>
+						<line number="489" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="490" hits="0" branch="false"/>
+						<line number="491" hits="0" branch="false"/>
+						<line number="493" hits="0" branch="false"/>
+						<line number="497" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="498" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$21" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.125" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/net/URL;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="507" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="508" hits="0" branch="false"/>
+								<line number="509" hits="0" branch="false"/>
+								<line number="511" hits="0" branch="false"/>
+								<line number="512" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="504" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/net/URL;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="516" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="517" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="504" hits="1" branch="false"/>
+						<line number="507" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="508" hits="0" branch="false"/>
+						<line number="509" hits="0" branch="false"/>
+						<line number="511" hits="0" branch="false"/>
+						<line number="512" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="516" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="517" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$22" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/net/URI;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="525" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="526" hits="0" branch="false"/>
+								<line number="527" hits="0" branch="false"/>
+								<line number="530" hits="0" branch="false"/>
+								<line number="531" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="532" hits="0" branch="false"/>
+								<line number="533" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="522" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/net/URI;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="538" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="539" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="522" hits="1" branch="false"/>
+						<line number="525" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="526" hits="0" branch="false"/>
+						<line number="527" hits="0" branch="false"/>
+						<line number="530" hits="0" branch="false"/>
+						<line number="531" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="532" hits="0" branch="false"/>
+						<line number="533" hits="0" branch="false"/>
+						<line number="538" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="539" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$23" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.14285714285714285" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/net/InetAddress;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="547" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="548" hits="0" branch="false"/>
+								<line number="549" hits="0" branch="false"/>
+								<line number="552" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="544" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/net/InetAddress;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="556" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="557" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="544" hits="1" branch="false"/>
+						<line number="547" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="548" hits="0" branch="false"/>
+						<line number="549" hits="0" branch="false"/>
+						<line number="552" hits="0" branch="false"/>
+						<line number="556" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="557" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$24" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.14285714285714285" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/util/UUID;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="566" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="567" hits="0" branch="false"/>
+								<line number="568" hits="0" branch="false"/>
+								<line number="570" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="563" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/util/UUID;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="574" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="575" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="563" hits="1" branch="false"/>
+						<line number="566" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="567" hits="0" branch="false"/>
+						<line number="568" hits="0" branch="false"/>
+						<line number="570" hits="0" branch="false"/>
+						<line number="574" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="575" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$25" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.25" branch-rate="1.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/util/Currency;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="583" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="580" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/util/Currency;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="587" hits="0" branch="false"/>
+								<line number="588" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="580" hits="1" branch="false"/>
+						<line number="583" hits="0" branch="false"/>
+						<line number="587" hits="0" branch="false"/>
+						<line number="588" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$26" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.2" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="592" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="create" signature="(Lcom/google/gson/Gson;Lcom/google/gson/reflect/TypeToken;)Lcom/google/gson/TypeAdapter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="595" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="596" hits="0" branch="false"/>
+								<line number="599" hits="0" branch="false"/>
+								<line number="600" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="592" hits="1" branch="false"/>
+						<line number="595" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="596" hits="0" branch="false"/>
+						<line number="599" hits="0" branch="false"/>
+						<line number="600" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$26$1" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.0" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lcom/google/gson/internal/bind/TypeAdapters$26;Lcom/google/gson/TypeAdapter;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/sql/Timestamp;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="602" hits="0" branch="false"/>
+								<line number="603" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="600" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/sql/Timestamp;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="607" hits="0" branch="false"/>
+								<line number="608" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="600" hits="0" branch="false"/>
+						<line number="602" hits="0" branch="false"/>
+						<line number="603" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="607" hits="0" branch="false"/>
+						<line number="608" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$27" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.02127659574468085" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/util/Calendar;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="623" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="624" hits="0" branch="false"/>
+								<line number="625" hits="0" branch="false"/>
+								<line number="627" hits="0" branch="false"/>
+								<line number="628" hits="0" branch="false"/>
+								<line number="629" hits="0" branch="false"/>
+								<line number="630" hits="0" branch="false"/>
+								<line number="631" hits="0" branch="false"/>
+								<line number="632" hits="0" branch="false"/>
+								<line number="633" hits="0" branch="false"/>
+								<line number="634" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="635" hits="0" branch="false"/>
+								<line number="636" hits="0" branch="false"/>
+								<line number="637" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="638" hits="0" branch="false"/>
+								<line number="639" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="640" hits="0" branch="false"/>
+								<line number="641" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="642" hits="0" branch="false"/>
+								<line number="643" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="644" hits="0" branch="false"/>
+								<line number="645" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="646" hits="0" branch="false"/>
+								<line number="647" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="648" hits="0" branch="false"/>
+								<line number="650" hits="0" branch="false"/>
+								<line number="651" hits="0" branch="false"/>
+								<line number="652" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="613" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/util/Calendar;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="657" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="658" hits="0" branch="false"/>
+								<line number="659" hits="0" branch="false"/>
+								<line number="661" hits="0" branch="false"/>
+								<line number="662" hits="0" branch="false"/>
+								<line number="663" hits="0" branch="false"/>
+								<line number="664" hits="0" branch="false"/>
+								<line number="665" hits="0" branch="false"/>
+								<line number="666" hits="0" branch="false"/>
+								<line number="667" hits="0" branch="false"/>
+								<line number="668" hits="0" branch="false"/>
+								<line number="669" hits="0" branch="false"/>
+								<line number="670" hits="0" branch="false"/>
+								<line number="671" hits="0" branch="false"/>
+								<line number="672" hits="0" branch="false"/>
+								<line number="673" hits="0" branch="false"/>
+								<line number="674" hits="0" branch="false"/>
+								<line number="675" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="613" hits="1" branch="false"/>
+						<line number="623" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="624" hits="0" branch="false"/>
+						<line number="625" hits="0" branch="false"/>
+						<line number="627" hits="0" branch="false"/>
+						<line number="628" hits="0" branch="false"/>
+						<line number="629" hits="0" branch="false"/>
+						<line number="630" hits="0" branch="false"/>
+						<line number="631" hits="0" branch="false"/>
+						<line number="632" hits="0" branch="false"/>
+						<line number="633" hits="0" branch="false"/>
+						<line number="634" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="635" hits="0" branch="false"/>
+						<line number="636" hits="0" branch="false"/>
+						<line number="637" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="638" hits="0" branch="false"/>
+						<line number="639" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="640" hits="0" branch="false"/>
+						<line number="641" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="642" hits="0" branch="false"/>
+						<line number="643" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="644" hits="0" branch="false"/>
+						<line number="645" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="646" hits="0" branch="false"/>
+						<line number="647" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="648" hits="0" branch="false"/>
+						<line number="650" hits="0" branch="false"/>
+						<line number="651" hits="0" branch="false"/>
+						<line number="652" hits="0" branch="false"/>
+						<line number="657" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="658" hits="0" branch="false"/>
+						<line number="659" hits="0" branch="false"/>
+						<line number="661" hits="0" branch="false"/>
+						<line number="662" hits="0" branch="false"/>
+						<line number="663" hits="0" branch="false"/>
+						<line number="664" hits="0" branch="false"/>
+						<line number="665" hits="0" branch="false"/>
+						<line number="666" hits="0" branch="false"/>
+						<line number="667" hits="0" branch="false"/>
+						<line number="668" hits="0" branch="false"/>
+						<line number="669" hits="0" branch="false"/>
+						<line number="670" hits="0" branch="false"/>
+						<line number="671" hits="0" branch="false"/>
+						<line number="672" hits="0" branch="false"/>
+						<line number="673" hits="0" branch="false"/>
+						<line number="674" hits="0" branch="false"/>
+						<line number="675" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$28" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.045454545454545456" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/util/Locale;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="684" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="685" hits="0" branch="false"/>
+								<line number="686" hits="0" branch="false"/>
+								<line number="688" hits="0" branch="false"/>
+								<line number="689" hits="0" branch="false"/>
+								<line number="690" hits="0" branch="false"/>
+								<line number="691" hits="0" branch="false"/>
+								<line number="692" hits="0" branch="false"/>
+								<line number="693" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="694" hits="0" branch="false"/>
+								<line number="696" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="697" hits="0" branch="false"/>
+								<line number="699" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="700" hits="0" branch="false"/>
+								<line number="702" hits="0" branch="true" condition-coverage="0% (0/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="703" hits="0" branch="false"/>
+								<line number="704" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="705" hits="0" branch="false"/>
+								<line number="707" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="681" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/util/Locale;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="712" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="713" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="681" hits="1" branch="false"/>
+						<line number="684" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="685" hits="0" branch="false"/>
+						<line number="686" hits="0" branch="false"/>
+						<line number="688" hits="0" branch="false"/>
+						<line number="689" hits="0" branch="false"/>
+						<line number="690" hits="0" branch="false"/>
+						<line number="691" hits="0" branch="false"/>
+						<line number="692" hits="0" branch="false"/>
+						<line number="693" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="694" hits="0" branch="false"/>
+						<line number="696" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="697" hits="0" branch="false"/>
+						<line number="699" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="700" hits="0" branch="false"/>
+						<line number="702" hits="0" branch="true" condition-coverage="0% (0/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="703" hits="0" branch="false"/>
+						<line number="704" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="705" hits="0" branch="false"/>
+						<line number="707" hits="0" branch="false"/>
+						<line number="712" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="713" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$29" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.26666666666666666" branch-rate="0.27586206896551724" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Lcom/google/gson/JsonElement;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="720" hits="0" branch="true" condition-coverage="0% (0/7)">
+									<conditions>
+										<condition number="0" type="switch" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="722" hits="0" branch="false"/>
+								<line number="724" hits="0" branch="false"/>
+								<line number="725" hits="0" branch="false"/>
+								<line number="727" hits="0" branch="false"/>
+								<line number="729" hits="0" branch="false"/>
+								<line number="730" hits="0" branch="false"/>
+								<line number="732" hits="0" branch="false"/>
+								<line number="733" hits="0" branch="false"/>
+								<line number="734" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="735" hits="0" branch="false"/>
+								<line number="737" hits="0" branch="false"/>
+								<line number="738" hits="0" branch="false"/>
+								<line number="740" hits="0" branch="false"/>
+								<line number="741" hits="0" branch="false"/>
+								<line number="742" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="743" hits="0" branch="false"/>
+								<line number="745" hits="0" branch="false"/>
+								<line number="746" hits="0" branch="false"/>
+								<line number="752" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Lcom/google/gson/JsonElement;)V" line-rate="0.4583333333333333" branch-rate="0.4444444444444444">
+							<lines>
+								<line number="757" hits="2" branch="true" condition-coverage="50% (2/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="758" hits="0" branch="false"/>
+								<line number="759" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="760" hits="1" branch="false"/>
+								<line number="761" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="762" hits="0" branch="false"/>
+								<line number="763" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="764" hits="0" branch="false"/>
+								<line number="766" hits="1" branch="false"/>
+								<line number="769" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="770" hits="1" branch="false"/>
+								<line number="771" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="772" hits="0" branch="false"/>
+								<line number="773" hits="0" branch="false"/>
+								<line number="774" hits="1" branch="false"/>
+								<line number="776" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="777" hits="0" branch="false"/>
+								<line number="778" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="779" hits="0" branch="false"/>
+								<line number="780" hits="0" branch="false"/>
+								<line number="781" hits="0" branch="false"/>
+								<line number="782" hits="0" branch="false"/>
+								<line number="785" hits="0" branch="false"/>
+								<line number="787" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="718" hits="3" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="718" hits="3" branch="false"/>
+						<line number="720" hits="0" branch="true" condition-coverage="0% (0/7)">
+							<conditions>
+								<condition number="0" type="switch" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="722" hits="0" branch="false"/>
+						<line number="724" hits="0" branch="false"/>
+						<line number="725" hits="0" branch="false"/>
+						<line number="727" hits="0" branch="false"/>
+						<line number="729" hits="0" branch="false"/>
+						<line number="730" hits="0" branch="false"/>
+						<line number="732" hits="0" branch="false"/>
+						<line number="733" hits="0" branch="false"/>
+						<line number="734" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="735" hits="0" branch="false"/>
+						<line number="737" hits="0" branch="false"/>
+						<line number="738" hits="0" branch="false"/>
+						<line number="740" hits="0" branch="false"/>
+						<line number="741" hits="0" branch="false"/>
+						<line number="742" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="743" hits="0" branch="false"/>
+						<line number="745" hits="0" branch="false"/>
+						<line number="746" hits="0" branch="false"/>
+						<line number="752" hits="0" branch="false"/>
+						<line number="757" hits="2" branch="true" condition-coverage="50% (2/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="758" hits="0" branch="false"/>
+						<line number="759" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="760" hits="1" branch="false"/>
+						<line number="761" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="762" hits="0" branch="false"/>
+						<line number="763" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="764" hits="0" branch="false"/>
+						<line number="766" hits="1" branch="false"/>
+						<line number="769" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="770" hits="1" branch="false"/>
+						<line number="771" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="772" hits="0" branch="false"/>
+						<line number="773" hits="0" branch="false"/>
+						<line number="774" hits="1" branch="false"/>
+						<line number="776" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="777" hits="0" branch="false"/>
+						<line number="778" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="779" hits="0" branch="false"/>
+						<line number="780" hits="0" branch="false"/>
+						<line number="781" hits="0" branch="false"/>
+						<line number="782" hits="0" branch="false"/>
+						<line number="785" hits="0" branch="false"/>
+						<line number="787" hits="2" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$3" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.08333333333333333" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Boolean;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="154" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="155" hits="0" branch="false"/>
+								<line number="156" hits="0" branch="false"/>
+								<line number="157" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="159" hits="0" branch="false"/>
+								<line number="161" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Boolean;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="165" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="166" hits="0" branch="false"/>
+								<line number="167" hits="0" branch="false"/>
+								<line number="169" hits="0" branch="false"/>
+								<line number="170" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="151" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="151" hits="1" branch="false"/>
+						<line number="154" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="155" hits="0" branch="false"/>
+						<line number="156" hits="0" branch="false"/>
+						<line number="157" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="159" hits="0" branch="false"/>
+						<line number="161" hits="0" branch="false"/>
+						<line number="165" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="166" hits="0" branch="false"/>
+						<line number="167" hits="0" branch="false"/>
+						<line number="169" hits="0" branch="false"/>
+						<line number="170" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$30" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.14285714285714285" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="828" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="create" signature="(Lcom/google/gson/Gson;Lcom/google/gson/reflect/TypeToken;)Lcom/google/gson/TypeAdapter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="831" hits="0" branch="false"/>
+								<line number="832" hits="0" branch="true" condition-coverage="0% (0/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="833" hits="0" branch="false"/>
+								<line number="835" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="836" hits="0" branch="false"/>
+								<line number="838" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="828" hits="1" branch="false"/>
+						<line number="831" hits="0" branch="false"/>
+						<line number="832" hits="0" branch="true" condition-coverage="0% (0/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="833" hits="0" branch="false"/>
+						<line number="835" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="836" hits="0" branch="false"/>
+						<line number="838" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$31" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.0" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lcom/google/gson/reflect/TypeToken;Lcom/google/gson/TypeAdapter;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="844" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="create" signature="(Lcom/google/gson/Gson;Lcom/google/gson/reflect/TypeToken;)Lcom/google/gson/TypeAdapter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="847" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="844" hits="0" branch="false"/>
+						<line number="847" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$32" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.3333333333333333" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/Class;Lcom/google/gson/TypeAdapter;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="854" hits="14" branch="false"/>
+							</lines>
+						</method>
+						<method name="create" signature="(Lcom/google/gson/Gson;Lcom/google/gson/reflect/TypeToken;)Lcom/google/gson/TypeAdapter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="857" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="860" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="854" hits="14" branch="false"/>
+						<line number="857" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="860" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$33" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.2" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/Class;Ljava/lang/Class;Lcom/google/gson/TypeAdapter;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="867" hits="5" branch="false"/>
+							</lines>
+						</method>
+						<method name="create" signature="(Lcom/google/gson/Gson;Lcom/google/gson/reflect/TypeToken;)Lcom/google/gson/TypeAdapter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="870" hits="0" branch="false"/>
+								<line number="871" hits="0" branch="true" condition-coverage="0% (0/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="874" hits="0" branch="false"/>
+								<line number="875" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="867" hits="5" branch="false"/>
+						<line number="870" hits="0" branch="false"/>
+						<line number="871" hits="0" branch="true" condition-coverage="0% (0/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="874" hits="0" branch="false"/>
+						<line number="875" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$34" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.2" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/Class;Ljava/lang/Class;Lcom/google/gson/TypeAdapter;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="882" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="create" signature="(Lcom/google/gson/Gson;Lcom/google/gson/reflect/TypeToken;)Lcom/google/gson/TypeAdapter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="885" hits="0" branch="false"/>
+								<line number="886" hits="0" branch="true" condition-coverage="0% (0/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="889" hits="0" branch="false"/>
+								<line number="890" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="882" hits="1" branch="false"/>
+						<line number="885" hits="0" branch="false"/>
+						<line number="886" hits="0" branch="true" condition-coverage="0% (0/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="889" hits="0" branch="false"/>
+						<line number="890" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$35" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.16666666666666666" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/Class;Lcom/google/gson/TypeAdapter;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="901" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="create" signature="(Lcom/google/gson/Gson;Lcom/google/gson/reflect/TypeToken;)Lcom/google/gson/TypeAdapter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="904" hits="0" branch="false"/>
+								<line number="905" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="906" hits="0" branch="false"/>
+								<line number="908" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="924" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="901" hits="2" branch="false"/>
+						<line number="904" hits="0" branch="false"/>
+						<line number="905" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="906" hits="0" branch="false"/>
+						<line number="908" hits="0" branch="false"/>
+						<line number="924" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$35$1" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.0" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lcom/google/gson/internal/bind/TypeAdapters$35;Ljava/lang/Class;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="908" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="914" hits="0" branch="false"/>
+								<line number="915" hits="0" branch="true" condition-coverage="0% (0/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="916" hits="0" branch="false"/>
+								<line number="917" hits="0" branch="false"/>
+								<line number="919" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="910" hits="0" branch="false"/>
+								<line number="911" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="908" hits="0" branch="false"/>
+						<line number="910" hits="0" branch="false"/>
+						<line number="911" hits="0" branch="false"/>
+						<line number="914" hits="0" branch="false"/>
+						<line number="915" hits="0" branch="true" condition-coverage="0% (0/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="916" hits="0" branch="false"/>
+						<line number="917" hits="0" branch="false"/>
+						<line number="919" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$36" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.0" branch-rate="1.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="105" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="105" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$4" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.14285714285714285" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Boolean;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="179" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="180" hits="0" branch="false"/>
+								<line number="181" hits="0" branch="false"/>
+								<line number="183" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Boolean;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="187" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="188" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="177" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="177" hits="1" branch="false"/>
+						<line number="179" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="180" hits="0" branch="false"/>
+						<line number="181" hits="0" branch="false"/>
+						<line number="183" hits="0" branch="false"/>
+						<line number="187" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="188" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$5" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Number;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="197" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="198" hits="0" branch="false"/>
+								<line number="199" hits="0" branch="false"/>
+								<line number="202" hits="0" branch="false"/>
+								<line number="203" hits="0" branch="false"/>
+								<line number="204" hits="0" branch="false"/>
+								<line number="205" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Number;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="210" hits="0" branch="false"/>
+								<line number="211" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="194" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="194" hits="1" branch="false"/>
+						<line number="197" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="198" hits="0" branch="false"/>
+						<line number="199" hits="0" branch="false"/>
+						<line number="202" hits="0" branch="false"/>
+						<line number="203" hits="0" branch="false"/>
+						<line number="204" hits="0" branch="false"/>
+						<line number="205" hits="0" branch="false"/>
+						<line number="210" hits="0" branch="false"/>
+						<line number="211" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$6" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1111111111111111" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Number;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="220" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="221" hits="0" branch="false"/>
+								<line number="222" hits="0" branch="false"/>
+								<line number="225" hits="0" branch="false"/>
+								<line number="226" hits="0" branch="false"/>
+								<line number="227" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Number;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="232" hits="0" branch="false"/>
+								<line number="233" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="217" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="217" hits="1" branch="false"/>
+						<line number="220" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="221" hits="0" branch="false"/>
+						<line number="222" hits="0" branch="false"/>
+						<line number="225" hits="0" branch="false"/>
+						<line number="226" hits="0" branch="false"/>
+						<line number="227" hits="0" branch="false"/>
+						<line number="232" hits="0" branch="false"/>
+						<line number="233" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$7" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.1111111111111111" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Number;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="242" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="243" hits="0" branch="false"/>
+								<line number="244" hits="0" branch="false"/>
+								<line number="247" hits="0" branch="false"/>
+								<line number="248" hits="0" branch="false"/>
+								<line number="249" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Number;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="254" hits="0" branch="false"/>
+								<line number="255" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="239" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="239" hits="1" branch="false"/>
+						<line number="242" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="243" hits="0" branch="false"/>
+						<line number="244" hits="0" branch="false"/>
+						<line number="247" hits="0" branch="false"/>
+						<line number="248" hits="0" branch="false"/>
+						<line number="249" hits="0" branch="false"/>
+						<line number="254" hits="0" branch="false"/>
+						<line number="255" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$8" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.16666666666666666" branch-rate="1.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/util/concurrent/atomic/AtomicInteger;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="263" hits="0" branch="false"/>
+								<line number="264" hits="0" branch="false"/>
+								<line number="265" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="260" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/util/concurrent/atomic/AtomicInteger;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="269" hits="0" branch="false"/>
+								<line number="270" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="260" hits="1" branch="false"/>
+						<line number="263" hits="0" branch="false"/>
+						<line number="264" hits="0" branch="false"/>
+						<line number="265" hits="0" branch="false"/>
+						<line number="269" hits="0" branch="false"/>
+						<line number="270" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$9" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.25" branch-rate="1.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/util/concurrent/atomic/AtomicBoolean;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="277" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="275" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/util/concurrent/atomic/AtomicBoolean;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="280" hits="0" branch="false"/>
+								<line number="281" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="275" hits="1" branch="false"/>
+						<line number="277" hits="0" branch="false"/>
+						<line number="280" hits="0" branch="false"/>
+						<line number="281" hits="0" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.google.gson.internal.bind.TypeAdapters$EnumTypeAdapter" filename="com/google/gson/internal/bind/TypeAdapters.java" line-rate="0.0" branch-rate="0.0" complexity="3.3125">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/Class;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="794" hits="0" branch="false"/>
+								<line number="795" hits="0" branch="false"/>
+								<line number="797" hits="0" branch="false"/>
+								<line number="799" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="800" hits="0" branch="false"/>
+								<line number="801" hits="0" branch="false"/>
+								<line number="802" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="803" hits="0" branch="false"/>
+								<line number="804" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="805" hits="0" branch="false"/>
+								<line number="808" hits="0" branch="false"/>
+								<line number="809" hits="0" branch="false"/>
+								<line number="811" hits="0" branch="false"/>
+								<line number="812" hits="0" branch="false"/>
+								<line number="813" hits="0" branch="false"/>
+								<line number="814" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Enum;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="816" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="817" hits="0" branch="false"/>
+								<line number="818" hits="0" branch="false"/>
+								<line number="820" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="read" signature="(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Enum;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="824" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="825" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="write" signature="(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="793" hits="0" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="793" hits="0" branch="false"/>
+						<line number="794" hits="0" branch="false"/>
+						<line number="795" hits="0" branch="false"/>
+						<line number="797" hits="0" branch="false"/>
+						<line number="799" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="800" hits="0" branch="false"/>
+						<line number="801" hits="0" branch="false"/>
+						<line number="802" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="803" hits="0" branch="false"/>
+						<line number="804" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="805" hits="0" branch="false"/>
+						<line number="808" hits="0" branch="false"/>
+						<line number="809" hits="0" branch="false"/>
+						<line number="811" hits="0" branch="false"/>
+						<line number="812" hits="0" branch="false"/>
+						<line number="813" hits="0" branch="false"/>
+						<line number="814" hits="0" branch="false"/>
+						<line number="816" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="817" hits="0" branch="false"/>
+						<line number="818" hits="0" branch="false"/>
+						<line number="820" hits="0" branch="false"/>
+						<line number="824" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="825" hits="0" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+		<package name="com.google.gson.stream" line-rate="0.40625" branch-rate="0.18181818181818182" complexity="3.03125">
+			<classes>
+				<class name="com.google.gson.stream.JsonWriter" filename="com/google/gson/stream/JsonWriter.java" line-rate="0.40625" branch-rate="0.18181818181818182" complexity="3.03125">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="145" hits="1" branch="false"/>
+								<line number="146" hits="33" branch="false"/>
+								<line number="147" hits="32" branch="false"/>
+								<line number="149" hits="1" branch="false"/>
+								<line number="150" hits="1" branch="false"/>
+								<line number="151" hits="1" branch="false"/>
+								<line number="152" hits="1" branch="false"/>
+								<line number="153" hits="1" branch="false"/>
+								<line number="154" hits="1" branch="false"/>
+								<line number="155" hits="1" branch="false"/>
+								<line number="156" hits="1" branch="false"/>
+								<line number="157" hits="1" branch="false"/>
+								<line number="158" hits="1" branch="false"/>
+								<line number="159" hits="1" branch="false"/>
+								<line number="160" hits="1" branch="false"/>
+								<line number="161" hits="1" branch="false"/>
+								<line number="162" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Ljava/io/Writer;)V" line-rate="0.9" branch-rate="0.5">
+							<lines>
+								<line number="167" hits="34" branch="false"/>
+								<line number="168" hits="34" branch="false"/>
+								<line number="170" hits="34" branch="false"/>
+								<line number="182" hits="34" branch="false"/>
+								<line number="190" hits="34" branch="false"/>
+								<line number="197" hits="34" branch="false"/>
+								<line number="198" hits="34" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="199" hits="0" branch="false"/>
+								<line number="201" hits="34" branch="false"/>
+								<line number="202" hits="34" branch="false"/>
+							</lines>
+						</method>
+						<method name="beforeName" signature="()V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="603" hits="0" branch="false"/>
+								<line number="604" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="605" hits="0" branch="false"/>
+								<line number="606" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="607" hits="0" branch="false"/>
+								<line number="609" hits="0" branch="false"/>
+								<line number="610" hits="0" branch="false"/>
+								<line number="611" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="beforeValue" signature="()V" line-rate="0.25" branch-rate="0.125">
+							<lines>
+								<line number="620" hits="2" branch="true" condition-coverage="16% (1/6)">
+									<conditions>
+										<condition number="0" type="switch" coverage="16%"/>
+									</conditions>
+								</line>
+								<line number="622" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="623" hits="0" branch="false"/>
+								<line number="628" hits="2" branch="false"/>
+								<line number="629" hits="2" branch="false"/>
+								<line number="632" hits="0" branch="false"/>
+								<line number="633" hits="0" branch="false"/>
+								<line number="634" hits="0" branch="false"/>
+								<line number="637" hits="0" branch="false"/>
+								<line number="638" hits="0" branch="false"/>
+								<line number="639" hits="0" branch="false"/>
+								<line number="642" hits="0" branch="false"/>
+								<line number="643" hits="0" branch="false"/>
+								<line number="644" hits="0" branch="false"/>
+								<line number="647" hits="0" branch="false"/>
+								<line number="649" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="beginArray" signature="()Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="287" hits="1" branch="false"/>
+								<line number="288" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="beginObject" signature="()Lcom/google/gson/stream/JsonWriter;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="307" hits="0" branch="false"/>
+								<line number="308" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="close" signature="()V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="546" hits="0" branch="false"/>
+								<line number="548" hits="0" branch="false"/>
+								<line number="549" hits="0" branch="true" condition-coverage="0% (0/6)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+										<condition number="2" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="550" hits="0" branch="false"/>
+								<line number="552" hits="0" branch="false"/>
+								<line number="553" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="close" signature="(IILjava/lang/String;)Lcom/google/gson/stream/JsonWriter;" line-rate="0.7" branch-rate="0.5">
+							<lines>
+								<line number="337" hits="1" branch="false"/>
+								<line number="338" hits="1" branch="true" condition-coverage="50% (2/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+										<condition number="1" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="339" hits="0" branch="false"/>
+								<line number="341" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="342" hits="0" branch="false"/>
+								<line number="345" hits="1" branch="false"/>
+								<line number="346" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="347" hits="0" branch="false"/>
+								<line number="349" hits="1" branch="false"/>
+								<line number="350" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="endArray" signature="()Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="297" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="endObject" signature="()Lcom/google/gson/stream/JsonWriter;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="317" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="flush" signature="()V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="534" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="535" hits="0" branch="false"/>
+								<line number="537" hits="0" branch="false"/>
+								<line number="538" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="getSerializeNulls" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="277" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="isHtmlSafe" signature="()Z" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="261" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="isLenient" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="242" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="jsonValue" signature="(Ljava/lang/String;)Lcom/google/gson/stream/JsonWriter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="431" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="432" hits="0" branch="false"/>
+								<line number="434" hits="0" branch="false"/>
+								<line number="435" hits="0" branch="false"/>
+								<line number="436" hits="0" branch="false"/>
+								<line number="437" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="name" signature="(Ljava/lang/String;)Lcom/google/gson/stream/JsonWriter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="386" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="387" hits="0" branch="false"/>
+								<line number="389" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="390" hits="0" branch="false"/>
+								<line number="392" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="393" hits="0" branch="false"/>
+								<line number="395" hits="0" branch="false"/>
+								<line number="396" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="newline" signature="()V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="588" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="589" hits="0" branch="false"/>
+								<line number="592" hits="0" branch="false"/>
+								<line number="593" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="594" hits="0" branch="false"/>
+								<line number="596" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="nullValue" signature="()Lcom/google/gson/stream/JsonWriter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="446" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="447" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="448" hits="0" branch="false"/>
+								<line number="450" hits="0" branch="false"/>
+								<line number="451" hits="0" branch="false"/>
+								<line number="454" hits="0" branch="false"/>
+								<line number="455" hits="0" branch="false"/>
+								<line number="456" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="open" signature="(ILjava/lang/String;)Lcom/google/gson/stream/JsonWriter;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="325" hits="1" branch="false"/>
+								<line number="326" hits="1" branch="false"/>
+								<line number="327" hits="1" branch="false"/>
+								<line number="328" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="peek" signature="()I" line-rate="0.6666666666666666" branch-rate="0.5">
+							<lines>
+								<line number="366" hits="3" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="367" hits="0" branch="false"/>
+								<line number="369" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="push" signature="(I)V" line-rate="0.5" branch-rate="0.5">
+							<lines>
+								<line number="354" hits="35" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="355" hits="0" branch="false"/>
+								<line number="356" hits="0" branch="false"/>
+								<line number="357" hits="0" branch="false"/>
+								<line number="359" hits="35" branch="false"/>
+								<line number="360" hits="35" branch="false"/>
+							</lines>
+						</method>
+						<method name="replaceTop" signature="(I)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="376" hits="2" branch="false"/>
+								<line number="377" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="setHtmlSafe" signature="(Z)V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="253" hits="0" branch="false"/>
+								<line number="254" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="setIndent" signature="(Ljava/lang/String;)V" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="213" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="214" hits="0" branch="false"/>
+								<line number="215" hits="0" branch="false"/>
+								<line number="217" hits="0" branch="false"/>
+								<line number="218" hits="0" branch="false"/>
+								<line number="220" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="setLenient" signature="(Z)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="235" hits="3" branch="false"/>
+								<line number="236" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="setSerializeNulls" signature="(Z)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="269" hits="1" branch="false"/>
+								<line number="270" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="string" signature="(Ljava/lang/String;)V" line-rate="0.6363636363636364" branch-rate="0.375">
+							<lines>
+								<line number="556" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="557" hits="1" branch="false"/>
+								<line number="558" hits="1" branch="false"/>
+								<line number="559" hits="1" branch="false"/>
+								<line number="560" hits="7" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="561" hits="6" branch="false"/>
+								<line number="563" hits="6" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="564" hits="6" branch="false"/>
+								<line number="565" hits="6" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="566" hits="6" branch="false"/>
+								<line number="568" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="569" hits="0" branch="false"/>
+								<line number="570" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="571" hits="0" branch="false"/>
+								<line number="575" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="576" hits="0" branch="false"/>
+								<line number="578" hits="0" branch="false"/>
+								<line number="579" hits="0" branch="false"/>
+								<line number="581" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="582" hits="1" branch="false"/>
+								<line number="584" hits="1" branch="false"/>
+								<line number="585" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="value" signature="(D)Lcom/google/gson/stream/JsonWriter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="485" hits="0" branch="true" condition-coverage="0% (0/4)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="486" hits="0" branch="false"/>
+								<line number="488" hits="0" branch="false"/>
+								<line number="489" hits="0" branch="false"/>
+								<line number="490" hits="0" branch="false"/>
+								<line number="491" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="value" signature="(J)Lcom/google/gson/stream/JsonWriter;" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="500" hits="0" branch="false"/>
+								<line number="501" hits="0" branch="false"/>
+								<line number="502" hits="0" branch="false"/>
+								<line number="503" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="value" signature="(Ljava/lang/Number;)Lcom/google/gson/stream/JsonWriter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="514" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="515" hits="0" branch="false"/>
+								<line number="518" hits="0" branch="false"/>
+								<line number="519" hits="0" branch="false"/>
+								<line number="520" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="521" hits="0" branch="true" condition-coverage="0% (0/6)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+										<condition number="1" type="jump" coverage="0%"/>
+										<condition number="2" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="522" hits="0" branch="false"/>
+								<line number="524" hits="0" branch="false"/>
+								<line number="525" hits="0" branch="false"/>
+								<line number="526" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="value" signature="(Ljava/lang/String;)Lcom/google/gson/stream/JsonWriter;" line-rate="0.8333333333333334" branch-rate="0.5">
+							<lines>
+								<line number="414" hits="1" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="415" hits="0" branch="false"/>
+								<line number="417" hits="1" branch="false"/>
+								<line number="418" hits="1" branch="false"/>
+								<line number="419" hits="1" branch="false"/>
+								<line number="420" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="value" signature="(Z)Lcom/google/gson/stream/JsonWriter;" line-rate="0.0" branch-rate="0.0">
+							<lines>
+								<line number="465" hits="0" branch="false"/>
+								<line number="466" hits="0" branch="false"/>
+								<line number="467" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+								<line number="468" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="writeDeferredName" signature="()V" line-rate="0.4" branch-rate="0.5">
+							<lines>
+								<line number="400" hits="2" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="401" hits="0" branch="false"/>
+								<line number="402" hits="0" branch="false"/>
+								<line number="403" hits="0" branch="false"/>
+								<line number="405" hits="2" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="145" hits="1" branch="false"/>
+						<line number="146" hits="33" branch="false"/>
+						<line number="147" hits="32" branch="false"/>
+						<line number="149" hits="1" branch="false"/>
+						<line number="150" hits="1" branch="false"/>
+						<line number="151" hits="1" branch="false"/>
+						<line number="152" hits="1" branch="false"/>
+						<line number="153" hits="1" branch="false"/>
+						<line number="154" hits="1" branch="false"/>
+						<line number="155" hits="1" branch="false"/>
+						<line number="156" hits="1" branch="false"/>
+						<line number="157" hits="1" branch="false"/>
+						<line number="158" hits="1" branch="false"/>
+						<line number="159" hits="1" branch="false"/>
+						<line number="160" hits="1" branch="false"/>
+						<line number="161" hits="1" branch="false"/>
+						<line number="162" hits="1" branch="false"/>
+						<line number="167" hits="34" branch="false"/>
+						<line number="168" hits="34" branch="false"/>
+						<line number="170" hits="34" branch="false"/>
+						<line number="182" hits="34" branch="false"/>
+						<line number="190" hits="34" branch="false"/>
+						<line number="197" hits="34" branch="false"/>
+						<line number="198" hits="34" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="199" hits="0" branch="false"/>
+						<line number="201" hits="34" branch="false"/>
+						<line number="202" hits="34" branch="false"/>
+						<line number="213" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="214" hits="0" branch="false"/>
+						<line number="215" hits="0" branch="false"/>
+						<line number="217" hits="0" branch="false"/>
+						<line number="218" hits="0" branch="false"/>
+						<line number="220" hits="0" branch="false"/>
+						<line number="235" hits="3" branch="false"/>
+						<line number="236" hits="3" branch="false"/>
+						<line number="242" hits="6" branch="false"/>
+						<line number="253" hits="0" branch="false"/>
+						<line number="254" hits="0" branch="false"/>
+						<line number="261" hits="0" branch="false"/>
+						<line number="269" hits="1" branch="false"/>
+						<line number="270" hits="1" branch="false"/>
+						<line number="277" hits="1" branch="false"/>
+						<line number="287" hits="1" branch="false"/>
+						<line number="288" hits="1" branch="false"/>
+						<line number="297" hits="1" branch="false"/>
+						<line number="307" hits="0" branch="false"/>
+						<line number="308" hits="0" branch="false"/>
+						<line number="317" hits="0" branch="false"/>
+						<line number="325" hits="1" branch="false"/>
+						<line number="326" hits="1" branch="false"/>
+						<line number="327" hits="1" branch="false"/>
+						<line number="328" hits="1" branch="false"/>
+						<line number="337" hits="1" branch="false"/>
+						<line number="338" hits="1" branch="true" condition-coverage="50% (2/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+								<condition number="1" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="339" hits="0" branch="false"/>
+						<line number="341" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="342" hits="0" branch="false"/>
+						<line number="345" hits="1" branch="false"/>
+						<line number="346" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="347" hits="0" branch="false"/>
+						<line number="349" hits="1" branch="false"/>
+						<line number="350" hits="1" branch="false"/>
+						<line number="354" hits="35" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="355" hits="0" branch="false"/>
+						<line number="356" hits="0" branch="false"/>
+						<line number="357" hits="0" branch="false"/>
+						<line number="359" hits="35" branch="false"/>
+						<line number="360" hits="35" branch="false"/>
+						<line number="366" hits="3" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="367" hits="0" branch="false"/>
+						<line number="369" hits="3" branch="false"/>
+						<line number="376" hits="2" branch="false"/>
+						<line number="377" hits="2" branch="false"/>
+						<line number="386" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="387" hits="0" branch="false"/>
+						<line number="389" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="390" hits="0" branch="false"/>
+						<line number="392" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="393" hits="0" branch="false"/>
+						<line number="395" hits="0" branch="false"/>
+						<line number="396" hits="0" branch="false"/>
+						<line number="400" hits="2" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="401" hits="0" branch="false"/>
+						<line number="402" hits="0" branch="false"/>
+						<line number="403" hits="0" branch="false"/>
+						<line number="405" hits="2" branch="false"/>
+						<line number="414" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="415" hits="0" branch="false"/>
+						<line number="417" hits="1" branch="false"/>
+						<line number="418" hits="1" branch="false"/>
+						<line number="419" hits="1" branch="false"/>
+						<line number="420" hits="1" branch="false"/>
+						<line number="431" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="432" hits="0" branch="false"/>
+						<line number="434" hits="0" branch="false"/>
+						<line number="435" hits="0" branch="false"/>
+						<line number="436" hits="0" branch="false"/>
+						<line number="437" hits="0" branch="false"/>
+						<line number="446" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="447" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="448" hits="0" branch="false"/>
+						<line number="450" hits="0" branch="false"/>
+						<line number="451" hits="0" branch="false"/>
+						<line number="454" hits="0" branch="false"/>
+						<line number="455" hits="0" branch="false"/>
+						<line number="456" hits="0" branch="false"/>
+						<line number="465" hits="0" branch="false"/>
+						<line number="466" hits="0" branch="false"/>
+						<line number="467" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="468" hits="0" branch="false"/>
+						<line number="485" hits="0" branch="true" condition-coverage="0% (0/4)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="486" hits="0" branch="false"/>
+						<line number="488" hits="0" branch="false"/>
+						<line number="489" hits="0" branch="false"/>
+						<line number="490" hits="0" branch="false"/>
+						<line number="491" hits="0" branch="false"/>
+						<line number="500" hits="0" branch="false"/>
+						<line number="501" hits="0" branch="false"/>
+						<line number="502" hits="0" branch="false"/>
+						<line number="503" hits="0" branch="false"/>
+						<line number="514" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="515" hits="0" branch="false"/>
+						<line number="518" hits="0" branch="false"/>
+						<line number="519" hits="0" branch="false"/>
+						<line number="520" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="521" hits="0" branch="true" condition-coverage="0% (0/6)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+								<condition number="2" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="522" hits="0" branch="false"/>
+						<line number="524" hits="0" branch="false"/>
+						<line number="525" hits="0" branch="false"/>
+						<line number="526" hits="0" branch="false"/>
+						<line number="534" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="535" hits="0" branch="false"/>
+						<line number="537" hits="0" branch="false"/>
+						<line number="538" hits="0" branch="false"/>
+						<line number="546" hits="0" branch="false"/>
+						<line number="548" hits="0" branch="false"/>
+						<line number="549" hits="0" branch="true" condition-coverage="0% (0/6)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+								<condition number="1" type="jump" coverage="0%"/>
+								<condition number="2" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="550" hits="0" branch="false"/>
+						<line number="552" hits="0" branch="false"/>
+						<line number="553" hits="0" branch="false"/>
+						<line number="556" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="557" hits="1" branch="false"/>
+						<line number="558" hits="1" branch="false"/>
+						<line number="559" hits="1" branch="false"/>
+						<line number="560" hits="7" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="561" hits="6" branch="false"/>
+						<line number="563" hits="6" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="564" hits="6" branch="false"/>
+						<line number="565" hits="6" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="566" hits="6" branch="false"/>
+						<line number="568" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="569" hits="0" branch="false"/>
+						<line number="570" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="571" hits="0" branch="false"/>
+						<line number="575" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="576" hits="0" branch="false"/>
+						<line number="578" hits="0" branch="false"/>
+						<line number="579" hits="0" branch="false"/>
+						<line number="581" hits="1" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="582" hits="1" branch="false"/>
+						<line number="584" hits="1" branch="false"/>
+						<line number="585" hits="1" branch="false"/>
+						<line number="588" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="589" hits="0" branch="false"/>
+						<line number="592" hits="0" branch="false"/>
+						<line number="593" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="594" hits="0" branch="false"/>
+						<line number="596" hits="0" branch="false"/>
+						<line number="603" hits="0" branch="false"/>
+						<line number="604" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="605" hits="0" branch="false"/>
+						<line number="606" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="607" hits="0" branch="false"/>
+						<line number="609" hits="0" branch="false"/>
+						<line number="610" hits="0" branch="false"/>
+						<line number="611" hits="0" branch="false"/>
+						<line number="620" hits="2" branch="true" condition-coverage="16% (1/6)">
+							<conditions>
+								<condition number="0" type="switch" coverage="16%"/>
+							</conditions>
+						</line>
+						<line number="622" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="623" hits="0" branch="false"/>
+						<line number="628" hits="2" branch="false"/>
+						<line number="629" hits="2" branch="false"/>
+						<line number="632" hits="0" branch="false"/>
+						<line number="633" hits="0" branch="false"/>
+						<line number="634" hits="0" branch="false"/>
+						<line number="637" hits="0" branch="false"/>
+						<line number="638" hits="0" branch="false"/>
+						<line number="639" hits="0" branch="false"/>
+						<line number="642" hits="0" branch="false"/>
+						<line number="643" hits="0" branch="false"/>
+						<line number="644" hits="0" branch="false"/>
+						<line number="647" hits="0" branch="false"/>
+						<line number="649" hits="2" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

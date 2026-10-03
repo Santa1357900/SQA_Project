@@ -1,0 +1,12 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-107-rcko2ju6/Closure-107f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 6
+  - com.google.javascript.jscomp.CommandLineRunnerClaudeTest::testConstructor_booleanFlagExplicitFalse_parsedCorrectly
+  - com.google.javascript.jscomp.CommandLineRunnerClaudeTest::testConstructor_commonJsModulesWithoutEntryModule_configInvalidNoCrash
+  - com.google.javascript.jscomp.CommandLineRunnerClaudeTest::testCreateExterns_defaultExterns_includesDefaultExternsNonEmpty
+  - com.google.javascript.jscomp.CommandLineRunnerClaudeTest::testConstructor_booleanFlagExplicitYes_parsedAsTrue
+  - com.google.javascript.jscomp.CommandLineRunnerClaudeTest::testCreateExterns_useOnlyCustomExterns_returnsEmptyList
+  - com.google.javascript.jscomp.CommandLineRunnerClaudeTest::testGetDefaultExterns_returnsNonEmptyList
+[exit 0]

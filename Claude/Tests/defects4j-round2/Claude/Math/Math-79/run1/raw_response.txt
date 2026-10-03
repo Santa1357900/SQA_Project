@@ -1,0 +1,466 @@
+package org.apache.commons.math.util;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.math.BigDecimal;
+
+public class MathUtilsClaudeTest {
+
+    // addAndCheck(int,int): normal sum returned
+    @Test
+    public void testAddAndCheckInt_normalValues_returnsSum() throws Throwable {
+        assertEquals(12, MathUtils.addAndCheck(5, 7));
+    }
+
+    // addAndCheck(int,int): sum exceeds Integer range -> throws
+    @Test
+    public void testAddAndCheckInt_overflow_throwsArithmeticException() throws Throwable {
+        try {
+            MathUtils.addAndCheck(Integer.MAX_VALUE, 1);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // addAndCheck(long,long): normal sum
+    @Test
+    public void testAddAndCheckLong_normalValues_returnsSum() throws Throwable {
+        assertEquals(12L, MathUtils.addAndCheck(5L, 7L));
+    }
+
+    // addAndCheck(long,long): overflow branch (a>=0,b>=0 positive overflow)
+    @Test
+    public void testAddAndCheckLong_overflow_throwsArithmeticException() throws Throwable {
+        try {
+            MathUtils.addAndCheck(Long.MAX_VALUE, 1L);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // binomialCoefficient: standard combinatorial value
+    @Test
+    public void testBinomialCoefficient_standardValue_correct() throws Throwable {
+        assertEquals(120L, MathUtils.binomialCoefficient(10, 3));
+    }
+
+    // binomialCoefficient: k > n/2 triggers symmetry branch, equals C(n,n-k)
+    @Test
+    public void testBinomialCoefficient_kGreaterThanHalfN_usesSymmetry() throws Throwable {
+        assertEquals(120L, MathUtils.binomialCoefficient(10, 7));
+    }
+
+    // binomialCoefficient: k==0 branch returns 1
+    @Test
+    public void testBinomialCoefficient_kZero_returnsOne() throws Throwable {
+        assertEquals(1L, MathUtils.binomialCoefficient(5, 0));
+    }
+
+    // binomialCoefficient: n < k violates precondition -> IllegalArgumentException
+    @Test
+    public void testBinomialCoefficient_nLessThanK_throwsIllegalArgumentException() throws Throwable {
+        try {
+            MathUtils.binomialCoefficient(3, 5);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // binomialCoefficient: n < 0 violates precondition -> IllegalArgumentException
+    @Test
+    public void testBinomialCoefficient_negativeN_throwsIllegalArgumentException() throws Throwable {
+        try {
+            MathUtils.binomialCoefficient(-1, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // binomialCoefficient: javadoc requires 0<=k<=n; negative k must throw (bug target)
+    @Test
+    public void testBinomialCoefficient_negativeK_throwsIllegalArgumentException() throws Throwable {
+        try {
+            MathUtils.binomialCoefficient(5, -1);
+            fail("expected IllegalArgumentException for k < 0");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // binomialCoefficientDouble: javadoc requires 0<=k<=n; negative k must throw (bug target)
+    @Test
+    public void testBinomialCoefficientDouble_negativeK_throwsIllegalArgumentException() throws Throwable {
+        try {
+            MathUtils.binomialCoefficientDouble(5, -1);
+            fail("expected IllegalArgumentException for k < 0");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // binomialCoefficientDouble: n<67 delegates to exact long computation
+    @Test
+    public void testBinomialCoefficientDouble_standardValue_correct() throws Throwable {
+        assertEquals(120.0, MathUtils.binomialCoefficientDouble(10, 3), 1e-9);
+    }
+
+    // binomialCoefficientLog: javadoc requires 0<=k<=n; negative k must throw (bug target)
+    @Test
+    public void testBinomialCoefficientLog_negativeK_throwsIllegalArgumentException() throws Throwable {
+        try {
+            MathUtils.binomialCoefficientLog(5, -1);
+            fail("expected IllegalArgumentException for k < 0");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // binomialCoefficientLog: n<67 branch equals log of exact coefficient
+    @Test
+    public void testBinomialCoefficientLog_standardValue_correct() throws Throwable {
+        assertEquals(Math.log(120.0), MathUtils.binomialCoefficientLog(10, 3), 1e-9);
+    }
+
+    // compareTo: within eps returns 0
+    @Test
+    public void testCompareTo_withinEps_returnsZero() throws Throwable {
+        assertEquals(0, MathUtils.compareTo(1.0, 1.0, 0.0));
+    }
+
+    // compareTo: x greater than y outside eps returns positive
+    @Test
+    public void testCompareTo_xGreaterY_returnsPositiveOne() throws Throwable {
+        assertEquals(1, MathUtils.compareTo(2.0, 1.0, 0.05));
+    }
+
+    // compareTo: x less than y outside eps returns negative
+    @Test
+    public void testCompareTo_xLessY_returnsNegativeOne() throws Throwable {
+        assertEquals(-1, MathUtils.compareTo(1.0, 2.0, 0.05));
+    }
+
+    // cosh: cosh(0) == 1.0
+    @Test
+    public void testCosh_zero_returnsOne() throws Throwable {
+        assertEquals(1.0, MathUtils.cosh(0.0), 1e-12);
+    }
+
+    // equals(double,double): both NaN considered equal
+    @Test
+    public void testEquals_bothNaN_returnsTrue() throws Throwable {
+        assertTrue(MathUtils.equals(Double.NaN, Double.NaN));
+    }
+
+    // equals(double,double): equal values return true
+    @Test
+    public void testEquals_sameValue_returnsTrue() throws Throwable {
+        assertTrue(MathUtils.equals(3.14, 3.14));
+    }
+
+    // equals(x,y,eps): difference exceeds eps and values not equal -> false
+    @Test
+    public void testEqualsWithEps_outsideRange_returnsFalse() throws Throwable {
+        assertFalse(MathUtils.equals(1.0, 1.2, 0.1));
+    }
+
+    // equals(x,y,eps): difference within eps -> true
+    @Test
+    public void testEqualsWithEps_withinRange_returnsTrue() throws Throwable {
+        assertTrue(MathUtils.equals(1.0, 1.05, 0.1));
+    }
+
+    // equals(x,y,maxUlps): adjacent representable doubles within 1 ulp -> true
+    @Test
+    public void testEqualsWithMaxUlps_adjacentValues_returnsTrue() throws Throwable {
+        double next = MathUtils.nextAfter(1.0, Double.POSITIVE_INFINITY);
+        assertTrue(MathUtils.equals(1.0, next, 1));
+    }
+
+    // equals(x,y,maxUlps): far apart values -> false
+    @Test
+    public void testEqualsWithMaxUlps_farApart_returnsFalse() throws Throwable {
+        assertFalse(MathUtils.equals(1.0, 2.0, 1));
+    }
+
+    // equals(double[],double[]): both null -> true
+    @Test
+    public void testEqualsDoubleArray_bothNull_returnsTrue() throws Throwable {
+        assertTrue(MathUtils.equals((double[]) null, (double[]) null));
+    }
+
+    // equals(double[],double[]): one null -> false
+    @Test
+    public void testEqualsDoubleArray_oneNull_returnsFalse() throws Throwable {
+        assertFalse(MathUtils.equals(new double[] {1.0}, (double[]) null));
+    }
+
+    // equals(double[],double[]): different length -> false
+    @Test
+    public void testEqualsDoubleArray_differentLength_returnsFalse() throws Throwable {
+        assertFalse(MathUtils.equals(new double[] {1.0}, new double[] {1.0, 2.0}));
+    }
+
+    // factorial: 0! == 1
+    @Test
+    public void testFactorial_zero_returnsOne() throws Throwable {
+        assertEquals(1L, MathUtils.factorial(0));
+    }
+
+    // factorial: 5! == 120
+    @Test
+    public void testFactorial_five_returns120() throws Throwable {
+        assertEquals(120L, MathUtils.factorial(5));
+    }
+
+    // factorial: negative n -> IllegalArgumentException
+    @Test
+    public void testFactorial_negative_throwsIllegalArgumentException() throws Throwable {
+        try {
+            MathUtils.factorial(-1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // factorial: n > 20 does not fit in long -> ArithmeticException
+    @Test
+    public void testFactorial_tooLarge_throwsArithmeticException() throws Throwable {
+        try {
+            MathUtils.factorial(21);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // factorialLog: n<21 branch equals log of exact factorial
+    @Test
+    public void testFactorialLog_smallN_matchesLogFactorial() throws Throwable {
+        assertEquals(Math.log(120.0), MathUtils.factorialLog(5), 1e-9);
+    }
+
+    // gcd: standard positive values
+    @Test
+    public void testGcd_basicValue_correct() throws Throwable {
+        assertEquals(6, MathUtils.gcd(12, 18));
+    }
+
+    // gcd: gcd(0,x) == |x| special case
+    @Test
+    public void testGcd_zeroAndX_returnsAbsoluteValue() throws Throwable {
+        assertEquals(5, MathUtils.gcd(0, -5));
+    }
+
+    // gcd: gcd(MIN_VALUE,0) throws ArithmeticException per javadoc
+    @Test
+    public void testGcd_minValueWithZero_throwsArithmeticException() throws Throwable {
+        try {
+            MathUtils.gcd(Integer.MIN_VALUE, 0);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // indicator(double): positive, negative, zero and NaN branches
+    @Test
+    public void testIndicatorDouble_variousSigns_correctValues() throws Throwable {
+        assertEquals(1.0, MathUtils.indicator(5.0), 1e-12);
+        assertEquals(-1.0, MathUtils.indicator(-5.0), 1e-12);
+        assertEquals(1.0, MathUtils.indicator(0.0), 1e-12);
+        assertTrue(Double.isNaN(MathUtils.indicator(Double.NaN)));
+    }
+
+    // lcm: standard positive values
+    @Test
+    public void testLcm_basicValue_correct() throws Throwable {
+        assertEquals(12, MathUtils.lcm(4, 6));
+    }
+
+    // lcm: a==0 special case returns 0
+    @Test
+    public void testLcm_zeroArgument_returnsZero() throws Throwable {
+        assertEquals(0, MathUtils.lcm(0, 5));
+    }
+
+    // lcm: MIN_VALUE with power-of-two n overflows to 2^31 -> ArithmeticException
+    @Test
+    public void testLcm_minValuePowerOfTwo_throwsArithmeticException() throws Throwable {
+        try {
+            MathUtils.lcm(Integer.MIN_VALUE, 2);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // log(base,x): log base 2 of 8 equals 3
+    @Test
+    public void testLog_baseTwoOfEight_returnsThree() throws Throwable {
+        assertEquals(3.0, MathUtils.log(2.0, 8.0), 1e-9);
+    }
+
+    // mulAndCheck(long,long): overflow -> ArithmeticException
+    @Test
+    public void testMulAndCheckLong_overflow_throwsArithmeticException() throws Throwable {
+        try {
+            MathUtils.mulAndCheck(Long.MAX_VALUE, 2L);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // mulAndCheck(int,int): normal product returned
+    @Test
+    public void testMulAndCheckInt_normalValues_returnsProduct() throws Throwable {
+        assertEquals(42, MathUtils.mulAndCheck(6, 7));
+    }
+
+    // normalizeAngle: a==direction endpoint maps to -pi per closed interval contract
+    @Test
+    public void testNormalizeAngle_piWithZeroCenter_returnsNegativePi() throws Throwable {
+        assertEquals(-Math.PI, MathUtils.normalizeAngle(Math.PI, 0.0), 1e-9);
+    }
+
+    // normalizeArray: scales elements proportionally to target sum
+    @Test
+    public void testNormalizeArray_basicScale_correct() throws Throwable {
+        double[] result = MathUtils.normalizeArray(new double[] {1.0, 2.0, 3.0}, 12.0);
+        assertEquals(2.0, result[0], 1e-9);
+        assertEquals(4.0, result[1], 1e-9);
+        assertEquals(6.0, result[2], 1e-9);
+    }
+
+    // normalizeArray: infinite target sum -> IllegalArgumentException
+    @Test
+    public void testNormalizeArray_infiniteTarget_throwsIllegalArgumentException() throws Throwable {
+        try {
+            MathUtils.normalizeArray(new double[] {1.0, 2.0}, Double.POSITIVE_INFINITY);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // normalizeArray: input sums to zero -> ArithmeticException
+    @Test
+    public void testNormalizeArray_zeroSum_throwsArithmeticException() throws Throwable {
+        try {
+            MathUtils.normalizeArray(new double[] {1.0, -1.0}, 5.0);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // normalizeArray: infinite element in input -> ArithmeticException
+    @Test
+    public void testNormalizeArray_infiniteElement_throwsArithmeticException() throws Throwable {
+        try {
+            MathUtils.normalizeArray(new double[] {1.0, Double.POSITIVE_INFINITY}, 5.0);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // round(double,scale): default ROUND_HALF_UP rounds ties away from zero
+    @Test
+    public void testRoundDouble_halfUpTie_roundsAwayFromZero() throws Throwable {
+        assertEquals(3.0, MathUtils.round(2.5, 0), 1e-9);
+    }
+
+    // round(double,scale,method): ROUND_FLOOR on negative value rounds toward -infinity
+    @Test
+    public void testRoundDouble_floorNegative_roundsTowardNegativeInfinity() throws Throwable {
+        assertEquals(-3.0, MathUtils.round(-2.3, 0, BigDecimal.ROUND_FLOOR), 1e-9);
+    }
+
+    // round(float,scale): default ROUND_HALF_UP rounds ties away from zero
+    @Test
+    public void testRoundFloat_halfUpTie_roundsAwayFromZero() throws Throwable {
+        assertEquals(3.0f, MathUtils.round(2.5f, 0), 1e-6f);
+    }
+
+    // round(float,scale,method): invalid rounding method -> IllegalArgumentException
+    @Test
+    public void testRoundFloat_invalidRoundingMethod_throwsIllegalArgumentException() throws Throwable {
+        try {
+            MathUtils.round(1.5f, 0, 999);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // round(float,scale,method): ROUND_UNNECESSARY on inexact value -> ArithmeticException
+    @Test
+    public void testRoundFloat_roundUnnecessaryInexact_throwsArithmeticException() throws Throwable {
+        try {
+            MathUtils.round(1.5f, 0, BigDecimal.ROUND_UNNECESSARY);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // sign(double): positive, negative, zero and NaN branches
+    @Test
+    public void testSignDouble_variousValues_correctValues() throws Throwable {
+        assertEquals(1.0, MathUtils.sign(5.0), 1e-12);
+        assertEquals(-1.0, MathUtils.sign(-5.0), 1e-12);
+        assertEquals(0.0, MathUtils.sign(0.0), 1e-12);
+        assertTrue(Double.isNaN(MathUtils.sign(Double.NaN)));
+    }
+
+    // sinh: sinh(0) == 0.0
+    @Test
+    public void testSinh_zero_returnsZero() throws Throwable {
+        assertEquals(0.0, MathUtils.sinh(0.0), 1e-12);
+    }
+
+    // subAndCheck(int,int): normal difference returned
+    @Test
+    public void testSubAndCheckInt_normalValues_returnsDifference() throws Throwable {
+        assertEquals(2, MathUtils.subAndCheck(5, 3));
+    }
+
+    // subAndCheck(int,int): MIN_VALUE minus positive overflows -> ArithmeticException
+    @Test
+    public void testSubAndCheckInt_overflow_throwsArithmeticException() throws Throwable {
+        try {
+            MathUtils.subAndCheck(Integer.MIN_VALUE, 1);
+            fail("expected ArithmeticException");
+        } catch (ArithmeticException expected) {
+        }
+    }
+
+    // pow(int,int): standard exponentiation
+    @Test
+    public void testPowIntInt_basicValue_correct() throws Throwable {
+        assertEquals(1024, MathUtils.pow(2, 10));
+    }
+
+    // pow(int,int): negative exponent -> IllegalArgumentException
+    @Test
+    public void testPowIntInt_negativeExponent_throwsIllegalArgumentException() throws Throwable {
+        try {
+            MathUtils.pow(2, -1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // distance (L2): classic 3-4-5 triangle
+    @Test
+    public void testDistanceEuclidean_basicValue_correct() throws Throwable {
+        double[] p1 = {0.0, 0.0};
+        double[] p2 = {3.0, 4.0};
+        assertEquals(5.0, MathUtils.distance(p1, p2), 1e-9);
+    }
+
+    // distanceInf (L-infinity): max absolute component difference
+    @Test
+    public void testDistanceInf_basicValue_correct() throws Throwable {
+        double[] p1 = {0.0, 0.0, 0.0};
+        double[] p2 = {1.0, -5.0, 3.0};
+        assertEquals(5.0, MathUtils.distanceInf(p1, p2), 1e-9);
+    }
+
+    // distance1 (L1): sum of absolute differences
+    @Test
+    public void testDistance1_basicValue_correct() throws Throwable {
+        double[] p1 = {0.0, 0.0};
+        double[] p2 = {3.0, 4.0};
+        assertEquals(7.0, MathUtils.distance1(p1, p2), 1e-9);
+    }
+}

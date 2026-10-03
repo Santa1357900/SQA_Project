@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Collections-3-n7n_sq2n/Collections-3b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.collections.CollectionUtilsClaudeTest::testRemoveAll_removesElementsPresentInRemoveCollection
+[exit 0]

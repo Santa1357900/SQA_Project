@@ -1,0 +1,292 @@
+package com.google.javascript.jscomp;
+
+import com.google.common.base.Supplier;
+import com.google.javascript.rhino.Node;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class InlineObjectLiteralsClaudeTest {
+
+  private Compiler compiler;
+
+  @Before
+  public void setUp() throws Throwable {
+    compiler = new Compiler();
+  }
+
+  private Supplier<String> newIdSupplier() {
+    return new Supplier<String>() {
+      private int counter = 0;
+      public String get() {
+        return String.valueOf(counter++);
+      }
+    };
+  }
+
+  private String runInlineObjectLiterals(String js, Supplier<String> supplier) {
+    CompilerOptions options = new CompilerOptions();
+    compiler.compile(SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode("test.js", js), options);
+    Node root = compiler.getRoot();
+    Node externsRoot = root.getFirstChild();
+    Node jsRoot = root.getLastChild();
+    InlineObjectLiterals pass = new InlineObjectLiterals(compiler, supplier);
+    pass.process(externsRoot, jsRoot);
+    return compiler.toSource();
+  }
+
+  private String runInlineObjectLiterals(String js) {
+    return runInlineObjectLiterals(js, newIdSupplier());
+  }
+
+  // Contract: VAR_PREFIX constant used to generate new variable names.
+  @Test
+  public void testVarPrefixConstant_hasExpectedValue() throws Throwable {
+    assertEquals("JSCompiler_object_inline_", InlineObjectLiterals.VAR_PREFIX);
+  }
+
+  // process(): code without any variables completes without throwing.
+  @Test
+  public void testProcess_noVariables_doesNotThrow() throws Throwable {
+    String out = runInlineObjectLiterals("function f() { return 1; }");
+    assertTrue(out.contains("return"));
+  }
+
+  // isInlinableObject: only GETPROP (indirect) refs -> var is split into separate variables.
+  @Test
+  public void testProcess_simpleObjectLiteral_inlinedIntoSeparateVars() throws Throwable {
+    String js = "function f() { var x = {a: 1, b: 2}; return x.a + x.b; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX));
+    assertFalse(out.contains("x.a"));
+    assertFalse(out.contains("x.b"));
+  }
+
+  // computeVarList: generated name follows VAR_PREFIX + key + "_" + supplier id.
+  @Test
+  public void testProcess_generatedVariableName_matchesExpectedPattern() throws Throwable {
+    String js = "function f() { var x = {a: 1}; return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "a_0"));
+  }
+
+  // isInlinableObject: a direct full reference (parent not GETPROP/VAR/ASSIGN) blocks inlining.
+  @Test
+  public void testProcess_fullVariableReference_blocksInlining() throws Throwable {
+    String js = "function f() { var x = {a: 1}; return x; }";
+    String out = runInlineObjectLiterals(js);
+    assertFalse(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // isInlinableObject: x.fn() call target ('this' binding) disables inlining entirely.
+  @Test
+  public void testProcess_callTargetUsage_blocksInlining() throws Throwable {
+    String js = "function f() { var x = {a: function() { return 1; }}; x.a(); }";
+    String out = runInlineObjectLiterals(js);
+    assertFalse(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // isInlinableObject: GETPROP not used as a call target is an allowed indirect reference.
+  @Test
+  public void testProcess_propertyReadNotCallTarget_isInlined() throws Throwable {
+    String js = "function f() { var x = {a: function() { return 1; }}; var g = x.a; g(); }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // isVarInlineForbidden: global variables are excluded from inlining.
+  @Test
+  public void testProcess_globalVariable_notInlined() throws Throwable {
+    String js = "var x = {a: 1}; function f() { return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertFalse(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // isVarInlineForbidden: RenameProperties.RENAME_PROPERTY_FUNCTION_NAME is never inlined.
+  @Test
+  public void testProcess_renamePropertyFunctionName_notInlined() throws Throwable {
+    String name = RenameProperties.RENAME_PROPERTY_FUNCTION_NAME;
+    String js = "function f() { var " + name + " = {a: 1}; return " + name + ".a; }";
+    String out = runInlineObjectLiterals(js);
+    assertFalse(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // isInlinableObject: assigning a non-object-literal value disables inlining.
+  @Test
+  public void testProcess_reassignedToNonObjectLiteral_notInlined() throws Throwable {
+    String js = "function f() { var x = {a: 1}; x = 5; return x; }";
+    String out = runInlineObjectLiterals(js);
+    assertFalse(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // isInlinableObject: self-referential assignment (x = {c: x.a}) must not be inlined.
+  @Test
+  public void testProcess_selfReferentialAssignment_notInlined() throws Throwable {
+    String js = "function f() { var x = {b: 1}; x = {c: x.a}; return x.c; }";
+    String out = runInlineObjectLiterals(js);
+    assertFalse(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // computeVarList: a key accessed but absent from the literal still gets its own variable.
+  @Test
+  public void testProcess_emptyObjectLiteral_propertyAccessStillInlined() throws Throwable {
+    String js = "function f() { var x = {}; return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // splitObject: declaration without initializer followed by a separate object-literal assignment.
+  @Test
+  public void testProcess_declarationWithoutInitializer_thenAssigned_isInlined() throws Throwable {
+    String js = "function f() { var x; x = {a: 1}; return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // computeVarList: keys from multiple object-literal assignments all get separate variables.
+  @Test
+  public void testProcess_multipleAssignmentsDifferentKeys_allKeysGetSeparateVars() throws Throwable {
+    String js = "function f() { var x = {a: 1}; x = {b: 2}; return x.a + x.b; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "a_"));
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "b_"));
+  }
+
+  // isVarInlineForbidden: local variables in nested function scopes are eligible too.
+  @Test
+  public void testProcess_nestedFunctionScopeVariable_isInlined() throws Throwable {
+    String js = "function outer() { function inner() { var x = {a: 1}; "
+        + "return x.a; } return inner; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // isInlinableObject: using the object itself as an array element is a full reference, blocking inlining.
+  @Test
+  public void testProcess_objectUsedAsArrayElement_notInlined() throws Throwable {
+    String js = "function f() { var x = {a: 1}; var result = [x]; return result; }";
+    String out = runInlineObjectLiterals(js);
+    assertFalse(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // The pass only splits a single level; a nested object literal value remains intact.
+  @Test
+  public void testProcess_nestedObjectLiteralValue_notRecursivelySplit() throws Throwable {
+    String js = "function f() { var x = {a: {b: 1}}; return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "a_0"));
+    assertTrue(out.contains("b"));
+  }
+
+  // isInlinableObject: without any object-literal assignment, ret never becomes true.
+  @Test
+  public void testProcess_neverAssignedObjectLiteral_notInlined() throws Throwable {
+    String js = "function f() { var x; return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertFalse(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // isInlinableObject: deeper property chains (x.a.b()) are not treated as a direct call-target risk for x.
+  @Test
+  public void testProcess_chainedPropertyCall_isInlined() throws Throwable {
+    String js = "function f() { var x = {a: {b: function(){return 1;}}}; x.a.b(); }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // A variable declared with an object literal and never referenced elsewhere is still split.
+  @Test
+  public void testProcess_declarationOnlyNeverReferenced_isInlined() throws Throwable {
+    String js = "function f() { var x = {a: 1}; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "a_0"));
+  }
+
+  // Referencing a different variable inside the literal is not flagged as self-referential.
+  @Test
+  public void testProcess_objectLiteralReferencesOtherVariable_isInlined() throws Throwable {
+    String js = "function f() { var y = 5; var x = {a: y}; return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "a_0"));
+  }
+
+  // fillInitialValues/computeVarList: duplicate keys -> one variable, last value wins (JS semantics).
+  @Test
+  public void testProcess_duplicateKeysInObjectLiteral_lastValueWins() throws Throwable {
+    String js = "function f() { var x = {a: 1, a: 2}; return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "a_0"));
+    assertTrue(out.contains("2"));
+  }
+
+  // computeVarList uses a LinkedHashMap: ids increment sequentially in declaration order.
+  @Test
+  public void testProcess_sequentialIdsForMultipleKeys() throws Throwable {
+    String js = "function f() { var x = {a: 1, b: 2}; return x.a + x.b; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "a_0"));
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "b_1"));
+  }
+
+  // Constructor: a custom id supplier's value is embedded verbatim in the generated name.
+  @Test
+  public void testProcess_customSupplierValue_usedInGeneratedName() throws Throwable {
+    Supplier<String> supplier = new Supplier<String>() {
+      public String get() {
+        return "custom";
+      }
+    };
+    String js = "function f() { var x = {a: 1}; return x.a; }";
+    String out = runInlineObjectLiterals(js, supplier);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "a_custom"));
+  }
+
+  // splitObject: variable declared inside an if-block (still function scoped via hoisting).
+  @Test
+  public void testProcess_variableDeclaredInsideIfBlock_isInlined() throws Throwable {
+    String js = "function f(c) { if (c) { var x = {a: 1}; } return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+
+  // process(): running the pass again after inlining is a no-op (nothing left to split).
+  @Test
+  public void testProcess_calledTwice_secondRunNoop() throws Throwable {
+    String js = "function f() { var x = {a: 1}; return x.a; }";
+    CompilerOptions options = new CompilerOptions();
+    compiler.compile(SourceFile.fromCode("externs.js", ""),
+        SourceFile.fromCode("test.js", js), options);
+    Node root = compiler.getRoot();
+    InlineObjectLiterals pass = new InlineObjectLiterals(compiler, newIdSupplier());
+    pass.process(root.getFirstChild(), root.getLastChild());
+    String firstPass = compiler.toSource();
+    pass.process(root.getFirstChild(), root.getLastChild());
+    assertEquals(firstPass, compiler.toSource());
+  }
+
+  // Array-valued property is inlined just like any other value type.
+  @Test
+  public void testProcess_arrayPropertyValue_isInlined() throws Throwable {
+    String js = "function f() { var x = {a: [1,2,3]}; return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "a_0"));
+  }
+
+  // String-valued property is inlined just like any other value type.
+  @Test
+  public void testProcess_stringPropertyValue_isInlined() throws Throwable {
+    String js = "function f() { var x = {a: 'hello'}; return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertTrue(out.contains(InlineObjectLiterals.VAR_PREFIX + "a_0"));
+  }
+
+  // A closure that fully captures x (return x) is a full reference, blocking inlining.
+  @Test
+  public void testProcess_closureCapturingVariableFully_notInlined() throws Throwable {
+    String js = "function f() { var x = {a: function() { return x; }}; return x.a; }";
+    String out = runInlineObjectLiterals(js);
+    assertFalse(out.contains(InlineObjectLiterals.VAR_PREFIX));
+  }
+}

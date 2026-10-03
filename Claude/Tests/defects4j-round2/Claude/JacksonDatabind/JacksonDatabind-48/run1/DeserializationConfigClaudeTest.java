@@ -1,0 +1,422 @@
+package com.fasterxml.jackson.databind;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.text.SimpleDateFormat;
+import java.util.Locale;
+import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicReference;
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.deser.DeserializationProblemHandler;
+import com.fasterxml.jackson.databind.introspect.NopAnnotationIntrospector;
+import com.fasterxml.jackson.databind.introspect.VisibilityChecker;
+import com.fasterxml.jackson.databind.jsontype.TypeDeserializer;
+
+public class DeserializationConfigClaudeTest {
+
+    private ObjectMapper mapper;
+    private DeserializationConfig config;
+
+    public static class SimpleBean {
+        private String name;
+        private int age;
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public int getAge() { return age; }
+        public void setAge(int age) { this.age = age; }
+    }
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
+    public static class RefBase {
+        private int id;
+        public int getId() { return id; }
+        public void setId(int id) { this.id = id; }
+    }
+
+    public static class RefSub extends RefBase {
+        private String extra;
+        public String getExtra() { return extra; }
+        public void setExtra(String extra) { this.extra = extra; }
+    }
+
+    public static class RefHolder {
+        private AtomicReference<RefBase> ref;
+        public AtomicReference<RefBase> getRef() { return ref; }
+        public void setRef(AtomicReference<RefBase> ref) { this.ref = ref; }
+    }
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+        config = mapper.getDeserializationConfig();
+    }
+
+    // ทดสอบค่าเริ่มต้น: nodeFactory ต้องเป็น JsonNodeFactory.instance ตาม constructor
+    @Test
+    public void testDefaultConfig_nodeFactory_isJsonNodeFactoryInstance() throws Throwable {
+        assertSame(JsonNodeFactory.instance, config.getNodeFactory());
+    }
+
+    // ทดสอบค่าเริ่มต้น: ยังไม่มี problem handler ใด ๆ ถูกตั้งค่า
+    @Test
+    public void testDefaultConfig_problemHandlers_isNull() throws Throwable {
+        assertNull(config.getProblemHandlers());
+    }
+
+    // ทดสอบค่า default ของ FAIL_ON_UNKNOWN_PROPERTIES ต้องเปิดใช้งานเป็นค่าเริ่มต้น
+    @Test
+    public void testDefaultConfig_failOnUnknownProperties_enabledByDefault() throws Throwable {
+        assertTrue(config.isEnabled(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES));
+    }
+
+    // ทดสอบค่า default ของ UNWRAP_ROOT_VALUE ต้องปิดเป็นค่าเริ่มต้น
+    @Test
+    public void testDefaultConfig_unwrapRootValue_disabledByDefault() throws Throwable {
+        assertFalse(config.isEnabled(DeserializationFeature.UNWRAP_ROOT_VALUE));
+    }
+
+    // ทดสอบ with(MapperFeature...) เมื่อไม่มี feature ส่งเข้ามา (0 รอบ) ต้องคืน instance เดิม
+    @Test
+    public void testWithMapperFeatureArray_noArgs_returnsSameInstance() throws Throwable {
+        DeserializationConfig c2 = config.with(new MapperFeature[0]);
+        assertSame(config, c2);
+    }
+
+    // ทดสอบ without(MapperFeature...) ปิด USE_ANNOTATIONS ทำให้ getAnnotationIntrospector คืน NopAnnotationIntrospector
+    @Test
+    public void testWithoutMapperFeature_disablesUseAnnotations_annotationIntrospectorIsNop() throws Throwable {
+        DeserializationConfig c2 = config.without(MapperFeature.USE_ANNOTATIONS);
+        assertSame(NopAnnotationIntrospector.instance, c2.getAnnotationIntrospector());
+    }
+
+    // ทดสอบ getAnnotationIntrospector() เมื่อ USE_ANNOTATIONS เปิดอยู่ (default) ต้องไม่ใช่ Nop introspector
+    @Test
+    public void testGetAnnotationIntrospector_defaultEnabled_notNop() throws Throwable {
+        assertNotSame(NopAnnotationIntrospector.instance, config.getAnnotationIntrospector());
+    }
+
+    // ทดสอบ with(MapperFeature, boolean): state=false ปิด feature, state=true เปิดกลับ
+    @Test
+    public void testWithMapperFeatureBooleanState_toggleUseAnnotations() throws Throwable {
+        DeserializationConfig c2 = config.with(MapperFeature.USE_ANNOTATIONS, false);
+        assertSame(NopAnnotationIntrospector.instance, c2.getAnnotationIntrospector());
+        DeserializationConfig c3 = c2.with(MapperFeature.USE_ANNOTATIONS, true);
+        assertNotSame(NopAnnotationIntrospector.instance, c3.getAnnotationIntrospector());
+    }
+
+    // ทดสอบ withRootName(null) เมื่อ rootName เดิมเป็น null อยู่แล้ว ต้องคืน instance เดิม
+    @Test
+    public void testWithRootName_nullWhenAlreadyNull_returnsSameInstance() throws Throwable {
+        assertSame(config, config.withRootName(null));
+    }
+
+    // ทดสอบ withView(Class): ครั้งแรกเปลี่ยนค่าต้องได้ instance ใหม่ ครั้งที่สองด้วย class เดิมต้องได้ instance เดิม    @Test
+    public void testWithView_changesThenIdempotent() throws Throwable {
+        DeserializationConfig c2 = config.withView(String.class);
+        assertNotSame(config, c2);
+        DeserializationConfig c3 = c2.withView(String.class);
+        assertSame(c2, c3);
+    }
+
+    // ทดสอบ with(DateFormat): เรียกซ้ำด้วยค่าเดิมต้องคืน instance เดิม (idempotent)
+    @Test
+    public void testWithDateFormat_idempotent_returnsSameInstance() throws Throwable {
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        DeserializationConfig c2 = config.with(df);
+        DeserializationConfig c3 = c2.with(df);
+        assertSame(c2, c3);
+    }
+
+    // ทดสอบ with(Locale): เรียกซ้ำด้วยค่าเดิมต้องคืน instance เดิม (idempotent)
+    @Test
+    public void testWithLocale_idempotent_returnsSameInstance() throws Throwable {
+        DeserializationConfig c2 = config.with(Locale.CANADA);
+        DeserializationConfig c3 = c2.with(Locale.CANADA);
+        assertSame(c2, c3);
+    }
+
+    // ทดสอบ with(TimeZone): เรียกซ้ำด้วยค่าเดิมต้องคืน instance เดิม (idempotent)
+    @Test
+    public void testWithTimeZone_idempotent_returnsSameInstance() throws Throwable {
+        TimeZone tz = TimeZone.getTimeZone("America/New_York");
+        DeserializationConfig c2 = config.with(tz);
+        DeserializationConfig c3 = c2.with(tz);
+        assertSame(c2, c3);
+    }
+
+    // ทดสอบ with(DeserializationFeature): เปิด UNWRAP_ROOT_VALUE ต้อง isEnabled true โดยไม่กระทบ instance เดิม
+    @Test
+    public void testWithDeserializationFeature_enabling_changesState() throws Throwable {
+        DeserializationConfig c2 = config.with(DeserializationFeature.UNWRAP_ROOT_VALUE);
+        assertTrue(c2.isEnabled(DeserializationFeature.UNWRAP_ROOT_VALUE));
+        assertFalse(config.isEnabled(DeserializationFeature.UNWRAP_ROOT_VALUE));
+    }
+
+    // ทดสอบ with(DeserializationFeature) ที่เปิดอยู่แล้ว (default) ต้องคืน instance เดิม
+    @Test
+    public void testWithDeserializationFeature_noChange_returnsSameInstance() throws Throwable {
+        DeserializationConfig c2 = config.with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        assertSame(config, c2);
+    }
+
+    // ทดสอบ with(first, features...) เปิดหลาย feature พร้อมกัน
+    @Test
+    public void testWithDeserializationFeatureVarargs_enablesAll() throws Throwable {
+        DeserializationConfig c2 = config.with(DeserializationFeature.UNWRAP_ROOT_VALUE,
+                DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+        assertTrue(c2.isEnabled(DeserializationFeature.UNWRAP_ROOT_VALUE));
+        assertTrue(c2.isEnabled(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS));
+    }
+
+    // ทดสอบ withFeatures(DeserializationFeature...) เปิดหลาย feature พร้อมกัน
+    @Test
+    public void testWithFeaturesDeserialization_enablesAll() throws Throwable {
+        DeserializationConfig c2 = config.withFeatures(DeserializationFeature.UNWRAP_ROOT_VALUE,
+                DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY);
+        assertTrue(c2.isEnabled(DeserializationFeature.UNWRAP_ROOT_VALUE));
+        assertTrue(c2.isEnabled(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY));
+    }
+
+    // ทดสอบ without(DeserializationFeature) ปิด FAIL_ON_UNKNOWN_PROPERTIES ที่เปิดเป็น default
+    @Test
+    public void testWithoutDeserializationFeature_disablesFailOnUnknown() throws Throwable {
+        DeserializationConfig c2 = config.without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        assertFalse(c2.isEnabled(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES));
+    }
+
+    // ทดสอบ without(first, features...) ปิดหลาย feature พร้อมกัน
+    @Test
+    public void testWithoutDeserializationFeatureVarargs_disablesAll() throws Throwable {
+        DeserializationConfig withBoth = config.with(DeserializationFeature.UNWRAP_ROOT_VALUE,
+                DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+        DeserializationConfig c2 = withBoth.without(DeserializationFeature.UNWRAP_ROOT_VALUE,
+                DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+        assertFalse(c2.isEnabled(DeserializationFeature.UNWRAP_ROOT_VALUE));
+        assertFalse(c2.isEnabled(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS));
+    }
+
+    // ทดสอบ withoutFeatures(DeserializationFeature...) ด้วย array ว่าง (0 รอบ) ต้องคืน instance เดิม
+    @Test
+    public void testWithoutFeaturesDeserialization_emptyArray_returnsSameInstance() throws Throwable {
+        DeserializationConfig c2 = config.withoutFeatures(new DeserializationFeature[0]);
+        assertSame(config, c2);
+    }
+
+    // ทดสอบ hasDeserializationFeatures(mask): เมื่อทุก feature ใน mask ถูกเปิดอยู่ ต้องคืน true
+    @Test
+    public void testHasDeserializationFeatures_allEnabled_true() throws Throwable {
+        int mask = DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES.getMask();
+        assertTrue(config.hasDeserializationFeatures(mask));
+    }
+
+    // ทดสอบ hasDeserializationFeatures(mask): เมื่อมี feature บางตัวใน mask ไม่ถูกเปิด ต้องคืน false
+    @Test
+    public void testHasDeserializationFeatures_notAllEnabled_false() throws Throwable {
+        int mask = DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES.getMask()
+                | DeserializationFeature.UNWRAP_ROOT_VALUE.getMask();
+        assertFalse(config.hasDeserializationFeatures(mask));
+    }
+
+    // ทดสอบ hasSomeOfFeatures(mask): เมื่อมีอย่างน้อยหนึ่ง feature ใน mask ถูกเปิด ต้องคืน true
+    @Test
+    public void testHasSomeOfFeatures_atLeastOne_true() throws Throwable {
+        int mask = DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES.getMask()
+                | DeserializationFeature.UNWRAP_ROOT_VALUE.getMask();
+        assertTrue(config.hasSomeOfFeatures(mask));
+    }
+
+    // ทดสอบ hasSomeOfFeatures(mask): เมื่อไม่มี feature ใน mask ถูกเปิดเลย ต้องคืน false
+    @Test
+    public void testHasSomeOfFeatures_none_false() throws Throwable {
+        int mask = DeserializationFeature.UNWRAP_ROOT_VALUE.getMask();
+        assertFalse(config.hasSomeOfFeatures(mask));
+    }
+
+    // ทดสอบ getDeserializationFeatures(): bit ของ feature ที่เปิดต้องตรงกับผลของ isEnabled
+    @Test
+    public void testGetDeserializationFeatures_bitConsistentWithIsEnabled() throws Throwable {
+        int features = config.getDeserializationFeatures();
+        int mask = DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES.getMask();
+        assertTrue((features & mask) != 0);
+    }
+
+    // ทดสอบ with(JsonParser.Feature): เปิดใช้งาน feature โดยไม่ขึ้นกับค่า default ของ factory
+    @Test
+    public void testWithJsonParserFeature_enablesRegardlessOfFactory() throws Throwable {
+        JsonFactory factory = new JsonFactory();
+        DeserializationConfig c2 = config.with(JsonParser.Feature.ALLOW_COMMENTS);
+        assertTrue(c2.isEnabled(JsonParser.Feature.ALLOW_COMMENTS, factory));
+    }
+
+    // ทดสอบ without(JsonParser.Feature): ปิดใช้งาน feature แม้ factory จะ enable ไว้เป็นค่า default
+    @Test
+    public void testWithoutJsonParserFeature_disablesRegardlessOfFactory() throws Throwable {
+        JsonFactory factory = new JsonFactory();
+        DeserializationConfig c2 = config.without(JsonParser.Feature.AUTO_CLOSE_SOURCE);
+        assertFalse(c2.isEnabled(JsonParser.Feature.AUTO_CLOSE_SOURCE, factory));
+    }
+
+    // ทดสอบ isEnabled(JsonParser.Feature,factory): เมื่อไม่ถูก override ต้องอ้างอิงค่าจาก factory
+    @Test
+    public void testIsEnabledJsonParserFeature_notOverridden_delegatesToFactory() throws Throwable {
+        JsonFactory factory = new JsonFactory();
+        boolean expected = factory.isEnabled(JsonParser.Feature.ALLOW_COMMENTS);
+        assertEquals(expected, config.isEnabled(JsonParser.Feature.ALLOW_COMMENTS, factory));
+    }
+
+    // ทดสอบ withoutFeatures(JsonParser.Feature...): ปิดใช้งานได้หลายค่าพร้อมกัน
+    @Test
+    public void testWithoutFeaturesJsonParserFeature_disablesMultiple() throws Throwable {
+        JsonFactory factory = new JsonFactory();
+        DeserializationConfig c2 = config.withoutFeatures(
+                JsonParser.Feature.AUTO_CLOSE_SOURCE, JsonParser.Feature.ALLOW_COMMENTS);
+        assertFalse(c2.isEnabled(JsonParser.Feature.AUTO_CLOSE_SOURCE, factory));
+        assertFalse(c2.isEnabled(JsonParser.Feature.ALLOW_COMMENTS, factory));
+    }
+
+    // ทดสอบ with(JsonNodeFactory): ถ้าเป็น instance เดิม ต้องคืน config เดิม (this)
+    @Test
+    public void testWithJsonNodeFactory_sameInstance_returnsSameConfig() throws Throwable {
+        DeserializationConfig c2 = config.with(JsonNodeFactory.instance);
+        assertSame(config, c2);
+    }
+
+    // ทดสอบ with(JsonNodeFactory): ถ้าต่างจากเดิม (null) ต้องสร้าง config ใหม่และเก็บค่าที่ส่งเข้ามา
+    @Test
+    public void testWithJsonNodeFactory_nullFactory_createsNewConfigWithNullFactory() throws Throwable {
+        DeserializationConfig c2 = config.with((JsonNodeFactory) null);
+        assertNull(c2.getNodeFactory());
+    }
+
+    // ทดสอบ withHandler: เพิ่ม handler ใหม่ทำให้ problemHandlers ไม่ null และเพิ่มซ้ำต้องคืน instance เดิม
+    @Test
+    public void testWithHandler_addAndIdempotent() throws Throwable {
+        DeserializationProblemHandler handler = new DeserializationProblemHandler() { };
+        DeserializationConfig c2 = config.withHandler(handler);
+        assertNotNull(c2.getProblemHandlers());
+        DeserializationConfig c3 = c2.withHandler(handler);
+        assertSame(c2, c3);
+    }
+
+    // ทดสอบ withNoProblemHandlers: เมื่อไม่มี handler อยู่แล้ว ต้องคืน instance เดิม
+    @Test
+    public void testWithNoProblemHandlers_default_returnsSameInstance() throws Throwable {
+        assertSame(config, config.withNoProblemHandlers());
+    }
+
+    // ทดสอบ withNoProblemHandlers: หลังเพิ่ม handler แล้วเรียกต้องล้างรายการ handler ทั้งหมด
+    @Test
+    public void testWithNoProblemHandlers_afterAdding_clearsHandlers() throws Throwable {
+        DeserializationProblemHandler handler = new DeserializationProblemHandler() { };
+        DeserializationConfig c2 = config.withHandler(handler);
+        DeserializationConfig c3 = c2.withNoProblemHandlers();
+        assertNull(c3.getProblemHandlers());
+    }
+
+    // ทดสอบ initialize(JsonParser): ต้อง override parser feature ตามค่าที่ตั้งไว้ใน config
+    @Test
+    public void testInitialize_appliesParserFeatureOverrides() throws Throwable {
+        JsonFactory factory = new JsonFactory();
+        JsonParser p = factory.createParser("{}");
+        DeserializationConfig c2 = config.with(JsonParser.Feature.ALLOW_COMMENTS);
+        c2.initialize(p);
+        assertTrue(p.isEnabled(JsonParser.Feature.ALLOW_COMMENTS));
+        p.close();
+    }
+
+    // ทดสอบ introspectClassAnnotations และ introspectDirectClassAnnotations คืนค่า BeanDescription ที่มี classInfo
+    @Test
+    public void testIntrospectClassAnnotationsAndDirect_returnNonNullBeanDescription() throws Throwable {
+        JavaType type = mapper.constructType(SimpleBean.class);
+        BeanDescription bean = config.introspectClassAnnotations(type);
+        BeanDescription directBean = config.introspectDirectClassAnnotations(type);
+        assertNotNull(bean.getClassInfo());
+        assertNotNull(directBean.getClassInfo());
+    }
+
+    // ทดสอบ getDefaultPropertyInclusion(): ค่าที่คืนต้องเป็น reference เดียวกันไม่ว่าจะระบุ class หรือไม่
+    @Test
+    public void testGetDefaultPropertyInclusion_sameReferenceForAnyClass() throws Throwable {
+        JsonInclude.Value v1 = config.getDefaultPropertyInclusion();
+        JsonInclude.Value v2 = config.getDefaultPropertyInclusion(SimpleBean.class);
+        assertSame(v1, v2);
+    }
+
+    // ทดสอบ getDefaultPropertyFormat(Class): ค่าที่คืนต้องเป็น reference เดียวกันสำหรับทุก class
+    @Test
+    public void testGetDefaultPropertyFormat_sameReferenceForAnyClass() throws Throwable {
+        JsonFormat.Value f1 = config.getDefaultPropertyFormat(String.class);
+        JsonFormat.Value f2 = config.getDefaultPropertyFormat(SimpleBean.class);
+        assertSame(f1, f2);
+    }
+
+    // ทดสอบ useRootWrapping(): default rootName เป็น null ต้องอ้างอิงตาม UNWRAP_ROOT_VALUE feature
+    @Test
+    public void testUseRootWrapping_defaultAndToggle() throws Throwable {
+        assertFalse(config.useRootWrapping());
+        DeserializationConfig c2 = config.with(DeserializationFeature.UNWRAP_ROOT_VALUE);
+        assertTrue(c2.useRootWrapping());
+    }
+
+    // ทดสอบ getDefaultVisibilityChecker(): ต้องคืนค่าที่ไม่เป็น null เสมอ
+    @Test
+    public void testGetDefaultVisibilityChecker_notNull() throws Throwable {
+        VisibilityChecker<?> checker = config.getDefaultVisibilityChecker();
+        assertNotNull(checker);
+    }
+
+    // ทดสอบ introspect(JavaType): คืนค่า BeanDescription ที่ไม่เป็น null สำหรับ POJO ปกติ
+    @Test
+    public void testIntrospect_returnsNonNullBeanDescription() throws Throwable {
+        JavaType type = mapper.constructType(SimpleBean.class);
+        BeanDescription bean = config.introspect(type);
+        assertNotNull(bean);
+        assertNotNull(bean.getClassInfo());
+    }
+
+    // ทดสอบ introspectForCreation และ introspectForBuilder คืนค่า BeanDescription ที่ไม่เป็น null
+    @Test
+    public void testIntrospectForCreationAndForBuilder_returnNonNullBeanDescription() throws Throwable {
+        JavaType type = mapper.constructType(SimpleBean.class);
+        BeanDescription creationBean = config.introspectForCreation(type);
+        BeanDescription builderBean = config.introspectForBuilder(type);
+        assertNotNull(creationBean);
+        assertNotNull(builderBean);
+    }
+
+    // ทดสอบ findTypeDeserializer: เมื่อไม่มี @JsonTypeInfo กำกับ type ต้องคืนค่า null ตาม javadoc
+    @Test
+    public void testFindTypeDeserializer_noTypeInfoConfigured_returnsNull() throws Throwable {
+        JavaType type = mapper.constructType(SimpleBean.class);
+        TypeDeserializer td = config.findTypeDeserializer(type);
+        assertNull(td);
+    }
+
+    // ทดสอบ findTypeDeserializer: เมื่อมี @JsonTypeInfo กำกับ type โดยตรง ต้องคืนค่า TypeDeserializer ที่ไม่เป็น null
+    @Test
+    public void testFindTypeDeserializer_typeInfoConfiguredDirectly_returnsNonNull() throws Throwable {
+        JavaType type = mapper.constructType(RefBase.class);
+        TypeDeserializer td = config.findTypeDeserializer(type);
+        assertNotNull(td);
+    }
+
+    // ทดสอบตามสัญญา javadoc ของ findTypeDeserializer: ต้อง resolve polymorphic subtype ภายใน AtomicReference ได้ถูกต้อง
+    @Test
+    public void testReadValue_atomicReferencePolymorphicContent_resolvesActualSubtype() throws Throwable {
+        String json = "{\"ref\":{\"@class\":\"" + RefSub.class.getName()
+                + "\",\"id\":1,\"extra\":\"hello\"}}";
+        RefHolder holder = mapper.readValue(json, RefHolder.class);
+        assertNotNull(holder.getRef());
+        assertTrue(holder.getRef().get() instanceof RefSub);
+        RefSub sub = (RefSub) holder.getRef().get();
+        assertEquals("hello", sub.getExtra());
+    }
+}

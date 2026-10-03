@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithms": {
+    "Claude": {
+      "selected_unique_bugs": 854,
+      "evaluated_unique_bugs": 697,
+      "detected_unique_bugs": 191,
+      "unknown_outcome_bugs": 157,
+      "fault_detection_rate": 0.274,
+      "complete_runs": 697,
+      "mean_test_coverage_ratio": 0.7873,
+      "mean_line_coverage_ratio": 0.7261,
+      "mean_branch_coverage_ratio": 0.6389,
+      "mean_generation_seconds": 363.4249,
+      "mean_total_seconds": 464.0624,
+      "status_breakdown": {
+        "complete": 697,
+        "no_valid_tests": 153,
+        "timeout": 1,
+        "validation_failed": 3
+      },
+      "model": "claude-sonnet-5",
+      "effort": "high"
+    }
+  }
+}

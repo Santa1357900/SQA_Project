@@ -1,0 +1,277 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import java.util.ArrayList;
+import java.util.List;
+
+public class PeepholeSubstituteAlternateSyntaxClaudeTest {
+
+  private String compile(String js) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setFoldConstants(true);
+    List<SourceFile> externs = new ArrayList<SourceFile>();
+    List<SourceFile> inputs = new ArrayList<SourceFile>();
+    inputs.add(SourceFile.fromCode("test.js", js));
+    Result result = compiler.compile(externs, inputs, options);
+    assertTrue(result.success);
+    return compiler.toSource();
+  }
+
+  // tryReduceReturn: NAME "undefined" -> return value removed
+  @Test
+  public void testTryReduceReturn_undefinedName_removesReturnValue() throws Throwable {
+    String out = compile("function f(){return undefined;}");
+    assertFalse(out.contains("undefined"));
+  }
+
+  // tryReduceReturn: VOID with no-side-effect operand (0) -> return value removed
+  @Test
+  public void testTryReduceReturn_voidZeroNoSideEffect_removesReturnValue() throws Throwable {
+    String out = compile("function f(){return void 0;}");
+    assertFalse(out.contains("void"));
+  }
+
+  // tryReduceReturn: VOID with side-effecting operand -> call must be preserved
+  @Test
+  public void testTryReduceReturn_voidCallWithSideEffect_keepsCall() throws Throwable {
+    String out = compile("function f(){return void foo();}");
+    assertTrue(out.contains("foo()"));
+  }
+
+  // tryReduceReturn: default case (NUMBER) -> unchanged
+  @Test
+  public void testTryReduceReturn_numberLiteral_unchanged() throws Throwable {
+    String out = compile("function f(){return 1;}");
+    assertTrue(out.contains("return 1"));
+  }
+
+  // tryMinimizeNot: EQ -> NE
+  @Test
+  public void testTryMinimizeNot_eq_toNe() throws Throwable {
+    String out = compile("r=!(a==b);");
+    assertTrue(out.contains("!="));
+    assertFalse(out.contains("=="));
+  }
+
+  // tryMinimizeNot: NE -> EQ
+  @Test
+  public void testTryMinimizeNot_ne_toEq() throws Throwable {
+    String out = compile("r=!(a!=b);");
+    assertTrue(out.contains("a==b"));
+  }
+
+  // tryMinimizeNot: SHEQ -> SHNE
+  @Test
+  public void testTryMinimizeNot_sheq_toShne() throws Throwable {
+    String out = compile("r=!(a===b);");
+    assertTrue(out.contains("!=="));
+    assertFalse(out.contains("==="));
+  }
+
+  // tryMinimizeNot: SHNE -> SHEQ
+  @Test
+  public void testTryMinimizeNot_shne_toSheq() throws Throwable {
+    String out = compile("r=!(a!==b);");
+    assertTrue(out.contains("==="));
+    assertFalse(out.contains("!=="));
+  }
+
+  // tryMinimizeNot: LT is not handled -> NOT and comparison both remain
+  @Test
+  public void testTryMinimizeNot_lt_unchanged() throws Throwable {
+    String out = compile("r=!(a<b);");
+    assertTrue(out.contains("!"));
+    assertTrue(out.contains("<"));
+  }
+
+  // tryMinimizeIf: if(x)foo(); -> x&&foo();
+  @Test
+  public void testOptimizeSubtree_ifThenOnly_toAnd() throws Throwable {
+    String out = compile("if(x)foo();");
+    assertTrue(out.contains("&&"));
+    assertFalse(out.contains("if"));
+  }
+
+  // tryMinimizeIf: if(!x)foo(); -> x||foo();
+  @Test
+  public void testOptimizeSubtree_ifNotThenOnly_toOr() throws Throwable {
+    String out = compile("if(!x)foo();");
+    assertTrue(out.contains("||"));
+    assertFalse(out.contains("if"));
+  }
+
+  // tryMinimizeIf: if(x)foo();else bar(); -> x?foo():bar();
+  @Test
+  public void testTryMinimizeIf_thenElseCalls_toHook() throws Throwable {
+    String out = compile("if(x){foo();}else{bar();}");
+    assertTrue(out.contains("?"));
+    assertTrue(out.contains("foo()"));
+    assertTrue(out.contains("bar()"));
+    assertFalse(out.contains("if"));
+  }
+
+  // tryMinimizeIf: if(x)a=1;else a=2; -> a=x?1:2;
+  @Test
+  public void testTryMinimizeIf_thenElseAssign_toHook() throws Throwable {
+    String out = compile("if(x){a=1;}else{a=2;}");
+    assertTrue(out.contains("?"));
+    assertTrue(out.contains("a="));
+    assertFalse(out.contains("if"));
+  }
+
+  // tryMinimizeIf: if(x)return 1;else return 2; -> return x?1:2;
+  @Test
+  public void testTryMinimizeIf_returnBranches_toHookReturn() throws Throwable {
+    String out = compile("function f(){if(x){return 1;}else{return 2;}}");
+    assertTrue(out.contains("return"));
+    assertTrue(out.contains("?"));
+    assertFalse(out.contains("if"));
+  }
+
+  // tryMinimizeIf: if(!x)foo();else bar(); -> negation removed, both branches preserved
+  @Test
+  public void testTryMinimizeIf_notWithElse_swapsBranches() throws Throwable {
+    String out = compile("if(!x){foo();}else{bar();}");
+    assertFalse(out.contains("!x"));
+    assertTrue(out.contains("foo()"));
+    assertTrue(out.contains("bar()"));
+  }
+
+  // tryMinimizeIf: property assignment in expression blocks the folding
+  @Test
+  public void testTryMinimizeIf_propertyAssignment_keepsIf() throws Throwable {
+    String out = compile("if(x){a.b=1;}");
+    assertTrue(out.contains("if"));
+  }
+
+  // tryMinimizeIf: if(x)var y=1;else y=2; -> var y=x?1:2;
+  @Test
+  public void testTryMinimizeIf_varThenAssignElse_combinesToVarHook() throws Throwable {
+    String out = compile("if(x){var y=1;}else{y=2;}");
+    assertTrue(out.contains("var y="));
+    assertTrue(out.contains("?"));
+    assertFalse(out.contains("if"));
+  }
+
+  // tryMinimizeIf: if(x)y=1;else var y=2; -> var y=x?1:2;
+  @Test
+  public void testTryMinimizeIf_assignThenVarElse_combinesToVarHook() throws Throwable {
+    String out = compile("if(x){y=1;}else{var y=2;}");
+    assertTrue(out.contains("var y="));
+    assertTrue(out.contains("?"));
+    assertFalse(out.contains("if"));
+  }
+
+  // tryRemoveRepeatedStatements: common tail call moved out of both branches
+  @Test
+  public void testTryRemoveRepeatedStatements_commonTailMovedOut() throws Throwable {
+    String out = compile("if(x){a=1;c();}else{b=1;c();}");
+    assertTrue(out.contains("a=1"));
+    assertTrue(out.contains("b=1"));
+    assertEquals(out.indexOf("c()"), out.lastIndexOf("c()"));
+  }
+
+  // tryMinimizeCondition: !!x -> x
+  @Test
+  public void testTryMinimizeCondition_doubleNot_removesBoth() throws Throwable {
+    String out = compile("if(!!x)foo();");
+    assertTrue(out.contains("&&"));
+    assertFalse(out.contains("!"));
+  }
+
+  // tryMinimizeCondition: !(!a&&!b) -> a||b (De Morgan)
+  @Test
+  public void testTryMinimizeCondition_notAndBothNegated_deMorganToOr() throws Throwable {
+    String out = compile("if(!(!a&&!b))foo();");
+    assertTrue(out.contains("||"));
+    assertFalse(out.contains("!"));
+    assertTrue(out.contains("foo()"));
+  }
+
+  // tryMinimizeCondition: x||false -> x
+  @Test
+  public void testTryMinimizeCondition_orFalseRight_simplifiesToLeft() throws Throwable {
+    String out = compile("if(x||false)foo();");
+    assertTrue(out.contains("&&"));
+    assertFalse(out.contains("false"));
+    assertFalse(out.contains("||"));
+  }
+
+  // tryMinimizeCondition: x&&true -> x
+  @Test
+  public void testTryMinimizeCondition_andTrueRight_simplifiesToLeft() throws Throwable {
+    String out = compile("if(x&&true)foo();");
+    assertTrue(out.contains("&&"));
+    assertFalse(out.contains("true"));
+  }
+
+  // tryMinimizeCondition: x||true -> true (side-effect-free left dropped, call kept)
+  @Test
+  public void testTryMinimizeCondition_orTrueRight_dropsCondition() throws Throwable {
+    String out = compile("if(x||true)foo();");
+    assertTrue(out.contains("foo()"));
+    assertFalse(out.contains("||"));
+  }
+
+  // tryMinimizeCondition HOOK: x?true:false -> x
+  @Test
+  public void testTryMinimizeCondition_hookTrueFalse_simplifiesToCondition() throws Throwable {
+    String out = compile("if(x?true:false)foo();");
+    assertTrue(out.contains("&&"));
+    assertFalse(out.contains("?"));
+    assertFalse(out.contains("true"));
+  }
+
+  // tryMinimizeCondition HOOK: x?false:true -> !x -> (via if) x||foo();
+  @Test
+  public void testTryMinimizeCondition_hookFalseTrue_negatesCondition() throws Throwable {
+    String out = compile("if(x?false:true)foo();");
+    assertTrue(out.contains("||"));
+    assertFalse(out.contains("?"));
+    assertFalse(out.contains("!"));
+  }
+
+  // tryMinimizeCondition HOOK: x?true:y -> x||y
+  @Test
+  public void testTryMinimizeCondition_hookTrueElse_toOr() throws Throwable {
+    String out = compile("if(x?true:y)foo();");
+    assertTrue(out.contains("||"));
+    assertTrue(out.contains("foo()"));
+    assertFalse(out.contains("true"));
+  }
+
+  // tryMinimizeCondition HOOK: x?y:false -> x&&y
+  @Test
+  public void testTryMinimizeCondition_hookThenFalse_toAnd() throws Throwable {
+    String out = compile("if(x?y:false)foo();");
+    assertTrue(out.contains("&&"));
+    assertFalse(out.contains("if"));
+    assertFalse(out.contains("false"));
+  }
+
+  // optimizeSubtree WHILE: while(true) -> while(1)
+  @Test
+  public void testOptimizeSubtree_whileTrueLiteral_toWhile1() throws Throwable {
+    String out = compile("while(true){foo();}");
+    assertFalse(out.contains("true"));
+    assertTrue(out.contains("1"));
+  }
+
+  // optimizeSubtree FOR: for(;true;) -> for(;1;)
+  @Test
+  public void testOptimizeSubtree_forConditionTrue_toFor1() throws Throwable {
+    String out = compile("for(;true;){foo();}");
+    assertFalse(out.contains("true"));
+    assertTrue(out.contains("foo()"));
+  }
+
+  // optimizeSubtree FOR-IN: condition expression must not be replaced
+  @Test
+  public void testOptimizeSubtree_forIn_conditionNotTouched() throws Throwable {
+    String out = compile("for(a in b){foo();}");
+    assertTrue(out.contains("in"));
+    assertTrue(out.contains("foo()"));
+  }
+}

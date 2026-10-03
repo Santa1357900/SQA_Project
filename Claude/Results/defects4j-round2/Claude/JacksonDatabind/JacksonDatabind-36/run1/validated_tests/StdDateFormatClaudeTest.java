@@ -1,0 +1,320 @@
+package com.fasterxml.jackson.databind.util;
+
+import java.text.DateFormat;
+import java.text.FieldPosition;
+import java.text.ParseException;
+import java.text.ParsePosition;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
+
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+public class StdDateFormatClaudeTest {
+
+    private Date utcDate(int year, int month, int day, int hour, int minute, int second, int millis) {
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        cal.clear();
+        cal.set(year, month, day, hour, minute, second);
+        cal.set(Calendar.MILLISECOND, millis);
+        return cal.getTime();
+    }
+
+    // default constructor: locale is US, timezone field left unset (null)
+    @Test
+    public void testDefaultConstructor_localeIsUSAndTimezoneNull() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        assertEquals(Locale.US, sdf._locale);
+        assertNull(sdf._timezone);
+    }
+
+    // deprecated constructor(tz, loc) stores both fields directly
+    @Test
+    public void testDeprecatedConstructor_setsTimezoneAndLocale() throws Throwable {
+        TimeZone tz = TimeZone.getTimeZone("America/Los_Angeles");
+        StdDateFormat sdf = new StdDateFormat(tz, Locale.GERMANY);
+        assertEquals(tz, sdf._timezone);
+        assertEquals(Locale.GERMANY, sdf._locale);
+    }
+
+    // static getDefaultTimeZone must be UTC (Jackson 2.7+)
+    @Test
+    public void testGetDefaultTimeZone_returnsUTC() throws Throwable {
+        assertEquals(TimeZone.getTimeZone("UTC"), StdDateFormat.getDefaultTimeZone());
+    }
+
+    // withTimeZone(null) substitutes default UTC tz and yields a new instance
+    @Test
+    public void testWithTimeZone_nullArgument_usesDefaultUTCNewInstance() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        StdDateFormat result = sdf.withTimeZone(null);
+        assertNotSame(sdf, result);
+        assertEquals(StdDateFormat.getDefaultTimeZone(), result.getTimeZone());
+    }
+
+    // withTimeZone with an equal (but different object) timezone returns same instance
+    @Test
+    public void testWithTimeZone_sameTimezoneInstance_returnsSameReference() throws Throwable {
+        StdDateFormat sdf1 = new StdDateFormat().withTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
+        StdDateFormat sdf2 = sdf1.withTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
+        assertSame(sdf1, sdf2);
+    }
+
+    // withTimeZone with a genuinely different timezone creates new instance
+    @Test
+    public void testWithTimeZone_differentTimezone_returnsNewInstanceWithTimezone() throws Throwable {
+        StdDateFormat sdf1 = new StdDateFormat();
+        TimeZone la = TimeZone.getTimeZone("America/Los_Angeles");
+        StdDateFormat sdf2 = sdf1.withTimeZone(la);
+        assertNotSame(sdf1, sdf2);
+        assertEquals(la, sdf2.getTimeZone());
+    }
+
+    // withLocale same locale (US) returns same reference
+    @Test
+    public void testWithLocale_sameLocale_returnsSameReference() throws Throwable {
+        StdDateFormat sdf1 = new StdDateFormat();
+        StdDateFormat sdf2 = sdf1.withLocale(Locale.US);
+        assertSame(sdf1, sdf2);
+    }
+
+    // withLocale different locale returns new instance with that locale
+    @Test
+    public void testWithLocale_differentLocale_returnsNewInstanceWithLocale() throws Throwable {
+        StdDateFormat sdf1 = new StdDateFormat();
+        StdDateFormat sdf2 = sdf1.withLocale(Locale.GERMANY);
+        assertNotSame(sdf1, sdf2);
+        assertEquals(Locale.GERMANY, sdf2._locale);
+    }
+
+    // clone() returns a distinct instance preserving timezone/locale config
+    @Test
+    public void testClone_returnsDistinctInstanceWithSameConfig() throws Throwable {
+        StdDateFormat sdf1 = new StdDateFormat().withTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
+        StdDateFormat cloned = sdf1.clone();
+        assertNotSame(sdf1, cloned);
+        assertEquals(sdf1.getTimeZone(), cloned.getTimeZone());
+        assertEquals(sdf1._locale, cloned._locale);
+    }
+
+    // static getISO8601Format(tz, loc) produces correct ISO-8601 string for epoch
+    @Test
+    public void testGetISO8601Format_formatsEpochCorrectly() throws Throwable {
+        DateFormat df = StdDateFormat.getISO8601Format(TimeZone.getTimeZone("UTC"), Locale.US);
+        assertEquals("1970-01-01T00:00:00.000+0000", df.format(new Date(0)));
+    }
+
+    // deprecated overload getISO8601Format(tz) behaves the same
+    @Test
+    public void testGetISO8601FormatDeprecated_formatsEpochCorrectly() throws Throwable {
+        DateFormat df = StdDateFormat.getISO8601Format(TimeZone.getTimeZone("UTC"));
+        assertEquals("1970-01-01T00:00:00.000+0000", df.format(new Date(0)));
+    }
+
+    // static getRFC1123Format(tz, loc) produces correct RFC-1123 string for epoch
+    @Test
+    public void testGetRFC1123Format_formatsEpochCorrectly() throws Throwable {
+        DateFormat df = StdDateFormat.getRFC1123Format(TimeZone.getTimeZone("GMT"), Locale.US);
+        assertEquals("Thu, 01 Jan 1970 00:00:00 GMT", df.format(new Date(0)));
+    }
+
+    // deprecated overload getRFC1123Format(tz) behaves the same
+    @Test
+    public void testGetRFC1123FormatDeprecated_formatsEpochCorrectly() throws Throwable {
+        DateFormat df = StdDateFormat.getRFC1123Format(TimeZone.getTimeZone("GMT"));
+        assertEquals("Thu, 01 Jan 1970 00:00:00 GMT", df.format(new Date(0)));
+    }
+
+    // getTimeZone on default (unconfigured) instance returns null field value
+    @Test
+    public void testGetTimeZone_defaultInstance_isNull() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        assertNull(sdf.getTimeZone());
+    }
+
+    // setTimeZone updates the timezone that getTimeZone reports
+    @Test
+    public void testSetTimeZone_updatesTimezone() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        TimeZone la = TimeZone.getTimeZone("America/Los_Angeles");
+        sdf.setTimeZone(la);
+        assertEquals(la, sdf.getTimeZone());
+    }
+
+    // isLenient() default (no explicit setting) must be true per contract
+    @Test
+    public void testIsLenient_defaultIsTrue() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        assertTrue(sdf.isLenient());
+    }
+
+    // DateFormat contract: after setLenient(false), isLenient() must report false
+    @Test
+    public void testSetLenient_false_thenIsLenientReturnsFalse() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        sdf.setLenient(false);
+        assertFalse(sdf.isLenient());
+    }
+
+    // plain date "yyyy-MM-dd" branch (len<=10, trailing digit) -> midnight UTC
+    @Test
+    public void testParse_plainDate_returnsMidnightUTC() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        Date expected = utcDate(2001, Calendar.JULY, 4, 0, 0, 0, 0);
+        assertEquals(expected, sdf.parse("2001-07-04"));
+    }
+
+    // trailing 'Z' branch with full milliseconds present
+    @Test
+    public void testParse_isoWithZSuffix_parsesCorrectly() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        Date expected = utcDate(2001, Calendar.JULY, 4, 12, 8, 56, 235);
+        assertEquals(expected, sdf.parse("2001-07-04T12:08:56.235Z"));
+    }
+
+    // explicit zero offset "+0000" (hasTimeZone true, no colon to strip)
+    @Test
+    public void testParse_isoWithZeroOffset_parsesCorrectly() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        Date expected = utcDate(2001, Calendar.JULY, 4, 12, 8, 56, 235);
+        assertEquals(expected, sdf.parse("2001-07-04T12:08:56.235+0000"));
+    }
+
+    // colon offset "+00:00" branch (colon stripped before parsing)
+    @Test
+    public void testParse_isoWithColonOffset_parsesCorrectly() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        Date expected = utcDate(2001, Calendar.JULY, 4, 12, 8, 56, 235);
+        assertEquals(expected, sdf.parse("2001-07-04T12:08:56.235+00:00"));
+    }
+
+    // missing milliseconds branch defaults millis to 0
+    @Test
+    public void testParse_isoMissingMillis_defaultsToZero() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        Date expected = utcDate(2001, Calendar.JULY, 4, 12, 8, 56, 0);
+        assertEquals(expected, sdf.parse("2001-07-04T12:08:56+0000"));
+    }
+
+    // missing seconds branch (ISO-8601 allows omitting seconds)
+    @Test
+    public void testParse_isoMissingSeconds_defaultsToZero() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        Date expected = utcDate(2001, Calendar.JULY, 4, 12, 8, 0, 0);
+        assertEquals(expected, sdf.parse("2001-07-04T12:08+0000"));
+    }
+
+    // "missing minutes" offset branch: "+07" appended with "00"
+    @Test
+    public void testParse_isoWithHourOnlyOffset_parsesCorrectly() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        Date expected = utcDate(2001, Calendar.JULY, 4, 5, 8, 56, 235);
+        assertEquals(expected, sdf.parse("2001-07-04T12:08:56.235+07"));
+    }
+
+    // RFC-1123 fallback branch via public parse(String)
+    @Test
+    public void testParse_rfc1123_parsesCorrectly() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        Date expected = utcDate(2000, Calendar.JANUARY, 1, 0, 0, 0, 0);
+        assertEquals(expected, sdf.parse("Sat, 01 Jan 2000 00:00:00 GMT"));
+    }
+
+    // purely numeric, non-negative timestamp branch
+    @Test
+    public void testParse_numericTimestampPositive_parsesAsEpochMillis() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        assertEquals(new Date(0), sdf.parse("0"));
+    }
+
+    // negative numeric timestamp branch (leading '-')
+    @Test
+    public void testParse_numericTimestampNegative_parsesAsEpochMillis() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        assertEquals(new Date(-1000), sdf.parse("-1000"));
+    }
+
+    // unparsable string falls through all formats -> ParseException
+    @Test
+    public void testParse_invalidString_throwsParseException() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        try {
+            sdf.parse("not-a-real-date");
+            fail("expected ParseException");
+        } catch (ParseException expected) {
+            assertTrue(expected.getMessage().contains("Can not parse date"));
+        }
+    }
+
+    // two-arg parse(String,ParsePosition) swallows failure and returns null
+    @Test
+    public void testParse_withParsePosition_invalidRfc1123ReturnsNull() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        Date result = sdf.parse("xyz", new ParsePosition(0));
+        assertNull(result);
+    }
+
+    // format() uses ISO-8601 with numeric offset representation
+    @Test
+    public void testFormat_producesISO8601StringWithOffset() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        StringBuffer sb = new StringBuffer();
+        FieldPosition fp = new FieldPosition(0);
+        sdf.format(new Date(0), sb, fp);
+        assertEquals("1970-01-01T00:00:00.000+0000", sb.toString());
+    }
+
+    // toString includes class name and locale representation
+    @Test
+    public void testToString_containsClassNameAndLocale() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        String str = sdf.toString();
+        assertTrue(str.contains("StdDateFormat"));
+        assertTrue(str.contains(Locale.US.toString()));
+    }
+
+    // looksLikeISO8601 true for "yyyy-" style prefix
+    @Test
+    public void testLooksLikeISO8601_trueForYearDashPattern() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        assertTrue(sdf.looksLikeISO8601("2001-07-04T12:08:56Z"));
+    }
+
+    // looksLikeISO8601 false for non date-like text
+    @Test
+    public void testLooksLikeISO8601_falseForNonDateString() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        assertFalse(sdf.looksLikeISO8601("abcdef"));
+    }
+
+    // direct call to protected parseAsRFC1123 helper
+    @Test
+    public void testParseAsRFC1123_directCallParsesCorrectly() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        ParsePosition pos = new ParsePosition(0);
+        Date result = sdf.parseAsRFC1123("Sat, 01 Jan 2000 00:00:00 GMT", pos);
+        Date expected = utcDate(2000, Calendar.JANUARY, 1, 0, 0, 0, 0);
+        assertEquals(expected, result);
+    }
+
+    // _clearFormats resets cached transient format fields to null
+    @Test
+    public void testClearFormats_resetsCachedFormatFields() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        sdf.format(new Date(0), new StringBuffer(), new FieldPosition(0));
+        assertNotNull(sdf._formatISO8601);
+        sdf._clearFormats();
+        assertNull(sdf._formatISO8601);
+    }
+
+    // public parse(String) trims leading/trailing whitespace before parsing
+    @Test
+    public void testParse_trimsWhitespace() throws Throwable {
+        StdDateFormat sdf = new StdDateFormat();
+        Date expected = utcDate(2001, Calendar.JULY, 4, 0, 0, 0, 0);
+        assertEquals(expected, sdf.parse("  2001-07-04  "));
+    }
+}

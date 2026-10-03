@@ -1,0 +1,321 @@
+package org.apache.commons.math3.optimization.direct;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import org.apache.commons.math3.analysis.MultivariateFunction;
+import org.apache.commons.math3.exception.DimensionMismatchException;
+import org.apache.commons.math3.exception.MathUnsupportedOperationException;
+import org.apache.commons.math3.exception.NotPositiveException;
+import org.apache.commons.math3.exception.OutOfRangeException;
+import org.apache.commons.math3.optimization.GoalType;
+import org.apache.commons.math3.optimization.PointValuePair;
+import org.apache.commons.math3.random.MersenneTwister;
+
+public class CMAESOptimizerClaudeTest {
+
+    private CMAESOptimizer newOptimizer(int lambda, double[] inputSigma, double stopFitness,
+            boolean isActiveCMA, int diagonalOnly, int checkFeasableCount,
+            boolean generateStatistics) {
+        return new CMAESOptimizer(lambda, inputSigma, 1000, stopFitness,
+                isActiveCMA, diagonalOnly, checkFeasableCount,
+                new MersenneTwister(1234L), generateStatistics);
+    }
+
+    private MultivariateFunction sphereFunction() {
+        return new MultivariateFunction() {
+            public double value(double[] point) {
+                double sum = 0;
+                for (int i = 0; i < point.length; i++) {
+                    sum += point[i] * point[i];
+                }
+                return sum;
+            }
+        };
+    }
+
+    private MultivariateFunction negSphereFunction() {
+        return new MultivariateFunction() {
+            public double value(double[] point) {
+                double sum = 0;
+                for (int i = 0; i < point.length; i++) {
+                    sum += point[i] * point[i];
+                }
+                return -sum;
+            }
+        };
+    }
+
+    // covers default constructor and default-initialized statistics lists
+    @Test
+    public void testConstructorDefault_createsInstanceWithEmptyStatistics() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer();
+        assertEquals(0, optimizer.getStatisticsSigmaHistory().size());
+    }
+
+    // covers CMAESOptimizer(int lambda) constructor
+    @Test
+    public void testConstructorLambda_createsInstanceWithEmptyStatistics() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(8);
+        assertEquals(0, optimizer.getStatisticsFitnessHistory().size());
+    }
+
+    // covers CMAESOptimizer(int lambda, double[] inputSigma) constructor
+    @Test
+    public void testConstructorLambdaSigma_createsInstanceWithEmptyStatistics() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer(8, new double[] {0.5, 0.5});
+        assertEquals(0, optimizer.getStatisticsMeanHistory().size());
+    }
+
+    // covers getStatisticsDHistory default empty list branch
+    @Test
+    public void testGetStatisticsDHistory_initiallyEmpty() throws Throwable {
+        CMAESOptimizer optimizer = new CMAESOptimizer();
+        assertEquals(0, optimizer.getStatisticsDHistory().size());
+    }
+
+    // covers checkParameters: inputSigma.length != init.length branch
+    @Test
+    public void testOptimize_dimensionMismatchInputSigma_throwsDimensionMismatchException() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(4, new double[] {0.3}, 0, true, 0, 0, false);
+        double[] start = {1.0, 1.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        try {
+            optimizer.optimize(1000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+            fail("expected DimensionMismatchException");
+        } catch (DimensionMismatchException expected) {
+        }
+    }
+
+    // covers checkParameters: inputSigma[i] < 0 branch
+    @Test
+    public void testOptimize_negativeInputSigma_throwsNotPositiveException() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(4, new double[] {-0.1, 0.3}, 0, true, 0, 0, false);
+        double[] start = {1.0, 1.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        try {
+            optimizer.optimize(1000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+            fail("expected NotPositiveException");
+        } catch (NotPositiveException expected) {
+        }
+    }
+
+    // covers checkParameters: inputSigma[i] > boundaries range branch
+    @Test
+    public void testOptimize_inputSigmaExceedsRange_throwsOutOfRangeException() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(4, new double[] {3.0, 0.3}, 0, true, 0, 0, false);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-1.0, -1.0};
+        double[] upper = {1.0, 1.0};
+        try {
+            optimizer.optimize(1000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+            fail("expected OutOfRangeException");
+        } catch (OutOfRangeException expected) {
+        }
+    }
+
+    // covers checkParameters: hasFiniteBounds && hasInfiniteBounds (mixed) branch
+    @Test
+    public void testOptimize_mixedFiniteInfiniteBounds_throwsMathUnsupportedOperationException() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(4, null, 0, true, 0, 0, false);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-1.0, Double.NEGATIVE_INFINITY};
+        double[] upper = {1.0, Double.POSITIVE_INFINITY};
+        try {
+            optimizer.optimize(1000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+            fail("expected MathUnsupportedOperationException");
+        } catch (MathUnsupportedOperationException expected) {
+        }
+    }
+
+    // covers boundary condition inputSigma[i] == range (not >), edge of OutOfRangeException check
+    @Test
+    public void testOptimize_inputSigmaEqualToRange_noExceptionThrown() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(6, new double[] {2.0}, 0, true, 0, 0, false);
+        double[] start = {0.5};
+        double[] lower = {0.0};
+        double[] upper = {2.0};
+        PointValuePair result = optimizer.optimize(2000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // covers boundary: inputSigma[i] == 0 is allowed (NotPositiveException only thrown for < 0)
+    @Test
+    public void testOptimize_zeroInputSigmaOnOneDimension_allowedNoException() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(6, new double[] {0.0, 0.3}, 0, true, 0, 0, false);
+        double[] start = {1.0, 1.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        PointValuePair result = optimizer.optimize(2000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // covers full generation loop converging on an easy convex MINIMIZE problem
+    @Test
+    public void testOptimize_sphereFunctionMinimize_convergesNearZero() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(0, null, 0, true, 0, 0, false);
+        double[] start = {5.0, 5.0};
+        double[] lower = {-10.0, -10.0};
+        double[] upper = {10.0, 10.0};
+        PointValuePair result = optimizer.optimize(20000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertTrue(result.getValue() >= -1e-6);
+        assertTrue(result.getValue() < 1.0);
+    }
+
+    // covers boundaries != null path and repair() clamping result within [lower, upper]
+    @Test
+    public void testOptimize_sphereFunctionWithBounds_resultWithinBounds() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(0, null, 0, true, 0, 0, false);
+        double[] start = {3.0, -3.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        PointValuePair result = optimizer.optimize(5000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        double[] point = result.getPoint();
+        for (int i = 0; i < point.length; i++) {
+            assertTrue(point[i] >= lower[i] - 1e-9 && point[i] <= upper[i] + 1e-9);
+        }
+    }
+
+    // covers boundaries == null path (hasFiniteBounds false -> unbounded optimization)
+    @Test
+    public void testOptimize_unboundedInfiniteBounds_finiteResult() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(0, null, 0, true, 0, 0, false);
+        double[] start = {2.0, 2.0};
+        double[] lower = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
+        double[] upper = {Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY};
+        PointValuePair result = optimizer.optimize(5000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertFalse(Double.isNaN(result.getValue()));
+        assertFalse(Double.isInfinite(result.getValue()));
+    }
+
+    // covers GoalType.MAXIMIZE sign handling (isMinimize = false); -(x^2+y^2) can never exceed 0
+    @Test
+    public void testOptimize_maximizeGoal_resultValueNotAboveZero() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(0, null, 0, true, 0, 0, false);
+        double[] start = {2.0, 2.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        PointValuePair result = optimizer.optimize(20000, negSphereFunction(), GoalType.MAXIMIZE, start, lower, upper);
+        assertTrue(result.getValue() <= 1e-6);
+        assertTrue(result.getValue() > -4.0);
+    }
+
+    // covers initializeCMA: lambda <= 0 -> lambda = 4 + 3*log(dimension) default-population branch
+    @Test
+    public void testOptimize_defaultLambdaZero_dimensionThreeConverges() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(0, null, 0, true, 0, 0, false);
+        double[] start = {4.0, -4.0, 4.0};
+        double[] lower = {-10.0, -10.0, -10.0};
+        double[] upper = {10.0, 10.0, 10.0};
+        PointValuePair result = optimizer.optimize(30000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertTrue(result.getValue() < 2.0);
+    }
+
+    // covers generateStatistics branch populating all four statistics histories
+    @Test
+    public void testOptimize_generateStatisticsTrue_historiesPopulatedAfterOptimize() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(6, null, 0, true, 0, 0, true);
+        double[] start = {3.0, 3.0};
+        double[] lower = {-5.0, -5.0};
+        double[] upper = {5.0, 5.0};
+        optimizer.optimize(3000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertTrue(optimizer.getStatisticsSigmaHistory().size() > 0);
+        assertTrue(optimizer.getStatisticsFitnessHistory().size() > 0);
+        assertTrue(optimizer.getStatisticsMeanHistory().size() > 0);
+        assertTrue(optimizer.getStatisticsDHistory().size() > 0);
+    }
+
+    // covers updateCovariance: isActiveCMA == false branch (non-active CMA update)
+    @Test
+    public void testOptimize_isActiveCMAFalse_convergesWithoutException() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(0, null, 0, false, 0, 0, false);
+        double[] start = {4.0, 4.0};
+        double[] lower = {-10.0, -10.0};
+        double[] upper = {10.0, 10.0};
+        PointValuePair result = optimizer.optimize(20000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertTrue(result.getValue() < 2.0);
+    }
+
+    // covers diagonalOnly > 0 branch (updateCovarianceDiagonalOnly code path)
+    @Test
+    public void testOptimize_diagonalOnlyPositive_convergesWithoutException() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(0, null, 0, true, 2, 0, false);
+        double[] start = {4.0, 4.0, 4.0};
+        double[] lower = {-10.0, -10.0, -10.0};
+        double[] upper = {10.0, 10.0, 10.0};
+        PointValuePair result = optimizer.optimize(20000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+
+    // covers checkFeasableCount > 0 branch (regenerating infeasible offspring near tight bounds)
+    @Test
+    public void testOptimize_checkFeasableCountPositive_resultWithinBounds() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(6, null, 0, true, 0, 5, false);
+        double[] start = {0.5, 0.5};
+        double[] lower = {-1.0, -1.0};
+        double[] upper = {1.0, 1.0};
+        PointValuePair result = optimizer.optimize(3000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        double[] point = result.getPoint();
+        for (int i = 0; i < point.length; i++) {
+            assertTrue(point[i] >= lower[i] - 1e-9 && point[i] <= upper[i] + 1e-9);
+        }
+    }
+
+    // covers stopFitness != 0 early-termination branch (javadoc: stop if value < stopFitness)
+    @Test
+    public void testOptimize_stopFitnessReached_optimumValueBelowThreshold() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(0, null, 1.0, true, 0, 0, false);
+        double[] start = {5.0, 5.0};
+        double[] lower = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
+        double[] upper = {Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY};
+        PointValuePair result = optimizer.optimize(20000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertTrue(result.getValue() < 1.0);
+    }
+
+    // covers decode()/repairAndDecode() preserving dimensionality of the result point
+    @Test
+    public void testOptimize_resultPointDimensionMatchesStartPoint() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(0, null, 0, true, 0, 0, false);
+        double[] start = {1.0, 2.0, 3.0};
+        double[] lower = {-10.0, -10.0, -10.0};
+        double[] upper = {10.0, 10.0, 10.0};
+        PointValuePair result = optimizer.optimize(2000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertEquals(3, result.getPoint().length);
+    }
+
+    // covers dimension == 1 edge case through the full optimization pipeline
+    @Test
+    public void testOptimize_singleDimensionProblem_converges() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(0, null, 0, true, 0, 0, false);
+        double[] start = {6.0};
+        double[] lower = {-10.0};
+        double[] upper = {10.0};
+        PointValuePair result = optimizer.optimize(20000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertTrue(result.getValue() < 1.0);
+    }
+
+    // covers explicit large lambda (population size) overriding the default-population formula
+    @Test
+    public void testOptimize_largePopulationSize_converges() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(20, null, 0, true, 0, 0, false);
+        double[] start = {4.0, 4.0};
+        double[] lower = {-10.0, -10.0};
+        double[] upper = {10.0, 10.0};
+        PointValuePair result = optimizer.optimize(20000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertTrue(result.getValue() < 1.0);
+    }
+
+    // covers inputSigma == null -> default 0.3-per-dimension sigma branch with finite bounds
+    @Test
+    public void testOptimize_inputSigmaNullWithBounds_usesDefaultSigmaNoException() throws Throwable {
+        CMAESOptimizer optimizer = newOptimizer(6, null, 0, true, 0, 0, false);
+        double[] start = {0.0, 0.0};
+        double[] lower = {-2.0, -2.0};
+        double[] upper = {2.0, 2.0};
+        PointValuePair result = optimizer.optimize(2000, sphereFunction(), GoalType.MINIMIZE, start, lower, upper);
+        assertFalse(Double.isNaN(result.getValue()));
+    }
+}

@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-71-26j4gmj6/Jsoup-71f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.jsoup.select.PseudoTextElementClaudeTest::testContainsDataMatches_scriptDataFound
+[exit 0]

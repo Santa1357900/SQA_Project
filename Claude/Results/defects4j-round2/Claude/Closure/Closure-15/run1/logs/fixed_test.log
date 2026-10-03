@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-15-v3a_zr71/Closure-15f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testCheckLeftOf_sideEffectBeforeUse_notInlined
+  - com.google.javascript.jscomp.FlowSensitiveInlineVariablesClaudeTest::testCheckLeftOf_safeSibling_inlined
+[exit 0]

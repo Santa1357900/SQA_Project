@@ -1,0 +1,276 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class FunctionTypeBuilderClaudeTest {
+
+  private Compiler compileHelper(String js) {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    options.setCheckTypes(true);
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("test.js", js);
+    compiler.compile(externs, input, options);
+    return compiler;
+  }
+
+  // inferInheritance: @extends without @constructor/@interface -> EXTENDS_WITHOUT_TYPEDEF warning
+  @Test
+  public void testInferInheritance_extendsWithoutConstructor_warnsExtendsWithoutTypedef() throws Throwable {
+    String js = "/**\n * @extends {Object}\n */\nfunction Foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // inferInheritance: @extends on non-object type -> EXTENDS_NON_OBJECT warning via ExtendedTypeValidator
+  @Test
+  public void testInferInheritance_extendsNonObjectType_warnsExtendsNonObject() throws Throwable {
+    String js = "/**\n * @constructor\n * @extends {number}\n */\nfunction Foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // inferInheritance: @extends with valid object base type -> no warnings
+  @Test
+  public void testInferInheritance_extendsValidObjectType_noWarnings() throws Throwable {
+    String js = "/**\n * @constructor\n * @extends {Object}\n */\nfunction Foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // inferInheritance: @implements without @constructor/@interface -> IMPLEMENTS_WITHOUT_CONSTRUCTOR warning
+  @Test
+  public void testInferInheritance_implementsWithoutConstructor_warnsImplementsWithoutConstructor() throws Throwable {
+    String js = "/**\n * @implements {Foo}\n */\nfunction Bar() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // inferInheritance: @implements on non-object type -> BAD_IMPLEMENTED_TYPE error via ImplementedTypeValidator
+  @Test
+  public void testInferInheritance_implementsNonObjectType_errorsBadImplementedType() throws Throwable {
+    String js = "/**\n * @constructor\n * @implements {number}\n */\nfunction Foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(1, compiler.getErrors().length);
+  }
+
+  // inferInheritance: @implements with a valid interface -> no warnings/errors
+  @Test
+  public void testInferInheritance_implementsValidInterface_noWarnings() throws Throwable {
+    String js = "/** @interface */\nfunction MyInterface() {}\n"
+        + "/**\n * @constructor\n * @implements {MyInterface}\n */\nfunction Foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // inferInheritance: interface extending another interface -> no warnings/errors
+  @Test
+  public void testInferInheritance_interfaceExtendsInterface_noWarnings() throws Throwable {
+    String js = "/** @interface */\nfunction A() {}\n"
+        + "/**\n * @interface\n * @extends {A}\n */\nfunction B() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // inferInheritance: constructor implementing two interfaces -> loop over multiple interfaces, no warnings
+  @Test
+  public void testInferInheritance_implementsMultipleInterfaces_noWarnings() throws Throwable {
+    String js = "/** @interface */\nfunction I1() {}\n/** @interface */\nfunction I2() {}\n"
+        + "/**\n * @constructor\n * @implements {I1}\n * @implements {I2}\n */\nfunction Foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // inferInheritance: base type's implemented interfaces are inherited through extends -> no warnings
+  @Test
+  public void testInferInheritance_baseTypeInterfacesInherited_noWarnings() throws Throwable {
+    String js = "/** @interface */\nfunction I1() {}\n"
+        + "/**\n * @constructor\n * @implements {I1}\n */\nfunction Base() {}\n"
+        + "/**\n * @constructor\n * @extends {Base}\n */\nfunction Sub() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // inferInheritance: both @extends without typedef and @implements without constructor on same fn -> 2 warnings
+  @Test
+  public void testInferInheritance_extendsAndImplementsWithoutConstructor_warnsBoth() throws Throwable {
+    String js = "/**\n * @extends {Object}\n * @implements {Foo}\n */\nfunction Bar() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(2, compiler.getWarnings().length);
+  }
+
+  // inferThisType: @this with non-object type -> THIS_TYPE_NON_OBJECT warning via ThisTypeValidator
+  @Test
+  public void testInferThisType_nonObjectType_warnsThisTypeNonObject() throws Throwable {
+    String js = "/**\n * @this {number}\n */\nfunction foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // inferThisType: @this with object type -> no warnings
+  @Test
+  public void testInferThisType_objectType_noWarnings() throws Throwable {
+    String js = "/**\n * @this {Object}\n */\nfunction foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // addParameter: var_args followed by required param -> VAR_ARGS_MUST_BE_LAST warning
+  @Test
+  public void testInferParameterTypes_varArgsNotLast_warnsVarArgsMustBeLast() throws Throwable {
+    String js = "/**\n * @param {...number} a\n * @param {number} b\n */\nfunction foo(a, b) {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // addParameter: var_args correctly placed last -> no warnings
+  @Test
+  public void testInferParameterTypes_varArgsLast_noWarnings() throws Throwable {
+    String js = "/**\n * @param {number} a\n * @param {...number} b\n */\nfunction foo(a, b) {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // addParameter: optional param followed by required param -> OPTIONAL_ARG_AT_END warning
+  @Test
+  public void testInferParameterTypes_optionalArgNotAtEnd_warnsOptionalArgAtEnd() throws Throwable {
+    String js = "/**\n * @param {number=} a\n * @param {number} b\n */\nfunction foo(a, b) {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // addParameter: optional param correctly placed at end -> no warnings
+  @Test
+  public void testInferParameterTypes_optionalArgAtEnd_noWarnings() throws Throwable {
+    String js = "/**\n * @param {number} a\n * @param {number=} b\n */\nfunction foo(a, b) {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // inferParameterTypes: jsdoc @param not present in actual argument list -> INEXISTANT_PARAM warning
+  @Test
+  public void testInferParameterTypes_inexistentParamSingle_warnsInexistantParam() throws Throwable {
+    String js = "/**\n * @param {number} a\n * @param {number} b\n */\nfunction foo(a) {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(1, compiler.getWarnings().length);
+  }
+
+  // inferParameterTypes: three jsdoc params but zero formal args -> INEXISTANT_PARAM loop warns 3 times
+  @Test
+  public void testInferParameterTypes_inexistentParamsMultiple_warnsThreeTimes() throws Throwable {
+    String js = "/**\n * @param {number} a\n * @param {number} b\n * @param {number} c\n */\nfunction foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(3, compiler.getWarnings().length);
+  }
+
+  // inferParameterTypes: all jsdoc params match actual args -> no warnings
+  @Test
+  public void testInferParameterTypes_allParamsMatch_noWarnings() throws Throwable {
+    String js = "/**\n * @param {number} a\n * @param {string} b\n */\nfunction foo(a, b) {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // inferParameterTypes: zero parameters, zero jsdoc params -> loop runs zero times, no warnings
+  @Test
+  public void testInferParameterTypes_zeroParams_noWarnings() throws Throwable {
+    String js = "function foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // addParameter: required, optional, varargs in correct order -> all three branches succeed, no warnings
+  @Test
+  public void testInferParameterTypes_mixedRequiredOptionalVarArgs_noWarnings() throws Throwable {
+    String js = "/**\n * @param {number} a\n * @param {number=} b\n * @param {...number} c\n */\nfunction foo(a, b, c) {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // inferParameterTypes: @template declared but no parameter uses it -> TEMPLATE_TYPE_EXPECTED error
+  @Test
+  public void testInferTemplateTypeName_noParamUsesTemplate_errorsTemplateTypeExpected() throws Throwable {
+    String js = "/**\n * @template T\n * @return {string}\n */\nfunction foo() { return ''; }\n";
+    Compiler compiler = compileHelper(js);
+    assertTrue(compiler.getErrors().length >= 1);
+  }
+
+  // inferParameterTypes: template type used more than once among params -> TEMPLATE_TYPE_DUPLICATED error
+  @Test
+  public void testInferTemplateTypeName_duplicateTemplateParam_errorsTemplateTypeDuplicated() throws Throwable {
+    String js = "/**\n * @template T\n * @param {T} a\n * @param {T} b\n */\nfunction foo(a, b) {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(1, compiler.getErrors().length);
+  }
+
+  // inferParameterTypes: template type correctly used once as a parameter -> no errors
+  @Test
+  public void testInferTemplateTypeName_singleTemplateParam_noErrors() throws Throwable {
+    String js = "/**\n * @template T\n * @param {T} a\n */\nfunction foo(a) {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // inferReturnType: template type used as BOTH a parameter type and return type is valid (identity fn)
+  // per TEMPLATE_TYPE_EXPECTED contract "the template type must be a parameter type" -> satisfied, no error
+  @Test
+  public void testInferReturnType_templateUsedAsParamAndReturn_noTemplateTypeExpectedError() throws Throwable {
+    String js = "/**\n * @template T\n * @param {T} a\n * @return {T}\n */\nfunction foo(a) { return a; }\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // inferFromOverriddenFunction: @override with matching single parameter inherits param type, no errors
+  @Test
+  public void testOverride_matchingSignature_noErrors() throws Throwable {
+    String js = "/** @constructor */\nfunction Base() {}\n"
+        + "/** @param {number} a */\nBase.prototype.foo = function(a) {};\n"
+        + "/**\n * @constructor\n * @extends {Base}\n */\nfunction Sub() {}\n"
+        + "/** @override */\nSub.prototype.foo = function(a) {};\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // inferReturnStatementsAsLastResort: function with control structure but no return -> void inferred, no errors
+  @Test
+  public void testFunctionWithoutReturnStatement_voidInferred_noErrorsOrWarnings() throws Throwable {
+    String js = "function foo(x) {\n  if (x) {\n    x = x + 1;\n  }\n}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getErrors().length);
+    assertEquals(0, compiler.getWarnings().length);
+  }
+
+  // buildAndRegister: plain @constructor with no extends/implements -> builds cleanly, no warnings
+  @Test
+  public void testPlainConstructor_noWarnings() throws Throwable {
+    String js = "/** @constructor */\nfunction Foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // buildAndRegister: plain @interface with no extends -> builds cleanly, no warnings
+  @Test
+  public void testPlainInterface_noWarnings() throws Throwable {
+    String js = "/** @interface */\nfunction Foo() {}\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+    assertEquals(0, compiler.getErrors().length);
+  }
+
+  // buildAndRegister: plain function with no JSDoc at all -> builds cleanly, no warnings/errors
+  @Test
+  public void testPlainFunctionNoJsDoc_noWarnings() throws Throwable {
+    String js = "function foo(a, b) { return a + b; }\n";
+    Compiler compiler = compileHelper(js);
+    assertEquals(0, compiler.getWarnings().length);
+    assertEquals(0, compiler.getErrors().length);
+  }
+}

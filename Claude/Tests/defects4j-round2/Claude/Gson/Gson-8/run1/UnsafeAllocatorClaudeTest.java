@@ -1,0 +1,247 @@
+package com.google.gson.internal;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.List;
+import java.util.AbstractList;
+
+public class UnsafeAllocatorClaudeTest {
+
+  // helper fixture: simple concrete class whose constructor mutates fields
+  private static class SimpleBean {
+    int intValue = 5;
+    String stringValue = "init";
+    boolean boolValue = true;
+    final int finalValue;
+    public SimpleBean() {
+      intValue = 99;
+      stringValue = "constructed";
+      boolValue = false;
+      finalValue = 7;
+    }
+  }
+
+  // helper fixture: constructor throws
+  private static class ThrowingCtor {
+    public ThrowingCtor() {
+      throw new RuntimeException("Constructor should not be invoked by UnsafeAllocator");
+    }
+  }
+
+  // helper fixture: multiple constructors, all should be bypassed
+  private static class MultiCtor {
+    int a = 0;
+    public MultiCtor() {
+      a = 1;
+      throw new RuntimeException("ctor0 invoked");
+    }
+    public MultiCtor(int x) {
+      a = 2;
+      throw new RuntimeException("ctor1 invoked");
+    }
+  }
+
+  // helper fixture: private constructor, access should be bypassed entirely
+  private static class PrivateCtorClass {
+    int value = 1;
+    private PrivateCtorClass() {
+      value = 2;
+    }
+  }
+
+  // helper fixture: user-defined interface
+  private interface SampleInterface {
+    void doSomething();
+  }
+
+  // helper fixture: user-defined abstract class
+  private abstract static class SampleAbstract {
+    public abstract void doSomething();
+  }
+
+  // covers: create() returns a usable, non-null allocator instance
+  @Test
+  public void testCreate_returnsNonNullAllocator() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    assertNotNull(allocator);
+  }
+
+  // covers: create() called repeatedly keeps returning non-null allocators
+  @Test
+  public void testCreate_multipleInvocations_returnsNonNullEachTime() throws Throwable {
+    UnsafeAllocator first = UnsafeAllocator.create();
+    UnsafeAllocator second = UnsafeAllocator.create();
+    assertNotNull(first);
+    assertNotNull(second);
+  }
+
+  // covers: newInstance on a plain concrete class returns a non-null object
+  @Test
+  public void testNewInstance_simpleConcreteClass_returnsNonNull() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    SimpleBean bean = allocator.newInstance(SimpleBean.class);
+    assertNotNull(bean);
+  }
+
+  // covers: returned object is actually of the requested runtime type
+  @Test
+  public void testNewInstance_simpleConcreteClass_returnsCorrectType() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    SimpleBean bean = allocator.newInstance(SimpleBean.class);
+    assertTrue(bean instanceof SimpleBean);
+    assertEquals(SimpleBean.class, bean.getClass());
+  }
+
+  // covers: constructor bypass -> int field keeps JVM default, not ctor-assigned value
+  @Test
+  public void testNewInstance_bypassesConstructor_intFieldDefault() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    SimpleBean bean = allocator.newInstance(SimpleBean.class);
+    assertEquals(0, bean.intValue);
+  }
+
+  // covers: constructor bypass -> String field keeps default null
+  @Test
+  public void testNewInstance_bypassesConstructor_stringFieldDefaultNull() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    SimpleBean bean = allocator.newInstance(SimpleBean.class);
+    assertNull(bean.stringValue);
+  }
+
+  // covers: constructor bypass -> boolean field keeps default false
+  @Test
+  public void testNewInstance_bypassesConstructor_booleanFieldDefaultFalse() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    SimpleBean bean = allocator.newInstance(SimpleBean.class);
+    assertFalse(bean.boolValue);
+  }
+
+  // covers: constructor bypass -> final field keeps default 0 despite ctor assignment
+  @Test
+  public void testNewInstance_bypassesConstructor_finalFieldDefaultZero() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    SimpleBean bean = allocator.newInstance(SimpleBean.class);
+    assertEquals(0, bean.finalValue);
+  }
+
+  // covers: a throwing constructor must never execute; no exception should propagate
+  @Test
+  public void testNewInstance_constructorThrowsException_doesNotPropagate() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    ThrowingCtor instance = allocator.newInstance(ThrowingCtor.class);
+    assertNotNull(instance);
+  }
+
+  // covers: class with several constructors - none must be invoked, field keeps default
+  @Test
+  public void testNewInstance_multipleConstructorsClass_doesNotInvokeAny() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    MultiCtor instance = allocator.newInstance(MultiCtor.class);
+    assertNotNull(instance);
+    assertEquals(0, instance.a);
+  }
+
+  // covers: two successive allocations of same class produce distinct object references
+  @Test
+  public void testNewInstance_calledTwiceSameClass_returnsDistinctInstances() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    SimpleBean first = allocator.newInstance(SimpleBean.class);
+    SimpleBean second = allocator.newInstance(SimpleBean.class);
+    assertNotSame(first, second);
+  }
+
+  // covers: per contract, a JDK interface type must yield UnsupportedOperationException
+  @Test
+  public void testNewInstance_withJdkInterface_throwsUnsupportedOperationException() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    try {
+      allocator.newInstance(List.class);
+      fail("Expected UnsupportedOperationException for interface type");
+    } catch (UnsupportedOperationException expected) {
+      // per javadoc contract: interface modifiers must be rejected
+    }
+  }
+
+  // covers: per contract, a JDK abstract class type must yield UnsupportedOperationException
+  @Test
+  public void testNewInstance_withJdkAbstractClass_throwsUnsupportedOperationException() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    try {
+      allocator.newInstance(AbstractList.class);
+      fail("Expected UnsupportedOperationException for abstract class type");
+    } catch (UnsupportedOperationException expected) {
+      // per javadoc contract: abstract modifiers must be rejected
+    }
+  }
+
+  // covers: user-defined interface must also be rejected with UnsupportedOperationException
+  @Test
+  public void testNewInstance_withUserDefinedInterface_throwsUnsupportedOperationException() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    try {
+      allocator.newInstance(SampleInterface.class);
+      fail("Expected UnsupportedOperationException for user-defined interface");
+    } catch (UnsupportedOperationException expected) {
+      // per javadoc contract
+    }
+  }
+
+  // covers: user-defined abstract class must also be rejected with UnsupportedOperationException
+  @Test
+  public void testNewInstance_withUserDefinedAbstractClass_throwsUnsupportedOperationException() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    try {
+      allocator.newInstance(SampleAbstract.class);
+      fail("Expected UnsupportedOperationException for user-defined abstract class");
+    } catch (UnsupportedOperationException expected) {
+      // per javadoc contract
+    }
+  }
+
+  // covers: java.lang.Object itself can be allocated (baseline concrete class)
+  @Test
+  public void testNewInstance_withObjectClass_returnsInstanceOfObject() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    Object instance = allocator.newInstance(Object.class);
+    assertNotNull(instance);
+    assertEquals(Object.class, instance.getClass());
+  }
+
+  // covers: static nested concrete class allocation works
+  @Test
+  public void testNewInstance_withStaticNestedClass_returnsInstance() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    SimpleBean instance = allocator.newInstance(SimpleBean.class);
+    assertTrue(instance instanceof SimpleBean);
+  }
+
+  // covers: independent create() results each function correctly on their own
+  @Test
+  public void testNewInstance_allocatorsFromSeparateCreateCalls_bothFunctionCorrectly() throws Throwable {
+    UnsafeAllocator allocatorOne = UnsafeAllocator.create();
+    UnsafeAllocator allocatorTwo = UnsafeAllocator.create();
+    SimpleBean beanOne = allocatorOne.newInstance(SimpleBean.class);
+    SimpleBean beanTwo = allocatorTwo.newInstance(SimpleBean.class);
+    assertNotNull(beanOne);
+    assertNotNull(beanTwo);
+  }
+
+  // covers: returned reference is assignable to declared class (no type erasure surprises)
+  @Test
+  public void testNewInstance_returnValueIsAssignableToDeclaredClass() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    SimpleBean bean = allocator.newInstance(SimpleBean.class);
+    Object asObject = bean;
+    assertTrue(SimpleBean.class.isInstance(asObject));
+  }
+
+  // covers: class with only a private constructor must still be allocatable, bypassing access control
+  @Test
+  public void testNewInstance_withClassHavingOnlyPrivateConstructor_bypassesAccessControl() throws Throwable {
+    UnsafeAllocator allocator = UnsafeAllocator.create();
+    PrivateCtorClass instance = allocator.newInstance(PrivateCtorClass.class);
+    assertNotNull(instance);
+    assertEquals(0, instance.value);
+  }
+}

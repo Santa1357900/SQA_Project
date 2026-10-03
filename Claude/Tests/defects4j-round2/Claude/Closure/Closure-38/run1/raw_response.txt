@@ -1,0 +1,386 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import com.google.javascript.rhino.IR;
+import com.google.javascript.rhino.Node;
+
+public class CodeConsumerClaudeTest {
+
+  /** Minimal concrete subclass that records all appended text and tracks the last char. */
+  private static class RecordingCodeConsumer extends CodeConsumer {
+    final StringBuilder sb = new StringBuilder();
+    private char last = '\0';
+
+    void append(String str) {
+      sb.append(str);
+      if (str.length() > 0) {
+        last = str.charAt(str.length() - 1);
+      }
+    }
+
+    char getLastChar() {
+      return last;
+    }
+  }
+
+  // continueProcessing(): default implementation always returns true
+  @Test
+  public void testContinueProcessing_default_returnsTrue() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    assertTrue(tc.continueProcessing());
+  }
+
+  // startSourceMapping, endSourceMapping, startNewLine, maybeCutLine, endLine,
+  // notePreferredLineBreak, endCaseBody, endFile: all no-op hook bodies
+  @Test
+  public void testNoOpHookMethods_doNotModifyAppendBuffer() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.startSourceMapping(IR.name("x"));
+    tc.endSourceMapping(IR.name("x"));
+    tc.startNewLine();
+    tc.maybeCutLine();
+    tc.endLine();
+    tc.notePreferredLineBreak();
+    tc.endCaseBody();
+    tc.endFile();
+    assertEquals(0, tc.sb.length());
+    assertEquals('\0', tc.getLastChar());
+  }
+
+  // addIdentifier(): delegates to add(identifier)
+  @Test
+  public void testAddIdentifier_appendsIdentifier() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.addIdentifier("foo");
+    assertEquals("foo", tc.sb.toString());
+  }
+
+  // appendBlockStart(): appends "{"
+  @Test
+  public void testAppendBlockStart_appendsOpenBrace() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.appendBlockStart();
+    assertEquals("{", tc.sb.toString());
+  }
+
+  // appendBlockEnd(): appends "}"
+  @Test
+  public void testAppendBlockEnd_appendsCloseBrace() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.appendBlockEnd();
+    assertEquals("}", tc.sb.toString());
+  }
+
+  // maybeLineBreak(): delegates to maybeCutLine() which is a no-op
+  @Test
+  public void testMaybeLineBreak_doesNotAlterBuffer() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.maybeLineBreak();
+    assertEquals(0, tc.sb.length());
+    assertFalse(tc.statementStarted);
+  }
+
+  // beginBlock(): when statementNeedsEnded is true, a ';' is appended before the block start
+  @Test
+  public void testBeginBlock_whenStatementNeedsEnded_appendsSemicolonBeforeBrace() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.statementNeedsEnded = true;
+    tc.beginBlock();
+    assertEquals(";{", tc.sb.toString());
+    assertFalse(tc.statementNeedsEnded);
+  }
+
+  // beginBlock(): when statementNeedsEnded is false, only the block start is appended
+  @Test
+  public void testBeginBlock_whenStatementDoesNotNeedEnding_appendsBraceOnly() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.beginBlock();
+    assertEquals("{", tc.sb.toString());
+    assertFalse(tc.statementNeedsEnded);
+  }
+
+  // endBlock(): no-arg form delegates to endBlock(false)
+  @Test
+  public void testEndBlock_defaultArg_resetsStatementNeeded() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.endBlock();
+    assertEquals("}", tc.sb.toString());
+    assertFalse(tc.statementNeedsEnded);
+  }
+
+  // endBlock(true): appends close brace and still resets statementNeedsEnded
+  @Test
+  public void testEndBlock_withTrueArg_appendsCloseBrace() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.statementNeedsEnded = true;
+    tc.endBlock(true);
+    assertEquals("}", tc.sb.toString());
+    assertFalse(tc.statementNeedsEnded);
+  }
+
+  // listSeparator(): adds a comma and marks statement started
+  @Test
+  public void testListSeparator_appendsComma() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.listSeparator();
+    assertEquals(",", tc.sb.toString());
+    assertTrue(tc.statementStarted);
+  }
+
+  // endStatement(): no-arg, when statementStarted is true marks statementNeedsEnded
+  @Test
+  public void testEndStatement_noArgs_whenStatementStarted_setsNeedsEnded() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.statementStarted = true;
+    tc.endStatement();
+    assertTrue(tc.statementNeedsEnded);
+  }
+
+  // endStatement(): no-arg, when statementStarted is false nothing is marked
+  @Test
+  public void testEndStatement_noArgs_whenNotStarted_doesNotSetNeedsEnded() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.endStatement();
+    assertFalse(tc.statementNeedsEnded);
+  }
+
+  // endStatement(true): appends a semicolon immediately and clears the flag
+  @Test
+  public void testEndStatementBoolean_true_appendsSemicolonImmediately() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.endStatement(true);
+    assertEquals(";", tc.sb.toString());
+    assertFalse(tc.statementNeedsEnded);
+  }
+
+  // maybeEndStatement(): when needed, appends ';' and marks statementStarted
+  @Test
+  public void testMaybeEndStatement_whenNeeded_appendsSemicolonAndMarksStarted() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.statementNeedsEnded = true;
+    tc.maybeEndStatement();
+    assertEquals(";", tc.sb.toString());
+    assertFalse(tc.statementNeedsEnded);
+    assertTrue(tc.statementStarted);
+  }
+
+  // maybeEndStatement(): when not needed, only marks statementStarted
+  @Test
+  public void testMaybeEndStatement_whenNotNeeded_marksStatementStarted() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.maybeEndStatement();
+    assertEquals(0, tc.sb.length());
+    assertTrue(tc.statementStarted);
+  }
+
+  // endFunction(): no-arg sets sawFunction regardless of context
+  @Test
+  public void testEndFunction_noArgs_setsSawFunctionTrue() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.endFunction();
+    assertTrue(tc.sawFunction);
+  }
+
+  // endFunction(true): statementContext branch also sets sawFunction
+  @Test
+  public void testEndFunctionBoolean_setsSawFunctionTrue() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.endFunction(true);
+    assertTrue(tc.sawFunction);
+  }
+
+  // beginCaseBody(): appends ":"
+  @Test
+  public void testBeginCaseBody_appendsColon() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.beginCaseBody();
+    assertEquals(":", tc.sb.toString());
+  }
+
+  // add(""): empty string short-circuits and nothing is appended
+  @Test
+  public void testAdd_emptyString_appendsNothing() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.add("");
+    assertEquals(0, tc.sb.length());
+    assertTrue(tc.statementStarted);
+  }
+
+  // add(): word char following word char requires a separating space
+  @Test
+  public void testAdd_wordCharAfterWordChar_insertsSeparatingSpace() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.append("foo");
+    tc.add("bar");
+    assertEquals("foo bar", tc.sb.toString());
+  }
+
+  // add(): '/' following '/' requires a separating space to avoid misparse
+  @Test
+  public void testAdd_slashAfterSlash_insertsSeparatingSpace() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.append("/");
+    tc.add("/x");
+    assertEquals("/ /x", tc.sb.toString());
+  }
+
+  // add(): no space needed when char classes don't require separation
+  @Test
+  public void testAdd_noSpaceNeeded_appendsDirectly() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.append("x");
+    tc.add(";");
+    assertEquals("x;", tc.sb.toString());
+  }
+
+  // appendOp(): simply appends the operator text
+  @Test
+  public void testAppendOp_appendsOperatorString() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.appendOp("+", true);
+    assertEquals("+", tc.sb.toString());
+  }
+
+  // addOp(): '+' following '+' needs a space to avoid "x+++y" ambiguity
+  @Test
+  public void testAddOp_samePlusMinusSign_insertsSpace() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.append("+");
+    tc.addOp("+", true);
+    assertEquals("+ +", tc.sb.toString());
+  }
+
+  // addOp(): letter-starting op (e.g. instanceof) after a word char needs a space
+  @Test
+  public void testAddOp_letterOperatorAfterWordChar_insertsSpace() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.append("x");
+    tc.addOp("instanceof", false);
+    assertEquals("x instanceof", tc.sb.toString());
+  }
+
+  // addOp(): '>' following '-' needs a space to avoid emitting "-->"
+  @Test
+  public void testAddOp_arrowAfterMinus_insertsSpace() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.append("-");
+    tc.addOp(">", false);
+    assertEquals("- >", tc.sb.toString());
+  }
+
+  // addOp(): no space needed for an unrelated operator on a fresh buffer
+  @Test
+  public void testAddOp_noSpaceNeeded_appendsDirectly() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.addOp("*", true);
+    assertEquals("*", tc.sb.toString());
+  }
+
+  // addNumber(): the printed literal must always round-trip to the original value
+  @Test
+  public void testAddNumber_integerMagnitudes_roundTripToOriginalValue() throws Throwable {
+    double[] values = {100, 1000, 10000, 100000, 1000000, 10000000, 100000000,
+        1000000000, 10000000000.0, 100000000000.0, 123000, 45600, 7000000};
+    for (int i = 0; i < values.length; i++) {
+      RecordingCodeConsumer tc = new RecordingCodeConsumer();
+      tc.addNumber(values[i]);
+      double parsed = Double.parseDouble(tc.sb.toString());
+      assertEquals(values[i], parsed, 0.0);
+    }
+  }
+
+  // addNumber(100): at the exp==2 boundary scientific notation must NOT be used
+  @Test
+  public void testAddNumber_exactlyHundred_printsPlainDigitsNotScientific() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.addNumber(100.0);
+    assertEquals("100", tc.sb.toString());
+  }
+
+  // addNumber(99): below the abs>=100 threshold, loop is skipped entirely
+  @Test
+  public void testAddNumber_belowHundredBoundary_printsPlainDigits() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.addNumber(99.0);
+    assertEquals("99", tc.sb.toString());
+  }
+
+  // addNumber(): negative integer values must also round-trip correctly
+  @Test
+  public void testAddNumber_negativeValue_roundTrips() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.addNumber(-1000.0);
+    double parsed = Double.parseDouble(tc.sb.toString());
+    assertEquals(-1000.0, parsed, 0.0);
+  }
+
+  // addNumber(-0.0): negative zero sign must be preserved (negativeZero branch)
+  @Test
+  public void testAddNumber_negativeZero_preservesSign() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.addNumber(-0.0);
+    assertEquals("-0.0", tc.sb.toString());
+  }
+
+  // addNumber(0.0): positive zero prints as plain "0"
+  @Test
+  public void testAddNumber_positiveZero_printsZero() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.addNumber(0.0);
+    assertEquals("0", tc.sb.toString());
+  }
+
+  // addNumber(): non-integral values fall into the String.valueOf(x) else branch
+  @Test
+  public void testAddNumber_fractionalValue_printsDecimalForm() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.addNumber(3.14);
+    assertEquals("3.14", tc.sb.toString());
+  }
+
+  // addNumber(): negative value following a '-' char needs a separating space
+  @Test
+  public void testAddNumber_negativeAfterMinusChar_insertsSeparatingSpace() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    tc.append("-");
+    tc.addNumber(-5.0);
+    assertEquals("- -5", tc.sb.toString());
+  }
+
+  // isNegativeZero(): distinguishes -0.0, +0.0 and a non-zero value
+  @Test
+  public void testIsNegativeZero_distinguishesPositiveAndNegativeZero() throws Throwable {
+    assertTrue(CodeConsumer.isNegativeZero(-0.0));
+    assertFalse(CodeConsumer.isNegativeZero(0.0));
+    assertFalse(CodeConsumer.isNegativeZero(5.0));
+  }
+
+  // isWordChar(): underscore, dollar, letters and digits are word chars; symbols are not
+  @Test
+  public void testIsWordChar_classifiesCharactersCorrectly() throws Throwable {
+    assertTrue(CodeConsumer.isWordChar('_'));
+    assertTrue(CodeConsumer.isWordChar('$'));
+    assertTrue(CodeConsumer.isWordChar('a'));
+    assertTrue(CodeConsumer.isWordChar('9'));
+    assertFalse(CodeConsumer.isWordChar('+'));
+  }
+
+  // shouldPreserveExtraBlocks(): default implementation returns false
+  @Test
+  public void testShouldPreserveExtraBlocks_defaultIsFalse() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    assertFalse(tc.shouldPreserveExtraBlocks());
+  }
+
+  // breakAfterBlockFor(): returns exactly the passed-in statementContext flag
+  @Test
+  public void testBreakAfterBlockFor_returnsStatementContextValue() throws Throwable {
+    RecordingCodeConsumer tc = new RecordingCodeConsumer();
+    Node n = IR.block();
+    assertTrue(tc.breakAfterBlockFor(n, true));
+    assertFalse(tc.breakAfterBlockFor(n, false));
+  }
+}

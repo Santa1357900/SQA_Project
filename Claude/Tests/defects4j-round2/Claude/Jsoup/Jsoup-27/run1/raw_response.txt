@@ -1,0 +1,246 @@
+package org.jsoup.helper;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Elements;
+import org.jsoup.parser.Parser;
+
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+
+public class DataUtilClaudeTest {
+
+    private ByteBuffer wrapBytes(String s, String charsetName) {
+        return ByteBuffer.wrap(s.getBytes(Charset.forName(charsetName)));
+    }
+
+    // load(File,...) : nonexistent file must throw IOException
+    @Test
+    public void testLoadFile_nonexistentFile_throwsIOException() throws Throwable {
+        File f = new File("this_file_does_not_exist_datautil_test_12345.html");
+        try {
+            DataUtil.load(f, "UTF-8", "http://example.com/");
+            fail("expected IOException");
+        } catch (IOException expected) {
+        }
+    }
+
+    // load(InputStream, null, baseUri) : no meta tag -> defaults to UTF-8, content parsed normally
+    @Test
+    public void testLoadInputStream_charsetNull_noMeta_defaultsToUtf8() throws Throwable {
+        String html = "<html><head></head><body>hello</body></html>";
+        InputStream is = new ByteArrayInputStream(html.getBytes(Charset.forName("UTF-8")));
+        Document doc = DataUtil.load(is, null, "http://example.com/");
+        assertEquals("hello", doc.body().text());
+    }
+
+    // load(InputStream, null, baseUri) : meta http-equiv charset differs from default -> re-decoded correctly
+    @Test
+    public void testLoadInputStream_charsetNull_withMetaCharset_detectsAndRedecodes() throws Throwable {
+        String html = "<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=ISO-8859-1\">" +
+                "</head><body>caf\u00e9</body></html>";
+        byte[] bytes = html.getBytes(Charset.forName("ISO-8859-1"));
+        InputStream is = new ByteArrayInputStream(bytes);
+        Document doc = DataUtil.load(is, null, "http://example.com/");
+        assertEquals("caf\u00e9", doc.body().text());
+    }
+
+    // load(InputStream, charsetName, baseUri) : explicit charset used, decodes given charset correctly
+    @Test
+    public void testLoadInputStream_charsetSpecified_decodesWithGivenCharset() throws Throwable {
+        String html = "<html><body>caf\u00e9</body></html>";
+        byte[] bytes = html.getBytes(Charset.forName("ISO-8859-1"));
+        InputStream is = new ByteArrayInputStream(bytes);
+        Document doc = DataUtil.load(is, "ISO-8859-1", "http://example.com/");
+        assertEquals("caf\u00e9", doc.body().text());
+    }
+
+    // load(InputStream, charsetName, baseUri, parser) : alternate xml parser is used
+    @Test
+    public void testLoadInputStreamWithParser_xmlParser_parsesCorrectly() throws Throwable {
+        String xml = "<root><child>text</child></root>";
+        InputStream is = new ByteArrayInputStream(xml.getBytes(Charset.forName("UTF-8")));
+        Document doc = DataUtil.load(is, "UTF-8", "http://example.com/", Parser.xmlParser());
+        Elements children = doc.select("child");
+        assertEquals(1, children.size());
+        assertEquals("text", children.first().text());
+    }
+
+    // parseByteData : charsetName null, no meta present -> default UTF-8 kept, doc not re-parsed
+    @Test
+    public void testParseByteData_charsetNull_noMeta_keepsUtf8Default() throws Throwable {
+        String html = "<html><head></head><body>plain text</body></html>";
+        ByteBuffer bb = wrapBytes(html, "UTF-8");
+        Document doc = DataUtil.parseByteData(bb, null, "http://example.com/", Parser.htmlParser());
+        assertEquals("plain text", doc.body().text());
+    }
+
+    // parseByteData : charsetName null, meta http-equiv content-type with different charset -> redecode branch
+    @Test
+    public void testParseByteData_charsetNull_metaHttpEquiv_redecodesWithFoundCharset() throws Throwable {
+        String html = "<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=ISO-8859-1\">" +
+                "</head><body>caf\u00e9</body></html>";
+        ByteBuffer bb = wrapBytes(html, "ISO-8859-1");
+        Document doc = DataUtil.parseByteData(bb, null, "http://example.com/", Parser.htmlParser());
+        assertEquals("caf\u00e9", doc.body().text());
+    }
+
+    // parseByteData : charsetName null, html5 <meta charset=...> attribute -> redecode branch
+    @Test
+    public void testParseByteData_charsetNull_metaCharsetAttr_redecodesWithFoundCharset() throws Throwable {
+        String html = "<html><head><meta charset=\"ISO-8859-1\"></head><body>caf\u00e9</body></html>";
+        ByteBuffer bb = wrapBytes(html, "ISO-8859-1");
+        Document doc = DataUtil.parseByteData(bb, null, "http://example.com/", Parser.htmlParser());
+        assertEquals("caf\u00e9", doc.body().text());
+    }
+
+    // parseByteData : charsetName null, meta charset equals default UTF-8 -> no redecode needed, still correct
+    @Test
+    public void testParseByteData_charsetNull_metaCharsetEqualsDefault_noRedecode() throws Throwable {
+        String html = "<html><head><meta charset=\"UTF-8\"></head><body>hello</body></html>";
+        ByteBuffer bb = wrapBytes(html, "UTF-8");
+        Document doc = DataUtil.parseByteData(bb, null, "http://example.com/", Parser.htmlParser());
+        assertEquals("hello", doc.body().text());
+    }
+
+    // parseByteData : charsetName null, meta charset attribute empty -> foundCharset length==0, keeps default
+    @Test
+    public void testParseByteData_metaCharsetEmpty_keepsDefault() throws Throwable {
+        String html = "<html><head><meta charset=\"\"></head><body>hello</body></html>";
+        ByteBuffer bb = wrapBytes(html, "UTF-8");
+        Document doc = DataUtil.parseByteData(bb, null, "http://example.com/", Parser.htmlParser());
+        assertEquals("hello", doc.body().text());
+    }
+
+    // parseByteData : charsetName null, meta http-equiv content lacks charset -> getCharsetFromContentType null, keeps default
+    @Test
+    public void testParseByteData_metaHttpEquivNoCharsetInContent_keepsDefault() throws Throwable {
+        String html = "<html><head><meta http-equiv=\"content-type\" content=\"text/html\">" +
+                "</head><body>hello</body></html>";
+        ByteBuffer bb = wrapBytes(html, "UTF-8");
+        Document doc = DataUtil.parseByteData(bb, null, "http://example.com/", Parser.htmlParser());
+        assertEquals("hello", doc.body().text());
+    }
+
+    // parseByteData : charsetName specified -> meta detection branch skipped entirely, decodes directly
+    @Test
+    public void testParseByteData_charsetSpecified_decodesDirectly_skipsMetaDetection() throws Throwable {
+        String html = "<html><head><meta charset=\"UTF-16\"></head><body>caf\u00e9</body></html>";
+        ByteBuffer bb = wrapBytes(html, "ISO-8859-1");
+        Document doc = DataUtil.parseByteData(bb, "ISO-8859-1", "http://example.com/", Parser.htmlParser());
+        assertEquals("caf\u00e9", doc.body().text());
+    }
+
+    // parseByteData : BOM character present at start is stripped before parsing
+    @Test
+    public void testParseByteData_bomPresent_stripsBomCharacter() throws Throwable {
+        byte[] bom = new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+        String html = "<html><body>hello</body></html>";
+        byte[] htmlBytes = html.getBytes(Charset.forName("UTF-8"));
+        byte[] full = new byte[bom.length + htmlBytes.length];
+        System.arraycopy(bom, 0, full, 0, bom.length);
+        System.arraycopy(htmlBytes, 0, full, bom.length, htmlBytes.length);
+        ByteBuffer bb = ByteBuffer.wrap(full);
+        Document doc = DataUtil.parseByteData(bb, "UTF-8", "http://example.com/", Parser.htmlParser());
+        assertEquals("hello", doc.body().text());
+    }
+
+    // parseByteData : output settings charset is set to the charsetName used for decoding
+    @Test
+    public void testParseByteData_setsOutputCharsetOnDocument() throws Throwable {
+        String html = "<html><body>hello</body></html>";
+        ByteBuffer bb = wrapBytes(html, "UTF-8");
+        Document doc = DataUtil.parseByteData(bb, "UTF-8", "http://example.com/", Parser.htmlParser());
+        assertEquals("UTF-8", doc.outputSettings().charset().name());
+    }
+
+    // readToByteBuffer : empty stream -> buffer with zero remaining bytes
+    @Test
+    public void testReadToByteBuffer_emptyStream_returnsEmptyBuffer() throws Throwable {
+        InputStream is = new ByteArrayInputStream(new byte[0]);
+        ByteBuffer bb = DataUtil.readToByteBuffer(is);
+        assertEquals(0, bb.remaining());
+    }
+
+    // readToByteBuffer : small content is read fully and matches original bytes
+    @Test
+    public void testReadToByteBuffer_smallContent_returnsExactBytes() throws Throwable {
+        byte[] data = "Hello World".getBytes(Charset.forName("UTF-8"));
+        InputStream is = new ByteArrayInputStream(data);
+        ByteBuffer bb = DataUtil.readToByteBuffer(is);
+        byte[] result = new byte[bb.remaining()];
+        bb.get(result);
+        assertArrayEquals(data, result);
+    }
+
+    // getCharsetFromContentType : null input returns null
+    @Test
+    public void testGetCharsetFromContentType_nullInput_returnsNull() throws Throwable {
+        assertNull(DataUtil.getCharsetFromContentType(null));
+    }
+
+    // getCharsetFromContentType : no charset present returns null
+    @Test
+    public void testGetCharsetFromContentType_noCharsetPresent_returnsNull() throws Throwable {
+        assertNull(DataUtil.getCharsetFromContentType("text/html"));
+    }
+
+    // getCharsetFromContentType : simple charset value returned trimmed and uppercased
+    @Test
+    public void testGetCharsetFromContentType_simpleCharset_returnsUppercaseTrimmed() throws Throwable {
+        String result = DataUtil.getCharsetFromContentType("text/html; charset=EUC-JP");
+        assertEquals("EUC-JP", result);
+    }
+
+    // getCharsetFromContentType : double-quoted charset value returned without quotes
+    @Test
+    public void testGetCharsetFromContentType_doubleQuotedCharset_returnsWithoutQuotes() throws Throwable {
+        String result = DataUtil.getCharsetFromContentType("text/html; charset=\"UTF-8\"");
+        assertEquals("UTF-8", result);
+    }
+
+    // getCharsetFromContentType : single-quoted charset value must also be returned without quotes (bug-hunting oracle)
+    @Test
+    public void testGetCharsetFromContentType_singleQuotedCharset_returnsWithoutQuotes() throws Throwable {
+        String result = DataUtil.getCharsetFromContentType("text/html; charset='EUC-JP'");
+        assertEquals("EUC-JP", result);
+    }
+
+    // getCharsetFromContentType : mixed case header and value are handled case-insensitively and uppercased
+    @Test
+    public void testGetCharsetFromContentType_mixedCaseAndWhitespace_returnsCleanUppercase() throws Throwable {
+        String result = DataUtil.getCharsetFromContentType("TEXT/HTML; CHARSET=utf-8");
+        assertEquals("UTF-8", result);
+    }
+
+    // getCharsetFromContentType : charset value stops at trailing semicolon boundary
+    @Test
+    public void testGetCharsetFromContentType_charsetWithTrailingSemicolon_stopsAtSemicolon() throws Throwable {
+        String result = DataUtil.getCharsetFromContentType("text/html; charset=EUC-JP; boundary=xyz");
+        assertEquals("EUC-JP", result);
+    }
+
+    // getCharsetFromContentType : whitespace after charset= is skipped before capturing value
+    @Test
+    public void testGetCharsetFromContentType_whitespaceAfterEquals_isSkipped() throws Throwable {
+        String result = DataUtil.getCharsetFromContentType("text/html; charset=  GB2312");
+        assertEquals("GB2312", result);
+    }
+
+    // load(InputStream,...) : baseUri is used to resolve relative links in parsed document
+    @Test
+    public void testLoadInputStream_baseUriUsedForRelativeLinks() throws Throwable {
+        String html = "<html><body><a href=\"page.html\">link</a></body></html>";
+        InputStream is = new ByteArrayInputStream(html.getBytes(Charset.forName("UTF-8")));
+        Document doc = DataUtil.load(is, "UTF-8", "http://example.com/base/");
+        Element link = doc.select("a").first();
+        assertEquals("http://example.com/base/page.html", link.attr("abs:href"));
+    }
+}

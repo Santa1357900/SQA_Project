@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Compress-22-sl6lxpx8/Compress-22f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStreamClaudeTest::testReadArray_lenZero_returnsZeroPerContract
+[exit 0]

@@ -1,0 +1,345 @@
+package com.fasterxml.jackson.databind.ser.std;
+
+import java.util.Date;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
+public class DateTimeSerializerBaseClaudeTest
+{
+    public static class DefaultDateBean {
+        private Date value;
+        public Date getValue() { return value; }
+        public void setValue(Date value) { this.value = value; }
+    }
+
+    public static class NumberShapeBean {
+        private Date value;
+        @JsonFormat(shape = JsonFormat.Shape.NUMBER)
+        public Date getValue() { return value; }
+        public void setValue(Date value) { this.value = value; }
+    }
+
+    public static class StringShapeBean {
+        private Date value;
+        @JsonFormat(shape = JsonFormat.Shape.STRING)
+        public Date getValue() { return value; }
+        public void setValue(Date value) { this.value = value; }
+    }
+
+    public static class ShapeAnyBean {
+        private Date value;
+        @JsonFormat(shape = JsonFormat.Shape.ANY)
+        public Date getValue() { return value; }
+        public void setValue(Date value) { this.value = value; }
+    }
+
+    public static class PatternDayBean {
+        private Date value;
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd", timezone = "UTC")
+        public Date getValue() { return value; }
+        public void setValue(Date value) { this.value = value; }
+    }
+
+    public static class PatternHourMinuteBean {
+        private Date value;
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm", timezone = "UTC")
+        public Date getValue() { return value; }
+        public void setValue(Date value) { this.value = value; }
+    }
+
+    public static class TimeZoneOnlyBean {
+        private Date value;
+        @JsonFormat(shape = JsonFormat.Shape.STRING, timezone = "America/Chicago")
+        public Date getValue() { return value; }
+        public void setValue(Date value) { this.value = value; }
+    }
+
+    public static class LocaleBean {
+        private Date value;
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "MMM", locale = "en_US", timezone = "UTC")
+        public Date getValue() { return value; }
+        public void setValue(Date value) { this.value = value; }
+    }
+
+    public static class NonEmptyBean {
+        private Date value;
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        public Date getValue() { return value; }
+        public void setValue(Date value) { this.value = value; }
+    }
+
+    public static class TwoDateFieldsBean {
+        private Date numeric;
+        private Date text;
+        @JsonFormat(shape = JsonFormat.Shape.NUMBER)
+        public Date getNumeric() { return numeric; }
+        public void setNumeric(Date numeric) { this.numeric = numeric; }
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy", timezone = "UTC")
+        public Date getText() { return text; }
+        public void setText(Date text) { this.text = text; }
+    }
+
+    // _asTimestamp: useTimestamp/customFormat both null -> falls back to global WRITE_DATES_AS_TIMESTAMPS (default enabled)
+    @Test
+    public void testDefaultDate_timestampsEnabledByDefault_writesNumericEpoch() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        DefaultDateBean bean = new DefaultDateBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":0}", json);
+    }
+
+    // _asTimestamp: global config disabled -> serialize as ISO string, not numeric
+    @Test
+    public void testDefaultDate_timestampsDisabled_writesIsoStringEpoch() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        DefaultDateBean bean = new DefaultDateBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("1970-01-01T00:00:00.000"));
+        assertFalse(json.equals("{\"value\":0}"));
+    }
+
+    // ISO string path must correctly represent pre-epoch (negative timestamp) dates
+    @Test
+    public void testDefaultDate_timestampsDisabled_negativeDate_writesPreEpochIsoString() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        DefaultDateBean bean = new DefaultDateBean();
+        bean.setValue(new Date(-86400000L));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("1969-12-31"));
+    }
+
+    // numeric timestamp path must correctly write negative values (before epoch)
+    @Test
+    public void testDefaultDate_negativeValue_writesNegativeNumericTimestamp() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        DefaultDateBean bean = new DefaultDateBean();
+        bean.setValue(new Date(-100));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":-100}", json);
+    }
+
+    // createContextual: numeric shape forces withFormat(TRUE,null), overriding disabled global config
+    @Test
+    public void testJsonFormatShapeNumber_overridesDisabledGlobalTimestamps() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        NumberShapeBean bean = new NumberShapeBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":0}", json);
+    }
+
+    // numeric shape must pass through the exact timestamp value, not just epoch(0)
+    @Test
+    public void testJsonFormatShapeNumber_nonZeroValue_matchesExactTimestamp() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        NumberShapeBean bean = new NumberShapeBean();
+        bean.setValue(new Date(999999));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":999999}", json);
+    }
+
+    // createContextual: STRING shape forces withFormat(FALSE, iso-df), overriding enabled global timestamps
+    @Test
+    public void testJsonFormatShapeString_overridesEnabledGlobalTimestamps() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        StringShapeBean bean = new StringShapeBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.startsWith("{\"value\":\"1970-01-01T00:00:00.000"));
+        assertFalse(json.equals("{\"value\":0}"));
+    }
+
+    // createContextual: Shape.ANY is neither numeric nor STRING -> falls through to "return this", using global config (enabled)
+    @Test
+    public void testJsonFormatShapeAny_fallsBackToGlobalConfig_enabled() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        ShapeAnyBean bean = new ShapeAnyBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":0}", json);
+    }
+
+    // same fallthrough branch but with global config disabled -> should still be ISO string
+    @Test
+    public void testJsonFormatShapeAny_fallsBackToGlobalConfig_disabled() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        ShapeAnyBean bean = new ShapeAnyBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("1970-01-01T00:00:00.000"));
+    }
+
+    // createContextual: format.hasPattern() true branch, pattern applied with explicit UTC timezone
+    @Test
+    public void testJsonFormatPattern_dateOnly_epoch() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        PatternDayBean bean = new PatternDayBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":\"1970-01-01\"}", json);
+    }
+
+    // pattern applied to a non-epoch date (31 days later -> 1970-02-01)
+    @Test
+    public void testJsonFormatPattern_dateOnly_nonEpoch() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        PatternDayBean bean = new PatternDayBean();
+        bean.setValue(new Date(31L * 24 * 60 * 60 * 1000));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":\"1970-02-01\"}", json);
+    }
+
+    // pattern with hour/minute, epoch value
+    @Test
+    public void testJsonFormatPattern_hourMinute_epoch() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        PatternHourMinuteBean bean = new PatternHourMinuteBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":\"00:00\"}", json);
+    }
+
+    // pattern with hour/minute, non-zero time-of-day
+    @Test
+    public void testJsonFormatPattern_hourMinute_nonZeroTime() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        PatternHourMinuteBean bean = new PatternHourMinuteBean();
+        bean.setValue(new Date(3661000L));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":\"01:01\"}", json);
+    }
+
+    // createContextual: format.hasPattern() false -> ISO8601 default pattern; explicit timezone applied (standard time offset)
+    @Test
+    public void testJsonFormatTimeZone_appliesStandardTimeOffset() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        TimeZoneOnlyBean bean = new TimeZoneOnlyBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("1969-12-31T18:00:00.000-0600"));
+    }
+
+    // explicit timezone applied correctly during daylight-saving period (seasonal offset change)
+    @Test
+    public void testJsonFormatTimeZone_appliesDaylightTimeOffset() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        TimeZoneOnlyBean bean = new TimeZoneOnlyBean();
+        bean.setValue(new Date(181L * 24 * 60 * 60 * 1000));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("1970-06-30T19:00:00.000-0500"));
+    }
+
+    // createContextual: format.hasLocale() true -> uses configured Locale for month name (January)
+    @Test
+    public void testJsonFormatLocale_januaryMonthName() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        LocaleBean bean = new LocaleBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":\"Jan\"}", json);
+    }
+
+    // locale applied consistently for a different month (June)
+    @Test
+    public void testJsonFormatLocale_juneMonthName() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        LocaleBean bean = new LocaleBean();
+        bean.setValue(new Date(151L * 24 * 60 * 60 * 1000));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":\"Jun\"}", json);
+    }
+
+    // isEmpty: epoch date (timestamp==0) is considered empty and omitted with NON_EMPTY
+    @Test
+    public void testJsonInclude_nonEmpty_omitsEpochDate() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        NonEmptyBean bean = new NonEmptyBean();
+        bean.setValue(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{}", json);
+    }
+
+    // isEmpty: positive non-zero timestamp is NOT empty and must be included
+    @Test
+    public void testJsonInclude_nonEmpty_includesPositiveTimestamp() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        NonEmptyBean bean = new NonEmptyBean();
+        bean.setValue(new Date(500));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":500}", json);
+    }
+
+    // isEmpty: negative timestamp (before epoch, != 0) must NOT be treated as empty
+    @Test
+    public void testJsonInclude_nonEmpty_includesNegativeTimestamp() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        NonEmptyBean bean = new NonEmptyBean();
+        bean.setValue(new Date(-500));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":-500}", json);
+    }
+
+    // isEmpty boundary: timestamp of exactly 1 (just above the empty threshold of 0) must be included
+    @Test
+    public void testJsonInclude_nonEmpty_boundaryOneMillisecond() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        NonEmptyBean bean = new NonEmptyBean();
+        bean.setValue(new Date(1));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"value\":1}", json);
+    }
+
+    // two properties with independent @JsonFormat configs must not interfere with each other
+    @Test
+    public void testTwoIndependentDateFields_defaultValues() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        TwoDateFieldsBean bean = new TwoDateFieldsBean();
+        bean.setNumeric(new Date(0));
+        bean.setText(new Date(0));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"numeric\":0"));
+        assertTrue(json.contains("\"text\":\"1970\""));
+    }
+
+    // independent field configs with distinct, non-default values
+    @Test
+    public void testTwoIndependentDateFields_variantValues() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        TwoDateFieldsBean bean = new TwoDateFieldsBean();
+        bean.setNumeric(new Date(1000));
+        bean.setText(new Date(31536000000L));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"numeric\":1000"));
+        assertTrue(json.contains("\"text\":\"1971\""));
+    }
+
+    // top-level (root) serialization: property is null so createContextual short-circuits, global config used
+    @Test
+    public void testTopLevelDateSerialization_noProperty_usesGlobalConfig() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = mapper.writeValueAsString(new Date(0));
+        assertEquals("0", json);
+    }
+
+    // top-level serialization respects disabled global timestamp config as well
+    @Test
+    public void testTopLevelDateSerialization_timestampsDisabled_writesIsoString() throws Throwable {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        String json = mapper.writeValueAsString(new Date(0));
+        assertTrue(json.contains("1970-01-01T00:00:00.000"));
+        assertFalse(json.equals("0"));
+    }
+}

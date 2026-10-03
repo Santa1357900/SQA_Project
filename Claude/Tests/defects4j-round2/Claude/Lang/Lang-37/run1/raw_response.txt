@@ -1,0 +1,411 @@
+package org.apache.commons.lang3;
+
+import java.util.AbstractMap;
+import java.util.Map;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ArrayUtilsClaudeTest {
+
+    // toString(Object): null array -> default "{}" literal
+    @Test
+    public void testToString_nullArray_returnsDefaultBraces() throws Throwable {
+        assertEquals("{}", ArrayUtils.toString(null));
+    }
+
+    // toString(Object, String): null array -> returns the supplied stringIfNull
+    @Test
+    public void testToString_nullArrayWithCustomDefault_returnsCustomString() throws Throwable {
+        assertEquals("NONE", ArrayUtils.toString(null, "NONE"));
+    }
+
+    // toString(Object, String): non-null array branch produces a real (non-default) representation
+    @Test
+    public void testToStringWithDefault_nonNullArray_returnsNonDefaultString() throws Throwable {
+        String result = ArrayUtils.toString(new int[]{1, 2}, "{}");
+        assertNotNull(result);
+        assertFalse(result.equals("{}"));
+    }
+
+    // isEquals: both null -> true (EqualsBuilder contract); different content -> false
+    @Test
+    public void testIsEquals_nullAndDifferentArrays() throws Throwable {
+        assertTrue(ArrayUtils.isEquals(null, null));
+        assertFalse(ArrayUtils.isEquals(new Object[]{"a"}, new Object[]{"b"}));
+    }
+
+    // toMap: null input array returns null
+    @Test
+    public void testToMap_nullArray_returnsNull() throws Throwable {
+        assertNull(ArrayUtils.toMap(null));
+    }
+
+    // toMap: Map.Entry element and Array element both populate the map correctly
+    @Test
+    public void testToMap_entryAndArrayElements_buildsMap() throws Throwable {
+        Object[] array = new Object[]{
+            new AbstractMap.SimpleEntry("KEY", "VALUE"),
+            new String[]{"RED", "#FF0000"}
+        };
+        Map<Object, Object> map = ArrayUtils.toMap(array);
+        assertEquals("VALUE", map.get("KEY"));
+        assertEquals("#FF0000", map.get("RED"));
+    }
+
+    // toMap: element neither Map.Entry nor Array -> IllegalArgumentException
+    @Test
+    public void testToMap_elementNotEntryOrArray_throwsIllegalArgumentException() throws Throwable {
+        Object[] array = new Object[]{"plainString"};
+        try {
+            ArrayUtils.toMap(array);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // toMap: sub-array element with length < 2 -> IllegalArgumentException
+    @Test
+    public void testToMap_subArrayTooShort_throwsIllegalArgumentException() throws Throwable {
+        Object[] array = new Object[]{new String[]{"ONLY"}};
+        try {
+            ArrayUtils.toMap(array);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // clone(T[]): null input -> null output
+    @Test
+    public void testCloneObjectArray_nullInput_returnsNull() throws Throwable {
+        assertNull(ArrayUtils.clone((Object[]) null));
+    }
+
+    // clone(T[]): non-null input -> new array instance with equal content
+    @Test
+    public void testCloneObjectArray_nonNullInput_returnsEqualButDifferentArray() throws Throwable {
+        String[] original = {"a", "b"};
+        String[] cloned = ArrayUtils.clone(original);
+        assertNotSame(original, cloned);
+        assertArrayEquals(original, cloned);
+    }
+
+    // clone(int[]): non-null input -> new array instance with equal content
+    @Test
+    public void testCloneIntArray_nonNullInput_returnsEqualButDifferentArray() throws Throwable {
+        int[] original = {1, 2, 3};
+        int[] cloned = ArrayUtils.clone(original);
+        assertNotSame(original, cloned);
+        assertArrayEquals(original, cloned);
+    }
+
+    // subarray(T[],start,end): normal in-range slice
+    @Test
+    public void testSubarrayObject_normalRange_returnsSlice() throws Throwable {
+        String[] arr = {"a", "b", "c", "d"};
+        String[] result = ArrayUtils.subarray(arr, 1, 3);
+        assertArrayEquals(new String[]{"b", "c"}, result);
+    }
+
+    // subarray(T[],start,end): negative start index promoted to 0
+    @Test
+    public void testSubarrayObject_negativeStart_promotedToZero() throws Throwable {
+        String[] arr = {"a", "b", "c", "d"};
+        String[] result = ArrayUtils.subarray(arr, -5, 2);
+        assertArrayEquals(new String[]{"a", "b"}, result);
+    }
+
+    // subarray(T[],start,end): end beyond length demoted to array length
+    @Test
+    public void testSubarrayObject_endBeyondLength_demotedToLength() throws Throwable {
+        String[] arr = {"a", "b", "c", "d"};
+        String[] result = ArrayUtils.subarray(arr, 2, 100);
+        assertArrayEquals(new String[]{"c", "d"}, result);
+    }
+
+    // subarray(T[],start,end): start>=end produces empty array of correct type
+    @Test
+    public void testSubarrayObject_emptyRange_returnsEmptyArray() throws Throwable {
+        String[] arr = {"a", "b", "c"};
+        String[] result = ArrayUtils.subarray(arr, 3, 3);
+        assertEquals(0, result.length);
+    }
+
+    // subarray(T[],start,end): null array input -> null output
+    @Test
+    public void testSubarrayObject_nullArray_returnsNull() throws Throwable {
+        assertNull(ArrayUtils.subarray((String[]) null, 0, 2));
+    }
+
+    // isSameLength(Object[],Object[]): null-as-empty handling and length mismatch
+    @Test
+    public void testIsSameLengthObject_nullAndLengthCombinations() throws Throwable {
+        assertTrue(ArrayUtils.isSameLength(null, new Object[0]));
+        assertFalse(ArrayUtils.isSameLength(null, new Object[]{"a"}));
+        assertFalse(ArrayUtils.isSameLength(new Object[]{"a"}, new Object[]{"a", "b"}));
+    }
+
+    // getLength: null -> 0; non-array object -> IllegalArgumentException
+    @Test
+    public void testGetLength_nullAndNonArray() throws Throwable {
+        assertEquals(0, ArrayUtils.getLength(null));
+        assertEquals(3, ArrayUtils.getLength(new int[]{1, 2, 3}));
+        try {
+            ArrayUtils.getLength("not an array");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // isSameType: null argument -> IllegalArgumentException
+    @Test
+    public void testIsSameType_nullArray_throwsIllegalArgumentException() throws Throwable {
+        try {
+            ArrayUtils.isSameType(null, new int[0]);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // isSameType: different class names -> false; identical class names -> true
+    @Test
+    public void testIsSameType_differentAndSameTypes() throws Throwable {
+        assertFalse(ArrayUtils.isSameType(new int[0], new String[0]));
+        assertTrue(ArrayUtils.isSameType(new int[0], new int[0]));
+    }
+
+    // reverse(Object[]): multiple elements swapped end to end
+    @Test
+    public void testReverseObjectArray_multipleElements_reversed() throws Throwable {
+        Object[] arr = {"a", "b", "c"};
+        ArrayUtils.reverse(arr);
+        assertArrayEquals(new Object[]{"c", "b", "a"}, arr);
+    }
+
+    // reverse(int[]): single element loop body executes zero times, array unchanged
+    @Test
+    public void testReverseIntArray_singleElement_unchanged() throws Throwable {
+        int[] single = {42};
+        ArrayUtils.reverse(single);
+        assertArrayEquals(new int[]{42}, single);
+    }
+
+    // indexOf(Object[],Object,int): found, negative startIndex treated as 0, startIndex beyond length
+    @Test
+    public void testIndexOfObject_foundAndStartIndexEdges() throws Throwable {
+        Object[] arr = {"a", "b", "c"};
+        assertEquals(1, ArrayUtils.indexOf(arr, "b"));
+        assertEquals(0, ArrayUtils.indexOf(arr, "a", -5));
+        assertEquals(-1, ArrayUtils.indexOf(arr, "a", 10));
+    }
+
+    // indexOf(Object[],Object): objectToFind null matches null element in array
+    @Test
+    public void testIndexOfObject_nullElementSearch_findsNullIndex() throws Throwable {
+        Object[] arr = {"a", null, "c"};
+        assertEquals(1, ArrayUtils.indexOf(arr, null));
+    }
+
+    // indexOf(Object[],Object): component-type mismatch short-circuits to not found
+    @Test
+    public void testIndexOfObject_incompatibleComponentType_returnsNegativeOne() throws Throwable {
+        String[] strArr = {"a", "b"};
+        assertEquals(-1, ArrayUtils.indexOf((Object[]) strArr, Integer.valueOf(1)));
+    }
+
+    // lastIndexOf(Object[],Object): default start is Integer.MAX_VALUE, finds last match
+    @Test
+    public void testLastIndexOfObject_defaultsToEnd_findsLastMatch() throws Throwable {
+        Object[] arr = {"a", "b", "a"};
+        assertEquals(2, ArrayUtils.lastIndexOf(arr, "a"));
+    }
+
+    // contains(Object[],Object): true when present, false when absent
+    @Test
+    public void testContainsObject_trueAndFalse() throws Throwable {
+        Object[] arr = {"a", "b"};
+        assertTrue(ArrayUtils.contains(arr, "a"));
+        assertFalse(ArrayUtils.contains(arr, "z"));
+    }
+
+    // indexOf(double[],double,double): value within +/- tolerance window is found
+    @Test
+    public void testIndexOfDoubleWithTolerance_withinTolerance_returnsIndex() throws Throwable {
+        double[] darr = {1.0, 2.0, 3.0};
+        assertEquals(1, ArrayUtils.indexOf(darr, 2.05, 0.1));
+    }
+
+    // indexOf(double[],double): empty array short-circuits via isEmpty check
+    @Test
+    public void testIndexOfDouble_emptyArray_returnsNegativeOne() throws Throwable {
+        assertEquals(-1, ArrayUtils.indexOf(new double[0], 1.0));
+    }
+
+    // toPrimitive(Character[]): a null element causes NullPointerException on unboxing
+    @Test
+    public void testToPrimitiveCharacter_withNullElement_throwsNullPointerException() throws Throwable {
+        Character[] carr = {Character.valueOf('a'), null};
+        try {
+            ArrayUtils.toPrimitive(carr);
+            fail("expected NullPointerException");
+        } catch (NullPointerException expected) {
+        }
+    }
+
+    // toPrimitive(Character[], char): null element replaced with valueForNull
+    @Test
+    public void testToPrimitiveCharacterWithDefault_replacesNullWithDefault() throws Throwable {
+        Character[] carr = {Character.valueOf('a'), null};
+        char[] result = ArrayUtils.toPrimitive(carr, 'z');
+        assertArrayEquals(new char[]{'a', 'z'}, result);
+    }
+
+    // toObject(char[]): primitive chars converted to boxed Character values
+    @Test
+    public void testToObjectChar_convertsCorrectly() throws Throwable {
+        char[] src = {'x', 'y'};
+        Character[] result = ArrayUtils.toObject(src);
+        assertEquals(Character.valueOf('x'), result[0]);
+        assertEquals(Character.valueOf('y'), result[1]);
+    }
+
+    // isEmpty(T[]): null, empty and non-empty branches
+    @Test
+    public void testIsEmptyObjectArray_variousCases() throws Throwable {
+        assertTrue(ArrayUtils.isEmpty((Object[]) null));
+        assertTrue(ArrayUtils.isEmpty(new Object[0]));
+        assertFalse(ArrayUtils.isEmpty(new Object[]{"a"}));
+    }
+
+    // addAll(T[],T...): both arrays null -> null result
+    @Test
+    public void testAddAll_bothNull_returnsNull() throws Throwable {
+        assertNull(ArrayUtils.addAll((String[]) null, (String[]) null));
+    }
+
+    // addAll(T[],T...): first array null -> cloned copy of second array returned
+    @Test
+    public void testAddAll_firstNull_returnsClonedSecond() throws Throwable {
+        String[] a2 = {"x", "y"};
+        String[] result = ArrayUtils.addAll((String[]) null, a2);
+        assertArrayEquals(a2, result);
+        assertNotSame(a2, result);
+    }
+
+    // addAll(T[],T...): normal concatenation of two compatible arrays
+    @Test
+    public void testAddAll_normalConcat_returnsJoinedArray() throws Throwable {
+        String[] a1 = {"a", "b"};
+        String[] a2 = {"c", "d"};
+        String[] result = ArrayUtils.addAll(a1, a2);
+        assertArrayEquals(new String[]{"a", "b", "c", "d"}, result);
+    }
+
+    // addAll(T[],T...): incompatible component types must be reported as IllegalArgumentException,
+    // not leaked as a raw ArrayStoreException (regression test for the missing try/catch bug)
+    @Test
+    public void testAddAll_incompatibleComponentTypes_throwsIllegalArgumentException() throws Throwable {
+        String[] array1 = {"a", "b"};
+        Object[] array2 = {Integer.valueOf(1)};
+        try {
+            ArrayUtils.addAll(array1, array2);
+            fail("expected IllegalArgumentException for incompatible array component types");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // addAll(int[],int...): normal concatenation of primitive arrays
+    @Test
+    public void testAddAllInt_normalConcat_returnsJoinedArray() throws Throwable {
+        int[] ia1 = {1, 2};
+        int[] ia2 = {3, 4};
+        int[] result = ArrayUtils.addAll(ia1, ia2);
+        assertArrayEquals(new int[]{1, 2, 3, 4}, result);
+    }
+
+    // add(T[],T): null array with null element yields single-element Object[] array;
+    // non-null array append grows the array by one
+    @Test
+    public void testAdd_nullArrayAndAppendToExisting() throws Throwable {
+        Object[] fromNull = ArrayUtils.add((Object[]) null, null);
+        assertEquals(1, fromNull.length);
+        assertNull(fromNull[0]);
+        String[] appended = ArrayUtils.add(new String[]{"a"}, "b");
+        assertArrayEquals(new String[]{"a", "b"}, appended);
+    }
+
+    // add(T[],int,T): inserting in the middle shifts subsequent elements right
+    @Test
+    public void testAddAtIndex_insertInMiddle_shiftsElements() throws Throwable {
+        String[] arr = {"a", "b"};
+        String[] result = ArrayUtils.add(arr, 1, "x");
+        assertArrayEquals(new String[]{"a", "x", "b"}, result);
+    }
+
+    // add(T[],int,T): index greater than array length -> IndexOutOfBoundsException
+    @Test
+    public void testAddAtIndex_indexOutOfBounds_throwsIndexOutOfBoundsException() throws Throwable {
+        String[] arr = {"a", "b"};
+        try {
+            ArrayUtils.add(arr, 5, "x");
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // add(int[],int,int): negative index -> IndexOutOfBoundsException
+    @Test
+    public void testAddIntAtIndex_negativeIndex_throwsIndexOutOfBoundsException() throws Throwable {
+        int[] arr = {1, 2};
+        try {
+            ArrayUtils.add(arr, -1, 9);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // remove(T[],int): removing a middle index shifts subsequent elements left
+    @Test
+    public void testRemove_middleIndex_returnsArrayWithoutElement() throws Throwable {
+        String[] arr = {"a", "b", "c"};
+        String[] result = ArrayUtils.remove(arr, 1);
+        assertArrayEquals(new String[]{"a", "c"}, result);
+    }
+
+    // remove(T[],int): index equal to length (out of range) -> IndexOutOfBoundsException
+    @Test
+    public void testRemove_indexEqualsLength_throwsIndexOutOfBoundsException() throws Throwable {
+        String[] arr = {"a", "b"};
+        try {
+            ArrayUtils.remove(arr, 2);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // remove(T[],int): null array always triggers IndexOutOfBoundsException per contract
+    @Test
+    public void testRemove_nullArray_throwsIndexOutOfBoundsException() throws Throwable {
+        try {
+            ArrayUtils.remove((String[]) null, 0);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) {
+        }
+    }
+
+    // removeElement(T[],Object): first occurrence removed when found
+    @Test
+    public void testRemoveElement_found_removesFirstOccurrence() throws Throwable {
+        String[] arr = {"a", "b", "a"};
+        String[] result = ArrayUtils.removeElement(arr, "a");
+        assertArrayEquals(new String[]{"b", "a"}, result);
+    }
+
+    // removeElement(T[],Object): element not found returns a cloned (different reference) array
+    @Test
+    public void testRemoveElement_notFound_returnsClone() throws Throwable {
+        String[] arr = {"a", "b"};
+        String[] result = ArrayUtils.removeElement(arr, "z");
+        assertArrayEquals(arr, result);
+        assertNotSame(arr, result);
+    }
+}

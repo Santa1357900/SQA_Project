@@ -1,0 +1,225 @@
+package org.apache.commons.codec.language;
+
+import org.apache.commons.codec.EncoderException;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CaverphoneClaudeTest {
+
+    private Caverphone caverphone;
+
+    @Before
+    public void setUp() throws Throwable {
+        caverphone = new Caverphone();
+    }
+
+    // branch: txt == null -> early return "1111111111"
+    @Test
+    public void testCaverphone_nullInput_returnsAllOnes() throws Throwable {
+        assertEquals("1111111111", caverphone.caverphone(null));
+    }
+
+    // branch: txt.length() == 0 -> early return "1111111111"
+    @Test
+    public void testCaverphone_emptyString_returnsAllOnes() throws Throwable {
+        assertEquals("1111111111", caverphone.caverphone(""));
+    }
+
+    // branch: input has length>0 but all chars are non a-z, falls through general algorithm on empty cleaned string
+    @Test
+    public void testCaverphone_onlyNonAlphaChars_fallsThroughToAllOnes() throws Throwable {
+        assertEquals("1111111111", caverphone.caverphone(" "));
+    }
+
+    // branch: lowercase conversion + removal of digits/uppercase, same as plain "thompson"
+    @Test
+    public void testCaverphone_mixedCaseAndDigits_Thompson() throws Throwable {
+        assertEquals("TMPSN11111", caverphone.caverphone("THOMPSON123"));
+    }
+
+    // basic name tracing through s+, t+, p+, m+, n+, h->2 rules
+    @Test
+    public void testCaverphone_basicName_Thompson() throws Throwable {
+        assertEquals("TMPSN11111", caverphone.caverphone("Thompson"));
+    }
+
+    // branches: c->k, y->3 (not preceded by vowel-3), 3$->A removal rule
+    @Test
+    public void testCaverphone_cToKAndYRule_copy() throws Throwable {
+        assertEquals("KPA1111111", caverphone.caverphone("copy"));
+    }
+
+    // branches: final-e removal, ^gn start rule
+    @Test
+    public void testCaverphone_gnStartAndFinalE_gnome() throws Throwable {
+        assertEquals("NM11111111", caverphone.caverphone("gnome"));
+    }
+
+    // branch: ^cough start rule
+    @Test
+    public void testCaverphone_coughStart() throws Throwable {
+        assertEquals("KF11111111", caverphone.caverphone("cough"));
+    }
+
+    // branch: ^rough start rule
+    @Test
+    public void testCaverphone_roughStart() throws Throwable {
+        assertEquals("RF11111111", caverphone.caverphone("rough"));
+    }
+
+    // branch: ^enough start rule (2.0 only)
+    @Test
+    public void testCaverphone_enoughStart() throws Throwable {
+        assertEquals("ANF1111111", caverphone.caverphone("enough"));
+    }
+
+    // branch: tch->2ch rule combined with w3 rule
+    @Test
+    public void testCaverphone_tchRule_watch() throws Throwable {
+        assertEquals("WK11111111", caverphone.caverphone("watch"));
+    }
+
+    // branches: z->s rule, 3$->A rule on double vowel
+    @Test
+    public void testCaverphone_zRule_zoo() throws Throwable {
+        assertEquals("SA11111111", caverphone.caverphone("zoo"));
+    }
+
+    // branch: x->k rule
+    @Test
+    public void testCaverphone_xRule_fox() throws Throwable {
+        assertEquals("FK11111111", caverphone.caverphone("fox"));
+    }
+
+    // branches: v->f rule combined with final-e removal
+    @Test
+    public void testCaverphone_vRuleAndFinalE_five() throws Throwable {
+        assertEquals("FF11111111", caverphone.caverphone("five"));
+    }
+
+    // branches: ph->fh rule, final-e removal, h->2 rule
+    @Test
+    public void testCaverphone_phRule_phone() throws Throwable {
+        assertEquals("FN11111111", caverphone.caverphone("phone"));
+    }
+
+    // branches: dg->2g rule (before d rule), ^[aeiou]->A start-vowel rule, g->k rule
+    @Test
+    public void testCaverphone_dgRuleAndVowelStart_edge() throws Throwable {
+        assertEquals("AK11111111", caverphone.caverphone("edge"));
+    }
+
+    // branches: c->k rule, tio->sio rule, ^[aeiou]->A rule
+    @Test
+    public void testCaverphone_tioRule_action() throws Throwable {
+        assertEquals("AKSN111111", caverphone.caverphone("action"));
+    }
+
+    // branches: j->y rule, ^y3->Y3 rule
+    @Test
+    public void testCaverphone_jRule_jack() throws Throwable {
+        assertEquals("YK11111111", caverphone.caverphone("jack"));
+    }
+
+    // branches: wh3->Wh3 rule, final-e removal, h->2 rule
+    @Test
+    public void testCaverphone_whRule_white() throws Throwable {
+        assertEquals("WT11111111", caverphone.caverphone("white"));
+    }
+
+    // branches: sh->s2 rule, w3->W3 rule
+    @Test
+    public void testCaverphone_shRule_wish() throws Throwable {
+        assertEquals("WS11111111", caverphone.caverphone("wish"));
+    }
+
+    // branch: w$->3 rule (word ending in w, not matching w3)
+    @Test
+    public void testCaverphone_wEndRule_saw() throws Throwable {
+        assertEquals("SA11111111", caverphone.caverphone("saw"));
+    }
+
+    // branches: c->k rule, r$->3 rule (word ending in r, not matching r3)
+    @Test
+    public void testCaverphone_rEndRule_car() throws Throwable {
+        assertEquals("KA11111111", caverphone.caverphone("car"));
+    }
+
+    // branches: b->p rule, l$->3 rule, plain l->2 rule
+    @Test
+    public void testCaverphone_lEndRule_ball() throws Throwable {
+        assertEquals("PA11111111", caverphone.caverphone("ball"));
+    }
+
+    // branches: gh->22 rule, l3->L3 rule
+    @Test
+    public void testCaverphone_ghRule_light() throws Throwable {
+        assertEquals("LT11111111", caverphone.caverphone("light"));
+    }
+
+    // BUG: spec says "ends with mb -> m2" but code uses "^mb" (starts with). Word ending in "mb" must map via mb->m2.
+    @Test
+    public void testCaverphone_mbEndRule_thumb_detectsBug() throws Throwable {
+        assertEquals("TM11111111", caverphone.caverphone("thumb"));
+    }
+
+    // BUG confirmation with a second word ending in "mb" (comb)
+    @Test
+    public void testCaverphone_mbEndRule_comb_detectsBug() throws Throwable {
+        assertEquals("KM11111111", caverphone.caverphone("comb"));
+    }
+
+    // encode(Object) with a String delegates to caverphone(String)
+    @Test
+    public void testEncode_objectWithString_matchesCaverphone() throws Throwable {
+        Object result = caverphone.encode((Object) "copy");
+        assertEquals(caverphone.caverphone("copy"), result);
+    }
+
+    // encode(Object) with non-String throws EncoderException
+    @Test
+    public void testEncode_objectWithNonString_throwsEncoderException() throws Throwable {
+        try {
+            caverphone.encode(new Integer(5));
+            fail("expected EncoderException");
+        } catch (EncoderException expected) {
+            assertTrue(expected.getMessage().contains("String"));
+        }
+    }
+
+    // encode(Object) with null throws EncoderException since null is not instanceof String
+    @Test
+    public void testEncode_objectWithNull_throwsEncoderException() throws Throwable {
+        try {
+            caverphone.encode((Object) null);
+            fail("expected EncoderException");
+        } catch (EncoderException expected) {
+            assertTrue(expected.getMessage().contains("String"));
+        }
+    }
+
+    // encode(String) delegates to caverphone(String)
+    @Test
+    public void testEncode_string_matchesCaverphone() throws Throwable {
+        assertEquals(caverphone.caverphone("Thompson"), caverphone.encode("Thompson"));
+    }
+
+    // isCaverphoneEqual: both null and empty map to the same all-ones code
+    @Test
+    public void testIsCaverphoneEqual_nullAndEmpty_true() throws Throwable {
+        assertTrue(caverphone.isCaverphoneEqual(null, ""));
+    }
+
+    // isCaverphoneEqual: identical strings are trivially equal
+    @Test
+    public void testIsCaverphoneEqual_sameString_true() throws Throwable {
+        assertTrue(caverphone.isCaverphoneEqual("Thompson", "Thompson"));
+    }
+
+    // isCaverphoneEqual: different codes ("cough" vs "rough") must be false
+    @Test
+    public void testIsCaverphoneEqual_differentCodes_false() throws Throwable {
+        assertFalse(caverphone.isCaverphoneEqual("cough", "rough"));
+    }
+}

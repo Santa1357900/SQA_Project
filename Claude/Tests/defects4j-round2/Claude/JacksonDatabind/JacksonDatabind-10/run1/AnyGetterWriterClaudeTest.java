@@ -1,0 +1,328 @@
+package com.fasterxml.jackson.databind.ser;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonFilter;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ser.impl.SimpleBeanPropertyFilter;
+import com.fasterxml.jackson.databind.ser.impl.SimpleFilterProvider;
+
+public class AnyGetterWriterClaudeTest {
+
+    private ObjectMapper mapper;
+
+    @Before
+    public void setUp() throws Throwable {
+        mapper = new ObjectMapper();
+    }
+
+    // ---- test beans ----
+
+    public static class SimpleAnyGetterBean {
+        private String name;
+        private Map<String, Object> extra = new LinkedHashMap<String, Object>();
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public void putExtra(String key, Object value) { extra.put(key, value); }
+
+        @JsonAnyGetter
+        public Map<String, Object> getExtra() { return extra; }
+    }
+
+    public static class NullAnyGetterBean {
+        private String name = "Bob";
+        public String getName() { return name; }
+
+        @JsonAnyGetter
+        public Map<String, Object> getExtra() { return null; }
+    }
+
+    public static class NonMapAnyGetterBean {
+        private String name = "Bob";
+        public String getName() { return name; }
+
+        @JsonAnyGetter
+        public Object getExtra() { return "not-a-map"; }
+    }
+
+    @JsonFilter("testFilter")
+    public static class FilteredAnyGetterBean {
+        private String name;
+        private Map<String, Object> extra = new LinkedHashMap<String, Object>();
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public void putExtra(String key, Object value) { extra.put(key, value); }
+
+        @JsonAnyGetter
+        public Map<String, Object> getExtra() { return extra; }
+    }
+
+    @JsonFilter("testFilter")
+    public static class FilteredNullAnyGetterBean {
+        private String name = "Ann";
+        public String getName() { return name; }
+
+        @JsonAnyGetter
+        public Map<String, Object> getExtra() { return null; }
+    }
+
+    @JsonFilter("testFilter")
+    public static class FilteredNonMapAnyGetterBean {
+        private String name = "Ann";
+        public String getName() { return name; }
+
+        @JsonAnyGetter
+        public Object getExtra() { return Integer.valueOf(5); }
+    }
+
+    // ---- getAndSerialize branch tests ----
+
+    // value == null -> method returns without writing any extra fields
+    @Test
+    public void testGetAndSerialize_nullMapValue_noExtraKeysInOutput() throws Throwable {
+        NullAnyGetterBean bean = new NullAnyGetterBean();
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"name\":\"Bob\"}", json);
+    }
+
+    // value is an empty Map -> no extra keys added, only base property present
+    @Test
+    public void testGetAndSerialize_emptyMap_noExtraKeysInOutput() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"name\":\"Alice\"}", json);
+    }
+
+    // value is Map with a single entry -> entry is flattened after the regular property
+    @Test
+    public void testGetAndSerialize_singleEntryMap_flattensEntryIntoOutput() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("city", "NYC");
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"name\":\"Alice\",\"city\":\"NYC\"}", json);
+    }
+
+    // value is Map with multiple entries -> all entries flattened, preserving insertion order
+    @Test
+    public void testGetAndSerialize_multipleEntriesMap_flattensAllEntries() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("city", "NYC");
+        bean.putExtra("zip", "10001");
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"name\":\"Alice\",\"city\":\"NYC\",\"zip\":\"10001\"}", json);
+    }
+
+    // numeric map value is serialized as a JSON number, not a quoted string
+    @Test
+    public void testGetAndSerialize_numericEntryValue_serializedAsNumber() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("age", Integer.valueOf(30));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"age\":30"));
+    }
+
+    // boolean map value is serialized as a JSON literal true/false
+    @Test
+    public void testGetAndSerialize_booleanEntryValue_serializedAsBoolean() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("active", Boolean.TRUE);
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"active\":true"));
+    }
+
+    // null map entry value is still included, serialized as JSON null
+    @Test
+    public void testGetAndSerialize_nullEntryValue_includedAsJsonNull() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("nickname", null);
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"nickname\":null"));
+    }
+
+    // map key containing a quote character is properly escaped in output
+    @Test
+    public void testGetAndSerialize_keyWithQuote_isEscapedInOutput() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("weird\"key", "value");
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("weird\\\"key"));
+    }
+
+    // empty-string map key is still serialized as a valid field name
+    @Test
+    public void testGetAndSerialize_emptyStringKey_isSerialized() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("", "emptyKeyValue");
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"\":\"emptyKeyValue\""));
+    }
+
+    // unicode characters in map value are preserved in output
+    @Test
+    public void testGetAndSerialize_unicodeValue_preservedInOutput() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("greeting", "h\u00e9llo");
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("h\u00e9llo"));
+    }
+
+    // list value inside the any-getter map is serialized as a JSON array
+    @Test
+    public void testGetAndSerialize_listEntryValue_serializedAsArray() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        List<String> tags = new ArrayList<String>();
+        tags.add("a");
+        tags.add("b");
+        bean.putExtra("tags", tags);
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"tags\":[\"a\",\"b\"]"));
+    }
+
+    // repeated serialization yields identical output (resolved map serializer reused consistently)
+    @Test
+    public void testGetAndSerialize_repeatedSerialization_producesConsistentOutput() throws Throwable {
+        SimpleAnyGetterBean bean = new SimpleAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("city", "NYC");
+        String first = mapper.writeValueAsString(bean);
+        String second = mapper.writeValueAsString(bean);
+        assertEquals(first, second);
+    }
+
+    // value returned by any-getter is not a Map -> JsonMappingException per contract
+    @Test
+    public void testGetAndSerialize_nonMapValue_throwsJsonMappingException() throws Throwable {
+        NonMapAnyGetterBean bean = new NonMapAnyGetterBean();
+        try {
+            mapper.writeValueAsString(bean);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("not java.util.Map"));
+        }
+    }
+
+    // exception message mentions the 'any-getter' marker text as documented in the source
+    @Test
+    public void testGetAndSerialize_nonMapValue_exceptionMessageMentionsAnyGetter() throws Throwable {
+        NonMapAnyGetterBean bean = new NonMapAnyGetterBean();
+        try {
+            mapper.writeValueAsString(bean);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("any-getter"));
+        }
+    }
+
+    // ---- getAndFilter branch tests (bean carries @JsonFilter so the filtered path is exercised) ----
+
+    // filter that serializes everything -> behaves like getAndSerialize, extras included
+    @Test
+    public void testGetAndFilter_serializeAllFilter_includesAllExtraEntries() throws Throwable {
+        FilteredAnyGetterBean bean = new FilteredAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("city", "NYC");
+        mapper.setFilterProvider(new SimpleFilterProvider().addFilter("testFilter", SimpleBeanPropertyFilter.serializeAll()));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"name\":\"Alice\",\"city\":\"NYC\"}", json);
+    }
+
+    // filtered path, value == null -> no extra keys added
+    @Test
+    public void testGetAndFilter_nullMapValue_noExtraKeysInOutput() throws Throwable {
+        FilteredNullAnyGetterBean bean = new FilteredNullAnyGetterBean();
+        mapper.setFilterProvider(new SimpleFilterProvider().addFilter("testFilter", SimpleBeanPropertyFilter.serializeAll()));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"name\":\"Ann\"}", json);
+    }
+
+    // filtered path, empty map -> only the regular property is serialized
+    @Test
+    public void testGetAndFilter_emptyMap_onlyRegularPropertySerialized() throws Throwable {
+        FilteredAnyGetterBean bean = new FilteredAnyGetterBean();
+        bean.setName("Bob");
+        mapper.setFilterProvider(new SimpleFilterProvider().addFilter("testFilter", SimpleBeanPropertyFilter.serializeAll()));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"name\":\"Bob\"}", json);
+    }
+
+    // filtered path, value not a Map -> JsonMappingException thrown same as unfiltered path
+    @Test
+    public void testGetAndFilter_nonMapValue_throwsJsonMappingException() throws Throwable {
+        FilteredNonMapAnyGetterBean bean = new FilteredNonMapAnyGetterBean();
+        mapper.setFilterProvider(new SimpleFilterProvider().addFilter("testFilter", SimpleBeanPropertyFilter.serializeAll()));
+        try {
+            mapper.writeValueAsString(bean);
+            fail("expected JsonMappingException");
+        } catch (JsonMappingException expected) {
+            assertTrue(expected.getMessage().contains("not java.util.Map"));
+        }
+    }
+
+    // filterOutAllExcept applied to an any-getter key: only that key is kept, regular property excluded
+    @Test
+    public void testGetAndFilter_filterOutAllExceptExtraKey_keepsOnlyThatKey() throws Throwable {
+        FilteredAnyGetterBean bean = new FilteredAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("city", "NYC");
+        bean.putExtra("zip", "10001");
+        mapper.setFilterProvider(new SimpleFilterProvider().addFilter("testFilter", SimpleBeanPropertyFilter.filterOutAllExcept("city")));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"city\":\"NYC\"}", json);
+    }
+
+    // filterOutAllExcept applied to the regular property name: all any-getter entries are excluded
+    @Test
+    public void testGetAndFilter_filterOutAllExceptName_excludesAllExtraEntries() throws Throwable {
+        FilteredAnyGetterBean bean = new FilteredAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("city", "NYC");
+        bean.putExtra("zip", "10001");
+        mapper.setFilterProvider(new SimpleFilterProvider().addFilter("testFilter", SimpleBeanPropertyFilter.filterOutAllExcept("name")));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"name\":\"Alice\"}", json);
+    }
+
+    // serializeAllExcept excludes one specific any-getter key while keeping the rest
+    @Test
+    public void testGetAndFilter_serializeAllExceptSpecificKey_excludesOnlyThatKey() throws Throwable {
+        FilteredAnyGetterBean bean = new FilteredAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("city", "NYC");
+        bean.putExtra("zip", "10001");
+        mapper.setFilterProvider(new SimpleFilterProvider().addFilter("testFilter", SimpleBeanPropertyFilter.serializeAllExcept("zip")));
+        String json = mapper.writeValueAsString(bean);
+        assertEquals("{\"name\":\"Alice\",\"city\":\"NYC\"}", json);
+    }
+
+    // filtered path preserves value types just like the unfiltered getAndSerialize path
+    @Test
+    public void testGetAndFilter_numericEntryValue_serializedAsNumber() throws Throwable {
+        FilteredAnyGetterBean bean = new FilteredAnyGetterBean();
+        bean.setName("Alice");
+        bean.putExtra("age", Integer.valueOf(42));
+        mapper.setFilterProvider(new SimpleFilterProvider().addFilter("testFilter", SimpleBeanPropertyFilter.serializeAll()));
+        String json = mapper.writeValueAsString(bean);
+        assertTrue(json.contains("\"age\":42"));
+    }
+}

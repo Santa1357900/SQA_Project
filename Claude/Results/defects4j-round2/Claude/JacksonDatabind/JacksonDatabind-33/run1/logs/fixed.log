@@ -1,0 +1,27 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p JacksonDatabind -v 33f -w /tmp/claude-JacksonDatabind-33-q0lz6vgy/fixed
+Checking out 660ec8f8 to /tmp/claude-JacksonDatabind-33-q0lz6vgy/fixed..... OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Correct Module ambiguity 1................................................. OK
+Correct Module ambiguity 2................................................. OK
+Correct Module ambiguity 3................................................. OK
+Copy generated Ant build file.............................................. OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-JacksonDatabind-33-q0lz6vgy/fixed/maven- OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 660ec8f8:1ed7f383..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: JacksonDatabind-33f............................. OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-JacksonDatabind-33-q0lz6vgy/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

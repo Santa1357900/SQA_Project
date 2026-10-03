@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Codec-14-4y6jb26t/Codec-14f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.codec.language.bm.LangClaudeTest::testLoadFromResource_resourceNotFound_messageReferencesGivenResourceName
+  - org.apache.commons.codec.language.bm.LangClaudeTest::testLoadFromResource_emptyResourceName_throwsIllegalStateException
+  - org.apache.commons.codec.language.bm.LangClaudeTest::testGuessLanguages_caseInsensitive_consistentAcrossCases
+[exit 0]

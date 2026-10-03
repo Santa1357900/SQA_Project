@@ -1,0 +1,264 @@
+package org.jfree.chart.plot;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.awt.Color;
+import java.awt.BasicStroke;
+import java.awt.Paint;
+import java.awt.Stroke;
+
+public class ValueMarkerClaudeTest {
+
+    // Constructor(double): value is stored and retrievable
+    @Test
+    public void testConstructor_singleArg_positiveValue() throws Throwable {
+        ValueMarker vm = new ValueMarker(5.0);
+        assertEquals(5.0, vm.getValue(), 1e-9);
+    }
+
+    // Constructor(double): zero boundary value
+    @Test
+    public void testConstructor_singleArg_zeroValue() throws Throwable {
+        ValueMarker vm = new ValueMarker(0.0);
+        assertEquals(0.0, vm.getValue(), 1e-9);
+    }
+
+    // Constructor(double): negative value
+    @Test
+    public void testConstructor_singleArg_negativeValue() throws Throwable {
+        ValueMarker vm = new ValueMarker(-7.5);
+        assertEquals(-7.5, vm.getValue(), 1e-9);
+    }
+
+    // Constructor(double): Double.MAX_VALUE boundary
+    @Test
+    public void testConstructor_singleArg_maxValue() throws Throwable {
+        ValueMarker vm = new ValueMarker(Double.MAX_VALUE);
+        assertEquals(Double.MAX_VALUE, vm.getValue(), 1e-9);
+    }
+
+    // Constructor(double): -Double.MAX_VALUE boundary
+    @Test
+    public void testConstructor_singleArg_minValue() throws Throwable {
+        ValueMarker vm = new ValueMarker(-Double.MAX_VALUE);
+        assertEquals(-Double.MAX_VALUE, vm.getValue(), 1e-9);
+    }
+
+    // Constructor(double): NaN value stored correctly
+    @Test
+    public void testConstructor_singleArg_NaN() throws Throwable {
+        ValueMarker vm = new ValueMarker(Double.NaN);
+        assertTrue(Double.isNaN(vm.getValue()));
+    }
+
+    // Constructor(double): positive infinity
+    @Test
+    public void testConstructor_singleArg_positiveInfinity() throws Throwable {
+        ValueMarker vm = new ValueMarker(Double.POSITIVE_INFINITY);
+        assertEquals(Double.valueOf(Double.POSITIVE_INFINITY), vm.getValue(), 1e-9);
+    }
+
+    // Constructor(double): negative infinity
+    @Test
+    public void testConstructor_singleArg_negativeInfinity() throws Throwable {
+        ValueMarker vm = new ValueMarker(Double.NEGATIVE_INFINITY);
+        assertEquals(Double.valueOf(Double.NEGATIVE_INFINITY), vm.getValue(), 1e-9);
+    }
+
+    // Constructor(double, Paint, Stroke): delegates correctly, value preserved
+    @Test
+    public void testConstructor_threeArg_valueSet() throws Throwable {
+        Paint p = Color.RED;
+        Stroke s = new BasicStroke(1.0f);
+        ValueMarker vm = new ValueMarker(2.5, p, s);
+        assertEquals(2.5, vm.getValue(), 1e-9);
+    }
+
+    // Constructor(double, Paint, Stroke, Paint, Stroke, float): value preserved
+    @Test
+    public void testConstructor_sixArg_valueSet() throws Throwable {
+        Paint p = Color.BLUE;
+        Stroke s = new BasicStroke(2.0f);
+        ValueMarker vm = new ValueMarker(9.0, p, s, p, s, 0.75f);
+        assertEquals(9.0, vm.getValue(), 1e-9);
+    }
+
+    // Constructor(6-arg): outlinePaint/outlineStroke null is permitted per Javadoc
+    @Test
+    public void testConstructor_sixArg_nullOutlinePaintAndStroke_allowed() throws Throwable {
+        Paint p = Color.BLUE;
+        Stroke s = new BasicStroke(2.0f);
+        ValueMarker vm = new ValueMarker(3.0, p, s, null, null, 0.5f);
+        assertEquals(3.0, vm.getValue(), 1e-9);
+    }
+
+    // Constructor(6-arg): alpha lower boundary 0.0f constructs successfully
+    @Test
+    public void testConstructor_sixArg_alphaBoundaryZero() throws Throwable {
+        Paint p = Color.GREEN;
+        Stroke s = new BasicStroke(1.0f);
+        ValueMarker vm = new ValueMarker(1.0, p, s, p, s, 0.0f);
+        assertEquals(1.0, vm.getValue(), 1e-9);
+    }
+
+    // Constructor(6-arg): alpha upper boundary 1.0f constructs successfully
+    @Test
+    public void testConstructor_sixArg_alphaBoundaryOne() throws Throwable {
+        Paint p = Color.GREEN;
+        Stroke s = new BasicStroke(1.0f);
+        ValueMarker vm = new ValueMarker(1.0, p, s, p, s, 1.0f);
+        assertEquals(1.0, vm.getValue(), 1e-9);
+    }
+
+    // getValue(): returns exactly what constructor set
+    @Test
+    public void testGetValue_returnsConstructorValue() throws Throwable {
+        ValueMarker vm = new ValueMarker(123.456);
+        assertEquals(123.456, vm.getValue(), 1e-9);
+    }
+
+    // setValue(double): updates the value to a positive number
+    @Test
+    public void testSetValue_updatesValue_positive() throws Throwable {
+        ValueMarker vm = new ValueMarker(1.0);
+        vm.setValue(42.0);
+        assertEquals(42.0, vm.getValue(), 1e-9);
+    }
+
+    // setValue(double): updates the value to a negative number
+    @Test
+    public void testSetValue_updatesValue_negative() throws Throwable {
+        ValueMarker vm = new ValueMarker(1.0);
+        vm.setValue(-42.0);
+        assertEquals(-42.0, vm.getValue(), 1e-9);
+    }
+
+    // setValue(double): updates to zero
+    @Test
+    public void testSetValue_zero() throws Throwable {
+        ValueMarker vm = new ValueMarker(5.0);
+        vm.setValue(0.0);
+        assertEquals(0.0, vm.getValue(), 1e-9);
+    }
+
+    // setValue(double): multiple calls, last call wins
+    @Test
+    public void testSetValue_multipleUpdates_lastWins() throws Throwable {
+        ValueMarker vm = new ValueMarker(0.0);
+        vm.setValue(1.0);
+        vm.setValue(2.0);
+        vm.setValue(3.0);
+        assertEquals(3.0, vm.getValue(), 1e-9);
+    }
+
+    // setValue(double): NaN is stored and retrievable
+    @Test
+    public void testSetValue_NaN() throws Throwable {
+        ValueMarker vm = new ValueMarker(0.0);
+        vm.setValue(Double.NaN);
+        assertTrue(Double.isNaN(vm.getValue()));
+    }
+
+    // setValue(double): positive infinity stored correctly
+    @Test
+    public void testSetValue_positiveInfinity() throws Throwable {
+        ValueMarker vm = new ValueMarker(0.0);
+        vm.setValue(Double.POSITIVE_INFINITY);
+        assertEquals(Double.valueOf(Double.POSITIVE_INFINITY), vm.getValue(), 1e-9);
+    }
+
+    // setValue(double): negative infinity stored correctly
+    @Test
+    public void testSetValue_negativeInfinity() throws Throwable {
+        ValueMarker vm = new ValueMarker(0.0);
+        vm.setValue(Double.NEGATIVE_INFINITY);
+        assertEquals(Double.valueOf(Double.NEGATIVE_INFINITY), vm.getValue(), 1e-9);
+    }
+
+    // equals(): identity branch (obj == this) returns true immediately
+    @Test
+    public void testEquals_sameInstance_true() throws Throwable {
+        ValueMarker vm = new ValueMarker(4.0);
+        assertTrue(vm.equals(vm));
+    }
+
+    // equals(): null argument returns false (super.equals handles null)
+    @Test
+    public void testEquals_null_false() throws Throwable {
+        ValueMarker vm = new ValueMarker(4.0);
+        assertFalse(vm.equals(null));
+    }
+
+    // equals(): comparing to an object of unrelated class returns false
+    @Test
+    public void testEquals_differentClass_false() throws Throwable {
+        ValueMarker vm = new ValueMarker(4.0);
+        assertFalse(vm.equals("not a marker"));
+    }
+
+    // equals(): two markers built with identical default fields and same value are equal
+    @Test
+    public void testEquals_sameDefaultValue_true() throws Throwable {
+        ValueMarker vm1 = new ValueMarker(5.0);
+        ValueMarker vm2 = new ValueMarker(5.0);
+        assertTrue(vm1.equals(vm2));
+    }
+
+    // equals(): same default fields but different value returns false
+    @Test
+    public void testEquals_differentValue_false() throws Throwable {
+        ValueMarker vm1 = new ValueMarker(1.0);
+        ValueMarker vm2 = new ValueMarker(2.0);
+        assertFalse(vm1.equals(vm2));
+    }
+
+    // equals(): two fully-specified markers with identical fields are equal
+    @Test
+    public void testEquals_sixArg_sameAllFields_true() throws Throwable {
+        Paint p = Color.RED;
+        Stroke s = new BasicStroke(1.0f);
+        ValueMarker vm1 = new ValueMarker(6.0, p, s, p, s, 0.8f);
+        ValueMarker vm2 = new ValueMarker(6.0, p, s, p, s, 0.8f);
+        assertTrue(vm1.equals(vm2));
+    }
+
+    // equals(): differing alpha causes super.equals() to fail, overall equals false
+    @Test
+    public void testEquals_sixArg_differentAlpha_false() throws Throwable {
+        Paint p = Color.RED;
+        Stroke s = new BasicStroke(1.0f);
+        ValueMarker vm1 = new ValueMarker(6.0, p, s, p, s, 0.8f);
+        ValueMarker vm2 = new ValueMarker(6.0, p, s, p, s, 0.3f);
+        assertFalse(vm1.equals(vm2));
+    }
+
+    // equals(): differing paint causes super.equals() to fail, overall equals false
+    @Test
+    public void testEquals_sixArg_differentPaint_false() throws Throwable {
+        Stroke s = new BasicStroke(1.0f);
+        ValueMarker vm1 = new ValueMarker(6.0, Color.RED, s, Color.RED, s, 0.8f);
+        ValueMarker vm2 = new ValueMarker(6.0, Color.BLUE, s, Color.BLUE, s, 0.8f);
+        assertFalse(vm1.equals(vm2));
+    }
+
+
+
+    // equals(): symmetry check for two equal markers
+    @Test
+    public void testEquals_symmetric_forEqualMarkers() throws Throwable {
+        ValueMarker vm1 = new ValueMarker(7.0);
+        ValueMarker vm2 = new ValueMarker(7.0);
+        assertTrue(vm1.equals(vm2));
+        assertTrue(vm2.equals(vm1));
+    }
+
+    // equals(): after setValue(), equality reflects the new value, not the old one
+    @Test
+    public void testEquals_afterSetValue_reflectsNewValue() throws Throwable {
+        ValueMarker vm1 = new ValueMarker(1.0);
+        ValueMarker vm2 = new ValueMarker(2.0);
+        vm1.setValue(2.0);
+        assertTrue(vm1.equals(vm2));
+    }
+}

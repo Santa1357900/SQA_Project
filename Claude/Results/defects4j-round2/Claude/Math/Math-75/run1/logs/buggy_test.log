@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-75-6ubm42e6/Math-75b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.apache.commons.math.stat.FrequencyClaudeTest::testGetPctObjectDeprecated_shouldMatchGetPct_notCumPct
+[exit 0]

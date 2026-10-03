@@ -1,0 +1,10 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Chart-24-g_hq4aqe/Chart-24b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 4
+  - org.jfree.chart.renderer.GrayPaintScaleClaudeTest::testGetPaint_defaultScale_farBelowRange_clamps
+  - org.jfree.chart.renderer.GrayPaintScaleClaudeTest::testGetPaint_aboveUpperBound_clampsToUpperBound
+  - org.jfree.chart.renderer.GrayPaintScaleClaudeTest::testGetPaint_belowLowerBound_clampsToLowerBound
+  - org.jfree.chart.renderer.GrayPaintScaleClaudeTest::testGetPaint_defaultScale_farAboveRange_clamps
+[exit 0]

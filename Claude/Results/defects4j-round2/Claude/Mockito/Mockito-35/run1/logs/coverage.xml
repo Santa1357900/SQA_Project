@@ -1,0 +1,326 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.9803921568627451" branch-rate="1.0" lines-covered="50" lines-valid="51" branches-covered="0" branches-valid="0" complexity="1.0" version="2.0.3" timestamp="1790853500853">
+	<sources>
+		<source>src</source>
+	</sources>
+	<packages>
+		<package name="org.mockito" line-rate="0.9803921568627451" branch-rate="1.0" complexity="1.0">
+			<classes>
+				<class name="org.mockito.Matchers" filename="org/mockito/Matchers.java" line-rate="0.9803921568627451" branch-rate="1.0" complexity="1.0">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="95" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="()V" line-rate="0.0" branch-rate="1.0">
+							<lines>
+								<line number="93" hits="0" branch="false"/>
+							</lines>
+						</method>
+						<method name="any" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="250" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="any" signature="(Ljava/lang/Class;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="237" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyBoolean" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="105" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyByte" signature="()B" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="116" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyChar" signature="()C" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="127" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyCollection" signature="()Ljava/util/Collection;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="333" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyCollectionOf" signature="(Ljava/lang/Class;)Ljava/util/Collection;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="347" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyDouble" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="171" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyFloat" signature="()F" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="160" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyInt" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="138" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyList" signature="()Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="272" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyListOf" signature="(Ljava/lang/Class;)Ljava/util/List;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="286" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyLong" signature="()J" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="149" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyMap" signature="()Ljava/util/Map;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="322" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyObject" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="193" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="anySet" signature="()Ljava/util/Set;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="297" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anySetOf" signature="(Ljava/lang/Class;)Ljava/util/Set;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="311" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyShort" signature="()S" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="182" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyString" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="261" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="anyVararg" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="221" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="argThat" signature="(Lorg/hamcrest/Matcher;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="617" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="booleanThat" signature="(Lorg/hamcrest/Matcher;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="641" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="byteThat" signature="(Lorg/hamcrest/Matcher;)B" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="653" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="charThat" signature="(Lorg/hamcrest/Matcher;)C" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="629" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="contains" signature="(Ljava/lang/String;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="566" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="doubleThat" signature="(Lorg/hamcrest/Matcher;)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="713" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="endsWith" signature="(Ljava/lang/String;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="592" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="eq" signature="(B)B" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="388" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="eq" signature="(C)C" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="401" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="eq" signature="(D)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="414" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="eq" signature="(F)F" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="427" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="eq" signature="(I)I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="440" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="eq" signature="(J)J" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="453" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="eq" signature="(Ljava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="479" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="eq" signature="(S)S" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="466" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="eq" signature="(Z)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="375" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="floatThat" signature="(Lorg/hamcrest/Matcher;)F" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="701" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="intThat" signature="(Lorg/hamcrest/Matcher;)I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="677" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="isA" signature="(Ljava/lang/Class;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="362" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="isNotNull" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="553" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="isNull" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="527" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="longThat" signature="(Lorg/hamcrest/Matcher;)J" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="689" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="matches" signature="(Ljava/lang/String;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="579" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="notNull" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="540" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="refEq" signature="(Ljava/lang/Object;[Ljava/lang/String;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="501" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="reportMatcher" signature="(Lorg/hamcrest/Matcher;)Lorg/mockito/internal/progress/HandyReturnValues;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="717" hits="49" branch="false"/>
+							</lines>
+						</method>
+						<method name="same" signature="(Ljava/lang/Object;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="516" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="shortThat" signature="(Lorg/hamcrest/Matcher;)S" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="665" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="startsWith" signature="(Ljava/lang/String;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="605" hits="1" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="93" hits="0" branch="false"/>
+						<line number="95" hits="1" branch="false"/>
+						<line number="105" hits="1" branch="false"/>
+						<line number="116" hits="1" branch="false"/>
+						<line number="127" hits="1" branch="false"/>
+						<line number="138" hits="1" branch="false"/>
+						<line number="149" hits="1" branch="false"/>
+						<line number="160" hits="1" branch="false"/>
+						<line number="171" hits="1" branch="false"/>
+						<line number="182" hits="1" branch="false"/>
+						<line number="193" hits="3" branch="false"/>
+						<line number="221" hits="1" branch="false"/>
+						<line number="237" hits="1" branch="false"/>
+						<line number="250" hits="1" branch="false"/>
+						<line number="261" hits="1" branch="false"/>
+						<line number="272" hits="1" branch="false"/>
+						<line number="286" hits="1" branch="false"/>
+						<line number="297" hits="1" branch="false"/>
+						<line number="311" hits="1" branch="false"/>
+						<line number="322" hits="1" branch="false"/>
+						<line number="333" hits="1" branch="false"/>
+						<line number="347" hits="1" branch="false"/>
+						<line number="362" hits="1" branch="false"/>
+						<line number="375" hits="1" branch="false"/>
+						<line number="388" hits="1" branch="false"/>
+						<line number="401" hits="1" branch="false"/>
+						<line number="414" hits="1" branch="false"/>
+						<line number="427" hits="1" branch="false"/>
+						<line number="440" hits="1" branch="false"/>
+						<line number="453" hits="1" branch="false"/>
+						<line number="466" hits="1" branch="false"/>
+						<line number="479" hits="1" branch="false"/>
+						<line number="501" hits="2" branch="false"/>
+						<line number="516" hits="1" branch="false"/>
+						<line number="527" hits="1" branch="false"/>
+						<line number="540" hits="2" branch="false"/>
+						<line number="553" hits="1" branch="false"/>
+						<line number="566" hits="1" branch="false"/>
+						<line number="579" hits="1" branch="false"/>
+						<line number="592" hits="1" branch="false"/>
+						<line number="605" hits="1" branch="false"/>
+						<line number="617" hits="1" branch="false"/>
+						<line number="629" hits="1" branch="false"/>
+						<line number="641" hits="1" branch="false"/>
+						<line number="653" hits="1" branch="false"/>
+						<line number="665" hits="1" branch="false"/>
+						<line number="677" hits="1" branch="false"/>
+						<line number="689" hits="1" branch="false"/>
+						<line number="701" hits="1" branch="false"/>
+						<line number="713" hits="1" branch="false"/>
+						<line number="717" hits="49" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

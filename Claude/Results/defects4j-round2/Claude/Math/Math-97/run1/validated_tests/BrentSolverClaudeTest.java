@@ -1,0 +1,209 @@
+package org.apache.commons.math.analysis;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import org.apache.commons.math.FunctionEvaluationException;
+
+public class BrentSolverClaudeTest {
+
+    private UnivariateRealFunction linearFunction(final double root) {
+        return new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x - root;
+            }
+        };
+    }
+
+    private UnivariateRealFunction quadraticMinusTwo() {
+        return new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x * x - 2.0;
+            }
+        };
+    }
+
+    private UnivariateRealFunction cubicFunction() {
+        return new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return x * x * x - x - 2.0;
+            }
+        };
+    }
+
+    private UnivariateRealFunction cosineFunction() {
+        return new UnivariateRealFunction() {
+            public double value(double x) throws FunctionEvaluationException {
+                return Math.cos(x);
+            }
+        };
+    }
+
+    // ---- solve(min, max, initial) ----
+
+    // Guard: (initial-min)*(max-initial) < 0 when initial < min -> throws
+    @Test
+    public void testSolveWithInitial_initialBelowMin_throwsIllegalArgumentException() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(5.0));
+        try {
+            solver.solve(0.0, 10.0, -1.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Guard: initial > max -> throws
+    @Test
+    public void testSolveWithInitial_initialAboveMax_throwsIllegalArgumentException() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(5.0));
+        try {
+            solver.solve(0.0, 10.0, 11.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // Boundary: initial == min (product == 0) must NOT throw; falls through to initial-max bracket
+    @Test
+    public void testSolveWithInitial_initialEqualsMin_boundaryAllowed_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(7.0));
+        double root = solver.solve(0.0, 10.0, 0.0);
+        assertEquals(7.0, root, 1e-4);
+    }
+
+    // Boundary: initial == max (product == 0) must NOT throw; falls through to min-initial bracket
+    @Test
+    public void testSolveWithInitial_initialEqualsMax_boundaryAllowed_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(3.0));
+        double root = solver.solve(0.0, 10.0, 10.0);
+        assertEquals(3.0, root, 1e-4);
+    }
+
+    // Branch: |yInitial| <= functionValueAccuracy -> returns initial itself
+    @Test
+    public void testSolveWithInitial_initialIsExactRoot_returnsInitial() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(4.0));
+        double root = solver.solve(0.0, 10.0, 4.0);
+        assertEquals(4.0, root, 1e-9);
+    }
+
+
+
+
+
+    // Branch: yInitial*yMin < 0 -> recurse on [min, initial]
+    @Test
+    public void testSolveWithInitial_rootBetweenMinAndInitial_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(2.0));
+        double root = solver.solve(0.0, 10.0, 5.0);
+        assertEquals(2.0, root, 1e-4);
+    }
+
+    // Branch: yInitial*yMax < 0 -> recurse on [initial, max]
+    @Test
+    public void testSolveWithInitial_rootBetweenInitialAndMax_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(8.0));
+        double root = solver.solve(0.0, 10.0, 5.0);
+        assertEquals(8.0, root, 1e-4);
+    }
+
+    // Variety: quadratic root captured via min-initial bracket
+    @Test
+    public void testSolveWithInitial_quadraticRootViaMinInitialBracket_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(quadraticMinusTwo());
+        double root = solver.solve(0.0, 5.0, 3.0);
+        assertEquals(Math.sqrt(2.0), root, 1e-4);
+    }
+
+    // Variety: trig root captured via initial-max bracket
+    @Test
+    public void testSolveWithInitial_trigRootViaInitialMaxBracket_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(cosineFunction());
+        double root = solver.solve(0.0, 3.0, 1.0);
+        assertEquals(Math.PI / 2.0, root, 1e-4);
+    }
+
+    // Negative-domain interval, bracket found between initial and max
+    @Test
+    public void testSolveWithInitial_negativeIntervalLinear_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(-3.0));
+        double root = solver.solve(-10.0, -1.0, -5.0);
+        assertEquals(-3.0, root, 1e-4);
+    }
+
+    // ---- solve(min, max) ----
+
+    // Normal opposite-sign bracket -> converges to root
+    @Test
+    public void testSolveTwoArgs_oppositeSignLinear_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(5.0));
+        double root = solver.solve(0.0, 10.0);
+        assertEquals(5.0, root, 1e-4);
+    }
+
+    // sign = yMin*yMax >= 0 (both positive) -> throws IllegalArgumentException
+    @Test
+    public void testSolveTwoArgs_sameSignPositive_throwsIllegalArgumentException() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(-1.0));
+        try {
+            solver.solve(1.0, 10.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // sign = yMin*yMax >= 0 (both negative) -> throws IllegalArgumentException
+    @Test
+    public void testSolveTwoArgs_sameSignNegative_throwsIllegalArgumentException() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(100.0));
+        try {
+            solver.solve(0.0, 10.0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+
+
+
+
+    // Variety: quadratic function root
+    @Test
+    public void testSolveTwoArgs_quadraticFunction_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(quadraticMinusTwo());
+        double root = solver.solve(0.0, 5.0);
+        assertEquals(Math.sqrt(2.0), root, 1e-4);
+    }
+
+    // Variety: cubic function root (classic Brent example x^3 - x - 2)
+    @Test
+    public void testSolveTwoArgs_cubicFunction_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(cubicFunction());
+        double root = solver.solve(1.0, 2.0);
+        assertEquals(1.5213797068045676, root, 1e-4);
+    }
+
+    // Variety: trigonometric function root
+    @Test
+    public void testSolveTwoArgs_trigFunction_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(cosineFunction());
+        double root = solver.solve(0.0, 3.0);
+        assertEquals(Math.PI / 2.0, root, 1e-4);
+    }
+
+    // Interval straddling zero
+    @Test
+    public void testSolveTwoArgs_negativeToPositiveInterval_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(0.0));
+        double root = solver.solve(-1.0, 1.0);
+        assertEquals(0.0, root, 1e-6);
+    }
+
+    // Wide interval with a large-magnitude root
+    @Test
+    public void testSolveTwoArgs_wideIntervalLargeRoot_returnsRoot() throws Throwable {
+        BrentSolver solver = new BrentSolver(linearFunction(9999.0));
+        double root = solver.solve(-10000.0, 10000.0);
+        assertEquals(9999.0, root, 1e-3);
+    }
+}

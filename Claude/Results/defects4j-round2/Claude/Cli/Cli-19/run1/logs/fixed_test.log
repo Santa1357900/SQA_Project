@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Cli-19-3yjb9863/Cli-19f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_twoCharInvalidOption_stopAtNonOptionFalse_ignoresToken
+  - org.apache.commons.cli.PosixParserClaudeTest::testFlatten_processMultiArgOption_accumulatesValues_bugFix
+[exit 0]

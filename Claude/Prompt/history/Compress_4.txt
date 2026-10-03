@@ -1,0 +1,480 @@
+===== SYSTEM =====
+คุณคือวิศวกรทดสอบซอฟต์แวร์ Java อาวุโส เชี่ยวชาญ JUnit 4, การออกแบบ test oracle และการวัด code coverage
+งานของคุณคือเขียน unit test suite สำหรับคลาส Java หนึ่งคลาสจากโปรเจกต์โอเพนซอร์สเก่า (Defects4J)
+ซึ่งคลาสนั้น "มีบั๊กที่ยังไม่รู้ตำแหน่ง" อยู่หนึ่งจุด เป้าหมายคือ (1) ครอบคลุม branch/line ให้สูงที่สุด
+และ (2) มีอย่างน้อยหนึ่งเทสต์ที่ล้มเหลวบนเวอร์ชันที่มีบั๊กแต่ผ่านบนเวอร์ชันที่แก้แล้ว
+
+<compile_rules>
+โค้ดจะถูกคอมไพล์ด้วย javac -source 1.6 บน JDK 8 และรันด้วย JUnit 4 เท่านั้น ข้อใดข้อหนึ่งต่อไปนี้ผิดจะทำให้ทั้งไฟล์ถูกทิ้ง
+1. ห้ามใช้ไวยากรณ์หลัง Java 6: ห้าม diamond `<>`, lambda `->`, method reference `::`, try-with-resources,
+   multi-catch `catch (A | B e)`, switch บน String, underscore ในตัวเลข, `var`, `List.of`, `Optional`, `java.util.stream`, `java.nio.file`
+   ให้เขียน generic แบบเต็ม เช่น `new ArrayList<String>()` และใช้ anonymous inner class แทน lambda
+2. ใช้เฉพาะ JUnit 4: `import org.junit.Test;` และ `import static org.junit.Assert.*;` ห้าม JUnit 5 (org.junit.jupiter) ห้าม Hamcrest matcher
+3. ห้ามใช้ไลบรารีที่ไม่ปรากฏในโค้ดที่ให้มา: ห้าม Mockito, PowerMock, EasyMock, AssertJ, Guava (ยกเว้นโปรเจกต์นั้นใช้ Guava อยู่แล้ว)
+4. ห้ามเดา API: ทุก constructor, method, field, constant, inner class ที่เรียกต้องปรากฏใน source code ที่ให้มา
+   หรือเป็น JDK มาตรฐาน ถ้าไม่แน่ใจว่ามีอยู่จริง ให้ตัดเทสต์นั้นทิ้ง อย่าเดาชื่อที่ "น่าจะมี"
+5. เรียกได้เฉพาะสมาชิก public และ protected (ถ้าเทสต์อยู่ package เดียวกัน เรียก package-private ได้) ห้ามแตะ private
+   ห้ามใช้ reflection เพื่อเลี่ยงข้อนี้
+6. ห้าม implement interface หรือ extend abstract class ที่มี abstract method มากกว่า 2 ตัว (javac จะฟ้อง "is not abstract and does not override")
+   ให้ใช้ concrete class ที่มีอยู่แล้วในโค้ดหรือใน JDK แทน
+7. ทุก `@Test` method ต้องประกาศ `throws Throwable` (เช่น `public void testX() throws Throwable`)
+8. ห้าม `assertEquals(null, x)` ให้ใช้ `assertNull(x)` ห้าม `assertEquals(Double.NaN, x)` ให้ใช้ `assertTrue(Double.isNaN(x))`
+   `assertEquals` กับ double/float ต้องมี delta เสมอ เช่น `assertEquals(1.0, x, 1e-9)`
+9. ห้ามส่ง `null` เข้า parameter ชนิด primitive และระวัง ambiguous overload (เช่น `method((String) null)`)
+10. import ทุกคลาสที่ใช้ให้ครบ รวม inner class และ exception ทุกตัว ห้ามพึ่ง wildcard ของ package อื่นนอกจาก `org.junit.Assert.*`
+</compile_rules>
+
+<determinism_rules>
+- ห้ามใช้ Random ที่ไม่ตรึง seed, `System.currentTimeMillis()`, `new Date()` โดยไม่กำหนดค่า, Locale/TimeZone/Charset เริ่มต้นของเครื่อง
+- ห้ามอ่านหรือเขียนไฟล์จริง เครือข่าย ฐานข้อมูล หรือสร้าง thread ที่อยู่ยาวกว่าตัวเทสต์ (ใช้ StringReader/ByteArrayInputStream แทนไฟล์)
+- ห้ามพึ่งลำดับการวนซ้ำของ HashMap/HashSet
+- ห้ามเทสต์ที่พิมพ์ผลออก console แทนการ assert
+</determinism_rules>
+
+<oracle_rules>
+นี่คือหัวใจของงาน: ค่าที่คาดหวัง (expected value) ต้องมาจาก "สัญญาของเมธอด" ไม่ใช่จากการไล่โค้ดที่ให้มาในหัวแล้วคัดลอกผลลัพธ์ออกมา
+เพราะโค้ดที่ให้มามีบั๊ก การ assert ตามพฤติกรรมของโค้ดจะทำให้เทสต์ "ยืนยันบั๊ก" แทนที่จะจับบั๊ก
+- ใช้ Javadoc, ชื่อเมธอด, ชื่อพารามิเตอร์, ข้อความใน exception, และมาตรฐานทั่วไปของโดเมน (เช่น กฎของ Java Number parsing, ISO-8601, RFC, คณิตศาสตร์) เป็นแหล่งของค่าที่ถูกต้อง
+- เมื่อ Javadoc กับโค้ดขัดกัน ให้เชื่อ Javadoc
+- assert ค่าที่ตรวจสอบได้จริง (ค่าคืนกลับ, สถานะ object หลังเรียก, ชนิด exception) ห้าม `assertTrue(true)` หรือ assert เฉพาะว่า "ไม่ throw"
+- ห้าม assert ข้อความ exception แบบตรงตัวทั้งประโยค (เปราะบาง) ให้ assert ชนิด exception หรือ `getMessage().contains("คำสำคัญ")`
+- เทสต์ที่คาดว่าจะ throw ให้ใช้ `try { ...; fail("expected X"); } catch (X expected) { }`
+</oracle_rules>
+
+<output_rules>
+ตอบกลับเป็น Java source code ของไฟล์เดียวเท่านั้น
+- บรรทัดแรกต้องเป็น `package ...;` บรรทัดสุดท้ายต้องเป็น `}` ที่ปิดคลาส
+- ห้ามมี markdown code fence (``` หรือ ```java) ห้ามมีคำอธิบายก่อนหรือหลังโค้ด ห้ามมีข้อความอื่นใดนอกจากโค้ด
+- ชื่อคลาสเทสต์และ package ต้องตรงกับที่ระบุใน instructions ทุกตัวอักษร
+</output_rules>
+
+
+===== USER =====
+<target>
+project: Compress (Defects4J bug Compress-4)
+package: org.apache.commons.compress.archivers.cpio
+class_under_test: CpioArchiveOutputStream
+test_class_to_write: CpioArchiveOutputStreamClaudeTest
+</target>
+
+<project_notes>
+Commons Compress: ใช้ ByteArrayInputStream/ByteArrayOutputStream แทนไฟล์จริง ปิด stream ด้วย try/finally
+</project_notes>
+
+<source_code>
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.commons.compress.archivers.cpio;
+
+import java.io.File;
+import java.io.FilterOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.HashMap;
+
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveOutputStream;
+import org.apache.commons.compress.utils.ArchiveUtils;
+
+/**
+ * CPIOArchiveOutputStream is a stream for writing CPIO streams. All formats of
+ * CPIO are supported (old ASCII, old binary, new portable format and the new
+ * portable format with CRC).
+ * <p/>
+ * <p/>
+ * An entry can be written by creating an instance of CpioArchiveEntry and fill
+ * it with the necessary values and put it into the CPIO stream. Afterwards
+ * write the contents of the file into the CPIO stream. Either close the stream
+ * by calling finish() or put a next entry into the cpio stream.
+ * <p/>
+ * <code><pre>
+ * CpioArchiveOutputStream out = new CpioArchiveOutputStream(
+ *         new FileOutputStream(new File("test.cpio")));
+ * CpioArchiveEntry entry = new CpioArchiveEntry();
+ * entry.setName("testfile");
+ * String contents = &quot;12345&quot;;
+ * entry.setFileSize(contents.length());
+ * entry.setMode(CpioConstants.C_ISREG); // regular file
+ * ... set other attributes, e.g. time, number of links
+ * out.putNextEntry(entry);
+ * out.write(testContents.getBytes());
+ * out.close();
+ * </pre></code>
+ * <p/>
+ * Note: This implementation should be compatible to cpio 2.5
+ * 
+ * This class uses mutable fields and is not considered threadsafe.
+ * 
+ * based on code from the jRPM project (jrpm.sourceforge.net)
+ */
+public class CpioArchiveOutputStream extends ArchiveOutputStream implements
+        CpioConstants {
+
+    private CpioArchiveEntry entry;
+
+    private boolean closed = false;
+
+    private boolean finished;
+
+    /**
+     * See {@link CpioArchiveEntry#setFormat(short)} for possible values.
+     */
+    private final short entryFormat;
+
+    private final HashMap names = new HashMap();
+
+    private long crc = 0;
+
+    private long written;
+
+    private final OutputStream out;
+
+    /**
+     * Construct the cpio output stream with a specified format
+     * 
+     * @param out
+     *            The cpio stream
+     * @param format
+     *            The format of the stream
+     */
+    public CpioArchiveOutputStream(final OutputStream out, final short format) {
+        this.out = new FilterOutputStream(out);
+        switch (format) {
+        case FORMAT_NEW:
+        case FORMAT_NEW_CRC:
+        case FORMAT_OLD_ASCII:
+        case FORMAT_OLD_BINARY:
+            break;
+        default:
+            throw new IllegalArgumentException("Unknown format: "+format);
+        
+        }
+        this.entryFormat = format;
+    }
+
+    /**
+     * Construct the cpio output stream. The format for this CPIO stream is the
+     * "new" format
+     * 
+     * @param out
+     *            The cpio stream
+     */
+    public CpioArchiveOutputStream(final OutputStream out) {
+        this(out, FORMAT_NEW);
+    }
+
+    /**
+     * Check to make sure that this stream has not been closed
+     * 
+     * @throws IOException
+     *             if the stream is already closed
+     */
+    private void ensureOpen() throws IOException {
+        if (this.closed) {
+            throw new IOException("Stream closed");
+        }
+    }
+
+    /**
+     * Begins writing a new CPIO file entry and positions the stream to the
+     * start of the entry data. Closes the current entry if still active. The
+     * current time will be used if the entry has no set modification time and
+     * the default header format will be used if no other format is specified in
+     * the entry.
+     * 
+     * @param entry
+     *            the CPIO cpioEntry to be written
+     * @throws IOException
+     *             if an I/O error has occurred or if a CPIO file error has
+     *             occurred
+     * @throws ClassCastException if entry is not an instance of CpioArchiveEntry
+     */
+    public void putArchiveEntry(ArchiveEntry entry) throws IOException {
+        CpioArchiveEntry e = (CpioArchiveEntry) entry;
+        ensureOpen();
+        if (this.entry != null) {
+            closeArchiveEntry(); // close previous entry
+        }
+        if (e.getTime() == -1) {
+            e.setTime(System.currentTimeMillis());
+        }
+
+        final short format = e.getFormat();
+        if (format != this.entryFormat){
+            throw new IOException("Header format: "+format+" does not match existing format: "+this.entryFormat);
+        }
+
+        if (this.names.put(e.getName(), e) != null) {
+            throw new IOException("duplicate entry: " + e.getName());
+        }
+
+        writeHeader(e);
+        this.entry = e;
+        this.written = 0;
+    }
+
+    private void writeHeader(final CpioArchiveEntry e) throws IOException {
+        switch (e.getFormat()) {
+        case FORMAT_NEW:
+            out.write(ArchiveUtils.toAsciiBytes(MAGIC_NEW));
+            writeNewEntry(e);
+            break;
+        case FORMAT_NEW_CRC:
+            out.write(ArchiveUtils.toAsciiBytes(MAGIC_NEW_CRC));
+            writeNewEntry(e);
+            break;
+        case FORMAT_OLD_ASCII:
+            out.write(ArchiveUtils.toAsciiBytes(MAGIC_OLD_ASCII));
+            writeOldAsciiEntry(e);
+            break;
+        case FORMAT_OLD_BINARY:
+            boolean swapHalfWord = true;
+            writeBinaryLong(MAGIC_OLD_BINARY, 2, swapHalfWord);
+            writeOldBinaryEntry(e, swapHalfWord);
+            break;
+        }
+    }
+
+    private void writeNewEntry(final CpioArchiveEntry entry) throws IOException {
+        writeAsciiLong(entry.getInode(), 8, 16);
+        writeAsciiLong(entry.getMode(), 8, 16);
+        writeAsciiLong(entry.getUID(), 8, 16);
+        writeAsciiLong(entry.getGID(), 8, 16);
+        writeAsciiLong(entry.getNumberOfLinks(), 8, 16);
+        writeAsciiLong(entry.getTime(), 8, 16);
+        writeAsciiLong(entry.getSize(), 8, 16);
+        writeAsciiLong(entry.getDeviceMaj(), 8, 16);
+        writeAsciiLong(entry.getDeviceMin(), 8, 16);
+        writeAsciiLong(entry.getRemoteDeviceMaj(), 8, 16);
+        writeAsciiLong(entry.getRemoteDeviceMin(), 8, 16);
+        writeAsciiLong(entry.getName().length() + 1, 8, 16);
+        writeAsciiLong(entry.getChksum(), 8, 16);
+        writeCString(entry.getName());
+        pad(entry.getHeaderPadCount());
+    }
+
+    private void writeOldAsciiEntry(final CpioArchiveEntry entry)
+            throws IOException {
+        writeAsciiLong(entry.getDevice(), 6, 8);
+        writeAsciiLong(entry.getInode(), 6, 8);
+        writeAsciiLong(entry.getMode(), 6, 8);
+        writeAsciiLong(entry.getUID(), 6, 8);
+        writeAsciiLong(entry.getGID(), 6, 8);
+        writeAsciiLong(entry.getNumberOfLinks(), 6, 8);
+        writeAsciiLong(entry.getRemoteDevice(), 6, 8);
+        writeAsciiLong(entry.getTime(), 11, 8);
+        writeAsciiLong(entry.getName().length() + 1, 6, 8);
+        writeAsciiLong(entry.getSize(), 11, 8);
+        writeCString(entry.getName());
+    }
+
+    private void writeOldBinaryEntry(final CpioArchiveEntry entry,
+            final boolean swapHalfWord) throws IOException {
+        writeBinaryLong(entry.getDevice(), 2, swapHalfWord);
+        writeBinaryLong(entry.getInode(), 2, swapHalfWord);
+        writeBinaryLong(entry.getMode(), 2, swapHalfWord);
+        writeBinaryLong(entry.getUID(), 2, swapHalfWord);
+        writeBinaryLong(entry.getGID(), 2, swapHalfWord);
+        writeBinaryLong(entry.getNumberOfLinks(), 2, swapHalfWord);
+        writeBinaryLong(entry.getRemoteDevice(), 2, swapHalfWord);
+        writeBinaryLong(entry.getTime(), 4, swapHalfWord);
+        writeBinaryLong(entry.getName().length() + 1, 2, swapHalfWord);
+        writeBinaryLong(entry.getSize(), 4, swapHalfWord);
+        writeCString(entry.getName());
+        pad(entry.getHeaderPadCount());
+    }
+
+    /*(non-Javadoc)
+     * 
+     * @see
+     * org.apache.commons.compress.archivers.ArchiveOutputStream#closeArchiveEntry
+     * ()
+     */
+    public void closeArchiveEntry() throws IOException {
+        ensureOpen();
+
+        if (this.entry.getSize() != this.written) {
+            throw new IOException("invalid entry size (expected "
+                    + this.entry.getSize() + " but got " + this.written
+                    + " bytes)");
+        }
+        pad(this.entry.getDataPadCount());
+        if (this.entry.getFormat() == FORMAT_NEW_CRC) {
+            if (this.crc != this.entry.getChksum()) {
+                throw new IOException("CRC Error");
+            }
+        }
+        this.entry = null;
+        this.crc = 0;
+        this.written = 0;
+    }
+
+    /**
+     * Writes an array of bytes to the current CPIO entry data. This method will
+     * block until all the bytes are written.
+     * 
+     * @param b
+     *            the data to be written
+     * @param off
+     *            the start offset in the data
+     * @param len
+     *            the number of bytes that are written
+     * @throws IOException
+     *             if an I/O error has occurred or if a CPIO file error has
+     *             occurred
+     */
+    public void write(final byte[] b, final int off, final int len)
+            throws IOException {
+        ensureOpen();
+        if (off < 0 || len < 0 || off > b.length - len) {
+            throw new IndexOutOfBoundsException();
+        } else if (len == 0) {
+            return;
+        }
+
+        if (this.entry == null) {
+            throw new IOException("no current CPIO entry");
+        }
+        if (this.written + len > this.entry.getSize()) {
+            throw new IOException("attempt to write past end of STORED entry");
+        }
+        out.write(b, off, len);
+        this.written += len;
+        if (this.entry.getFormat() == FORMAT_NEW_CRC) {
+            for (int pos = 0; pos < len; pos++) {
+                this.crc += b[pos] & 0xFF;
+            }
+        }
+    }
+
+    /**
+     * Finishes writing the contents of the CPIO output stream without closing
+     * the underlying stream. Use this method when applying multiple filters in
+     * succession to the same output stream.
+     * 
+     * @throws IOException
+     *             if an I/O exception has occurred or if a CPIO file error has
+     *             occurred
+     */
+    public void finish() throws IOException {
+        ensureOpen();
+
+        if (this.finished) {
+            return;
+        }
+        if (this.entry != null) {
+            throw new IOException("This archives contains unclosed entries.");
+        }
+        this.entry = new CpioArchiveEntry(this.entryFormat);
+        this.entry.setName(CPIO_TRAILER);
+        this.entry.setNumberOfLinks(1);
+        writeHeader(this.entry);
+        closeArchiveEntry();
+    }
+
+    /**
+     * Closes the CPIO output stream as well as the stream being filtered.
+     * 
+     * @throws IOException
+     *             if an I/O error has occurred or if a CPIO file error has
+     *             occurred
+     */
+    public void close() throws IOException {
+        if (!this.closed) {
+            this.finish();
+            out.close();
+            this.closed = true;
+        }
+    }
+
+    private void pad(int count) throws IOException{
+        if (count > 0){
+            byte buff[] = new byte[count];
+            out.write(buff);
+        }
+    }
+
+    private void writeBinaryLong(final long number, final int length,
+            final boolean swapHalfWord) throws IOException {
+        byte tmp[] = CpioUtil.long2byteArray(number, length, swapHalfWord);
+        out.write(tmp);
+    }
+
+    private void writeAsciiLong(final long number, final int length,
+            final int radix) throws IOException {
+        StringBuffer tmp = new StringBuffer();
+        String tmpStr;
+        if (radix == 16) {
+            tmp.append(Long.toHexString(number));
+        } else if (radix == 8) {
+            tmp.append(Long.toOctalString(number));
+        } else {
+            tmp.append(Long.toString(number));
+        }
+
+        if (tmp.length() <= length) {
+            long insertLength = length - tmp.length();
+            for (int pos = 0; pos < insertLength; pos++) {
+                tmp.insert(0, "0");
+            }
+            tmpStr = tmp.toString();
+        } else {
+            tmpStr = tmp.substring(tmp.length() - length);
+        }
+        out.write(tmpStr.getBytes()); // TODO is it correct to use the default charset here?
+    }
+
+    private void writeCString(final String str) throws IOException {
+        out.write(str.getBytes()); // TODO is it correct to use the default charset here?
+        out.write('\0');
+    }
+
+    public ArchiveEntry createArchiveEntry(File inputFile, String entryName)
+            throws IOException {
+        return new CpioArchiveEntry(inputFile, entryName);
+    }
+
+}
+</source_code>
+
+<instructions>
+เขียนคลาส JUnit 4 ชื่อ CpioArchiveOutputStreamClaudeTest ใน package org.apache.commons.compress.archivers.cpio เพื่อทดสอบคลาส CpioArchiveOutputStream ข้างต้น
+
+ขั้นที่ 1 วิเคราะห์ก่อนเขียน (คิดในใจ ไม่ต้องแสดงผล)
+  ก. ไล่รายการ public/protected method และ constructor ทุกตัวที่เรียกได้จริงจากภายนอกโดยไม่ต้อง mock
+  ข. สำหรับแต่ละเมธอด ไล่ทุกสาขา: if/else, switch, ternary, `&&`/`||` แต่ละตัว, ลูปกรณี 0 รอบ / 1 รอบ / หลายรอบ,
+     และทุก throw ที่เข้าถึงได้ผ่าน public API
+  ค. หาค่านำเข้าที่ทำให้เข้าถึงแต่ละสาขา โดยเน้นค่าขอบ: null, "", " ", 0, -1, 1, MIN_VALUE, MAX_VALUE, ค่าที่ overflow,
+     อาเรย์/คอลเลกชันว่างและ 1 สมาชิก, Unicode/escape ใน String, ค่าคงที่ที่ปรากฏในโค้ด, ค่าตรงรอยต่อของเงื่อนไข (< กับ <=)
+  ง. ล่าบั๊ก: มองหาจุดที่โค้ดกับ Javadoc ไม่ตรงกัน, off-by-one, การจัดการ null ที่ไม่ครบ, การเปรียบเทียบที่ผิดชนิด,
+     การ copy-paste ที่ลืมแก้ตัวแปร, การไม่ตรวจขอบเขต แล้วเขียนเทสต์ที่ "ยืนยันพฤติกรรมที่ถูกต้องตามสัญญา" ณ จุดนั้นโดยเฉพาะ
+  จ. ตัดเทสต์ที่ต้องพึ่ง API ที่ไม่ปรากฏในโค้ด, ต้อง mock, หรือต้องเข้าถึง private ออก
+
+ขั้นที่ 2 เขียนคลาสเทสต์
+  - หนึ่ง @Test ต่อหนึ่งสาขาหรือหนึ่งกลุ่มสาขาที่เกี่ยวข้องกัน เทสต์ยาวไม่เกิน 15 บรรทัด
+  - ตั้งชื่อแบบ test<MethodName>_<condition>_<expectedOutcome>
+  - เขียนคอมเมนต์บรรทัดเดียวเหนือแต่ละเทสต์ว่าคุมสาขา/เงื่อนไขใด
+  - ทุกเทสต์ต้องมี assertion ที่ตรวจค่าจริงตาม <oracle_rules>
+  - ใส่เทสต์สำหรับทุกเส้นทางที่ throw exception
+  - รวม 20 ถึง 45 เทสต์ เรียงตามลำดับเมธอดในคลาส
+  - ถ้าคลาสต้องการ setup ร่วม ให้ใช้ `@Before public void setUp() throws Throwable`
+  - ห้ามใช้ `@Ignore` และห้ามปล่อยเทสต์ว่าง
+
+ตอบกลับตาม <output_rules>: โค้ด Java ล้วน เริ่มด้วย `package org.apache.commons.compress.archivers.cpio;` เท่านั้น
+</instructions>

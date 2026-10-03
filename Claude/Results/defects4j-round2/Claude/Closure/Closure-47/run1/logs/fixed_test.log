@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Closure-47-5pehnir6/Closure-47f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - com.google.debugging.sourcemap.SourceMapConsumerV3ClaudeTest::testGetMappingForLine_columnBeforeFirstEntry_returnsPreviousMapping
+  - com.google.debugging.sourcemap.SourceMapConsumerV3ClaudeTest::testGetMappingForLine_emptyLine_returnsPreviousMapping
+  - com.google.debugging.sourcemap.SourceMapConsumerV3ClaudeTest::testParse_twoLines_correctMappingForSecondLine
+  - com.google.debugging.sourcemap.SourceMapConsumerV3ClaudeTest::testParse_validSingleLineTrailingSemicolon_correctMapping
+  - com.google.debugging.sourcemap.SourceMapConsumerV3ClaudeTest::testParse_missingTrailingSemicolonForLastLine_bugRegression
+[exit 0]

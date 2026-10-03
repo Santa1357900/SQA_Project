@@ -1,0 +1,17 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Codec -v 7f -w /tmp/claude-Codec-7-ttbms4hi/fixed
+Checking out 954d995c to /tmp/claude-Codec-7-ttbms4hi/fixed................ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Run post-checkout hook..................................................... OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 954d995c:f7966c1b..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Codec-7f........................................ OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Codec-7-ttbms4hi/fixed
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

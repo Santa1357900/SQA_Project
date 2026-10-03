@@ -1,0 +1,226 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="1.0" branch-rate="1.0" lines-covered="31" lines-valid="31" branches-covered="13" branches-valid="13" complexity="4.909090909090909" version="2.0.3" timestamp="1790805179863">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="com.fasterxml.jackson.databind.deser.std" line-rate="1.0" branch-rate="1.0" complexity="4.909090909090909">
+			<classes>
+				<class name="com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer" filename="com/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer.java" line-rate="1.0" branch-rate="1.0" complexity="4.909090909090909">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="23" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="25" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="deserialize" signature="(Lcom/fasterxml/jackson/core/JsonParser;Lcom/fasterxml/jackson/databind/DeserializationContext;)Lcom/fasterxml/jackson/databind/JsonNode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="67" hits="19" branch="true" condition-coverage="100% (3/3)">
+									<conditions>
+										<condition number="0" type="switch" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="69" hits="5" branch="false"/>
+								<line number="71" hits="3" branch="false"/>
+								<line number="73" hits="11" branch="false"/>
+							</lines>
+						</method>
+						<method name="deserialize" signature="(Lcom/fasterxml/jackson/core/JsonParser;Lcom/fasterxml/jackson/databind/DeserializationContext;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="15" hits="41" branch="false"/>
+							</lines>
+						</method>
+						<method name="deserializeWithType" signature="(Lcom/fasterxml/jackson/core/JsonParser;Lcom/fasterxml/jackson/databind/DeserializationContext;Lcom/fasterxml/jackson/databind/jsontype/TypeDeserializer;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="getDeserializer" signature="(Ljava/lang/Class;)Lcom/fasterxml/jackson/databind/JsonDeserializer;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="32" hits="33" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="33" hits="6" branch="false"/>
+								<line number="35" hits="27" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="36" hits="4" branch="false"/>
+								<line number="39" hits="23" branch="false"/>
+							</lines>
+						</method>
+						<method name="getNullValue" signature="()Lcom/fasterxml/jackson/databind/JsonNode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="56" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="getNullValue" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="getNullValue" signature="(Lcom/fasterxml/jackson/databind/DeserializationContext;)Lcom/fasterxml/jackson/databind/JsonNode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="50" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="getNullValue" signature="(Lcom/fasterxml/jackson/databind/DeserializationContext;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="isCachable" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="15" hits="41" branch="false"/>
+						<line number="23" hits="1" branch="false"/>
+						<line number="25" hits="2" branch="false"/>
+						<line number="32" hits="33" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="33" hits="6" branch="false"/>
+						<line number="35" hits="27" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="36" hits="4" branch="false"/>
+						<line number="39" hits="23" branch="false"/>
+						<line number="50" hits="2" branch="false"/>
+						<line number="56" hits="1" branch="false"/>
+						<line number="67" hits="19" branch="true" condition-coverage="100% (3/3)">
+							<conditions>
+								<condition number="0" type="switch" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="69" hits="5" branch="false"/>
+						<line number="71" hits="3" branch="false"/>
+						<line number="73" hits="11" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer$ArrayDeserializer" filename="com/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer.java" line-rate="1.0" branch-rate="1.0" complexity="4.909090909090909">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="115" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="117" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="deserialize" signature="(Lcom/fasterxml/jackson/core/JsonParser;Lcom/fasterxml/jackson/databind/DeserializationContext;)Lcom/fasterxml/jackson/databind/node/ArrayNode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="124" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="125" hits="1" branch="false"/>
+								<line number="127" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="deserialize" signature="(Lcom/fasterxml/jackson/core/JsonParser;Lcom/fasterxml/jackson/databind/DeserializationContext;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="110" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="getInstance" signature="()Lcom/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer$ArrayDeserializer;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="119" hits="4" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="110" hits="2" branch="false"/>
+						<line number="115" hits="1" branch="false"/>
+						<line number="117" hits="1" branch="false"/>
+						<line number="119" hits="4" branch="false"/>
+						<line number="124" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="125" hits="1" branch="false"/>
+						<line number="127" hits="1" branch="false"/>
+					</lines>
+				</class>
+				<class name="com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer$ObjectDeserializer" filename="com/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer.java" line-rate="1.0" branch-rate="1.0" complexity="4.909090909090909">
+					<methods>
+						<method name="&lt;clinit&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="88" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="()V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="90" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="deserialize" signature="(Lcom/fasterxml/jackson/core/JsonParser;Lcom/fasterxml/jackson/databind/DeserializationContext;)Lcom/fasterxml/jackson/databind/node/ObjectNode;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="97" hits="3" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="98" hits="1" branch="false"/>
+								<line number="99" hits="1" branch="false"/>
+								<line number="103" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="104" hits="1" branch="false"/>
+								<line number="106" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="deserialize" signature="(Lcom/fasterxml/jackson/core/JsonParser;Lcom/fasterxml/jackson/databind/DeserializationContext;)Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="83" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="getInstance" signature="()Lcom/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer$ObjectDeserializer;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="92" hits="6" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="83" hits="3" branch="false"/>
+						<line number="88" hits="1" branch="false"/>
+						<line number="90" hits="1" branch="false"/>
+						<line number="92" hits="6" branch="false"/>
+						<line number="97" hits="3" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="98" hits="1" branch="false"/>
+						<line number="99" hits="1" branch="false"/>
+						<line number="103" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="104" hits="1" branch="false"/>
+						<line number="106" hits="1" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

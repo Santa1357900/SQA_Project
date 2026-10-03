@@ -1,0 +1,178 @@
+package com.google.javascript.jscomp;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CodeGeneratorClaudeTest {
+
+  // ---------- isSimpleNumber tests ----------
+
+  // Bug check: "0" is a valid simple integer literal (single zero digit has no
+  // leading-zero problem); the buggy impl rejects it because it checks
+  // charAt(0) != '0' unconditionally.
+  @Test
+  public void testIsSimpleNumber_zero_isSimple() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("0"));
+  }
+
+  // Branch: len > 0 fails for empty string -> false.
+  @Test
+  public void testIsSimpleNumber_emptyString_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber(""));
+  }
+
+  // Branch: single non-zero digit is simple.
+  @Test
+  public void testIsSimpleNumber_singleNonZeroDigit_returnsTrue() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("5"));
+  }
+
+  // Branch: multi-digit number without leading zero is simple.
+  @Test
+  public void testIsSimpleNumber_multiDigitNoLeadingZero_returnsTrue() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("123"));
+  }
+
+  // Branch: multi-digit number with leading zero is not simple.
+  @Test
+  public void testIsSimpleNumber_leadingZeroMultiDigit_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("012"));
+  }
+
+  // Branch: all-zero string is not simple (starts with '0').
+  @Test
+  public void testIsSimpleNumber_allZeros_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("00"));
+  }
+
+  // Branch: loop detects a non-digit character and returns false early.
+  @Test
+  public void testIsSimpleNumber_containsLetter_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("12a"));
+  }
+
+  // Branch: minus sign is not a digit, returns false.
+  @Test
+  public void testIsSimpleNumber_negativeSign_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("-5"));
+  }
+
+  // Branch: decimal point is not a digit, returns false.
+  @Test
+  public void testIsSimpleNumber_decimalPoint_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber("1.5"));
+  }
+
+  // Branch: loop runs many iterations over a long all-digit string with no leading zero.
+  @Test
+  public void testIsSimpleNumber_longAllDigits_returnsTrue() throws Throwable {
+    assertTrue(CodeGenerator.isSimpleNumber("1234567890123456789012345"));
+  }
+
+  // Branch: whitespace is not a digit character, returns false immediately.
+  @Test
+  public void testIsSimpleNumber_whitespace_returnsFalse() throws Throwable {
+    assertFalse(CodeGenerator.isSimpleNumber(" "));
+  }
+
+  // ---------- getSimpleNumber tests ----------
+
+  // Bug check: "0" should parse to the number 0 since it is a simple number.
+  @Test
+  public void testGetSimpleNumber_zero_returnsZero() throws Throwable {
+    assertEquals(0.0, CodeGenerator.getSimpleNumber("0"), 0.0);
+  }
+
+  // Branch: valid simple number is parsed and returned as a double.
+  @Test
+  public void testGetSimpleNumber_validNumber_returnsValue() throws Throwable {
+    assertEquals(123.0, CodeGenerator.getSimpleNumber("123"), 0.0);
+  }
+
+  // Branch: isSimpleNumber returns false for empty string -> NaN.
+  @Test
+  public void testGetSimpleNumber_emptyString_returnsNaN() throws Throwable {
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("")));
+  }
+
+  // Branch: leading zero makes it not a simple number -> NaN.
+  @Test
+  public void testGetSimpleNumber_leadingZero_returnsNaN() throws Throwable {
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("0123")));
+  }
+
+  // Branch: non-digit character makes it not a simple number -> NaN.
+  @Test
+  public void testGetSimpleNumber_nonDigit_returnsNaN() throws Throwable {
+    assertTrue(Double.isNaN(CodeGenerator.getSimpleNumber("12a")));
+  }
+
+  // Branch: isSimpleNumber is true but Long.parseLong overflows -> caught
+  // NumberFormatException -> NaN.
+  @Test
+  public void testGetSimpleNumber_overflowLong_returnsNaN() throws Throwable {
+    assertTrue(Double.isNaN(
+        CodeGenerator.getSimpleNumber("999999999999999999999999999999")));
+  }
+
+  // Branch: single non-zero digit converts correctly.
+  @Test
+  public void testGetSimpleNumber_singleDigit_returnsValue() throws Throwable {
+    assertEquals(7.0, CodeGenerator.getSimpleNumber("7"), 0.0);
+  }
+
+  // ---------- identifierEscape tests ----------
+
+  // Branch: string is fully latin/ASCII -> returned unchanged (short-circuit branch).
+  @Test
+  public void testIdentifierEscape_plainAscii_unchanged() throws Throwable {
+    assertEquals("foo", CodeGenerator.identifierEscape("foo"));
+  }
+
+  // Branch: non-latin char forces per-character loop; ASCII chars pass through,
+  // non-ASCII char gets hex-escaped (lowercase hex digits).
+  @Test
+  public void testIdentifierEscape_nonLatinChar_escaped() throws Throwable {
+    assertEquals("caf\\u00e9", CodeGenerator.identifierEscape("caf\u00e9"));
+  }
+
+  // Branch: control char combined with a non-latin trigger char is escaped,
+  // while plain ascii letter passes through unchanged.
+  @Test
+  public void testIdentifierEscape_controlCharacter_escaped() throws Throwable {
+    assertEquals("a\\u0001\\u00e9",
+        CodeGenerator.identifierEscape("a\u0001\u00e9"));
+  }
+
+  // Branch: empty string trivially has no non-latin chars -> unchanged.
+  @Test
+  public void testIdentifierEscape_emptyString_returnsEmpty() throws Throwable {
+    assertEquals("", CodeGenerator.identifierEscape(""));
+  }
+
+  // Branch: high unicode char escaped with lowercase hex digits.
+  @Test
+  public void testIdentifierEscape_highUnicodeChar_escapedLowercaseHex() throws Throwable {
+    assertEquals("x\\u00ff", CodeGenerator.identifierEscape("x\u00ff"));
+  }
+
+  // Boundary: char == 0x7F is NOT < 0x7F, so it must be escaped.
+  @Test
+  public void testIdentifierEscape_boundary0x7F_escaped() throws Throwable {
+    assertEquals("\\u007f\\u00e9",
+        CodeGenerator.identifierEscape("\u007F\u00e9"));
+  }
+
+  // Boundary: space (0x20) is > 0x1F and < 0x7F, so it passes through unescaped.
+  @Test
+  public void testIdentifierEscape_boundarySpace_passesThrough() throws Throwable {
+    assertEquals(" \\u00e9", CodeGenerator.identifierEscape(" \u00e9"));
+  }
+
+  // Boundary: char == 0x1F is NOT > 0x1F, so it must be escaped.
+  @Test
+  public void testIdentifierEscape_boundary0x1F_escaped() throws Throwable {
+    assertEquals("\\u001f\\u00e9",
+        CodeGenerator.identifierEscape("\u001F\u00e9"));
+  }
+}

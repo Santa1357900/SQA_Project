@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-56-osh9k7vs/Math-56b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.math.util.MultidimensionalCounterClaudeTest::testGetCounts_multiDimension_lastDimensionLargeGap_catchesBug
+  - org.apache.commons.math.util.MultidimensionalCounterClaudeTest::testGetCount_roundTrip_withGetCounts_consistentForAllIndices
+  - org.apache.commons.math.util.MultidimensionalCounterClaudeTest::testGetCounts_singleDimension_identityMapping_catchesBug
+[exit 0]

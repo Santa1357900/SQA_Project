@@ -1,0 +1,255 @@
+package com.google.javascript.jscomp;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import com.google.javascript.rhino.Node;
+
+public class RemoveUnusedVarsClaudeTest {
+
+  /**
+   * Helper: parses the given JS as a single input file (with empty externs),
+   * runs RemoveUnusedVars via the CallGraphCompilerPass entry point (which has
+   * no normalization precondition), and returns the resulting SCRIPT node.
+   */
+  private Node parseAndRun(String code, boolean removeGlobals,
+      boolean preserveNames, boolean modifyCallSites) throws Throwable {
+    Compiler compiler = new Compiler();
+    CompilerOptions options = new CompilerOptions();
+    SourceFile externs = SourceFile.fromCode("externs.js", "");
+    SourceFile input = SourceFile.fromCode("input.js", code);
+    compiler.compile(externs, input, options);
+    Node root = compiler.getRoot();
+    Node externsRoot = root.getFirstChild();
+    Node jsRoot = root.getLastChild();
+    SimpleDefinitionFinder defFinder = null;
+    if (modifyCallSites) {
+      defFinder = new SimpleDefinitionFinder(compiler);
+      defFinder.process(externsRoot, jsRoot);
+    }
+    RemoveUnusedVars pass =
+        new RemoveUnusedVars(compiler, removeGlobals, preserveNames, modifyCallSites);
+    pass.process(externsRoot, jsRoot, defFinder);
+    return jsRoot.getFirstChild();
+  }
+
+  // Covers constructor and that class implements both required interfaces.
+  @Test
+  public void testConstructor_implementsExpectedInterfaces() throws Throwable {
+    Compiler compiler = new Compiler();
+    RemoveUnusedVars pass = new RemoveUnusedVars(compiler, true, false, false);
+    assertTrue(pass instanceof CompilerPass);
+    assertTrue(pass instanceof OptimizeCalls.CallGraphCompilerPass);
+  }
+
+  // Covers isRemovableVar==true for unreferenced global when removeGlobals=true;
+  // removeUnreferencedVars removes the whole VAR statement.
+  @Test
+  public void testProcess_globalUnusedVarRemoveGlobalsTrue_removesVar() throws Throwable {
+    Node script = parseAndRun("var x = 1; var y = 2; y;", true, false, false);
+    assertEquals(2, script.getChildCount());
+    Node first = script.getFirstChild();
+    assertTrue(first.isVar());
+    assertEquals("y", first.getFirstChild().getString());
+  }
+
+  // Covers isRemovableVar returning false when !removeGlobals && var.isGlobal().
+  @Test
+  public void testProcess_globalUnusedVarRemoveGlobalsFalse_keepsVar() throws Throwable {
+    Node script = parseAndRun("var x = 1;", false, false, false);
+    assertEquals(1, script.getChildCount());
+    Node stmt = script.getFirstChild();
+    assertTrue(stmt.isVar());
+    assertEquals("x", stmt.getFirstChild().getString());
+  }
+
+  // Covers markReferencedVar preventing removal of a referenced global variable.
+  @Test
+  public void testProcess_referencedGlobalVar_keepsVar() throws Throwable {
+    Node script = parseAndRun("var x = 1; x;", true, false, false);
+    assertEquals(2, script.getChildCount());
+  }
+
+  // Covers local variable removal via VAR node with literal (side-effect free) init.
+  @Test
+  public void testProcess_localUnusedVarInFunction_removesVar() throws Throwable {
+    Node script = parseAndRun("function f(a) { var c = 1; return a; }", true, false, false);
+    Node function = script.getFirstChild();
+    Node body = function.getLastChild();
+    assertEquals(1, body.getChildCount());
+  }
+
+  // Covers isRemovableVar: local (non-global) vars are removable even when removeGlobals=false.
+  @Test
+  public void testProcess_removeGlobalsFalse_localVarStillRemoved() throws Throwable {
+    Node script = parseAndRun("function f(a) { var c = 1; return a; }", false, false, false);
+    Node function = script.getFirstChild();
+    Node body = function.getLastChild();
+    assertEquals(1, body.getChildCount());
+  }
+
+  // Covers branch: toRemove.isVar() && toRemove.getChildCount() > 1 (partial removal only).
+  @Test
+  public void testProcess_multipleVarDeclaration_onlyRemovesUnreferencedName() throws Throwable {
+    Node script = parseAndRun("var a, b; b;", true, false, false);
+    Node varStmt = script.getFirstChild();
+    assertTrue(varStmt.isVar());
+    assertEquals(1, varStmt.getChildCount());
+    assertEquals("b", varStmt.getFirstChild().getString());
+  }
+
+  // Covers branch: unreferenced var whose initializer may have side effects ->
+  // keep the expression, drop the var wrapper ("var a = foo();" => "foo();").
+  @Test
+  public void testProcess_varWithSideEffectInitializer_keepsCallRemovesVarWrapper() throws Throwable {
+    Node script = parseAndRun("function foo() { return 1; } var a = foo();", true, false, false);
+    assertEquals(2, script.getChildCount());
+    Node second = script.getLastChild();
+    assertTrue(second.isExprResult());
+    assertTrue(second.getFirstChild().isCall());
+  }
+
+  // Covers special-case guard: parent.isFor() && parent.getChildCount() < 4 leaves for-in var alone.
+  @Test
+  public void testProcess_forInLoopVar_notRemoved() throws Throwable {
+    Node script = parseAndRun("var obj = {}; for (var i in obj) { }", true, false, false);
+    Node forNode = script.getLastChild();
+    assertTrue(forNode.isFor());
+    assertEquals(3, forNode.getChildCount());
+    assertTrue(forNode.getFirstChild().isVar());
+  }
+
+  // Covers removeUnreferencedFunctionArgs stripping trailing unreferenced args off the end.
+  @Test
+  public void testProcess_trailingUnusedFunctionArgs_removedFromEnd() throws Throwable {
+    Node script = parseAndRun("function f(a, b, c) { return a; }", true, false, false);
+    Node function = script.getFirstChild();
+    Node paramList = function.getFirstChild().getNext();
+    assertEquals(1, paramList.getChildCount());
+    assertEquals("a", paramList.getFirstChild().getString());
+  }
+
+  // Covers contract: trailing-only removal stops at first referenced arg from the end.
+  @Test
+  public void testProcess_unusedFunctionArgNotAtEnd_notRemoved() throws Throwable {
+    Node script = parseAndRun("function f(a, b, c) { return c; }", true, false, false);
+    Node function = script.getFirstChild();
+    Node paramList = function.getFirstChild().getNext();
+    assertEquals(3, paramList.getChildCount());
+  }
+
+  // Covers "arguments" special handling marking all declared parameters as referenced.
+  @Test
+  public void testProcess_argumentsReferenced_marksAllParamsReferenced() throws Throwable {
+    Node script = parseAndRun("function f(a, b) { arguments; }", true, false, false);
+    Node function = script.getFirstChild();
+    Node paramList = function.getFirstChild().getNext();
+    assertEquals(2, paramList.getChildCount());
+  }
+
+  // Covers preserveFunctionExpressionNames=false clearing the bleeding function name.
+  @Test
+  public void testProcess_functionExpressionNameUnreferenced_preserveFalse_clearsName() throws Throwable {
+    Node script = parseAndRun("var g = function foo() { return 1; }; g();", true, false, false);
+    Node functionNode = script.getFirstChild().getFirstChild().getFirstChild();
+    assertEquals("", functionNode.getFirstChild().getString());
+  }
+
+  // Covers preserveFunctionExpressionNames=true keeping the bleeding function name.
+  @Test
+  public void testProcess_functionExpressionNameUnreferenced_preserveTrue_keepsName() throws Throwable {
+    Node script = parseAndRun("var g = function foo() { return 1; }; g();", true, true, false);
+    Node functionNode = script.getFirstChild().getFirstChild().getFirstChild();
+    assertEquals("foo", functionNode.getFirstChild().getString());
+  }
+
+  // Covers removal of an entire unreferenced global function declaration.
+  @Test
+  public void testProcess_unusedFunctionDeclarationGlobal_removed() throws Throwable {
+    Node script = parseAndRun("function foo() { return 1; }", true, false, false);
+    assertEquals(0, script.getChildCount());
+  }
+
+  // Covers markReferencedVar preventing removal of a called function declaration.
+  @Test
+  public void testProcess_referencedFunctionDeclaration_notRemoved() throws Throwable {
+    Node script = parseAndRun("function foo() { return 1; } foo();", true, false, false);
+    assertEquals(2, script.getChildCount());
+  }
+
+  // Covers CallSiteOptimizer removing an unreferenced trailing arg from the function
+  // declaration and from its call site.
+  @Test
+  public void testProcess_modifyCallSitesTrue_removesArgFromCallSite() throws Throwable {
+    Node script = parseAndRun("function f(a, b) { return a; } f(1, 2);", true, false, true);
+    Node function = script.getFirstChild();
+    Node paramList = function.getFirstChild().getNext();
+    assertEquals(1, paramList.getChildCount());
+    Node callNode = script.getLastChild().getFirstChild();
+    assertEquals(2, callNode.getChildCount());
+  }
+
+  // Covers zero-iteration paths through traversal and removal loops on an empty script.
+  @Test
+  public void testProcess_emptyScript_noChangesNoExceptions() throws Throwable {
+    Node script = parseAndRun("", true, false, false);
+    assertEquals(0, script.getChildCount());
+  }
+
+  // Covers allFunctionScopes accumulating nested function scopes for local var removal.
+  @Test
+  public void testProcess_nestedFunctionUnusedLocal_removedAcrossScopes() throws Throwable {
+    Node script = parseAndRun(
+        "function outer() { function inner() { var z = 1; return 2; } return inner(); } outer();",
+        true, false, false);
+    Node outerBody = script.getFirstChild().getLastChild();
+    Node innerFn = outerBody.getFirstChild();
+    Node innerBody = innerFn.getLastChild();
+    assertEquals(1, innerBody.getChildCount());
+  }
+
+  // Covers Javadoc example: property assign on a var without other refs is not a reference.
+  @Test
+  public void testProcess_propertyAssignOnlyToLiteralInitVar_removesVarAndAssign() throws Throwable {
+    Node script = parseAndRun("var x = {}; x.foo = 3;", true, false, false);
+    assertEquals(0, script.getChildCount());
+  }
+
+  // Covers Javadoc example: property assign on a var with non-literal init counts as a reference.
+  @Test
+  public void testProcess_propertyAssignToUnknownInitVar_marksReferenced() throws Throwable {
+    Node script = parseAndRun(
+        "function foo() { return {}; } var y = foo(); y.foo = 3;", true, false, false);
+    assertEquals(3, script.getChildCount());
+  }
+
+  // Covers nameNode.hasChildren()==false path (no initializer) leading to full removal.
+  @Test
+  public void testProcess_varDeclarationNoInitializer_removedWhenUnused() throws Throwable {
+    Node script = parseAndRun("var x;", true, false, false);
+    assertEquals(0, script.getChildCount());
+  }
+
+  // Covers loop removing multiple entries from the maybeUnreferenced list.
+  @Test
+  public void testProcess_multipleUnusedGlobalFunctions_allRemoved() throws Throwable {
+    Node script = parseAndRun("function a() {} function b() {}", true, false, false);
+    assertEquals(0, script.getChildCount());
+  }
+
+  // Covers isRemovableVar returning false for unreferenced global function when removeGlobals=false.
+  @Test
+  public void testProcess_removeGlobalsFalse_globalFunctionDeclarationKept() throws Throwable {
+    Node script = parseAndRun("function a() {}", false, false, false);
+    assertEquals(1, script.getChildCount());
+  }
+
+  // Covers removeUnreferencedFunctionArgs loop breaking immediately when last arg is referenced.
+  @Test
+  public void testProcess_allParamsReferenced_noneRemoved() throws Throwable {
+    Node script = parseAndRun("function f(a, b) { return a + b; }", true, false, false);
+    Node function = script.getFirstChild();
+    Node paramList = function.getFirstChild().getNext();
+    assertEquals(2, paramList.getChildCount());
+  }
+}

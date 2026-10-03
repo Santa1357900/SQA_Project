@@ -1,0 +1,29 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Lang -v 43b -w /tmp/claude-Lang-43-wo3a8fgm/buggy
+Checking out a38e2e94 to /tmp/claude-Lang-43-wo3a8fgm/buggy................ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Rename enum package in src................................................. OK
+Move enum package in src................................................... OK
+Rename enum package in test................................................ OK
+Move enum package in test.................................................. OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /tmp/claude-Lang-43-wo3a8fgm/buggy/default.propertie OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff a38e2e94:eb8b39b1..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Lang-43b........................................ OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /tmp/claude-Lang-43-wo3a8fgm/buggy
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

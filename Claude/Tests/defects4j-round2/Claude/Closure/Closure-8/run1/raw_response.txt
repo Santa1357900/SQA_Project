@@ -1,0 +1,225 @@
+package com.google.javascript.jscomp;
+
+import com.google.common.collect.Lists;
+import com.google.javascript.rhino.Node;
+import java.util.List;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class CollapseVariableDeclarationsClaudeTest {
+
+  private String runPass(String js) throws Throwable {
+    CompilerOptions options = new CompilerOptions();
+    List<SourceFile> externs = Lists.newArrayList();
+    List<SourceFile> inputs = Lists.newArrayList();
+    inputs.add(SourceFile.fromCode("in.js", js));
+    Compiler compiler = new Compiler();
+    compiler.compile(externs, inputs, options);
+    Node root = compiler.getRoot();
+    Node externsRoot = root.getFirstChild();
+    Node jsRoot = root.getLastChild();
+    CollapseVariableDeclarations pass = new CollapseVariableDeclarations(compiler);
+    pass.process(externsRoot, jsRoot);
+    return compiler.toSource();
+  }
+
+  private int countOccurrences(String s, String sub) {
+    int count = 0;
+    int idx = 0;
+    while (true) {
+      idx = s.indexOf(sub, idx);
+      if (idx < 0) break;
+      count++;
+      idx += sub.length();
+    }
+    return count;
+  }
+
+  // adjacent stub var + initialized var must collapse into a single var statement
+  @Test
+  public void testProcess_stubThenInitializedVar_collapsesIntoOne() throws Throwable {
+    String out = runPass("var a; var b = 1;");
+    assertEquals(1, countOccurrences(out, "var "));
+    assertTrue(out.contains("a"));
+    assertTrue(out.contains("b"));
+    assertTrue(out.contains("1"));
+  }
+
+  // three adjacent initialized vars collapse into one var statement (multi iteration while loop)
+  @Test
+  public void testProcess_threeInitializedVars_collapsesAll() throws Throwable {
+    String out = runPass("var a = 1; var b = 2; var c = 3;");
+    assertEquals(1, countOccurrences(out, "var "));
+    assertTrue(out.contains("a"));
+    assertTrue(out.contains("b"));
+    assertTrue(out.contains("c"));
+  }
+
+  // pre-existing multi-declarator var merges with a following var (inner hasChildren loop, multiple moves)
+  @Test
+  public void testProcess_multiDeclaratorVarFollowedByVar_mergesAdditional() throws Throwable {
+    String out = runPass("var a = 1, b = 2; var c = 3;");
+    assertEquals(1, countOccurrences(out, "var "));
+    assertTrue(out.contains("a"));
+    assertTrue(out.contains("b"));
+    assertTrue(out.contains("c"));
+  }
+
+  // non-adjacent vars separated by a plain expression statement must NOT collapse
+  @Test
+  public void testProcess_nonAdjacentVarsSeparatedByExpr_notCollapsed() throws Throwable {
+    String out = runPass("var a = 1; 0; var b = 2;");
+    assertEquals(2, countOccurrences(out, "var "));
+    assertTrue(out.contains("0"));
+  }
+
+  // bare if/else var branches (parent.isIf() guard) must NOT be collapsed together
+  @Test
+  public void testProcess_ifElseBareVarBranches_notCollapsed() throws Throwable {
+    String out = runPass("var cond = 1; if (cond) var a = 1; else var b = 2;");
+    assertEquals(3, countOccurrences(out, "var "));
+  }
+
+  // bare if-only var branch (no else) must not be collapsed either
+  @Test
+  public void testProcess_singleVarInBareThenNoElse_notCollapsed() throws Throwable {
+    String out = runPass("var cond = 1; if (cond) var a = 1;");
+    assertEquals(2, countOccurrences(out, "var "));
+  }
+
+  // block-wrapped if var and outer vars separated by an if statement must stay separate
+  @Test
+  public void testProcess_blockWrappedIfVar_notCollapsedAcrossBlocks() throws Throwable {
+    String out = runPass("var a = 1; if (a) { var b = 2; } var c = 3;");
+    assertEquals(3, countOccurrences(out, "var "));
+  }
+
+  // two independent adjacent-var groups separated by a non-collapsible statement collapse independently
+  @Test
+  public void testProcess_multipleCollapseGroups_collapseEachIndependently() throws Throwable {
+    String out = runPass("var a=1; var b=2; 0; var c=3; var d=4;");
+    assertEquals(2, countOccurrences(out, "var "));
+  }
+
+  // vars inside a function collapse independently of vars in the outer scope
+  @Test
+  public void testProcess_functionScopeVars_collapseIndependentlyOfOuterScope() throws Throwable {
+    String out = runPass("function f(){ var a=1; var b=2; } var c=3;");
+    assertEquals(2, countOccurrences(out, "var "));
+  }
+
+  // assignments to previously (non-stub) declared vars merge with a trailing var into one redeclaration
+  @Test
+  public void testProcess_assignRedeclareNonBlacklistedVars_mergesIntoOne() throws Throwable {
+    String out = runPass("var a=0; var b=0; a=1; b=2; var c=3;");
+    assertEquals(2, countOccurrences(out, "var "));
+    assertTrue(out.contains("a"));
+    assertTrue(out.contains("b"));
+    assertTrue(out.contains("c"));
+  }
+
+  // assignments to blacklisted stub vars must NOT be merged into redeclarations
+  @Test
+  public void testProcess_assignToBlacklistedStubVars_notMerged() throws Throwable {
+    String out = runPass("var a; var b; a=1; b=2; var c=3;");
+    assertEquals(2, countOccurrences(out, "var "));
+  }
+
+  // assignment whose lhs is a property (not NAME) must never be merged
+  @Test
+  public void testProcess_assignWithPropertyLhs_notMerged() throws Throwable {
+    String out = runPass("var obj = {}; 0; var a = 1; obj.prop = 2; var b = 3;");
+    assertEquals(3, countOccurrences(out, "var "));
+  }
+
+  // a single var declaration with no neighbors is left unchanged
+  @Test
+  public void testProcess_singleVarAlone_noChange() throws Throwable {
+    String out = runPass("var a = 1;");
+    assertEquals(1, countOccurrences(out, "var "));
+    assertTrue(out.contains("1"));
+  }
+
+  // a program with no var statements at all results in no collapses
+  @Test
+  public void testProcess_noVarsAtAll_noChange() throws Throwable {
+    String out = runPass("0; 1;");
+    assertEquals(0, countOccurrences(out, "var "));
+  }
+
+  // collapsing must preserve original left-to-right declaration order
+  @Test
+  public void testProcess_collapse_preservesDeclarationOrder() throws Throwable {
+    String out = runPass("var z = 1; var y = 2; var x = 3;");
+    assertEquals(1, countOccurrences(out, "var "));
+    assertTrue(out.indexOf("z") < out.indexOf("y"));
+    assertTrue(out.indexOf("y") < out.indexOf("x"));
+  }
+
+  // three adjacent stub (uninitialized) vars collapse into a single var statement
+  @Test
+  public void testProcess_threeAdjacentStubVars_collapseIntoOne() throws Throwable {
+    String out = runPass("var a; var b; var c;");
+    assertEquals(1, countOccurrences(out, "var "));
+    assertTrue(out.contains("a"));
+    assertTrue(out.contains("b"));
+    assertTrue(out.contains("c"));
+  }
+
+  // an assignment-only chain with no trailing/leading var must NOT be collapsed (hasVar must be true)
+  @Test
+  public void testProcess_assignOnlyChainWithoutVar_notMerged() throws Throwable {
+    String out = runPass("var a=0; var b=0; a=1; b=2;");
+    assertEquals(1, countOccurrences(out, "var "));
+  }
+
+  // a starting var with multiple declarators merges with trailing assign(s) and a trailing var
+  @Test
+  public void testProcess_multiDeclaratorStartMergesWithAssignsAndVar() throws Throwable {
+    String out = runPass("var a=0, b=0; a=1; var c=2;");
+    assertEquals(1, countOccurrences(out, "var "));
+    assertTrue(out.contains("a"));
+    assertTrue(out.contains("b"));
+    assertTrue(out.contains("c"));
+  }
+
+  // collapsing works across different literal types (string, boolean, number)
+  @Test
+  public void testProcess_collapseAcrossDifferentInitializerTypes() throws Throwable {
+    String out = runPass("var a = 'x'; var b = true; var c = 3.5;");
+    assertEquals(1, countOccurrences(out, "var "));
+    assertTrue(out.contains("x"));
+    assertTrue(out.contains("true"));
+    assertTrue(out.contains("3.5"));
+  }
+
+  // an empty program yields no collapses and no output
+  @Test
+  public void testProcess_emptyInput_noChange() throws Throwable {
+    String out = runPass("");
+    assertEquals(0, countOccurrences(out, "var "));
+    assertEquals("", out.trim());
+  }
+
+  // a function declaration between two vars breaks the collapse chain
+  @Test
+  public void testProcess_varFollowedByFunctionDeclaration_notCollapsed() throws Throwable {
+    String out = runPass("var a = 1; function f(){} var b = 2;");
+    assertEquals(2, countOccurrences(out, "var "));
+    assertTrue(out.contains("f"));
+  }
+
+  // multiple separate functions each collapse their own vars independently
+  @Test
+  public void testProcess_multipleFunctions_eachCollapseOwnVars() throws Throwable {
+    String out = runPass("function f(){ var a=1; var b=2; } function g(){ var c=1; var d=2; }");
+    assertEquals(2, countOccurrences(out, "var "));
+  }
+
+  // assigning to an undeclared global variable must not be merged (no Var found in scope)
+  @Test
+  public void testProcess_assignToUndeclaredVariable_notMerged() throws Throwable {
+    String out = runPass("var a = 1; undeclaredVar = 2; var b = 3;");
+    assertEquals(2, countOccurrences(out, "var "));
+  }
+}

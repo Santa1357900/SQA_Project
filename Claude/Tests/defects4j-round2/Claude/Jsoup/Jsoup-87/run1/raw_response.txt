@@ -1,0 +1,483 @@
+package org.jsoup.nodes;
+
+import org.jsoup.Jsoup;
+import org.jsoup.parser.Tag;
+import org.jsoup.select.Elements;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+public class ElementClaudeTest {
+
+    // Constructor(String tag): default baseUri "" and no children
+    @Test
+    public void testConstructor_withTagName_setsDefaults() throws Throwable {
+        Element el = new Element("div");
+        assertEquals("div", el.tagName());
+        assertEquals("", el.baseUri());
+        assertEquals(0, el.childNodeSize());
+    }
+
+    // Constructor(Tag, baseUri) passes null attributes; attributes() lazily initializes
+    @Test
+    public void testConstructor_withTagBaseUriNullAttributes_lazyInitAttributes() throws Throwable {
+        Element el = new Element(Tag.valueOf("p"), "http://example.com");
+        assertEquals("http://example.com", el.baseUri());
+        assertEquals("", el.id());
+        assertNotNull(el.attributes());
+    }
+
+    // tagName(String) changes tag, reflected by tagName() and nodeName()
+    @Test
+    public void testTagNameSetter_changesTagNameAndNodeName() throws Throwable {
+        Element el = new Element("span");
+        el.tagName("div");
+        assertEquals("div", el.tagName());
+        assertEquals("div", el.nodeName());
+    }
+
+    // tagName("") must throw per Validate.notEmpty branch
+    @Test
+    public void testTagNameSetter_emptyName_throwsIllegalArgumentException() throws Throwable {
+        Element el = new Element("div");
+        try {
+            el.tagName("");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // tag() returns the underlying Tag object with matching name
+    @Test
+    public void testTag_returnsUnderlyingTagObject() throws Throwable {
+        Element el = new Element("div");
+        Tag t = el.tag();
+        assertEquals("div", t.getName());
+    }
+
+    // isBlock() true/false branches for block vs inline tag
+    @Test
+    public void testIsBlock_blockTrueInlineFalse() throws Throwable {
+        Document doc = Jsoup.parse("<div></div><span></span>");
+        Element div = doc.select("div").get(0);
+        Element span = doc.select("span").get(0);
+        assertTrue(div.isBlock());
+        assertFalse(span.isBlock());
+    }
+
+    // id(): empty when unset, value when set
+    @Test
+    public void testId_defaultEmptyThenSetReturnsValue() throws Throwable {
+        Element el = new Element("div");
+        assertEquals("", el.id());
+        el.attr("id", "main");
+        assertEquals("main", el.id());
+    }
+
+    // attr(String,String) chains (returns this) and stores value
+    @Test
+    public void testAttrStringValue_chainsAndStoresValue() throws Throwable {
+        Element el = new Element("div");
+        Element ret = el.attr("title", "hello");
+        assertSame(el, ret);
+        assertEquals("hello", el.attr("title"));
+    }
+
+    // attr(String,boolean): true sets empty value; false removes existing attribute
+    @Test
+    public void testAttrBooleanValue_trueAndFalseBranches() throws Throwable {
+        Element el = new Element("input");
+        el.attr("data-x", "val");
+        assertEquals("val", el.attr("data-x"));
+        el.attr("data-x", false);
+        assertEquals("", el.attr("data-x"));
+        el.attr("checked", true);
+        assertEquals("", el.attr("checked"));
+    }
+
+    // dataset() reflects data- prefixed attributes as a map
+    @Test
+    public void testDataset_reflectsDataPrefixedAttributes() throws Throwable {
+        Document doc = Jsoup.parse("<div data-name='jsoup' data-lang='java'></div>");
+        Element div = doc.select("div").get(0);
+        Map<String, String> ds = div.dataset();
+        assertEquals("jsoup", ds.get("name"));
+        assertEquals("java", ds.get("lang"));
+        assertEquals(2, ds.size());
+    }
+
+    // parent(): null for standalone element, set for child in tree
+    @Test
+    public void testParent_nullForStandaloneSetForChild() throws Throwable {
+        Element orphan = new Element("div");
+        assertNull(orphan.parent());
+        Document doc = Jsoup.parse("<div><p>Hi</p></div>");
+        Element div = doc.select("div").get(0);
+        Element p = doc.select("p").get(0);
+        assertSame(div, p.parent());
+    }
+
+    // parents(): excludes the internal #root pseudo element
+    @Test
+    public void testParents_excludesRootPseudoElement() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>Hi</p></div>");
+        Element p = doc.select("p").get(0);
+        Elements parents = p.parents();
+        assertEquals(3, parents.size());
+        assertEquals("div", parents.get(0).tagName());
+        assertEquals("body", parents.get(1).tagName());
+        assertEquals("html", parents.get(2).tagName());
+    }
+
+    // child(index): valid index returns element; out of bounds throws
+    @Test
+    public void testChild_validIndexAndOutOfBoundsThrows() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>1</p><p>2</p></div>");
+        Element div = doc.select("div").get(0);
+        assertEquals("1", div.child(0).text());
+        assertEquals("2", div.child(1).text());
+        try {
+            div.child(5);
+            fail("expected IndexOutOfBoundsException");
+        } catch (IndexOutOfBoundsException expected) { }
+    }
+
+    // children(): filters out text nodes, keeps only Element children, in order
+    @Test
+    public void testChildren_filtersOnlyElementNodes() throws Throwable {
+        Document doc = Jsoup.parse("<div>Text<span>A</span>MoreText<b>B</b></div>");
+        Element div = doc.select("div").get(0);
+        Elements children = div.children();
+        assertEquals(2, children.size());
+        assertEquals("span", children.get(0).tagName());
+        assertEquals("b", children.get(1).tagName());
+    }
+
+    // textNodes(): filters only TextNode children, preserves raw whole text
+    @Test
+    public void testTextNodes_filtersOnlyTextNodeChildren() throws Throwable {
+        Document doc = Jsoup.parse("<p>One <span>Two</span> Three</p>");
+        Element p = doc.select("p").get(0);
+        List<TextNode> tns = p.textNodes();
+        assertEquals(2, tns.size());
+        assertEquals("One ", tns.get(0).getWholeText());
+        assertEquals(" Three", tns.get(1).getWholeText());
+    }
+
+    // select() finds matching descendants; selectFirst() returns null if no match
+    @Test
+    public void testSelectAndSelectFirst_cssQuery() throws Throwable {
+        Document doc = Jsoup.parse("<div><p class='a'>1</p><p>2</p></div>");
+        Element div = doc.select("div").get(0);
+        Elements ps = div.select("p.a");
+        assertEquals(1, ps.size());
+        assertEquals("1", ps.get(0).text());
+        assertNull(div.selectFirst("span"));
+    }
+
+    // appendChild(): reparents node from one parent to another
+    @Test
+    public void testAppendChild_reparentsFromOldToNewParent() throws Throwable {
+        Element parent1 = new Element("div");
+        Element parent2 = new Element("div");
+        Element child = new Element("span");
+        parent1.appendChild(child);
+        assertSame(parent1, child.parent());
+        assertEquals(1, parent1.childNodeSize());
+        parent2.appendChild(child);
+        assertSame(parent2, child.parent());
+        assertEquals(0, parent1.childNodeSize());
+        assertEquals(1, parent2.childNodeSize());
+    }
+
+    // appendChild(null) must throw per Validate.notNull branch
+    @Test
+    public void testAppendChild_null_throwsIllegalArgumentException() throws Throwable {
+        Element el = new Element("div");
+        try {
+            el.appendChild(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // prependChild(): adds node at index 0, shifting existing children
+    @Test
+    public void testPrependChild_addsAtStartOfChildren() throws Throwable {
+        Element div = new Element("div");
+        Element a = new Element("a");
+        Element b = new Element("b");
+        div.appendChild(a);
+        div.prependChild(b);
+        assertEquals(2, div.childNodeSize());
+        assertSame(b, div.child(0));
+        assertSame(a, div.child(1));
+    }
+
+    // insertChildren(-1,...): negative index rolls around to insert at end
+    @Test
+    public void testInsertChildren_negativeIndexRollsAroundToEnd() throws Throwable {
+        Element div = new Element("div");
+        Element a = new Element("a");
+        div.appendChild(a);
+        Element b = new Element("b");
+        List<Node> newNodes = new ArrayList<Node>();
+        newNodes.add(b);
+        div.insertChildren(-1, newNodes);
+        assertEquals(2, div.childNodeSize());
+        assertSame(b, div.child(1));
+    }
+
+    // insertChildren(): out-of-bounds index throws per Validate.isTrue branch
+    @Test
+    public void testInsertChildren_outOfBoundsIndex_throwsIllegalArgumentException() throws Throwable {
+        Element div = new Element("div");
+        try {
+            div.insertChildren(99, new ArrayList<Node>());
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // appendElement()/prependElement(): create and insert new children at correct ends
+    @Test
+    public void testAppendElementAndPrependElement_createChildrenAtEnds() throws Throwable {
+        Element div = new Element("div");
+        Element h1 = div.appendElement("h1");
+        assertEquals("h1", h1.tagName());
+        assertSame(div, h1.parent());
+        Element span = div.prependElement("span");
+        assertSame(span, div.child(0));
+        assertSame(h1, div.child(1));
+    }
+
+    // appendText()/prependText(): add TextNode children at correct ends
+    @Test
+    public void testAppendTextAndPrependText_addTextNodesAtEnds() throws Throwable {
+        Element p = new Element("p");
+        p.appendText("World");
+        p.prependText("Hello ");
+        assertEquals("Hello World", p.text());
+    }
+
+    // append()/prepend(String html): parse and insert nodes at correct ends
+    @Test
+    public void testAppendAndPrependHtml_parsesAndInserts() throws Throwable {
+        Element div = new Element("div");
+        div.append("<p>Hi</p>");
+        assertEquals("p", div.child(0).tagName());
+        div.prepend("<b>X</b>");
+        assertEquals("b", div.child(0).tagName());
+        assertEquals(2, div.children().size());
+    }
+
+    // empty(): clears child nodes but leaves attributes untouched
+    @Test
+    public void testEmpty_removesChildrenButKeepsAttributes() throws Throwable {
+        Element div = new Element("div");
+        div.attr("id", "keep");
+        div.appendElement("p");
+        div.empty();
+        assertEquals(0, div.childNodeSize());
+        assertEquals("keep", div.id());
+    }
+
+    // cssSelector(): shortcut path returns "#id" when element has an id
+    @Test
+    public void testCssSelector_withId_returnsHashId() throws Throwable {
+        Element div = new Element("div");
+        div.attr("id", "main");
+        assertEquals("#main", div.cssSelector());
+    }
+
+    // siblingElements(): returns element siblings, excluding this element, in order
+    @Test
+    public void testSiblingElements_excludesSelf() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>1</p><p>2</p><p>3</p></div>");
+        Elements ps = doc.select("p");
+        Element p2 = ps.get(1);
+        Elements sib = p2.siblingElements();
+        assertEquals(2, sib.size());
+        assertSame(ps.get(0), sib.get(0));
+        assertSame(ps.get(2), sib.get(1));
+    }
+
+    // nextElementSibling()/previousElementSibling(): boundary null cases and normal cases
+    @Test
+    public void testNextAndPreviousElementSibling_atBoundaries() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>1</p><p>2</p></div>");
+        Elements ps = doc.select("p");
+        assertSame(ps.get(1), ps.get(0).nextElementSibling());
+        assertNull(ps.get(1).nextElementSibling());
+        assertNull(ps.get(0).previousElementSibling());
+        assertSame(ps.get(0), ps.get(1).previousElementSibling());
+    }
+
+    // nextElementSiblings()/previousElementSiblings(): return correct counts of following/preceding
+    @Test
+    public void testNextAndPreviousElementSiblings_returnFollowingAndPreceding() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>1</p><p>2</p><p>3</p></div>");
+        Elements ps = doc.select("p");
+        Elements following = ps.get(0).nextElementSiblings();
+        assertEquals(2, following.size());
+        Elements preceding = ps.get(2).previousElementSiblings();
+        assertEquals(2, preceding.size());
+    }
+
+    // firstElementSibling(): when element is the only child, it is the parent's first
+    // element child, so per contract it must return itself (bug: code returns null here)
+    @Test
+    public void testFirstElementSibling_onlyChild_returnsSelfPerContract() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>Only</p></div>");
+        Element p = doc.select("p").get(0);
+        Element first = p.firstElementSibling();
+        assertSame(p, first);
+    }
+
+    // firstElementSibling(): with multiple children, returns the first sibling element
+    @Test
+    public void testFirstElementSibling_multipleChildren_returnsFirstSibling() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>1</p><p>2</p><p>3</p></div>");
+        Elements ps = doc.select("p");
+        assertSame(ps.get(0), ps.get(1).firstElementSibling());
+        assertSame(ps.get(0), ps.get(2).firstElementSibling());
+    }
+
+    // elementSiblingIndex(): zero-based position among element siblings; 0 for orphan
+    @Test
+    public void testElementSiblingIndex_zeroBasedPositionAmongElementSiblings() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>1</p><p>2</p><p>3</p></div>");
+        Elements ps = doc.select("p");
+        assertEquals(0, ps.get(0).elementSiblingIndex());
+        assertEquals(2, ps.get(2).elementSiblingIndex());
+        Element orphan = new Element("div");
+        assertEquals(0, orphan.elementSiblingIndex());
+    }
+
+    // lastElementSibling(): when element is the only child, it is the parent's last
+    // element child, so per contract it must return itself (bug: code returns null here)
+    @Test
+    public void testLastElementSibling_onlyChild_returnsSelfPerContract() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>Only</p></div>");
+        Element p = doc.select("p").get(0);
+        assertSame(p, p.lastElementSibling());
+    }
+
+    // lastElementSibling(): with multiple children, returns the last sibling element
+    @Test
+    public void testLastElementSibling_multipleChildren_returnsLastSibling() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>1</p><p>2</p><p>3</p></div>");
+        Elements ps = doc.select("p");
+        assertSame(ps.get(2), ps.get(0).lastElementSibling());
+        assertSame(ps.get(2), ps.get(1).lastElementSibling());
+    }
+
+    // getElementsByTag(): finds matching descendants; empty name throws
+    @Test
+    public void testGetElementsByTag_findsDescendants_andEmptyNameThrows() throws Throwable {
+        Document doc = Jsoup.parse("<div><p>1</p><span><p>2</p></span></div>");
+        Element div = doc.select("div").get(0);
+        Elements ps = div.getElementsByTag("p");
+        assertEquals(2, ps.size());
+        try {
+            div.getElementsByTag("");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // getElementById(): found returns matching element, not found returns null
+    @Test
+    public void testGetElementById_foundAndNotFound() throws Throwable {
+        Document doc = Jsoup.parse("<div><p id='x'>hi</p></div>");
+        Element div = doc.select("div").get(0);
+        assertEquals("hi", div.getElementById("x").text());
+        assertNull(div.getElementById("nope"));
+    }
+
+    // getElementsByClass(): case-insensitive match, no match returns empty
+    @Test
+    public void testGetElementsByClass_caseInsensitiveMatch() throws Throwable {
+        Document doc = Jsoup.parse("<p class='Header'>1</p>");
+        Element p = doc.select("p").get(0);
+        assertEquals(1, p.getElementsByClass("header").size());
+        assertEquals(0, p.getElementsByClass("missing").size());
+    }
+
+    // getElementsByAttributeValueMatching(String regex): invalid regex wraps and throws
+    @Test
+    public void testGetElementsByAttributeValueMatching_invalidRegex_throwsIllegalArgumentException() throws Throwable {
+        Element div = new Element("div");
+        try {
+            div.getElementsByAttributeValueMatching("href", "[");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Pattern"));
+        }
+    }
+
+    // text(): normalizes whitespace and joins text across inline/block elements, trimmed
+    @Test
+    public void testText_normalizesWhitespaceAndJoinsAcrossBlocks() throws Throwable {
+        Document doc = Jsoup.parse("<p>Hello  <b>there</b> now! </p>");
+        Element p = doc.select("p").get(0);
+        assertEquals("Hello there now!", p.text());
+    }
+
+    // ownText(): excludes text that belongs to child elements
+    @Test
+    public void testOwnText_excludesChildElementText() throws Throwable {
+        Document doc = Jsoup.parse("<p>Hello <b>there</b> now!</p>");
+        Element p = doc.select("p").get(0);
+        assertEquals("Hello now!", p.ownText());
+    }
+
+    // hasText(): false for only-blank text, true when non-blank text present
+    @Test
+    public void testHasText_trueAndFalseBranches() throws Throwable {
+        Element p1 = new Element("p");
+        p1.appendText("   ");
+        assertFalse(p1.hasText());
+        Element p2 = new Element("p");
+        p2.appendText("hi");
+        assertTrue(p2.hasText());
+    }
+
+    // classNames()/hasClass(): returns all classes, case-insensitive matching
+    @Test
+    public void testClassNamesAndHasClass_caseInsensitive() throws Throwable {
+        Element div = new Element("div");
+        div.attr("class", "header gray");
+        assertEquals("header gray", div.className());
+        Set<String> classes = div.classNames();
+        assertEquals(2, classes.size());
+        assertTrue(div.hasClass("HEADER"));
+        assertFalse(div.hasClass("bold"));
+    }
+
+    // addClass()/removeClass()/toggleClass(): mutate the class attribute as documented
+    @Test
+    public void testAddRemoveToggleClass_mutateClassAttribute() throws Throwable {
+        Element div = new Element("div");
+        div.addClass("bold");
+        assertTrue(div.hasClass("bold"));
+        div.removeClass("bold");
+        assertFalse(div.hasClass("bold"));
+        div.toggleClass("italic");
+        assertTrue(div.hasClass("italic"));
+        div.toggleClass("italic");
+        assertFalse(div.hasClass("italic"));
+    }
+
+    // val(): textarea branch uses text(), other tags use "value" attribute
+    @Test
+    public void testVal_textareaUsesTextOthersUseValueAttribute() throws Throwable {
+        Element textarea = new Element("textarea");
+        textarea.val("Hello");
+        assertEquals("Hello", textarea.val());
+        Element input = new Element("input");
+        input.val("x");
+        assertEquals("x", input.attr("value"));
+    }
+}

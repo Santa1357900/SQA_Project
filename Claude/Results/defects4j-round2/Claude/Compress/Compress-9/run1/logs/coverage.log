@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /tmp/claude-Compress-9-tspsckwe/Compress-9b-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 110
+     Lines covered: 94
+  Conditions total: 42
+Conditions covered: 39
+     Line coverage: 85.5%
+Condition coverage: 92.9%
+[exit 0]

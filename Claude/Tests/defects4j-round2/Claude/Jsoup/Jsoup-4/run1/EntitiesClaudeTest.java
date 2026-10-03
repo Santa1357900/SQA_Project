@@ -1,0 +1,190 @@
+package org.jsoup.nodes;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+
+public class EntitiesClaudeTest {
+
+    // escape: base mode, '&' is in baseByVal map -> named entity "amp"
+    @Test
+    public void testEscape_baseMode_ampMappedToNamedEntity() throws Throwable {
+        CharsetEncoder utf8 = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("&", utf8, Entities.EscapeMode.base);
+        assertEquals("&amp;", result);
+    }
+
+    // escape: base mode, '<' and '>' mapped to "lt"/"gt"
+    @Test
+    public void testEscape_baseMode_ltGtMappedToNamedEntities() throws Throwable {
+        CharsetEncoder utf8 = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("<>", utf8, Entities.EscapeMode.base);
+        assertEquals("&lt;&gt;", result);
+    }
+
+    // escape: extended mode, U+2260 ("ne") is only present in fullByVal, not baseByVal
+    @Test
+    public void testEscape_extendedMode_neMappedToNamedEntity() throws Throwable {
+        CharsetEncoder utf8 = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("\u2260", utf8, Entities.EscapeMode.extended);
+        assertEquals("&ne;", result);
+    }
+
+    // escape: base mode, char not in baseByVal but encodable -> kept literal (else-if branch)
+    @Test
+    public void testEscape_baseMode_charNotInMap_encodableUtf8_keptLiteral() throws Throwable {
+        CharsetEncoder utf8 = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("\u2260", utf8, Entities.EscapeMode.base);
+        assertEquals("\u2260", result);
+    }
+
+    // escape: char not in any map and not encodable by ASCII -> numeric escape (else branch)
+    @Test
+    public void testEscape_notEncodable_asciiEncoder_numericEscape() throws Throwable {
+        CharsetEncoder ascii = Charset.forName("US-ASCII").newEncoder();
+        String result = Entities.escape("\u2603", ascii, Entities.EscapeMode.base);
+        assertEquals("&#9731;", result);
+    }
+
+    // escape: 0-iteration loop, empty string returns empty string
+    @Test
+    public void testEscape_emptyString_returnsEmpty() throws Throwable {
+        CharsetEncoder utf8 = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("", utf8, Entities.EscapeMode.base);
+        assertEquals("", result);
+    }
+
+    // escape: multiple chars, loop executes several times, mixing all three branches
+    @Test
+    public void testEscape_multipleCharacters_mixedEscaping() throws Throwable {
+        CharsetEncoder utf8 = Charset.forName("UTF-8").newEncoder();
+        String result = Entities.escape("<a>&", utf8, Entities.EscapeMode.base);
+        assertEquals("&lt;a&gt;&amp;", result);
+    }
+
+    // escape: plain ascii text with ascii encoder, no chars in map -> unchanged
+    @Test
+    public void testEscape_plainAsciiText_unchangedWithAsciiEncoder() throws Throwable {
+        CharsetEncoder ascii = Charset.forName("US-ASCII").newEncoder();
+        String result = Entities.escape("hello", ascii, Entities.EscapeMode.base);
+        assertEquals("hello", result);
+    }
+
+    // escape: map lookup takes priority over encoder capability even when char is not encodable
+    @Test
+    public void testEscape_mapPriorityOverEncoder_aeligWithAsciiEncoder() throws Throwable {
+        CharsetEncoder ascii = Charset.forName("US-ASCII").newEncoder();
+        String result = Entities.escape("\u00E6", ascii, Entities.EscapeMode.base);
+        assertEquals("&aelig;", result);
+    }
+
+    // unescape: string without '&' returns unchanged immediately (short-circuit branch)
+    @Test
+    public void testUnescape_noAmpersand_returnsOriginalUnchanged() throws Throwable {
+        String result = Entities.unescape("no entities here");
+        assertEquals("no entities here", result);
+    }
+
+    // unescape: named entity with trailing semicolon
+    @Test
+    public void testUnescape_namedEntityWithSemicolon_amp() throws Throwable {
+        String result = Entities.unescape("&amp;");
+        assertEquals("&", result);
+    }
+
+    // unescape: named entity without trailing semicolon (regex allows optional ';')
+    @Test
+    public void testUnescape_namedEntityWithoutTrailingSemicolon_lt() throws Throwable {
+        String result = Entities.unescape("1 &lt 2");
+        assertEquals("1 < 2", result);
+    }
+
+    // unescape: unknown named entity is not in full map -> kept as original text
+    @Test
+    public void testUnescape_unknownNamedEntity_keptOriginal() throws Throwable {
+        String result = Entities.unescape("&zzzzznotreal;");
+        assertEquals("&zzzzznotreal;", result);
+    }
+
+    // unescape: decimal numeric character reference decodes correctly
+    @Test
+    public void testUnescape_decimalNumericReference_correctChar() throws Throwable {
+        String result = Entities.unescape("&#65;");
+        assertEquals("A", result);
+    }
+
+    // unescape: hex numeric reference with lowercase 'x' indicator
+    @Test
+    public void testUnescape_hexNumericReferenceLowercaseX_correctChar() throws Throwable {
+        String result = Entities.unescape("&#x41;");
+        assertEquals("A", result);
+    }
+
+    // unescape: hex numeric reference with uppercase 'X' indicator
+    @Test
+    public void testUnescape_hexNumericReferenceUppercaseX_correctChar() throws Throwable {
+        String result = Entities.unescape("&#X41;");
+        assertEquals("A", result);
+    }
+
+    // unescape: boundary value 0xFFFF is within char range, must be decoded correctly
+    @Test
+    public void testUnescape_numericReferenceAtBmpBoundary_correctChar() throws Throwable {
+        String result = Entities.unescape("&#65535;");
+        assertEquals(String.valueOf((char) 65535), result);
+    }
+
+    // unescape: codepoint above 0xFFFF is out of range per the method's own comment,
+    // so it must be left unmodified rather than truncated into a bogus 16-bit char
+    @Test
+    public void testUnescape_numericReferenceAboveBmp_keptOriginal() throws Throwable {
+        String input = "&#128512;";
+        String result = Entities.unescape(input);
+        assertEquals(input, result);
+    }
+
+    // unescape: first codepoint just above the BMP boundary (0x10000) also must be kept unmodified
+    @Test
+    public void testUnescape_numericReferenceJustAboveBmpBoundary_keptOriginal() throws Throwable {
+        String input = "&#65536;";
+        String result = Entities.unescape(input);
+        assertEquals(input, result);
+    }
+
+    // unescape: numeric value overflowing Integer causes NumberFormatException, caught, kept original
+    @Test
+    public void testUnescape_numberFormatOverflow_keepsOriginal() throws Throwable {
+        String input = "&#99999999999;";
+        String result = Entities.unescape(input);
+        assertEquals(input, result);
+    }
+
+    // unescape: multiple entities in the same string are all replaced (multi-iteration loop)
+    @Test
+    public void testUnescape_multipleEntitiesInText_allReplaced() throws Throwable {
+        String result = Entities.unescape("Fish &amp; Chips &lt;&gt;");
+        assertEquals("Fish & Chips <>", result);
+    }
+
+    // unescape: lone '&' with no following letters/digits produces zero regex matches
+    @Test
+    public void testUnescape_lonelyAmpersand_noMatch_unchanged() throws Throwable {
+        String result = Entities.unescape("A & B");
+        assertEquals("A & B", result);
+    }
+
+    // unescape: combination of named and numeric entities within one string
+    @Test
+    public void testUnescape_mixedNamedAndNumericEntities() throws Throwable {
+        String result = Entities.unescape("&quot;&#65;&quot;");
+        assertEquals("\"A\"", result);
+    }
+
+    // unescape: zero value numeric reference is within valid range and decodes to NUL char
+    @Test
+    public void testUnescape_zeroValueNumericReference_decodesToNulChar() throws Throwable {
+        String result = Entities.unescape("&#0;");
+        assertEquals(String.valueOf((char) 0), result);
+    }
+}

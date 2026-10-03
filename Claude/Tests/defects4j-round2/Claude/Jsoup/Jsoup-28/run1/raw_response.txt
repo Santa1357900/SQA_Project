@@ -1,0 +1,225 @@
+package org.jsoup.nodes;
+
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+
+public class EntitiesClaudeTest {
+
+    private CharsetEncoder asciiEncoder;
+
+    @Before
+    public void setUp() throws Throwable {
+        asciiEncoder = Charset.forName("US-ASCII").newEncoder();
+    }
+
+    // isNamedEntity: known entity "amp" in full map -> true
+    @Test
+    public void testIsNamedEntity_knownEntityAmp_returnsTrue() throws Throwable {
+        assertTrue(Entities.isNamedEntity("amp"));
+    }
+
+    // isNamedEntity: known entity "lt" in full map -> true
+    @Test
+    public void testIsNamedEntity_knownEntityLt_returnsTrue() throws Throwable {
+        assertTrue(Entities.isNamedEntity("lt"));
+    }
+
+    // isNamedEntity: unknown name -> false (containsKey false branch)
+    @Test
+    public void testIsNamedEntity_unknownEntity_returnsFalse() throws Throwable {
+        assertFalse(Entities.isNamedEntity("zzzznotrealentity"));
+    }
+
+    // isNamedEntity: empty string -> false
+    @Test
+    public void testIsNamedEntity_emptyString_returnsFalse() throws Throwable {
+        assertFalse(Entities.isNamedEntity(""));
+    }
+
+    // getCharacterByName: known entity returns correct Character
+    @Test
+    public void testGetCharacterByName_amp_returnsAmpersandChar() throws Throwable {
+        assertEquals(Character.valueOf('&'), Entities.getCharacterByName("amp"));
+    }
+
+    // getCharacterByName: known entity "lt" returns '<'
+    @Test
+    public void testGetCharacterByName_lt_returnsLessThanChar() throws Throwable {
+        assertEquals(Character.valueOf('<'), Entities.getCharacterByName("lt"));
+    }
+
+    // getCharacterByName: unknown entity returns null
+    @Test
+    public void testGetCharacterByName_unknownEntity_returnsNull() throws Throwable {
+        assertNull(Entities.getCharacterByName("zzzznotrealentity"));
+    }
+
+    // escape: char present in xhtml map -> named entity branch (map.containsKey true)
+    @Test
+    public void testEscape_charInXhtmlMap_lessThan_appendsNamedEntity() throws Throwable {
+        String result = Entities.escape("<", asciiEncoder, Entities.EscapeMode.xhtml);
+        assertEquals("&lt;", result);
+    }
+
+    // escape: ampersand in xhtml map -> named entity
+    @Test
+    public void testEscape_charInXhtmlMap_ampersand_appendsNamedEntity() throws Throwable {
+        String result = Entities.escape("&", asciiEncoder, Entities.EscapeMode.xhtml);
+        assertEquals("&amp;", result);
+    }
+
+    // escape: char not in map but encodable by ASCII encoder -> literal char branch
+    @Test
+    public void testEscape_charNotInMapButEncodable_appendsLiteralChar() throws Throwable {
+        String result = Entities.escape("A", asciiEncoder, Entities.EscapeMode.xhtml);
+        assertEquals("A", result);
+    }
+
+    // escape: char not in map and not encodable by ASCII encoder -> numeric entity branch
+    @Test
+    public void testEscape_charNotInMapNotEncodable_appendsNumericEntity() throws Throwable {
+        String result = Entities.escape("\u20AC", asciiEncoder, Entities.EscapeMode.xhtml);
+        assertEquals("&#8364;", result);
+    }
+
+    // escape: empty string -> loop executes 0 times, returns empty
+    @Test
+    public void testEscape_emptyString_returnsEmptyString() throws Throwable {
+        String result = Entities.escape("", asciiEncoder, Entities.EscapeMode.xhtml);
+        assertEquals("", result);
+    }
+
+    // escape: mixed string exercises all three branches within one loop (multiple iterations)
+    @Test
+    public void testEscape_mixedChars_combinesBranchesCorrectly() throws Throwable {
+        String result = Entities.escape("a<b", asciiEncoder, Entities.EscapeMode.xhtml);
+        assertEquals("a&lt;b", result);
+    }
+
+    // escape: base mode, ampersand should be mapped to "amp" named entity
+    @Test
+    public void testEscape_baseMode_ampersand_appendsNamedEntity() throws Throwable {
+        String result = Entities.escape("&", asciiEncoder, Entities.EscapeMode.base);
+        assertEquals("&amp;", result);
+    }
+
+    // escape: extended mode, quote character should be mapped to "quot" named entity
+    @Test
+    public void testEscape_extendedMode_quote_appendsNamedEntity() throws Throwable {
+        String result = Entities.escape("\"", asciiEncoder, Entities.EscapeMode.extended);
+        assertEquals("&quot;", result);
+    }
+
+    // unescape: no ampersand in input -> fast path returns same string unchanged
+    @Test
+    public void testUnescape_noAmpersand_returnsSameStringUnchanged() throws Throwable {
+        String result = Entities.unescape("hello world");
+        assertEquals("hello world", result);
+    }
+
+    // unescape: named entity with trailing semicolon -> converts to character
+    @Test
+    public void testUnescape_namedEntityWithSemicolon_convertsToChar() throws Throwable {
+        String result = Entities.unescape("&amp;");
+        assertEquals("&", result);
+    }
+
+    // unescape: non-strict, named entity without trailing semicolon -> still converts (optional ';')
+    @Test
+    public void testUnescape_namedEntityNonStrictNoSemicolon_convertsToChar() throws Throwable {
+        String result = Entities.unescape("&amp", false);
+        assertEquals("&", result);
+    }
+
+    // unescape: strict mode requires trailing ';' -> without it, no match, left unchanged
+    @Test
+    public void testUnescape_namedEntityStrictNoSemicolon_notConverted() throws Throwable {
+        String result = Entities.unescape("&amp", true);
+        assertEquals("&amp", result);
+    }
+
+    // unescape: strict mode with trailing ';' present -> matches and converts
+    @Test
+    public void testUnescape_namedEntityStrictWithSemicolon_converted() throws Throwable {
+        String result = Entities.unescape("&amp;", true);
+        assertEquals("&", result);
+    }
+
+    // unescape: decimal numeric reference -> converts using base 10
+    @Test
+    public void testUnescape_decimalNumericReference_convertsToChar() throws Throwable {
+        String result = Entities.unescape("&#65;");
+        assertEquals("A", result);
+    }
+
+    // unescape: hex numeric reference with lowercase 'x' -> converts using base 16
+    @Test
+    public void testUnescape_hexNumericReferenceLowerX_convertsToChar() throws Throwable {
+        String result = Entities.unescape("&#x41;");
+        assertEquals("A", result);
+    }
+
+    // unescape: hex numeric reference with uppercase 'X' -> converts using base 16
+    @Test
+    public void testUnescape_hexNumericReferenceUpperX_convertsToChar() throws Throwable {
+        String result = Entities.unescape("&#X41;");
+        assertEquals("A", result);
+    }
+
+    // unescape: unknown named entity -> full.containsKey false, charval stays -1, left unchanged
+    @Test
+    public void testUnescape_unknownNamedEntity_leftUnchanged() throws Throwable {
+        String result = Entities.unescape("&zzzznotreal;");
+        assertEquals("&zzzznotreal;", result);
+    }
+
+    // unescape: invalid digits for base-10 parse (e.g. "1a") -> NumberFormatException caught, left unchanged
+    @Test
+    public void testUnescape_invalidNumberFormatInDigits_leftUnchanged() throws Throwable {
+        String result = Entities.unescape("&#1a;");
+        assertEquals("&#1a;", result);
+    }
+
+    // unescape: boundary numeric reference exactly at 0xFFFF -> valid single-char decode on both sides of the bug
+    @Test
+    public void testUnescape_numericReferenceAtBoundary0xFFFF_convertsCorrectly() throws Throwable {
+        String result = Entities.unescape("&#65535;");
+        assertEquals(65535, result.codePointAt(0));
+    }
+
+    // BUG TEST: numeric reference above 0xFFFF cannot be represented by a single char;
+    // condition "charval != -1 || charval > 0xFFFF" incorrectly still converts it (truncating bits),
+    // the correct contract is to leave such out-of-range numeric refs unmodified (original text kept)
+    @Test
+    public void testUnescape_numericReferenceAboveBMP_leftUnchangedNotCorrupted() throws Throwable {
+        String input = "&#128512;";
+        String result = Entities.unescape(input);
+        assertEquals(input, result);
+    }
+
+    // unescape: multiple named entities in one string -> all iterations of the matcher loop convert
+    @Test
+    public void testUnescape_multipleEntitiesInOneString_allConverted() throws Throwable {
+        String result = Entities.unescape("&amp;&amp;");
+        assertEquals("&&", result);
+    }
+
+    // unescape: empty string input -> fast path (no '&') returns empty string
+    @Test
+    public void testUnescape_emptyString_returnsEmptyString() throws Throwable {
+        String result = Entities.unescape("");
+        assertEquals("", result);
+    }
+
+    // unescape: default single-arg overload behaves same as explicit non-strict call
+    @Test
+    public void testUnescape_defaultOverload_matchesNonStrictBehavior() throws Throwable {
+        String viaDefault = Entities.unescape("&amp");
+        String viaExplicit = Entities.unescape("&amp", false);
+        assertEquals(viaExplicit, viaDefault);
+    }
+}

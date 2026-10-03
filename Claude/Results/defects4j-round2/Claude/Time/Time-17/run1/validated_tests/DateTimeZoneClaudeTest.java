@@ -1,0 +1,327 @@
+package org.joda.time;
+
+import java.util.Set;
+import java.util.TimeZone;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class DateTimeZoneClaudeTest {
+
+    private DateTimeZone originalDefault;
+
+    @Before
+    public void setUp() throws Throwable {
+        originalDefault = DateTimeZone.getDefault();
+    }
+
+    @After
+    public void tearDown() throws Throwable {
+        DateTimeZone.setDefault(originalDefault);
+    }
+
+    // getDefault() must never return null
+    @Test
+    public void testGetDefault_returnsNonNullZone() throws Throwable {
+        assertNotNull(DateTimeZone.getDefault());
+    }
+
+    // setDefault(null) branch -> IllegalArgumentException
+    @Test
+    public void testSetDefault_nullZone_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateTimeZone.setDefault(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // setDefault valid zone updates static default
+    @Test
+    public void testSetDefault_validZone_updatesDefault() throws Throwable {
+        DateTimeZone newZone = DateTimeZone.forID("America/Chicago");
+        DateTimeZone.setDefault(newZone);
+        assertEquals(newZone, DateTimeZone.getDefault());
+    }
+
+    // forID(null) -> getDefault() branch
+    @Test
+    public void testForID_null_returnsDefaultZone() throws Throwable {
+        assertEquals(DateTimeZone.getDefault(), DateTimeZone.forID(null));
+    }
+
+    // forID("UTC") special-cased branch
+    @Test
+    public void testForID_UTC_returnsUTCConstant() throws Throwable {
+        assertSame(DateTimeZone.UTC, DateTimeZone.forID("UTC"));
+    }
+
+    // forID with a valid long provider id
+    @Test
+    public void testForID_validLongId_returnsMatchingZone() throws Throwable {
+        DateTimeZone zone = DateTimeZone.forID("America/Los_Angeles");
+        assertEquals("America/Los_Angeles", zone.getID());
+    }
+
+    // forID with unrecognised id -> throws
+    @Test
+    public void testForID_unrecognizedId_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateTimeZone.forID("Not/ARealZone");
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // forID("+00:00") offset==0 branch -> returns UTC
+    @Test
+    public void testForID_plusZeroOffset_returnsUTC() throws Throwable {
+        assertSame(DateTimeZone.UTC, DateTimeZone.forID("+00:00"));
+    }
+
+    // forID with positive fixed offset id, consistent with forOffsetHours
+    @Test
+    public void testForID_positiveOffsetId_matchesForOffsetHours() throws Throwable {
+        DateTimeZone fromId = DateTimeZone.forID("+05:00");
+        DateTimeZone fromHours = DateTimeZone.forOffsetHours(5);
+        assertEquals("+05:00", fromId.getID());
+        assertEquals(fromHours.getOffset(0L), fromId.getOffset(0L));
+    }
+
+    // forID with negative fixed offset id, consistent with forOffsetHours
+    @Test
+    public void testForID_negativeOffsetId_matchesForOffsetHours() throws Throwable {
+        DateTimeZone fromId = DateTimeZone.forID("-05:00");
+        DateTimeZone fromHours = DateTimeZone.forOffsetHours(-5);
+        assertEquals("-05:00", fromId.getID());
+        assertEquals(fromHours.getOffset(0L), fromId.getOffset(0L));
+    }
+
+    // forOffsetHours(0) -> UTC
+    @Test
+    public void testForOffsetHours_zero_returnsUTC() throws Throwable {
+        assertSame(DateTimeZone.UTC, DateTimeZone.forOffsetHours(0));
+    }
+
+    // forOffsetHours positive value
+    @Test
+    public void testForOffsetHours_positive_correctIdAndOffset() throws Throwable {
+        DateTimeZone zone = DateTimeZone.forOffsetHours(5);
+        assertEquals("+05:00", zone.getID());
+        assertEquals(5 * 3600000, zone.getOffset(0L));
+    }
+
+    // forOffsetHours negative value
+    @Test
+    public void testForOffsetHours_negative_correctIdAndOffset() throws Throwable {
+        DateTimeZone zone = DateTimeZone.forOffsetHours(-5);
+        assertEquals("-05:00", zone.getID());
+        assertEquals(-5 * 3600000, zone.getOffset(0L));
+    }
+
+    // forOffsetHoursMinutes(0,0) -> UTC
+    @Test
+    public void testForOffsetHoursMinutes_zeroZero_returnsUTC() throws Throwable {
+        assertSame(DateTimeZone.UTC, DateTimeZone.forOffsetHoursMinutes(0, 0));
+    }
+
+    // minutesOffset < 0 branch -> throws
+    @Test
+    public void testForOffsetHoursMinutes_minutesNegative_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateTimeZone.forOffsetHoursMinutes(5, -1);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // minutesOffset > 59 branch -> throws
+    @Test
+    public void testForOffsetHoursMinutes_minutesTooLarge_throwsIllegalArgumentException() throws Throwable {
+        try {
+            DateTimeZone.forOffsetHoursMinutes(5, 60);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    // negative hours combined with positive minutes per javadoc example (-2,30) -> "-02:30"
+    @Test
+    public void testForOffsetHoursMinutes_negativeHoursPositiveMinutes_correctIdAndOffset() throws Throwable {
+        DateTimeZone zone = DateTimeZone.forOffsetHoursMinutes(-2, 30);
+        assertEquals("-02:30", zone.getID());
+        assertEquals(-9000000, zone.getOffset(0L));
+    }
+
+
+
+
+
+    // boundary valid hours (+-23) must succeed, not throw
+    @Test
+    public void testForOffsetHoursMinutes_boundaryValidHours_returnsCorrectZone() throws Throwable {
+        DateTimeZone zone = DateTimeZone.forOffsetHoursMinutes(23, 59);
+        assertEquals("+23:59", zone.getID());
+    }
+
+    // forOffsetMillis(0) -> offset==0 branch inside fixedOffsetZone -> UTC
+    @Test
+    public void testForOffsetMillis_zero_returnsUTC() throws Throwable {
+        assertSame(DateTimeZone.UTC, DateTimeZone.forOffsetMillis(0));
+    }
+
+    // forOffsetMillis positive
+    @Test
+    public void testForOffsetMillis_positive_returnsCorrectId() throws Throwable {
+        DateTimeZone zone = DateTimeZone.forOffsetMillis(3600000);
+        assertEquals("+01:00", zone.getID());
+        assertEquals(3600000, zone.getOffset(0L));
+    }
+
+    // forTimeZone(null) -> getDefault() branch
+    @Test
+    public void testForTimeZone_null_returnsDefaultZone() throws Throwable {
+        assertEquals(DateTimeZone.getDefault(), DateTimeZone.forTimeZone(null));
+    }
+
+    // forTimeZone with id "UTC" special-cased branch
+    @Test
+    public void testForTimeZone_UTCId_returnsUTCConstant() throws Throwable {
+        assertSame(DateTimeZone.UTC, DateTimeZone.forTimeZone(TimeZone.getTimeZone("UTC")));
+    }
+
+    // getAvailableIDs must contain UTC (required by setProvider0 contract); providers never null
+    @Test
+    public void testGetAvailableIDsAndProviders_notNull() throws Throwable {
+        Set<String> ids = DateTimeZone.getAvailableIDs();
+        assertNotNull(ids);
+        assertTrue(ids.contains("UTC"));
+        assertNotNull(DateTimeZone.getProvider());
+        assertNotNull(DateTimeZone.getNameProvider());
+    }
+
+    // getID returns the id passed to the protected constructor
+    @Test
+    public void testGetID_returnsConstructorValue() throws Throwable {
+        assertEquals("UTC", DateTimeZone.UTC.getID());
+    }
+
+    // getShortName/getName with null locale default-locale branch, must not be null
+    @Test
+    public void testGetShortNameAndName_returnNonNullStrings() throws Throwable {
+        assertNotNull(DateTimeZone.UTC.getShortName(0L));
+        assertNotNull(DateTimeZone.UTC.getName(0L));
+    }
+
+    // UTC offset is always 0, for extreme instants too
+    @Test
+    public void testGetOffset_UTC_alwaysZero() throws Throwable {
+        assertEquals(0, DateTimeZone.UTC.getOffset(0L));
+        assertEquals(0, DateTimeZone.UTC.getOffset(Long.MAX_VALUE));
+        assertEquals(0, DateTimeZone.UTC.getOffset(Long.MIN_VALUE));
+    }
+
+    // getOffset(ReadableInstant) null branch -> uses current time, UTC offset still 0
+    @Test
+    public void testGetOffset_nullReadableInstant_usesCurrentTime() throws Throwable {
+        assertEquals(0, DateTimeZone.UTC.getOffset((ReadableInstant) null));
+    }
+
+    // getStandardOffset and isStandardOffset (offset==standardOffset) for UTC
+    @Test
+    public void testGetStandardOffsetAndIsStandardOffset_UTC() throws Throwable {
+        assertEquals(0, DateTimeZone.UTC.getStandardOffset(0L));
+        assertTrue(DateTimeZone.UTC.isStandardOffset(0L));
+    }
+
+    // getOffsetFromLocal for a fixed zero-offset zone always returns 0
+    @Test
+    public void testGetOffsetFromLocal_UTC_alwaysZero() throws Throwable {
+        assertEquals(0, DateTimeZone.UTC.getOffsetFromLocal(123456789L));
+    }
+
+    // convertUTCToLocal identity for UTC (offset 0)
+    @Test
+    public void testConvertUTCToLocal_UTC_identity() throws Throwable {
+        assertEquals(123456789L, DateTimeZone.UTC.convertUTCToLocal(123456789L));
+    }
+
+    // convertLocalToUTC identity for UTC (offset 0, no DST boundary branch taken)
+    @Test
+    public void testConvertLocalToUTC_UTC_identity() throws Throwable {
+        assertEquals(123456789L, DateTimeZone.UTC.convertLocalToUTC(123456789L, true));
+    }
+
+    // getMillisKeepLocal with newZone==this short-circuit branch
+    @Test
+    public void testGetMillisKeepLocal_sameZone_returnsSameInstant() throws Throwable {
+        assertEquals(123456789L, DateTimeZone.UTC.getMillisKeepLocal(DateTimeZone.UTC, 123456789L));
+    }
+
+    // getMillisKeepLocal across two different fixed-offset zones
+    @Test
+    public void testGetMillisKeepLocal_differentFixedZone_correctConversion() throws Throwable {
+        DateTimeZone plus2 = DateTimeZone.forOffsetHours(2);
+        long result = DateTimeZone.UTC.getMillisKeepLocal(plus2, 0L);
+        assertEquals(-7200000L, result);
+    }
+
+    // isLocalDateTimeGap: isFixed() true branch always returns false
+    @Test
+    public void testIsLocalDateTimeGap_fixedZone_returnsFalse() throws Throwable {
+        LocalDateTime ldt = new LocalDateTime(2007, 3, 11, 2, 30, 0, 0);
+        assertFalse(DateTimeZone.UTC.isLocalDateTimeGap(ldt));
+    }
+
+    // isLocalDateTimeGap: real DST spring-forward gap (2007-03-11 02:00-03:00 US rule) -> true
+    @Test
+    public void testIsLocalDateTimeGap_nonFixedZoneGapTime_returnsTrue() throws Throwable {
+        DateTimeZone la = DateTimeZone.forID("America/Los_Angeles");
+        LocalDateTime gap = new LocalDateTime(2007, 3, 11, 2, 30, 0, 0);
+        assertTrue(la.isLocalDateTimeGap(gap));
+    }
+
+    // isLocalDateTimeGap: ordinary time in a non-fixed zone -> false
+    @Test
+    public void testIsLocalDateTimeGap_nonFixedZoneNormalTime_returnsFalse() throws Throwable {
+        DateTimeZone la = DateTimeZone.forID("America/Los_Angeles");
+        LocalDateTime normal = new LocalDateTime(2007, 1, 1, 0, 0, 0, 0);
+        assertFalse(la.isLocalDateTimeGap(normal));
+    }
+
+    // adjustOffset on a fixed zone: no overlap possible, instant unchanged for both flags
+    @Test
+    public void testAdjustOffset_fixedZone_returnsSameInstant() throws Throwable {
+        long instant = 1000000000L;
+        assertEquals(instant, DateTimeZone.UTC.adjustOffset(instant, true));
+        assertEquals(instant, DateTimeZone.UTC.adjustOffset(instant, false));
+    }
+
+    // isFixed(): true for UTC, false for a real rule-based zone
+    @Test
+    public void testIsFixed_variousZones() throws Throwable {
+        assertTrue(DateTimeZone.UTC.isFixed());
+        DateTimeZone la = DateTimeZone.forID("America/Los_Angeles");
+        assertFalse(la.isFixed());
+    }
+
+    // nextTransition/previousTransition on a real zone move away from the given instant
+    @Test
+    public void testNextAndPreviousTransition_nonFixedZone() throws Throwable {
+        DateTimeZone la = DateTimeZone.forID("America/Los_Angeles");
+        long instant = 0L;
+        assertTrue(la.nextTransition(instant) > instant);
+        assertTrue(la.previousTransition(instant) < instant);
+    }
+
+    // toTimeZone converts using the same id
+    @Test
+    public void testToTimeZone_returnsMatchingId() throws Throwable {
+        TimeZone tz = DateTimeZone.UTC.toTimeZone();
+        assertEquals("UTC", tz.getID());
+    }
+
+
+}

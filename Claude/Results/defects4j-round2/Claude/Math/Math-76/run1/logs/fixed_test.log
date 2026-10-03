@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Math-76-y65mjtz3/Math-76f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - org.apache.commons.math.linear.SingularValueDecompositionImplClaudeTest::testGetRank_zeroMatrix
+  - org.apache.commons.math.linear.SingularValueDecompositionImplClaudeTest::testGetU_truncatedSVD_mGreaterEqualN_columnsOrthonormal
+  - org.apache.commons.math.linear.SingularValueDecompositionImplClaudeTest::testGetV_truncatedSVD_mLessThanN_columnsOrthonormal
+[exit 0]

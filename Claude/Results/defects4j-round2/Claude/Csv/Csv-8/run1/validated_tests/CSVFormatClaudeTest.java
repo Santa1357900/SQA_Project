@@ -1,0 +1,414 @@
+package org.apache.commons.csv;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import java.io.StringReader;
+
+public class CSVFormatClaudeTest {
+
+    // DEFAULT: ตรวจค่าคงที่ทุกฟิลด์ตาม Javadoc ของ DEFAULT
+    @Test
+    public void testDefault_fields() throws Throwable {
+        assertEquals(',', CSVFormat.DEFAULT.getDelimiter());
+        assertEquals(Character.valueOf('"'), CSVFormat.DEFAULT.getQuoteChar());
+        assertNull(CSVFormat.DEFAULT.getQuotePolicy());
+        assertNull(CSVFormat.DEFAULT.getCommentStart());
+        assertNull(CSVFormat.DEFAULT.getEscape());
+        assertFalse(CSVFormat.DEFAULT.getIgnoreSurroundingSpaces());
+        assertTrue(CSVFormat.DEFAULT.getIgnoreEmptyLines());
+        assertEquals("\r\n", CSVFormat.DEFAULT.getRecordSeparator());
+        assertNull(CSVFormat.DEFAULT.getNullString());
+        assertNull(CSVFormat.DEFAULT.getHeader());
+        assertFalse(CSVFormat.DEFAULT.getSkipHeaderRecord());
+    }
+
+    // RFC4180/EXCEL: ignoreEmptyLines=false ตาม Javadoc, และ EXCEL เท่ากับ RFC4180
+    @Test
+    public void testPredefinedFormats_rfc4180AndExcel_ignoreEmptyLinesFalse() throws Throwable {
+        assertFalse(CSVFormat.RFC4180.getIgnoreEmptyLines());
+        assertEquals(',', CSVFormat.RFC4180.getDelimiter());
+        assertEquals(Character.valueOf('"'), CSVFormat.RFC4180.getQuoteChar());
+        assertEquals("\r\n", CSVFormat.RFC4180.getRecordSeparator());
+        assertTrue(CSVFormat.EXCEL.equals(CSVFormat.RFC4180));
+    }
+
+    // TDF: delimiter=TAB, ignoreSurroundingSpaces=true, คงเครื่องหมายคำพูด
+    @Test
+    public void testTdf_fields() throws Throwable {
+        assertEquals('\t', CSVFormat.TDF.getDelimiter());
+        assertTrue(CSVFormat.TDF.getIgnoreSurroundingSpaces());
+        assertEquals(Character.valueOf('"'), CSVFormat.TDF.getQuoteChar());
+    }
+
+    // MYSQL: delimiter=TAB, escape=BACKSLASH, ไม่ใช้ quote, recordSeparator=LF
+    @Test
+    public void testMysql_fields() throws Throwable {
+        assertEquals('\t', CSVFormat.MYSQL.getDelimiter());
+        assertEquals(Character.valueOf('\\'), CSVFormat.MYSQL.getEscape());
+        assertFalse(CSVFormat.MYSQL.getIgnoreEmptyLines());
+        assertNull(CSVFormat.MYSQL.getQuoteChar());
+        assertFalse(CSVFormat.MYSQL.isQuoting());
+        assertEquals("\n", CSVFormat.MYSQL.getRecordSeparator());
+    }
+
+    // newFormat: delimiter ที่ถูกต้อง -> ฟิลด์อื่นเป็นค่าเริ่มต้นทั้งหมด
+    @Test
+    public void testNewFormat_validDelimiter_defaultsApplied() throws Throwable {
+        CSVFormat f = CSVFormat.newFormat(';');
+        assertEquals(';', f.getDelimiter());
+        assertNull(f.getQuoteChar());
+        assertFalse(f.getIgnoreEmptyLines());
+        assertNull(f.getRecordSeparator());
+        assertNull(f.getHeader());
+    }
+
+    // newFormat: delimiter เป็นตัวแบ่งบรรทัด (CR, LF) ต้อง throw IllegalArgumentException
+    @Test
+    public void testNewFormat_lineBreakDelimiter_throws() throws Throwable {
+        try {
+            CSVFormat.newFormat('\r');
+            fail("expected IllegalArgumentException for CR");
+        } catch (IllegalArgumentException expected) { }
+        try {
+            CSVFormat.newFormat('\n');
+            fail("expected IllegalArgumentException for LF");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // withDelimiter: คืน instance ใหม่ที่เปลี่ยนเฉพาะ delimiter, ต้นฉบับไม่เปลี่ยน (immutable)
+    @Test
+    public void testWithDelimiter_changesDelimiter_originalImmutable() throws Throwable {
+        CSVFormat base = CSVFormat.DEFAULT;
+        CSVFormat changed = base.withDelimiter(';');
+        assertEquals(';', changed.getDelimiter());
+        assertEquals(',', base.getDelimiter());
+    }
+
+    // withDelimiter: ตัวแบ่งบรรทัดต้อง throw
+    @Test
+    public void testWithDelimiter_lineBreak_throws() throws Throwable {
+        try {
+            CSVFormat.DEFAULT.withDelimiter('\r');
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // withCommentStart(char): เปิดใช้งาน comment และเก็บค่าตัวอักษรไว้
+    @Test
+    public void testWithCommentStart_char_enablesCommenting() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withCommentStart('#');
+        assertTrue(f.isCommentingEnabled());
+        assertEquals(Character.valueOf('#'), f.getCommentStart());
+    }
+
+    // withCommentStart(Character null): ปิดใช้งาน comment
+    @Test
+    public void testWithCommentStart_nullCharacter_disablesCommenting() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withCommentStart('#').withCommentStart((Character) null);
+        assertFalse(f.isCommentingEnabled());
+        assertNull(f.getCommentStart());
+    }
+
+    // withCommentStart: ตัวแบ่งบรรทัดต้อง throw ทั้ง overload char และ Character
+    @Test
+    public void testWithCommentStart_lineBreak_throws() throws Throwable {
+        try {
+            CSVFormat.DEFAULT.withCommentStart('\r');
+            fail("expected IllegalArgumentException for char overload");
+        } catch (IllegalArgumentException expected) { }
+        try {
+            CSVFormat.DEFAULT.withCommentStart(Character.valueOf('\n'));
+            fail("expected IllegalArgumentException for Character overload");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // withEscape(char): เปิดใช้งาน escape
+    @Test
+    public void testWithEscape_char_enablesEscaping() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withEscape('\\');
+        assertTrue(f.isEscaping());
+        assertEquals(Character.valueOf('\\'), f.getEscape());
+    }
+
+    // withEscape(Character null): ปิดใช้งาน escape
+    @Test
+    public void testWithEscape_nullCharacter_disablesEscaping() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withEscape('\\').withEscape((Character) null);
+        assertFalse(f.isEscaping());
+        assertNull(f.getEscape());
+    }
+
+    // withEscape: ตัวแบ่งบรรทัดต้อง throw
+    @Test
+    public void testWithEscape_lineBreak_throws() throws Throwable {
+        try {
+            CSVFormat.DEFAULT.withEscape('\n');
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // withHeader(String...): เก็บ header ตามที่ระบุ
+    @Test
+    public void testWithHeader_setsHeaderArray() throws Throwable {
+        String[] header = new String[]{"a", "b", "c"};
+        CSVFormat f = CSVFormat.DEFAULT.withHeader(header);
+        assertArrayEquals(header, f.getHeader());
+    }
+
+    // withHeader(): ไม่ส่งพารามิเตอร์ -> อาร์เรย์ว่างไม่ใช่ null; withHeader((String[])null) -> header เป็น null
+    @Test
+    public void testWithHeader_noArgsEmptyVsExplicitNull() throws Throwable {
+        CSVFormat f1 = CSVFormat.DEFAULT.withHeader();
+        assertNotNull(f1.getHeader());
+        assertEquals(0, f1.getHeader().length);
+        CSVFormat f2 = CSVFormat.DEFAULT.withHeader((String[]) null);
+        assertNull(f2.getHeader());
+    }
+
+    // getHeader(): ต้องคืนสำเนา (clone) ไม่ใช่ reference เดิม เพื่อรักษา immutability
+    @Test
+    public void testGetHeader_returnsIndependentClone() throws Throwable {
+        String[] header = new String[]{"x", "y"};
+        CSVFormat f = CSVFormat.DEFAULT.withHeader(header);
+        String[] g1 = f.getHeader();
+        String[] g2 = f.getHeader();
+        assertNotSame(g1, g2);
+        g1[0] = "z";
+        assertEquals("x", g2[0]);
+    }
+
+    // withIgnoreEmptyLines / withIgnoreSurroundingSpaces: สลับค่าได้อิสระ ต้นฉบับไม่เปลี่ยน
+    @Test
+    public void testWithIgnoreEmptyLinesAndSurroundingSpaces_toggled() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withIgnoreEmptyLines(false).withIgnoreSurroundingSpaces(true);
+        assertFalse(f.getIgnoreEmptyLines());
+        assertTrue(f.getIgnoreSurroundingSpaces());
+        assertTrue(CSVFormat.DEFAULT.getIgnoreEmptyLines());
+        assertFalse(CSVFormat.DEFAULT.getIgnoreSurroundingSpaces());
+    }
+
+    // withNullString: ตั้งค่าแล้วต้อง isNullHandling()==true และคืนค่าเดิม
+    @Test
+    public void testWithNullString_setsValue_enablesNullHandling() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withNullString("NULL");
+        assertTrue(f.isNullHandling());
+        assertEquals("NULL", f.getNullString());
+    }
+
+    // withNullString(null): ปิดการแปลง null
+    @Test
+    public void testWithNullString_null_disablesNullHandling() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withNullString("NULL").withNullString(null);
+        assertFalse(f.isNullHandling());
+        assertNull(f.getNullString());
+    }
+
+    // withQuoteChar(char): เปิดใช้งาน quoting
+    @Test
+    public void testWithQuoteChar_char_enablesQuoting() throws Throwable {
+        CSVFormat f = CSVFormat.newFormat(',').withQuoteChar('\'');
+        assertTrue(f.isQuoting());
+        assertEquals(Character.valueOf('\''), f.getQuoteChar());
+    }
+
+    // withQuoteChar(Character null): ปิดใช้งาน quoting
+    @Test
+    public void testWithQuoteChar_nullCharacter_disablesQuoting() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withQuoteChar((Character) null);
+        assertFalse(f.isQuoting());
+        assertNull(f.getQuoteChar());
+    }
+
+    // withQuoteChar: ตัวแบ่งบรรทัดต้อง throw
+    @Test
+    public void testWithQuoteChar_lineBreak_throws() throws Throwable {
+        try {
+            CSVFormat.DEFAULT.withQuoteChar('\r');
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    // withQuotePolicy: ตั้งค่า policy ได้ และ DEFAULT ไม่ถูกแก้ไข
+    @Test
+    public void testWithQuotePolicy_setsPolicy() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withQuotePolicy(Quote.NONE);
+        assertEquals(Quote.NONE, f.getQuotePolicy());
+        assertNull(CSVFormat.DEFAULT.getQuotePolicy());
+    }
+
+    // withRecordSeparator(char): แปลงเป็น String ตัวเดียว
+    @Test
+    public void testWithRecordSeparator_char_convertsToString() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withRecordSeparator('\n');
+        assertEquals("\n", f.getRecordSeparator());
+    }
+
+    // withRecordSeparator(String): ตั้งค่าตามที่ระบุตรง ๆ
+    @Test
+    public void testWithRecordSeparator_string_setsDirectly() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withRecordSeparator("\r\n\r\n");
+        assertEquals("\r\n\r\n", f.getRecordSeparator());
+    }
+
+    // withSkipHeaderRecord: ตั้งค่าได้ และต้นฉบับไม่เปลี่ยน
+    @Test
+    public void testWithSkipHeaderRecord_setsFlag() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withSkipHeaderRecord(true);
+        assertTrue(f.getSkipHeaderRecord());
+        assertFalse(CSVFormat.DEFAULT.getSkipHeaderRecord());
+    }
+
+    // equals: instance เดียวกันต้องเท่ากับตัวเอง
+    @Test
+    public void testEquals_sameInstance_true() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT;
+        assertTrue(f.equals(f));
+    }
+
+    // equals: เทียบกับ null ต้อง false
+    @Test
+    public void testEquals_null_false() throws Throwable {
+        assertFalse(CSVFormat.DEFAULT.equals(null));
+    }
+
+    // equals: เทียบกับคนละ class ต้อง false
+    @Test
+    public void testEquals_differentClass_false() throws Throwable {
+        assertFalse(CSVFormat.DEFAULT.equals("not a format"));
+    }
+
+    // equals: สองฟอร์แมตที่ประกอบสร้างต่างกันแต่ฟิลด์เหมือน DEFAULT ทุกตัว ต้อง equal กัน
+    @Test
+    public void testEquals_equivalentFormats_true() throws Throwable {
+        CSVFormat a = CSVFormat.newFormat(',').withQuoteChar('"')
+                .withIgnoreEmptyLines(true).withRecordSeparator("\r\n");
+        assertTrue(a.equals(CSVFormat.DEFAULT));
+        assertTrue(CSVFormat.DEFAULT.equals(a));
+    }
+
+    // equals: delimiter ต่างกันต้อง false
+    @Test
+    public void testEquals_differentDelimiter_false() throws Throwable {
+        assertFalse(CSVFormat.DEFAULT.equals(CSVFormat.DEFAULT.withDelimiter(';')));
+    }
+
+    // equals: header ต่างกันต้อง false (ใช้ Arrays.equals ภายใน)
+    @Test
+    public void testEquals_differentHeader_false() throws Throwable {
+        assertFalse(CSVFormat.DEFAULT.withHeader("a").equals(CSVFormat.DEFAULT.withHeader("b")));
+    }
+
+    // hashCode: วัตถุที่ equal กันต้องมี hashCode เท่ากัน
+    @Test
+    public void testHashCode_equalObjects_sameHashCode() throws Throwable {
+        CSVFormat a = CSVFormat.newFormat(',').withQuoteChar('"')
+                .withIgnoreEmptyLines(true).withRecordSeparator("\r\n");
+        assertEquals(CSVFormat.DEFAULT.hashCode(), a.hashCode());
+    }
+
+    // validate: quoteChar เท่ากับ delimiter ต้อง throw IllegalStateException
+    @Test
+    public void testValidate_quoteCharEqualsDelimiter_throws() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withDelimiter('"');
+        try {
+            f.validate();
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException e) {
+            assertTrue(e.getMessage().contains("quoteChar"));
+        }
+    }
+
+    // validate: escape เท่ากับ delimiter ต้อง throw
+    @Test
+    public void testValidate_escapeEqualsDelimiter_throws() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withDelimiter('\\').withEscape('\\');
+        try {
+            f.validate();
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException e) {
+            assertTrue(e.getMessage().contains("escape"));
+        }
+    }
+
+    // validate: commentStart เท่ากับ delimiter ต้อง throw
+    @Test
+    public void testValidate_commentStartEqualsDelimiter_throws() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withDelimiter('#').withCommentStart('#');
+        try {
+            f.validate();
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException e) {
+            assertTrue(e.getMessage().contains("comment"));
+        }
+    }
+
+    // validate: quoteChar เท่ากับ commentStart ต้อง throw
+    @Test
+    public void testValidate_quoteCharEqualsCommentStart_throws() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withCommentStart('"');
+        try {
+            f.validate();
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException e) {
+            assertTrue(e.getMessage().contains("quoteChar"));
+        }
+    }
+
+    // validate: escape เท่ากับ commentStart ต้อง throw
+    @Test
+    public void testValidate_escapeEqualsCommentStart_throws() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withEscape('!').withCommentStart('!');
+        try {
+            f.validate();
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException e) {
+            assertTrue(e.getMessage().contains("escape"));
+        }
+    }
+
+    // validate: quotePolicy=NONE แต่ไม่มี escape ต้อง throw
+    @Test
+    public void testValidate_quoteNoneWithoutEscape_throws() throws Throwable {
+        CSVFormat f = CSVFormat.DEFAULT.withQuotePolicy(Quote.NONE);
+        try {
+            f.validate();
+            fail("expected IllegalStateException");
+        } catch (IllegalStateException e) {
+            assertTrue(e.getMessage().contains("quotes"));
+        }
+    }
+
+
+
+    // validate: DEFAULT ไม่มีความขัดแย้งใด ๆ ต้องผ่านโดยไม่ throw
+    @Test
+    public void testValidate_validDefault_noException() throws Throwable {
+        CSVFormat.DEFAULT.validate();
+        assertEquals(',', CSVFormat.DEFAULT.getDelimiter());
+    }
+
+    // parse: คืนค่า CSVParser ที่ไม่เป็น null
+    @Test
+    public void testParse_returnsNonNullParser() throws Throwable {
+        CSVParser parser = CSVFormat.DEFAULT.parse(new StringReader("a,b\r\n"));
+        assertNotNull(parser);
+    }
+
+    // format: ค่าธรรมดาที่ไม่มีอักขระพิเศษต้องถูกต่อด้วย delimiter และตัด record separator ท้ายออก (trim)
+    @Test
+    public void testFormat_simpleValues_commaJoinedAndTrimmed() throws Throwable {
+        String result = CSVFormat.DEFAULT.format("a", "b");
+        assertEquals("a,b", result);
+    }
+
+    // toString: ต้องแสดง Delimiter, SkipHeaderRecord และ Header เมื่อมีการกำหนด
+    @Test
+    public void testToString_containsDelimiterAndHeaderInfo() throws Throwable {
+        String s1 = CSVFormat.DEFAULT.toString();
+        assertTrue(s1.contains("Delimiter=<,>"));
+        assertTrue(s1.contains("SkipHeaderRecord:false"));
+        CSVFormat f = CSVFormat.DEFAULT.withHeader("a", "b");
+        String s2 = f.toString();
+        assertTrue(s2.contains("Header:"));
+    }
+}

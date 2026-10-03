@@ -1,0 +1,319 @@
+package org.joda.time.chrono;
+
+import org.joda.time.Chronology;
+import org.joda.time.DateTimeZone;
+import org.joda.time.DurationField;
+import org.joda.time.Instant;
+import org.joda.time.ReadableInstant;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class GJChronologyClaudeTest {
+
+    // getInstanceUTC: zone must be UTC
+    @Test
+    public void testGetInstanceUTC_zoneIsUTC() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        assertEquals(DateTimeZone.UTC, chrono.getZone());
+    }
+
+    // getInstanceUTC: default cutover instant
+    @Test
+    public void testGetInstanceUTC_cutoverIsDefault() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        assertEquals(GJChronology.DEFAULT_CUTOVER, chrono.getGregorianCutover());
+    }
+
+    // getInstanceUTC: default minDaysInFirstWeek is 4
+    @Test
+    public void testGetInstanceUTC_minDaysInFirstWeekIsFour() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        assertEquals(4, chrono.getMinimumDaysInFirstWeek());
+    }
+
+    // getInstance(): uses default zone branch
+    @Test
+    public void testGetInstance_noArgs_zoneMatchesDefaultZone() throws Throwable {
+        GJChronology chrono = GJChronology.getInstance();
+        assertEquals(DateTimeZone.getDefault(), chrono.getZone());
+    }
+
+    // getInstance(zone): sets zone correctly, default cutover/minDays
+    @Test
+    public void testGetInstance_zoneOnly_setsZone() throws Throwable {
+        DateTimeZone zone = DateTimeZone.forID("America/New_York");
+        GJChronology chrono = GJChronology.getInstance(zone);
+        assertEquals(zone, chrono.getZone());
+        assertEquals(4, chrono.getMinimumDaysInFirstWeek());
+    }
+
+    // getInstance(zone): cache branch returns identical cached instance
+    @Test
+    public void testGetInstance_zoneOnly_sameZoneReturnsCachedInstance() throws Throwable {
+        DateTimeZone zone = DateTimeZone.forID("Australia/Sydney");
+        GJChronology a = GJChronology.getInstance(zone);
+        GJChronology b = GJChronology.getInstance(zone);
+        assertSame(a, b);
+    }
+
+    // getInstance(zone, ReadableInstant): 2-arg overload sets custom cutover
+    @Test
+    public void testGetInstance_zoneAndCutoverInstant_setsCutover() throws Throwable {
+        Instant cutover = new Instant(0L);
+        GJChronology chrono = GJChronology.getInstance(DateTimeZone.UTC, (ReadableInstant) cutover);
+        assertEquals(cutover, chrono.getGregorianCutover());
+    }
+
+    // getInstance(zone, null cutover, minDays): null branch uses default cutover
+    @Test
+    public void testGetInstance_zoneAndNullCutoverInstant_usesDefaultCutover() throws Throwable {
+        GJChronology chrono = GJChronology.getInstance(
+                DateTimeZone.forID("Asia/Tokyo"), (ReadableInstant) null, 4);
+        assertEquals(GJChronology.DEFAULT_CUTOVER, chrono.getGregorianCutover());
+    }
+
+    // getInstance(zone, cutover, minDays): custom minDays applied
+    @Test
+    public void testGetInstance_minDaysParam_appliedCorrectly() throws Throwable {
+        GJChronology chrono = GJChronology.getInstance(DateTimeZone.UTC, GJChronology.DEFAULT_CUTOVER, 7);
+        assertEquals(7, chrono.getMinimumDaysInFirstWeek());
+    }
+
+    // getInstance(zone, long, minDays): long equal to default millis -> null cutoverInstant branch
+    @Test
+    public void testGetInstance_longCutoverEqualsDefaultMillis_usesDefaultCutoverInstance() throws Throwable {
+        GJChronology chrono = GJChronology.getInstance(
+                DateTimeZone.UTC, GJChronology.DEFAULT_CUTOVER.getMillis(), 4);
+        assertEquals(GJChronology.DEFAULT_CUTOVER, chrono.getGregorianCutover());
+    }
+
+    // getInstance(zone, long, minDays): long different from default -> custom cutover
+    @Test
+    public void testGetInstance_longCutoverDifferent_usesCustomCutover() throws Throwable {
+        GJChronology chrono = GJChronology.getInstance(DateTimeZone.UTC, 0L, 4);
+        assertEquals(new Instant(0L), chrono.getGregorianCutover());
+    }
+
+    // getInstance(zone, cutover, minDays): same params twice hits cache loop, returns same object
+    @Test
+    public void testGetInstance_sameParamsTwice_returnsSameCachedInstance() throws Throwable {
+        DateTimeZone zone = DateTimeZone.forID("Pacific/Auckland");
+        GJChronology a = GJChronology.getInstance(zone, GJChronology.DEFAULT_CUTOVER, 4);
+        GJChronology b = GJChronology.getInstance(zone, GJChronology.DEFAULT_CUTOVER, 4);
+        assertSame(a, b);
+    }
+
+    // getInstance(zone, cutover, minDays): different minDays -> new distinct instance
+    @Test
+    public void testGetInstance_differentMinDays_returnsDifferentInstance() throws Throwable {
+        GJChronology a = GJChronology.getInstance(DateTimeZone.UTC, GJChronology.DEFAULT_CUTOVER, 2);
+        GJChronology b = GJChronology.getInstance(DateTimeZone.UTC, GJChronology.DEFAULT_CUTOVER, 3);
+        assertNotSame(a, b);
+        assertEquals(2, a.getMinimumDaysInFirstWeek());
+        assertEquals(3, b.getMinimumDaysInFirstWeek());
+    }
+
+    // withUTC: already UTC -> returns same instance (zone == getZone() branch)
+    @Test
+    public void testWithUTC_alreadyUTC_returnsSameInstance() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        assertSame(chrono, chrono.withUTC());
+    }
+
+    // withUTC: non-UTC -> returns chronology with UTC zone
+    @Test
+    public void testWithUTC_nonUTC_returnsUTCZoneInstance() throws Throwable {
+        GJChronology chrono = GJChronology.getInstance(DateTimeZone.forID("Europe/Paris"));
+        Chronology utcChrono = chrono.withUTC();
+        assertEquals(DateTimeZone.UTC, utcChrono.getZone());
+    }
+
+    // withZone(null): null branch falls back to default zone
+    @Test
+    public void testWithZone_null_usesDefaultZone() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        Chronology result = chrono.withZone(null);
+        assertEquals(DateTimeZone.getDefault(), result.getZone());
+    }
+
+    // withZone: same zone object -> returns same instance
+    @Test
+    public void testWithZone_sameZoneObject_returnsSameInstance() throws Throwable {
+        DateTimeZone zone = DateTimeZone.forID("Asia/Shanghai");
+        GJChronology chrono = GJChronology.getInstance(zone);
+        assertSame(chrono, chrono.withZone(zone));
+    }
+
+    // withZone: different zone -> new chronology with that zone, cutover preserved
+    @Test
+    public void testWithZone_differentZone_updatesZoneKeepsCutover() throws Throwable {
+        GJChronology chrono = GJChronology.getInstance(DateTimeZone.UTC);
+        DateTimeZone chicago = DateTimeZone.forID("America/Chicago");
+        Chronology newChrono = chrono.withZone(chicago);
+        assertEquals(chicago, newChrono.getZone());
+    }
+
+    // getDateTimeMillis(4-arg): epoch date is exactly 0 millis (Gregorian branch, no cutover check needed)
+    @Test
+    public void testGetDateTimeMillis_4arg_epoch_returnsZero() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        long millis = chrono.getDateTimeMillis(1970, 1, 1, 0);
+        assertEquals(0L, millis);
+    }
+
+    // getDateTimeMillis(7-arg): epoch date is exactly 0 millis
+    @Test
+    public void testGetDateTimeMillis_7arg_epoch_returnsZero() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        long millis = chrono.getDateTimeMillis(1970, 1, 1, 0, 0, 0, 0);
+        assertEquals(0L, millis);
+    }
+
+    // getDateTimeMillis(4-arg): date inside cutover gap throws IllegalArgumentException
+    @Test
+    public void testGetDateTimeMillis_4arg_cutoverGap_throwsIllegalArgumentException() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        try {
+            chrono.getDateTimeMillis(1582, 10, 10, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("does not exist") >= 0);
+        }
+    }
+
+    // getDateTimeMillis(7-arg): date inside cutover gap throws IllegalArgumentException
+    @Test
+    public void testGetDateTimeMillis_7arg_cutoverGap_throwsIllegalArgumentException() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        try {
+            chrono.getDateTimeMillis(1582, 10, 10, 0, 0, 0, 0);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().indexOf("does not exist") >= 0);
+        }
+    }
+
+    // getDateTimeMillis: Julian-side date before cutover round-trips through field getters
+    @Test
+    public void testGetDateTimeMillis_julianDateBeforeCutover_roundTripsCorrectly() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        long instant = chrono.getDateTimeMillis(1500, 6, 15, 0, 0, 0, 0);
+        assertEquals(1500, chrono.year().get(instant));
+        assertEquals(6, chrono.monthOfYear().get(instant));
+        assertEquals(15, chrono.dayOfMonth().get(instant));
+    }
+
+    // getGregorianCutover: returns exactly the configured cutover instant
+    @Test
+    public void testGetGregorianCutover_returnsConfiguredInstant() throws Throwable {
+        Instant cutover = new Instant(100000L);
+        GJChronology chrono = GJChronology.getInstance(DateTimeZone.UTC, cutover, 4);
+        assertEquals(cutover, chrono.getGregorianCutover());
+    }
+
+    // getMinimumDaysInFirstWeek: returns configured value
+    @Test
+    public void testGetMinimumDaysInFirstWeek_returnsConfiguredValue() throws Throwable {
+        GJChronology chrono = GJChronology.getInstance(DateTimeZone.UTC, GJChronology.DEFAULT_CUTOVER, 5);
+        assertEquals(5, chrono.getMinimumDaysInFirstWeek());
+    }
+
+    // equals: reflexive - same instance equals itself
+    @Test
+    public void testEquals_sameInstance_returnsTrue() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        assertTrue(chrono.equals(chrono));
+    }
+
+    // equals: comparing to null must return false, not throw
+    @Test
+    public void testEquals_null_returnsFalse() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        assertFalse(chrono.equals(null));
+    }
+
+    // equals: comparing to an unrelated type must return false
+    @Test
+    public void testEquals_unrelatedType_returnsFalse() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        assertFalse(chrono.equals("not a chronology"));
+    }
+
+    // hashCode: must be consistent across repeated calls
+    @Test
+    public void testHashCode_consistentAcrossCalls() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        int h1 = chrono.hashCode();
+        int h2 = chrono.hashCode();
+        assertEquals(h1, h2);
+    }
+
+    // toString: default cutover and minDays -> no cutover/mdfw suffix, contains zone id
+    @Test
+    public void testToString_defaultCutoverAndMinDays_containsZoneId() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        String s = chrono.toString();
+        assertTrue(s.indexOf("GJChronology[") == 0);
+        assertTrue(s.indexOf("UTC") >= 0);
+        assertTrue(s.indexOf("mdfw=") < 0);
+    }
+
+    // toString: non-default minDays -> includes mdfw suffix
+    @Test
+    public void testToString_customMinDays_containsMdfw() throws Throwable {
+        GJChronology chrono = GJChronology.getInstance(DateTimeZone.UTC, GJChronology.DEFAULT_CUTOVER, 2);
+        String s = chrono.toString();
+        assertTrue(s.indexOf("mdfw=2") >= 0);
+    }
+
+    // toString: non-default cutover -> includes cutover label
+    @Test
+    public void testToString_customCutover_containsCutoverLabel() throws Throwable {
+        GJChronology chrono = GJChronology.getInstance(DateTimeZone.UTC, new Instant(0L), 4);
+        String s = chrono.toString();
+        assertTrue(s.indexOf("cutover=") >= 0);
+    }
+
+    // dayOfMonth CutoverField.getMinimumValue(): delegates to julian field, min day is 1
+    @Test
+    public void testDayOfMonth_noArgMinimumValueIsOne() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        assertEquals(1, chrono.dayOfMonth().getMinimumValue());
+    }
+
+    // dayOfMonth CutoverField.getMaximumValue(): delegates to gregorian field, max day is 31
+    @Test
+    public void testDayOfMonth_noArgMaximumValueIsThirtyOne() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        assertEquals(31, chrono.dayOfMonth().getMaximumValue());
+    }
+
+    // dayOfMonth CutoverField.getMaximumValue(instant): October 1582 Julian side max day is 4
+    @Test
+    public void testDayOfMonth_cutoverOctober1582_maxValueIsFour() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        long instant = chrono.getDateTimeMillis(1582, 10, 1, 0, 0, 0, 0);
+        assertEquals(4, chrono.dayOfMonth().getMaximumValue(instant));
+    }
+
+    // dayOfYear CutoverField.getMaximumValue(instant): 1582 has only 355 days due to the gap
+    @Test
+    public void testDayOfYear_year1582_maxValueIs355() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        long instant = chrono.getDateTimeMillis(1582, 1, 1, 0, 0, 0, 0);
+        assertEquals(355, chrono.dayOfYear().getMaximumValue(instant));
+    }
+
+    // Bug target: weekyearOfCentury's duration field must be linked to the same
+    // weekyears duration field exposed by the chronology (assemble() wires
+    // fields.weekyearOfCentury using fields.weekyears, which must already be
+    // the cutover-aware field at that point, not the stale Gregorian one).
+    @Test
+    public void testWeekyearOfCentury_durationField_shouldMatchWeekyearsDurationField() throws Throwable {
+        GJChronology chrono = GJChronology.getInstanceUTC();
+        DurationField weekyears = chrono.weekyears();
+        DurationField weekyearOfCenturyDuration = chrono.weekyearOfCentury().getDurationField();
+        assertSame(weekyears, weekyearOfCenturyDuration);
+    }
+}

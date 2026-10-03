@@ -1,0 +1,7 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-47-f0rito4r/Jsoup-47f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 1
+  - org.jsoup.nodes.EntitiesClaudeTest::testUnescape_strict_namedEntityWithoutSemicolon_notDecoded
+[exit 0]

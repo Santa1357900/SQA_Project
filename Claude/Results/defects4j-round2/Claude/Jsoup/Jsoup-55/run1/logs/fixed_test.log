@@ -1,0 +1,12 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /tmp/claude-Jsoup-55-ax349cws/Jsoup-55f-claude.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 6
+  - org.jsoup.parser.TokeniserStateClaudeTest::testCommentEndBang_dashBranch_appendsAndContinues
+  - org.jsoup.parser.TokeniserStateClaudeTest::testMarkupDeclarationOpen_commentDashes_createsComment
+  - org.jsoup.parser.TokeniserStateClaudeTest::testMarkupDeclarationOpen_unrecognized_createsBogusComment
+  - org.jsoup.parser.TokeniserStateClaudeTest::testCommentStartDash_secondDash_transitionsToCommentEnd_bugCheck
+  - org.jsoup.parser.TokeniserStateClaudeTest::testCommentEndBang_greaterThanBranch_endsCommentWithoutAppend
+  - org.jsoup.parser.TokeniserStateClaudeTest::testTagOpen_questionMark_createsBogusComment
+[exit 0]

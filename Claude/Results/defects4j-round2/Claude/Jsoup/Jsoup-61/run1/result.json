@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithm": "Claude",
+  "algorithm_version": "1.0.0",
+  "project": "Jsoup",
+  "bug_id": 61,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "complete",
+  "error": null,
+  "tests_generated": 45,
+  "tests_validated": 41,
+  "fixed_failing_tests": 4,
+  "buggy_failing_tests": 0,
+  "fault_detected": false,
+  "test_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "covered_methods": 75,
+    "total_methods": 96,
+    "ratio": 0.7812
+  },
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 291,
+    "lines_total": 352,
+    "line_ratio": 0.8267,
+    "branch_measure": "condition",
+    "branches_covered": 118,
+    "branches_total": 184,
+    "branch_ratio": 0.6413
+  },
+  "generation_seconds": 413.349,
+  "validation_seconds": 38.393,
+  "total_seconds": 451.742,
+  "configuration": {
+    "model": "claude-sonnet-5",
+    "effort": "high",
+    "thinking": "adaptive",
+    "max_tokens": 64000,
+    "prompt_system": "Claude/Prompt/system_prompt.txt",
+    "prompt_template": "Claude/Prompt/template_prompt.txt",
+    "usage": {
+      "input_tokens": 1,
+      "output_tokens": 52266,
+      "cache_creation_input_tokens": 17350,
+      "cache_read_input_tokens": 2690,
+      "total_cost_usd": 1.4957960000000001,
+      "duration_api_ms": 413349,
+      "num_turns": 1
+    }
+  },
+  "artifacts": {
+    "tests": "Tests/defects4j-round2/Claude/Jsoup/Jsoup-61/run1/",
+    "logs": "Results/defects4j-round2/Claude/Jsoup/Jsoup-61/run1/logs/",
+    "prompt": "Claude/Prompt/history/Jsoup_61.txt"
+  },
+  "created_at": "2026-09-30T22:59:10.502935+00:00",
+  "generation_wall_seconds": 414.773
+}
