@@ -46,7 +46,7 @@ Claude/
     │   └── logs/               # fixed_test.log, buggy_test.log, coverage.log, failing_tests, all_tests, summary.csv, coverage.xml
     ├── summary_by_project.csv
     ├── summary_overall.json
-    └── results_claude.csv      # ตารางแบน method,project,bug_id,run,tests,compile,code_coverage,branch_coverage,fault_detected,time
+    └── results_claude.csv      # ตารางแบน method,project,bug_id,run,tests,compile,code_coverage,conditions_coverage,fault_detected,time
 ```
 
 ---
@@ -82,7 +82,7 @@ Prompt แบ่งเป็น 2 ส่วนและใช้แท็ก XML
 | 1. Fixed    | `checkout -v <bug>f` → `compile` → `test -s suite.tar.bz2`         | รายชื่อเทสที่ fail บน fixed (`fixed_failing_tests`)                                                                                         |
 | 2. Filter   | ตัด `@Test` method ที่ fail บน fixed ออกจากซอร์ส                   | ชุดเทสที่ผ่านการตรวจ (`tests_validated`)                                                                                                    |
 | 3. Buggy    | `checkout -v <bug>b` → `compile` → `test -s validated.tar.bz2`     | `buggy_failing_tests` → `fault_detected = true` เมื่อ > 0                                                                                   |
-| 4. Coverage | `coverage -s validated.tar.bz2` (บน buggy, เฉพาะ modified classes) | `line_ratio`, `branch_ratio` (condition coverage ของ Cobertura), `test_coverage.ratio` = covered_methods / total_methods จาก `coverage.xml` |
+| 4. Coverage | `coverage -s validated.tar.bz2` (บน buggy, เฉพาะ modified classes) | `line_ratio`, `condition coverage, `test_coverage.ratio` = covered_methods / total_methods จาก `coverage.xml` |
 
 สถานะที่เป็นไปได้: `complete`, `no_generated_tests`, `no_valid_tests` (เช่น compile ไม่ผ่าน), `validation_failed`, `timeout`, `error`, `interrupted` โดยรายละเอียดอยู่ใน `status_detail`
 
@@ -167,7 +167,7 @@ wsl -d Ubuntu python3 /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Code/valid
 
 ### 3.4 ดูผล
 
-- `Claude/Results/defects4j-round2/summary_overall.json` — ภาพรวม: fault detection rate, mean line/branch/method coverage, จำนวนสถานะ
+- `Claude/Results/defects4j-round2/summary_overall.json` — ภาพรวม: fault detection rate, mean line/condition/method coverage, จำนวนสถานะ
 - `Claude/Results/defects4j-round2/summary_by_project.csv` — แยกรายโปรเจกต์
 - `Claude/Results/defects4j-round2/results_claude.csv` — ตารางแบน ใช้กับ `experiments/scripts/summarize_results.sh` ของกลุ่มได้
 
@@ -186,7 +186,7 @@ wsl -d Ubuntu python3 /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Code/valid
 | Fault detection rate (191 / 697) | 27.40% |
 | Test coverage เฉลี่ย | 78.73% |
 | Line coverage เฉลี่ย | 72.61% |
-| Branch/condition coverage เฉลี่ย | 63.89% |
+| condition coverage เฉลี่ย | 63.89% |
 | Generation time เฉลี่ย | 363.42 วินาที |
 | Total time เฉลี่ย | 464.06 วินาที |
 
@@ -194,7 +194,7 @@ wsl -d Ubuntu python3 /mnt/e/SaiStudyKKU/SQA/project/workspeac/Claude/Code/valid
 
 FDR คำนวณจาก `detected / evaluated`. Coverage เป็นค่าเฉลี่ยใน modified classes สำหรับรอบที่ประเมินผลได้; test coverage คือสัดส่วนเมธอดเป้าหมายที่ถูกเรียกถึง.
 
-| Project | Selected | Evaluated | Detected | Unknown | Fault detection rate | Test coverage | Line coverage | Branch coverage |
+| Project | Selected | Evaluated | Detected | Unknown | Fault detection rate | Test coverage | Line coverage | Condition coverage |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Chart | 26 | 23 | 16 | 3 | 69.57% | 85.44% | 76.19% | 66.17% |
 | Cli | 39 | 38 | 7 | 1 | 18.42% | 82.63% | 82.62% | 77.44% |
@@ -221,7 +221,6 @@ FDR คำนวณจาก `detected / evaluated`. Coverage เป็นค่
 
 - ชื่อคลาสเทสใช้ `<Class>ClaudeTest` เพื่อไม่ชนกับเทสเดิมของโปรเจกต์ (เช่น `NumberUtilsTest` มีอยู่แล้วใน Lang)
 - Coverage คำนวณจากเทสที่ผ่านบน fixed เท่านั้น ตามข้อกำหนดกลาง จึงอาจต่ำกว่าการนับทั้งชุด
-- `branch_ratio` คือ _condition coverage_ ของ Cobertura (`branch_measure = "condition"`) ตามที่กลุ่มตกลง
 - ไม่มี credential ใดถูก commit: `.env` (`KKU_API_KEY` / `ANTHROPIC_API_KEY`) อยู่ใน `.gitignore` และ backend `cli` ใช้การล็อกอินของ Claude Code ในเครื่อง
 - `generation.json` เก็บ `total_cost_usd` ที่ CLI รายงานไว้เพื่ออ้างอิง (ประมาณ $0.6–1.0 ต่อบั๊กที่ effort `high`) ถ้าต้องการลดเวลา/ค่าใช้จ่ายให้ใช้ `--effort medium`
 - `generation_seconds` = เวลาที่โมเดลทำงานจริง (`duration_api_ms`) ส่วน `generation_wall_seconds` รวมเวลา retry/รอโควตา — ใช้ค่าแรกเมื่อเทียบกับ DE/ACO
