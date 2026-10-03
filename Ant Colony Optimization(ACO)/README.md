@@ -55,7 +55,7 @@ defects4j info -p Lang
 ## 2. การรัน Defects4J Benchmark แบบขนาน (Parallel Runner)
 
 สคริปต์หลัก: `experiments/run_d4j_parallel.py`  
-ทำหน้าที่: ดึงโค้ด (Checkout), คอมไพล์ (Compile), รันชุดทดสอบ (Test), และวัด Coverage (Line & Condition/Branch) แบบหลายคอร์พร้อมกัน พร้อมบันทึกผลลัพธ์ตาม Common Format อัตโนมัติ
+ทำหน้าที่: ดึงโค้ด (Checkout), คอมไพล์ (Compile), รันชุดทดสอบ (Test), และวัด Coverage (Line & Condition) แบบหลายคอร์พร้อมกัน พร้อมบันทึกผลลัพธ์ตาม Common Format อัตโนมัติ
 
 เปิด **PowerShell** บน Windows แล้วสั่งรันได้ทันที:
 
@@ -170,7 +170,7 @@ Get-Content Results\defects4j-round2\summary_overall.json
 
 ## 5. ผลการทดสอบ ACO
 
-ตารางนี้เป็นผลจากชุดทดสอบ benchmark ของ Defects4J ที่เก็บใน `Results/defects4j-round2/Defects4J/` ไม่ใช่ผลจากอัลกอริทึม ACO. ในชุดนี้เลือก 854 bugs, ประเมินได้ 584, ตรวจพบ 583 และยังไม่ทราบผล 270 bugs (FDR 583/584 = 99.83% ในกลุ่มที่ประเมินได้). ค่า coverage เป็นค่าเฉลี่ยใน modified classes ของ buggy revision; branch coverage ในที่นี้เป็น condition coverage ของ Cobertura.
+ตารางนี้เป็นผลจากชุดทดสอบ benchmark ของ Defects4J ที่เก็บใน `Results/defects4j-round2/Defects4J/` ไม่ใช่ผลจากอัลกอริทึม ACO. ในชุดนี้เลือก 854 bugs, ประเมินได้ 584, ตรวจพบ 583 และยังไม่ทราบผล 270 bugs (FDR 583/584 = 99.83% ในกลุ่มที่ประเมินได้). ค่า coverage เป็นค่าเฉลี่ยใน modified classes ของ buggy revision; condition coverage.
 
 | Project         | Bugs evaluated / selected | Detected |     FDR | Mean line coverage | Mean condition coverage |
 | --------------- | ------------------------: | -------: | ------: | -----------------: | ----------------------: |
