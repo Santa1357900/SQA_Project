@@ -8,7 +8,7 @@ import re
 import sys
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[1]
 HISTORY_DIR = BASE_DIR / "ai" / "Gemini" / "prompts" / "history"
 D4J_PROJECTS_DIR = BASE_DIR / "defects4j" / "framework" / "projects"
 GENERATED_TESTS_DIR = BASE_DIR / "ai" / "Gemini" / "generated-tests"

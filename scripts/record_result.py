@@ -2,7 +2,7 @@ import argparse
 import csv
 import os
 
-RESULTS_CSV = os.path.join(os.path.dirname(__file__), "..", "results.csv")
+RESULTS_CSV = os.path.join(os.path.dirname(__file__), "..", "Results", "results.csv")
 
 def append_result(method: str, project: str, bug_id: str, run: int,
                   tests: int, compile_status: bool, code_cov: float,

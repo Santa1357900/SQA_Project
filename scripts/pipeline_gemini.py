@@ -34,7 +34,7 @@ if sys.platform == "win32":
         pass
 
 # ที่อยู่หลักของโปรเจกต์
-BASE_DIR = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[1]
 ENV_FILE = BASE_DIR / ".env"
 DATASET_DIR = BASE_DIR / "dataset"
 
@@ -380,7 +380,7 @@ def main():
     parser.add_argument("--bugs", nargs="+", help="ระบุหมายเลขบั๊กเฉพาะเจาะจง เช่น 1 3 4")
     parser.add_argument("--limit", type=int, help="จำกัดจำนวนบั๊กที่จะประมวลผล (เช่น --limit 5)")
     parser.add_argument("--model", default="gemini-3.5-flash-lite", help="โมเดล Gemini (default: gemini-3.5-flash-lite)")
-    parser.add_argument("--output-dir", default=str(BASE_DIR / "TestCode"), help="โฟลเดอร์สำหรับเก็บไฟล์เทส (default: TestCode)")
+    parser.add_argument("--output-dir", default=str(BASE_DIR / "ai" / "Gemini" / "generated-tests"), help="โฟลเดอร์สำหรับเก็บไฟล์เทส (default: ai/Gemini/generated-tests)")
     parser.add_argument("--version-tag", default=None, help="Tag เวอร์ชันสำหรับโฟลเดอร์ ai/Gemini (default: None)")
     parser.add_argument("--overwrite", action="store_true", help="สร้างเทสทับไฟล์เดิมถ้ามีอยู่แล้ว")
     args = parser.parse_args()

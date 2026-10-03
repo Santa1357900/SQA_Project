@@ -5,7 +5,7 @@ from collections import defaultdict
 import argparse
 import sys
 
-DEFAULT_CSV = os.path.join(os.path.dirname(__file__), "..", "results.csv")
+DEFAULT_CSV = os.path.join(os.path.dirname(__file__), "..", "Results", "results.csv")
 
 def summarize(csv_file=None):
     csv_path = csv_file or DEFAULT_CSV
