@@ -55,7 +55,7 @@ TARGET_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*)_([1-9][0-9]*)$")
 PACKAGE_RE = re.compile(r"(?m)^\s*package\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*;")
 PRINT_LOCK = threading.Lock()
 
-load_dotenv(ROOT / ".env")
+load_dotenv(CLAUDE_DIR / ".env")
 
 
 def log(msg: str):
