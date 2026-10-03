@@ -9,8 +9,6 @@ Code/             source code และ runner
 Configuration/    ค่าเริ่มต้น, profile และไลบรารีที่ต้องใช้
 Results/          ผลการทดลอง, result.json, summaries และ metadata
 Test/             test suites ที่สร้างได้
-COMMON_OUTPUT_FORMAT.md  นิยาม schema และตัวชี้วัดกลาง
-common-result.example.json  ตัวอย่าง result.json
 run.sh            คำสั่งหลัก
 run-full.sh       สคริปต์รันเต็ม
 THIRD_PARTY.md    รายการไลบรารีภายนอกและ license
