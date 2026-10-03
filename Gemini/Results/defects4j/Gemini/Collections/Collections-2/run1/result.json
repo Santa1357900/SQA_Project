@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j",
+  "algorithm": "Gemini",
+  "algorithm_version": "Gemini-3.5-Flash-Lite",
+  "project": "Collections",
+  "bug_id": 2,
+  "run": 1,
+  "status": "complete",
+  "status_detail": "inconclusive",
+  "error": null,
+  "tests_generated": 35,
+  "tests_validated": 32,
+  "fixed_failing_tests": 3,
+  "buggy_failing_tests": 3,
+  "fault_detected": null,
+  "test_coverage": null,
+  "code_coverage": {
+    "scope": "modified_classes",
+    "revision": "buggy",
+    "tool": "Defects4J/Cobertura",
+    "lines_covered": 399,
+    "lines_total": 465,
+    "line_ratio": 0.858065,
+    "branch_measure": "condition",
+    "branches_covered": 202,
+    "branches_total": 268,
+    "branch_ratio": 0.753731
+  },
+  "generation_seconds": null,
+  "total_seconds": null,
+  "configuration": {
+    "generator": "Gemini-3.5-Flash-Lite"
+  },
+  "artifacts": {
+    "tests": "Tests/defects4j/Gemini/Collections/Collections-2/run1/",
+    "logs": "Results/defects4j/Gemini/Collections/Collections-2/run1/logs/"
+  }
+}
