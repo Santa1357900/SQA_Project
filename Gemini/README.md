@@ -105,41 +105,11 @@ python Code/validate.py --collect-only \
 
 ดังนั้นตัวอย่าง pilot ด้านบนแสดงรูปแบบการเรียก CLI แต่ full pipeline ผ่าน `run_all_and_validate.py` ยังไม่พร้อมทำซ้ำกับโครงสร้างปัจจุบันจนกว่าจะปรับ references เหล่านี้ให้ตรงกัน หรือเลือก input/output path ที่ CLI รองรับ ตรวจ `--help` และทดสอบหนึ่ง bug ให้ครบตั้งแต่ generate ถึง validate ก่อนรันชุดใหญ่
 
-## ผลการทดลอง
+## ผลการทดลองที่แนบมา
 
 ไฟล์สรุปปัจจุบันรายงาน 854 bugs จาก 17 projects: `evaluated_unique_bugs=455`, `detected_unique_bugs=10`, `unknown_outcome_bugs=290`, และ `validation_failed/not_available=399`. Fault detection rate ใน summary คือ 10/455 = **2.20%**. ใน 455 complete records มี 10 `revealing`, 155 `not_revealing` และ 290 `inconclusive`; ผล inconclusive ยังไม่ใช่การตรวจพบบั๊ก
 
 ค่าเฉลี่ย coverage ใน `summary_overall.json` คือ line ratio 0.688727 และ branch ratio 0.594542; test coverage ratio เป็น `null`. ให้ใช้ค่าตาม summary ที่สร้างจากไฟล์ปัจจุบัน และตรวจจำนวน evaluated/unknown ควบคู่กับ FDR เสมอ ผลจาก model/API อาจเปลี่ยนตาม model version, prompt, source, API settings, seed และเวลาที่รัน
-
-
-### ผลแยกตามโปรเจกต์
-
-ตารางนี้คำนวณจาก `Results/results.csv`. `Unknown` และ `Test coverage ratio` แสดง `—` เพราะ CSV ไม่ได้เก็บผล unknown แยกจาก false และไม่มีตัวชี้วัด test coverage ratio. `Evaluated / selected` คือสัดส่วนแถวที่ประเมินได้ต่อแถวที่เลือก; `Avg. generated tests` เฉลี่ยจำนวน tests ทุกแถว. Code/branch coverage เฉลี่ยจากแถว evaluated ตามค่าที่บันทึกไว้ใน CSV; ค่า 0 ใน CSV ถูกรวมตามเดิม และไฟล์นี้แยกค่า coverage 0 จริงออกจากค่าที่ไม่มีข้อมูลไม่ได้.
-
-| Project | Selected | Evaluated | Detected | Unknown | FDR | Test coverage ratio | Evaluated / selected | Avg. generated tests | Code coverage | Branch coverage |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Chart | 26 | 18 | 2 | — | 11.11% | — | 69.23% | 15.15 | 91.07% | 74.64% |
-| Cli | 39 | 28 | 1 | — | 3.57% | — | 71.79% | 3.26 | 68.77% | 61.12% |
-| Closure | 174 | 56 | 0 | — | 0.00% | — | 32.18% | 7.98 | 27.84% | 18.69% |
-| Codec | 18 | 13 | 0 | — | 0.00% | — | 72.22% | 18.00 | 77.61% | 68.11% |
-| Collections | 28 | 15 | 1 | — | 6.67% | — | 53.57% | 11.86 | 89.83% | 84.63% |
-| Compress | 47 | 38 | 0 | — | 0.00% | — | 80.85% | 13.53 | 61.53% | 55.28% |
-| Csv | 16 | 11 | 0 | — | 0.00% | — | 68.75% | 16.94 | 94.08% | 82.93% |
-| Gson | 18 | 8 | 0 | — | 0.00% | — | 44.44% | 15.56 | 62.70% | 53.32% |
-| JacksonCore | 26 | 13 | 0 | — | 0.00% | — | 50.00% | 10.58 | 53.69% | 42.50% |
-| JacksonDatabind | 110 | 41 | 0 | — | 0.00% | — | 37.27% | 9.57 | 54.45% | 43.19% |
-| JacksonXml | 6 | 2 | 0 | — | 0.00% | — | 33.33% | 9.00 | 3.97% | 1.01% |
-| Jsoup | 93 | 59 | 1 | — | 1.69% | — | 63.44% | 17.17 | 75.52% | 64.05% |
-| JxPath | 22 | 5 | 0 | — | 0.00% | — | 22.73% | 2.64 | 36.04% | 26.65% |
-| Lang | 61 | 43 | 0 | — | 0.00% | — | 70.49% | 21.57 | 89.16% | 80.62% |
-| Math | 106 | 76 | 4 | — | 5.26% | — | 71.70% | 13.10 | 83.18% | 74.86% |
-| Mockito | 38 | 23 | 1 | — | 4.35% | — | 60.53% | 8.68 | 73.64% | 55.87% |
-| Time | 26 | 6 | 0 | — | 0.00% | — | 23.08% | 13.38 | 70.26% | 53.49% |
-
-ค่าเฉลี่ย coverage รวมจากแถว evaluated ใน CSV: code coverage 68.57%, branch coverage 58.67%. ตัวเลขนี้อ้างอิง `results.csv`; หากมีผล JSON ชุดใหม่ ให้สร้าง summary จาก JSON และระบุ experiment/run ให้ชัดก่อนนำมาแทน.
-
-ผลจาก Gemini API อาจเปลี่ยนตาม model version, prompt, source, API settings และเวลาที่รัน; ควรบันทึกการตั้งค่าที่ใช้กับแต่ละ experiment.
-
 
 ## วิธีอ่านไฟล์ผล
 
