@@ -1,0 +1,15 @@
+{
+  "Gemini": {
+    "selected_unique_bugs": 854,
+    "evaluated_unique_bugs": 455,
+    "detected_unique_bugs": 10,
+    "unknown_outcome_bugs": 290,
+    "fault_detection_rate": 0.021978,
+    "complete_runs": 455,
+    "mean_test_coverage_ratio": null,
+    "mean_line_coverage_ratio": 0.688727,
+    "mean_branch_coverage_ratio": 0.594542,
+    "mean_generation_seconds": null,
+    "mean_total_seconds": null
+  }
+}

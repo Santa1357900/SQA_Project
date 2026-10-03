@@ -1,0 +1,241 @@
+### TASK: DEFECTS4J AUTOMATED UNIT TEST GENERATION (GEMINI SQA ENGINE v2.0)
+
+[OBJECTIVE / เป้าหมาย]
+สร้างชุดทดสอบระดับ Unit Test ด้วย JUnit 4 ฉบับสมบูรณ์สำหรับคลาส Java ที่กำหนด เพื่อใช้วัดผลความครอบคลุมของโค้ด (Line/Branch Coverage) และเพิ่มอัตราการตรวจจับข้อบกพร่องจริง (Fault Detection / REVEALING) โดยมีอัตราการคอมไพล์ผ่าน 100% ภายใต้สภาพแวดล้อม Defects4J
+
+[DEFECTS4J COMPATIBILITY & COMPILE SAFETY RULES (กฎเหล็กป้องกัน Compile Error 100%)]
+1. Java 6 Language Level (STRICT - Defects4J คอมไพล์ด้วย -source 1.6):
+   - ❌ ห้ามใช้ Diamond Operator: ห้ามเขียน `new ArrayList<>()` ให้ระบุ Type ชัดเจนเสมอ เช่น `new ArrayList<String>()` หรือ `new ArrayList()`
+   - ❌ ห้ามใช้ Lambda Expressions หรือ Method References: ห้ามใช้ `->` หรือ `::` เด็ดขาด ให้เขียนเป็น Anonymous Inner Class แบบ Java 6 ดั้งเดิม (เช่น `new Runnable() { public void run() { ... } }`)
+   - ❌ ห้ามใช้ Try-with-resources (`try (AutoCloseable r = ...)`) หรือ Multi-catch (`catch (X | Y e)`) ให้ใช้บล็อก `try-finally` แบบคลาสสิกเท่านั้น
+2. Exception Propagation:
+   - ทุก `@Test` method ต้องต่อท้ายด้วย `throws Throwable` เสมอ (เช่น `public void testMethod() throws Throwable`) เพื่อป้องกันข้อผิดพลาด unreported checked exception
+3. Zero-Dependency & Mocking Safety:
+   - ❌ ห้ามเรียกใช้ไลบรารีภายนอก เช่น Mockito, PowerMock, EasyMock, AssertJ เด็ดขาด
+   - ❌ ห้ามพยายาม Implement/Extends Interface หรือ Abstract Class ขนาดใหญ่ของ Java SE หรือ Framework (เช่น Compiler, AbstractCompiler, ErrorReporter, JsonParser, JsonGenerator, JsonDeserializer, MapperConfig, DeserializationConfig, SerializationConfig, Graphics2D, UnivariateRealFunction, Evaluator, Node) เพราะ javac จะ error ทันทีว่า "is not abstract and does not override all methods"
+   - ให้สร้างและทดสอบผ่าน Concrete Class ที่มีอยู่จริงในโปรเจกต์ หรือสร้าง Dummy class เฉพาะกรณีที่ Interface มีเมธอดไม่เกิน 1-2 เมธอดเท่านั้น
+4. Type & Constructor Strictness (No Hallucination):
+   - ❌ ห้ามเดาหรือเรียกเมธอดแปลกปลอมบนคลาส `Node` ของ Google Closure Compiler (เช่น `setQualifiedName` ไม่มีอยู่จริง ให้ใช้เฉพาะเมธอดมาตรฐาน เช่น `getType()`, `getString()`, `getDouble()`, `getFirstChild()`, `hasChildren()` หรือสร้างผ่าน `IR.name(String)`, `IR.string(String)`, `IR.number(double)` เท่านั้น)
+   - ❌ ห้ามเดา Constructor หรือ Method หรือชื่อคลาสที่ไม่มีอยู่จริง (เช่น `PropertyMapKind`) ให้ตรวจสอบจาก [TARGET SOURCE CODE] ว่าคลาสมี Constructor อะไรบ้าง
+   - ❌ ห้ามส่ง `null` ให้ parameter ที่เป็น primitive type (`int`, `double`, `boolean`, `char`, `long`) เด็ดขาด เพราะ javac จะฟ้อง type incompatible
+   - ❌ ห้ามเรียกใช้ `private` method / constructor หรือ private field หรือ private inner class (เช่น `Assign` ใน `RemoveUnusedVars`) โดยตรง
+   - ❌ ห้ามใช้ `assertEquals(null, val)` ให้ใช้ `assertNull(val)` แทนเสมอ
+   - ❌ ห้ามใช้ `assertEquals(Double.NaN, val)` เพราะ ambiguous ใน JUnit 4 ให้ใช้ `assertEquals(Double.valueOf(Double.NaN), val)` หรือ `assertTrue(Double.isNaN(val))`
+5. Full Imports Required:
+   - ต้อง Import ทุกคลาสที่เรียกใช้อย่างครบถ้วน ไม่ละเลย Utility หรือ Annotation package (เช่น `com.fasterxml.jackson.databind.util.ClassUtil`, `com.fasterxml.jackson.annotation.*`, `org.jsoup.parser.*`, `org.jsoup.nodes.*`)
+
+[TEST DESIGN & FAULT DETECTION DIRECTIVES (เพิ่มโอกาส REVEALING และลด INCONCLUSIVE)]
+1. Oracle Precision (ลด Inconclusive จากการ Assert เปราะบาง):
+   - ❌ อย่า Assert ข้อความ Exception หรือ toString() แบบ Exact Match (เพราะข้อความอาจเปลี่ยนตามเวอร์ชัน) ให้เน้น Assert ชนิดของ Exception หรือใช้ `assertTrue(e.getMessage().contains(...))` แทน
+   - สำหรับกรณีทดสอบที่คาดว่าจะเกิด Exception ให้ใช้โครงสร้าง `try { method(); fail("Should throw exception"); } catch (SpecificException e) { /* Expected */ }` หรือ `@Test(expected = SpecificException.class)`
+2. Bug-Hunting Edge Cases (กระตุ้นจุดบกพร่องที่ซ่อนอยู่):
+   - ค่าขอบเขตวิกฤต: ค่าศูนย์ (0), ค่าลบ (-1), Maximum/Minimum values, Integer overflow/underflow
+   - ปัญหา Null Safety: ส่ง `null` เข้าไปยัง Public method ที่รับ Object เพื่อดูว่ามี NullPointerException โดยไม่ได้จัดการหรือไม่
+   - กรณี Collection/Array: ทดสอบ Empty, Single element, Duplicate elements, Null elements, Unmodifiable collection
+   - กรณี String: Empty string `""`, Whitespace only `"   "`, String containing delimiters, Escape sequences, Special Unicode characters
+   - Boundary & Loop conditions: จุดเปลี่ยนเงื่อนไข `<` vs `<=`, Off-by-one errors, Empty input streams
+
+[TARGET SOURCE CODE]
+package com.fasterxml.jackson.core.json;
+
+import java.io.IOException;
+
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.base.GeneratorBase;
+import com.fasterxml.jackson.core.io.CharTypes;
+import com.fasterxml.jackson.core.io.CharacterEscapes;
+import com.fasterxml.jackson.core.io.IOContext;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.core.util.VersionUtil;
+
+/**
+ * Intermediate base class shared by JSON-backed generators
+ * like {@link UTF8JsonGenerator} and {@link WriterBasedJsonGenerator}.
+ * 
+ * @since 2.1
+ */
+public abstract class JsonGeneratorImpl extends GeneratorBase
+{
+    /*
+    /**********************************************************
+    /* Constants
+    /**********************************************************
+     */
+
+    /**
+     * This is the default set of escape codes, over 7-bit ASCII range
+     * (first 128 character codes), used for single-byte UTF-8 characters.
+     */
+    protected final static int[] sOutputEscapes = CharTypes.get7BitOutputEscapes();
+    
+    /*
+    /**********************************************************
+    /* Configuration, basic I/O
+    /**********************************************************
+     */
+
+    final protected IOContext _ioContext;
+
+    /*
+    /**********************************************************
+    /* Configuration, output escaping
+    /**********************************************************
+     */
+
+    /**
+     * Currently active set of output escape code definitions (whether
+     * and how to escape or not) for 7-bit ASCII range (first 128
+     * character codes). Defined separately to make potentially
+     * customizable
+     */
+    protected int[] _outputEscapes = sOutputEscapes;
+
+    /**
+     * Value between 128 (0x80) and 65535 (0xFFFF) that indicates highest
+     * Unicode code point that will not need escaping; or 0 to indicate
+     * that all characters can be represented without escaping.
+     * Typically used to force escaping of some portion of character set;
+     * for example to always escape non-ASCII characters (if value was 127).
+     *<p>
+     * NOTE: not all sub-classes make use of this setting.
+     */
+    protected int _maximumNonEscapedChar;
+
+    /**
+     * Definition of custom character escapes to use for generators created
+     * by this factory, if any. If null, standard data format specific
+     * escapes are used.
+     */
+    protected CharacterEscapes _characterEscapes;
+    
+    /*
+    /**********************************************************
+    /* Configuration, other
+    /**********************************************************
+     */
+
+    /**
+     * Separator to use, if any, between root-level values.
+     * 
+     * @since 2.1
+     */
+    protected SerializableString _rootValueSeparator
+        = DefaultPrettyPrinter.DEFAULT_ROOT_VALUE_SEPARATOR;
+
+    /**
+     * Flag that is set if quoting is not to be added around
+     * JSON Object property names.
+     *
+     * @since 2.7
+     */
+    protected boolean _cfgUnqNames;
+
+    /*
+    /**********************************************************
+    /* Life-cycle
+    /**********************************************************
+     */
+
+    public JsonGeneratorImpl(IOContext ctxt, int features, ObjectCodec codec)
+    {
+        super(features, codec);
+        _ioContext = ctxt;
+        if (Feature.ESCAPE_NON_ASCII.enabledIn(features)) {
+            // inlined `setHighestNonEscapedChar()`
+            _maximumNonEscapedChar = 127;
+        }
+        _cfgUnqNames = !Feature.QUOTE_FIELD_NAMES.enabledIn(features);
+    }
+
+    /*
+    /**********************************************************
+    /* Overridden configuration methods
+    /**********************************************************
+     */
+
+    @Override
+    public JsonGenerator enable(Feature f) {
+        super.enable(f);
+        if (f == Feature.QUOTE_FIELD_NAMES) {
+            _cfgUnqNames = false;
+        }
+        return this;
+    }
+
+
+    @Override
+    protected void _checkStdFeatureChanges(int newFeatureFlags, int changedFeatures) {
+        super._checkStdFeatureChanges(newFeatureFlags, changedFeatures);
+        _cfgUnqNames = !Feature.QUOTE_FIELD_NAMES.enabledIn(newFeatureFlags);
+    }
+
+    @Override
+    public JsonGenerator setHighestNonEscapedChar(int charCode) {
+        _maximumNonEscapedChar = (charCode < 0) ? 0 : charCode;
+        return this;
+    }
+
+    @Override
+    public int getHighestEscapedChar() {
+        return _maximumNonEscapedChar;
+    }
+
+    @Override
+    public JsonGenerator setCharacterEscapes(CharacterEscapes esc)
+    {
+        _characterEscapes = esc;
+        if (esc == null) { // revert to standard escapes
+            _outputEscapes = sOutputEscapes;
+        } else {
+            _outputEscapes = esc.getEscapeCodesForAscii();
+        }
+        return this;
+    }
+
+    /**
+     * Method for accessing custom escapes factory uses for {@link JsonGenerator}s
+     * it creates.
+     */
+    @Override
+    public CharacterEscapes getCharacterEscapes() {
+        return _characterEscapes;
+    }
+    
+    @Override
+    public JsonGenerator setRootValueSeparator(SerializableString sep) {
+        _rootValueSeparator = sep;
+        return this;
+    }
+    
+    /*
+    /**********************************************************
+    /* Versioned
+    /**********************************************************
+     */
+
+    @Override
+    public Version version() {
+        return VersionUtil.versionFor(getClass());
+    }
+
+    /*
+    /**********************************************************
+    /* Partial API
+    /**********************************************************
+     */
+
+    // // Overrides just to make things final, to possibly help with inlining
+    
+    @Override
+    public final void writeStringField(String fieldName, String value) throws IOException
+    {
+        writeFieldName(fieldName);
+        writeString(value);
+    }
+}
+
+[OUTPUT PROTOCOL]
+ส่งกลับเฉพาะ "โค้ดภาษา Java ดิบ (Raw Code)" ที่พร้อมนำไปคอมไพล์ทันที:
+- เริ่มต้นบรรทัดแรกด้วย package com.fasterxml.jackson.core.json; และสิ้นสุดที่ปีกกาปิด } สุดท้ายของคลาส
+- ห้ามใส่เครื่องหมาย Markdown Code Fence (ห้ามใส่ ``` หรือ ```java)
+- ห้ามมีข้อความเกริ่นนำ คำอธิบายประกอบ หรือข้อความสรุปใด ๆ ทั้งสิ้น

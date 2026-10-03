@@ -1,0 +1,360 @@
+### TASK: DEFECTS4J AUTOMATED UNIT TEST GENERATION (GEMINI SQA ENGINE v2.0)
+
+[OBJECTIVE / เป้าหมาย]
+สร้างชุดทดสอบระดับ Unit Test ด้วย JUnit 4 ฉบับสมบูรณ์สำหรับคลาส Java ที่กำหนด เพื่อใช้วัดผลความครอบคลุมของโค้ด (Line/Branch Coverage) และเพิ่มอัตราการตรวจจับข้อบกพร่องจริง (Fault Detection / REVEALING) โดยมีอัตราการคอมไพล์ผ่าน 100% ภายใต้สภาพแวดล้อม Defects4J
+
+[DEFECTS4J COMPATIBILITY & COMPILE SAFETY RULES (กฎเหล็กป้องกัน Compile Error 100%)]
+1. Java 6 Language Level (STRICT - Defects4J คอมไพล์ด้วย -source 1.6):
+   - ❌ ห้ามใช้ Diamond Operator: ห้ามเขียน `new ArrayList<>()` ให้ระบุ Type ชัดเจนเสมอ เช่น `new ArrayList<String>()` หรือ `new ArrayList()`
+   - ❌ ห้ามใช้ Lambda Expressions หรือ Method References: ห้ามใช้ `->` หรือ `::` เด็ดขาด ให้เขียนเป็น Anonymous Inner Class แบบ Java 6 ดั้งเดิม (เช่น `new Runnable() { public void run() { ... } }`)
+   - ❌ ห้ามใช้ Try-with-resources (`try (AutoCloseable r = ...)`) หรือ Multi-catch (`catch (X | Y e)`) ให้ใช้บล็อก `try-finally` แบบคลาสสิกเท่านั้น
+2. Exception Propagation:
+   - ทุก `@Test` method ต้องต่อท้ายด้วย `throws Throwable` เสมอ (เช่น `public void testMethod() throws Throwable`) เพื่อป้องกันข้อผิดพลาด unreported checked exception
+3. Zero-Dependency & Mocking Safety:
+   - ❌ ห้ามเรียกใช้ไลบรารีภายนอก เช่น Mockito, PowerMock, EasyMock, AssertJ เด็ดขาด
+   - ❌ ห้ามพยายาม Implement/Extends Interface หรือ Abstract Class ขนาดใหญ่ของ Java SE หรือ Framework (เช่น Compiler, AbstractCompiler, ErrorReporter, JsonParser, JsonGenerator, JsonDeserializer, MapperConfig, DeserializationConfig, SerializationConfig, Graphics2D, UnivariateRealFunction, Evaluator, Node) เพราะ javac จะ error ทันทีว่า "is not abstract and does not override all methods"
+   - ให้สร้างและทดสอบผ่าน Concrete Class ที่มีอยู่จริงในโปรเจกต์ หรือสร้าง Dummy class เฉพาะกรณีที่ Interface มีเมธอดไม่เกิน 1-2 เมธอดเท่านั้น
+4. Type & Constructor Strictness (No Hallucination):
+   - ❌ ห้ามเดาหรือเรียกเมธอดแปลกปลอมบนคลาส `Node` ของ Google Closure Compiler (เช่น `setQualifiedName` ไม่มีอยู่จริง ให้ใช้เฉพาะเมธอดมาตรฐาน เช่น `getType()`, `getString()`, `getDouble()`, `getFirstChild()`, `hasChildren()` หรือสร้างผ่าน `IR.name(String)`, `IR.string(String)`, `IR.number(double)` เท่านั้น)
+   - ❌ ห้ามเดา Constructor หรือ Method หรือชื่อคลาสที่ไม่มีอยู่จริง (เช่น `PropertyMapKind`) ให้ตรวจสอบจาก [TARGET SOURCE CODE] ว่าคลาสมี Constructor อะไรบ้าง
+   - ❌ ห้ามส่ง `null` ให้ parameter ที่เป็น primitive type (`int`, `double`, `boolean`, `char`, `long`) เด็ดขาด เพราะ javac จะฟ้อง type incompatible
+   - ❌ ห้ามเรียกใช้ `private` method / constructor หรือ private field หรือ private inner class (เช่น `Assign` ใน `RemoveUnusedVars`) โดยตรง
+   - ❌ ห้ามใช้ `assertEquals(null, val)` ให้ใช้ `assertNull(val)` แทนเสมอ
+   - ❌ ห้ามใช้ `assertEquals(Double.NaN, val)` เพราะ ambiguous ใน JUnit 4 ให้ใช้ `assertEquals(Double.valueOf(Double.NaN), val)` หรือ `assertTrue(Double.isNaN(val))`
+5. Full Imports Required:
+   - ต้อง Import ทุกคลาสที่เรียกใช้อย่างครบถ้วน ไม่ละเลย Utility หรือ Annotation package (เช่น `com.fasterxml.jackson.databind.util.ClassUtil`, `com.fasterxml.jackson.annotation.*`, `org.jsoup.parser.*`, `org.jsoup.nodes.*`)
+
+[TEST DESIGN & FAULT DETECTION DIRECTIVES (เพิ่มโอกาส REVEALING และลด INCONCLUSIVE)]
+1. Oracle Precision (ลด Inconclusive จากการ Assert เปราะบาง):
+   - ❌ อย่า Assert ข้อความ Exception หรือ toString() แบบ Exact Match (เพราะข้อความอาจเปลี่ยนตามเวอร์ชัน) ให้เน้น Assert ชนิดของ Exception หรือใช้ `assertTrue(e.getMessage().contains(...))` แทน
+   - สำหรับกรณีทดสอบที่คาดว่าจะเกิด Exception ให้ใช้โครงสร้าง `try { method(); fail("Should throw exception"); } catch (SpecificException e) { /* Expected */ }` หรือ `@Test(expected = SpecificException.class)`
+2. Bug-Hunting Edge Cases (กระตุ้นจุดบกพร่องที่ซ่อนอยู่):
+   - ค่าขอบเขตวิกฤต: ค่าศูนย์ (0), ค่าลบ (-1), Maximum/Minimum values, Integer overflow/underflow
+   - ปัญหา Null Safety: ส่ง `null` เข้าไปยัง Public method ที่รับ Object เพื่อดูว่ามี NullPointerException โดยไม่ได้จัดการหรือไม่
+   - กรณี Collection/Array: ทดสอบ Empty, Single element, Duplicate elements, Null elements, Unmodifiable collection
+   - กรณี String: Empty string `""`, Whitespace only `"   "`, String containing delimiters, Escape sequences, Special Unicode characters
+   - Boundary & Loop conditions: จุดเปลี่ยนเงื่อนไข `<` vs `<=`, Off-by-one errors, Empty input streams
+
+[TARGET SOURCE CODE]
+/**
+ * Copyright 1999-2001,2004 The Apache Software Foundation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.commons.cli;
+
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+
+/** 
+ * <p>Represents list of arguments parsed against
+ * a {@link Options} descriptor.<p>
+ *
+ * <p>It allows querying of a boolean {@link #hasOption(String opt)},
+ * in addition to retrieving the {@link #getOptionValue(String opt)}
+ * for options requiring arguments.</p>
+ *
+ * <p>Additionally, any left-over or unrecognized arguments,
+ * are available for further processing.</p>
+ *
+ * @author bob mcwhirter (bob @ werken.com)
+ * @author <a href="mailto:jstrachan@apache.org">James Strachan</a>
+ * @author John Keyes (john at integralsource.com)
+ */
+public class CommandLine {
+
+    /** the unrecognised options/arguments */
+    private List args = new LinkedList();
+
+    /** the processed options */
+    private Map options = new HashMap();
+    private Map names = new HashMap();
+
+    /** Map of unique options for ease to get complete list of options */
+//    private Set allOptions = new HashSet();
+    private Map hashcodeMap = new HashMap();
+
+    /**
+     * Creates a command line.
+     */
+    CommandLine()
+    {
+        // nothing to do
+    }
+
+    /** 
+     * Query to see if an option has been set.
+     *
+     * @param opt Short name of the option
+     * @return true if set, false if not
+     */
+    public boolean hasOption(String opt)
+    {
+        return options.containsKey(opt);
+    }
+
+    /** 
+     * Query to see if an option has been set.
+     *
+     * @param opt character name of the option
+     * @return true if set, false if not
+     */
+    public boolean hasOption(char opt)
+    {
+        return hasOption(String.valueOf(opt));
+    }
+
+    /**
+     * Return the <code>Object</code> type of this <code>Option</code>.
+     *
+     * @param opt the name of the option
+     * @return the type of this <code>Option</code>
+     */
+    public Object getOptionObject(String opt)
+    {
+        String res = getOptionValue(opt);
+
+        if (!options.containsKey(opt))
+        {
+            return null;
+        }
+
+        Object type = ((Option) options.get(opt)).getType();
+
+        return (res == null)        ? null : TypeHandler.createValue(res, type);
+    }
+
+    /**
+     * Return the <code>Object</code> type of this <code>Option</code>.
+     *
+     * @param opt the name of the option
+     * @return the type of opt
+     */
+    public Object getOptionObject(char opt)
+    {
+        return getOptionObject(String.valueOf(opt));
+    }
+
+    /** 
+     * Retrieve the argument, if any, of this option.
+     *
+     * @param opt the name of the option
+     * @return Value of the argument if option is set, and has an argument,
+     * otherwise null.
+     */
+    public String getOptionValue(String opt)
+    {
+        String[] values = getOptionValues(opt);
+
+        return (values == null) ? null : values[0];
+    }
+
+    /** 
+     * Retrieve the argument, if any, of this option.
+     *
+     * @param opt the character name of the option
+     * @return Value of the argument if option is set, and has an argument,
+     * otherwise null.
+     */
+    public String getOptionValue(char opt)
+    {
+        return getOptionValue(String.valueOf(opt));
+    }
+
+    /** 
+     * Retrieves the array of values, if any, of an option.
+     *
+     * @param opt string name of the option
+     * @return Values of the argument if option is set, and has an argument,
+     * otherwise null.
+     */
+    public String[] getOptionValues(String opt)
+    {
+        opt = Util.stripLeadingHyphens(opt);
+
+        String key = opt;
+        if (names.containsKey(opt))
+        {
+            key = (String) names.get(opt);
+        }
+        if (options.containsKey(key))
+        {
+            return ((Option) options.get(key)).getValues();
+        }
+
+        return null;
+        }
+
+    /**
+     * <p>Retrieves the option object given the long or short option as a String</p>
+     * @param opt short or long name of the option
+     * @return Canonicalized option
+     */
+
+
+    /** 
+     * Retrieves the array of values, if any, of an option.
+     *
+     * @param opt character name of the option
+     * @return Values of the argument if option is set, and has an argument,
+     * otherwise null.
+     */
+    public String[] getOptionValues(char opt)
+    {
+        return getOptionValues(String.valueOf(opt));
+    }
+
+    /** 
+     * Retrieve the argument, if any, of an option.
+     *
+     * @param opt name of the option
+     * @param defaultValue is the default value to be returned if the option 
+     * is not specified
+     * @return Value of the argument if option is set, and has an argument,
+     * otherwise <code>defaultValue</code>.
+     */
+    public String getOptionValue(String opt, String defaultValue)
+    {
+        String answer = getOptionValue(opt);
+
+        return (answer != null) ? answer : defaultValue;
+    }
+
+    /** 
+     * Retrieve the argument, if any, of an option.
+     *
+     * @param opt character name of the option
+     * @param defaultValue is the default value to be returned if the option 
+     * is not specified
+     * @return Value of the argument if option is set, and has an argument,
+     * otherwise <code>defaultValue</code>.
+     */
+    public String getOptionValue(char opt, String defaultValue)
+    {
+        return getOptionValue(String.valueOf(opt), defaultValue);
+    }
+
+    /** 
+     * Retrieve any left-over non-recognized options and arguments
+     *
+     * @return remaining items passed in but not parsed as an array
+     */
+    public String[] getArgs()
+    {
+        String[] answer = new String[args.size()];
+
+        args.toArray(answer);
+
+        return answer;
+    }
+
+    /** 
+     * Retrieve any left-over non-recognized options and arguments
+     *
+     * @return remaining items passed in but not parsed as a <code>List</code>.
+     */
+    public List getArgList()
+    {
+        return args;
+    }
+
+    /** 
+     * jkeyes
+     * - commented out until it is implemented properly
+     * <p>Dump state, suitable for debugging.</p>
+     *
+     * @return Stringified form of this object
+     */
+
+    /*
+    public String toString() {
+        StringBuffer buf = new StringBuffer();
+            
+        buf.append("[ CommandLine: [ options: ");
+        buf.append(options.toString());
+        buf.append(" ] [ args: ");
+        buf.append(args.toString());
+        buf.append(" ] ]");
+            
+        return buf.toString();
+    }
+    */
+
+    /**
+     * Add left-over unrecognized option/argument.
+     *
+     * @param arg the unrecognised option/argument.
+     */
+    void addArg(String arg)
+    {
+        args.add(arg);
+    }
+
+    /**
+     * Add an option to the command line.  The values of 
+     * the option are stored.
+     *
+     * @param opt the processed option
+     */
+    void addOption(Option opt)
+    {
+        hashcodeMap.put(new Integer(opt.hashCode()), opt);
+        String key = opt.getKey();
+        if (key == null)
+        {
+            key = opt.getLongOpt();
+        }
+        else
+        {
+            names.put(opt.getLongOpt(), key);
+        }
+        options.put(key, opt);
+    }
+
+    /**
+     * Returns an iterator over the Option members of CommandLine.
+     *
+     * @return an <code>Iterator</code> over the processed {@link Option} 
+     * members of this {@link CommandLine}
+     */
+    public Iterator iterator()
+    {
+        return hashcodeMap.values().iterator();
+    }
+
+    /**
+     * Returns an array of the processed {@link Option}s.
+     *
+     * @return an array of the processed {@link Option}s.
+     */
+    public Option[] getOptions()
+    {
+        Collection processed = options.values();
+
+        // reinitialise array
+        Option[] optionsArray = new Option[processed.size()];
+
+        // return the array
+        return (Option[]) processed.toArray(optionsArray);
+    }
+}
+
+[OUTPUT PROTOCOL]
+ส่งกลับเฉพาะ "โค้ดภาษา Java ดิบ (Raw Code)" ที่พร้อมนำไปคอมไพล์ทันที:
+- เริ่มต้นบรรทัดแรกด้วย package org.apache.commons.cli; และสิ้นสุดที่ปีกกาปิด } สุดท้ายของคลาส
+- ห้ามใส่เครื่องหมาย Markdown Code Fence (ห้ามใส่ ``` หรือ ```java)
+- ห้ามมีข้อความเกริ่นนำ คำอธิบายประกอบ หรือข้อความสรุปใด ๆ ทั้งสิ้น

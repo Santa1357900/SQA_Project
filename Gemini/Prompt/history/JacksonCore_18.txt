@@ -1,0 +1,501 @@
+### TASK: DEFECTS4J AUTOMATED UNIT TEST GENERATION (GEMINI SQA ENGINE v2.0)
+
+[OBJECTIVE / เป้าหมาย]
+สร้างชุดทดสอบระดับ Unit Test ด้วย JUnit 4 ฉบับสมบูรณ์สำหรับคลาส Java ที่กำหนด เพื่อใช้วัดผลความครอบคลุมของโค้ด (Line/Branch Coverage) และเพิ่มอัตราการตรวจจับข้อบกพร่องจริง (Fault Detection / REVEALING) โดยมีอัตราการคอมไพล์ผ่าน 100% ภายใต้สภาพแวดล้อม Defects4J
+
+[DEFECTS4J COMPATIBILITY & COMPILE SAFETY RULES (กฎเหล็กป้องกัน Compile Error 100%)]
+1. Java 6 Language Level (STRICT - Defects4J คอมไพล์ด้วย -source 1.6):
+   - ❌ ห้ามใช้ Diamond Operator: ห้ามเขียน `new ArrayList<>()` ให้ระบุ Type ชัดเจนเสมอ เช่น `new ArrayList<String>()` หรือ `new ArrayList()`
+   - ❌ ห้ามใช้ Lambda Expressions หรือ Method References: ห้ามใช้ `->` หรือ `::` เด็ดขาด ให้เขียนเป็น Anonymous Inner Class แบบ Java 6 ดั้งเดิม (เช่น `new Runnable() { public void run() { ... } }`)
+   - ❌ ห้ามใช้ Try-with-resources (`try (AutoCloseable r = ...)`) หรือ Multi-catch (`catch (X | Y e)`) ให้ใช้บล็อก `try-finally` แบบคลาสสิกเท่านั้น
+2. Exception Propagation:
+   - ทุก `@Test` method ต้องต่อท้ายด้วย `throws Throwable` เสมอ (เช่น `public void testMethod() throws Throwable`) เพื่อป้องกันข้อผิดพลาด unreported checked exception
+3. Zero-Dependency & Mocking Safety:
+   - ❌ ห้ามเรียกใช้ไลบรารีภายนอก เช่น Mockito, PowerMock, EasyMock, AssertJ เด็ดขาด
+   - ❌ ห้ามพยายาม Implement/Extends Interface หรือ Abstract Class ขนาดใหญ่ของ Java SE หรือ Framework (เช่น Compiler, AbstractCompiler, ErrorReporter, JsonParser, JsonGenerator, JsonDeserializer, MapperConfig, DeserializationConfig, SerializationConfig, Graphics2D, UnivariateRealFunction, Evaluator, Node) เพราะ javac จะ error ทันทีว่า "is not abstract and does not override all methods"
+   - ให้สร้างและทดสอบผ่าน Concrete Class ที่มีอยู่จริงในโปรเจกต์ หรือสร้าง Dummy class เฉพาะกรณีที่ Interface มีเมธอดไม่เกิน 1-2 เมธอดเท่านั้น
+4. Type & Constructor Strictness (No Hallucination):
+   - ❌ ห้ามเดาหรือเรียกเมธอดแปลกปลอมบนคลาส `Node` ของ Google Closure Compiler (เช่น `setQualifiedName` ไม่มีอยู่จริง ให้ใช้เฉพาะเมธอดมาตรฐาน เช่น `getType()`, `getString()`, `getDouble()`, `getFirstChild()`, `hasChildren()` หรือสร้างผ่าน `IR.name(String)`, `IR.string(String)`, `IR.number(double)` เท่านั้น)
+   - ❌ ห้ามเดา Constructor หรือ Method หรือชื่อคลาสที่ไม่มีอยู่จริง (เช่น `PropertyMapKind`) ให้ตรวจสอบจาก [TARGET SOURCE CODE] ว่าคลาสมี Constructor อะไรบ้าง
+   - ❌ ห้ามส่ง `null` ให้ parameter ที่เป็น primitive type (`int`, `double`, `boolean`, `char`, `long`) เด็ดขาด เพราะ javac จะฟ้อง type incompatible
+   - ❌ ห้ามเรียกใช้ `private` method / constructor หรือ private field หรือ private inner class (เช่น `Assign` ใน `RemoveUnusedVars`) โดยตรง
+   - ❌ ห้ามใช้ `assertEquals(null, val)` ให้ใช้ `assertNull(val)` แทนเสมอ
+   - ❌ ห้ามใช้ `assertEquals(Double.NaN, val)` เพราะ ambiguous ใน JUnit 4 ให้ใช้ `assertEquals(Double.valueOf(Double.NaN), val)` หรือ `assertTrue(Double.isNaN(val))`
+5. Full Imports Required:
+   - ต้อง Import ทุกคลาสที่เรียกใช้อย่างครบถ้วน ไม่ละเลย Utility หรือ Annotation package (เช่น `com.fasterxml.jackson.databind.util.ClassUtil`, `com.fasterxml.jackson.annotation.*`, `org.jsoup.parser.*`, `org.jsoup.nodes.*`)
+
+[TEST DESIGN & FAULT DETECTION DIRECTIVES (เพิ่มโอกาส REVEALING และลด INCONCLUSIVE)]
+1. Oracle Precision (ลด Inconclusive จากการ Assert เปราะบาง):
+   - ❌ อย่า Assert ข้อความ Exception หรือ toString() แบบ Exact Match (เพราะข้อความอาจเปลี่ยนตามเวอร์ชัน) ให้เน้น Assert ชนิดของ Exception หรือใช้ `assertTrue(e.getMessage().contains(...))` แทน
+   - สำหรับกรณีทดสอบที่คาดว่าจะเกิด Exception ให้ใช้โครงสร้าง `try { method(); fail("Should throw exception"); } catch (SpecificException e) { /* Expected */ }` หรือ `@Test(expected = SpecificException.class)`
+2. Bug-Hunting Edge Cases (กระตุ้นจุดบกพร่องที่ซ่อนอยู่):
+   - ค่าขอบเขตวิกฤต: ค่าศูนย์ (0), ค่าลบ (-1), Maximum/Minimum values, Integer overflow/underflow
+   - ปัญหา Null Safety: ส่ง `null` เข้าไปยัง Public method ที่รับ Object เพื่อดูว่ามี NullPointerException โดยไม่ได้จัดการหรือไม่
+   - กรณี Collection/Array: ทดสอบ Empty, Single element, Duplicate elements, Null elements, Unmodifiable collection
+   - กรณี String: Empty string `""`, Whitespace only `"   "`, String containing delimiters, Escape sequences, Special Unicode characters
+   - Boundary & Loop conditions: จุดเปลี่ยนเงื่อนไข `<` vs `<=`, Off-by-one errors, Empty input streams
+
+[TARGET SOURCE CODE]
+package com.fasterxml.jackson.core.base;
+
+import java.io.*;
+import java.math.BigDecimal;
+
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.core.json.DupDetector;
+import com.fasterxml.jackson.core.json.JsonWriteContext;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.core.util.VersionUtil;
+
+/**
+ * This base class implements part of API that a JSON generator exposes
+ * to applications, adds shared internal methods that sub-classes
+ * can use and adds some abstract methods sub-classes must implement.
+ */
+public abstract class GeneratorBase extends JsonGenerator
+{
+    public final static int SURR1_FIRST = 0xD800;
+    public final static int SURR1_LAST = 0xDBFF;
+    public final static int SURR2_FIRST = 0xDC00;
+    public final static int SURR2_LAST = 0xDFFF;
+
+    /**
+     * Set of feature masks related to features that need updates of other
+     * local configuration or state.
+     * 
+     * @since 2.5
+     */
+    protected final static int DERIVED_FEATURES_MASK =
+            Feature.WRITE_NUMBERS_AS_STRINGS.getMask()
+            | Feature.ESCAPE_NON_ASCII.getMask()
+            | Feature.STRICT_DUPLICATE_DETECTION.getMask()
+            ;
+
+    // // // Constants for validation messages (since 2.6)
+
+    protected final static String WRITE_BINARY = "write a binary value";
+    protected final static String WRITE_BOOLEAN = "write a boolean value";
+    protected final static String WRITE_NULL = "write a null";
+    protected final static String WRITE_NUMBER = "write a number";
+    protected final static String WRITE_RAW = "write a raw (unencoded) value";
+    protected final static String WRITE_STRING = "write a string";
+
+    /**
+     * This value is the limit of scale allowed for serializing {@link BigDecimal}
+     * in "plain" (non-engineering) notation; intent is to prevent asymmetric
+     * attack whereupon simple eng-notation with big scale is used to generate
+     * huge "plain" serialization. See [core#315] for details.
+     * 
+     * @since 2.7.7
+     */
+    
+    /*
+    /**********************************************************
+    /* Configuration
+    /**********************************************************
+     */
+
+    protected ObjectCodec _objectCodec;
+
+    /**
+     * Bit flag composed of bits that indicate which
+     * {@link com.fasterxml.jackson.core.JsonGenerator.Feature}s
+     * are enabled.
+     */
+    protected int _features;
+
+    /**
+     * Flag set to indicate that implicit conversion from number
+     * to JSON String is needed (as per
+     * {@link com.fasterxml.jackson.core.JsonGenerator.Feature#WRITE_NUMBERS_AS_STRINGS}).
+     */
+    protected boolean _cfgNumbersAsStrings;
+
+    /*
+    /**********************************************************
+    /* State
+    /**********************************************************
+     */
+
+    /**
+     * Object that keeps track of the current contextual state
+     * of the generator.
+     */
+    protected JsonWriteContext _writeContext;
+
+    /**
+     * Flag that indicates whether generator is closed or not. Gets
+     * set when it is closed by an explicit call
+     * ({@link #close}).
+     */
+    protected boolean _closed;
+
+    /*
+    /**********************************************************
+    /* Life-cycle
+    /**********************************************************
+     */
+
+    protected GeneratorBase(int features, ObjectCodec codec) {
+        super();
+        _features = features;
+        _objectCodec = codec;
+        DupDetector dups = Feature.STRICT_DUPLICATE_DETECTION.enabledIn(features)
+                ? DupDetector.rootDetector(this) : null;
+        _writeContext = JsonWriteContext.createRootContext(dups);
+        _cfgNumbersAsStrings = Feature.WRITE_NUMBERS_AS_STRINGS.enabledIn(features);
+    }
+
+    /**
+     * @since 2.5
+     */
+    protected GeneratorBase(int features, ObjectCodec codec, JsonWriteContext ctxt) {
+        super();
+        _features = features;
+        _objectCodec = codec;
+        _writeContext = ctxt;
+        _cfgNumbersAsStrings = Feature.WRITE_NUMBERS_AS_STRINGS.enabledIn(features);
+    }
+
+    /**
+     * Implemented with standard version number detection algorithm, typically using
+     * a simple generated class, with information extracted from Maven project file
+     * during build.
+     */
+    @Override public Version version() { return VersionUtil.versionFor(getClass()); }
+
+    @Override
+    public Object getCurrentValue() {
+        return _writeContext.getCurrentValue();
+    }
+
+    @Override
+    public void setCurrentValue(Object v) {
+        _writeContext.setCurrentValue(v);
+    }
+
+    /*
+    /**********************************************************
+    /* Configuration
+    /**********************************************************
+     */
+
+
+    @Override public final boolean isEnabled(Feature f) { return (_features & f.getMask()) != 0; }
+    @Override public int getFeatureMask() { return _features; }
+
+    //public JsonGenerator configure(Feature f, boolean state) { }
+
+    @Override
+    public JsonGenerator enable(Feature f) {
+        final int mask = f.getMask();
+        _features |= mask;
+        if ((mask & DERIVED_FEATURES_MASK) != 0) {
+            // why not switch? Requires addition of a generated class, alas
+            if (f == Feature.WRITE_NUMBERS_AS_STRINGS) {
+                _cfgNumbersAsStrings = true;
+            } else if (f == Feature.ESCAPE_NON_ASCII) {
+                setHighestNonEscapedChar(127);
+            } else if (f == Feature.STRICT_DUPLICATE_DETECTION) {
+                if (_writeContext.getDupDetector() == null) { // but only if disabled currently
+                    _writeContext = _writeContext.withDupDetector(DupDetector.rootDetector(this));
+                }
+            }
+        }
+        return this;
+    }
+
+    @Override
+    public JsonGenerator disable(Feature f) {
+        final int mask = f.getMask();
+        _features &= ~mask;
+        if ((mask & DERIVED_FEATURES_MASK) != 0) {
+            if (f == Feature.WRITE_NUMBERS_AS_STRINGS) {
+                _cfgNumbersAsStrings = false;
+            } else if (f == Feature.ESCAPE_NON_ASCII) {
+                setHighestNonEscapedChar(0);
+            } else if (f == Feature.STRICT_DUPLICATE_DETECTION) {
+                _writeContext = _writeContext.withDupDetector(null);
+            }
+        }
+        return this;
+    }
+
+    @Override
+    @Deprecated
+    public JsonGenerator setFeatureMask(int newMask) {
+        int changed = newMask ^ _features;
+        _features = newMask;
+        if (changed != 0) {
+            _checkStdFeatureChanges(newMask, changed);
+        }
+        return this;
+    }
+
+    @Override // since 2.7
+    public JsonGenerator overrideStdFeatures(int values, int mask) {
+        int oldState = _features;
+        int newState = (oldState & ~mask) | (values & mask);
+        int changed = oldState ^ newState;
+        if (changed != 0) {
+            _features = newState;
+            _checkStdFeatureChanges(newState, changed);
+        }
+        return this;
+    }
+
+    /**
+     * Helper method called to verify changes to standard features.
+     *
+     * @param newFeatureFlags Bitflag of standard features after they were changed
+     * @param changedFeatures Bitflag of standard features for which setting
+     *    did change
+     *
+     * @since 2.7
+     */
+    protected void _checkStdFeatureChanges(int newFeatureFlags, int changedFeatures)
+    {
+        if ((changedFeatures & DERIVED_FEATURES_MASK) == 0) {
+            return;
+        }
+        _cfgNumbersAsStrings = Feature.WRITE_NUMBERS_AS_STRINGS.enabledIn(newFeatureFlags);
+        if (Feature.ESCAPE_NON_ASCII.enabledIn(changedFeatures)) {
+            if (Feature.ESCAPE_NON_ASCII.enabledIn(newFeatureFlags)) {
+                setHighestNonEscapedChar(127);
+            } else {
+                setHighestNonEscapedChar(0);
+            }
+        }
+        if (Feature.STRICT_DUPLICATE_DETECTION.enabledIn(changedFeatures)) {
+            if (Feature.STRICT_DUPLICATE_DETECTION.enabledIn(newFeatureFlags)) { // enabling
+                if (_writeContext.getDupDetector() == null) { // but only if disabled currently
+                    _writeContext = _writeContext.withDupDetector(DupDetector.rootDetector(this));
+                }
+            } else { // disabling
+                _writeContext = _writeContext.withDupDetector(null);
+            }
+        }
+    }
+
+    @Override public JsonGenerator useDefaultPrettyPrinter() {
+        // Should not override a pretty printer if one already assigned.
+        if (getPrettyPrinter() != null) {
+            return this;
+        }
+        return setPrettyPrinter(_constructDefaultPrettyPrinter());
+    }
+    
+    @Override public JsonGenerator setCodec(ObjectCodec oc) {
+        _objectCodec = oc;
+        return this;
+    }
+
+    @Override public ObjectCodec getCodec() { return _objectCodec; }
+
+    /*
+    /**********************************************************
+    /* Public API, accessors
+    /**********************************************************
+     */
+
+    /**
+     * Note: co-variant return type.
+     */
+    @Override public JsonWriteContext getOutputContext() { return _writeContext; }
+
+    /*
+    /**********************************************************
+    /* Public API, write methods, structural
+    /**********************************************************
+     */
+
+    //public void writeStartArray() throws IOException
+    //public void writeEndArray() throws IOException
+    //public void writeStartObject() throws IOException
+    //public void writeEndObject() throws IOException
+
+    /*
+    /**********************************************************
+    /* Public API, write methods, textual
+    /**********************************************************
+     */
+
+    @Override public void writeFieldName(SerializableString name) throws IOException {
+        writeFieldName(name.getValue());
+    }
+    
+    //public abstract void writeString(String text) throws IOException;
+
+    //public abstract void writeString(char[] text, int offset, int len) throws IOException;
+
+    //public abstract void writeRaw(String text) throws IOException,;
+
+    //public abstract void writeRaw(char[] text, int offset, int len) throws IOException;
+
+    @Override
+    public void writeString(SerializableString text) throws IOException {
+        writeString(text.getValue());
+    }
+
+    @Override public void writeRawValue(String text) throws IOException {
+        _verifyValueWrite("write raw value");
+        writeRaw(text);
+    }
+
+    @Override public void writeRawValue(String text, int offset, int len) throws IOException {
+        _verifyValueWrite("write raw value");
+        writeRaw(text, offset, len);
+    }
+
+    @Override public void writeRawValue(char[] text, int offset, int len) throws IOException {
+        _verifyValueWrite("write raw value");
+        writeRaw(text, offset, len);
+    }
+
+    @Override public void writeRawValue(SerializableString text) throws IOException {
+        _verifyValueWrite("write raw value");
+        writeRaw(text);
+    }
+
+    @Override
+    public int writeBinary(Base64Variant b64variant, InputStream data, int dataLength) throws IOException {
+        // Let's implement this as "unsupported" to make it easier to add new parser impls
+        _reportUnsupportedOperation();
+        return 0;
+    }
+
+    /*
+   /**********************************************************
+   /* Public API, write methods, primitive
+   /**********************************************************
+    */
+
+    // Not implemented at this level, added as placeholders
+
+     /*
+    public abstract void writeNumber(int i)
+    public abstract void writeNumber(long l)
+    public abstract void writeNumber(double d)
+    public abstract void writeNumber(float f)
+    public abstract void writeNumber(BigDecimal dec)
+    public abstract void writeBoolean(boolean state)
+    public abstract void writeNull()
+    */
+
+    /*
+    /**********************************************************
+    /* Public API, write methods, POJOs, trees
+    /**********************************************************
+     */
+
+    @Override
+    public void writeObject(Object value) throws IOException {
+        if (value == null) {
+            // important: call method that does check value write:
+            writeNull();
+        } else {
+            /* 02-Mar-2009, tatu: we are NOT to call _verifyValueWrite here,
+             *   because that will be done when codec actually serializes
+             *   contained POJO. If we did call it it would advance state
+             *   causing exception later on
+             */
+            if (_objectCodec != null) {
+                _objectCodec.writeValue(this, value);
+                return;
+            }
+            _writeSimpleObject(value);
+        }
+    }
+
+    @Override
+    public void writeTree(TreeNode rootNode) throws IOException {
+        // As with 'writeObject()', we are not check if write would work
+        if (rootNode == null) {
+            writeNull();
+        } else {
+            if (_objectCodec == null) {
+                throw new IllegalStateException("No ObjectCodec defined");
+            }
+            _objectCodec.writeValue(this, rootNode);
+        }
+    }
+
+    /*
+    /**********************************************************
+    /* Public API, low-level output handling
+    /**********************************************************
+     */
+
+    @Override public abstract void flush() throws IOException;
+    @Override public void close() throws IOException { _closed = true; }
+    @Override public boolean isClosed() { return _closed; }
+
+    /*
+    /**********************************************************
+    /* Package methods for this, sub-classes
+    /**********************************************************
+     */
+
+    /**
+     * Method called to release any buffers generator may be holding,
+     * once generator is being closed.
+     */
+    protected abstract void _releaseBuffers();
+
+    /**
+     * Method called before trying to write a value (scalar or structured),
+     * to verify that this is legal in current output state, as well as to
+     * output separators if and as necessary.
+     * 
+     * @param typeMsg Additional message used for generating exception message
+     *   if value output is NOT legal in current generator output state.
+     */
+    protected abstract void _verifyValueWrite(String typeMsg) throws IOException;
+
+    /**
+     * Overridable factory method called to instantiate an appropriate {@link PrettyPrinter}
+     * for case of "just use the default one", when {@link #useDefaultPrettyPrinter()} is called.
+     *
+     * @since 2.6
+     */
+    protected PrettyPrinter _constructDefaultPrettyPrinter() {
+        return new DefaultPrettyPrinter();
+    }
+
+    /**
+     * Helper method used to serialize a {@link java.math.BigDecimal} as a String,
+     * for serialization, taking into account configuration settings
+     *
+     * @since 2.7.7
+     */
+    protected String _asString(BigDecimal value) throws IOException {
+            // 24-Aug-2016, tatu: [core#315] prevent possible DoS vector
+        return value.toString();
+    }
+
+    /*
+    /**********************************************************
+    /* UTF-8 related helper method(s)
+    /**********************************************************
+     */
+
+    /**
+     * @since 2.5
+     */
+    protected final int _decodeSurrogate(int surr1, int surr2) throws IOException
+    {
+        // First is known to be valid, but how about the other?
+        if (surr2 < SURR2_FIRST || surr2 > SURR2_LAST) {
+            String msg = "Incomplete surrogate pair: first char 0x"+Integer.toHexString(surr1)+", second 0x"+Integer.toHexString(surr2);
+            _reportError(msg);
+        }
+        int c = 0x10000 + ((surr1 - SURR1_FIRST) << 10) + (surr2 - SURR2_FIRST);
+        return c;
+    }
+}
+
+[OUTPUT PROTOCOL]
+ส่งกลับเฉพาะ "โค้ดภาษา Java ดิบ (Raw Code)" ที่พร้อมนำไปคอมไพล์ทันที:
+- เริ่มต้นบรรทัดแรกด้วย package com.fasterxml.jackson.core.base; และสิ้นสุดที่ปีกกาปิด } สุดท้ายของคลาส
+- ห้ามใส่เครื่องหมาย Markdown Code Fence (ห้ามใส่ ``` หรือ ```java)
+- ห้ามมีข้อความเกริ่นนำ คำอธิบายประกอบ หรือข้อความสรุปใด ๆ ทั้งสิ้น

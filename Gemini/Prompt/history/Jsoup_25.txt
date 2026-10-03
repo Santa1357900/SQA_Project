@@ -1,0 +1,306 @@
+### TASK: DEFECTS4J AUTOMATED UNIT TEST GENERATION (GEMINI SQA ENGINE v2.0)
+
+[OBJECTIVE / เป้าหมาย]
+สร้างชุดทดสอบระดับ Unit Test ด้วย JUnit 4 ฉบับสมบูรณ์สำหรับคลาส Java ที่กำหนด เพื่อใช้วัดผลความครอบคลุมของโค้ด (Line/Branch Coverage) และเพิ่มอัตราการตรวจจับข้อบกพร่องจริง (Fault Detection / REVEALING) โดยมีอัตราการคอมไพล์ผ่าน 100% ภายใต้สภาพแวดล้อม Defects4J
+
+[DEFECTS4J COMPATIBILITY & COMPILE SAFETY RULES (กฎเหล็กป้องกัน Compile Error 100%)]
+1. Java 6 Language Level (STRICT - Defects4J คอมไพล์ด้วย -source 1.6):
+   - ❌ ห้ามใช้ Diamond Operator: ห้ามเขียน `new ArrayList<>()` ให้ระบุ Type ชัดเจนเสมอ เช่น `new ArrayList<String>()` หรือ `new ArrayList()`
+   - ❌ ห้ามใช้ Lambda Expressions หรือ Method References: ห้ามใช้ `->` หรือ `::` เด็ดขาด ให้เขียนเป็น Anonymous Inner Class แบบ Java 6 ดั้งเดิม (เช่น `new Runnable() { public void run() { ... } }`)
+   - ❌ ห้ามใช้ Try-with-resources (`try (AutoCloseable r = ...)`) หรือ Multi-catch (`catch (X | Y e)`) ให้ใช้บล็อก `try-finally` แบบคลาสสิกเท่านั้น
+2. Exception Propagation:
+   - ทุก `@Test` method ต้องต่อท้ายด้วย `throws Throwable` เสมอ (เช่น `public void testMethod() throws Throwable`) เพื่อป้องกันข้อผิดพลาด unreported checked exception
+3. Zero-Dependency & Mocking Safety:
+   - ❌ ห้ามเรียกใช้ไลบรารีภายนอก เช่น Mockito, PowerMock, EasyMock, AssertJ เด็ดขาด
+   - ❌ ห้ามพยายาม Implement/Extends Interface หรือ Abstract Class ขนาดใหญ่ของ Java SE หรือ Framework (เช่น Compiler, AbstractCompiler, ErrorReporter, JsonParser, JsonGenerator, JsonDeserializer, MapperConfig, DeserializationConfig, SerializationConfig, Graphics2D, UnivariateRealFunction, Evaluator, Node) เพราะ javac จะ error ทันทีว่า "is not abstract and does not override all methods"
+   - ให้สร้างและทดสอบผ่าน Concrete Class ที่มีอยู่จริงในโปรเจกต์ หรือสร้าง Dummy class เฉพาะกรณีที่ Interface มีเมธอดไม่เกิน 1-2 เมธอดเท่านั้น
+4. Type & Constructor Strictness (No Hallucination):
+   - ❌ ห้ามเดาหรือเรียกเมธอดแปลกปลอมบนคลาส `Node` ของ Google Closure Compiler (เช่น `setQualifiedName` ไม่มีอยู่จริง ให้ใช้เฉพาะเมธอดมาตรฐาน เช่น `getType()`, `getString()`, `getDouble()`, `getFirstChild()`, `hasChildren()` หรือสร้างผ่าน `IR.name(String)`, `IR.string(String)`, `IR.number(double)` เท่านั้น)
+   - ❌ ห้ามเดา Constructor หรือ Method หรือชื่อคลาสที่ไม่มีอยู่จริง (เช่น `PropertyMapKind`) ให้ตรวจสอบจาก [TARGET SOURCE CODE] ว่าคลาสมี Constructor อะไรบ้าง
+   - ❌ ห้ามส่ง `null` ให้ parameter ที่เป็น primitive type (`int`, `double`, `boolean`, `char`, `long`) เด็ดขาด เพราะ javac จะฟ้อง type incompatible
+   - ❌ ห้ามเรียกใช้ `private` method / constructor หรือ private field หรือ private inner class (เช่น `Assign` ใน `RemoveUnusedVars`) โดยตรง
+   - ❌ ห้ามใช้ `assertEquals(null, val)` ให้ใช้ `assertNull(val)` แทนเสมอ
+   - ❌ ห้ามใช้ `assertEquals(Double.NaN, val)` เพราะ ambiguous ใน JUnit 4 ให้ใช้ `assertEquals(Double.valueOf(Double.NaN), val)` หรือ `assertTrue(Double.isNaN(val))`
+5. Full Imports Required:
+   - ต้อง Import ทุกคลาสที่เรียกใช้อย่างครบถ้วน ไม่ละเลย Utility หรือ Annotation package (เช่น `com.fasterxml.jackson.databind.util.ClassUtil`, `com.fasterxml.jackson.annotation.*`, `org.jsoup.parser.*`, `org.jsoup.nodes.*`)
+
+[TEST DESIGN & FAULT DETECTION DIRECTIVES (เพิ่มโอกาส REVEALING และลด INCONCLUSIVE)]
+1. Oracle Precision (ลด Inconclusive จากการ Assert เปราะบาง):
+   - ❌ อย่า Assert ข้อความ Exception หรือ toString() แบบ Exact Match (เพราะข้อความอาจเปลี่ยนตามเวอร์ชัน) ให้เน้น Assert ชนิดของ Exception หรือใช้ `assertTrue(e.getMessage().contains(...))` แทน
+   - สำหรับกรณีทดสอบที่คาดว่าจะเกิด Exception ให้ใช้โครงสร้าง `try { method(); fail("Should throw exception"); } catch (SpecificException e) { /* Expected */ }` หรือ `@Test(expected = SpecificException.class)`
+2. Bug-Hunting Edge Cases (กระตุ้นจุดบกพร่องที่ซ่อนอยู่):
+   - ค่าขอบเขตวิกฤต: ค่าศูนย์ (0), ค่าลบ (-1), Maximum/Minimum values, Integer overflow/underflow
+   - ปัญหา Null Safety: ส่ง `null` เข้าไปยัง Public method ที่รับ Object เพื่อดูว่ามี NullPointerException โดยไม่ได้จัดการหรือไม่
+   - กรณี Collection/Array: ทดสอบ Empty, Single element, Duplicate elements, Null elements, Unmodifiable collection
+   - กรณี String: Empty string `""`, Whitespace only `"   "`, String containing delimiters, Escape sequences, Special Unicode characters
+   - Boundary & Loop conditions: จุดเปลี่ยนเงื่อนไข `<` vs `<=`, Off-by-one errors, Empty input streams
+
+[TARGET SOURCE CODE]
+package org.jsoup.parser;
+
+import org.jsoup.helper.Validate;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * HTML Tag capabilities.
+ *
+ * @author Jonathan Hedley, jonathan@hedley.net
+ */
+public class Tag {
+    private static final Map<String, Tag> tags = new HashMap<String, Tag>(); // map of known tags
+
+    private String tagName;
+    private boolean isBlock = true; // block or inline
+    private boolean formatAsBlock = true; // should be formatted as a block
+    private boolean canContainBlock = true; // Can this tag hold block level tags?
+    private boolean canContainInline = true; // only pcdata if not
+    private boolean empty = false; // can hold nothing; e.g. img
+    private boolean selfClosing = false; // can self close (<foo />). used for unknown tags that self close, without forcing them as empty.
+    private boolean preserveWhitespace = false; // for pre, textarea, script etc
+
+    private Tag(String tagName) {
+        this.tagName = tagName.toLowerCase();
+    }
+
+    /**
+     * Get this tag's name.
+     *
+     * @return the tag's name
+     */
+    public String getName() {
+        return tagName;
+    }
+
+    /**
+     * Get a Tag by name. If not previously defined (unknown), returns a new generic tag, that can do anything.
+     * <p/>
+     * Pre-defined tags (P, DIV etc) will be ==, but unknown tags are not registered and will only .equals().
+     *
+     * @param tagName Name of tag, e.g. "p". Case insensitive.
+     * @return The tag, either defined or new generic.
+     */
+    public static Tag valueOf(String tagName) {
+        Validate.notNull(tagName);
+        tagName = tagName.trim().toLowerCase();
+        Validate.notEmpty(tagName);
+
+        synchronized (tags) {
+            Tag tag = tags.get(tagName);
+            if (tag == null) {
+                // not defined: create default; go anywhere, do anything! (incl be inside a <p>)
+                tag = new Tag(tagName);
+                tag.isBlock = false;
+                tag.canContainBlock = true;
+            }
+            return tag;
+        }
+    }
+
+    /**
+     * Gets if this is a block tag.
+     *
+     * @return if block tag
+     */
+    public boolean isBlock() {
+        return isBlock;
+    }
+
+    /**
+     * Gets if this tag should be formatted as a block (or as inline)
+     *
+     * @return if should be formatted as block or inline
+     */
+    public boolean formatAsBlock() {
+        return formatAsBlock;
+    }
+
+    /**
+     * Gets if this tag can contain block tags.
+     *
+     * @return if tag can contain block tags
+     */
+    public boolean canContainBlock() {
+        return canContainBlock;
+    }
+
+    /**
+     * Gets if this tag is an inline tag.
+     *
+     * @return if this tag is an inline tag.
+     */
+    public boolean isInline() {
+        return !isBlock;
+    }
+
+    /**
+     * Gets if this tag is a data only tag.
+     *
+     * @return if this tag is a data only tag
+     */
+    public boolean isData() {
+        return !canContainInline && !isEmpty();
+    }
+
+    /**
+     * Get if this is an empty tag
+     *
+     * @return if this is an empty tag
+     */
+    public boolean isEmpty() {
+        return empty;
+    }
+
+    /**
+     * Get if this tag is self closing.
+     *
+     * @return if this tag should be output as self closing.
+     */
+    public boolean isSelfClosing() {
+        return empty || selfClosing;
+    }
+
+    /**
+     * Get if this is a pre-defined tag, or was auto created on parsing.
+     *
+     * @return if a known tag
+     */
+    public boolean isKnownTag() {
+        return tags.containsKey(tagName);
+    }
+
+    /**
+     * Check if this tagname is a known tag.
+     *
+     * @param tagName name of tag
+     * @return if known HTML tag
+     */
+    public static boolean isKnownTag(String tagName) {
+        return tags.containsKey(tagName);
+    }
+
+    /**
+     * Get if this tag should preserve whitespace within child text nodes.
+     *
+     * @return if preserve whitepace
+     */
+    public boolean preserveWhitespace() {
+        return preserveWhitespace;
+    }
+
+    Tag setSelfClosing() {
+        selfClosing = true;
+        return this;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Tag)) return false;
+
+        Tag tag = (Tag) o;
+
+        if (canContainBlock != tag.canContainBlock) return false;
+        if (canContainInline != tag.canContainInline) return false;
+        if (empty != tag.empty) return false;
+        if (formatAsBlock != tag.formatAsBlock) return false;
+        if (isBlock != tag.isBlock) return false;
+        if (preserveWhitespace != tag.preserveWhitespace) return false;
+        if (selfClosing != tag.selfClosing) return false;
+        if (!tagName.equals(tag.tagName)) return false;
+
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = tagName.hashCode();
+        result = 31 * result + (isBlock ? 1 : 0);
+        result = 31 * result + (formatAsBlock ? 1 : 0);
+        result = 31 * result + (canContainBlock ? 1 : 0);
+        result = 31 * result + (canContainInline ? 1 : 0);
+        result = 31 * result + (empty ? 1 : 0);
+        result = 31 * result + (selfClosing ? 1 : 0);
+        result = 31 * result + (preserveWhitespace ? 1 : 0);
+        return result;
+    }
+
+    public String toString() {
+        return tagName;
+    }
+
+    // internal static initialisers:
+    // prepped from http://www.w3.org/TR/REC-html40/sgml/dtd.html and other sources
+    private static final String[] blockTags = {
+            "html", "head", "body", "frameset", "script", "noscript", "style", "meta", "link", "title", "frame",
+            "noframes", "section", "nav", "aside", "hgroup", "header", "footer", "p", "h1", "h2", "h3", "h4", "h5", "h6",
+            "ul", "ol", "pre", "div", "blockquote", "hr", "address", "figure", "figcaption", "form", "fieldset", "ins",
+            "del", "dl", "dt", "dd", "li", "table", "caption", "thead", "tfoot", "tbody", "colgroup", "col", "tr", "th",
+            "td", "video", "audio", "canvas", "details", "menu", "plaintext"
+    };
+    private static final String[] inlineTags = {
+            "object", "base", "font", "tt", "i", "b", "u", "big", "small", "em", "strong", "dfn", "code", "samp", "kbd",
+            "var", "cite", "abbr", "time", "acronym", "mark", "ruby", "rt", "rp", "a", "img", "br", "wbr", "map", "q",
+            "sub", "sup", "bdo", "iframe", "embed", "span", "input", "select", "textarea", "label", "button", "optgroup",
+            "option", "legend", "datalist", "keygen", "output", "progress", "meter", "area", "param", "source", "track",
+            "summary", "command", "device"
+    };
+    private static final String[] emptyTags = {
+            "meta", "link", "base", "frame", "img", "br", "wbr", "embed", "hr", "input", "keygen", "col", "command",
+            "device"
+    };
+    private static final String[] formatAsInlineTags = {
+            "title", "a", "p", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "address", "li", "th", "td", "script", "style"
+    };
+    private static final String[] preserveWhitespaceTags = {"pre", "plaintext", "title"};
+
+    static {
+        // creates
+        for (String tagName : blockTags) {
+            Tag tag = new Tag(tagName);
+            register(tag);
+        }
+        for (String tagName : inlineTags) {
+            Tag tag = new Tag(tagName);
+            tag.isBlock = false;
+            tag.canContainBlock = false;
+            tag.formatAsBlock = false;
+            register(tag);
+        }
+
+        // mods:
+        for (String tagName : emptyTags) {
+            Tag tag = tags.get(tagName);
+            Validate.notNull(tag);
+            tag.canContainBlock = false;
+            tag.canContainInline = false;
+            tag.empty = true;
+        }
+
+        for (String tagName : formatAsInlineTags) {
+            Tag tag = tags.get(tagName);
+            Validate.notNull(tag);
+            tag.formatAsBlock = false;
+        }
+
+        for (String tagName : preserveWhitespaceTags) {
+            Tag tag = tags.get(tagName);
+            Validate.notNull(tag);
+            tag.preserveWhitespace = true;
+        }
+    }
+
+    private static Tag register(Tag tag) {
+        synchronized (tags) {
+            tags.put(tag.tagName, tag);
+        }
+        return tag;
+    }
+}
+
+[OUTPUT PROTOCOL]
+ส่งกลับเฉพาะ "โค้ดภาษา Java ดิบ (Raw Code)" ที่พร้อมนำไปคอมไพล์ทันที:
+- เริ่มต้นบรรทัดแรกด้วย package org.jsoup.parser; และสิ้นสุดที่ปีกกาปิด } สุดท้ายของคลาส
+- ห้ามใส่เครื่องหมาย Markdown Code Fence (ห้ามใส่ ``` หรือ ```java)
+- ห้ามมีข้อความเกริ่นนำ คำอธิบายประกอบ หรือข้อความสรุปใด ๆ ทั้งสิ้น

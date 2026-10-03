@@ -1,0 +1,240 @@
+### TASK: DEFECTS4J AUTOMATED UNIT TEST GENERATION (GEMINI SQA ENGINE v2.0)
+
+[OBJECTIVE / เป้าหมาย]
+สร้างชุดทดสอบระดับ Unit Test ด้วย JUnit 4 ฉบับสมบูรณ์สำหรับคลาส Java ที่กำหนด เพื่อใช้วัดผลความครอบคลุมของโค้ด (Line/Branch Coverage) และเพิ่มอัตราการตรวจจับข้อบกพร่องจริง (Fault Detection / REVEALING) โดยมีอัตราการคอมไพล์ผ่าน 100% ภายใต้สภาพแวดล้อม Defects4J
+
+[DEFECTS4J COMPATIBILITY & COMPILE SAFETY RULES (กฎเหล็กป้องกัน Compile Error 100%)]
+1. Java 6 Language Level (STRICT - Defects4J คอมไพล์ด้วย -source 1.6):
+   - ❌ ห้ามใช้ Diamond Operator: ห้ามเขียน `new ArrayList<>()` ให้ระบุ Type ชัดเจนเสมอ เช่น `new ArrayList<String>()` หรือ `new ArrayList()`
+   - ❌ ห้ามใช้ Lambda Expressions หรือ Method References: ห้ามใช้ `->` หรือ `::` เด็ดขาด ให้เขียนเป็น Anonymous Inner Class แบบ Java 6 ดั้งเดิม (เช่น `new Runnable() { public void run() { ... } }`)
+   - ❌ ห้ามใช้ Try-with-resources (`try (AutoCloseable r = ...)`) หรือ Multi-catch (`catch (X | Y e)`) ให้ใช้บล็อก `try-finally` แบบคลาสสิกเท่านั้น
+2. Exception Propagation:
+   - ทุก `@Test` method ต้องต่อท้ายด้วย `throws Throwable` เสมอ (เช่น `public void testMethod() throws Throwable`) เพื่อป้องกันข้อผิดพลาด unreported checked exception
+3. Zero-Dependency & Mocking Safety:
+   - ❌ ห้ามเรียกใช้ไลบรารีภายนอก เช่น Mockito, PowerMock, EasyMock, AssertJ เด็ดขาด
+   - ❌ ห้ามพยายาม Implement/Extends Interface หรือ Abstract Class ขนาดใหญ่ของ Java SE หรือ Framework (เช่น Compiler, AbstractCompiler, ErrorReporter, JsonParser, JsonGenerator, JsonDeserializer, MapperConfig, DeserializationConfig, SerializationConfig, Graphics2D, UnivariateRealFunction, Evaluator, Node) เพราะ javac จะ error ทันทีว่า "is not abstract and does not override all methods"
+   - ให้สร้างและทดสอบผ่าน Concrete Class ที่มีอยู่จริงในโปรเจกต์ หรือสร้าง Dummy class เฉพาะกรณีที่ Interface มีเมธอดไม่เกิน 1-2 เมธอดเท่านั้น
+4. Type & Constructor Strictness (No Hallucination):
+   - ❌ ห้ามเดาหรือเรียกเมธอดแปลกปลอมบนคลาส `Node` ของ Google Closure Compiler (เช่น `setQualifiedName` ไม่มีอยู่จริง ให้ใช้เฉพาะเมธอดมาตรฐาน เช่น `getType()`, `getString()`, `getDouble()`, `getFirstChild()`, `hasChildren()` หรือสร้างผ่าน `IR.name(String)`, `IR.string(String)`, `IR.number(double)` เท่านั้น)
+   - ❌ ห้ามเดา Constructor หรือ Method หรือชื่อคลาสที่ไม่มีอยู่จริง (เช่น `PropertyMapKind`) ให้ตรวจสอบจาก [TARGET SOURCE CODE] ว่าคลาสมี Constructor อะไรบ้าง
+   - ❌ ห้ามส่ง `null` ให้ parameter ที่เป็น primitive type (`int`, `double`, `boolean`, `char`, `long`) เด็ดขาด เพราะ javac จะฟ้อง type incompatible
+   - ❌ ห้ามเรียกใช้ `private` method / constructor หรือ private field หรือ private inner class (เช่น `Assign` ใน `RemoveUnusedVars`) โดยตรง
+   - ❌ ห้ามใช้ `assertEquals(null, val)` ให้ใช้ `assertNull(val)` แทนเสมอ
+   - ❌ ห้ามใช้ `assertEquals(Double.NaN, val)` เพราะ ambiguous ใน JUnit 4 ให้ใช้ `assertEquals(Double.valueOf(Double.NaN), val)` หรือ `assertTrue(Double.isNaN(val))`
+5. Full Imports Required:
+   - ต้อง Import ทุกคลาสที่เรียกใช้อย่างครบถ้วน ไม่ละเลย Utility หรือ Annotation package (เช่น `com.fasterxml.jackson.databind.util.ClassUtil`, `com.fasterxml.jackson.annotation.*`, `org.jsoup.parser.*`, `org.jsoup.nodes.*`)
+
+[TEST DESIGN & FAULT DETECTION DIRECTIVES (เพิ่มโอกาส REVEALING และลด INCONCLUSIVE)]
+1. Oracle Precision (ลด Inconclusive จากการ Assert เปราะบาง):
+   - ❌ อย่า Assert ข้อความ Exception หรือ toString() แบบ Exact Match (เพราะข้อความอาจเปลี่ยนตามเวอร์ชัน) ให้เน้น Assert ชนิดของ Exception หรือใช้ `assertTrue(e.getMessage().contains(...))` แทน
+   - สำหรับกรณีทดสอบที่คาดว่าจะเกิด Exception ให้ใช้โครงสร้าง `try { method(); fail("Should throw exception"); } catch (SpecificException e) { /* Expected */ }` หรือ `@Test(expected = SpecificException.class)`
+2. Bug-Hunting Edge Cases (กระตุ้นจุดบกพร่องที่ซ่อนอยู่):
+   - ค่าขอบเขตวิกฤต: ค่าศูนย์ (0), ค่าลบ (-1), Maximum/Minimum values, Integer overflow/underflow
+   - ปัญหา Null Safety: ส่ง `null` เข้าไปยัง Public method ที่รับ Object เพื่อดูว่ามี NullPointerException โดยไม่ได้จัดการหรือไม่
+   - กรณี Collection/Array: ทดสอบ Empty, Single element, Duplicate elements, Null elements, Unmodifiable collection
+   - กรณี String: Empty string `""`, Whitespace only `"   "`, String containing delimiters, Escape sequences, Special Unicode characters
+   - Boundary & Loop conditions: จุดเปลี่ยนเงื่อนไข `<` vs `<=`, Off-by-one errors, Empty input streams
+
+[TARGET SOURCE CODE]
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.math.optimization.linear;
+
+import org.apache.commons.math.optimization.OptimizationException;
+import org.apache.commons.math.optimization.RealPointValuePair;
+import org.apache.commons.math.util.MathUtils;
+
+
+/**
+ * Solves a linear problem using the Two-Phase Simplex Method.
+ * @version $Revision$ $Date$
+ * @since 2.0
+ */
+public class SimplexSolver extends AbstractLinearOptimizer {
+
+    /** Default amount of error to accept in floating point comparisons. */ 
+    private static final double DEFAULT_EPSILON = 1.0e-6;
+
+    /** Amount of error to accept in floating point comparisons. */ 
+    protected final double epsilon;  
+
+    /**
+     * Build a simplex solver with default settings.
+     */
+    public SimplexSolver() {
+        this(DEFAULT_EPSILON);
+    }
+
+    /**
+     * Build a simplex solver with a specified accepted amount of error
+     * @param epsilon the amount of error to accept in floating point comparisons
+     */
+    public SimplexSolver(final double epsilon) {
+        this.epsilon = epsilon;
+    }
+
+    /**
+     * Returns the column with the most negative coefficient in the objective function row.
+     * @param tableau simple tableau for the problem
+     * @return column with the most negative coefficient
+     */
+    private Integer getPivotColumn(SimplexTableau tableau) {
+        double minValue = 0;
+        Integer minPos = null;
+        for (int i = tableau.getNumObjectiveFunctions(); i < tableau.getWidth() - 1; i++) {
+            if (MathUtils.compareTo(tableau.getEntry(0, i), minValue, epsilon) < 0) {
+                minValue = tableau.getEntry(0, i);
+                minPos = i;
+            }
+        }
+        return minPos;
+    }
+
+    /**
+     * Returns the row with the minimum ratio as given by the minimum ratio test (MRT).
+     * @param tableau simple tableau for the problem
+     * @param col the column to test the ratio of.  See {@link #getPivotColumn(SimplexTableau)}
+     * @return row with the minimum ratio
+     */
+    private Integer getPivotRow(final int col, final SimplexTableau tableau) {
+        double minRatio = Double.MAX_VALUE;
+        Integer minRatioPos = null;
+        for (int i = tableau.getNumObjectiveFunctions(); i < tableau.getHeight(); i++) {
+            final double rhs = tableau.getEntry(i, tableau.getWidth() - 1);
+            final double entry = tableau.getEntry(i, col);
+            if (MathUtils.compareTo(entry, 0, epsilon) >= 0) {
+                final double ratio = rhs / entry;
+                if (ratio < minRatio) {
+                    minRatio = ratio;
+                    minRatioPos = i; 
+                }
+            }
+        }
+        return minRatioPos;
+    }
+
+
+    /**
+     * Runs one iteration of the Simplex method on the given model.
+     * @param tableau simple tableau for the problem
+     * @throws OptimizationException if the maximal iteration count has been
+     * exceeded or if the model is found not to have a bounded solution
+     */
+    protected void doIteration(final SimplexTableau tableau)
+        throws OptimizationException {
+
+        incrementIterationsCounter();
+
+        Integer pivotCol = getPivotColumn(tableau);
+        Integer pivotRow = getPivotRow(pivotCol, tableau);
+        if (pivotRow == null) {
+            throw new UnboundedSolutionException();
+        }
+
+        // set the pivot element to 1
+        double pivotVal = tableau.getEntry(pivotRow, pivotCol);
+        tableau.divideRow(pivotRow, pivotVal);
+
+        // set the rest of the pivot column to 0
+        for (int i = 0; i < tableau.getHeight(); i++) {
+            if (i != pivotRow) {
+                double multiplier = tableau.getEntry(i, pivotCol);
+                tableau.subtractRow(i, pivotRow, multiplier);
+            }
+        }
+    }
+
+    /**
+     * Checks whether Phase 1 is solved.
+     * @param tableau simple tableau for the problem
+     * @return whether Phase 1 is solved
+     */
+    private boolean isPhase1Solved(final SimplexTableau tableau) {
+        if (tableau.getNumArtificialVariables() == 0) {
+            return true;
+        }
+        for (int i = tableau.getNumObjectiveFunctions(); i < tableau.getWidth() - 1; i++) {
+            if (MathUtils.compareTo(tableau.getEntry(0, i), 0, epsilon) < 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns whether the problem is at an optimal state.
+     * @param tableau simple tableau for the problem
+     * @return whether the model has been solved
+     */
+    public boolean isOptimal(final SimplexTableau tableau) {
+        if (tableau.getNumArtificialVariables() > 0) {
+            return false;
+        }
+        for (int i = tableau.getNumObjectiveFunctions(); i < tableau.getWidth() - 1; i++) {
+            if (MathUtils.compareTo(tableau.getEntry(0, i), 0, epsilon) < 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Solves Phase 1 of the Simplex method.
+     * @param tableau simple tableau for the problem
+     * @exception OptimizationException if the maximal number of iterations is
+     * exceeded, or if the problem is found not to have a bounded solution, or
+     * if there is no feasible solution
+     */
+    protected void solvePhase1(final SimplexTableau tableau)
+        throws OptimizationException {
+        // make sure we're in Phase 1
+        if (tableau.getNumArtificialVariables() == 0) {
+            return;
+        }
+
+        while (!isPhase1Solved(tableau)) {
+            doIteration(tableau);
+        }
+
+        // if W is not zero then we have no feasible solution
+        if (!MathUtils.equals(tableau.getEntry(0, tableau.getRhsOffset()), 0, epsilon)) {
+            throw new NoFeasibleSolutionException();
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public RealPointValuePair doOptimize()
+        throws OptimizationException {
+        final SimplexTableau tableau =
+            new SimplexTableau(f, constraints, goalType, restrictToNonNegative, epsilon);
+        solvePhase1(tableau);
+        tableau.discardArtificialVariables();
+        while (!isOptimal(tableau)) {
+            doIteration(tableau);
+        }
+        return tableau.getSolution();
+    }
+
+}
+
+[OUTPUT PROTOCOL]
+ส่งกลับเฉพาะ "โค้ดภาษา Java ดิบ (Raw Code)" ที่พร้อมนำไปคอมไพล์ทันที:
+- เริ่มต้นบรรทัดแรกด้วย package org.apache.commons.math.optimization.linear; และสิ้นสุดที่ปีกกาปิด } สุดท้ายของคลาส
+- ห้ามใส่เครื่องหมาย Markdown Code Fence (ห้ามใส่ ``` หรือ ```java)
+- ห้ามมีข้อความเกริ่นนำ คำอธิบายประกอบ หรือข้อความสรุปใด ๆ ทั้งสิ้น
