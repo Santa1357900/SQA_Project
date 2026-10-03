@@ -1,9 +1,0 @@
-# Scripts executed inside WSL/Linux must keep LF line endings on every platform.
-*.sh text eol=lf
-*.py text eol=lf
-*.json text eol=lf
-*.csv text eol=lf
-*.md text eol=lf
-*.txt text eol=lf
-*.java text eol=lf
-*.log text eol=lf
