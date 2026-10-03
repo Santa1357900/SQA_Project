@@ -5,8 +5,7 @@ Claude test generator for Defects4J (SQA Project - AI-Assisted Testing).
 Flow per bug:
   dataset/<Project>_<bug>/<Class>.java
     -> assemble prompt (Prompt/system_prompt.txt + Prompt/template_prompt.txt)
-    -> Claude via the KKU IntelSphere gateway (backend "kku"), the Claude Code CLI
-       (backend "cli") or the Anthropic API (backend "api")
+    -> Claude Sonnet through KKU IntelSphere (gen.ai.kku.ac.th)
        (backend/model/effort from Configuration/claude_config.json)
     -> sanitize Java 6 / JUnit 4 output
     -> Tests/<experiment>/Claude/<Project>/<Project>-<bug>/run<N>/<Class>ClaudeTest.java
@@ -186,14 +185,11 @@ def count_tests(code: str) -> int:
     return len(re.findall(r"@(?:org\.junit\.)?Test\b", code))
 
 
-# Claude backends:
-#   "kku" - KKU IntelSphere gateway (gen.ai.kku.ac.th), Anthropic Messages API via the SDK
-#   "cli" - Claude Code CLI (`claude -p`) with the logged-in account
-#   "api" - Anthropic API directly via the SDK
+# backend: "kku" (KKU IntelSphere), "api" (Anthropic) or "cli" (claude -p)
 
 def call_claude(backend, config: dict, system_prompt: str, user_prompt: str, label: str):
-    """Dispatch to the configured backend. Return (text, usage, stop_reason, request_id)."""
-    if config.get("backend", "cli") == "cli":
+    """Return (text, usage, stop_reason, request_id)."""
+    if config.get("backend", "kku") == "cli":
         return call_claude_cli(backend, config, user_prompt, label)
     return call_claude_api(backend, config, system_prompt, user_prompt, label)
 
@@ -212,21 +208,20 @@ LIMIT_RE = re.compile(r"limit.*?resets?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)", re.
 
 
 def parse_limit_reset(message: str):
-    """Return an epoch time for 'You've hit your ... limit · resets 9:10am (...)' messages, else None."""
+    """Epoch time parsed from a "... limit · resets 9:10am" message, else None."""
     lowered = (message or "").lower()
     if "limit" not in lowered or "hit your" not in lowered:
-        return None        # ordinary 429s / other errors stay on the short backoff path
+        return None
     m = LIMIT_RE.search(message)
     if not m:
-        # "You've hit your ... limit" without a parsable time: back off for 30 minutes.
-        return time.time() + 1800
+        return time.time() + 1800   # no time given, try again in 30 min
     hour, minute, ampm = int(m.group(1)), int(m.group(2) or 0), m.group(3).lower()
     hour = hour % 12 + (12 if ampm == "pm" else 0)
     now = time.localtime()
     reset = time.mktime((now.tm_year, now.tm_mon, now.tm_mday, hour, minute, 0, 0, 0, -1))
     if reset <= time.time():
         reset += 86400
-    return reset + 90          # small margin after the stated reset time
+    return reset + 90
 
 
 def set_quota_window(reset_at: float, label: str, message: str):
@@ -247,30 +242,19 @@ def wait_for_quota_window():
 
 
 def call_claude_cli(cli_path: str, config: dict, user_prompt: str, label: str):
-    """Run `claude -p` (print mode) with the logged-in Claude Code account.
-
-    The system prompt is passed via --system-prompt-file (config.prompt_files.system);
-    the user prompt is piped through stdin to avoid Windows command-line limits.
-    """
+    """Run `claude -p`. The user prompt goes in on stdin (too long for argv on Windows)."""
     attempts = int(config.get("max_attempts", 5))
     system_file = ROOT / config["prompt_files"]["system"]
-    # stream-json gives every assistant message; the plain "json" format only returns the
-    # last one, which drops the head of long answers when the CLI auto-continues past
-    # its output-token cap. The cap itself is raised through the env var below.
+    # stream-json, because plain json only carries the last message of a long answer
     cmd = [cli_path, "-p",
            "--model", config["model"],
            "--effort", config.get("effort", "high"),
            "--output-format", "stream-json", "--verbose",
            "--tools", "",
            "--system-prompt-file", str(system_file)]
-    # No --max-turns: with tools disabled the only extra "turns" are the CLI's own
-    # continuations after its output-token cap, and capping those at 1 makes long
-    # answers end in an error_max_turns result instead of a complete file.
     env = dict(os.environ)
     env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = str(config.get("max_tokens", 64000))
     if config.get("cli_config_dir"):
-        # Separate Claude Code profile (its own login) so the pipeline's quota use does not
-        # share the account used interactively in the IDE.
         env["CLAUDE_CONFIG_DIR"] = str(config["cli_config_dir"])
     last_error = None
     attempt = 0
@@ -280,9 +264,9 @@ def call_claude_cli(cli_path: str, config: dict, user_prompt: str, label: str):
         try:
             proc = subprocess.run(cmd, input=user_prompt, capture_output=True, text=True,
                                   encoding="utf-8", errors="replace", env=env,
-                                  timeout=int(config.get("cli_timeout_seconds", 1200)))
+                                  timeout=int(config.get("request_timeout_seconds", 3600)))
         except subprocess.TimeoutExpired:
-            last_error = f"claude -p timed out after {config.get('cli_timeout_seconds', 1200)}s"
+            last_error = f"claude -p timed out after {config.get('request_timeout_seconds', 3600)}s"
             delay = 5
         else:
             data, text_parts = {}, []
@@ -312,7 +296,6 @@ def call_claude_cli(cli_path: str, config: dict, user_prompt: str, label: str):
                     "duration_api_ms": data.get("duration_api_ms"),
                     "num_turns": data.get("num_turns"),
                 }, data.get("stop_reason"), data.get("session_id"))
-            # Only the CLI's own error text is meaningful; raw stream-json lines are not.
             api_message = (data.get("result") or "").strip() if data else ""
             stderr_tail = (proc.stderr or "").strip()[-400:]
             stdout_tail = "\n".join(l for l in proc.stdout.splitlines() if l.strip() and not l.startswith("{"))[-300:]
@@ -326,8 +309,7 @@ def call_claude_cli(cli_path: str, config: dict, user_prompt: str, label: str):
                 raise RuntimeError(f"Claude CLI non-retryable error: {last_error}")
             reset_at = parse_limit_reset(api_message)
             if reset_at is not None:
-                # Subscription usage window exhausted: park every worker until it resets
-                # instead of burning retries. Does not count as an attempt.
+                # wait for the reset; not counted as an attempt
                 set_quota_window(reset_at, label, last_error)
                 attempt -= 1
                 continue
@@ -338,7 +320,7 @@ def call_claude_cli(cli_path: str, config: dict, user_prompt: str, label: str):
 
 
 class DailyQuotaExhausted(Exception):
-    """The KKU gateway's per-day token quota is used up; nothing more can run until it resets."""
+    """Daily token quota is used up on every key."""
 
 
 QUOTA_STOP = threading.Event()
@@ -350,8 +332,7 @@ def is_daily_limit(exc: Exception) -> bool:
 
 
 class KeyPool:
-    """One SDK client per API key. Requests are spread round-robin over the keys that still
-    have quota; a key that reports its daily limit (or is rejected) is retired for this run."""
+    """One client per API key, used round-robin. Keys that run out of quota are dropped."""
 
     def __init__(self, clients: list):
         self.clients = clients            # [(label, anthropic.Anthropic), ...]
@@ -363,7 +344,6 @@ class KeyPool:
         return len(self.clients)
 
     def acquire(self):
-        """Return (index, label, client) for the next usable key, or raise DailyQuotaExhausted."""
         with self.lock:
             for _ in range(len(self.clients)):
                 i = self.cursor % len(self.clients)
@@ -374,7 +354,7 @@ class KeyPool:
         raise DailyQuotaExhausted(f"all {len(self.clients)} API key(s) are out of daily quota or unusable")
 
     def retire(self, index: int, reason: str) -> bool:
-        """Mark a key unusable. Returns True the first time (so the caller logs it once)."""
+        # True only the first time, so it gets logged once
         with self.lock:
             if index in self.retired:
                 return False
@@ -387,13 +367,7 @@ class KeyPool:
 
 
 def load_kku_keys(kku: dict) -> list:
-    """Collect KKU keys from the environment, in order, without duplicates.
-
-    Accepted forms in .env (mix freely):
-      KKU_API_KEYS=key1,key2,key3          # comma / space / semicolon separated
-      KKU_API_KEY=key1                     # single key
-      KKU_API_KEY_2=key2, KKU_API_KEY_3=... # numbered or otherwise suffixed
-    """
+    """Keys from .env: KKU_API_KEYS=a,b,c and/or KKU_API_KEY, KKU_API_KEY_2, ..."""
     base = kku.get("api_key_env", "KKU_API_KEY")
     raw = []
     raw += re.split(r"[\s,;]+", os.environ.get(base + "S", ""))
@@ -409,13 +383,7 @@ def load_kku_keys(kku: dict) -> list:
 
 
 def make_sdk_client(config: dict) -> KeyPool:
-    """Key pool of Anthropic SDK clients for the `kku` (KKU IntelSphere gateway) or `api`
-    (Anthropic direct) backend.
-
-    The KKU gateway exposes the Anthropic Messages API at <base_url>/v1/messages and
-    authenticates with the KKU-issued key in the x-api-key header, so the same SDK and
-    request shape work for both; only base_url and the key differ.
-    """
+    """KKU IntelSphere speaks the Anthropic Messages API, so the SDK works with its base_url."""
     if config.get("backend") == "kku":
         kku = config.get("kku", {})
         keys = load_kku_keys(kku)
@@ -423,7 +391,7 @@ def make_sdk_client(config: dict) -> KeyPool:
             raise RuntimeError(f"No KKU key found. Put {kku.get('api_key_env', 'KKU_API_KEY')} "
                                f"(or {kku.get('api_key_env', 'KKU_API_KEY')}S=key1,key2,...) in .env at the repository root.")
         base_url = kku.get("base_url", "https://gen.ai.kku.ac.th/api")
-        timeout = float(config.get("cli_timeout_seconds", 3600))
+        timeout = float(config.get("request_timeout_seconds", 3600))
         return KeyPool([(f"key{i + 1} (...{key[-4:]})",
                          anthropic.Anthropic(api_key=key, base_url=base_url, max_retries=2, timeout=timeout))
                         for i, key in enumerate(keys)])
@@ -434,13 +402,9 @@ def make_sdk_client(config: dict) -> KeyPool:
 
 def call_claude_api(pool: KeyPool, config: dict, system_prompt: str,
                     user_prompt: str, label: str):
-    """Anthropic SDK backend (`kku` gateway or `api` direct).
+    """Send one prompt and return (text, usage, stop_reason, request_id).
 
-    Return (text, usage_dict, stop_reason, request_id). Retries transient errors.
-    Always streams: the KKU gateway only returns a parsable Message on the streaming path,
-    and long generations would hit HTTP timeouts otherwise.
-    A key that hits its daily limit is retired and the request moves to the next key
-    without using up an attempt; DailyQuotaExhausted is raised only when no key is left.
+    Streaming only: KKU IntelSphere does not return a usable non-streaming response.
     """
     attempts = int(config.get("max_attempts", 5))
     last_error = None
@@ -469,8 +433,6 @@ def call_claude_api(pool: KeyPool, config: dict, system_prompt: str,
                 "cache_creation_input_tokens": getattr(message.usage, "cache_creation_input_tokens", None),
                 "cache_read_input_tokens": getattr(message.usage, "cache_read_input_tokens", None),
                 "duration_api_ms": round((time.perf_counter() - started) * 1000),
-                # What the endpoint says actually served the request (e.g. the gateway's
-                # "anthropic/claude-sonnet-5" and its upstream provider).
                 "served_model": message.model,
                 "provider": (getattr(message, "model_extra", None) or {}).get("provider"),
                 "api_key": key_label if len(pool) > 1 else None,
@@ -485,13 +447,12 @@ def call_claude_api(pool: KeyPool, config: dict, system_prompt: str,
             last_error = exc
             delay = min(60, 5 * (2 ** (attempt - 1))) + random.uniform(0, 2)
         except anthropic.APIStatusError as exc:
-            if is_daily_limit(exc):      # KKU gateway: 401 "This model reached daily limit."
+            if is_daily_limit(exc):      # 401 "This model reached daily limit."
                 if pool.retire(key_index, "daily limit"):
                     log(f"[~] {key_label}: daily quota reached - {pool.active()} key(s) left")
                 attempt -= 1
                 continue
             if exc.status_code in (401, 403) and len(pool) > 1:
-                # A bad key must not sink the whole pool; drop it and carry on with the rest.
                 if pool.retire(key_index, f"rejected ({exc.status_code})"):
                     log(f"[!] {key_label}: rejected by the server ({str(exc)[:120]}) - {pool.active()} key(s) left")
                 attempt -= 1
@@ -516,11 +477,10 @@ def output_dir_for(config: dict, project: str, bug_id: int, run: int) -> Path:
 
 
 def claim(out_dir: Path, config: dict) -> bool:
-    """Atomically claim a bug so several generator instances (different accounts) can share
-    one queue. A claim older than the per-call timeout is considered abandoned."""
+    """Claim a bug so two generator processes never work on the same one."""
     out_dir.mkdir(parents=True, exist_ok=True)
     marker = out_dir / ".claim"
-    stale_after = int(config.get("cli_timeout_seconds", 1200)) + 600
+    stale_after = int(config.get("request_timeout_seconds", 3600)) + 600
     for _ in range(2):
         try:
             fd = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -570,7 +530,7 @@ def process_bug(backend, config, system_prompt, template, notes,
         "project": project,
         "bug_id": bug_id,
         "run": run,
-        "backend": config.get("backend", "cli"),
+        "backend": config.get("backend", "kku"),
         "model": config["model"],
         "effort": config.get("effort"),
         "thinking": config.get("thinking"),
@@ -587,7 +547,7 @@ def process_bug(backend, config, system_prompt, template, notes,
         text, usage, stop_reason, request_id = call_claude(
             backend, config, system_prompt, user_prompt, name)
     except DailyQuotaExhausted as exc:
-        # Not a failure of this bug: leave any earlier output untouched so the next run resumes here.
+        # keep old output; this bug is retried on the next run
         QUOTA_STOP.set()
         (out_dir / ".claim").unlink(missing_ok=True)
         return f"QUOTA: {exc}"
@@ -604,8 +564,7 @@ def process_bug(backend, config, system_prompt, template, notes,
         return f"ERROR: {exc}"
 
     wall_seconds = round(time.perf_counter() - started, 3)
-    # generation_seconds = time the model actually spent (comparable with the search-based
-    # algorithms' generation time); wall time additionally includes retries and quota waits.
+    # generation_seconds = model time only; wall time also has retries and waits
     api_ms = usage.get("duration_api_ms")
     seconds = round(api_ms / 1000, 3) if api_ms else wall_seconds
     code = sanitize_java(strip_code_fences(text), target)
@@ -682,11 +641,10 @@ def main(argv=None) -> int:
         if not m or int(m.group(1)) >= int(m.group(2)):
             parser.error("--shard must be K/N with K < N")
         shard = (int(m.group(1)), int(m.group(2)))
-    backend_name = config.get("backend", "cli")
+    backend_name = config.get("backend", "kku")
     kku_keys = 0
     if backend_name == "kku":
-        # The gateway's daily token quota, not CPU or rate limits, is the bottleneck:
-        # scale parallelism with the number of keys (workers-per-key from config).
+        # workers-per-key from config; the daily quota is the real limit
         kku_keys = len(load_kku_keys(config.get("kku", {})))
         workers = args.workers or min(8, int(config.get("kku", {}).get("workers", 2)) * max(1, kku_keys))
     else:
@@ -707,8 +665,7 @@ def main(argv=None) -> int:
             parser.error(f"unknown targets: {', '.join(sorted(missing))}")
         selected = [n for n in selected if n in set(args.targets)]
     if shard:
-        # Shard on the stable sorted list (not on the pending list) so that instances
-        # started at different times still get disjoint subsets.
+        # shard the full sorted list so instances started later still get disjoint sets
         selected = [n for i, n in enumerate(selected) if i % shard[1] == shard[0]]
 
     def is_done(name):
@@ -760,7 +717,7 @@ def main(argv=None) -> int:
                 if outcome.startswith("QUOTA") or outcome == "SKIP (daily quota exhausted)":
                     not_run += 1
                     if outcome.startswith("SKIP"):
-                        continue          # one QUOTA line is enough; don't print hundreds of skips
+                        continue
                 log(f"[{name}] {outcome}")
         except KeyboardInterrupt:
             print("Interrupted; waiting for in-flight requests...", file=sys.stderr, flush=True)
