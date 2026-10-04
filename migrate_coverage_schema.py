@@ -5,10 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 RESULT_DIRS = [
-    "Ant Colony Optimization(ACO)/Results",
-    "Claude/Results",
-    "Differential Evolution(DE)/Results",
-    "Gemini/Results",
+    "Ant Colony Optimization(ACO)/Results"
 ]
 
 
