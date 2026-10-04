@@ -33,6 +33,8 @@ DE และ ACO เป็นอัลกอริทึมค้นหา ไ�
 
 ### การแปลงรูปแบบข้อมูล Coverage
 
+เนื่องจากที่โปรเจคมีการเขียน conditions coverage ผิดเป็น branches coverage จึงอาจทำให้เกิดความเข้าใจผิดขึ้นจึงต้องมีการปรับไฟล์ `result.json` ของแต่ละวิธีโดยใช้ไฟล์ `migrate_coverage_schema.py` ในการปรับ
+
 ไฟล์ `migrate_coverage_schema.py` ใช้ปรับ `result.json` ของ ACO, Claude, DE และ Gemini ให้เป็น schema version `1.1` โดยระบุชนิดของ coverage ให้ตรงกับเครื่องมือวัด: ผลจาก Cobertura เปลี่ยนชื่อฟิลด์ `branches_*` เป็น `conditions_*` และกำหนด `coverage_measure` เป็น `condition` ส่วนผลจาก JaCoCo กำหนดเป็น `branch` สคริปต์แก้เฉพาะรูปแบบข้อมูลที่บันทึกไว้ **ไม่รันทดสอบหรือคำนวณ coverage ใหม่**
 
 รันจากโฟลเดอร์หลักของโปรเจกต์:
