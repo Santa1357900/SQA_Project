@@ -30,3 +30,21 @@ DE และ ACO เป็นอัลกอริทึมค้นหา ไ�
 - `Gemini/` — prompt, pipeline เรียก Gemini, dataset และผลการทดลอง
 
 ดูขั้นตอนติดตั้ง วิธีรัน และรูปแบบผลลัพธ์ฉบับเต็มใน `README.md` ของโฟลเดอร์แต่ละวิธี ก่อนทดลอง Claude หรือ Gemini ให้ตั้ง API key ใน `.env` ตามคู่มือของโฟลเดอร์นั้น และห้าม commit `.env` หรือเปิดเผย API key
+
+### การแปลงรูปแบบข้อมูล Coverage
+
+ไฟล์ `migrate_coverage_schema.py` ใช้ปรับ `result.json` ของ ACO, Claude, DE และ Gemini ให้เป็น schema version `1.1` โดยระบุชนิดของ coverage ให้ตรงกับเครื่องมือวัด: ผลจาก Cobertura เปลี่ยนชื่อฟิลด์ `branches_*` เป็น `conditions_*` และกำหนด `coverage_measure` เป็น `condition` ส่วนผลจาก JaCoCo กำหนดเป็น `branch` สคริปต์แก้เฉพาะรูปแบบข้อมูลที่บันทึกไว้ **ไม่รันทดสอบหรือคำนวณ coverage ใหม่**
+
+รันจากโฟลเดอร์หลักของโปรเจกต์:
+
+```bash
+python migrate_coverage_schema.py
+```
+
+คำสั่งนี้แสดงรายการไฟล์ที่จะเปลี่ยนโดยยังไม่แก้ไฟล์ หากต้องการบันทึกการเปลี่ยนแปลง ให้รัน:
+
+```bash
+python migrate_coverage_schema.py --write
+```
+
+**ควรรัน `--write` เพียงครั้งเดียวกับผลลัพธ์ชุดเดิม** เพราะสคริปต์ปัจจุบันไม่ได้ตรวจว่าไฟล์เคยแปลงเป็น schema `1.1` แล้ว
