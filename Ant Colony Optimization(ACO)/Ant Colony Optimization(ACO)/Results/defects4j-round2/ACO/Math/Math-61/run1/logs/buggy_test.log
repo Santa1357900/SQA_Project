@@ -1,0 +1,39 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Math-61-r1/Math-61b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 33
+  - acogen.AcoGeneratedTest::test0001_getDomainUpperBound
+  - acogen.AcoGeneratedTest::test0004_sample
+  - acogen.AcoGeneratedTest::test0005_init
+  - acogen.AcoGeneratedTest::test0007_init
+  - acogen.AcoGeneratedTest::test0011_cumulativeProbability
+  - acogen.AcoGeneratedTest::test0012_getDomainLowerBound
+  - acogen.AcoGeneratedTest::test0015_normalApproximateProbability
+  - acogen.AcoGeneratedTest::test0016_probability
+  - acogen.AcoGeneratedTest::test0020_probability
+  - acogen.AcoGeneratedTest::test0022_cumulativeProbability
+  - acogen.AcoGeneratedTest::test0023_getMean
+  - acogen.AcoGeneratedTest::test0024_init
+  - acogen.AcoGeneratedTest::test0026_probability
+  - acogen.AcoGeneratedTest::test0028_init
+  - acogen.AcoGeneratedTest::test0031_init
+  - acogen.AcoGeneratedTest::test0032_normalApproximateProbability
+  - acogen.AcoGeneratedTest::test0033_init
+  - acogen.AcoGeneratedTest::test0034_getDomainLowerBound
+  - acogen.AcoGeneratedTest::test0037_getDomainLowerBound
+  - acogen.AcoGeneratedTest::test0039_getDomainUpperBound
+  - acogen.AcoGeneratedTest::test0040_init
+  - acogen.AcoGeneratedTest::test0041_init
+  - acogen.AcoGeneratedTest::test0044_init
+  - acogen.AcoGeneratedTest::test0045_init
+  - acogen.AcoGeneratedTest::test0046_init
+  - acogen.AcoGeneratedTest::test0047_init
+  - acogen.AcoGeneratedTest::test0048_getDomainUpperBound
+  - acogen.AcoGeneratedTest::test0049_init
+  - acogen.AcoGeneratedTest::test0050_init
+  - acogen.AcoGeneratedTest::test0051_getDomainLowerBound
+  - acogen.AcoGeneratedTest::test0052_init
+  - acogen.AcoGeneratedTest::test0053_init
+  - acogen.AcoGeneratedTest::test0054_getDomainUpperBound
+[exit 0]

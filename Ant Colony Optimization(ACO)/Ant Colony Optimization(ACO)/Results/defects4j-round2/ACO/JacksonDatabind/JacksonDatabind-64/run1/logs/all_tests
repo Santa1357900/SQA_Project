@@ -1,0 +1,8 @@
+test0001_getPropertyDefaultValue(acogen.AcoGeneratedTest)
+test0002_getClassAnnotations(acogen.AcoGeneratedTest)
+test0003_buildWriter(acogen.AcoGeneratedTest)
+test0004_getDefaultBean(acogen.AcoGeneratedTest)
+test0005_getDefaultValue(acogen.AcoGeneratedTest)
+test0006_findSerializationType(acogen.AcoGeneratedTest)
+test0007_init(acogen.AcoGeneratedTest)
+test0008_throwWrapped(acogen.AcoGeneratedTest)

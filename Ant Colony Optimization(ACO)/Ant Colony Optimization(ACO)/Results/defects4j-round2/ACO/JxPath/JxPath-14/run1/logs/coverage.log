@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/JxPath-14-r1/JxPath-14b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 355
+     Lines covered: 124
+  Conditions total: 212
+Conditions covered: 47
+     Line coverage: 34.9%
+Condition coverage: 22.2%
+[exit 0]

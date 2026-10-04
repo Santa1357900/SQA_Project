@@ -1,0 +1,48 @@
+$ java -Xmx768m -Xss4m -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit/junit/3.8.1/junit-3.8.1.jar:/home/pheerapat/aco-work/jobs/Cli-24-r1/f/target/classes:/home/pheerapat/aco-work/jobs/Cli-24-r1/f/target/test-classes AcoOracle /home/pheerapat/aco-work/jobs/Cli-24-r1/specs.tsv /home/pheerapat/aco-work/jobs/Cli-24-r1/expected1.txt 5000
+usage:
+       
+
+/a/b
+usage:  |
+
+usage: 2020-01-01
+1.5
+
+12:30:00
+usage: a"b
+[
+
+false
+usage: 2020-01-01
+
+usage:
+
+usage: 12:30:00
+a
+
+a=b
+[exit 0]
+$ java -Xmx768m -Xss4m -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/defects4j/framework/projects/Cli/lib/junit/junit/3.8.1/junit-3.8.1.jar:/home/pheerapat/aco-work/jobs/Cli-24-r1/f/target/classes:/home/pheerapat/aco-work/jobs/Cli-24-r1/f/target/test-classes AcoOracle /home/pheerapat/aco-work/jobs/Cli-24-r1/specs.tsv /home/pheerapat/aco-work/jobs/Cli-24-r1/expected2.txt 5000
+usage:
+       
+
+/a/b
+usage:  |
+
+usage: 2020-01-01
+1.5
+
+12:30:00
+usage: a"b
+[
+
+false
+usage: 2020-01-01
+
+usage:
+
+usage: 12:30:00
+a
+
+a=b
+[exit 0]

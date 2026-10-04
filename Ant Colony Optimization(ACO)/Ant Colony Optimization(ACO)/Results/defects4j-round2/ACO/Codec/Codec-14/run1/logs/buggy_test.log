@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Codec-14-r1/Codec-14b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - acogen.AcoGeneratedTest::test0005_guessLanguage
+  - acogen.AcoGeneratedTest::test0015_loadFromResource
+  - acogen.AcoGeneratedTest::test0025_guessLanguages
+  - acogen.AcoGeneratedTest::test0093_encode
+  - acogen.AcoGeneratedTest::test0094_encode
+[exit 0]

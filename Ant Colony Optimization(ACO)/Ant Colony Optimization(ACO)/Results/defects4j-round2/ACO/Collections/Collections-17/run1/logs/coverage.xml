@@ -1,0 +1,88 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="1.0" branch-rate="1.0" lines-covered="14" lines-valid="14" branches-covered="4" branches-valid="4" complexity="1.6666666666666667" version="2.0.3" timestamp="1791054955587">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="org.apache.commons.collections.functors" line-rate="1.0" branch-rate="1.0" complexity="1.6666666666666667">
+			<classes>
+				<class name="org.apache.commons.collections.functors.EqualPredicate" filename="org/apache/commons/collections/functors/EqualPredicate.java" line-rate="1.0" branch-rate="1.0" complexity="1.6666666666666667">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/Object;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="84" hits="8" branch="false"/>
+								<line number="85" hits="8" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/Object;Lorg/apache/commons/collections/functors/Equator;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="96" hits="12" branch="false"/>
+								<line number="97" hits="12" branch="false"/>
+								<line number="98" hits="12" branch="false"/>
+								<line number="99" hits="12" branch="false"/>
+							</lines>
+						</method>
+						<method name="equalPredicate" signature="(Ljava/lang/Object;)Lorg/apache/commons/collections/Predicate;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="52" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="53" hits="1" branch="false"/>
+								<line number="55" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="equalPredicate" signature="(Ljava/lang/Object;Lorg/apache/commons/collections/functors/Equator;)Lorg/apache/commons/collections/Predicate;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="69" hits="2" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="70" hits="1" branch="false"/>
+								<line number="72" hits="1" branch="false"/>
+							</lines>
+						</method>
+						<method name="evaluate" signature="(Ljava/lang/Object;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="108" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="getValue" signature="()Ljava/lang/Object;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="118" hits="5" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="52" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="53" hits="1" branch="false"/>
+						<line number="55" hits="1" branch="false"/>
+						<line number="69" hits="2" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="70" hits="1" branch="false"/>
+						<line number="72" hits="1" branch="false"/>
+						<line number="84" hits="8" branch="false"/>
+						<line number="85" hits="8" branch="false"/>
+						<line number="96" hits="12" branch="false"/>
+						<line number="97" hits="12" branch="false"/>
+						<line number="98" hits="12" branch="false"/>
+						<line number="99" hits="12" branch="false"/>
+						<line number="108" hits="3" branch="false"/>
+						<line number="118" hits="5" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

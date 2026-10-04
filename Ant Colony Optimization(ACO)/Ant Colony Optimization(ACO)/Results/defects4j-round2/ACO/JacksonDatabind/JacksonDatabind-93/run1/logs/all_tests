@@ -1,0 +1,4 @@
+test0001_validateSubType(acogen.AcoGeneratedTest)
+test0002_validateSubType(acogen.AcoGeneratedTest)
+test0003_init(acogen.AcoGeneratedTest)
+test0004_instance(acogen.AcoGeneratedTest)

@@ -1,0 +1,4 @@
+org.jsoup.safety.Cleaner.isValid(org.jsoup.nodes.Document)	m(org.jsoup.safety.Cleaner,isValid,org.jsoup.nodes.Document,n(org.jsoup.safety.Cleaner,org.jsoup.safety.Whitelist,_),_)	E:java.lang.IllegalArgumentException:Object must not be null	1
+org.jsoup.safety.Cleaner.clean(org.jsoup.nodes.Document)	m(org.jsoup.safety.Cleaner,clean,org.jsoup.nodes.Document,n(org.jsoup.safety.Cleaner,org.jsoup.safety.Whitelist,_),n(org.jsoup.nodes.Document,java.lang.String,t:0020))	E:java.lang.IllegalArgumentException:Object must not be null	0
+org.jsoup.safety.Cleaner.<init>(org.jsoup.safety.Whitelist)	n(org.jsoup.safety.Cleaner,org.jsoup.safety.Whitelist,_)	E:java.lang.IllegalArgumentException:Object must not be null	0
+org.jsoup.safety.Cleaner.<init>(org.jsoup.safety.Whitelist)	n(org.jsoup.safety.Cleaner,org.jsoup.safety.Whitelist,m(org.jsoup.safety.Whitelist,none,,_))	R:org.jsoup.safety.Cleaner	1

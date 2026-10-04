@@ -1,0 +1,56 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Jsoup-8-r1/Jsoup-8b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 50
+  - acogen.AcoGeneratedTest::test0014_childNodesAsArray
+  - acogen.AcoGeneratedTest::test0023_outerHtmlTail
+  - acogen.AcoGeneratedTest::test0024_ownerDocument
+  - acogen.AcoGeneratedTest::test0032_removeAttr
+  - acogen.AcoGeneratedTest::test0034_attributes
+  - acogen.AcoGeneratedTest::test0038_attributes
+  - acogen.AcoGeneratedTest::test0041_childNodesAsArray
+  - acogen.AcoGeneratedTest::test0048_outerHtml
+  - acogen.AcoGeneratedTest::test0052_nodeName
+  - acogen.AcoGeneratedTest::test0062_siblingIndex
+  - acogen.AcoGeneratedTest::test0064_hashCode
+  - acogen.AcoGeneratedTest::test0065_attr
+  - acogen.AcoGeneratedTest::test0068_absUrl
+  - acogen.AcoGeneratedTest::test0071_hasAttr
+  - acogen.AcoGeneratedTest::test0072_baseUri
+  - acogen.AcoGeneratedTest::test0074_addChildren
+  - acogen.AcoGeneratedTest::test0079_childNodes
+  - acogen.AcoGeneratedTest::test0081_ownerDocument
+  - acogen.AcoGeneratedTest::test0083_hashCode
+  - acogen.AcoGeneratedTest::test0084_addChildren
+  - acogen.AcoGeneratedTest::test0085_hashCode
+  - acogen.AcoGeneratedTest::test0086_siblingIndex
+  - acogen.AcoGeneratedTest::test0089_attributes
+  - acogen.AcoGeneratedTest::test0090_setParentNode
+  - acogen.AcoGeneratedTest::test0091_equals
+  - acogen.AcoGeneratedTest::test0092_childNodes
+  - acogen.AcoGeneratedTest::test0093_setBaseUri
+  - acogen.AcoGeneratedTest::test0097_setBaseUri
+  - acogen.AcoGeneratedTest::test0098_hasAttr
+  - acogen.AcoGeneratedTest::test0101_setSiblingIndex
+  - acogen.AcoGeneratedTest::test0104_attr
+  - acogen.AcoGeneratedTest::test0105_setSiblingIndex
+  - acogen.AcoGeneratedTest::test0106_setParentNode
+  - acogen.AcoGeneratedTest::test0108_absUrl
+  - acogen.AcoGeneratedTest::test0109_attr
+  - acogen.AcoGeneratedTest::test0110_attr
+  - acogen.AcoGeneratedTest::test0111_parent
+  - acogen.AcoGeneratedTest::test0112_equals
+  - acogen.AcoGeneratedTest::test0113_nextSibling
+  - acogen.AcoGeneratedTest::test0114_nextSibling
+  - acogen.AcoGeneratedTest::test0115_addChildren
+  - acogen.AcoGeneratedTest::test0117_parent
+  - acogen.AcoGeneratedTest::test0119_addChildren
+  - acogen.AcoGeneratedTest::test0120_nodeName
+  - acogen.AcoGeneratedTest::test0122_removeAttr
+  - acogen.AcoGeneratedTest::test0124_toString
+  - acogen.AcoGeneratedTest::test0125_outerHtmlHead
+  - acogen.AcoGeneratedTest::test0126_indent
+  - acogen.AcoGeneratedTest::test0127_indent
+  - acogen.AcoGeneratedTest::test0130_outerHtmlTail
+[exit 0]

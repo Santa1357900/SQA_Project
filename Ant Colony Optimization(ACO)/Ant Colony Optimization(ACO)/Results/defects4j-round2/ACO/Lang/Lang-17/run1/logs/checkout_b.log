@@ -1,0 +1,24 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j checkout -p Lang -v 17b -w /home/pheerapat/aco-work/jobs/Lang-17-r1/b
+Checking out 2c1b5be1 to /home/pheerapat/aco-work/jobs/Lang-17-r1/b........ OK
+Init local repository...................................................... OK
+Tag post-fix revision...................................................... OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Apply patch................................................................ OK
+Run post-checkout hook..................................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Excluding broken/flaky tests............................................... OK
+Backing up build file: /home/pheerapat/aco-work/jobs/Lang-17-r1/b/default.p OK
+Initialize fixed program version........................................... OK
+Apply patch................................................................ OK
+Initialize buggy program version........................................... OK
+Diff 2c1b5be1:8a3e8603..................................................... OK
+Apply patch................................................................ OK
+Tag pre-fix revision....................................................... OK
+Check out program version: Lang-17b........................................ OK
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j compile -w /home/pheerapat/aco-work/jobs/Lang-17-r1/b
+Running ant (compile)...................................................... OK
+Running ant (compile.tests)................................................ OK
+[exit 0]

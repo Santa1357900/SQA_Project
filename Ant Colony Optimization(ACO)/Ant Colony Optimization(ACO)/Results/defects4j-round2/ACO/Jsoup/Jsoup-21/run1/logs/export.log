@@ -1,0 +1,16 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j export -p classes.modified -w /home/pheerapat/aco-work/jobs/Jsoup-21-r1/b
+Running ant (export.classes.modified)...................................... OK
+
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j export -p cp.test -w /home/pheerapat/aco-work/jobs/Jsoup-21-r1/b
+Running ant (export.cp.test)............................................... OK
+
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j export -p cp.test -w /home/pheerapat/aco-work/jobs/Jsoup-21-r1/f
+Running ant (export.cp.test)............................................... OK
+
+[exit 0]
+$ /home/pheerapat/defects4j/framework/bin/defects4j export -p dir.bin.classes -w /home/pheerapat/aco-work/jobs/Jsoup-21-r1/b
+Running ant (export.dir.bin.classes)....................................... OK
+
+[exit 0]

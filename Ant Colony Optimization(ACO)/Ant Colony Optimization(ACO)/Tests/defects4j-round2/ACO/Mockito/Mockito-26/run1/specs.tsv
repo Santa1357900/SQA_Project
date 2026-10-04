@@ -1,0 +1,12 @@
+org.mockito.internal.util.Primitives.isPrimitiveWrapper(java.lang.Class)	m(org.mockito.internal.util.Primitives,isPrimitiveWrapper,java.lang.Class,_,k(java.lang.Object))	R:Boolean:false	29
+org.mockito.internal.util.Primitives.primitiveWrapperOf(java.lang.Class)	m(org.mockito.internal.util.Primitives,primitiveWrapperOf,java.lang.Class,_,k(java.lang.Integer))	R:Integer:0	1
+org.mockito.internal.util.Primitives.primitiveTypeOf(java.lang.Class)	m(org.mockito.internal.util.Primitives,primitiveTypeOf,java.lang.Class,_,_)	E:java.lang.NullPointerException	0
+org.mockito.internal.util.Primitives.primitiveTypeOf(java.lang.Class)	m(org.mockito.internal.util.Primitives,primitiveTypeOf,java.lang.Class,_,k(java.lang.Double))	R:class double	1
+org.mockito.internal.util.Primitives.primitiveWrapperOf(java.lang.Class)	m(org.mockito.internal.util.Primitives,primitiveWrapperOf,java.lang.Class,_,k(int))	R:null	0
+org.mockito.internal.util.Primitives.<init>()	n(org.mockito.internal.util.Primitives,)	R:org.mockito.internal.util.Primitives	1
+org.mockito.internal.util.Primitives.primitiveValueOrNullFor(java.lang.Class)	m(org.mockito.internal.util.Primitives,primitiveValueOrNullFor,java.lang.Class,_,k([I))	R:null	1
+org.mockito.internal.util.Primitives.primitiveValueOrNullFor(java.lang.Class)	m(org.mockito.internal.util.Primitives,primitiveValueOrNullFor,java.lang.Class,_,k(int))	R:Integer:0	0
+org.mockito.internal.util.Primitives.primitiveTypeOf(java.lang.Class)	m(org.mockito.internal.util.Primitives,primitiveTypeOf,java.lang.Class,_,k(java.lang.String))	R:null	0
+org.mockito.internal.util.Primitives.isPrimitiveWrapper(java.lang.Class)	m(org.mockito.internal.util.Primitives,isPrimitiveWrapper,java.lang.Class,_,k(java.lang.Double))	R:Boolean:true	0
+org.mockito.internal.util.Primitives.primitiveWrapperOf(java.lang.Class)	m(org.mockito.internal.util.Primitives,primitiveWrapperOf,java.lang.Class,_,k(java.lang.Double))	R:Double:0.0	0
+org.mockito.internal.util.Primitives.primitiveTypeOf(java.lang.Class)	m(org.mockito.internal.util.Primitives,primitiveTypeOf,java.lang.Class,_,k(int))	R:class int	1

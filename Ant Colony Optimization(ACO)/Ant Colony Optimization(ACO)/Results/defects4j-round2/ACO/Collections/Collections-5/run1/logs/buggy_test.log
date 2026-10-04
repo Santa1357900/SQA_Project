@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Collections-5-r1/Collections-5b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - acogen.AcoGeneratedTest::test0086_addAll
+  - acogen.AcoGeneratedTest::test0088_addAll
+  - acogen.AcoGeneratedTest::test0093_addAll
+[exit 0]

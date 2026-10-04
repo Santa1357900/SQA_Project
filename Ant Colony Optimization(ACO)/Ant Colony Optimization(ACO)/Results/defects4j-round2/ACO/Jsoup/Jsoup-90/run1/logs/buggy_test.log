@@ -1,0 +1,9 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Jsoup-90-r1/Jsoup-90b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 3
+  - acogen.AcoGeneratedTest::test0059_referrer
+  - acogen.AcoGeneratedTest::test0077_userAgent
+  - acogen.AcoGeneratedTest::test0085_referrer
+[exit 0]

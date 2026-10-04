@@ -1,0 +1,7 @@
+test0001_deserialize(acogen.AcoGeneratedTest)
+test0002_deserializeCustom(acogen.AcoGeneratedTest)
+test0003_deserializeCustom(acogen.AcoGeneratedTest)
+test0004_deserializeWithType(acogen.AcoGeneratedTest)
+test0005_createContextual(acogen.AcoGeneratedTest)
+test0006_init(acogen.AcoGeneratedTest)
+test0007_init(acogen.AcoGeneratedTest)

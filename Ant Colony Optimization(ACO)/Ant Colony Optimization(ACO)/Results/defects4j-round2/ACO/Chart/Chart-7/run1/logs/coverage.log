@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Chart-7-r1/Chart-7b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 159
+     Lines covered: 94
+  Conditions total: 54
+Conditions covered: 18
+     Line coverage: 59.1%
+Condition coverage: 33.3%
+[exit 0]

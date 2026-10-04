@@ -1,0 +1,166 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="1.0" branch-rate="0.6" lines-covered="27" lines-valid="27" branches-covered="6" branches-valid="10" complexity="1.4444444444444444" version="2.0.3" timestamp="1791057780071">
+	<sources>
+		<source>src/main/java</source>
+	</sources>
+	<packages>
+		<package name="org.jsoup.nodes" line-rate="1.0" branch-rate="0.6" complexity="1.4444444444444444">
+			<classes>
+				<class name="org.jsoup.nodes.Comment" filename="org/jsoup/nodes/Comment.java" line-rate="1.0" branch-rate="0.6" complexity="1.4444444444444444">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="19" hits="45" branch="false"/>
+								<line number="20" hits="45" branch="false"/>
+								<line number="21" hits="45" branch="false"/>
+							</lines>
+						</method>
+						<method name="&lt;init&gt;" signature="(Ljava/lang/String;Ljava/lang/String;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="30" hits="20" branch="false"/>
+								<line number="31" hits="20" branch="false"/>
+							</lines>
+						</method>
+						<method name="absUrl" signature="(Ljava/lang/String;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="asXmlDeclaration" signature="()Lorg/jsoup/nodes/XmlDeclaration;" line-rate="1.0" branch-rate="0.5">
+							<lines>
+								<line number="75" hits="5" branch="false"/>
+								<line number="76" hits="5" branch="false"/>
+								<line number="77" hits="3" branch="false"/>
+								<line number="78" hits="3" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="79" hits="3" branch="false"/>
+								<line number="80" hits="2" branch="false"/>
+								<line number="81" hits="2" branch="false"/>
+								<line number="83" hits="2" branch="false"/>
+							</lines>
+						</method>
+						<method name="attr" signature="(Ljava/lang/String;)Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="12" hits="109" branch="false"/>
+							</lines>
+						</method>
+						<method name="attr" signature="(Ljava/lang/String;Ljava/lang/String;)Lorg/jsoup/nodes/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="baseUri" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="childNodeSize" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="getData" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="42" hits="62" branch="false"/>
+							</lines>
+						</method>
+						<method name="hasAttr" signature="(Ljava/lang/String;)Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="isXmlDeclaration" signature="()Z" line-rate="1.0" branch-rate="0.6666666666666666">
+							<lines>
+								<line number="66" hits="5" branch="false"/>
+								<line number="67" hits="5" branch="true" condition-coverage="66% (4/6)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+										<condition number="1" type="jump" coverage="50%"/>
+										<condition number="2" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="nodeName" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="34" hits="173" branch="false"/>
+							</lines>
+						</method>
+						<method name="outerHtmlHead" signature="(Ljava/lang/Appendable;ILorg/jsoup/nodes/Document$OutputSettings;)V" line-rate="1.0" branch-rate="0.5">
+							<lines>
+								<line number="46" hits="49" branch="true" condition-coverage="50% (1/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="50%"/>
+									</conditions>
+								</line>
+								<line number="47" hits="48" branch="false"/>
+								<line number="48" hits="47" branch="false"/>
+								<line number="49" hits="47" branch="false"/>
+								<line number="50" hits="47" branch="false"/>
+								<line number="51" hits="47" branch="false"/>
+								<line number="52" hits="47" branch="false"/>
+							</lines>
+						</method>
+						<method name="outerHtmlTail" signature="(Ljava/lang/Appendable;ILorg/jsoup/nodes/Document$OutputSettings;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="54" hits="49" branch="false"/>
+							</lines>
+						</method>
+						<method name="removeAttr" signature="(Ljava/lang/String;)Lorg/jsoup/nodes/Node;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+							</lines>
+						</method>
+						<method name="toString" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="58" hits="44" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="12" hits="109" branch="false"/>
+						<line number="19" hits="45" branch="false"/>
+						<line number="20" hits="45" branch="false"/>
+						<line number="21" hits="45" branch="false"/>
+						<line number="30" hits="20" branch="false"/>
+						<line number="31" hits="20" branch="false"/>
+						<line number="34" hits="173" branch="false"/>
+						<line number="42" hits="62" branch="false"/>
+						<line number="46" hits="49" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="47" hits="48" branch="false"/>
+						<line number="48" hits="47" branch="false"/>
+						<line number="49" hits="47" branch="false"/>
+						<line number="50" hits="47" branch="false"/>
+						<line number="51" hits="47" branch="false"/>
+						<line number="52" hits="47" branch="false"/>
+						<line number="54" hits="49" branch="false"/>
+						<line number="58" hits="44" branch="false"/>
+						<line number="66" hits="5" branch="false"/>
+						<line number="67" hits="5" branch="true" condition-coverage="66% (4/6)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+								<condition number="1" type="jump" coverage="50%"/>
+								<condition number="2" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="75" hits="5" branch="false"/>
+						<line number="76" hits="5" branch="false"/>
+						<line number="77" hits="3" branch="false"/>
+						<line number="78" hits="3" branch="true" condition-coverage="50% (1/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="50%"/>
+							</conditions>
+						</line>
+						<line number="79" hits="3" branch="false"/>
+						<line number="80" hits="2" branch="false"/>
+						<line number="81" hits="2" branch="false"/>
+						<line number="83" hits="2" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Math-45-r1/Math-45b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 7
+  - acogen.AcoGeneratedTest::test0020_getEntry
+  - acogen.AcoGeneratedTest::test0035_multiply
+  - acogen.AcoGeneratedTest::test0046_createMatrix
+  - acogen.AcoGeneratedTest::test0060_getEntry
+  - acogen.AcoGeneratedTest::test0063_multiply
+  - acogen.AcoGeneratedTest::test0065_setEntry
+  - acogen.AcoGeneratedTest::test0074_setEntry
+[exit 0]

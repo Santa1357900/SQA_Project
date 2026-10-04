@@ -1,0 +1,11 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Cli-24-r1/Cli-24b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 5
+  - acogen.AcoGeneratedTest::test0057_printUsage
+  - acogen.AcoGeneratedTest::test0060_printHelp
+  - acogen.AcoGeneratedTest::test0072_printHelp
+  - acogen.AcoGeneratedTest::test0082_printWrapped
+  - acogen.AcoGeneratedTest::test0088_printUsage
+[exit 0]

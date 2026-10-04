@@ -1,0 +1,2 @@
+$ java -Xmx768m -Xss4m -javaagent:/home/pheerapat/aco-work/tool/jacocoagent.jar=output=none,includes=org.apache.commons.math.util.MathUtils:org.apache.commons.math.util.MathUtils$* -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/tool/jacococore.jar:/home/pheerapat/aco-work/jobs/Math-94-r1/b/target/test-classes:/home/pheerapat/aco-work/jobs/Math-94-r1/b/target/classes:/home/pheerapat/defects4j/framework/projects/lib/junit-4.12-hamcrest-1.3.jar AcoSearch /home/pheerapat/aco-work/jobs/Math-94-r1/aco.properties
+[exit 0]

@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Math-35-r1/Math-35b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 7
+  - acogen.AcoGeneratedTest::test0002_getElitismRate
+  - acogen.AcoGeneratedTest::test0008_setElitismRate
+  - acogen.AcoGeneratedTest::test0009_setElitismRate
+  - acogen.AcoGeneratedTest::test0013_getElitismRate
+  - acogen.AcoGeneratedTest::test0014_getElitismRate
+  - acogen.AcoGeneratedTest::test0017_nextGeneration
+  - acogen.AcoGeneratedTest::test0022_init
+[exit 0]

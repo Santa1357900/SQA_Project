@@ -1,0 +1,160 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="1.0" branch-rate="1.0" lines-covered="30" lines-valid="30" branches-covered="10" branches-valid="10" complexity="1.9" version="2.0.3" timestamp="1791060124512">
+	<sources>
+		<source>src/java</source>
+	</sources>
+	<packages>
+		<package name="org.apache.commons.math.distribution" line-rate="1.0" branch-rate="1.0" complexity="1.9">
+			<classes>
+				<class name="org.apache.commons.math.distribution.FDistributionImpl" filename="org/apache/commons/math/distribution/FDistributionImpl.java" line-rate="1.0" branch-rate="1.0" complexity="1.9">
+					<methods>
+						<method name="&lt;init&gt;" signature="(DD)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="50" hits="36" branch="false"/>
+								<line number="51" hits="36" branch="false"/>
+								<line number="52" hits="30" branch="false"/>
+								<line number="53" hits="26" branch="false"/>
+							</lines>
+						</method>
+						<method name="cumulativeProbability" signature="(D)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="72" hits="18" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="73" hits="5" branch="false"/>
+								<line number="75" hits="13" branch="false"/>
+								<line number="76" hits="13" branch="false"/>
+								<line number="78" hits="13" branch="false"/>
+								<line number="82" hits="18" branch="false"/>
+							</lines>
+						</method>
+						<method name="getDenominatorDegreesOfFreedom" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="192" hits="24" branch="false"/>
+							</lines>
+						</method>
+						<method name="getDomainLowerBound" signature="(D)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="119" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="getDomainUpperBound" signature="(D)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="132" hits="4" branch="false"/>
+							</lines>
+						</method>
+						<method name="getInitialDomain" signature="(D)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="145" hits="7" branch="false"/>
+								<line number="147" hits="7" branch="false"/>
+								<line number="148" hits="7" branch="false"/>
+							</lines>
+						</method>
+						<method name="getNumeratorDegreesOfFreedom" signature="()D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="170" hits="17" branch="false"/>
+							</lines>
+						</method>
+						<method name="inverseCumulativeProbability" signature="(D)D" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="100" hits="5" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="101" hits="1" branch="false"/>
+								<line number="103" hits="4" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="104" hits="1" branch="false"/>
+								<line number="106" hits="3" branch="false"/>
+							</lines>
+						</method>
+						<method name="setDenominatorDegreesOfFreedom" signature="(D)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="180" hits="31" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="181" hits="4" branch="false"/>
+								<line number="184" hits="27" branch="false"/>
+								<line number="185" hits="27" branch="false"/>
+							</lines>
+						</method>
+						<method name="setNumeratorDegreesOfFreedom" signature="(D)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="158" hits="37" branch="true" condition-coverage="100% (2/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="100%"/>
+									</conditions>
+								</line>
+								<line number="159" hits="6" branch="false"/>
+								<line number="162" hits="31" branch="false"/>
+								<line number="163" hits="31" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="50" hits="36" branch="false"/>
+						<line number="51" hits="36" branch="false"/>
+						<line number="52" hits="30" branch="false"/>
+						<line number="53" hits="26" branch="false"/>
+						<line number="72" hits="18" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="73" hits="5" branch="false"/>
+						<line number="75" hits="13" branch="false"/>
+						<line number="76" hits="13" branch="false"/>
+						<line number="78" hits="13" branch="false"/>
+						<line number="82" hits="18" branch="false"/>
+						<line number="100" hits="5" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="101" hits="1" branch="false"/>
+						<line number="103" hits="4" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="104" hits="1" branch="false"/>
+						<line number="106" hits="3" branch="false"/>
+						<line number="119" hits="4" branch="false"/>
+						<line number="132" hits="4" branch="false"/>
+						<line number="145" hits="7" branch="false"/>
+						<line number="147" hits="7" branch="false"/>
+						<line number="148" hits="7" branch="false"/>
+						<line number="158" hits="37" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="159" hits="6" branch="false"/>
+						<line number="162" hits="31" branch="false"/>
+						<line number="163" hits="31" branch="false"/>
+						<line number="170" hits="17" branch="false"/>
+						<line number="180" hits="31" branch="true" condition-coverage="100% (2/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="100%"/>
+							</conditions>
+						</line>
+						<line number="181" hits="4" branch="false"/>
+						<line number="184" hits="27" branch="false"/>
+						<line number="185" hits="27" branch="false"/>
+						<line number="192" hits="24" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

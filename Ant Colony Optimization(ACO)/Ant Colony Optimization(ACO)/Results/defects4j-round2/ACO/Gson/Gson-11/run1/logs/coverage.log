@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Gson-11-r1/Gson-11b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 500
+     Lines covered: 115
+  Conditions total: 196
+Conditions covered: 0
+     Line coverage: 23.0%
+Condition coverage: 0.0%
+[exit 0]

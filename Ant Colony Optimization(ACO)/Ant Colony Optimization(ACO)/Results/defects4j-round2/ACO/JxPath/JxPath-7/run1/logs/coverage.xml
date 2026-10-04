@@ -1,0 +1,192 @@
+<?xml version="1.0"?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+
+<coverage line-rate="0.7142857142857143" branch-rate="0.0" lines-covered="20" lines-valid="28" branches-covered="0" branches-valid="8" complexity="1.2666666666666666" version="2.0.3" timestamp="1791057852111">
+	<sources>
+		<source>src/java</source>
+	</sources>
+	<packages>
+		<package name="org.apache.commons.jxpath.ri.compiler" line-rate="0.7142857142857143" branch-rate="0.0" complexity="1.2666666666666666">
+			<classes>
+				<class name="org.apache.commons.jxpath.ri.compiler.CoreOperationGreaterThan" filename="org/apache/commons/jxpath/ri/compiler/CoreOperationGreaterThan.java" line-rate="0.6666666666666666" branch-rate="0.0" complexity="1.3333333333333333">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/jxpath/ri/compiler/Expression;Lorg/apache/commons/jxpath/ri/compiler/Expression;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="28" hits="9" branch="false"/>
+								<line number="29" hits="9" branch="false"/>
+							</lines>
+						</method>
+						<method name="computeValue" signature="(Lorg/apache/commons/jxpath/ri/EvalContext;)Ljava/lang/Object;" line-rate="0.3333333333333333" branch-rate="0.0">
+							<lines>
+								<line number="32" hits="1" branch="false"/>
+								<line number="33" hits="0" branch="false"/>
+								<line number="34" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="getSymbol" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="38" hits="5" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="28" hits="9" branch="false"/>
+						<line number="29" hits="9" branch="false"/>
+						<line number="32" hits="1" branch="false"/>
+						<line number="33" hits="0" branch="false"/>
+						<line number="34" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="38" hits="5" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.jxpath.ri.compiler.CoreOperationGreaterThanOrEqual" filename="org/apache/commons/jxpath/ri/compiler/CoreOperationGreaterThanOrEqual.java" line-rate="0.6666666666666666" branch-rate="0.0" complexity="1.3333333333333333">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/jxpath/ri/compiler/Expression;Lorg/apache/commons/jxpath/ri/compiler/Expression;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="29" hits="9" branch="false"/>
+								<line number="30" hits="9" branch="false"/>
+							</lines>
+						</method>
+						<method name="computeValue" signature="(Lorg/apache/commons/jxpath/ri/EvalContext;)Ljava/lang/Object;" line-rate="0.3333333333333333" branch-rate="0.0">
+							<lines>
+								<line number="33" hits="1" branch="false"/>
+								<line number="34" hits="0" branch="false"/>
+								<line number="35" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="getSymbol" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="39" hits="5" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="29" hits="9" branch="false"/>
+						<line number="30" hits="9" branch="false"/>
+						<line number="33" hits="1" branch="false"/>
+						<line number="34" hits="0" branch="false"/>
+						<line number="35" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="39" hits="5" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.jxpath.ri.compiler.CoreOperationLessThan" filename="org/apache/commons/jxpath/ri/compiler/CoreOperationLessThan.java" line-rate="0.6666666666666666" branch-rate="0.0" complexity="1.3333333333333333">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/jxpath/ri/compiler/Expression;Lorg/apache/commons/jxpath/ri/compiler/Expression;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="28" hits="9" branch="false"/>
+								<line number="29" hits="9" branch="false"/>
+							</lines>
+						</method>
+						<method name="computeValue" signature="(Lorg/apache/commons/jxpath/ri/EvalContext;)Ljava/lang/Object;" line-rate="0.3333333333333333" branch-rate="0.0">
+							<lines>
+								<line number="32" hits="1" branch="false"/>
+								<line number="33" hits="0" branch="false"/>
+								<line number="34" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="getSymbol" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="38" hits="6" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="28" hits="9" branch="false"/>
+						<line number="29" hits="9" branch="false"/>
+						<line number="32" hits="1" branch="false"/>
+						<line number="33" hits="0" branch="false"/>
+						<line number="34" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="38" hits="6" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.jxpath.ri.compiler.CoreOperationLessThanOrEqual" filename="org/apache/commons/jxpath/ri/compiler/CoreOperationLessThanOrEqual.java" line-rate="0.6666666666666666" branch-rate="0.0" complexity="1.3333333333333333">
+					<methods>
+						<method name="&lt;init&gt;" signature="(Lorg/apache/commons/jxpath/ri/compiler/Expression;Lorg/apache/commons/jxpath/ri/compiler/Expression;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="29" hits="9" branch="false"/>
+								<line number="30" hits="9" branch="false"/>
+							</lines>
+						</method>
+						<method name="computeValue" signature="(Lorg/apache/commons/jxpath/ri/EvalContext;)Ljava/lang/Object;" line-rate="0.3333333333333333" branch-rate="0.0">
+							<lines>
+								<line number="33" hits="1" branch="false"/>
+								<line number="34" hits="0" branch="false"/>
+								<line number="35" hits="0" branch="true" condition-coverage="0% (0/2)">
+									<conditions>
+										<condition number="0" type="jump" coverage="0%"/>
+									</conditions>
+								</line>
+							</lines>
+						</method>
+						<method name="getSymbol" signature="()Ljava/lang/String;" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="39" hits="5" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="29" hits="9" branch="false"/>
+						<line number="30" hits="9" branch="false"/>
+						<line number="33" hits="1" branch="false"/>
+						<line number="34" hits="0" branch="false"/>
+						<line number="35" hits="0" branch="true" condition-coverage="0% (0/2)">
+							<conditions>
+								<condition number="0" type="jump" coverage="0%"/>
+							</conditions>
+						</line>
+						<line number="39" hits="5" branch="false"/>
+					</lines>
+				</class>
+				<class name="org.apache.commons.jxpath.ri.compiler.CoreOperationRelationalExpression" filename="org/apache/commons/jxpath/ri/compiler/CoreOperationRelationalExpression.java" line-rate="1.0" branch-rate="1.0" complexity="1.0">
+					<methods>
+						<method name="&lt;init&gt;" signature="([Lorg/apache/commons/jxpath/ri/compiler/Expression;)V" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="30" hits="36" branch="false"/>
+								<line number="31" hits="36" branch="false"/>
+							</lines>
+						</method>
+						<method name="getPrecedence" signature="()I" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="35" hits="6" branch="false"/>
+							</lines>
+						</method>
+						<method name="isSymmetric" signature="()Z" line-rate="1.0" branch-rate="1.0">
+							<lines>
+								<line number="39" hits="4" branch="false"/>
+							</lines>
+						</method>
+					</methods>
+					<lines>
+						<line number="30" hits="36" branch="false"/>
+						<line number="31" hits="36" branch="false"/>
+						<line number="35" hits="6" branch="false"/>
+						<line number="39" hits="4" branch="false"/>
+					</lines>
+				</class>
+			</classes>
+		</package>
+	</packages>
+</coverage>

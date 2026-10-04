@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "experiment": "defects4j-round2",
+  "algorithms": {
+    "ACO": {
+      "selected_unique_bugs": 854,
+      "evaluated_unique_bugs": 844,
+      "detected_unique_bugs": 165,
+      "unknown_outcome_bugs": 10,
+      "fault_detection_rate": 0.1955,
+      "complete_runs": 844,
+      "mean_test_coverage_ratio": 0.6856,
+      "mean_line_coverage_ratio": 0.4681,
+      "mean_branch_coverage_ratio": 0.3508,
+      "mean_generation_seconds": 20.2281,
+      "mean_total_seconds": 340.0766,
+      "status_breakdown": {
+        "complete": 844,
+        "no_generated_tests": 7,
+        "validation_failed": 3
+      }
+    }
+  }
+}

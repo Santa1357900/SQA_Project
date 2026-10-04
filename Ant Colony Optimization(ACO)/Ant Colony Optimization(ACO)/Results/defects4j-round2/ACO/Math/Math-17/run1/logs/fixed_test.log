@@ -1,0 +1,17 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Math-17-r1/Math-17f-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 11
+  - acogen.AcoGeneratedTest::test0080_init
+  - acogen.AcoGeneratedTest::test0081_init
+  - acogen.AcoGeneratedTest::test0082_init
+  - acogen.AcoGeneratedTest::test0083_init
+  - acogen.AcoGeneratedTest::test0084_init
+  - acogen.AcoGeneratedTest::test0085_init
+  - acogen.AcoGeneratedTest::test0086_init
+  - acogen.AcoGeneratedTest::test0087_init
+  - acogen.AcoGeneratedTest::test0089_init
+  - acogen.AcoGeneratedTest::test0090_init
+  - acogen.AcoGeneratedTest::test0091_init
+[exit 0]

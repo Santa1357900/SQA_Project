@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Csv-12-r1/Csv-12b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 184
+     Lines covered: 140
+  Conditions total: 140
+Conditions covered: 83
+     Line coverage: 76.1%
+Condition coverage: 59.3%
+[exit 0]

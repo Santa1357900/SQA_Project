@@ -1,0 +1,2 @@
+com.google.gson.TypeInfoFactory.getTypeInfoForField(java.lang.reflect.Field,java.lang.reflect.Type)	m(com.google.gson.TypeInfoFactory,getTypeInfoForField,java.lang.reflect.Field|java.lang.reflect.Type,_,_,_)	E:java.lang.IllegalArgumentException:Type 'null' is not a Class, ParameterizedType, or GenericArrayType. Can't extract class.	0
+com.google.gson.TypeInfoFactory.getTypeInfoForArray(java.lang.reflect.Type)	m(com.google.gson.TypeInfoFactory,getTypeInfoForArray,java.lang.reflect.Type,_,_)	E:java.lang.IllegalArgumentException:condition failed: false	0

@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Lang-10-r1/Lang-10b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 7
+  - acogen.AcoGeneratedTest::test0051_parse
+  - acogen.AcoGeneratedTest::test0062_getParsePattern
+  - acogen.AcoGeneratedTest::test0063_getParsePattern
+  - acogen.AcoGeneratedTest::test0065_getParsePattern
+  - acogen.AcoGeneratedTest::test0068_parseObject
+  - acogen.AcoGeneratedTest::test0070_parseObject
+  - acogen.AcoGeneratedTest::test0071_parseObject
+[exit 0]

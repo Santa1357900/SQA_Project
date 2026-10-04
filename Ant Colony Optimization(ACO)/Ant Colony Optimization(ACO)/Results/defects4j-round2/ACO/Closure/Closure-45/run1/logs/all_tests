@@ -1,0 +1,4 @@
+test0001_process(acogen.AcoGeneratedTest)
+test0002_init(acogen.AcoGeneratedTest)
+test0003_process(acogen.AcoGeneratedTest)
+test0004_init(acogen.AcoGeneratedTest)

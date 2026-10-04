@@ -1,0 +1,3 @@
+com.fasterxml.jackson.databind.ser.std.NumberSerializers.addAll(java.util.Map)	m(com.fasterxml.jackson.databind.ser.std.NumberSerializers,addAll,java.util.Map,_,p(map0))	R:null	29
+com.fasterxml.jackson.databind.ser.std.NumberSerializers.<init>()	n(com.fasterxml.jackson.databind.ser.std.NumberSerializers,)	R:com.fasterxml.jackson.databind.ser.std.NumberSerializers	1
+com.fasterxml.jackson.databind.ser.std.NumberSerializers.addAll(java.util.Map)	m(com.fasterxml.jackson.databind.ser.std.NumberSerializers,addAll,java.util.Map,_,_)	E:java.lang.NullPointerException	0

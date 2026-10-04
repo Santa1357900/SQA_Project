@@ -1,0 +1,7 @@
+test0001_patchGlobalScope(acogen.AcoGeneratedTest)
+test0002_init(acogen.AcoGeneratedTest)
+test0003_init(acogen.AcoGeneratedTest)
+test0004_createScope(acogen.AcoGeneratedTest)
+test0005_init(acogen.AcoGeneratedTest)
+test0006_createInitialScope(acogen.AcoGeneratedTest)
+test0007_init(acogen.AcoGeneratedTest)

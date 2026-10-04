@@ -1,0 +1,7 @@
+test0001_enterScope(acogen.AcoGeneratedTest)
+test0002_shouldTraverse(acogen.AcoGeneratedTest)
+test0003_hotSwapScript(acogen.AcoGeneratedTest)
+test0004_process(acogen.AcoGeneratedTest)
+test0005_init(acogen.AcoGeneratedTest)
+test0006_visit(acogen.AcoGeneratedTest)
+test0007_init(acogen.AcoGeneratedTest)

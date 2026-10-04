@@ -1,0 +1,8 @@
+test0001_getStatisticsFitnessHistory(acogen.AcoGeneratedTest)
+test0002_init(acogen.AcoGeneratedTest)
+test0003_getStatisticsMeanHistory(acogen.AcoGeneratedTest)
+test0004_getStatisticsDHistory(acogen.AcoGeneratedTest)
+test0005_getStatisticsSigmaHistory(acogen.AcoGeneratedTest)
+test0006_init(acogen.AcoGeneratedTest)
+test0007_init(acogen.AcoGeneratedTest)
+test0008_doOptimize(acogen.AcoGeneratedTest)

@@ -1,0 +1,20 @@
+$ java -Xmx768m -Xss4m -javaagent:/home/pheerapat/aco-work/tool/jacocoagent.jar=output=none,includes=com.google.gson.internal.UnsafeAllocator:com.google.gson.internal.UnsafeAllocator$* -cp /home/pheerapat/aco-work/tool/classes:/home/pheerapat/aco-work/tool/jacococore.jar:/home/pheerapat/defects4j/framework/projects/Gson/lib/junit/junit/3.8.2/junit-3.8.2.jar:/home/pheerapat/aco-work/jobs/Gson-8-r1/b/target/classes:/home/pheerapat/aco-work/jobs/Gson-8-r1/b/target/test-classes:/home/pheerapat/defects4j/framework/projects/lib/junit-4.12-hamcrest-1.3.jar:/home/pheerapat/defects4j/framework/projects/Gson/lib/com/google/code/findbugs/jsr305/3.0.0/jsr305-3.0.0.jar:/home/pheerapat/defects4j/framework/projects/Gson/lib/junit/junit/4.12/junit-4.12.jar:/home/pheerapat/defects4j/framework/projects/Gson/lib/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar AcoSearch /home/pheerapat/aco-work/jobs/Gson-8-r1/aco.properties
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  SIGSEGV (0xb) at pc=0x00007f7bfdb832d4, pid=1778615, tid=1780245
+#
+# JRE version: OpenJDK Runtime Environment (11.0.32.1+1) (build 11.0.32.1+1-post-1ubuntu1-26.04-Ubuntu)
+# Java VM: OpenJDK 64-Bit Server VM (11.0.32.1+1-post-1ubuntu1-26.04-Ubuntu, mixed mode, sharing, tiered, compressed oops, g1 gc, linux-amd64)
+# Problematic frame:
+# V  [libjvm.so+0x5832d4]  AccessInternal::PostRuntimeDispatch<G1BarrierSet::AccessBarrier<1097844ul, G1BarrierSet>, (AccessInternal::BarrierType)2, 1097844ul>::oop_access_barrier(void*)+0x4
+#
+# No core dump will be written. Core dumps have been disabled. To enable core dumping, try "ulimit -c unlimited" before starting Java again
+#
+# An error report file with more information is saved as:
+# /home/pheerapat/aco-work/jobs/Gson-8-r1/b/hs_err_pid1778615.log
+#
+# If you would like to submit a bug report, please visit:
+#   https://bugs.launchpad.net/ubuntu/+source/openjdk-lts
+#
+[exit -6]

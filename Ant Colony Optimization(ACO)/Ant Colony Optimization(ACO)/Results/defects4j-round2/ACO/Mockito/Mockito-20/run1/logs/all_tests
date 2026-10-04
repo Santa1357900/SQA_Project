@@ -1,0 +1,8 @@
+test0001_resetMock(acogen.AcoGeneratedTest)
+test0002_init(acogen.AcoGeneratedTest)
+test0003_createMock(acogen.AcoGeneratedTest)
+test0004_getHandler(acogen.AcoGeneratedTest)
+test0005_resetMock(acogen.AcoGeneratedTest)
+test0006_resetMock(acogen.AcoGeneratedTest)
+test0007_resetMock(acogen.AcoGeneratedTest)
+test0008_resetMock(acogen.AcoGeneratedTest)

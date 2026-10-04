@@ -1,0 +1,101 @@
+org.apache.commons.lang.NumberUtils.isDigits(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isDigits,java.lang.String,_,t:0074007200750065)	R:Boolean:false	3
+org.apache.commons.lang.NumberUtils.createLong(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createLong,java.lang.String,_,t:002d0030002e0030)	E:java.lang.NumberFormatException:For input string: "-0.0"	0
+org.apache.commons.lang.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createBigDecimal,java.lang.String,_,_)	E:java.lang.NullPointerException	0
+org.apache.commons.lang.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createBigDecimal,java.lang.String,_,t:00300078)	E:java.lang.NumberFormatException:Character x is neither a decimal digit number, decimal point, nor "e" notation exponential mark.	0
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:002d0030002e0030)	R:BigDecimal:0.0	24
+org.apache.commons.lang.NumberUtils.stringToInt(java.lang.String,int)	m(org.apache.commons.lang.NumberUtils,stringToInt,java.lang.String|int,_,t:000a,i:2147483647)	R:Integer:2147483647	1
+org.apache.commons.lang.NumberUtils.compare(float,float)	m(org.apache.commons.lang.NumberUtils,compare,float|float,_,f:1056964608,f:0)	R:Integer:1	1
+org.apache.commons.lang.NumberUtils.maximum(long,long,long)	m(org.apache.commons.lang.NumberUtils,maximum,long|long|long,_,j:9223372036854775807,j:0,j:1000)	R:Long:9223372036854775807	3
+org.apache.commons.lang.NumberUtils.createDouble(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createDouble,java.lang.String,_,t:000a)	E:java.lang.NumberFormatException:empty String	0
+org.apache.commons.lang.NumberUtils.minimum(long,long,long)	m(org.apache.commons.lang.NumberUtils,minimum,long|long|long,_,j:1,j:2147483648,j:1)	R:Long:1	3
+org.apache.commons.lang.NumberUtils.<init>()	n(org.apache.commons.lang.NumberUtils,)	R:org.apache.commons.lang.NumberUtils	1
+org.apache.commons.lang.NumberUtils.compare(float,float)	m(org.apache.commons.lang.NumberUtils,compare,float|float,_,f:1065353216,f:2143289344)	R:Integer:-1	2
+org.apache.commons.lang.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createBigDecimal,java.lang.String,_,t:0031)	R:BigDecimal:1	0
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:0030)	R:Integer:0	5
+org.apache.commons.lang.NumberUtils.createBigInteger(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createBigInteger,java.lang.String,_,_)	E:java.lang.NullPointerException	0
+org.apache.commons.lang.NumberUtils.minimum(long,long,long)	m(org.apache.commons.lang.NumberUtils,minimum,long|long|long,_,j:9223372036854775807,j:0,j:9223372036854775807)	R:Long:0	1
+org.apache.commons.lang.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createBigDecimal,java.lang.String,_,t:004100420043)	E:java.lang.NumberFormatException:Character A is neither a decimal digit number, decimal point, nor "e" notation exponential mark.	0
+org.apache.commons.lang.NumberUtils.stringToInt(java.lang.String)	m(org.apache.commons.lang.NumberUtils,stringToInt,java.lang.String,_,t:0061002c0062)	R:Integer:0	1
+org.apache.commons.lang.NumberUtils.createDouble(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createDouble,java.lang.String,_,t:0020006900730020006e006f007400200061002000760061006c006900640020006e0075006d006200650072002e)	E:java.lang.NumberFormatException:For input string: "is not a valid number."	0
+org.apache.commons.lang.NumberUtils.minimum(long,long,long)	m(org.apache.commons.lang.NumberUtils,minimum,long|long|long,_,j:-9223372036854775808,j:10,j:1000)	R:Long:-9223372036854775808	0
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:0031002e0035)	R:Float:1.5	2
+org.apache.commons.lang.NumberUtils.maximum(int,int,int)	m(org.apache.commons.lang.NumberUtils,maximum,int|int|int,_,i:-1,i:1000,i:-1)	R:Integer:1000	3
+org.apache.commons.lang.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createFloat,java.lang.String,_,t:0032003000320030002d00300031002d00300031)	E:java.lang.NumberFormatException:For input string: "2020-01-01"	0
+org.apache.commons.lang.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createFloat,java.lang.String,_,t:0020006900730020006e006f007400200061002000760061006c006900640020006e0075006d006200650072002e)	E:java.lang.NumberFormatException:For input string: "is not a valid number."	0
+org.apache.commons.lang.NumberUtils.compare(float,float)	m(org.apache.commons.lang.NumberUtils,compare,float|float,_,f:2143289344,f:0)	R:Integer:1	1
+org.apache.commons.lang.NumberUtils.maximum(int,int,int)	m(org.apache.commons.lang.NumberUtils,maximum,int|int|int,_,i:255,i:975,i:-1)	R:Integer:975	0
+org.apache.commons.lang.NumberUtils.maximum(int,int,int)	m(org.apache.commons.lang.NumberUtils,maximum,int|int|int,_,i:-2147483648,i:1,i:1000)	R:Integer:1000	1
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:0020)	E:java.lang.NumberFormatException:  is not a valid number.	8
+org.apache.commons.lang.NumberUtils.compare(double,double)	m(org.apache.commons.lang.NumberUtils,compare,double|double,_,d:9221120237041090560,d:-4620693217682128896)	R:Integer:1	2
+org.apache.commons.lang.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createFloat,java.lang.String,_,t:0061003d0062)	E:java.lang.NumberFormatException:For input string: "a=b"	0
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,_)	R:Boolean:false	1
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:00310032003a00330030003a00300030)	E:java.lang.NumberFormatException:For input string: "12:30:00"	2
+org.apache.commons.lang.NumberUtils.createInteger(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createInteger,java.lang.String,_,t:)	E:java.lang.NumberFormatException:Zero length string	0
+org.apache.commons.lang.NumberUtils.maximum(long,long,long)	m(org.apache.commons.lang.NumberUtils,maximum,long|long|long,_,j:1000,j:-9223372036854775808,j:0)	R:Long:1000	0
+org.apache.commons.lang.NumberUtils.minimum(int,int,int)	m(org.apache.commons.lang.NumberUtils,minimum,int|int|int,_,i:-553,i:2147483647,i:3)	R:Integer:-553	3
+org.apache.commons.lang.NumberUtils.maximum(int,int,int)	m(org.apache.commons.lang.NumberUtils,maximum,int|int|int,_,i:-2147483648,i:2147483647,i:-849)	R:Integer:2147483647	0
+org.apache.commons.lang.NumberUtils.minimum(int,int,int)	m(org.apache.commons.lang.NumberUtils,minimum,int|int|int,_,i:2147483647,i:1,i:-2147483648)	R:Integer:-2147483648	2
+org.apache.commons.lang.NumberUtils.compare(float,float)	m(org.apache.commons.lang.NumberUtils,compare,float|float,_,f:0,f:0)	R:Integer:0	1
+org.apache.commons.lang.NumberUtils.maximum(int,int,int)	m(org.apache.commons.lang.NumberUtils,maximum,int|int|int,_,i:3,i:-2147483648,i:-1)	R:Integer:3	1
+org.apache.commons.lang.NumberUtils.compare(float,float)	m(org.apache.commons.lang.NumberUtils,compare,float|float,_,f:0,f:1065353216)	R:Integer:-1	1
+org.apache.commons.lang.NumberUtils.compare(double,double)	m(org.apache.commons.lang.NumberUtils,compare,double|double,_,d:9218868437227405311,d:-4620693217682128896)	R:Integer:1	1
+org.apache.commons.lang.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createFloat,java.lang.String,_,t:0020)	E:java.lang.NumberFormatException:empty String	0
+org.apache.commons.lang.NumberUtils.compare(double,double)	m(org.apache.commons.lang.NumberUtils,compare,double|double,_,d:9221120237041090560,d:9221120237041090560)	R:Integer:0	1
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:0030007800310046)	R:Integer:31	2
+org.apache.commons.lang.NumberUtils.createInteger(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createInteger,java.lang.String,_,t:0020)	E:java.lang.NumberFormatException:For input string: " "	0
+org.apache.commons.lang.NumberUtils.createInteger(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createInteger,java.lang.String,_,t:0066006f006f002e006200610072)	E:java.lang.NumberFormatException:For input string: "foo.bar"	0
+org.apache.commons.lang.NumberUtils.createDouble(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createDouble,java.lang.String,_,t:0061003d0062)	E:java.lang.NumberFormatException:For input string: "a=b"	0
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,t:0023)	R:Boolean:false	7
+org.apache.commons.lang.NumberUtils.compare(double,double)	m(org.apache.commons.lang.NumberUtils,compare,double|double,_,d:-4616189618054758400,d:-4620693217682128896)	R:Integer:-1	1
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,t:00610020006200200063)	R:Boolean:false	4
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:)	E:java.lang.NumberFormatException:"" is not a valid number.	2
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:00660061006c00730065)	E:java.lang.NumberFormatException:false is not a valid number.	3
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,t:00e9)	R:Boolean:false	1
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,t:002200220020006900730020006e006f007400200061002000760061006c006900640020006e0075006d006200650072002e)	R:Boolean:false	1
+org.apache.commons.lang.NumberUtils.stringToInt(java.lang.String,int)	m(org.apache.commons.lang.NumberUtils,stringToInt,java.lang.String|int,_,t:006100620063,i:-434)	R:Integer:-434	0
+org.apache.commons.lang.NumberUtils.createBigDecimal(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createBigDecimal,java.lang.String,_,t:0061003d0062)	E:java.lang.NumberFormatException:Character a is neither a decimal digit number, decimal point, nor "e" notation exponential mark.	0
+org.apache.commons.lang.NumberUtils.minimum(long,long,long)	m(org.apache.commons.lang.NumberUtils,minimum,long|long|long,_,j:9223372036854775807,j:10,j:-9223372036854775808)	R:Long:-9223372036854775808	1
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:002200220020006900730020006e006f007400200061002000760061006c006900640020006e0075006d006200650072002e)	E:java.lang.NumberFormatException:"" is not a valid number. is not a valid number.	2
+org.apache.commons.lang.NumberUtils.createInteger(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createInteger,java.lang.String,_,t:00e9)	E:java.lang.NumberFormatException:For input string: "\u00e9"	0
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,_)	R:null	1
+org.apache.commons.lang.NumberUtils.compare(double,double)	m(org.apache.commons.lang.NumberUtils,compare,double|double,_,d:4756540486875873280,d:9221120237041090560)	R:Integer:-1	1
+org.apache.commons.lang.NumberUtils.stringToInt(java.lang.String)	m(org.apache.commons.lang.NumberUtils,stringToInt,java.lang.String,_,t:0030)	R:Integer:0	1
+org.apache.commons.lang.NumberUtils.createFloat(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createFloat,java.lang.String,_,_)	E:java.lang.NullPointerException	0
+org.apache.commons.lang.NumberUtils.minimum(int,int,int)	m(org.apache.commons.lang.NumberUtils,minimum,int|int|int,_,i:-1,i:2147483647,i:255)	R:Integer:-1	0
+org.apache.commons.lang.NumberUtils.stringToInt(java.lang.String,int)	m(org.apache.commons.lang.NumberUtils,stringToInt,java.lang.String|int,_,t:003100320033,i:255)	R:Integer:123	0
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,t:0030007800310046)	R:Boolean:true	7
+org.apache.commons.lang.NumberUtils.stringToInt(java.lang.String,int)	m(org.apache.commons.lang.NumberUtils,stringToInt,java.lang.String|int,_,t:0030,i:2147483647)	R:Integer:0	0
+org.apache.commons.lang.NumberUtils.stringToInt(java.lang.String,int)	m(org.apache.commons.lang.NumberUtils,stringToInt,java.lang.String|int,_,t:004100420043,i:255)	R:Integer:255	0
+org.apache.commons.lang.NumberUtils.isDigits(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isDigits,java.lang.String,_,_)	R:Boolean:false	2
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,t:002d0031)	R:Boolean:true	2
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,t:002d0030002e0030)	R:Boolean:true	4
+org.apache.commons.lang.NumberUtils.createDouble(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createDouble,java.lang.String,_,t:0023)	E:java.lang.NumberFormatException:For input string: "#"	0
+org.apache.commons.lang.NumberUtils.isDigits(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isDigits,java.lang.String,_,t:0030)	R:Boolean:true	2
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,t:002d00300078)	R:Boolean:false	1
+org.apache.commons.lang.NumberUtils.isDigits(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isDigits,java.lang.String,_,t:)	R:Boolean:false	1
+org.apache.commons.lang.NumberUtils.createDouble(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createDouble,java.lang.String,_,t:002200220020006900730020006e006f007400200061002000760061006c006900640020006e0075006d006200650072002e)	E:java.lang.NumberFormatException:For input string: """ is not a valid number."	0
+org.apache.commons.lang.NumberUtils.createBigInteger(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createBigInteger,java.lang.String,_,t:0061003d0062)	E:java.lang.NumberFormatException:For input string: "a=b"	0
+org.apache.commons.lang.NumberUtils.createLong(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createLong,java.lang.String,_,t:004100420043)	E:java.lang.NumberFormatException:For input string: "ABC"	0
+org.apache.commons.lang.NumberUtils.createBigInteger(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createBigInteger,java.lang.String,_,t:002d0031)	R:BigInteger:-1	1
+org.apache.commons.lang.NumberUtils.maximum(long,long,long)	m(org.apache.commons.lang.NumberUtils,maximum,long|long|long,_,j:-1,j:0,j:-1)	R:Long:0	1
+org.apache.commons.lang.NumberUtils.createBigInteger(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createBigInteger,java.lang.String,_,t:0009)	E:java.lang.NumberFormatException:For input string: "\u0009"	0
+org.apache.commons.lang.NumberUtils.maximum(long,long,long)	m(org.apache.commons.lang.NumberUtils,maximum,long|long|long,_,j:-1,j:10,j:-1)	R:Long:10	0
+org.apache.commons.lang.NumberUtils.maximum(long,long,long)	m(org.apache.commons.lang.NumberUtils,maximum,long|long|long,_,j:-1,j:0,j:9223372036854775807)	R:Long:9223372036854775807	1
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,t:003100650035)	R:Boolean:true	3
+org.apache.commons.lang.NumberUtils.createBigInteger(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createBigInteger,java.lang.String,_,t:006100220062)	E:java.lang.NumberFormatException:For input string: "a"b"	0
+org.apache.commons.lang.NumberUtils.createLong(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createLong,java.lang.String,_,t:0020)	E:java.lang.NumberFormatException:For input string: " "	0
+org.apache.commons.lang.NumberUtils.createLong(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createLong,java.lang.String,_,t:0066006f006f002e006200610072)	E:java.lang.NumberFormatException:For input string: "foo.bar"	0
+org.apache.commons.lang.NumberUtils.createLong(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createLong,java.lang.String,_,t:003100650035)	E:java.lang.NumberFormatException:For input string: "1e5"	0
+org.apache.commons.lang.NumberUtils.createLong(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createLong,java.lang.String,_,t:002d0031)	R:Long:-1	1
+org.apache.commons.lang.NumberUtils.minimum(long,long,long)	m(org.apache.commons.lang.NumberUtils,minimum,long|long|long,_,j:2,j:-1,j:9223372036854775807)	R:Long:-1	0
+org.apache.commons.lang.NumberUtils.createInteger(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createInteger,java.lang.String,_,t:0031)	R:Integer:1	0
+org.apache.commons.lang.NumberUtils.minimum(int,int,int)	m(org.apache.commons.lang.NumberUtils,minimum,int|int|int,_,i:2,i:255,i:1)	R:Integer:1	0
+org.apache.commons.lang.NumberUtils.minimum(int,int,int)	m(org.apache.commons.lang.NumberUtils,minimum,int|int|int,_,i:2,i:100,i:5)	R:Integer:2	0
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:006e0075006c006c)	E:java.lang.NumberFormatException:null is not a valid number.	4
+org.apache.commons.lang.NumberUtils.stringToInt(java.lang.String)	m(org.apache.commons.lang.NumberUtils,stringToInt,java.lang.String,_,t:003100320033)	R:Integer:123	0
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:002d00300078)	E:java.lang.NumberFormatException:For input string: "-"	1
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:003100650035)	R:Float:100000.0	3
+org.apache.commons.lang.NumberUtils.createNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,createNumber,java.lang.String,_,t:002d002d)	R:null	1
+org.apache.commons.lang.NumberUtils.isNumber(java.lang.String)	m(org.apache.commons.lang.NumberUtils,isNumber,java.lang.String,_,t:0032003000320030002d00300031002d00300031)	R:Boolean:false	2
+org.apache.commons.lang.NumberUtils.stringToInt(java.lang.String)	m(org.apache.commons.lang.NumberUtils,stringToInt,java.lang.String,_,t:002d0031)	R:Integer:-1	0
+org.apache.commons.lang.NumberUtils.stringToInt(java.lang.String)	m(org.apache.commons.lang.NumberUtils,stringToInt,java.lang.String,_,t:0031)	R:Integer:1	0

@@ -1,0 +1,8 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Chart-16-r1/Chart-16b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 2
+  - acogen.AcoGeneratedTest::test0037_setCategoryKeys
+  - acogen.AcoGeneratedTest::test0059_getCategoryIndex
+[exit 0]

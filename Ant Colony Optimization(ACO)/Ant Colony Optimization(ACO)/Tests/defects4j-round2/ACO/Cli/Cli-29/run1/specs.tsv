@@ -1,0 +1,14 @@
+org.apache.commons.cli.Util.stripLeadingAndTrailingQuotes(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingAndTrailingQuotes,java.lang.String,_,t:003100650035)	R:"1e5"	4
+org.apache.commons.cli.Util.<init>()	n(org.apache.commons.cli.Util,)	R:org.apache.commons.cli.Util	1
+org.apache.commons.cli.Util.stripLeadingAndTrailingQuotes(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingAndTrailingQuotes,java.lang.String,_,_)	E:java.lang.NullPointerException	0
+org.apache.commons.cli.Util.stripLeadingAndTrailingQuotes(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingAndTrailingQuotes,java.lang.String,_,t:002d002d)	R:"--"	0
+org.apache.commons.cli.Util.stripLeadingHyphens(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingHyphens,java.lang.String,_,t:002d0030002e0030)	R:"0.0"	2
+org.apache.commons.cli.Util.stripLeadingHyphens(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingHyphens,java.lang.String,_,t:0020)	R:" "	1
+org.apache.commons.cli.Util.stripLeadingAndTrailingQuotes(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingAndTrailingQuotes,java.lang.String,_,t:007b002200610022003a0031007d)	R:"{"a":1}"	0
+org.apache.commons.cli.Util.stripLeadingAndTrailingQuotes(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingAndTrailingQuotes,java.lang.String,_,t:0032003000320030002d00300031002d00300031)	R:"2020-01-01"	0
+org.apache.commons.cli.Util.stripLeadingHyphens(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingHyphens,java.lang.String,_,t:00250073)	R:"%s"	0
+org.apache.commons.cli.Util.stripLeadingHyphens(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingHyphens,java.lang.String,_,t:000a)	R:"\u000a"	0
+org.apache.commons.cli.Util.stripLeadingHyphens(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingHyphens,java.lang.String,_,t:004100420043)	R:"ABC"	0
+org.apache.commons.cli.Util.stripLeadingAndTrailingQuotes(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingAndTrailingQuotes,java.lang.String,_,t:0022)	R:""	2
+org.apache.commons.cli.Util.stripLeadingHyphens(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingHyphens,java.lang.String,_,_)	R:null	1
+org.apache.commons.cli.Util.stripLeadingHyphens(java.lang.String)	m(org.apache.commons.cli.Util,stripLeadingHyphens,java.lang.String,_,t:002d002d)	R:""	2

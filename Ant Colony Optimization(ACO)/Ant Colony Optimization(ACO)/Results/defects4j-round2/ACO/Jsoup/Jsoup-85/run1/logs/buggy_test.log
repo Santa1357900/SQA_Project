@@ -1,0 +1,14 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Jsoup-85-r1/Jsoup-85b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 8
+  - acogen.AcoGeneratedTest::test0022_init
+  - acogen.AcoGeneratedTest::test0046_createFromEncoded
+  - acogen.AcoGeneratedTest::test0047_hashCode
+  - acogen.AcoGeneratedTest::test0055_getValue
+  - acogen.AcoGeneratedTest::test0068_clone
+  - acogen.AcoGeneratedTest::test0082_html
+  - acogen.AcoGeneratedTest::test0083_html
+  - acogen.AcoGeneratedTest::test0088_equals
+[exit 0]

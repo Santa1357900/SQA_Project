@@ -1,0 +1,4 @@
+test0001_injectMocksOnFields(acogen.AcoGeneratedTest)
+test0002_init(acogen.AcoGeneratedTest)
+test0003_injectMocksOnFields(acogen.AcoGeneratedTest)
+test0004_injectMocksOnFields(acogen.AcoGeneratedTest)

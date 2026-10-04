@@ -1,0 +1,13 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j coverage -s /home/pheerapat/aco-work/jobs/Time-13-r1/Time-13b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (coverage.instrument).......................................... OK
+Running ant (run.gen.tests)................................................ OK
+Running ant (coverage.report).............................................. OK
+       Lines total: 672
+     Lines covered: 193
+  Conditions total: 452
+Conditions covered: 64
+     Line coverage: 28.7%
+Condition coverage: 14.2%
+[exit 0]

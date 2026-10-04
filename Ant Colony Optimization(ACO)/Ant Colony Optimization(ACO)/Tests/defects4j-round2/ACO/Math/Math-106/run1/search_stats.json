@@ -1,0 +1,15 @@
+{
+  "target_classes": 1,
+  "skipped_classes": [],
+  "methods": 7,
+  "iterations_done": 5,
+  "evaluations": 91,
+  "probes_covered": 8,
+  "tests_archived": 13,
+  "timeouts": 0,
+  "blocked": 0,
+  "decision_points": 22,
+  "coverage_feedback": true,
+  "search_seconds": 49.049,
+  "history": ["1,8,10,20", "2,8,11,40", "3,8,12,60", "4,8,12,80", "5,8,13,91"]
+}

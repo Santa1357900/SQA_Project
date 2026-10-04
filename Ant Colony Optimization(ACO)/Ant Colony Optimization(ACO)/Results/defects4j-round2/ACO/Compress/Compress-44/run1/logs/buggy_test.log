@@ -1,0 +1,20 @@
+$ /home/pheerapat/defects4j/framework/bin/defects4j test -s /home/pheerapat/aco-work/jobs/Compress-44-r1/Compress-44b-aco.1.tar.bz2
+Extract test suite......................................................... OK
+Running ant (compile.gen.tests)............................................ OK
+Running ant (run.gen.tests)................................................ OK
+Failing tests: 14
+  - acogen.AcoGeneratedTest::test0001_read
+  - acogen.AcoGeneratedTest::test0002_skip
+  - acogen.AcoGeneratedTest::test0003_read
+  - acogen.AcoGeneratedTest::test0004_init
+  - acogen.AcoGeneratedTest::test0005_getValue
+  - acogen.AcoGeneratedTest::test0006_read
+  - acogen.AcoGeneratedTest::test0007_read
+  - acogen.AcoGeneratedTest::test0008_read
+  - acogen.AcoGeneratedTest::test0009_read
+  - acogen.AcoGeneratedTest::test0010_read
+  - acogen.AcoGeneratedTest::test0011_read
+  - acogen.AcoGeneratedTest::test0012_read
+  - acogen.AcoGeneratedTest::test0013_read
+  - acogen.AcoGeneratedTest::test0014_skip
+[exit 0]

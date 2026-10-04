@@ -1,0 +1,5 @@
+test0001_getNullValue(acogen.AcoGeneratedTest)
+test0002_deserialize(acogen.AcoGeneratedTest)
+test0003_getNullValue(acogen.AcoGeneratedTest)
+test0004_init(acogen.AcoGeneratedTest)
+test0005_getDeserializer(acogen.AcoGeneratedTest)
