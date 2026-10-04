@@ -1,2 +1,0 @@
-algorithm,project,selected_unique_bugs,evaluated_unique_bugs,detected_unique_bugs,unknown_outcome_bugs,fault_detection_rate,complete_runs,mean_test_coverage_ratio,mean_line_coverage_ratio,mean_branch_coverage_ratio,mean_generation_seconds,mean_total_seconds
-ACO,Lang,1,1,1,0,1.0,5,1.0,0.984,0.8911,0.027,7.62
